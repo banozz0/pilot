@@ -1,0 +1,70 @@
+{
+ "total_count": 21364,
+ "items": [
+  {
+   "full_name": "rxhanson/Rectangle",
+   "name": "Rectangle",
+   "description": "Move and resize windows on macOS with keyboard shortcuts and snap areas",
+   "stargazers_count": 30048,
+   "html_url": "https://github.com/rxhanson/Rectangle",
+   "fork": false,
+   "archived": false,
+   "owner": {
+    "login": "rxhanson",
+    "avatar_url": "https://avatars.githubusercontent.com/u/13651296?v=4"
+   }
+  },
+  {
+   "full_name": "juj/RectangleBinPack",
+   "name": "RectangleBinPack",
+   "description": "Source code for performing 2d rectangular bin packing.",
+   "stargazers_count": 996,
+   "html_url": "https://github.com/juj/RectangleBinPack",
+   "fork": false,
+   "archived": false,
+   "owner": {
+    "login": "juj",
+    "avatar_url": "https://avatars.githubusercontent.com/u/225351?v=4"
+   }
+  },
+  {
+   "full_name": "wkentaro/labelme",
+   "name": "labelme",
+   "description": "Image annotation with Python. Supports polygon, rectangle, circle, line, point, and AI-assisted annotation.",
+   "stargazers_count": 16214,
+   "html_url": "https://github.com/wkentaro/labelme",
+   "fork": false,
+   "archived": false,
+   "owner": {
+    "login": "wkentaro",
+    "avatar_url": "https://avatars.githubusercontent.com/u/4310419?v=4"
+   }
+  },
+  {
+   "full_name": "secnot/rectpack",
+   "name": "rectpack",
+   "description": "Python 2D rectangle packing library",
+   "stargazers_count": 564,
+   "html_url": "https://github.com/secnot/rectpack",
+   "fork": false,
+   "archived": false,
+   "owner": {
+    "login": "secnot",
+    "avatar_url": "https://avatars.githubusercontent.com/u/11860789?v=4"
+   }
+  },
+  {
+   "full_name": "ahmetb/RectangleWin",
+   "name": "RectangleWin",
+   "description": "Spectacle/Rectangle for Windows: Hotkey-driven window snapping for Windows 10/11.",
+   "stargazers_count": 275,
+   "html_url": "https://github.com/ahmetb/RectangleWin",
+   "fork": false,
+   "archived": false,
+   "owner": {
+    "login": "ahmetb",
+    "avatar_url": "https://avatars.githubusercontent.com/u/159209?v=4"
+   }
+  }
+ ]
+}

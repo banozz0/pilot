@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in Pilot does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see it again
+      placeholder: "1. "
+  - type: textarea
+    id: mac
+    attributes:
+      label: Your Mac and Pilot
+      description: Pilot version and build, macOS version, Mac model, layer key, look and tiler (Pilot's Send feedback writes them for you).
+  - type: textarea
+    id: crash
+    attributes:
+      label: Crash report (optional)
+      description: >-
+        If Pilot quit by itself, macOS kept a crash report on your Mac: the newest Pilot-<date>.ips in
+        ~/Library/Logs/DiagnosticReports (Finder › Go › Go to Folder). Pilot's helpers write theirs there too: pilot-text,
+        pilot-upscale, pilot-dictate, pilot-files, pilot-mcp, pilot and PilotWebApp. Pilot's General › About › Reveal crash
+        reports shows the newest one. A report may hold paths from your Mac; attaching it is your choice: drag the file
+        here. Pilot never sends it.
+      placeholder: Drag the .ips file here, or leave this empty.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: Paste any you want to share yourself. Pilot never sends them; check them for anything private first.
+      render: text

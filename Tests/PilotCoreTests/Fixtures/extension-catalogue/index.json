@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "extensions": [
+    {
+      "id": "claude-sessions",
+      "title": "Claude Sessions",
+      "icon": "🤖",
+      "version": "1.0.1",
+      "description": "Your recent Claude Code sessions by folder and title; copy the command that resumes one, or open its folder.",
+      "examples": [
+        "Type pilot: your sessions in that folder, newest first",
+        "Return copies the command that resumes one"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "sessions",
+          "title": "Claude sessions",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [
+          "~/.claude/projects"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "77468d545ee568cb22f52c184c50cf95c51ac6814e898eddce5396126939fb70",
+          "size": 585,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "01f984bbe00c3115bd505514923115d507a59c2b21725ec7c579b77d1afe2ec3",
+          "size": 10540,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "pomodoro",
+      "title": "Pomodoro",
+      "icon": "🍅",
+      "version": "1.0.0",
+      "description": "Focus blocks and breaks, counted down in the menu bar, with the long break every few blocks.",
+      "examples": [
+        "Start focus: 25 minutes counting down in the menu bar",
+        "At zero, Pilot's alert offers Start break"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "focus",
+          "title": "Focus",
+          "mode": "no-view"
+        },
+        {
+          "name": "break",
+          "title": "Break",
+          "mode": "no-view"
+        },
+        {
+          "name": "custom",
+          "title": "Custom focus…",
+          "mode": "list"
+        },
+        {
+          "name": "pause",
+          "title": "Pause timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "resume",
+          "title": "Resume timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "skip",
+          "title": "Skip block",
+          "mode": "no-view"
+        },
+        {
+          "name": "stop",
+          "title": "Stop timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "today",
+          "title": "Pomodoro today",
+          "mode": "detail"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "b6a4fb1fbac787fbc5d0ad433be97b46f285ca2693f8ffc2ba1b69a6b6093630",
+          "size": 3991,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "ec3f77a1917d7e779a71160a25d51d07e03e358ea3b1971649d81e74bc6f3825",
+          "size": 11573,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "ports",
+      "title": "Ports",
+      "icon": "🔌",
+      "version": "1.0.0",
+      "description": "See which program holds a listening TCP port and quit it: the dev server you forgot.",
+      "examples": [
+        "Type 3000: the program holding it; Return quits it"
+      ],
+      "requires": [
+        "python3",
+        "lsof"
+      ],
+      "commands": [
+        {
+          "name": "kill-port",
+          "title": "Kill port",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "593ae160a7eabc3963896f542ebda4796d40f1bc9d61cac9fff7a4e8f069e854",
+          "size": 481,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "d028706948a4729c8f3971493aae25496983172f9f06444c0925a5248df388b6",
+          "size": 5578,
+          "executable": true
+        }
+      ]
+    }
+  ]
+}

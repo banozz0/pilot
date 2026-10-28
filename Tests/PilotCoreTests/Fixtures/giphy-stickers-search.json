@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "type": "sticker",
+      "id": "l0HlvtIPzPdt2usKs",
+      "url": "https://giphy.com/stickers/thumbs-up-l0HlvtIPzPdt2usKs",
+      "title": "Thumbs Up Sticker by Pudgy Penguins",
+      "rating": "g",
+      "is_sticker": 1,
+      "images": {
+        "original": {"height": "480", "width": "480", "size": "612345", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif", "webp": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.webp"},
+        "downsized": {"height": "480", "width": "480", "size": "612345", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy-downsized.gif"},
+        "fixed_width_small": {"height": "100", "width": "100", "size": "48211", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/100w.gif"},
+        "preview_gif": {"height": "88", "width": "88", "size": "38977", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy-preview.gif"},
+        "preview_webp": {"height": "120", "width": "120", "size": "40312", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy-preview.webp"},
+        "480w_still": {"height": "480", "width": "480", "url": "https://media.giphy.com/media/l0HlvtIPzPdt2usKs/480w_s.jpg"}
+      },
+      "analytics_response_payload": "e=Z2lmX2lkPWwwSGx2dElQelBkdDJ1c0tz"
+    },
+    {
+      "type": "sticker",
+      "id": "kyLYXonQYYfwYDIeZl",
+      "url": "https://giphy.com/stickers/kyLYXonQYYfwYDIeZl",
+      "title": "",
+      "rating": "g",
+      "is_sticker": 1,
+      "images": {
+        "original": {"height": "320", "width": "320", "url": "https://media.giphy.com/media/kyLYXonQYYfwYDIeZl/giphy.gif"},
+        "fixed_width_small": {"height": "100", "width": "100", "url": "https://media.giphy.com/media/kyLYXonQYYfwYDIeZl/100w.gif"}
+      }
+    },
+    {
+      "type": "sticker",
+      "id": "insecure",
+      "title": "Plain HTTP",
+      "images": {
+        "original": {"url": "http://media.giphy.com/media/insecure/giphy.gif"},
+        "preview_gif": {"url": "http://media.giphy.com/media/insecure/giphy-preview.gif"}
+      }
+    }
+  ],
+  "pagination": {"total_count": 3, "count": 3, "offset": 0},
+  "meta": {"status": 200, "msg": "OK", "response_id": "fixture"}
+}

@@ -1,0 +1,14 @@
+{
+  "id": "ports",
+  "title": "Ports",
+  "icon": "🔌",
+  "version": "1.0.0",
+  "description": "See which program holds a listening TCP port and quit it: the dev server you forgot.",
+  "runtime": "process",
+  "requires": ["python3", "lsof"],
+  "permissions": {},
+  "commands": [
+    { "name": "kill-port", "title": "Kill port", "mode": "list", "run": "main.py" },
+    { "name": "kill", "title": "Quit a port's program", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

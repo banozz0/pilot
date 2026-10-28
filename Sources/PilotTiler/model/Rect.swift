@@ -1,0 +1,75 @@
+// Vendored from AeroSpace (MIT, nikitabobko/AeroSpace) at 74a1bf17: Sources/AppBundle/model/Rect.swift
+import AppKit
+
+// Pilot: Equatable, so the drop-zone overlay redraws only a changed frame (card agent-bo-95423032)
+struct Rect: ConvenienceMutable, AeroAny, Equatable {
+    var topLeftX: CGFloat
+    var topLeftY: CGFloat
+
+    private var _width: CGFloat
+    var width: CGFloat {
+        get { max(_width, 0) }
+        set(newValue) { _width = newValue }
+    }
+
+    private var _height: CGFloat
+    var height: CGFloat {
+        get { max(_height, 0) }
+        set(newValue) { _height = newValue }
+    }
+
+    init(topLeftX: CGFloat, topLeftY: CGFloat, width: CGFloat, height: CGFloat) {
+        self.topLeftX = topLeftX
+        self.topLeftY = topLeftY
+        self._width = width
+        self._height = height
+    }
+}
+
+extension CGRect {
+    func monitorFrameNormalized() -> Rect {
+        let mainMonitorHeight: CGFloat = mainMonitorInfo.height
+        let rect = toRect()
+        return rect.copy(\.topLeftY, mainMonitorHeight - rect.topLeftY)
+    }
+}
+
+extension CGRect {
+    func toRect() -> Rect {
+        Rect(topLeftX: minX, topLeftY: maxY, width: width, height: height)
+    }
+
+    /// Pilot: the same numbers as a Rect, read as top-left and y down (`toRect` reads an AppKit rect, y up).
+    var engineRect: Rect { Rect(topLeftX: minX, topLeftY: minY, width: width, height: height) }
+}
+
+extension Rect {
+    /// Pilot: the same numbers as a CGRect, for PilotCore's presets, which read top-left, y down too.
+    var cgRect: CGRect { CGRect(x: minX, y: minY, width: width, height: height) }
+
+    /// Pilot: this frame in AppKit's coordinates (origin bottom-left of the main screen, y up), for a window's setFrame.
+    @MainActor var appKitFrame: NSRect { NSRect(origin: topLeftCorner.addingYOffset(height).withYAxisFlipped, size: size) }
+}
+
+extension Rect {
+    func contains(_ point: CGPoint) -> Bool {
+        minX.until(excl: maxX)?.contains(point.x) == true && minY.until(excl: maxY)?.contains(point.y) == true
+    }
+
+    var center: CGPoint {
+        CGPoint(x: topLeftX + width / 2, y: topLeftY + height / 2)
+    }
+
+    var topLeftCorner: CGPoint { CGPoint(x: topLeftX, y: topLeftY) }
+    var bottomRightCorner: CGPoint { CGPoint(x: maxX, y: maxY) }
+    var bottomLeftCorner: CGPoint { CGPoint(x: minX, y: maxY) }
+
+    var minY: CGFloat { topLeftY }
+    var maxY: CGFloat { topLeftY + height }
+    var minX: CGFloat { topLeftX }
+    var maxX: CGFloat { topLeftX + width }
+
+    var size: CGSize { CGSize(width: width, height: height) }
+
+    func getDimension(_ orientation: Orientation) -> CGFloat { orientation == .h ? width : height }
+}

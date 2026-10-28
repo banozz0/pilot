@@ -1,0 +1,91 @@
+{
+  "fill": {
+    "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "tl.svg",
+          "name": "tl",
+          "glass": true
+        }
+      ],
+      "name": "group-1",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "br.svg",
+          "name": "br",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.89412,0.91765,0.94118,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "image-name": "bl.svg",
+          "name": "bl",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.89412,0.91765,0.94118,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "image-name": "tr.svg",
+          "name": "tr",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.89412,0.91765,0.94118,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "name": "group-0",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

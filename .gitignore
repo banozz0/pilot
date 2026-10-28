@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+build/
+.worktrees/
+.claude/worktrees/
+.DS_Store
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+.build/

@@ -1,0 +1,9 @@
+keybind = super+shift+,=reload_config
+keybind = super+==increase_font_size:1
+keybind = super++=increase_font_size:1
+keybind = super+t=new_tab
+keybind = ctrl+a>n=next_tab
+keybind = global:super+grave_accent=toggle_quick_terminal
+keybind = super+arrow_up=jump_to_prompt:-1
+keybind = copy=copy_to_clipboard
+keybind = bogus+x=nothing

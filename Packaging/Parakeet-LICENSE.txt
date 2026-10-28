@@ -1,0 +1,7 @@
+Parakeet TDT v3, a speech model downloaded on your click (Dictation).
+
+Model: parakeet-tdt-0.6b-v3 by NVIDIA, huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+Core ML build: FluidInference, huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml (converted from NVIDIA's model)
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0), creativecommons.org/licenses/by/4.0/
+
+Pilot does not ship or change the model; it downloads FluidInference's build and runs it on this Mac through FluidAudio.

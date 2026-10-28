@@ -1,0 +1,14 @@
+{
+  "id": "example",
+  "title": "Example",
+  "icon": "🧩",
+  "version": "0.1.0",
+  "description": "One command with no window: it runs, and Pilot shows its answer as a HUD line.",
+  "examples": ["Type its title in Hyper+Space, Return: a HUD says hello"],
+  "runtime": "process",
+  "requires": ["python3"],
+  "permissions": {},
+  "commands": [
+    { "name": "hello", "title": "Example", "mode": "no-view", "run": "main.py" }
+  ]
+}

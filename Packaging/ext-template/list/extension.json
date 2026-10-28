@@ -1,0 +1,14 @@
+{
+  "id": "example",
+  "title": "Example",
+  "icon": "🧩",
+  "version": "0.1.0",
+  "description": "A list of rows: Pilot filters them as you type, Return copies the one picked.",
+  "examples": ["Type its title in Hyper+Space, pick a row, Return: its text is on the clipboard"],
+  "runtime": "process",
+  "requires": ["python3"],
+  "permissions": { "clipboard": true },
+  "commands": [
+    { "name": "items", "title": "Example", "mode": "list", "run": "main.py" }
+  ]
+}

@@ -1,0 +1,7 @@
+RealESRGAN x4plus, the upscaler's larger model, downloaded on your click (Upscale).
+
+Model: RealESRGAN_x4plus by Xintao Wang, github.com/xinntao/Real-ESRGAN (BSD 3-Clause, its text in Real-ESRGAN-LICENSE.txt)
+Core ML build: VincentGOURBIN, huggingface.co/VincentGOURBIN/RealESRGAN-CoreML at da0d01ce, whose model card says
+"BSD-3-Clause (same as original Real-ESRGAN)" and credits the original model; it ships no licence file of its own.
+
+Pilot does not ship the model; it downloads that build and runs it on this Mac.

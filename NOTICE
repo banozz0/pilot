@@ -1,0 +1,28 @@
+Pilot
+Copyright (c) 2026 banozz. Pilot's own code is under the MIT licence in LICENSE.
+
+Trademarks
+----------
+Pilot shows other companies' app icons and logos so you can recognise the apps it installs, opens and drives:
+
+- Packaging/catalogue-icons/: the icons of the apps in Install's catalogue.
+- Packaging/webapp-icons/: the icons of the sites Install › Web App offers.
+- The Claude mark on extension gauges (Sources/Pilot/System/ExtensionGaugeIcon.swift), drawn from CodexBar's path.
+
+These names, icons and logos are trademarks of their owners. They are not covered by Pilot's MIT licence or by
+CodexBar's, they are used only to name the app or service they belong to, and their use implies no endorsement by or
+affiliation with those owners. A fork that redistributes Pilot is responsible for its own use of them.
+
+Third-party code and assets
+---------------------------
+- Sources/PilotTiler/ and Sources/PilotTilerPrivateApi/: from AeroSpace (MIT); see the LICENSE in each folder.
+- Sources/CGhostty/ghostty.h: Ghostty's embedding header (MIT); see Sources/CGhostty/LICENSE. Scripts/build-ghosttykit.sh
+  builds libghostty from Ghostty's own source; what it links is listed in Packaging/Ghostty-THIRD-PARTY.txt.
+- Helpers/pilot-files/vendor/cardinal/: Cardinal's search engine (MIT); see its LICENSE and NOTICE.
+- Packaging/*-LICENSE.txt and *-NOTICES.txt: the licences of the other libraries, models and data Pilot bundles or
+  downloads (CodexBar, gemoji, Omarchy, WhisperKit, FluidAudio, Whisper, Parakeet, Kokoro, Real-ESRGAN).
+- Packaging/Fonts/: each face with its own licence beside it.
+- The Rust crates of Helpers/pilot-files keep their licences in the cargo registry; Scripts/rust-licenses.py collects
+  them into the app.
+
+General › About › Acknowledgements in the app lists the same credits.

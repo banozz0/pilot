@@ -1,0 +1,51 @@
+// Vendored from AeroSpace (MIT, nikitabobko/AeroSpace) at 74a1bf17: Sources/Common/util/ResultEx.swift
+// periphery:ignore:all
+extension Result {
+    public init(catching body: () async throws(Failure) -> Success) async {
+        do {
+            self = .success(try await body())
+        } catch {
+            self = .failure(error)
+        }
+    }
+
+    public func getOrNil(appendErrorTo errors: inout [Failure]) -> Success? {
+        switch self {
+            case .success(let success):
+                return success
+            case .failure(let error):
+                errors.append(error)
+                return nil
+        }
+    }
+
+    public func filter(_ failure: @autoclosure () -> Failure, _ predicate: (Success) -> Bool) -> Self {
+        flatMap { succ in predicate(succ) ? .success(succ) : .failure(failure()) }
+    }
+
+    public func getOrNil(onFailure handle: (Failure) -> ()) -> Success? {
+        switch self {
+            case .success(let it): return it
+            case .failure(let err):
+                handle(err)
+                return nil
+        }
+    }
+
+    public func getOrNil(onFailure handle: (Failure) async -> ()) async -> Success? {
+        switch self {
+            case .success(let it): return it
+            case .failure(let err):
+                await handle(err)
+                return nil
+        }
+    }
+
+    public func get(or handle: (Failure) async -> Success) async -> Success {
+        switch self {
+            case .success(let it): return it
+            case .failure(let err): return await handle(err)
+        }
+    }
+
+}

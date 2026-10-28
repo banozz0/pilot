@@ -1,0 +1,31 @@
+# pilot-files: the menu's file index (card agent-bo-95422765), a helper Pilot.app runs from Contents/Helpers.
+# Built on Cardinal's engine (vendor/cardinal, MIT; see vendor/cardinal/NOTICE). Builds on stable Rust.
+[package]
+name = "pilot-files"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+search-cache = { path = "vendor/cardinal/search-cache" }
+cardinal-sdk = { path = "vendor/cardinal/cardinal-sdk" }
+search-cancel = { path = "vendor/cardinal/search-cancel" }
+crossbeam-channel = "0.5.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Typo search (typo.rs): a substring test per name.
+memchr = "2.8"
+# Where a file came from (source.rs): the same versions Cardinal's file-tags links.
+plist = "1.7"
+xattr = "1.4"
+# Duplicates (dupes.rs): the file hash Homy and Finder-style tools use.
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+# Whole-program LTO in one unit (story 142): 0.6 MB smaller than thin LTO, same code paths, a slower helper build.
+lto = "fat"
+codegen-units = 1
+strip = true

@@ -1,0 +1,13 @@
+Vendored from https://github.com/maddada/cardinal at e06fcd849e8cced05ea657d6c11e186997572237 (2026-04-27),
+MIT licence in LICENSE beside this file, which Scripts/build-app.sh also copies into Pilot.app as
+Contents/Resources/Cardinal-LICENSE.txt.
+
+Crates: search-cache, fswalk, namepool, cardinal-sdk, cardinal-syntax, query-segmentation, search-cancel,
+slab-mmap, file-tags. Three changes from upstream: namepool and search-cache used the nightly-only
+str::from_raw_parts; it is str::from_utf8_unchecked over slice::from_raw_parts here, the same bytes and lifetime,
+so the helper builds on stable Rust. And search-cache's handle_fs_events skips an indexed folder whose event only
+changed its own metadata (metadata_only_folder) instead of walking the whole folder again.
+And search-cache serves the helper's typo search: each name's index entry keeps its LETTER_BITS mask (not saved,
+set again on load), NameIndex::indices_where / SearchCache::nodes_named scan the names in parallel reading only
+those the mask lets through, and SearchCache::search_within narrows found nodes by a line of filters
+(evaluate_and_from).

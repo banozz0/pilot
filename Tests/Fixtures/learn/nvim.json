@@ -1,0 +1,5 @@
+[{"mode":"n","lhs":" ff","rhs":"","desc":"Find files"},
+ {"mode":"n","lhs":"<C-W>d","rhs":"<C-W>d","desc":""},
+ {"mode":"n","lhs":"gx","rhs":"","desc":""},
+ {"mode":"n","lhs":"<Plug>(MadeUpPlugin)","rhs":":call Thing()<CR>","desc":""},
+ {"mode":"i","lhs":"jk","rhs":"<Esc>","desc":"Leave insert"}]

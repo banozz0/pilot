@@ -1,0 +1,43 @@
+{
+ "tag_name": "v2.0.3",
+ "html_url": "https://github.com/rxhanson/Rectangle/releases/tag/v2.0.3",
+ "draft": false,
+ "prerelease": false,
+ "assets": [
+  {
+   "name": "Rectangle.pkg",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle.pkg",
+   "size": 4749188
+  },
+  {
+   "name": "Rectangle110-104.delta",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle110-104.delta",
+   "size": 2622874
+  },
+  {
+   "name": "Rectangle110-105.delta",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle110-105.delta",
+   "size": 2604206
+  },
+  {
+   "name": "Rectangle110-107.delta",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle110-107.delta",
+   "size": 368958
+  },
+  {
+   "name": "Rectangle110-108.delta",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle110-108.delta",
+   "size": 363154
+  },
+  {
+   "name": "Rectangle110-109.delta",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle110-109.delta",
+   "size": 363770
+  },
+  {
+   "name": "Rectangle2.0.3.dmg",
+   "browser_download_url": "https://github.com/rxhanson/Rectangle/releases/download/v2.0.3/Rectangle2.0.3.dmg",
+   "size": 4730793
+  }
+ ]
+}

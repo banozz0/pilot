@@ -1,0 +1,18 @@
+{
+  "id": "surfaces-demo",
+  "title": "Surfaces demo",
+  "icon": "🧪",
+  "version": "1.0.0",
+  "description": "Pilot's test fixture for Surfaces v2: gauges in the menu bar, a popover with sections and countdowns, a chat with a reply box, rows with badges, inline buttons and asks.",
+  "runtime": "process",
+  "surfaces": {"page": {"command": "page", "every": 60}, "bar": {"command": "bar", "every": 60}},
+  "commands": [
+    {"name": "page", "title": "Page", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "bar", "title": "Bar", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "chat", "title": "Chat", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "send", "title": "Send", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "rename", "title": "Rename", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "tag", "title": "Tag", "mode": "no-view", "hidden": true, "run": "main.py"},
+    {"name": "close", "title": "Close", "mode": "no-view", "hidden": true, "run": "main.py"}
+  ]
+}

@@ -1,0 +1,99 @@
+{
+ "resultCount": 7,
+ "results": [
+  {
+   "kind": "software",
+   "trackId": 6504484102,
+   "trackName": "Billiards 8-Ball Pool Master ™",
+   "sellerName": "Shanghai Yizheng Network Technology Co., Ltd",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/37/6d/c4/376dc476-bd75-5c56-c9e1-ed248a77b901/BlueIcon-0-0-1x_U007epad-0-11-0-0-85-220.png/100x100bb.jpg",
+   "supportedDevices": [
+    "MacDesktop-MacDesktop",
+    "iPhone5s-iPhone5s"
+   ],
+   "bundleId": "com.yizhgame.happyeightball",
+   "trackViewUrl": "https://apps.apple.com/mt/app/billiards-8-ball-pool-master/id6504484102?uo=4"
+  },
+  {
+   "kind": "software",
+   "trackId": 543186831,
+   "trackName": "8 Ball Pool™",
+   "sellerName": "Miniclip SA",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/fc/32/a9/fc32a999-5384-bdef-1af1-2f7aa5259871/AppIcon-0-0-1x_U007emarketing-0-8-0-85-220.png/100x100bb.jpg",
+   "bundleId": "com.miniclip.8ballpoolmult",
+   "trackViewUrl": "https://apps.apple.com/us/app/8-ball-pool/id543186831?uo=4",
+   "supportedDevices": [
+    "iPhone5s-iPhone5s",
+    "iPadAir-iPadAir"
+   ]
+  },
+  {
+   "kind": "mac-software",
+   "trackId": 416970936,
+   "trackName": "Pool!",
+   "sellerName": "Vintolo Ltd",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple125/v4/28/9e/37/289e377e-f4d8-ed46-6c96-aa30661a8bf4/AppIcon-0-0-85-220-0-0-0-0-4-0-0-0-2x-sRGB-0-0-0-0-0.png/100x100bb.png",
+   "bundleId": "com.byterun.pool-mac",
+   "trackViewUrl": "https://apps.apple.com/mt/app/pool/id416970936?mt=12&uo=4",
+   "supportedDevices": []
+  },
+  {
+   "kind": "software",
+   "trackId": 1586517737,
+   "trackName": "Pro Snooker & Pool 2026+",
+   "sellerName": "iWare Designs Ltd.",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/17/c7/67/17c76721-035b-11e6-555c-8f2f6391afba/AppIcon-0-0-1x_U007emarketing-0-11-0-85-220.png/100x100bb.jpg",
+   "supportedDevices": [
+    "MacDesktop-MacDesktop",
+    "iPhone5s-iPhone5s"
+   ],
+   "bundleId": "asg.iwaredesigns.prosnookerandpool",
+   "trackViewUrl": "https://apps.apple.com/mt/app/pro-snooker-pool-2026/id1586517737?uo=4"
+  },
+  {
+   "kind": "mac-software",
+   "trackId": 512623047,
+   "trackName": "Vegas Pool Sharks Lite",
+   "sellerName": "RESETgame",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple124/v4/f8/af/a4/f8afa453-ea75-e53a-4023-3c430ac0c1f7/AppIcon-85-220-4-2x.png/100x100bb.png",
+   "bundleId": "com.resetgame.vegaspoolsharkslitex",
+   "trackViewUrl": "https://apps.apple.com/mt/app/vegas-pool-sharks-lite/id512623047?mt=12&uo=4",
+   "supportedDevices": []
+  },
+  {
+   "kind": "software",
+   "trackId": 310633997,
+   "trackName": "WhatsApp Messenger",
+   "sellerName": "WhatsApp Inc.",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/3c/dc/2a/3cdc2a16-402f-151e-0126-99c912c92a42/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-85-220.png/100x100bb.jpg",
+   "supportedDevices": [
+    "MacDesktop-MacDesktop",
+    "iPhone5s-iPhone5s"
+   ],
+   "bundleId": "net.whatsapp.WhatsApp",
+   "trackViewUrl": "https://apps.apple.com/mt/app/whatsapp-messenger/id310633997?uo=4"
+  },
+  {
+   "kind": "mac-software",
+   "trackId": 1127348246,
+   "trackName": "SNOK",
+   "sellerName": "Beijing Tiantian Innovation Technology Co ,Ltd",
+   "price": 0.0,
+   "formattedPrice": "Free",
+   "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple123/v4/5b/f1/15/5bf115c6-9eff-f914-4ef5-1da4f0ff0b02/Icon.png/100x100bb.png",
+   "bundleId": "cn.iduoduo.snokmac",
+   "trackViewUrl": "https://apps.apple.com/mt/app/snok/id1127348246?mt=12&uo=4",
+   "supportedDevices": []
+  }
+ ]
+}

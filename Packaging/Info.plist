@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>dev.banozz.pilot</string>
+  <key>CFBundleName</key><string>Pilot</string>
+  <key>CFBundleDisplayName</key><string>Pilot</string>
+  <key>CFBundleExecutable</key><string>Pilot</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <!-- The app icon (SH22): Packaging/AppIcon.icon, which build-app.sh compiles with actool into Assets.car (the name)
+       and AppIcon.icns (the file, for older readers). -->
+  <key>CFBundleIconName</key><string>AppIcon</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSUIElement</key><true/>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>dev.banozz.pilot</string>
+    <key>CFBundleURLSchemes</key><array><string>pilot</string></array>
+  </dict></array>
+  <key>LSMinimumSystemVersion</key><string>27.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>PilotGiphyKey</key><string></string>
+  <!-- Sparkle 2's updates (SH6; the routes are on PilotUpdates). The feed is the latest GitHub release's appcast.xml (Q431),
+       written here alone. The key is a
+       placeholder until SH5; Scripts/build-app.sh writes SPARKLE_ED_KEY over it. SUEnableAutomaticChecks stays unset, so
+       Sparkle asks on the second launch. -->
+  <key>SUFeedURL</key><string>https://github.com/banozz0/pilot/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>SH5-SPARKLE-PUBLIC-ED-KEY-NOT-SET</string>
+  <key>SUScheduledCheckInterval</key><integer>86400</integer>
+  <!-- libmalloc's space-efficient mode, read once at launch: freed memory goes back to macOS (story 142; PilotApp.init). -->
+  <key>LSEnvironment</key><dict><key>MallocSpaceEfficient</key><string>1</string></dict>
+  <key>NSAppleEventsUsageDescription</key><string>Pilot asks System Events to sleep, restart, shut down, log out and switch dark mode when you press those binds.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key><string>Pilot lists your paired Bluetooth devices and connects or disconnects the one you pick in Setup. It asks only when you press Show paired devices there.</string>
+  <key>NSLocationUsageDescription</key><string>macOS shows Wi-Fi network names only to apps with Location access. Pilot uses it to show and join Wi-Fi networks in Setup and for nothing else. It asks only when you press Show networks there.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>macOS shows Wi-Fi network names only to apps with Location access. Pilot uses it to show and join Wi-Fi networks in Setup and for nothing else. It asks only when you press Show networks there.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Pilot listens while you dictate with Pilot (Voice › Dictation) and writes it down on this Mac, and records your microphone into a screen recording when you pick Microphone as its sound on Captures.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Pilot marks the days with events and lists your next events in the clock's calendar. It asks only when you turn on Show events there.</string>
+  <key>NSServices</key><array><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Convert with Pilot…</string></dict>
+    <key>NSMessage</key><string>convertFiles</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendFileTypes</key><array>
+      <string>public.image</string>
+      <string>public.audiovisual-content</string>
+      <string>com.adobe.pdf</string>
+      <string>public.text</string>
+      <string>org.openxmlformats.wordprocessingml.document</string>
+      <string>com.microsoft.word.doc</string>
+      <string>org.oasis-open.opendocument.text</string>
+    </array>
+  </dict><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Fix with Pilot</string></dict>
+    <key>NSMessage</key><string>fixText</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendTypes</key><array><string>public.utf8-plain-text</string></array>
+    <key>NSReturnTypes</key><array><string>public.utf8-plain-text</string></array>
+    <key>NSTimeout</key><string>120000</string>
+  </dict><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Ask Pilot AI</string></dict>
+    <key>NSMessage</key><string>askText</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendTypes</key><array><string>public.utf8-plain-text</string></array>
+  </dict><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Read Aloud with Pilot</string></dict>
+    <key>NSMessage</key><string>readText</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendTypes</key><array><string>public.utf8-plain-text</string></array>
+  </dict><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Resize with Pilot</string></dict>
+    <key>NSMessage</key><string>resizeImages</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendFileTypes</key><array><string>public.image</string></array>
+  </dict><dict>
+    <key>NSMenuItem</key><dict><key>default</key><string>Upscale with Pilot</string></dict>
+    <key>NSMessage</key><string>upscaleImages</string>
+    <key>NSPortName</key><string>Pilot</string>
+    <key>NSRequiredContext</key><dict/>
+    <key>NSSendFileTypes</key><array><string>public.image</string></array>
+  </dict></array>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Sven Medina</string>
+</dict></plist>

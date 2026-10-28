@@ -1,0 +1,12 @@
+# gitleaks' default rules, less what is no secret in Pilot: a key combo after the word "key" (Hyper+Shift+F), and the
+# Bitwarden tests' made-up session key ("fake-session-key-for-tests-only-0123456789" in base64).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Key combos and the tests' fake session key"
+targetRules = ["generic-api-key"]
+regexes = [
+  '''(?i)^(hyper|cmd|ctrl|alt|opt|shift)(\+[a-z0-9=-]+)+$''',
+  '''^ZmFrZS1zZXNzaW9uLWtleS1mb3ItdGVzdHMtb25seS0wMTIzNDU2Nzg5$''',
+]

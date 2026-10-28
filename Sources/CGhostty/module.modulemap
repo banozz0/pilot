@@ -1,0 +1,7 @@
+// Ghostty's embedder API, MIT (Mitchell Hashimoto, Ghostty contributors): include/ghostty.h at the tag
+// Scripts/build-ghosttykit.sh builds, which puts the matching archive at .build/ghosttykit/libghostty.a.
+module CGhostty {
+    header "ghostty.h"
+    link "ghostty"
+    export *
+}

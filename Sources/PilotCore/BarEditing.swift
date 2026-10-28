@@ -1,0 +1,193 @@
+import Foundation
+
+/// Where a drop on the top bar lands (card agent-bo-95423017; the Menu bar page's strip since Q185): each side is a
+/// zone round its drawn slots (an empty side a zone of its own at its edge or the middle), the sides split halfway
+/// between their zones in the order they are drawn, and the drop goes before the first slot of that side whose middle is right of it. Pure, so it is
+/// tested without views; the bar hands it the slots as it drew them.
+public struct BarDrop: Sendable {
+    /// A slot as the bar drew it, its kind as BarSlot.kind; one with no width (an item drawing nothing, or one gone for
+    /// room) still counts in its side's order.
+    public struct Slot: Sendable {
+        public let kind: BarKind
+        public let minX: Double, maxX: Double
+
+        public init(kind: BarKind, minX: Double, maxX: Double) {
+            (self.kind, self.minX, self.maxX) = (kind, minX, maxX)
+        }
+
+        var drawn: Bool { maxX > minX }
+        var midX: Double { (minX + maxX) / 2 }
+    }
+
+    /// Where the dragged item lands: before the slot at `index` of `side`'s slots without it, the caret at `caret`.
+    public struct Target: Equatable, Sendable {
+        public let side: TopBarSide
+        public let index: Int
+        public let caret: Double
+
+        public init(side: TopBarSide, index: Int, caret: Double) { (self.side, self.index, self.caret) = (side, index, caret) }
+    }
+
+    /// Each side's slots in order, every one of them.
+    public let sides: [TopBarSide: [Slot]]
+    public let width: Double, height: Double
+    /// An empty side's zone, and how far in from the bar's edge the left and right ones sit.
+    static let emptyZone = 60.0, edge = 4.0
+    /// A zone's reach past its first and last slot, and a drop's reach under the bar.
+    static let pad = 3.0, below = 8.0
+    /// The caret past a side's first or last slot: just outside its zone's edge, never on it.
+    static let caretGap = 6.0
+
+    public init(sides: [TopBarSide: [Slot]], width: Double, height: Double) {
+        (self.sides, self.width, self.height) = (sides, width, height)
+    }
+
+    /// The side's drop zone along the bar: its drawn slots' span, or an empty side's 60 points at its place.
+    public func zone(_ side: TopBarSide) -> ClosedRange<Double> {
+        let drawn = (sides[side] ?? []).filter(\.drawn), end = width - Self.edge
+        if let first = drawn.first, let last = drawn.last { return first.minX - Self.pad...last.maxX + Self.pad }
+        switch side {
+        case .left: return Self.edge...Self.edge + Self.emptyZone
+        case .centre: return (width - Self.emptyZone) / 2...(width + Self.emptyZone) / 2
+        case .right: return end - Self.emptyZone...end
+        }
+    }
+
+    /// The side a drop at `x` lands on: the zones in the order they sit along the bar (a long right side can reach past an
+    /// empty centre's), each reaching halfway to the next.
+    func side(at x: Double) -> TopBarSide {
+        let ordered = TopBarSide.allCases.map { ($0, zone($0)) }.sorted { $0.1.lowerBound < $1.1.lowerBound }
+        return zip(ordered, ordered.dropFirst()).first { x < ($0.1.upperBound + $1.1.lowerBound) / 2 }?.0.0 ?? ordered.last!.0
+    }
+
+    /// Where `dragging` lands for a drop at `x`, `y` down from the bar's top edge; nil off the bar (the caller decides
+    /// what that means). Nil `dragging` is something not on the bar yet (an extension's item, drawn in the Extensions slot). The index counts the side's slots without the dragged one and never goes before Pilot's icon,
+    /// which leads the left side.
+    public func target(x: Double, y: Double, dragging: BarKind?) -> Target? {
+        guard (0...height + Self.below).contains(y) else { return nil }
+        let side = side(at: x)
+        let others = (sides[side] ?? []).filter { $0.kind != dragging }
+        let lead = others.prefix { $0.kind.pinned }.count
+        let next = others.indices.first { $0 >= lead && others[$0].drawn && others[$0].midX > x }
+        let index = max(lead, next ?? others.lastIndex(where: \.drawn).map { $0 + 1 } ?? others.count)
+        let before = others[..<index].last(where: \.drawn), after = others[index...].first(where: \.drawn)
+        let caret = switch (before, after) {
+        case let (b?, a?): (b.maxX + a.minX) / 2
+        case let (b?, nil): b.maxX + Self.caretGap
+        case let (nil, a?): a.minX - Self.caretGap
+        case (nil, nil): (zone(side).lowerBound + zone(side).upperBound) / 2
+        }
+        return Target(side: side, index: index, caret: caret)
+    }
+}
+
+extension BarSettings {
+    /// A drop on the top bar: the item goes to `side`, before the slot now at `index` of that side's top bar slots without
+    /// it, or last past the end. A reading joins the Group wherever it lands while the Group is shown (slots' rule). Pilot
+    /// never moves: its icon leads the left side.
+    public mutating func place(_ kind: BarKind, on side: TopBarSide, at index: Int) {
+        guard !kind.pinned else { return }
+        let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.kind != kind }
+        // A link can name any index: below 0 is first.
+        let index = max(index, 0)
+        guard index < others.count else { return move(kind, to: side) }
+        set(kind, side: side)
+        let target = others[index].kind
+        move(kind, to: entries.filter { $0.kind != kind }.firstIndex { $0.kind == target }!)
+    }
+
+    /// An item put on the top bar (a pilot://bar add link, pilot bar-items add): the item goes on, joins the top bar (one in the macOS menu bar alone is put in
+    /// both) and lands as a drop does. Pilot is on and placed already.
+    public mutating func add(_ kind: BarKind, on side: TopBarSide, at index: Int) {
+        guard !kind.pinned else { return }
+        // The Group draws nothing without a reading: one put back after it went with its readings brings round 4's three.
+        if kind == .group, gathered.isEmpty { for reading in [BarKind.cpu, .memory, .network] { join(reading) } }
+        join(kind)
+        place(kind, on: side, at: index)
+    }
+
+    /// The item on, in the top bar: one in the macOS menu bar alone is put in both.
+    private mutating func join(_ kind: BarKind) {
+        set(kind, on: true)
+        if entry(kind).placement == .menuBar { set(kind, placement: .both) }
+    }
+
+    /// The readings the top bar's Group gathers now; none while it is off.
+    private var gathered: [BarKind] { slots(in: .topBar, topBarOn: true).first(where: \.isGroup)?.kinds ?? [] }
+
+    /// Takes the slot `kind` draws off the bar (a remove link or the right-click menu's Remove; Sven on build 52 could not get rid of his
+    /// readings): the item goes off; the Group goes off with the readings it gathers, so its slot goes rather than coming
+    /// apart into one item per reading. Pilot never goes.
+    public mutating func remove(slot kind: BarKind) {
+        guard !kind.pinned else { return }
+        if kind == .group { for reading in gathered { set(reading, on: false) } }
+        set(kind, on: false)
+    }
+
+    /// Moves `kind`'s slot one place along the top bar, `step` -1 left or 1 right: within its side, and past a side's end
+    /// into the next side's near end. Nothing goes before Pilot's icon; a reading the Group gathers has no slot to move.
+    public mutating func nudge(_ kind: BarKind, by step: Int) {
+        guard !kind.pinned else { return }
+        let side = entry(kind).side, all = slots(in: .topBar, topBarOn: true, side: side)
+        guard let at = all.firstIndex(where: { $0.kind == kind }) else { return }
+        // `place` counts the side's slots without the moved one, so one place either way is `at + step` in both.
+        let to = at + step, lead = all.prefix { $0.kind.pinned }.count
+        if to >= lead, to < all.count { return place(kind, on: side, at: to) }
+        let sides = TopBarSide.allCases, next = sides.firstIndex(of: side)! + step
+        guard sides.indices.contains(next) else { return }
+        place(kind, on: sides[next], at: step < 0 ? .max : 0)
+    }
+}
+
+/// The spacer at a width of Sven's own (Sven on build 21: free spacing; the Menu bar page's Width since Q185): one spacer
+/// at any width, saved with the bar, rather than several spacers, since the bar holds each item once.
+public enum BarSpacer {
+    public static let widths: ClosedRange<Double> = 4...600
+
+    /// Its width as drawn: stretched, else its style's.
+    public static func width(_ entry: BarEntry) -> Double { entry.width ?? (entry.style == .flexible ? 40 : 14) }
+
+    static func clamp(_ width: Double) -> Double { min(max(width.rounded(), widths.lowerBound), widths.upperBound) }
+}
+
+/// A pilot://bar link (card agent-bo-95423017): `move=<kind>`, `add=<kind>` (each with `side=left|centre|right` and
+/// `index=<n>`, else the item's own side and last there) or `remove=<kind>` does what a drag does; `edit=1` opens the
+/// Menu bar page, where the bar is dragged; `spacer=<points>` sets the spacer's width as the page's Width does (`spacer=reset` gives it back its style's). A link
+/// naming an item or side this Pilot lacks is nil, and the app logs it.
+public enum BarRoute: Equatable, Sendable {
+    case edit
+    case spacer(Double?)
+    case move(BarKind, side: TopBarSide?, index: Int?)
+    case add(BarKind, side: TopBarSide?, index: Int?)
+    case remove(BarKind)
+
+    public init?(_ url: URL) {
+        var to: TopBarSide?
+        if let side = url.queryValue("side") {
+            guard let known = TopBarSide(rawValue: side) else { return nil }
+            to = known
+        }
+        let index = url.queryValue("index").flatMap { Int($0) }
+        let kind = { (name: String) in url.queryValue(name).flatMap(BarKind.init(rawValue:)) }
+        if let kind = kind("move") { self = .move(kind, side: to, index: index) }
+        else if let kind = kind("add") { self = .add(kind, side: to, index: index) }
+        else if let kind = kind("remove") { self = .remove(kind) }
+        else if url.queryValue("edit") == "1" { self = .edit }
+        else if let spacer = url.queryValue("spacer") {
+            guard spacer == "reset" || Double(spacer) != nil else { return nil }
+            self = .spacer(Double(spacer))
+        }
+        else { return nil }
+    }
+
+    /// Its change to the bar; opening the Menu bar page changes nothing here.
+    public func apply(to s: inout BarSettings) {
+        switch self {
+        case .edit: break
+        case .move(let kind, let side, let index): s.place(kind, on: side ?? s.entry(kind).side, at: index ?? .max)
+        case .add(let kind, let side, let index): s.add(kind, on: side ?? s.entry(kind).side, at: index ?? .max)
+        case .remove(let kind): s.remove(slot: kind)
+        case .spacer(let width): s.setSpacer(width: width)
+        }
+    }
+}

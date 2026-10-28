@@ -1,0 +1,15 @@
+name: Idea
+description: Something you would like Pilot to do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Pilot to do, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: mac
+    attributes:
+      label: Your Mac and Pilot
+      description: Pilot version and build, macOS version, Mac model, layer key, look and tiler (Pilot's Send feedback writes them for you).

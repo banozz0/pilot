@@ -1,0 +1,2345 @@
+{
+  "apps" : [
+
+  ],
+  "binds" : [
+    {
+      "action" : "ai.ask",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "ai.chat",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Q",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "ai.fix",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "ai.selection",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "ai.selectionTools",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.activityMonitor",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.appsMenu",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.bitwardenFill",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.bitwardenForget",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.bitwardenGenerator",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.bitwardenLock",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.bitwardenSearch",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.browser",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.calendar",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.clipboard",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "V",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.clipboardOptionV",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : false,
+        "key" : "V",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "apps.editor",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.emoji",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "E",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.files",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.generatePassword",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.launcher",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Space",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.lazygit",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "G",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.mail",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.messages",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.music",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.notes",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.open:app.zen-browser.zen",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "B",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:cc.ffitch.shottr",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "I",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:com.madda.ghostex.gpui",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "G",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:com.openai.codex",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "I",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:com.tdesktop.Telegram",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "T",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:dev.empryo.desktop",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Z",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:dev.vencord.vesktop",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "V",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:net.whatsapp.WhatsApp",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "W",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.open:rocks.spotifast.Spotifast",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "M",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.passwords",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "P",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.pastePlain",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "V",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "apps.private:app.zen-browser.zen",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "B",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.reports",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.terminal",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Return",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.url:app.zen-browser.zen:https://claude.ai",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.url:app.zen-browser.zen:https://mail.google.com",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "E",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.url:app.zen-browser.zen:https://open.spotify.com",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "apps.url:app.zen-browser.zen:https://x.com",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "X",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "apps.url:app.zen-browser.zen:https://youtube.com",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Y",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.web:https://www.youtube.com",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "H",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.webApp",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "bar.peekMenuBar",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "M",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "captures.activeWindow",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "S",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "captures.area",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "S",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "captures.delayed",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.editLast",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "E",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "captures.fullscreen",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "A",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "captures.menu",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "C",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "captures.ocr",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "X",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "captures.pauseRecording",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "A",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "captures.pinLast",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.repeatArea",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "S",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "captures.restoreThumbnail",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.screenRecording",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "A",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "captures.scrolling",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "D",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "captures.scrollingUp",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.shottrShortcutsOff",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.shottrShortcutsRestore",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "captures.toggleDesktopIcons",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "dictation.hold",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "dictation.toggle",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.copy",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.cut",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.nextTab",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.paste",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.pick:{\"list\":\"ls ~/code\",\"run\":\"open \\\"$HOME/code/$1\\\"\",\"title\":\"Open a code folder\"}",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : ";",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "drive.previousTab",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.quitApp",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.redo",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.selectAll",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.undo",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "drive.url:shottr://show",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.grantAccessibility",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.hyper",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.openWindow",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.reportBug",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.restartTiler",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.sheet",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "C",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "engine.suggestIdea",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.support",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.tilingOff",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.tilingOn",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "engine.topBar",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "ext.ports.kill-port",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "extensions.catalogue",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "extensions.openFolder",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "look.ghosttyApply",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "look.ghosttyRemove",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "media.mute",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F10",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.next",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F9",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.playPause",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F8",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.previous",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F7",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.volumeDown",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F11",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.volumeUp",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F12",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "notes.toggle",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "N",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "scripts.openFolder",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "speech.readAloud",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "R",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.bluetoothSettings",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "B",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.brightnessDown",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F1",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "system.brightnessDownAll",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F1",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "system.brightnessUp",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F2",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "system.brightnessUpAll",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F2",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "system.clearAllNotifications",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.clearNotification",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.colourPicker",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "C",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "system.darkMode",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "D",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "system.displaySettings",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.focusSettings",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.idleLock",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.infoHUD",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "T",
+        "modifiers" : [
+          "ctrl",
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "system.keepAwake",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.killProcess",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.lock",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Escape",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "system.logOut",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.menu",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Space",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "system.missionControl",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : false,
+        "key" : "↑",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.nextWallpaper",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Space",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.nextWallpaperAll",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.nightShift",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.openFullDiskAccess",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.openNotification",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.previousWallpaper",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Space",
+        "modifiers" : [
+          "shift",
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.previousWallpaperAll",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.restart",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.shutDown",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.sleep",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.soundSettings",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "A",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "system.speedTest",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.translationLanguages",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.wifi",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "system.wifiSettings",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "W",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "terminal.drop",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "T",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.balance",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "B",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.centre",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.centreColumn",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "C",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.close",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "W",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.closeAll",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.closeOthers",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "W",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.cycle",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.cycleColumnWidth",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "R",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.cycleColumnWidthBack",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "R",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.defocus",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "D",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.firstThird",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.firstThreeQuarters",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "[",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.firstTwoThirds",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.flipSplit",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "/",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusDisplayLeft",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "←",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusDisplayRight",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "→",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusDown",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↓",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusLeft",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "←",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusNext",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Tab",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusPrevious",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Tab",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusRight",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "→",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.focusUp",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↑",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.fullscreen",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "F",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.grow",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "=",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.growHeight",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.growWidth",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "=",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.joinDown",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↓",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.joinLeft",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "←",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.joinRight",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "→",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.joinUp",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↑",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.lastQuarter",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "]",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.lastThird",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.lastTwoThirds",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.maximise",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.middleThird",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.minimise",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.popOut",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "O",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.resetLayout",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "R",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "windows.sendToDisplayLeft",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "←",
+        "modifiers" : [
+          "shift",
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "windows.sendToDisplayRight",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "→",
+        "modifiers" : [
+          "shift",
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "windows.shrink",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "-",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.shrinkHeight",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.shrinkWidth",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "-",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "windows.snapLeft",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.snapRight",
+      "custom" : true,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.swapDown",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↓",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.swapLeft",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "←",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.swapRight",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "→",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.swapUp",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "↑",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.toggleFloat",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "T",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "windows.toggleFloatWorkspace",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "T",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "windows.toggleScrolling",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimFocusDown",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimFocusLeft",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimFocusRight",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimFocusUp",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimSwapDown",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimSwapLeft",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimSwapRight",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "windows.vimSwapUp",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "workspaces.cycleLayout",
+      "custom" : true,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "/",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.former",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "`",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:1",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "1",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:2",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "2",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:3",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "3",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:4",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "4",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:5",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "5",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:6",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "6",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:7",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "7",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:8",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "8",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.go:9",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "9",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:1",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "1",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:2",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "2",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:3",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "3",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:4",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "4",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:5",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "5",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:6",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "6",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:7",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "7",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:8",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "8",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.move:9",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "9",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:1",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "1",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:2",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "2",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:3",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "3",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:4",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "4",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:5",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "5",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:6",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "6",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:7",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "7",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:8",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "8",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.moveFollow:9",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "9",
+        "modifiers" : [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.next",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "workspaces.previous",
+      "custom" : false,
+      "trigger" : null
+    },
+    {
+      "action" : "workspaces.rescue",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Escape",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.restoreSnapshot",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "S",
+        "modifiers" : [
+          "shift",
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.saveSnapshot",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "S",
+        "modifiers" : [
+          "ctrl"
+        ]
+      }
+    },
+    {
+      "action" : "workspaces.toggleGaps",
+      "custom" : false,
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Delete",
+        "modifiers" : [
+          "shift"
+        ]
+      }
+    }
+  ],
+  "mouse" : [
+    {
+      "action" : "media.playPause",
+      "trigger" : {
+        "hyper" : false,
+        "key" : "Mouse 3",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "ai.ask",
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Mouse 3",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "apps.pastePlain",
+      "button" : 4,
+      "device" : {
+        "name" : "HyperX Pulsefire Core",
+        "product" : 3471,
+        "vendor" : 1008
+      },
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Mouse Next",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "drive.copy",
+      "button" : 5,
+      "device" : {
+        "name" : "HyperX Pulsefire Core",
+        "product" : 3471,
+        "vendor" : 1008
+      },
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Mouse Key Escape",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.volumeUp",
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Mouse Scroll Up",
+        "modifiers" : [
+
+        ]
+      }
+    },
+    {
+      "action" : "media.volumeDown",
+      "trigger" : {
+        "hyper" : true,
+        "key" : "Mouse Scroll Down",
+        "modifiers" : [
+
+        ]
+      }
+    }
+  ],
+  "preset" : "myBinds",
+  "presets" : [
+    {
+      "base" : "pilot",
+      "binds" : [
+
+      ],
+      "id" : "pilot",
+      "name" : "Pilot default"
+    },
+    {
+      "base" : "myBinds",
+      "binds" : [
+        {
+          "action" : "apps.editor",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "apps.notes",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "apps.open:cc.ffitch.shottr",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "I",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "apps.open:rocks.spotifast.Spotifast",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "M",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "apps.url:app.zen-browser.zen:https://claude.ai",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "apps.url:app.zen-browser.zen:https://open.spotify.com",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "apps.web:https://www.youtube.com",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "H",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "drive.pick:{\"list\":\"ls ~/code\",\"run\":\"open \\\"$HOME/code/$1\\\"\",\"title\":\"Open a code folder\"}",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : ";",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "drive.url:shottr://show",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "ext.ports.kill-port",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "notes.toggle",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "N",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "system.bluetoothSettings",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "B",
+            "modifiers" : [
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "system.soundSettings",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "A",
+            "modifiers" : [
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "system.wifiSettings",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "W",
+            "modifiers" : [
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "windows.centre",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "windows.focusDisplayLeft",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "←",
+            "modifiers" : [
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "windows.focusDisplayRight",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "→",
+            "modifiers" : [
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "windows.focusDown",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "↓",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "windows.focusLeft",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "←",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "windows.focusRight",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "→",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "windows.focusUp",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "↑",
+            "modifiers" : [
+
+            ]
+          }
+        },
+        {
+          "action" : "windows.maximise",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "windows.sendToDisplayLeft",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "←",
+            "modifiers" : [
+              "shift",
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "windows.sendToDisplayRight",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "→",
+            "modifiers" : [
+              "shift",
+              "ctrl"
+            ]
+          }
+        },
+        {
+          "action" : "windows.snapLeft",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "windows.snapRight",
+          "custom" : true,
+          "trigger" : null
+        },
+        {
+          "action" : "windows.swapDown",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "↓",
+            "modifiers" : [
+              "shift"
+            ]
+          }
+        },
+        {
+          "action" : "windows.swapLeft",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "←",
+            "modifiers" : [
+              "shift"
+            ]
+          }
+        },
+        {
+          "action" : "windows.swapRight",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "→",
+            "modifiers" : [
+              "shift"
+            ]
+          }
+        },
+        {
+          "action" : "windows.swapUp",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "↑",
+            "modifiers" : [
+              "shift"
+            ]
+          }
+        },
+        {
+          "action" : "workspaces.cycleLayout",
+          "custom" : true,
+          "trigger" : {
+            "hyper" : true,
+            "key" : "/",
+            "modifiers" : [
+              "shift"
+            ]
+          }
+        }
+      ],
+      "id" : "myBinds",
+      "name" : "My binds"
+    }
+  ],
+  "version" : 3
+}

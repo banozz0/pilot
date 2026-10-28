@@ -1,0 +1,40 @@
+{
+ "objects": [
+  {
+   "package": {
+    "name": "cowsay",
+    "version": "1.6.0",
+    "description": "cowsay is a configurable talking cow"
+   }
+  },
+  {
+   "package": {
+    "name": "cowsay-browser",
+    "version": "1.1.8",
+    "description": "cowsay is a configurable talking cow"
+   }
+  },
+  {
+   "package": {
+    "name": "cowrizz",
+    "version": "1.0.4",
+    "description": "cowsay with rizz"
+   }
+  },
+  {
+   "package": {
+    "name": "react-cowsay",
+    "version": "0.1.0",
+    "description": "A react wrapper for cowsay-browser"
+   }
+  },
+  {
+   "package": {
+    "name": "cowsay-demo",
+    "version": "1.5.0",
+    "description": "cowsay is a configurable talking cow"
+   }
+  }
+ ],
+ "total": 225
+}

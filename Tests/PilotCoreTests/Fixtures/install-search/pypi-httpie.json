@@ -1,0 +1,9 @@
+{
+ "info": {
+  "name": "httpie",
+  "summary": "HTTPie: modern, user-friendly command-line HTTP client for the API era.",
+  "version": "3.2.4",
+  "home_page": "https://httpie.io/",
+  "project_url": "https://pypi.org/project/httpie/"
+ }
+}

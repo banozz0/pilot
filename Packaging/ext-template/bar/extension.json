@@ -1,0 +1,16 @@
+{
+  "id": "example",
+  "title": "Example",
+  "icon": "🧩",
+  "version": "0.1.0",
+  "description": "A top-bar item: a short text Pilot asks for every two minutes, and a popover on a click.",
+  "examples": ["Turn it on in Menu bar: the bar shows the time; click it for the popover"],
+  "runtime": "process",
+  "requires": ["python3"],
+  "permissions": {},
+  "surfaces": { "bar": { "command": "bar", "every": 120 } },
+  "commands": [
+    { "name": "now", "title": "Example", "mode": "no-view", "run": "main.py" },
+    { "name": "bar", "title": "Example in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

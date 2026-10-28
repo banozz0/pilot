@@ -1,0 +1,10 @@
+{
+  "appMB": 70,
+  "binaryMB": 52,
+  "pilotIdleMB": 45,
+  "helperIdleMB": 150,
+  "pilotIdleCPUPercent": 0.5,
+  "helperIdleCPUPercent": 2,
+  "launchBindsSeconds": 2,
+  "launchFilesSeconds": 5
+}

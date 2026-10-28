@@ -1,0 +1,17 @@
+#!/bin/zsh -f
+# Pilot's gate on every shell command its AI agents run (spec pilot-ai-helper T17, ADR 0013): claude's
+# CLAUDE_CODE_SHELL_PREFIX, set by AIChat.Agent.environment. claude hands it one argument, the script it built around the
+# model's command (`… && eval '<command>' < /dev/null && pwd -P >| <tmp>/claude-<hex>-cwd`), and leaves running it to us.
+# It runs only when the command is one plain `pilot …` call: words of letters, digits and _ . / : = @ % + , - or a
+# "double-quoted" word with no $, ` or \ in it. Anything else is refused unrun: a second command (; && || | &), a
+# redirect, $( ), a glob or ~, a single quote (it would end eval's quote), or a script not shaped as above. claude's
+# allow-list let `pilot ping; ps aux` through, since it auto-allows read-only commands (probe E, 2026-10-12).
+emulate -L zsh
+refuse() { print -u2 "Pilot refused this: only one plain pilot command per call (no ; && | redirects \$ \` or quotes ')."; exit 1 }
+(( $# == 1 )) || refuse
+[[ $1 =~ " && eval '([^']*)' < /dev/null && pwd -P >\| [^ ']*/claude-[0-9a-f]+-cwd\$" ]] || refuse
+command=$match[1]
+[[ $command =~ '^pilot( +([A-Za-z0-9_./:=@%+,-]+|"[^"$`\\]*"))* *$' ]] || refuse
+# The agent's pilot: its changes wait on one plan and one Allow (ControlPlan), whatever claude's environment held.
+export PILOT_AGENT=1
+exec /bin/zsh -f -c "$1"

@@ -1,0 +1,136 @@
+{
+  "apps": [
+    {
+      "name": "Ghostty",
+      "bundle": "com.mitchellh.ghostty",
+      "doc": "https://github.com/ghostty-org/ghostty/blob/v1.3.1/macos/Sources/App/macOS/MainMenu.xib",
+      "checked": "2026-10-05",
+      "actions": [
+        { "label": "New window", "route": "drive.menu:com.mitchellh.ghostty:File > New Window" },
+        { "label": "Quick terminal", "route": "drive.menu:com.mitchellh.ghostty:View > Quick Terminal" }
+      ]
+    },
+    {
+      "name": "Zen",
+      "bundle": "app.zen-browser.zen",
+      "doc": "https://github.com/zen-browser/flatpak/blob/main/app.zen_browser.zen.desktop",
+      "checked": "2026-10-05",
+      "actions": [
+        { "label": "New private window", "route": "apps.private:app.zen-browser.zen" }
+      ]
+    },
+    {
+      "name": "Calendar",
+      "bundle": "com.apple.iCal",
+      "doc": "https://support.apple.com/guide/calendar/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "Go to Today", "route": "drive.menu:com.apple.iCal:View > Go to Today", "symbol": "calendar.day.timeline.left", "opens": true },
+        { "label": "New Event", "route": "drive.menu:com.apple.iCal:File > New Event", "symbol": "calendar.badge.plus", "opens": true }
+      ]
+    },
+    {
+      "name": "Mail",
+      "bundle": "com.apple.mail",
+      "doc": "https://support.apple.com/guide/mail/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Message", "route": "drive.menu:com.apple.mail:File > New Message", "symbol": "square.and.pencil", "opens": true },
+        { "label": "Get New Mail", "route": "drive.menu:com.apple.mail:Mailbox > Get New Mail", "symbol": "envelope.arrow.triangle.branch", "opens": true }
+      ]
+    },
+    {
+      "name": "Music",
+      "bundle": "com.apple.Music",
+      "doc": "https://support.apple.com/guide/music/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "Play or pause", "route": "media.playPause", "symbol": "playpause" },
+        { "label": "Next track", "route": "media.next", "symbol": "forward.end" },
+        { "label": "Favourite This Song", "route": "drive.menu:com.apple.Music:Song > Favourite | Favorite", "symbol": "star" }
+      ]
+    },
+    {
+      "name": "Notes",
+      "bundle": "com.apple.Notes",
+      "doc": "https://support.apple.com/guide/notes/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Note", "route": "drive.menu:com.apple.Notes:File > New Note", "symbol": "square.and.pencil", "opens": true },
+        { "label": "Search Notes", "route": "drive.menu:com.apple.Notes:Edit > Find > Note List Search…", "symbol": "magnifyingglass", "opens": true }
+      ]
+    },
+    {
+      "name": "Reminders",
+      "bundle": "com.apple.reminders",
+      "doc": "https://support.apple.com/guide/reminders/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Reminder", "route": "drive.menu:com.apple.reminders:File > New Reminder", "symbol": "plus.circle", "opens": true },
+        { "label": "Today's Reminders", "route": "drive.menu:com.apple.reminders:View > Show Smart List > Today", "symbol": "sun.max", "opens": true },
+        { "label": "Scheduled Reminders", "route": "drive.menu:com.apple.reminders:View > Show Smart List > Scheduled", "symbol": "calendar", "opens": true }
+      ]
+    },
+    {
+      "name": "Finder",
+      "bundle": "com.apple.finder",
+      "doc": "https://support.apple.com/guide/mac-help/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Finder Window", "route": "drive.menu:com.apple.finder:File > New Finder Window", "symbol": "macwindow.badge.plus", "opens": true },
+        { "label": "Show Downloads", "route": "drive.menu:com.apple.finder:Go > Downloads", "symbol": "arrow.down.circle", "opens": true },
+        { "label": "Empty Trash", "route": "drive.menu:com.apple.finder:Finder > Empty Bin… | Empty Trash… | Empty Bin | Empty Trash", "symbol": "trash", "opens": true }
+      ]
+    },
+    {
+      "name": "Google Chrome",
+      "bundle": "com.google.Chrome",
+      "doc": "https://support.google.com/chrome/answer/157179",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Tab", "route": "drive.menu:com.google.Chrome:File > New Tab", "symbol": "plus.square.on.square", "opens": true },
+        { "label": "New Incognito Window", "route": "apps.private:com.google.Chrome", "symbol": "eyeglasses" },
+        { "label": "Search Tabs", "route": "drive.menu:com.google.Chrome:Tab > Search Tabs…", "symbol": "magnifyingglass", "opens": true }
+      ]
+    },
+    {
+      "name": "Safari",
+      "bundle": "com.apple.Safari",
+      "doc": "https://support.apple.com/guide/safari/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Tab", "route": "drive.menu:com.apple.Safari:File > New Tab", "symbol": "plus.square.on.square", "opens": true },
+        { "label": "New Private Window", "route": "drive.menu:com.apple.Safari:File > New Private Window", "symbol": "hand.raised", "opens": true }
+      ]
+    },
+    {
+      "name": "QuickTime Player",
+      "bundle": "com.apple.QuickTimePlayerX",
+      "doc": "https://support.apple.com/guide/quicktime-player/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Screen Recording", "route": "drive.menu:com.apple.QuickTimePlayerX:File > New Screen Recording", "symbol": "record.circle", "opens": true },
+        { "label": "New Movie Recording", "route": "drive.menu:com.apple.QuickTimePlayerX:File > New Movie Recording", "symbol": "video", "opens": true },
+        { "label": "New Audio Recording", "route": "drive.menu:com.apple.QuickTimePlayerX:File > New Audio Recording", "symbol": "mic", "opens": true }
+      ]
+    },
+    {
+      "name": "Preview",
+      "bundle": "com.apple.Preview",
+      "doc": "https://support.apple.com/guide/preview/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New from Clipboard", "route": "drive.menu:com.apple.Preview:File > New from Clipboard", "symbol": "doc.on.clipboard", "opens": true }
+      ]
+    },
+    {
+      "name": "Contacts",
+      "bundle": "com.apple.AddressBook",
+      "doc": "https://support.apple.com/guide/contacts/welcome/mac",
+      "checked": "2026-10-18",
+      "actions": [
+        { "label": "New Card", "route": "drive.menu:com.apple.AddressBook:File > New Card", "symbol": "person.crop.circle.badge.plus", "opens": true }
+      ]
+    }
+  ]
+}

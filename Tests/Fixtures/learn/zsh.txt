@@ -1,0 +1,21 @@
+Welcome back, made-up user
+alias -- -='cd -'
+alias -g G='| grep'
+alias gs='git status'
+alias ll='ls -la'
+alias say='echo '\''hi there'\'''
+alias -s md=glow
+--pilot-learn-bindkeys--
+bindkey "^@" set-mark-command
+bindkey "^R" history-incremental-search-backward
+bindkey "^X^E" edit-command-line
+bindkey "^[b" backward-word
+bindkey "^[[A" up-line-or-search
+bindkey "^\\" undefined-key
+bindkey " " magic-space
+bindkey "a" self-insert
+bindkey -R "\M-^@"-"\M-^?" self-insert
+--pilot-learn-functions--
+_helper
+mkcd
+take

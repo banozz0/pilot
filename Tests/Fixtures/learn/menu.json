@@ -1,0 +1,8 @@
+[{"title":"Apple","enabled":true,"children":[{"title":"About","enabled":true,"children":[]}]},
+ {"title":"File","enabled":true,"children":[
+   {"title":"New Window","enabled":true,"children":[],"char":"N","modifiers":0},
+   {"title":"Save As…","enabled":false,"children":[],"char":"S","modifiers":1},
+   {"title":"","enabled":false,"children":[]},
+   {"title":"Close","enabled":true,"children":[]},
+   {"title":"Open Recent","enabled":true,"children":[{"title":"Clear Menu","enabled":true,"children":[],"char":"K","modifiers":3}]}]},
+ {"title":"Edit","enabled":true,"children":[{"title":"Copy","enabled":true,"children":[],"char":"C","modifiers":0}]}]

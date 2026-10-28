@@ -1,0 +1,1231 @@
+[
+ {
+  "id": "nightwatch",
+  "name": "Nightwatch",
+  "sub": "The cockpit at 3 am",
+  "src": "Tokyo Night",
+  "dark": 1,
+  "g": "#1a1b26",
+  "g2": "#16161e",
+  "s": "#1f2335",
+  "s2": "#292e42",
+  "l": "#2b3049",
+  "l2": "#3b4261",
+  "t": "#c0caf5",
+  "t2": "#a9b1d6",
+  "t3": "#7a82ab",
+  "a": "#7aa2f7",
+  "a2": "#bb9af7",
+  "a3": "#7dcfff",
+  "ok": "#9ece6a",
+  "wn": "#e0af68",
+  "bd": "#f7768e",
+  "c": [
+   "#7aa2f7",
+   "#bb9af7",
+   "#9ece6a"
+  ],
+  "df": "'Big Shoulders Display'",
+  "dw": 800,
+  "dz": 1.2,
+  "dls": ".005em",
+  "bt": "gradient",
+  "r": 0.8,
+  "face": "Big Shoulders Display",
+  "border": "a gradient from blue to violet, Hyprland’s active border",
+  "worst": [
+   "#bb9af7",
+   0.4,
+   "#171830"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#16161e",
+   "al": "#7aa2f7",
+   "kb": "#363b4d"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.367600982238371,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.367600982238371,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.367600982238371,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 6.714255474802574,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 7.334790611929662,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.367600982238371,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 6.456600189956392,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 6.771802592642337,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 6.930363354919874,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "teahouse",
+  "name": "Teahouse",
+  "sub": "Steam over jade",
+  "src": "Osaka Jade",
+  "dark": 1,
+  "g": "#111c18",
+  "g2": "#0c1512",
+  "s": "#162420",
+  "s2": "#1e3029",
+  "l": "#24392e",
+  "l2": "#34503f",
+  "t": "#ece6c4",
+  "t2": "#c6c89d",
+  "t3": "#8aa596",
+  "a": "#2dd5b7",
+  "a2": "#d2689c",
+  "a3": "#e5c736",
+  "ok": "#63b07a",
+  "wn": "#e5c736",
+  "bd": "#ff5345",
+  "c": [
+   "#2dd5b7",
+   "#d2689c",
+   "#e5c736"
+  ],
+  "df": "'Fraunces'",
+  "dw": 600,
+  "dz": 1.04,
+  "dls": "-.01em",
+  "dfv": "'SOFT' 100",
+  "bt": "glow",
+  "r": 1.1,
+  "face": "Fraunces, soft",
+  "border": "a jade ring with a soft halo",
+  "worst": [
+   "#2dd5b7",
+   0.3,
+   "#10201b"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#0c1512",
+   "al": "#2dd5b7",
+   "kb": "#2c3c36"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.293600043369613,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.293600043369613,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.293600043369613,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 8.58217520681669,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 9.260514835249516,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.293600043369613,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 8.29438791535973,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 8.646065792827631,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 8.82138234028055,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "crema",
+  "name": "Crema",
+  "sub": "The first cup",
+  "src": "Ristretto",
+  "dark": 1,
+  "g": "#2c2525",
+  "g2": "#221c1c",
+  "s": "#352c2b",
+  "s2": "#3f3331",
+  "l": "#493b39",
+  "l2": "#5c4b48",
+  "t": "#f3e7e8",
+  "t2": "#cbbfc0",
+  "t3": "#998d8e",
+  "a": "#f38d70",
+  "a2": "#f9cc6c",
+  "a3": "#85dacc",
+  "ok": "#adda78",
+  "wn": "#f9cc6c",
+  "bd": "#fd6883",
+  "c": [
+   "#f38d70",
+   "#f9cc6c",
+   "#85dacc"
+  ],
+  "df": "'Young Serif'",
+  "dw": 400,
+  "dz": 1,
+  "dls": "-.01em",
+  "bt": "lit",
+  "r": 1.2,
+  "face": "Young Serif",
+  "border": "coral, lit from above with a warm drop",
+  "worst": [
+   "#f38d70",
+   0.35,
+   "#2a201e"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#221c1c",
+   "al": "#f38d70",
+   "kb": "#4b3f3d"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.5994337062793775,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.5994337062793775,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.5994337062793775,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 7.08493071830608,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 7.589116853512222,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.5994337062793775,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 6.86845291931305,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 7.133436277164679,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 7.267487702071061,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "ukiyo",
+  "name": "Ukiyo",
+  "sub": "The great wave",
+  "src": "Kanagawa",
+  "dark": 1,
+  "g": "#1f1f28",
+  "g2": "#18181f",
+  "s": "#24242f",
+  "s2": "#2c2c38",
+  "l": "#363646",
+  "l2": "#54546d",
+  "t": "#dcd7ba",
+  "t2": "#c8c093",
+  "t3": "#908f86",
+  "a": "#7e9cd8",
+  "a2": "#e6c384",
+  "a3": "#c34043",
+  "ok": "#98bb6c",
+  "wn": "#ffa066",
+  "bd": "#e82424",
+  "c": [
+   "#7e9cd8",
+   "#e6c384",
+   "#98bb6c"
+  ],
+  "df": "'Zen Old Mincho'",
+  "dw": 700,
+  "dz": 1,
+  "dls": ".01em",
+  "bt": "double",
+  "r": 0.4,
+  "face": "Zen Old Mincho",
+  "border": "a double rule, like a woodblock print’s frame",
+  "worst": [
+   "#7e9cd8",
+   0.29,
+   "#1b2034"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#18181f",
+   "al": "#7e9cd8",
+   "kb": "#393944"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.343283585837197,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.343283585837197,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.343283585837197,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 7.846238184170814,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 8.316409045653556,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.343283585837197,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 7.65111836037011,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 7.889671671625403,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 8.009168095215053,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "understory",
+  "name": "Understory",
+  "sub": "Moss after rain",
+  "src": "Everforest",
+  "dark": 1,
+  "g": "#2d353b",
+  "g2": "#252c31",
+  "s": "#343f44",
+  "s2": "#3d484d",
+  "l": "#434e52",
+  "l2": "#56635f",
+  "t": "#e4d8bb",
+  "t2": "#bcc2ae",
+  "t3": "#929c8f",
+  "a": "#a7c080",
+  "a2": "#e69875",
+  "a3": "#7fbbb3",
+  "ok": "#a7c080",
+  "wn": "#dbbc7f",
+  "bd": "#e67e80",
+  "c": [
+   "#a7c080",
+   "#e69875",
+   "#7fbbb3"
+  ],
+  "df": "'Bricolage Grotesque'",
+  "dw": 700,
+  "dz": 1,
+  "dls": "-.025em",
+  "bt": "soft",
+  "r": 1.1,
+  "face": "Bricolage Grotesque",
+  "border": "moss green with a wide soft halo",
+  "worst": [
+   "#a7c080",
+   0.22,
+   "#2a3236"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#252c31",
+   "al": "#a7c080",
+   "kb": "#495358"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.90892316913031,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.90892316913031,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.90892316913031,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 5.748867546375503,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 5.9543725394721125,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.90892316913031,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 5.632000229349252,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 5.775099597445494,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 5.847721790455204,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "hearth",
+  "name": "Hearth",
+  "sub": "The last log",
+  "src": "Gruvbox",
+  "dark": 1,
+  "g": "#282828",
+  "g2": "#1f2021",
+  "s": "#32302f",
+  "s2": "#3c3836",
+  "l": "#45403d",
+  "l2": "#5a524c",
+  "t": "#ebdbb2",
+  "t2": "#d4be98",
+  "t3": "#a08f7e",
+  "a": "#d8a657",
+  "a2": "#e78a4e",
+  "a3": "#89b482",
+  "ok": "#a9b665",
+  "wn": "#e78a4e",
+  "bd": "#ea6962",
+  "c": [
+   "#d8a657",
+   "#e78a4e",
+   "#89b482"
+  ],
+  "df": "'Caprasimo'",
+  "dw": 400,
+  "dz": 0.98,
+  "dls": "0",
+  "bt": "lit",
+  "r": 1,
+  "face": "Caprasimo",
+  "border": "amber, lit from above, glowing low",
+  "worst": [
+   "#e78a4e",
+   0.44,
+   "#241c17"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#1f2021",
+   "al": "#d8a657",
+   "kb": "#484442"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.263866348922696,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.263866348922696,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.263866348922696,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 6.727882310811616,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 7.257370926858778,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 7.263866348922696,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 6.498189305234987,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 6.779371490766784,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 6.921682574386828,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "graphite",
+  "name": "Graphite",
+  "sub": "The quiet machine",
+  "src": "Matte Black",
+  "dark": 1,
+  "g": "#121212",
+  "g2": "#0d0d0d",
+  "s": "#181818",
+  "s2": "#202020",
+  "l": "#272727",
+  "l2": "#363636",
+  "t": "#ededed",
+  "t2": "#c2c2c2",
+  "t3": "#8d8d90",
+  "a": "#e68e0d",
+  "a2": "#d35f5f",
+  "a3": "#ededed",
+  "ok": "#8fbf6a",
+  "wn": "#f59e0b",
+  "bd": "#d35f5f",
+  "c": [
+   "#e68e0d",
+   "#ededed",
+   "#d35f5f"
+  ],
+  "df": "'Unbounded'",
+  "dw": 600,
+  "dz": 0.8,
+  "dls": "-.02em",
+  "bt": "brackets",
+  "r": 0.45,
+  "face": "Unbounded",
+  "border": "corner brackets in signal amber, like a camera’s focus",
+  "worst": [
+   "#e68e0d",
+   0.15,
+   "#121212"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#0d0d0d",
+   "al": "#e68e0d",
+   "kb": "#2d2d2d"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.968527477211186,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.968527477211186,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.968527477211186,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 9.799743265252713,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 9.991717548903173,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 9.968527477211186,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 9.696250897030604,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 9.82247214451339,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 9.88444914060935,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "fjord",
+  "name": "Fjord",
+  "sub": "The cold harbour",
+  "src": "Nord",
+  "dark": 1,
+  "g": "#2e3440",
+  "g2": "#272c36",
+  "s": "#343a47",
+  "s2": "#3b4252",
+  "l": "#434c5e",
+  "l2": "#4f5a70",
+  "t": "#eceff4",
+  "t2": "#d8dee9",
+  "t3": "#a2acbf",
+  "a": "#88c0d0",
+  "a2": "#b48ead",
+  "a3": "#ebcb8b",
+  "ok": "#a3be8c",
+  "wn": "#d08770",
+  "bd": "#bf616a",
+  "c": [
+   "#88c0d0",
+   "#b48ead",
+   "#a3be8c"
+  ],
+  "df": "'Syne'",
+  "dw": 700,
+  "dz": 0.95,
+  "dls": "-.01em",
+  "bt": "frost",
+  "r": 0.9,
+  "face": "Syne",
+  "border": "frost blue with an icy top edge",
+  "worst": [
+   "#88c0d0",
+   0.3,
+   "#3b4252"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#272c36",
+   "al": "#88c0d0",
+   "kb": "#474d5c"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.438145351508624,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.438145351508624,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.438145351508624,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 7.626741950830885,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 8.380504667203569,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 8.438145351508624,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 7.337246338167287,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 7.692387752991549,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 7.875339419499829,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "boardwalk",
+  "name": "Boardwalk",
+  "sub": "Summer of ’82",
+  "src": "Retro 82",
+  "dark": 1,
+  "g": "#05182e",
+  "g2": "#031222",
+  "s": "#0a2038",
+  "s2": "#0f2a48",
+  "l": "#14365a",
+  "l2": "#204b70",
+  "t": "#f6dcac",
+  "t2": "#b9d3cf",
+  "t3": "#7fa8a6",
+  "a": "#faa968",
+  "a2": "#f85525",
+  "a3": "#8cbfb8",
+  "ok": "#8cbfb8",
+  "wn": "#e97b3c",
+  "bd": "#f85525",
+  "c": [
+   "#faa968",
+   "#f85525",
+   "#8cbfb8"
+  ],
+  "df": "'Tilt Warp'",
+  "dw": 400,
+  "dz": 0.96,
+  "dls": "0",
+  "bt": "offset",
+  "r": 0.7,
+  "face": "Tilt Warp",
+  "border": "peach, with a hard red sticker shadow",
+  "worst": [
+   "#faa968",
+   0.55,
+   "#40284a"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#031222",
+   "al": "#faa968",
+   "kb": "#1d3753"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.40372994196391,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.40372994196391,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.40372994196391,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 8.816781748872586,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 10.269291964067817,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.40372994196391,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 8.233661284706237,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 8.94634722662749,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 9.30061655104936,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "nocturne",
+  "name": "Nocturne",
+  "sub": "Peach light, deep blue",
+  "src": "Ethereal",
+  "dark": 1,
+  "g": "#060b1e",
+  "g2": "#040816",
+  "s": "#0c1430",
+  "s2": "#141c3e",
+  "l": "#1c2550",
+  "l2": "#2a3566",
+  "t": "#ffd6b8",
+  "t2": "#d2c1b0",
+  "t3": "#949cc8",
+  "a": "#8f94e6",
+  "a2": "#c89dc1",
+  "a3": "#e9bb4f",
+  "ok": "#92a593",
+  "wn": "#eb8b54",
+  "bd": "#ed5b5a",
+  "c": [
+   "#8f94e6",
+   "#c89dc1",
+   "#e9bb4f"
+  ],
+  "df": "'Instrument Serif'",
+  "dw": 400,
+  "dz": 1.3,
+  "dls": "0",
+  "dst": "italic",
+  "bt": "glow",
+  "r": 1.2,
+  "face": "Instrument Serif, italic",
+  "border": "periwinkle with a moonlit halo",
+  "worst": [
+   "#7d82d9",
+   0.36,
+   "#0a1230"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#040816",
+   "al": "#8f94e6",
+   "kb": "#222a4a"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.355223406891815,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.355223406891815,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.355223406891815,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 9.784989642741998,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 10.350839779402364,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.355223406891815,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 9.518383405674077,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 9.843171466972903,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 10.000876590056304,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "paper",
+  "name": "Paper",
+  "sub": "The desk",
+  "src": "Flexoki Light",
+  "dark": 0,
+  "g": "#f2efe4",
+  "g2": "#e8e5d9",
+  "s": "#fffcf0",
+  "s2": "#f2efe4",
+  "l": "#dad8ce",
+  "l2": "#bdbbb1",
+  "t": "#100f0f",
+  "t2": "#403e3c",
+  "t3": "#6c6a65",
+  "a": "#205ea6",
+  "a2": "#d14d41",
+  "a3": "#d0a215",
+  "ok": "#66800b",
+  "wn": "#bc5215",
+  "bd": "#af3029",
+  "c": [
+   "#205ea6",
+   "#d14d41",
+   "#879a39"
+  ],
+  "sel": "rgba(208,162,21,.24)",
+  "df": "'Newsreader'",
+  "dw": 500,
+  "dz": 1.12,
+  "dls": "-.01em",
+  "dst": "italic",
+  "bt": "ink",
+  "r": 0.6,
+  "face": "Newsreader, italic",
+  "border": "an ink rule with a blue offset, like a riso print",
+  "worst": [
+   "#205ea6",
+   0.13,
+   "#e2ddcb"
+  ],
+  "derived": {
+   "sel": "rgba(208,162,21,.24)",
+   "ai": "#ffffff",
+   "al": "#1b508d",
+   "kb": "#ffffff"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.360722485131772,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.360722485131772,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.360722485131772,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 9.527557308654657,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 10.147945886314858,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 10.360722485131772,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 9.376571601404569,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 9.561313044962798,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 9.654523276533459,
+    "raised": false
+   }
+  }
+ },
+ {
+  "id": "petal",
+  "name": "Petal",
+  "sub": "The slow morning",
+  "src": "Rosé Pine",
+  "dark": 0,
+  "g": "#f4ece5",
+  "g2": "#ebe2da",
+  "s": "#fffaf3",
+  "s2": "#f2e9e1",
+  "l": "#e2d9d3",
+  "l2": "#cbc3c4",
+  "t": "#4d4870",
+  "t2": "#625e7b",
+  "t3": "#77738f",
+  "a": "#907aa9",
+  "a2": "#d7827e",
+  "a3": "#56949f",
+  "ok": "#286983",
+  "wn": "#ea9d34",
+  "bd": "#b4637a",
+  "c": [
+   "#907aa9",
+   "#d7827e",
+   "#56949f"
+  ],
+  "df": "'Recursive'",
+  "dw": 700,
+  "dz": 1,
+  "dls": "-.01em",
+  "dfv": "'CASL' 1",
+  "bt": "soft",
+  "r": 1.3,
+  "face": "Recursive Casual",
+  "border": "iris with a wide pastel halo",
+  "worst": [
+   "#907aa9",
+   0.3,
+   "#efe5dc"
+  ],
+  "derived": {
+   "sel": null,
+   "ai": "#ffffff",
+   "al": "#7a6890",
+   "kb": "#ffffff"
+  },
+  "mats": {
+   "solid40": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.935971092704389,
+    "raised": false
+   },
+   "solid80": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.935971092704389,
+    "raised": false
+   },
+   "solid100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.935971092704389,
+    "raised": false
+   },
+   "tinted40": {
+    "ma": 40,
+    "ms": 72,
+    "cr": 5.441269787825657,
+    "raised": false
+   },
+   "tinted80": {
+    "ma": 80,
+    "ms": 88,
+    "cr": 5.809587828844505,
+    "raised": false
+   },
+   "tinted100": {
+    "ma": 100,
+    "ms": 100,
+    "cr": 5.935971092704389,
+    "raised": false
+   },
+   "glass40": {
+    "ma": 22,
+    "ms": 72,
+    "cr": 5.351682482543285,
+    "raised": false
+   },
+   "glass80": {
+    "ma": 44,
+    "ms": 72,
+    "cr": 5.461304407283651,
+    "raised": false
+   },
+   "glass100": {
+    "ma": 55,
+    "ms": 72,
+    "cr": 5.516636910632118,
+    "raised": false
+   }
+  }
+ }
+]

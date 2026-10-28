@@ -1,0 +1,5 @@
+alias.co checkout
+alias.lg log --graph --oneline --decorate
+alias.wip !git add -A && git commit -m wip
+user.name Example Person
+alias.empty

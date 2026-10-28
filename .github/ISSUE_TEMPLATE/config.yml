@@ -1,0 +1,2 @@
+# Pilot's Send feedback opens issues/new?template=bug.yml or idea.yml with the title and the mac field prefilled.
+blank_issues_enabled: true
