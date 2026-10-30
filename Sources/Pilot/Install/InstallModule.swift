@@ -67,10 +67,19 @@ enum InstallModule {
         let title = "Install \(helper.name)"
         switch helper.step(installed: installed) {
         case .installed: HUD.tip("\(helper.name) is installed")
-        case .needsHomebrew: HUD.tip("\(helper.name) installs through Homebrew: install Homebrew first, on General")
+        case .needsHomebrew: HUD.tip("\(helper.name) installs through Homebrew: install Homebrew first, in Install › Helpers")
         case .installer(let command): confirm(title, command) { run(command, title, VisibleRun.waitForReturn) }
         case .formula(let p): confirmRun(title, p.install, hook: "installed", key: p.key, confirm: confirm, run: run)
         }
+    }
+
+    /// A formula helper with Homebrew in one run (Clean's Install Homebrew and Mole, Sven 2026-10-29, Q557): the confirm
+    /// step with the chained command, then the visible terminal, which records the formula's install and waits for Return
+    /// so Homebrew's next steps are read.
+    static func installWithHomebrew(_ helper: Helper, confirm: Confirm = confirm, run: @escaping Run = visibleRun) {
+        guard let package = helper.package else { return install(helper, confirm: confirm, run: run) }
+        let title = "Install Homebrew and \(helper.name)"
+        confirm(title, helper.withHomebrew) { run(helper.withHomebrew, title, "\(hook("installed", key: package.key)); \(VisibleRun.waitForReturn)") }
     }
 
     /// A search's page: the App Store's in the App Store, anything else in Zen.

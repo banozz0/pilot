@@ -36,7 +36,7 @@ struct BindEditorRenders {
         return try #require(snapshot(host, scale: 2))
     }
 
-    @Test("Editor A renders a1–a16 in Instrument dark and light, and fits the least window",
+    @Test("Editor A renders a1–a17 in Instrument dark and light, and fits the least window",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let engine = try ToyboxBindsRenders().engine()
@@ -80,9 +80,9 @@ struct BindEditorRenders {
         let noBind = finder("make coffee", ai: BindEditorTests.ai(#"{"id": null, "reason": "A key cannot make coffee"}"#))
         noBind.ask("make coffee") { _ in }
         await BindEditorTests.settle { noBind.asking?.running == false }
-        // a15–a16: the wheel click playing media, then Back's Hyper action, new.
+        // a15–a16: the wheel click playing media (its own glyph, never Music's icon: Q552), then Back's Hyper action, new.
         let wheel = MouseTrigger(sends: MouseKeys.button(2), button: 3)
-        engine.binds.setMouse(wheel.sends, to: try #require(actions.first { $0.module == "media" }?.id), button: 3)
+        engine.binds.setMouse(wheel.sends, to: try #require(actions.first { $0.id == "media.playPause" }?.id), button: 3)
         let back = MouseTrigger(sends: MouseKeys.button(3), button: 4, hyper: true)
         let states: [(String, (CGFloat) -> BindEditor)] = [
             ("a1-kinds", { BindEditor(action: nil, actions: actions, startKey: free, windowHeight: $0, finder: finder()) }),
@@ -105,6 +105,8 @@ struct BindEditorRenders {
             ("a14-ai-nobind", { BindEditor(action: nil, actions: actions, startKey: free, windowHeight: $0, finder: noBind) }),
             ("a15-mouse", { BindEditor(action: nil, actions: actions, windowHeight: $0, mouse: wheel, finder: finder()) }),
             ("a16-mouse-hyper", { BindEditor(action: nil, actions: actions, windowHeight: $0, mouse: back, finder: finder()) }),
+            // a17: "play" typed for Back: the media key's rows are Pilot's own, never Music's (Q552).
+            ("a17-mouse-play", { BindEditor(action: nil, actions: actions, windowHeight: $0, mouse: back, finder: finder("play")) }),
         ]
         for dark in [true, false] {
             // Instrument is dark or light as its theme is: Lagoon dark, Porcelain light.

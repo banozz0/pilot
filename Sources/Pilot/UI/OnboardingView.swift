@@ -159,6 +159,34 @@ private struct OnboardingSteps: View {
             PanelHeading(text: "set up pilot · \(OnboardingModel.Step.extras.counted) · extras, all optional")
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    // Update and Clean first, each with the helpers it runs (Q555); Homebrew's one Terminal run after Clean.
+                    ForEach(OnboardingExtras.Feature.allCases, id: \.self) { feature in
+                        PanelHeading(text: "\(feature.title) · \(feature.short)")
+                        Card {
+                            if let line = feature.line {
+                                CardRow {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(line).font(ink.ui(12.5)).foregroundStyle(ink.text).fixedSize(horizontal: false, vertical: true)
+                                        if let later = extras.later(feature) { FinePrint(text: later, color: ink.warnText) }
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                            ForEach(feature.items, id: \.self) { item($0) }
+                        }
+                        if feature == .clean, let command = extras.brewCommand {
+                            Card {
+                                CardRow {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        FinePrint(text: OnboardingExtras.terminalNote)
+                                        Text(command).font(ink.mono(11)).foregroundStyle(ink.text2).textSelection(.enabled)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                    }
                     PanelHeading(text: "Voice")
                     Card {
                         if let on = extras.speechOnMac {
@@ -181,20 +209,6 @@ private struct OnboardingSteps: View {
                     }
                     PanelHeading(text: "Images")
                     Card { item(.upscaler) }
-                    PanelHeading(text: "Homebrew and helpers")
-                    Card {
-                        ForEach(OnboardingExtras.Item.brew, id: \.self) { item($0) }
-                        if let command = extras.brewCommand {
-                            CardRow {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    FinePrint(text: OnboardingExtras.terminalNote)
-                                    Text(command).font(ink.mono(11)).foregroundStyle(ink.text2).textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                        }
-                    }
                     PanelHeading(text: "Pilot")
                     Card {
                         CardRow {
@@ -242,7 +256,7 @@ private struct OnboardingSteps: View {
             if model.extras.onMac.contains(item) {
                 Chip(text: "on this Mac", color: ink.green)
             } else {
-                if item.recommended { Chip(text: "recommended", color: ink.accent) }
+                if let chip = item.chip { Chip(text: chip, color: ink.accent) }
                 Toggle(item.title, isOn: model.extras.binding(item))
                     .toggleStyle(.pilotSwitch)
             }

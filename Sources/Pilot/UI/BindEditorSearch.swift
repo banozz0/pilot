@@ -333,7 +333,7 @@ extension BindEditor {
         default: break
         }
         if case .menu(let bundle, _)? = DriveRoute(id: id) { return bundle }
-        return DriveModule.catalogue.app(for: id)?.app.bundle
+        return DriveCatalogue.ownAction(id) ? nil : DriveModule.catalogue.app(for: id)?.app.bundle
     }
 
     /// The line under the keys: Record's prompt, a plain combo's cost, whose the key is.

@@ -9,6 +9,8 @@ struct UpkeepPage: View {
     var store = ReportStore.standard
     /// Mole is there for Clean to run (CleanModule.mole); a render says which.
     var mole = CleanModule.mole != nil
+    /// Homebrew is there for Update to read and Mole to install through; a render says which.
+    var homebrew = Helper.homebrew.path() != nil
     /// Opens Activity › Reports on a run.
     var openReport: (String) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
@@ -41,7 +43,8 @@ struct UpkeepPage: View {
     }
 
     /// Update and Clean open their Hyper+Space branch, so the preview, the confirm and the run are the menu's own; Clean
-    /// without Mole installs it through Install's confirm step, as the menu's Install Mole row does.
+    /// without Mole installs it through Install's confirm step, as the menu's Install Mole row does, with Homebrew in the
+    /// same run when that is missing too (Q557).
     private var start: some View {
         KitBlock(title: "Update and Clean", symbol: "arrow.triangle.2.circlepath") {
             VStack(spacing: 0) {
@@ -56,8 +59,8 @@ struct UpkeepPage: View {
                             Button("Clean…") { PilotMenu.shared.toggle(branch: .clean) }.buttonStyle(.pilotPrimary)
                         }
                     } else {
-                        starter(.clean, line: "Clean runs through Mole, which is not installed.") {
-                            Button("Install Mole…") { CleanModule.pick(.install) }.buttonStyle(.pilot)
+                        starter(.clean, line: homebrew ? "Clean runs through Mole, which is not installed." : "Clean runs through Mole, which installs through Homebrew; neither is installed.") {
+                            Button(homebrew ? "Install Mole…" : "Install Homebrew and Mole…") { CleanModule.pick(.install) }.buttonStyle(.pilot)
                         }
                     }
                 }

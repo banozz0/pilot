@@ -427,11 +427,11 @@ struct AppWindowRenders {
                 }
             }
         }.padding(16).pilotTheme().background(Theme.background), title: "", to: dir.appendingPathComponent("bar-items.png"))
-        // Sven's menu bar as it starts after the carry-over: the group of CPU and RAM in its capsule, then the timer.
+        // Sven's menu bar as it starts after the carry-over: the group of CPU and RAM, then the timer.
         let svens = menuSettings.slots(in: .menuBar).compactMap { slot in BarParts.parts(slot, inputs, settings: menuSettings.settings).map { (slot, $0) } }
         try Self.render(HStack(spacing: 6) {
             ForEach(Array(svens.enumerated()), id: \.offset) { _, item in
-                if let image = StatusItemImage.image(item.1, capsule: item.0.kinds.count > 1) { Image(nsImage: image).renderingMode(.template).foregroundStyle(.black) }
+                if let image = StatusItemImage.image(item.1) { Image(nsImage: image).renderingMode(.template).foregroundStyle(.black) }
             }
         }.padding(6).background(Color(white: 0.9)), title: "", to: dir.appendingPathComponent("menu-bar-image-svens.png"))
         try Self.render(StatPopover(stats: [.cpu, .ram], rows: rows, busiest: [.cpu: SystemStats.busiest(ps, by: .cpu), .ram: SystemStats.busiest(ps, by: .memory)],

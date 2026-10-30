@@ -9,8 +9,9 @@ import PilotCore
 @MainActor
 enum StatusItemImage {
     static let height: CGFloat = 18
-    /// Between the parts of one item, between the items of the group, around the group's capsule.
-    private static let gap: CGFloat = 4, itemGap: CGFloat = 8, capsulePad: CGFloat = 5, padding: CGFloat = 2
+    /// Between the parts of one item, between the items of the group. A group draws bare, like any menu bar item: no plate
+    /// behind it (Sven, 2026-10-30: the capsule read as a pill).
+    private static let gap: CGFloat = 4, itemGap: CGFloat = 8, padding: CGFloat = 2
     private static let graphWidth: CGFloat = 30, barWidth: CGFloat = 22, symbolSize: CGFloat = 13, markSize: CGFloat = 15
 
     nonisolated(unsafe) private static let value: [NSAttributedString.Key: Any] = [
@@ -22,26 +23,21 @@ enum StatusItemImage {
     nonisolated(unsafe) private static let badge: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.black]
 
-    /// The picture, or nil with nothing to draw. `items` are the slot's items, the group's readings each their own, in a
-    /// capsule when `capsule`. Drawn once into a bitmap at twice the point size, so each menu bar's redraw copies pixels.
-    static func image(_ items: [[BarPart]], capsule: Bool = false) -> NSImage? {
+    /// The picture, or nil with nothing to draw. `items` are the slot's items, the group's readings each their own. Drawn once into a bitmap at twice the point size, so each menu bar's redraw copies pixels.
+    static func image(_ items: [[BarPart]]) -> NSImage? {
         let items = items.map { $0.filter { switch $0 { case .app, .warn, .level: false; default: true } } }.filter { !$0.isEmpty }
         guard !items.isEmpty else { return nil }
         let partWidths = items.map { $0.map(width) }
         let widths = partWidths.map { $0.reduce(0, +) + gap * CGFloat($0.count - 1) }
         let inner = widths.reduce(0, +) + itemGap * CGFloat(widths.count - 1)
-        let size = NSSize(width: (inner + (capsule ? capsulePad * 2 : 0) + padding * 2).rounded(.up), height: height)
+        let size = NSSize(width: (inner + padding * 2).rounded(.up), height: height)
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * 2, pixelsHigh: Int(size.height) * 2,
                                             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
         bitmap.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-        if capsule {
-            NSColor.black.withAlphaComponent(0.14).setFill()
-            NSBezierPath(roundedRect: NSRect(x: padding, y: 1, width: size.width - padding * 2, height: height - 2), xRadius: 5, yRadius: 5).fill()
-        }
-        var x = padding + (capsule ? capsulePad : 0)
+        var x = padding
         for (index, item) in items.enumerated() {
             var partX = x
             for (part, w) in zip(item, partWidths[index]) {

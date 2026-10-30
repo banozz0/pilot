@@ -7,7 +7,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The explainer video's launcher frames (SH23, round 4): the Hyper+Space menu as Line draws it in Dusk (cut 5), solid, one
+/// The explainer video's launcher frames (SH23, round 4): the Hyper+Space menu as Line draws it in the film's theme (Void for film v2), solid, one
 /// still per typed prefix of a query, so a composition can play the typing key by key (an offscreen panel catches only
 /// the morph's first 50 ms, so the video replays LineMorph's timings between the stills); the clipboard panel that
 /// Return opens, its pick moving down; the first look in five looks (cut 3); cut 4's file search
@@ -27,7 +27,8 @@ struct LauncherFilmRenders {
                                                               ("lock", "lock keyboard"), ("music", "music"), ("miss", "obsidian"),
                                                               ("typo", "invocie"), ("wall", "next wallpaper"), ("update", "update"),
                                                               ("clean", "clean"), ("stats", "stats"), ("ports", "open ports"),
-                                                              ("gaps", "gaps"), ("summ", "summarise"), ("ctext", "capture text")]
+                                                              ("gaps", "gaps"), ("summ", "summarise"), ("ctext", "capture text"),
+                                                              ("ql", "gh pilot"), ("fix", "fix"), ("aloud", "read aloud")]
 
     /// Cut 3's "make it yours": the menu's first look in Instrument and Toybox, dark and light.
     static let looks: [(PilotStyle, String)] = [(.instrument, "dusk"), (.instrument, "porcelain"), (.instrument, "orchid"),
@@ -44,7 +45,7 @@ struct LauncherFilmRenders {
         let look = Look.shared
         let (style, theme, glass) = (look.style, look.themeID, look.glass)
         defer { (look.style, look.themeID, look.glass) = (style, theme, glass) }
-        // The film's look, Instrument on Dusk (Sven's Q516); glass draws nothing offscreen, so Solid.
+        // The film's look, Instrument in ExplainerFilmRenders.theme; glass draws nothing offscreen, so Solid.
         (look.style, look.themeID, look.glass) = (.instrument, ExplainerFilmRenders.theme, false)
         let root = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("launcher-film")
         let built = try LineMenuRenders.built()

@@ -13,7 +13,8 @@ public struct DriveCatalogue: Decodable, Sendable {
 
     /// One action: what the Binds screen shows and the action id it binds, a DriveRoute, an AppLink or one of Pilot's own
     /// actions doing the app's job (Music's Play or pause is `media.playPause`, the media key). The menu lists
-    /// each as a command of its app (P38), its badge `symbol`; `opens` brings the app forward first, launching it, for a
+    /// each as a command of its app (P38), its badge `symbol`, but Pilot's own action as Pilot's, its own glyph and words
+    /// (Q552); `opens` brings the app forward first, launching it, for a
     /// route whose result shows in the app (a menu item's New Event).
     public struct Entry: Decodable, Sendable, Hashable {
         public var label: String, route: String
@@ -45,8 +46,9 @@ public struct DriveCatalogue: Decodable, Sendable {
         }
     }
 
-    /// One of Pilot's own action ids, a module and a name ("media.next"): no link or route.
-    static func ownAction(_ id: String) -> Bool { id.wholeMatch(of: /[a-z]+\.[A-Za-z]+/) != nil }
+    /// One of Pilot's own action ids, a module and a name ("media.next"): no link or route. It wears its own glyph, never
+    /// its app's icon: the media key plays whatever is playing, not only Music (Q552).
+    public static func ownAction(_ id: String) -> Bool { id.wholeMatch(of: /[a-z]+\.[A-Za-z]+/) != nil }
 
     /// An empty catalogue, for a Pilot run outside its bundle.
     public init() { apps = [] }

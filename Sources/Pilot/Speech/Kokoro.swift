@@ -59,6 +59,7 @@ final class KokoroModel {
         guard run == nil, !isReady else { return }
         failure = nil
         state = .downloading(0)
+        SpeechModel.markDownloading(folder, true)
         generation += 1
         let mine = generation
         run = helper.run(["download", folder.path, Self.helperName], heard: { [weak self] line in
@@ -73,11 +74,17 @@ final class KokoroModel {
             guard let self, generation == mine else { return }
             run = nil
             state = Self.onDisk(folder) ? .ready : .failed(failure ?? "The download stopped (exit \(status)). Try again.")
+            if state == .ready { SpeechModel.markDownloading(folder, false) }
             speechLog.notice("kokoro: download ended \(status)")
             if samplesWanted { renderSamples(true) }
         })
         if run == nil { state = .failed("The speech helper is missing from this build of Pilot.") }
         speechLog.notice("kokoro: download")
+    }
+
+    /// At launch: a download a quit cut off goes on from the files already there (SpeechModel.downloadingFile).
+    func resume() {
+        if !isReady, SpeechModel.wasCutOff(folder) { download() }
     }
 
     func cancel() {
@@ -86,7 +93,10 @@ final class KokoroModel {
         rendering = false
         generation += 1
         stopping?.cancel()
-        if !isReady { state = .absent }
+        if !isReady {
+            state = .absent
+            SpeechModel.markDownloading(folder, false)
+        }
     }
 
     /// Deletes the folder, model, voices and Core ML's compile of it alike; Read aloud speaks in Apple's voices again.

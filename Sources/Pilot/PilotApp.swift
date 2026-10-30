@@ -58,6 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PilotUpdates.shared.start()
         // The bar items in the macOS menu bar, as the store places them (cards agent-bo-95422833, 910 and 911).
         if let engine = Engine.shared { MenuBarStatusItems.shared.start(engine.barSources) }
+        // Setup's Extras downloads a quit cut off start again, and show on Pilot's item as they run (Sven, 2026-10-29).
+        ExtrasDownloads.shared.resume()
+        // A speech model or Kokoro download pressed in Settings, cut off the same way, goes on too.
+        SpeechModels.shared.resume()
+        KokoroModel.shared.resume()
         // Nothing about this Mac is read while the screen is locked or asleep (card agent-bo-95422839).
         // The sampler, the bars' timed readings, the secure-input check and the clipboard's poll all wait for an unlock.
         let engine: [any ScreenPausing] = Engine.shared.map { [$0.barSources.readings, $0.secureInput] } ?? []

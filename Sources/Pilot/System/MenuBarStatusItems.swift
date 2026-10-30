@@ -113,8 +113,8 @@ final class BarItemsStore {
     }
 }
 
-/// One macOS menu-bar item as drawn: its slot's items (its identity), their parts, and whether it is the group, drawn
-/// in a capsule (card agent-bo-95422911).
+/// One macOS menu-bar item as drawn: its slot's items (its identity), their parts, and whether it is the group, its
+/// readings side by side (card agent-bo-95422911).
 struct StatusItemContent: Equatable {
     let kinds: [BarKind]
     let parts: [[BarPart]]
@@ -319,7 +319,7 @@ final class StatusBarHost: NSObject, StatusItemHosting {
             entry.item.length = NSStatusItem.variableLength
             return
         }
-        let image = StatusItemImage.image(entry.content.parts, capsule: entry.content.isGroup)
+        let image = StatusItemImage.image(entry.content.parts)
         // A reading past its threshold turns amber; the group's picture is one template, so only a lone item can.
         button.contentTintColor = !entry.content.isGroup && entry.content.parts.joined().contains(.warn) ? NSColor(Theme.yellow) : nil
         button.title = ""

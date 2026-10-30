@@ -21,7 +21,7 @@ import WebApps
 /// in the top bar, Activity, the views earlier cuts borrowed from other render tests, Keys › Mouse, Snippets, AI › Setup and
 /// Apps › Open with; and cut 6's: a tea timer in the bar, Extensions › Catalogue, Summarise in the selection pill, Capture text's
 /// tip, and Weather's popover on Glass.
-/// Instrument on Dusk (Sven's Q516, cut 5), Solid (glass draws nothing offscreen), with made-up notes, files, copies and
+/// Instrument in the film's theme (`theme`), Solid (glass draws nothing offscreen), with made-up notes, files, copies and
 /// windows, never this Mac's. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter ExplainerFilmRenders`
 extension SharedLook {
@@ -29,8 +29,8 @@ extension SharedLook {
 @Suite("Explainer film renders")
 struct ExplainerFilmRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
-    /// The film's theme: Dusk from cut 5 (Sven, Q516).
-    nonisolated static let theme = "dusk"
+    /// The film's theme: Void from film v2 (Sven, 2026-10-29, Q583; Dusk in the 1.0 film, Q516).
+    nonisolated static let theme = "void"
 
     /// The folder `name` under explainer-film, the app, faces and a stranger's look ready; refuses Sven's own home.
     static func prepare(_ name: String) throws -> URL {
@@ -893,11 +893,11 @@ struct ExplainerFilmRenders {
     }
 
     /// Cut 5 (Sven's cut 4 notes, Q516: Dusk throughout): the views earlier cuts took from other render tests, drawn again
-    /// here in Dusk (the dictation pill, the selection pill and its bubble, the ring, the bind editor's picker, the capture
-    /// editor's states, Weather's popover), and the new shots' own: Keys › Mouse with a side button given a job and Hyper's
+    /// here in the film's theme (the dictation pill, the selection pill and its bubble, the ring, the bind editor's picker, the
+    /// capture editor's states, Weather's popover), and the new shots' own: Keys › Mouse with a side button given a job and Hyper's
     /// mouse binds, Snippets before and after one is added, and AI › Setup on your own key. Fakes throughout: no Keychain,
     /// mouse, network or this Mac's snippets.
-    @Test("Cut 5 in Dusk: the borrowed views redrawn, Mouse, Snippets and AI › Setup", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Cut 5's borrowed views redrawn in the film's theme, Mouse, Snippets and AI › Setup", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func dusk() async throws {
         let dir = try Self.prepare("dusk")
         let look = Look.shared

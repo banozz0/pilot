@@ -17,8 +17,6 @@ struct StatusItemImageTests {
         let wide = try #require(StatusItemImage.image(Self.cpu("100%")))
         #expect(narrow.size.width == wide.size.width && narrow.size.width > 50)
         #expect(narrow.isTemplate && narrow.size.height == StatusItemImage.height)
-        // The group's capsule takes room around its readings.
-        #expect(try #require(StatusItemImage.image(Self.cpu("5%"), capsule: true)).size.width > narrow.size.width)
     }
 
     @Test("Every part has room: graphs, meters, symbols, the mark, rings, badges, workspaces, dots and Wi-Fi bars")

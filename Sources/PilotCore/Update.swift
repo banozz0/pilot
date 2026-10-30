@@ -75,9 +75,9 @@ public struct UpdateRow: Equatable, Sendable {
 /// outdated `uv` tools, and since story 118 macOS updates, App Store apps, global npm and bun packages and cargo crates,
 /// from version to version; only what Sven confirms upgrades).
 public enum UpdateList {
-    /// What a row of Update is: Update all, the self-updating switch, Install mas, a row by its key, a pinned row,
-    /// whose Return asks to unpin, or Reports (story 153).
-    public enum Pick: Hashable, Sendable { case all, selfUpdating, installMas, row(String), unpin(String), reports }
+    /// What a row of Update is: Update all, the self-updating switch, Install mas, Install Homebrew, a row by its key, a
+    /// pinned row, whose Return asks to unpin, or Reports (story 153).
+    public enum Pick: Hashable, Sendable { case all, selfUpdating, installMas, installHomebrew, row(String), unpin(String), reports }
 
     /// Update's categories in order, named as Remove's are; one with nothing outdated is not listed.
     public enum Category: String, CaseIterable, Sendable {
@@ -287,12 +287,20 @@ public enum UpdateList {
         }
         let setting = MenuEntry(title: "Apps that update themselves: \(includeSelfUpdating ? "On" : "Off")", target: .update(.selfUpdating),
                                 home: .update, inSearch: false, icon: .glyph("arrow.triangle.2.circlepath", .second))
-        let reports = MenuEntry(title: "Reports", target: .update(.reports), home: .update, detail: "every Update and Clean run, kept",
-                                inSearch: false, icon: MenuIcon.reports)
         let mas = masInstalled || !recommend ? [] : [MenuEntry(title: "App Store apps: install mas", target: .update(.installMas), home: .update,
                                                  detail: Helper.mas.install, inSearch: false, icon: MenuIcon.appStore)]
         return [run] + branches + [setting] + mas + [reports] + listed
     }
+
+    /// Update's rows while Homebrew is missing (Sven, 2026-10-29, Q556): Install Homebrew in place of an outdated list
+    /// that could never be read, then Reports.
+    public static func noHomebrew() -> [MenuEntry] {
+        [MenuEntry(title: "Install Homebrew", target: .update(.installHomebrew), home: .update, detail: "Update reads its list · asks your password in Terminal",
+                   inSearch: false, icon: .glyph("arrow.down.circle", .accent)), reports]
+    }
+
+    private static let reports = MenuEntry(title: "Reports", target: .update(.reports), home: .update, detail: "every Update and Clean run, kept",
+                                           inSearch: false, icon: MenuIcon.reports)
 
     /// The way out of a pin (card agent-bo-95422979): `brew unpin` for a pinned formula, nil for any other row.
     public static func unpin(_ row: UpdateRow) -> String? {

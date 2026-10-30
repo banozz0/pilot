@@ -197,7 +197,7 @@ struct GeneralPage: View {
                     .toggleStyle(.pilotSwitchRow(info: "Tap a layer key by itself and it sends Escape; held with another key, it is Hyper."))
             }
             BlockRow {
-                Text("Show the bind after a click")
+                Text("Show an app's bind after you open it")
                 InfoMark(text: "After a click opens an app, or a menu pick runs something, that has a bind. At most once an hour per bind.")
                 Spacer()
                 Toggle("Show the bind when I use the mouse or the menu", isOn: $settings.bindNudges).toggleStyle(.pilotSwitch)
@@ -206,8 +206,10 @@ struct GeneralPage: View {
                 Text("Hold Hyper to see your binds")
                 InfoMark(text: "Hold the Hyper key this long to see that layer's binds; Shift or Ctrl turns the page.")
                 Spacer()
-                overlayDelay
+                // Off: the stepper dims, as the delay waits for the switch.
+                overlayDelay.disabled(!settings.overlayEnabled)
                 Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
+                Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
             }
             // Small: where the key sits, not a keyboard to read (Sven: the card was mostly empty under the picker).
             LayerKeyPicture(keys: settings.layerKeys).frame(maxWidth: LayerKeyPicture.compactWidth).frame(maxWidth: .infinity).padding(.vertical, 10)

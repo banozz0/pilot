@@ -63,6 +63,10 @@ public struct Helper: Equatable, Sendable, Identifiable {
         }
     }
 
+    /// Homebrew's installer, then this formula, in one run, for a Mac without Homebrew (Q557); the visible run's PATH
+    /// starts with Homebrew's folder, so the brew it just installed is found.
+    public var withHomebrew: String { "\(Self.homebrew.install) && \(install)" }
+
     /// How it installs, as Install › Helpers' row and `pilot list helpers` say it.
     public var how: String {
         switch route {

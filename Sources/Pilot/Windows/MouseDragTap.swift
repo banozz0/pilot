@@ -195,9 +195,11 @@ final class MouseDragTap {
     private func fileClick(at point: CGPoint) -> FileActionsMenu.Source? {
         guard layer.isHyperHeld() else { return nil }
         let clickThrough = EngineObservers.clickThrough(), screens = Screens.frames
-        // The front window there; the Dock's see-through one over a whole screen is looked through, as a drag does.
+        // The front window there; the Dock's see-through one over a whole screen is looked through, as a drag does, and so
+        // is an overlay app's (Cua Driver's agent cursor, layer 0, over the desktop), never a full-screen app's window.
         guard let front = EngineObservers.onScreen().first(where: {
-            $0.alpha > 0 && $0.info.frame.contains(point) && !clickThrough.contains($0.info.id) && !($0.layer != 0 && screens.contains($0.info.frame))
+            $0.alpha > 0 && $0.info.frame.contains(point) && !clickThrough.contains($0.info.id)
+                && !(screens.contains($0.info.frame) && ($0.layer != 0 || Self.overlay($0.info.pid)))
         }) else { return .finder }
         if front.info.pid == ProcessInfo.processInfo.processIdentifier {
             let file = PilotMenu.shared.file(at: CGPoint(x: point.x, y: Screens.primaryHeight - point.y))
@@ -212,6 +214,13 @@ final class MouseDragTap {
             return nil
         }
         return .finder
+    }
+
+    /// Another app with no Dock icon (an agent's cursor, a screen overlay): its whole-screen window takes no click in
+    /// practice. Never Pilot's own, which clickThrough already tells.
+    private static func overlay(_ pid: pid_t) -> Bool {
+        pid != ProcessInfo.processInfo.processIdentifier
+            && NSRunningApplication(processIdentifier: pid).map { $0.activationPolicy != .regular } ?? false
     }
 
     /// The drag this press starts: the modifier alone over another app's normal window or Pilot's own (MouseDrag.hit),

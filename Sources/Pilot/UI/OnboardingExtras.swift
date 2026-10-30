@@ -39,19 +39,26 @@ final class OnboardingExtras {
             }
         }
 
+        /// What it gives, a helper by the feature it serves (Q555).
         @MainActor var detail: String {
-            if let helper { return helper.unlocks }
-            return switch self {
+            switch self {
             case .voices: "Kokoro's natural English voices, US and UK, run on this Mac · \(KokoroModel.size)"
             case .command: "lets a terminal or an AI agent read and change Pilot; links ~/.local/bin/pilot"
             case .upscaler: "sharper 4x upscales; the General model is already in Pilot · \(Self.upscalerMegabytes) MB"
-            case .ffmpeg: "Convert to MP3 and GIF"
-            case .webp: "Convert to WebP"
+            case .homebrew: "Update reads its list of apps and tools; Install and Remove use it too. Asks your Mac's password in Terminal."
+            case .mas: "App Store apps in Update too; Install gets free App Store apps itself"
+            case .mole: "Clean's preview, the clean itself, and Disk usage · installs through Homebrew"
+            case .ffmpeg: "Convert: to MP3 and GIF"
+            case .webp: "Convert: to WebP"
+            case .npm: "Install's search and Update: npm packages (comes with Node)"
+            case .cargo: "Install's search and Update: Rust crates (comes with Rust)"
             case .recommendApps: "Install suggests apps and tools for this Mac; off, its search still finds anything"
             case .launchAtLogin: "so Pilot is there after a restart"
-            default: ""
             }
         }
+
+        /// Its tag: "needed" for the helper its feature runs through, "recommended" for the rest ticked from the start.
+        var chip: String? { [.homebrew, .mole].contains(self) ? "needed" : recommended ? "recommended" : nil }
 
         /// Max quality's download, as Upscale's own panel says it.
         static let upscalerMegabytes = Int((Double(UpscaleModel.max.download?.bytes ?? 0) / 1_000_000).rounded())
@@ -69,6 +76,45 @@ final class OnboardingExtras {
         }
 
         static let brew: [Item] = [.homebrew, .mole, .mas, .npm, .cargo, .ffmpeg, .webp]
+    }
+
+    /// The helpers grouped by the feature they serve (Sven, 2026-10-29, Q555, after a stranger run skipped them): Update,
+    /// Clean, then the other tools, each saying what it does.
+    enum Feature: CaseIterable {
+        case update, clean, more
+
+        var items: [Item] {
+            switch self {
+            case .update: [.homebrew, .mas]
+            case .clean: [.mole]
+            case .more: [.ffmpeg, .webp, .npm, .cargo]
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .update: "Update"
+            case .clean: "Clean"
+            case .more: "More tools"
+            }
+        }
+
+        var short: String {
+            switch self {
+            case .update: "update apps and tools"
+            case .clean: "free disk space"
+            case .more: "for other features"
+            }
+        }
+
+        /// What the feature does, over its helpers; nil for More tools, whose rows each say it.
+        var line: String? {
+            switch self {
+            case .update: "Pilot's menu lists every app and tool with a newer version, and updates them after you confirm."
+            case .clean: "Pilot's menu shows the caches and leftovers Mole would remove and the space it frees, then cleans after you confirm."
+            case .more: nil
+            }
+        }
     }
 
     /// The model Sven dictates with (his prefs, `dictation.model` = whisperTurbo).
@@ -93,12 +139,23 @@ final class OnboardingExtras {
 
     /// Whether Continue started the picks, which stay as they were, for Try it.
     private(set) var started = false
+    #if DEBUG
+    /// A render's Mac in place of this one's: what is on it.
+    var seededOnMac: Set<Item>?
+    #endif
 
     func load() {
         guard !loaded else { return }
         loaded = true
         speechOnMac = SpeechModels.shared.active?.choice
         if speechOnMac != nil { speech = nil }
+        #if DEBUG
+        if let seededOnMac {
+            onMac = seededOnMac
+            picked.subtract(onMac)
+            return
+        }
+        #endif
         let helpers = Helper.installed()
         onMac = Set(Item.allCases.filter { item in
             switch item {
@@ -125,6 +182,18 @@ final class OnboardingExtras {
         guard !onMac.contains(.homebrew) else { return }
         if on && item.formula != nil { picked.insert(.homebrew) }
         if !on && item == .homebrew { picked.subtract(Item.brew) }
+    }
+
+    /// What a feature says when the helper it needs is neither ticked nor on this Mac: that it asks later; nil once ready.
+    func later(_ feature: Feature) -> String? {
+        let ready = { (item: Item) in self.picked.contains(item) || self.onMac.contains(item) }
+        switch feature {
+        case .update: return ready(.homebrew) ? nil : "Update will ask to install Homebrew when you open it."
+        case .clean:
+            guard !ready(.mole) else { return nil }
+            return "Clean will ask to install \(ready(.homebrew) ? "Mole" : "Homebrew and Mole") when you open it."
+        case .more: return nil
+        }
     }
 
     /// The one Terminal run, shown on the step as it will run; nil when nothing needs Homebrew.
@@ -180,7 +249,9 @@ final class OnboardingExtras {
 
 /// The downloads Extras' Continue started, held past Welcome's close: Try it, Pilot's menu-bar item and its dropdown show
 /// them until each ends (Sven, 2026-10-28, Q543). The speech model and voices are owned by what Settings shows them from,
-/// so this keeps only which ones; the upscaler's fetch has no other owner, so its state lives here.
+/// so this keeps only which ones; the upscaler's fetch has no other owner, so its state lives here. Which ones are saved
+/// until each is on disk or Sven cancels or removes it, so one cut off by quitting Pilot starts again at the next launch
+/// (Sven, 2026-10-29: "I closed Pilot … while the dictation model was being downloaded and the download stopped").
 @Observable @MainActor
 final class ExtrasDownloads {
     static let shared = ExtrasDownloads()
@@ -219,26 +290,69 @@ final class ExtrasDownloads {
         }
     }
 
+    /// The downloads not yet ended: a speech model's raw value, `voices`, `upscaler`.
+    static let key = "extras.downloads"
+    static let voicesName = "voices", upscalerName = "upscaler"
+
     private var speech: SpeechChoice?
     private var voices = false
     /// Max quality's download, nil until it starts.
     private var upscaler: SpeechModel.State?
+    @ObservationIgnored private let defaults: UserDefaults
     #if DEBUG
     /// A render's downloads in place of the real ones.
     var seeded: [Download]?
     #endif
 
+    init(defaults: UserDefaults = .pilot()) { self.defaults = defaults }
+
     func start(speech: SpeechChoice?, voices: Bool, upscaler: Bool) {
-        if let speech {
+        if let speech { SpeechModels.shared.pick = speech }
+        begin(speech: speech, voices: voices, upscaler: upscaler)
+    }
+
+    /// At launch: the downloads a quit cut off start again, the speech model and voices from the files already there, the
+    /// upscaler from the start. Nothing is read beyond the saved list unless it names something.
+    func resume() {
+        let names = defaults.stringArray(forKey: Self.key) ?? []
+        guard !names.isEmpty else { return }
+        log.notice("extras: resuming \(names.joined(separator: ", "), privacy: .public)")
+        begin(speech: names.lazy.compactMap(SpeechChoice.init).first, voices: names.contains(Self.voicesName),
+              upscaler: names.contains(Self.upscalerName))
+    }
+
+    /// Starts what is not on disk yet, saves which, and watches them until each ends.
+    private func begin(speech: SpeechChoice?, voices: Bool, upscaler: Bool) {
+        if let speech, !SpeechModels.shared.model(speech).isReady {
             self.speech = speech
-            SpeechModels.shared.pick = speech
             SpeechModels.shared.model(speech).download()
         }
-        if voices {
+        if voices, !KokoroModel.shared.isReady {
             self.voices = true
             KokoroModel.shared.download()
         }
-        if upscaler { fetchUpscaler() }
+        if upscaler, UpscaleModels.compiled(.max) == nil { fetchUpscaler() }
+        save()
+        watch()
+    }
+
+    /// Saves the downloads still to finish: on disk (ready) or cancelled and removed (absent) ends one; a failed one stays,
+    /// so the next launch tries it again.
+    private func save() {
+        func pending(_ state: SpeechModel.State) -> Bool { state != .ready && state != .absent }
+        var names: [String] = []
+        if let speech, pending(SpeechModels.shared.model(speech).state) { names.append(speech.rawValue) }
+        if voices, pending(KokoroModel.shared.state) { names.append(Self.voicesName) }
+        if let upscaler, pending(upscaler) { names.append(Self.upscalerName) }
+        if names.isEmpty { defaults.removeObject(forKey: Self.key) } else { defaults.set(names, forKey: Self.key) }
+    }
+
+    /// Saves again at each change of a download's state, until none is left to finish.
+    private func watch() {
+        guard defaults.stringArray(forKey: Self.key) != nil else { return }
+        withObservationTracking { _ = downloads.map(\.state) } onChange: { [weak self] in
+            Task { @MainActor in self?.save(); self?.watch() }
+        }
     }
 
     private func fetchUpscaler() {

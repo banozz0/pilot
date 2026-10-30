@@ -50,8 +50,8 @@ enum FinderItems {
             guard let up = parent(e) else { break }
             e = up
         }
-        let folder = windowFolder(above: e)
-        let chain = walked.map(\.role).joined(separator: ">") + " in " + container
+        let shown = windowFolder(above: e), folder = shown?.url
+        let chain = walked.map(\.role).joined(separator: ">") + " in " + container + (shown?.desktop == true ? " on the desktop" : "")
         for (element, role) in walked {
             guard let (file, how) = named(element, role: role, in: folder) else { continue }
             if let folder, file.standardizedFileURL.path == folder.standardizedFileURL.path {
@@ -75,7 +75,8 @@ enum FinderItems {
            FileManager.default.fileExists(atPath: folder.appending(path: name).path) {
             return (folder.appending(path: name), "AXFilename")
         }
-        guard rowLike || role == kAXTextFieldRole || role == kAXStaticTextRole else { return nil }
+        // A desktop icon is taken as an AXImage that shows its name as its title; unverified until the live check.
+        guard rowLike || role == kAXTextFieldRole || role == kAXStaticTextRole || role == kAXImageRole else { return nil }
         let shown = first(element, below: rowLike ? 2 : 0) { e in
             [kAXValueAttribute, kAXTitleAttribute].lazy.compactMap { value(e, $0) as? String }.first { !$0.isEmpty }
         }
@@ -90,18 +91,27 @@ enum FinderItems {
         return entries.first { fm.displayName(atPath: $0.path) == name }
     }
 
-    /// The folder the window above `e` shows, by its AXDocument; nil on the desktop or when the window names none.
-    private nonisolated static func windowFolder(above e: AXUIElement) -> URL? {
-        var e = e
+    /// The folder the window above `e` shows, by its AXDocument; on the desktop (a window with no subrole, or none above
+    /// its scroll area) the Desktop folder, whose icons may name no AXURL; nil when a window names none.
+    private nonisolated static func windowFolder(above e: AXUIElement) -> (url: URL, desktop: Bool)? {
+        var e = e, role = value(e, kAXRoleAttribute) as? String
         for _ in 0..<8 {
-            if value(e, kAXRoleAttribute) as? String == kAXWindowRole {
+            if role == kAXWindowRole {
                 let document = value(e, kAXDocumentAttribute)
-                return ((document as? URL) ?? (document as? String).flatMap(URL.init(string:))).flatMap { $0.isFileURL ? $0 : nil }
+                if let url = ((document as? URL) ?? (document as? String).flatMap(URL.init(string:))), url.isFileURL { return (url, false) }
+                return value(e, kAXSubroleAttribute) == nil ? desktop() : nil
             }
             guard let up = parent(e) else { return nil }
+            let below = role
             e = up
+            role = value(e, kAXRoleAttribute) as? String
+            if role == kAXApplicationRole { return below == kAXScrollAreaRole ? desktop() : nil }
         }
         return nil
+    }
+
+    private nonisolated static func desktop() -> (url: URL, desktop: Bool)? {
+        FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first.map { ($0, true) }
     }
 
     /// Roles that hold items: the walk up stops here, the point on none of them.

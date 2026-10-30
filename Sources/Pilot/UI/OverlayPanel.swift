@@ -23,6 +23,8 @@ final class HyperOverlay {
     var rows: (BindsPage.Sublayer) -> [BindsPage.Row] = { _ in [] }
     /// Settings › General's hold delay, read at each press.
     var delay: () -> TimeInterval = { HoldOverlay.delay }
+    /// Settings › General's switch, read at each press: off, a press closes as a release would and starts no timer.
+    var enabled: () -> Bool = { true }
     /// Brings the panel up; the tests' keeps it off Sven's screen.
     var order: (NSPanel) -> Void = { $0.orderFrontRegardless() }
 
@@ -30,7 +32,7 @@ final class HyperOverlay {
 
     func layer(down: Bool, held: Modifiers = []) {
         timer?.invalidate()
-        guard down else { return apply(state.layerUp()) }
+        guard down, enabled() else { return apply(state.layerUp()) }
         let delay = delay()
         state.layerDown(at: ProcessInfo.processInfo.systemUptime, delay: delay)
         _ = state.modifiers(held)

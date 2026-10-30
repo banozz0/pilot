@@ -445,7 +445,10 @@ struct PilotDictationTests {
         rig.media.answers.removeFirst()(true)
         #expect(rig.media.asked == ["pause"])
         pilot.toggle()
-        #expect(rig.media.asked == ["pause", "play"], "played again as the take stops, not after it is typed")
+        #expect(rig.media.asked == ["pause"], "not while the microphone records the take's tail")
+        rig.later.forEach { $0() }
+        rig.later = []
+        #expect(rig.media.asked == ["pause", "play"], "played again once the microphone stops, not after it is typed")
         rig.helper.last.ended(0)
         #expect(rig.media.asked == ["pause", "play"], "once")
 

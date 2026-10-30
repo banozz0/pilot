@@ -145,6 +145,33 @@ struct InstrumentOnboarding: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    // Update and Clean first, each with the helpers it runs (Q555); Homebrew's one Terminal run after Clean.
+                    ForEach(OnboardingExtras.Feature.allCases, id: \.self) { feature in
+                        InstrumentPanel(title: feature.title, note: feature.short) {
+                            if let line = feature.line {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(line).styleText(\.body).foregroundStyle(style.color(\.text))
+                                    if let later = extras.later(feature) { Text(later).styleText(\.caption).foregroundStyle(style.color(\.accent)) }
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 18).padding(.vertical, 12)
+                            }
+                            ForEach(Array(feature.items.enumerated()), id: \.element) { index, extra in
+                                if index > 0 || feature.line != nil { InstrumentRule() }
+                                item(extra)
+                            }
+                            if feature == .clean, let command = extras.brewCommand {
+                                InstrumentRule()
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(OnboardingExtras.terminalNote).styleText(\.caption).foregroundStyle(style.color(\.text2))
+                                    Text(command).styleText(\.mono).foregroundStyle(style.color(\.text3)).textSelection(.enabled)
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 18).padding(.vertical, 12)
+                            }
+                        }
+                    }
                     InstrumentPanel(title: "Voice") {
                         if let on = extras.speechOnMac {
                             line { titled("Dictation model", "\(on.name) is on this Mac"); Spacer(minLength: 8); state("Done") }
@@ -167,21 +194,6 @@ struct InstrumentOnboarding: View {
                         item(.command)
                     }
                     InstrumentPanel(title: "Images") { item(.upscaler) }
-                    InstrumentPanel(title: "Homebrew and helpers") {
-                        ForEach(Array(OnboardingExtras.Item.brew.enumerated()), id: \.element) { index, extra in
-                            if index > 0 { InstrumentRule() }
-                            item(extra)
-                        }
-                        if let command = extras.brewCommand {
-                            InstrumentRule()
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(OnboardingExtras.terminalNote).styleText(\.caption).foregroundStyle(style.color(\.text2))
-                                Text(command).styleText(\.mono).foregroundStyle(style.color(\.text3)).textSelection(.enabled)
-                            }
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.horizontal, 18).padding(.vertical, 12)
-                        }
-                    }
                     InstrumentPanel(title: "Pilot") {
                         line {
                             titled("Extensions", OnboardingExtras.extensionsDetail)
@@ -232,7 +244,7 @@ struct InstrumentOnboarding: View {
             if model.extras.onMac.contains(item) {
                 state("On this Mac")
             } else {
-                if item.recommended { tag("Recommended") }
+                if let chip = item.chip { tag(chip.capitalized) }
                 Toggle(item.title, isOn: model.extras.binding(item))
                     .labelsHidden().toggleStyle(InstrumentSwitchStyle(lit: false))
             }

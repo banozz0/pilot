@@ -75,7 +75,7 @@ struct ReportsPageRenders {
         var text = ""
         for style in PilotStyle.allCases {
             look.style = style
-            let page = ReportsGround { UpkeepPage(store: store, mole: false) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 500).pilotTheme(look: look)
+            let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 500).pilotTheme(look: look)
             try LookPageTests().hosted(page, height: 500) { host in
                 let rep = try #require(snapshot(host, scale: 2))
                 if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue).png")) }

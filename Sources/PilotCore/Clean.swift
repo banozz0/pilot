@@ -71,15 +71,20 @@ public enum CleanMenu {
     /// since a row's target is its id in the list and Mole repeats titles ("Obsolete VS Code extension").
     public enum Pick: Hashable, Sendable { case run, analyze, install, note(Int), reports }
 
-    /// With Mole missing, one row installs it through Install's confirm step. While the preview runs, nothing, so the
-    /// menu says it is previewing. Then the clean with its total and exact command, each item, a note when the system
-    /// caches were skipped, and Disk usage. Reports (story 153) ends the list.
-    public static func entries(_ preview: CleanPreview?, mole: Bool) -> [MenuEntry] {
+    /// With Mole missing, one row installs it through Install's confirm step, Homebrew with it in one run when that is
+    /// missing too (Sven, 2026-10-29, Q557). While the preview runs, nothing, so the menu says it is previewing. Then the
+    /// clean with its total and exact command, each item, a note when the system caches were skipped, and Disk usage.
+    /// Reports (story 153) ends the list.
+    public static func entries(_ preview: CleanPreview?, mole: Bool, homebrew: Bool = true) -> [MenuEntry] {
         func row(_ title: String, _ pick: Pick, _ detail: String? = nil, _ icon: MenuIcon) -> MenuEntry {
             MenuEntry(title: title, target: .clean(pick), home: .clean, detail: detail, inSearch: false, icon: icon)
         }
         let reports = row("Reports", .reports, "every Update and Clean run, kept", MenuIcon.reports)
-        guard mole else { return [row("Install Mole", .install, Helper.mole.install, .glyph("arrow.down.circle", .accent)), reports] }
+        guard mole else {
+            let install = homebrew ? row("Install Mole", .install, Helper.mole.install, .glyph("arrow.down.circle", .accent))
+                : row("Install Homebrew and Mole", .install, "one Terminal run · asks your password there", .glyph("arrow.down.circle", .accent))
+            return [install, reports]
+        }
         guard let preview else { return [] }
         let items = preview.items.enumerated().map { i, item in
             row(item.title, .note(i), item.detail.isEmpty ? item.section : "\(item.section) · \(item.detail)",

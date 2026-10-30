@@ -27,7 +27,8 @@ enum CleanModule {
     }()
 
     /// Return on a Clean row: the clean asks with its exact command and stays open when done, so Mole's summary is read;
-    /// Disk usage opens Mole's explorer; Install Mole is Install's own confirm step; an item or a note only says how
+    /// Disk usage opens Mole's explorer; Install Mole is Install's own confirm step, with Homebrew's installer before it
+    /// when Homebrew is missing too (Q557); an item or a note only says how
     /// Mole cleans; Reports opens Install › Reports, where every clean is kept (story 153).
     static func pick(_ pick: CleanMenu.Pick) {
         switch pick {
@@ -41,7 +42,7 @@ enum CleanModule {
         case .analyze:
             VisibleTerminal.run(Mole.analyze, title: "Disk usage", onSuccess: "true")
         case .install:
-            InstallModule.install(.mole)
+            if Helper.homebrew.path() == nil { InstallModule.installWithHomebrew(.mole) } else { InstallModule.install(.mole) }
         case .note:
             HUD.tip("Mole cleans these together; Clean asks first")
         case .reports:

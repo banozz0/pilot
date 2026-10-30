@@ -187,6 +187,21 @@ final class SpeechModel {
 
     /// Dictate.readyFile in Helpers/pilot-dictate.
     static let readyFile = "ready"
+    /// Written as a download starts and gone once it is on disk or cancelled: one left at launch was cut off by a quit,
+    /// and starts again (Sven, 2026-10-29: "the download stopped"). Kokoro's folder keeps one too.
+    static let downloadingFile = "downloading"
+
+    static func markDownloading(_ folder: URL, _ on: Bool) {
+        let marker = folder.appending(path: downloadingFile)
+        if on {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: marker.path, contents: nil)
+        } else {
+            try? FileManager.default.removeItem(at: marker)
+        }
+    }
+
+    static func wasCutOff(_ folder: URL) -> Bool { FileManager.default.fileExists(atPath: folder.appending(path: downloadingFile).path) }
 
     let choice: SpeechChoice
     let folder: URL
@@ -219,6 +234,7 @@ final class SpeechModel {
         guard run == nil, !isReady else { return }
         failure = nil
         state = .downloading(0)
+        Self.markDownloading(folder, true)
         generation += 1
         let mine = generation
         run = helper.run(["download", folder.path, choice.helperName], heard: { [weak self] line in
@@ -228,12 +244,20 @@ final class SpeechModel {
         whisperLog.notice("speech model \(self.choice.rawValue, privacy: .public): download")
     }
 
+    /// At launch: a download a quit cut off goes on from the files already there.
+    func resume() {
+        if !isReady, Self.wasCutOff(folder) { download() }
+    }
+
     func cancel() {
         let stopping = run
         run = nil
         generation += 1
         stopping?.cancel()
-        if !isReady { state = .absent }
+        if !isReady {
+            state = .absent
+            Self.markDownloading(folder, false)
+        }
     }
 
     /// Deletes the model's folder; it waits for Download again.
@@ -285,6 +309,7 @@ final class SpeechModel {
         run = nil
         if Self.onDisk(folder, choice) {
             state = .ready
+            Self.markDownloading(folder, false)
             onReady?()
         } else {
             state = .failed(failure ?? "The download stopped (exit \(status)). Try again.")
@@ -331,6 +356,9 @@ final class SpeechModels {
     }
 
     func prepareInBackground() { active?.prepareInBackground() }
+
+    /// At launch: each download a quit cut off, from Settings or setup alike, starts again.
+    func resume() { all.forEach { $0.resume() } }
 
     func stopPreparing() { all.forEach { $0.stopPreparing() } }
 
@@ -594,8 +622,13 @@ final class PilotDictation {
         take.target = frontApp()
         take.stopped = .now
         run.finish()
-        // The microphone is done: what was playing goes on while the take is written down.
-        media.takeEnded()
+        // What was playing goes on while the take is written down, once the microphone is done: it records the 0.4 s
+        // tail on (Dictate.tail), and through the speakers the music came into the take's end. A take started meanwhile
+        // plays it at its own end.
+        _ = after(0.5) { [weak self] in
+            guard let self, state != .starting, state != .listening else { return }
+            media.takeEnded()
+        }
         state = .writing
         show.writing()
         whisperLog.notice("pilot dictation: stop, model \(take.loaded ? "loaded" : "still loading", privacy: .public)")

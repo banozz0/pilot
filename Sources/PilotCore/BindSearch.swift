@@ -176,7 +176,8 @@ public enum BindSearch {
         }
         let apps = s.apps.map { app($0.name, bundle: $0.bundle) }
         let catalogue = s.catalogue.apps.flatMap { app in
-            app.actions.map {
+            // Pilot's own action an app names (Music's Play or pause) lists once, as Pilot's (Q552).
+            app.actions.filter { !DriveCatalogue.ownAction($0.route) }.map {
                 Row(id: $0.route, title: "\(app.name): \($0.label)", subtitle: "App action · \(app.name)", group: .actions, bundle: app.bundle)
             }
         }

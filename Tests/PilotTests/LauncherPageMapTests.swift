@@ -17,7 +17,7 @@ struct LauncherPageMapTests {
         }
         #expect(try schema.setting("displays.brightnessKeys").page == "system")
         #expect(try schema.setting("displays.brightnessKeys").label == "Brightness keys follow the focused window")
-        #expect(try schema.setting("general.bindNudges").label == "Show the bind after a click")
+        #expect(try schema.setting("general.bindNudges").label == "Show an app's bind after you open it")
     }
 
     @Test("A search by a setting's words keeps the ability it sits under: repos lazygit, length a password, GIPHY Stickers and GIFs")

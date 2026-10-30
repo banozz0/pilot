@@ -12,13 +12,15 @@ REV=${2:-HEAD}
 # and its Xcode MCP bridge.
 PRIVATE=(AGENTS.md CLAUDE.md .claude .mcp.json)
 # Lines the grep lets through, path and text: Pilot's Send feedback opens the public repo's issue form, and the site's
-# pages link the repo, its releases and its issues, and Sparkle's feed and release.sh's download links name its releases (Q431); the public repo is banozz0/pilot once today's is renamed (Q324).
+# pages (and pilot.js's demo clipboard) link the repo, its releases and its issues, and Sparkle's feed and release.sh's download links name its releases (Q431); the public repo is banozz0/pilot once today's is renamed (Q324).
+# README's Download links name its releases too (Sven, 2026-10-29).
 # They are printed on every run.
 ALLOWED=('Sources/PilotCore/Feedback.swift:.*github.com/banozz0/pilot/issues/new'
          'Tests/PilotCoreTests/FeedbackTests.swift:.*banozz0/pilot'
-         'site/[a-z]+\.html:.*github.com/banozz0/pilot'
+         'site/[a-z]+\.(html|js):.*github.com/banozz0/pilot'
          'Packaging/Info.plist:.*github.com/banozz0/pilot/releases/'
-         'Scripts/release.sh:.*github.com/banozz0/pilot/releases/')
+         'Scripts/release.sh:.*github.com/banozz0/pilot/releases/'
+         'README.md:.*github.com/banozz0/pilot/releases')
 PATTERN='svenmedina|/Users/sven([^[:alnum:]_]|$)|banozz0/pilot([^-[:alnum:]_]|$)'
 
 git -C "$ROOT" rev-parse --verify --quiet "$REV^{tree}" >/dev/null || { echo "error: $REV is no commit or tree" >&2; exit 1; }
@@ -28,8 +30,12 @@ mkdir -p "$OUT"
 OUT=${OUT:A}
 git -C "$ROOT" archive --format=tar "$REV" -- . ${PRIVATE/#/:(exclude)} | tar -x -C "$OUT"
 for p in $PRIVATE; do [[ ! -e $OUT/$p && ! -L $OUT/$p ]] || { echo "error: $p is in the tree" >&2; exit 1; }; done
-# README's file map lists the private files too: their rows, and .claude/'s one child, leave with them.
-[[ -f $OUT/README.md ]] && perl -0pi -e 's/^├── \.claude\/[^\n]*\n(?:│   [^\n]*\n)*//m; s/^├── (?:\.mcp\.json|AGENTS\.md|CLAUDE\.md)\b[^\n]*\n//mg' "$OUT/README.md"
+# README's file map is for agents: its rows quote each file's first comment, with private ids. The public README ends
+# before it, with or without its heading or a newline after it; a map left in stops the run.
+if [[ -f $OUT/README.md ]]; then
+  perl -0pi -e 's/\n(?:## Files\n+)?<!-- file-map:start.*?<!-- file-map:end -->\n?//s' "$OUT/README.md"
+  ! grep -q 'file-map:' "$OUT/README.md" || { echo "error: README.md still holds its file map" >&2; exit 1; }
+fi
 
 echo "public tree: $OUT"
 echo "  from: $REV ($(git -C "$ROOT" rev-parse --short "$REV"))"

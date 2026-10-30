@@ -13,7 +13,7 @@ public enum NotesWelcome {
 
     ## How it works
 
-    - **Open:** Hyper+Shift+N shows the notes panel, or open Notes in Pilot's window.
+    - **Open:** Hyper+N shows the notes panel, or open Notes in Pilot's window.
     - **New note:** ⌘N. What you type in Scratch becomes a note of its own.
     - **Save a line fast:** Hyper+Space, type `note` and your words, then Return.
     - **Pin:** ⌘P, or ⌘K for every action on a note. Pinned notes stay on top.

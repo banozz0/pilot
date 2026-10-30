@@ -26,6 +26,7 @@ final class PilotSettings {
         overlayMode = defaults.string(forKey: "overlayMode").flatMap(OverlayPage.Mode.init(rawValue:)) ?? .every
         overlayPicks = Set(defaults.stringArray(forKey: "overlayPicks") ?? [])
         overlayDelay = HoldOverlay.clamped(delay: defaults.object(forKey: "overlay.delay") as? Double ?? HoldOverlay.delay)
+        overlayEnabled = defaults.object(forKey: "overlay.enabled") as? Bool ?? true
         showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
         bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? true
@@ -123,6 +124,11 @@ final class PilotSettings {
         }
     }
     @ObservationIgnored var onOverlayDelayChange: () -> Void = {}
+    /// On unless switched off (Sven, 2026-10-30, Q587): off, holding Hyper never shows the overlay; read at each press.
+    /// The quick tap's window still follows overlayDelay, so a tap is Escape as before.
+    var overlayEnabled: Bool {
+        didSet { defaults.set(overlayEnabled, forKey: "overlay.enabled") }
+    }
     /// Off until switched on on Home: This Mac's public IP is the one reading that calls the internet (card agent-bo-95422831).
     var showPublicIP: Bool {
         didSet { defaults.set(showPublicIP, forKey: "system.publicIP") }
@@ -340,6 +346,7 @@ final class Engine {
                              presses: pressCounts?.counts ?? [:], picks: settings.overlayPicks)
         }
         overlay.delay = { [unowned self] in settings.overlayDelay }
+        overlay.enabled = { [unowned self] in settings.overlayEnabled }
         tap.onModifiers = { [unowned self] held in overlay.modifiers(held) }
         tap.onKey = { [unowned self] in overlay.key() }
         tap.onTyped = { SnippetLibrary.shared.keywords.typed($0, $1()) }

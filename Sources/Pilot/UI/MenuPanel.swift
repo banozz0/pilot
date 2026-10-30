@@ -724,6 +724,8 @@ final class PilotMenu {
     /// all read-only. A check left running by a closed menu is joined, not run again.
     private func loadUpdate() {
         let checker = InstallModule.updates
+        // Without Homebrew there is no list to read (Q556): Install Homebrew, not a check that can only fail.
+        guard Helper.homebrew.path() != nil else { return model?.nav.provide(.package, home: .update, UpdateList.noHomebrew()) ?? () }
         guard updateLoad == nil, let model else { return showUpdate() }
         masInstalled = Helper.mas.path() != nil
         if checker.current != nil { seeUpdates(); showUpdate() }
@@ -768,6 +770,16 @@ final class PilotMenu {
     /// Return in Update: a row asks to update it with its exact command (a pinned one asks to unpin instead), Update all
     /// asks with the command for everything outdated but macOS, and the switch flips self-updating casks in or out.
     private func update(_ pick: UpdateList.Pick) {
+        // Install Homebrew and Reports have no rows behind them: Update without Homebrew lists only these.
+        switch pick {
+        case .installHomebrew:
+            close(restoreFocus: false)
+            return InstallModule.install(.homebrew)
+        case .reports:
+            close(restoreFocus: false)
+            return AppWindowController.shared.open(AppPlace(.reports))
+        default: break
+        }
         guard let rows = updateRows else { return }
         switch pick {
         case .selfUpdating:
@@ -795,17 +807,18 @@ final class PilotMenu {
             guard let row = rows.first(where: { $0.item.key == key }) else { return }
             close(restoreFocus: false)
             return InstallModule.unpin(row)
-        case .reports:
-            close(restoreFocus: false)
-            return AppWindowController.shared.open(AppPlace(.reports))
+        case .installHomebrew, .reports: return
         }
         showUpdate()
     }
 
-    /// Clean's rows: Mole's preview, kept between menus (CleanPreviewer), or Install Mole when it is missing.
+    /// Clean's rows: Mole's preview, kept between menus (CleanPreviewer), or Install Mole when it is missing (with
+    /// Homebrew when that is missing too).
     private func loadClean() {
         let mole = CleanModule.mole != nil
-        if !mole || CleanModule.previewer.ready != nil { return showClean(CleanModule.previewer.ready, mole: mole) }
+        if !mole || CleanModule.previewer.ready != nil {
+            return showClean(CleanModule.previewer.ready, mole: mole, homebrew: mole || Helper.homebrew.path() != nil)
+        }
         guard cleanLoad == nil else { return }
         cleanLoad = Task { [weak self] in
             let preview = await CleanModule.previewer.preview()
@@ -817,8 +830,8 @@ final class PilotMenu {
         }
     }
 
-    private func showClean(_ preview: CleanPreview?, mole: Bool) {
-        model?.nav.provide(.action, home: .clean, CleanMenu.entries(preview, mole: mole))
+    private func showClean(_ preview: CleanPreview?, mole: Bool, homebrew: Bool = true) {
+        model?.nav.provide(.action, home: .clean, CleanMenu.entries(preview, mole: mole, homebrew: homebrew))
     }
 
     private func showRemove() {

@@ -31,6 +31,11 @@ public enum Dictate {
     static let speaking: Float = 0.01
     /// The quiet kept either side of the speech, so a word's soft start and end stay in.
     static let margin = WhisperKit.sampleRate * 3 / 10
+    /// The fewest frames in a row that make a sound rather than a click: a key press or a mouse click is one frame,
+    /// the shortest word three.
+    static let sound = 3
+    /// The quiet kept after the take's last sound, for a voice trailing off under any level.
+    static let afterSound = WhisperKit.sampleRate / 2
     /// The most of the take a partial pass reads; past it, the take up to a pause is written down for good. Under
     /// Whisper's 30 s window with room for the speech that comes during a pass.
     static let window = WhisperKit.sampleRate * 20
@@ -217,6 +222,28 @@ public enum Dictate {
         return max(0, first * frame - margin)..<min(samples.count, (last + 1) * frame + margin)
     }
 
+    /// How loud each `frame` of `samples` is (RMS).
+    static func loudness(_ samples: [Float]) -> [Float] {
+        stride(from: 0, to: samples.count, by: frame).map { AudioProcessor.calculateAverageEnergy(of: Array(samples[$0..<min($0 + frame, samples.count)])) }
+    }
+
+    /// How loud a frame must be to count as sound: 6 dB over the room (the take's quietest tenth), at least -50 dB and at
+    /// most `speaking`, so a voice trailing off at -44 dB in a quiet room still counts.
+    static func soundLevel(_ loudness: [Float]) -> Float {
+        let room = loudness.sorted().dropFirst(loudness.count / 10).first ?? 0
+        return min(speaking, max(0.003, room * 2))
+    }
+
+    /// The end of the last `sound` in `loudness` louder than `level`, in samples; nil when it holds none.
+    static func soundEnd(_ loudness: [Float], over level: Float) -> Int? {
+        var run = 0, end: Int?
+        for (index, frameLoudness) in loudness.enumerated() {
+            run = frameLoudness > level ? run + 1 : 0
+            if run >= sound { end = (index + 1) * frame }
+        }
+        return end
+    }
+
     /// The start of the quietest frame in `range`, where a cut splits no word.
     static func quietest(_ samples: [Float], in range: Range<Int>) -> Int {
         stride(from: range.lowerBound, to: min(range.upperBound, samples.count - frame), by: frame)
@@ -257,7 +284,8 @@ public enum Dictate {
     /// The take's text, in the language it was spoken in; empty for a take too short or too quiet to hold words. It is
     /// read from its speech's start to the last sample recorded: the quiet before is cut off, the end never, since last
     /// words said softer than `speaking` (a voice trailing off, -44 dB in a WAV) fell past the speech's end and were
-    /// never written down (Sven, 2026-10-24: "not getting all my words, especially the last few ones").
+    /// never written down (Sven, 2026-10-24: "not getting all my words, especially the last few ones"). Whisper cuts the
+    /// quiet after on its own (WhisperTranscriber.text).
     public static func transcribe(_ transcriber: any Transcriber, _ samples: [Float]) async throws -> String {
         guard let speech = speech(in: samples), speech.count >= shortest else { return "" }
         return try await transcriber.text(Array(samples[speech.lowerBound...])).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,17 +350,59 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         kit.voiceActivityDetector = EnergyVAD(energyThreshold: Dictate.speaking)
     }
 
-    func text(_ samples: [Float]) async throws -> String {
+    func text(_ take: [Float]) async throws -> String {
+        // Whisper reads the take to `afterSound` past its last sound. Read to the last sample, the pause before the stop,
+        // the key's click and the tail came in, and on a take over 30 s WhisperKit made them a piece of their own that
+        // Whisper wrote "Thank you.", "you" or "*sounds of breath*" for (Sven, 2026-10-29: "most of the times it ends
+        // with 'thank you'"). In a room too loud to tell a soft last word from it the take stays whole, and so does it
+        // for Parakeet, which writes nothing over quiet and lost a soft last word cut this way.
+        let loudness = Dictate.loudness(take), level = Dictate.soundLevel(loudness)
+        let samples: [Float]
+        if level < Dictate.speaking {
+            guard let end = Dictate.soundEnd(loudness, over: level) else { return "" }
+            samples = Array(take.prefix(end + Dictate.afterSound))
+        } else {
+            samples = take
+        }
         let language = await language(of: samples)
         // No first-token check: a piece opening on room noise failed it however sure the rest was, and its decode again
         // at a higher temperature came back garbled or as one made-up line, one run in three on a noisy 85 s clip
         // (2026-10-19). The average log probability still sends a decode that failed as a whole round again.
         let options = DecodingOptions(language: language, detectLanguage: language == nil, skipSpecialTokens: true, withoutTimestamps: true,
                                       firstTokenLogProbThreshold: nil, chunkingStrategy: .vad)
-        return try await kit.transcribe(audioArray: samples + Self.padding, decodeOptions: options)
-            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !Self.isTag($0) }
-            .joined(separator: " ")
+        var pieces = try await kit.transcribe(audioArray: samples + Self.padding, decodeOptions: options)
+            .map { (text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), start: Int(($0.seekTime ?? 0) * Float(WhisperKit.sampleRate))) }
+            .filter { !$0.text.isEmpty && !Self.isTag($0.text) }
+        // The last guard, should a piece of quiet still reach Whisper: WhisperKit 1.1.1 never computes the no-speech
+        // probability (TextDecoder's noSpeechProb is 0), so noSpeechThreshold skips nothing.
+        // A line no one dictates goes whatever the piece holds: typing alone is sound and came back "Продолжение следует...".
+        if let last = pieces.last, Self.isNeverSaid(last.text)
+            || Self.isMadeUp(last.text) && Dictate.soundEnd(Array(loudness.dropFirst(last.start / Dictate.frame)), over: level) == nil {
+            pieces.removeLast()
+        }
+        return pieces.map(\.text).joined(separator: " ")
+    }
+
+    /// What Whisper writes on its own over quiet or a click: "Thank you.", "you", "Thanks for watching!", ".". Dropped
+    /// only as the take's last piece and only over no sound, so a "Thank you" said aloud stays.
+    static let madeUp: Set<String> = ["", "you", "thank you", "thanks", "thank you very much", "thank you so much", "thank you for watching",
+                                      "thanks for watching", "bye", "so", "gracias", "gracias por ver", "vielen dank"]
+    /// The closing lines and subtitle credits of the videos Whisper learned from, which no one dictates: dropped as the
+    /// take's last piece whatever it holds. Credits by their start, whoever they credit.
+    static let neverSaid: Set<String> = ["продолжение следует", "спасибо за просмотр", "ご視聴ありがとうございました", "ご視聴ありがとうございます"]
+    static let credits = ["субтитры", "редактор субтитров", "untertitel", "untertitelung", "sous titres", "subtítulos realizados por",
+                          "subtitles by", "amara org"]
+
+    static func isMadeUp(_ piece: String) -> Bool { madeUp.contains(words(piece)) }
+
+    static func isNeverSaid(_ piece: String) -> Bool {
+        let words = words(piece)
+        return neverSaid.contains(words) || credits.contains { words.hasPrefix($0) }
+    }
+
+    /// `piece` lowercased, its words only, one space apart: "Sous-titres réalisés…" is "sous titres réalisés".
+    static func words(_ piece: String) -> String {
+        String(piece.lowercased().map { $0.isLetter || $0.isNumber ? $0 : " " }).split(separator: " ").joined(separator: " ")
     }
 
     /// The take's language once `samples` hold a `solid` stretch, detected at temperature 0 on their first 30 s; nil
@@ -346,11 +416,12 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         return detected
     }
 
-    /// A piece that is only Whisper's note about the sound, "[Foreign]", "(music)" or "[BLANK_AUDIO]": no words to type.
-    /// Whisper small wrote "[Foreign]" for a Spanish take (2026-10-16).
+    /// A piece that is only Whisper's note about the sound, "[Foreign]", "(music)", "[BLANK_AUDIO]" or "*sounds of
+    /// breath*": no words to type. Whisper small wrote "[Foreign]" for a Spanish take (2026-10-16).
     static func isTag(_ piece: String) -> Bool {
-        guard let first = piece.first, let last = piece.last else { return false }
-        return (first == "[" && last == "]" || first == "(" && last == ")") && !piece.dropFirst().dropLast().contains(where: { "[]()".contains($0) })
+        guard piece.count > 1, let first = piece.first, let last = piece.last else { return false }
+        return (first == "[" && last == "]" || first == "(" && last == ")" || first == "*" && last == "*")
+            && !piece.dropFirst().dropLast().contains(where: { "[]()*".contains($0) })
     }
 }
 
