@@ -6,9 +6,10 @@ import SwiftUI
 // with its icon and name, the dashed spot where the next app goes; under own sizes an accent line between two apps that
 // drags their percents. A spot clicked opens the picker hung off it.
 
-/// The workspace as a screen: a menu bar strip, then the placed apps where the layout puts them, 6 pt apart. Scrolling's
-/// strip shows three columns whole; each column past them peeks in at the right edge with its number, and the next
-/// app's spot is the strip's next column.
+/// The workspace as a screen: a menu bar strip, then the placed apps where the layout puts them, 6 pt apart. Until the
+/// layout's spots are full its empty ones show as dashed spots (Sven 2026-10-30: main + stack draws the main and the
+/// stacked pair); past that the next app's spot is a strip where it joins. Scrolling's strip shows three columns whole;
+/// each column past them peeks in at the right edge with its number, and the next app's spot is the strip's next column.
 struct WorkspacePreview: View {
     @Environment(\.ink) private var ink
 
@@ -26,7 +27,11 @@ struct WorkspacePreview: View {
         GeometryReader { g in
             // Laid out half a gap past each edge, then each tile inset by half a gap: 6 pt between, flush at the edges.
             let half = Self.gap / 2
-            let preview = draft.preview(in: CGRect(origin: .zero, size: g.size).insetBy(dx: -half, dy: -half), strip: Self.strip + Self.gap)
+            let area = CGRect(origin: .zero, size: g.size).insetBy(dx: -half, dy: -half)
+            let preview = draft.shape(in: area) ?? {
+                let full = draft.preview(in: area, strip: Self.strip + Self.gap)
+                return (full.apps, [full.next])
+            }()
             let strip = draft.layout == .scrolling
             ZStack(alignment: .topLeading) {
                 ForEach(Array(draft.apps.enumerated()), id: \.element.bundleId) { i, app in
@@ -41,11 +46,14 @@ struct WorkspacePreview: View {
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.app(i)] = $0 }
                         .position(x: r.midX, y: r.midY)
                 }
-                let next = preview.next.insetBy(dx: half, dy: half)
-                AddSpot(big: draft.apps.isEmpty, narrow: !draft.apps.isEmpty && next.width < next.height, on: picking == .next) { open(.next) }
-                    .frame(width: next.width, height: next.height)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.next] = $0 }
-                    .position(x: next.midX, y: next.midY)
+                // The layout's empty spots, the first where the next app lands; a click on any adds to the first.
+                ForEach(preview.open.indices, id: \.self) { k in
+                    let r = preview.open[k].insetBy(dx: half, dy: half), spot = WorkspaceEditor.Spot.open(k)
+                    AddSpot(big: k == 0 && r.width >= 150 && r.height >= 90, narrow: r.width < 90 && r.width < r.height, on: picking == spot) { open(spot) }
+                        .frame(width: r.width, height: r.height)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[spot] = $0 }
+                        .position(x: r.midX, y: r.midY)
+                }
                 if draft.layout == nil {
                     ForEach(0..<max(0, draft.apps.count - 1), id: \.self) { i in
                         SizeDivider(draft: $draft, divider: i, tiles: preview.apps, height: g.size.height)

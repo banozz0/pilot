@@ -9,13 +9,17 @@ struct InstrumentExtensionDetail: View {
     @Environment(\.style) private var style
     let blocks: [DetailBlock]
     let facts: [Extension.Detail.Fact]
+    /// A detail's own blocks (pilot-1-1 T9), drawn in place of its words, and where their actions go.
+    var drawn: [Extension.Block] = []
+    var act: (Extension.Item.Action) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 0) {
-            if !blocks.isEmpty { words(MarkdownStyle(style: style)) }
+            let hasBody = !blocks.isEmpty || !drawn.isEmpty
+            if !drawn.isEmpty { ExtensionDetailBlocks(blocks: drawn, act: act) } else if !blocks.isEmpty { words(MarkdownStyle(style: style)) }
             if !facts.isEmpty {
-                if !blocks.isEmpty { InstrumentRule(vertical: true) }
-                factsColumn.frame(width: blocks.isEmpty ? nil : ExtensionDetailView.factsWidth)
+                if hasBody { InstrumentRule(vertical: true) }
+                factsColumn.frame(width: hasBody ? ExtensionDetailView.factsWidth : nil)
             }
         }
     }

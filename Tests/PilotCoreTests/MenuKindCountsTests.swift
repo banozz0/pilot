@@ -52,7 +52,8 @@ struct MenuKindCountsTests {
         for _ in 0..<5 {
             _ = nav.handle(.tab)
             guard let kind = nav.only, kind != .file else { continue }
-            #expect(nav.count(of: kind) == nav.rows.count, "\(kind)")
+            // Packages ends on Search to install, an offer no count takes.
+            #expect(nav.count(of: kind) == nav.rows.count { !$0.isOffer }, "\(kind)")
             #expect(counts(nav) == all, "the other kinds keep their counts")
         }
     }

@@ -12,6 +12,7 @@ struct TopBarView: View {
     var frames = BarFrames.shared
     var recorder = Recorder.shared
     var wallpapers = BarWallpapers.shared
+    var dictation = DictationOverlay.shared
     /// The items this bar holds readers for: the ones it shows, from appearing to going.
     @State private var held: Set<BarKind> = []
 
@@ -19,11 +20,12 @@ struct TopBarView: View {
         let sides = store.settings.preview(.topBar).top ?? [:]
         let kinds = Set(sides.values.joined().flatMap(\.kinds))
         // Each slot is its own view, so a timer tick redraws the timer, not the bar.
-        TopBarStrip(sides: sides, background: store.background, colour: store.colour, itemColours: store.itemColours,
+        TopBarStrip(sides: sides, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,
                     wallpaper: wallpapers.strips[screen], report: { [frames, screen] in frames.report($2, side: $0, index: $1, on: screen) },
                     // Capture shows the recording's time itself, in place of the red-dot control; checked first, so the bar
                     // never follows the recorder then.
                     trailing: !kinds.contains(.capture) && recorder.isActive ? AnyView(RecordingControl(recorder: recorder)) : nil,
+                    live: dictation.inBar ? AnyView(DictationBarItem(overlay: dictation)) : nil, liveSide: dictation.setup.barSide,
                     overflow: AnyView(TopBarOverflow(screen: screen, sides: sides, sources: sources, store: store, frames: frames))) {
             TopBarSlot(slot: $0, screen: screen, sources: sources, store: store)
         }
@@ -168,6 +170,11 @@ struct TopBarStrip<Slot: View>: View {
     var report: ((TopBarSide, Int, CGRect) -> Void)? = nil
     /// Drawn after the right side's items while it is there: the recording's control (story 192, Q162).
     var trailing: AnyView? = nil
+    /// Dictation's take (DictationBarItem), on `liveSide`: on the left just after Pilot's mark (first with no mark), so the
+    /// left edge never moves; at the centre after its items, the group re-centred, never going for room; on the right
+    /// first, before the status items, where it is the first to go on a crowded bar. Its words fold before any item goes.
+    var live: AnyView? = nil
+    var liveSide = TopBarSide.left
     /// Holds the slots that go for room, placed by TopBarRow only while any does (TopBarOverflow); the Menu bar page's
     /// preview has none.
     var overflow: AnyView? = nil
@@ -178,9 +185,13 @@ struct TopBarStrip<Slot: View>: View {
         // a hairline between the bar's groups, its caption face and the rule along its foot.
         let toybox = style.kind == .toybox, instrument = style.kind == .instrument
         let rules = instrument ? sides.mapValues(InstrumentBar.hairlines(before:)) : [:]
+        let placed = live?.layoutValue(key: TopBarRow.Side.self, value: liveSide).layoutValue(key: TopBarRow.Folds.self, value: true)
+        // On the left it follows the mark: placed first only where there is none.
+        let first = liveSide == .right || liveSide == .left && !sides.values.contains { $0.contains { $0.kinds.contains(.pilot) } }
         let ground = TopBarColour.ground(colour, style: style)
         let (inked, tone) = TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: .shared)
         TopBarRow(spacing: toybox ? ToyBar.spacing : InstrumentBar.spacing, gap: 12) {
+            if let placed, first { placed }
             ForEach(TopBarSide.allCases, id: \.self) { side in
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
                     let ruled = rules[side]?.contains(index) == true
@@ -189,8 +200,10 @@ struct TopBarStrip<Slot: View>: View {
                         .reported(report.map { report in { report(side, index, $0) } })
                         .layoutValue(key: TopBarRow.Side.self, value: side)
                         .layoutValue(key: TopBarRow.Folds.self, value: item.kind.folds)
+                    if let placed, liveSide == .left, item.kinds.contains(.pilot) { placed }
                 }
             }
+            if let placed, liveSide == .centre { placed }
             if let trailing { trailing.layoutValue(key: TopBarRow.Side.self, value: .right) }
             if let overflow { overflow.layoutValue(key: TopBarRow.Overflow.self, value: true) }
         }
@@ -309,14 +322,22 @@ enum TopBarColour {
         look.glassTint(Color(Paint(ground(colour, style: style))), alpha: tintAlpha(look))
     }
 
-    /// The glass's tint's share in percent at Look's Transparency.
-    static func tintAlpha(_ look: Look) -> Int { MaterialValues.windowAlpha(strength: Layers.strength(transparency: look.transparency)) }
+    /// The glass's tint's share in percent at Look's Transparency, over its whole range (Sven, Q714): whole at 0 %, where
+    /// the bar goes solid (TopBarBackground.shown), 55 % at the default 33 % as before, down to the window ground's least
+    /// (42 %) at 100 %, in a line between each. 50 % is 52, 77 % 46.
+    static func tintAlpha(_ look: Look) -> Int { tintAlpha(transparency: look.transparency) }
+    static func tintAlpha(transparency: Int) -> Int {
+        let t = Double(min(100, max(0, transparency))), standard = 33.0
+        let atStandard = MaterialValues.glassShare * 100, least = Layers(transparency: 100).ground * 100
+        let share = t <= standard ? 100 + (atStandard - 100) * t / standard : atStandard + (least - atStandard) * (t - standard) / (100 - standard)
+        return Int(share.rounded())
+    }
 }
 
 /// The top bar's measures (design JJPiA9o30SA direction A).
 @MainActor
 enum BarMetrics {
-    /// A target's room each side of its ink, which its hover pill fills.
+    /// A target's room each side of its ink, which takes the pointer.
     static let inset: CGFloat = 8
     /// A workspace number's: the numbers sit closer than items.
     static let numberInset: CGFloat = 7
@@ -341,8 +362,8 @@ private extension View {
 
 /// The top bar's row: the left side against the leading edge, the right against the trailing edge, the centre centred
 /// while it clears both, every item at its own width. Short of room the centre first moves to the middle of the clear gap;
-/// then an item that folds (the app's menus, card agent-bo-95423016) gives room down to its least, the width it takes
-/// offered none; then whole items go, the right side's innermost first (as a crowded menu bar hides its leftmost status
+/// then an item that folds (the app's menus, card agent-bo-95423016; then dictation's words at the centre) gives room down
+/// to its least, the width it takes offered none; then whole items go, the right side's innermost first (as a crowded menu bar hides its leftmost status
 /// items), then the left side's innermost; the centre (the clock) always stays. A Layout cannot hide a subview, so what
 /// goes is placed `offstage`, wholly outside the row, for the window or the caller's clip to hide (TrailingRow's way too).
 /// While anything goes, the overflow item (Sven on build 52: no limit on what the bar holds) takes its room just inside
@@ -416,7 +437,8 @@ struct TopBarRow: Layout {
         let left = widths[.left] ?? [], centre = widths[.centre] ?? [], right = widths[.right] ?? []
         var keptLeft = left.count, keptRight = right.count
         var sized = widths
-        let c = side(centre)
+        // The centre's width, less what a folding item there gave.
+        func c() -> CGFloat { side(sized[.centre, default: []]) }
         func kept(_ s: TopBarSide) -> Range<Int> {
             switch s {
             case .left: 0..<keptLeft
@@ -436,14 +458,14 @@ struct TopBarRow: Layout {
         // The centre's least and most x, clear of both sides; with no centre (the Menu's) the sides are one gap apart.
         func span() -> (lo: CGFloat, hi: CGFloat) {
             let l = side(sized[.left, default: []][kept(.left)]), r = rightSide()
-            return (l > 0 ? l + gap : 0, room - c - (r > 0 ? r + (c > 0 ? gap : 0) : 0))
+            return (l > 0 ? l + gap : 0, room - c() - (r > 0 ? r + (c() > 0 ? gap : 0) : 0))
         }
         // The kept items that fold give what the row is short, each down to its least.
         func fold() {
             sized = widths
             let (lo, hi) = span()
             var short = lo - hi
-            for s in [TopBarSide.left, .right] {
+            for s in [TopBarSide.left, .right, .centre] {
                 for i in kept(s) where short > 0 {
                     let give = min(short, sized[s]![i] - (least[s]?[i] ?? sized[s]![i]))
                     sized[s]![i] -= give
@@ -459,7 +481,7 @@ struct TopBarRow: Layout {
         }
         // Centred on the row while that clears both sides, else in the middle of the room between them, so it never reads
         // as one of a side's items.
-        let (lo, hi) = span(), centred = (room - c) / 2
+        let (lo, hi) = span(), centred = (room - c()) / 2
         let centreX = (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
         var x: [TopBarSide: [CGFloat?]] = [:]
         let more = overflows() ? room - rightSide() : nil

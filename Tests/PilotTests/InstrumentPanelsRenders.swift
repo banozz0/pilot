@@ -169,7 +169,7 @@ struct InstrumentPanelsRenders {
         let store = BarItemsStore.shared
         let engine = Engine()
         typealias On = DropdownQuickSwitchesTests.Fake
-        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(true), clipboard: On(true))
+        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(true), clipboard: On(true), dictation: On(true))
 
         for dark in [true, false] {
             look.themeID = dark ? "nightwatch" : "paper"

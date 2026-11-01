@@ -302,7 +302,8 @@ struct MarkdownStyle: Equatable {
 enum MarkdownMarks {
     static let heading = try! NSRegularExpression(pattern: #"^(#{1,6})[ \t]+\S.*$"#, options: .anchorsMatchLines)
     static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
-    static let italic = try! NSRegularExpression(pattern: #"(?<![\*\w])([\*_])(?=[^\s\*_])(.+?)(?<=[^\s\*_])\1(?![\*\w])"#)
+    /// `_words_` or `*words*`; an underscore's may sit right inside or outside bold's `**` (`**_both_**`, `_**both**_`).
+    static let italic = try! NSRegularExpression(pattern: #"(?<!\w)_(?=[^\s_]).+?(?<=[^\s_])_(?!\w)|(?<![\*\w])\*(?=[^\s\*_]).+?(?<=[^\s\*_])\*(?![\*\w])"#)
     static let code = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
     static let link = try! NSRegularExpression(pattern: #"\[([^\]\n]+)\]\(([^)\s]+)\)"#)
     static let bareURL = try! NSRegularExpression(pattern: #"(?<![\(\[])https?://[^\s)\]]+"#)
@@ -561,7 +562,7 @@ final class NotesTextView: NSTextView {
         }
         each(MarkdownMarks.italic) { m in
             restyleFonts(m.range) { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
-            mark(m.range(at: 1))
+            mark(NSRange(location: m.range.location, length: 1))
             mark(NSRange(location: NSMaxRange(m.range) - 1, length: 1))
         }
         each(MarkdownMarks.link) { m in

@@ -55,17 +55,22 @@ protocol MenuExtrasReading: Sendable {
     func menu(of handle: MenuItemHandle) -> [MenuItemNode]
     /// Presses the item at `path` inside the item's menu, never the item itself.
     func press(_ path: [String], in handle: MenuItemHandle) -> Bool
+    /// The items MenuBarAgent (`agent`) hosts for other apps, by owning pid: macOS 27.2 gives no app an AXExtrasMenuBar.
+    /// Throws when MenuBarAgent did not answer in time.
+    func hosted(by agent: pid_t) throws -> [pid_t: [MenuExtrasRaw]]
 }
 
 extension MenuExtrasReading {
+    func hosted(by agent: pid_t) -> [pid_t: [MenuExtrasRaw]] { [:] }
     func frame(of handle: MenuItemHandle) -> CGRect? { nil }
     func menu(of handle: MenuItemHandle) -> [MenuItemNode] { [] }
     func press(_ path: [String], in handle: MenuItemHandle) -> Bool { false }
 }
 
-/// The real tree: each app's AXExtrasMenuBar (top bar spike, vault note Projects/Pilot/Top bar spike.md). Pilot never
-/// moves or hides another app's item; it pictures one only with Show exact menu bar items on (MenuItemPictures, ADR
-/// 0012); a press is AXPress on the item, never a synthesized click or keystroke (ADR 0001).
+/// The real tree: each app's AXExtrasMenuBar, else MenuBarAgent's bar on macOS 27.2 (`hosted`) (top bar spike, vault
+/// note Projects/Pilot/Top bar spike.md). Pilot never moves or hides another app's item; it pictures one only with Show
+/// exact menu bar items on (MenuItemPictures, ADR 0012); a press is AXPress on the item, never a synthesized click or
+/// keystroke (ADR 0001).
 struct AXMenuExtras: MenuExtrasReading {
     /// Which bar it reads: other apps' items (AXExtrasMenuBar), or an app's own menus (AXMenuBar, AppMenus).
     var bar = "AXExtrasMenuBar"
@@ -88,13 +93,41 @@ struct AXMenuExtras: MenuExtrasReading {
         // Never Pilot's own, as AXMenu.menuBar.
         guard pid != getpid(), let bar = try Self.copy(AXUIElementCreateApplication(pid), bar),
               let items = try Self.copy(bar as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement], !items.isEmpty else { return nil }
-        return try items.map { item in
-            MenuExtrasRaw(title: try Self.copy(item, kAXTitleAttribute) as? String,
-                          description: details ? try Self.copy(item, kAXDescriptionAttribute) as? String : nil,
-                          help: details ? try Self.copy(item, kAXHelpAttribute) as? String : nil, handle: MenuItemHandle(item),
-                          frame: details ? try Self.frame(item) : nil,
-                          identifier: details ? try Self.copy(item, kAXIdentifierAttribute) as? String : nil)
+        return try items.map(raw)
+    }
+
+    private func raw(_ item: AXUIElement) throws -> MenuExtrasRaw {
+        MenuExtrasRaw(title: try Self.copy(item, kAXTitleAttribute) as? String,
+                      description: details ? try Self.copy(item, kAXDescriptionAttribute) as? String : nil,
+                      help: details ? try Self.copy(item, kAXHelpAttribute) as? String : nil, handle: MenuItemHandle(item),
+                      frame: details ? try Self.frame(item) : nil,
+                      identifier: details ? try Self.copy(item, kAXIdentifierAttribute) as? String : nil)
+    }
+
+    /// macOS 27.2 draws every app's items in MenuBarAgent's bar windows: each item a group there, its child the owning
+    /// app's own button (that app's pid, AXPress). One bar's buttons are read, the main display's first (its origin is
+    /// Accessibility's 0,0), as each screen's bar may host its own copy; a group holding the app's whole AXApplication
+    /// (another screen's bar) is never walked. An app's items keep their order across the bar.
+    func hosted(by agent: pid_t) throws -> [pid_t: [MenuExtrasRaw]] {
+        guard bar == "AXExtrasMenuBar",
+              let windows = try Self.copy(AXUIElementCreateApplication(agent), kAXWindowsAttribute) as? [AXUIElement] else { return [:] }
+        let children = { (element: AXUIElement) throws in try Self.copy(element, kAXChildrenAttribute) as? [AXUIElement] ?? [] }
+        let main = windows.filter { (try? Self.frame($0))?.origin == .zero }
+        var buttons: [(pid_t, AXUIElement)] = []
+        for window in main + windows where buttons.isEmpty {
+            buttons = try children(window).flatMap(children).compactMap { item in
+                var pid: pid_t = 0
+                guard AXUIElementGetPid(item, &pid) == .success, pid != agent,
+                      ["AXButton", "AXMenuBarItem"].contains((try? Self.copy(item, kAXRoleAttribute)) as? String) else { return nil }
+                return (pid, item)
+            }
         }
+        var hosted: [pid_t: [MenuExtrasRaw]] = [:]
+        for (pid, item) in buttons {
+            guard let raw = try? raw(item) else { continue }
+            hosted[pid, default: []].append(raw)
+        }
+        return hosted.mapValues { $0.sorted { ($0.frame?.minX ?? 0) < ($1.frame?.minX ?? 0) } }
     }
 
     func frame(of handle: MenuItemHandle) -> CGRect? { try? Self.frame(handle.element as! AXUIElement) }
@@ -168,7 +201,8 @@ final class PolicyCache: @unchecked Sendable {
 /// pointer comes over them, at most once per `hoverGap`, and when the drawer opens; one scan at a time. No poll (Sven, 2026-10-10: a 30 s scan of every app was idle CPU), so an
 /// item a running app adds shows at the next hover. Each scan ends by picturing the items afresh, with Show exact menu bar
 /// items on (MenuItemPictures). A click presses the item itself; from the drawer its menu opens under the drawer's item
-/// (`press(_:under:)`). An app that does not answer in time keeps what it last listed.
+/// (`press(_:under:)`), except a MenuBarAgent item's (macOS 27.2), which opens where it sits. An app that does not answer
+/// in time keeps what it last listed.
 @Observable @MainActor
 final class MenuApps {
     struct Item: Equatable {
@@ -176,6 +210,9 @@ final class MenuApps {
         let handle: MenuItemHandle
         /// Where it sits in the macOS menu bar (MenuExtrasRaw.frame).
         var frame: CGRect? = nil
+        /// MenuBarAgent's (macOS 27.2): Accessibility shows its menu only open and no room moves it (Sven's clicks on
+        /// 1.0.2 test build 4 logged 0 menu items read closed and landed false for each), so it opens where it sits.
+        var hosted = false
     }
     struct Entry: Equatable {
         let app: MenuExtrasApp
@@ -255,15 +292,21 @@ final class MenuApps {
         }
         let reader = reader, previous = list
         let apps = reader.running().filter { $0.pid != ownPid }
+        let agent = apps.first { $0.bundleId == Self.menuBarAgent }?.pid
         let fresh = await Task.detached(priority: .utility) {
+            // macOS 27.2: the apps' items are MenuBarAgent's, read once for every app that gives none of its own; when
+            // MenuBarAgent does not answer in time, those apps keep what they last listed.
+            let hosted = Result { try agent.map(reader.hosted) ?? [:] }
             let entries = Entries(count: apps.count)
             DispatchQueue.concurrentPerform(iterations: apps.count) { i in
                 let app = apps[i]
                 do {
-                    entries.set(i, try reader.items(of: app.pid).flatMap { raws in
+                    let own = try reader.items(of: app.pid)
+                    entries.set(i, try (own ?? hosted.get()[app.pid]).flatMap { raws in
                         let shown = MenuApps.shown(raws, of: app)
-                        return shown.isEmpty ? nil
-                            : Entry(app: app, items: shown.map { Item(label: MenuApps.label($0, app: app.name), handle: $0.handle, frame: $0.frame) })
+                        return shown.isEmpty ? nil : Entry(app: app, items: shown.map {
+                            Item(label: MenuApps.label($0, app: app.name), handle: $0.handle, frame: $0.frame, hosted: own == nil)
+                        })
                     })
                 } catch {
                     entries.set(i, previous.first { $0.app.pid == app.pid })
@@ -290,10 +333,12 @@ final class MenuApps {
     /// by its title path, as App menus draw the front app's (build 21). macOS hangs an app's own menu only under where the
     /// item sits in its own bar, and Pilot cannot put its room right of the other apps' items there to move one (Sven on
     /// build 43: an app's menu still opened at the screen's right edge), so only an item with no menu to read (a popover,
-    /// a menu made as it opens) goes to MenuItemOpener.
+    /// a menu made as it opens) goes to MenuItemOpener. A `hosted` item is pressed where it sits at once: neither works
+    /// for it, and the opener's room only cost a wait and a jump in the bar.
     @discardableResult
     func press(_ item: Item, under target: (pid: pid_t, view: NSView)? = nil) -> Task<Bool, Never> {
-        guard let target, let x = target.view.screenFrame?.minX else { return reader.pressOffMain(item) }
+        if target != nil, item.hosted { tblog.notice("other apps: \(item.label, privacy: .public) is MenuBarAgent's, pressed where it sits") }
+        guard let target, !item.hosted, let x = target.view.screenFrame?.minX else { return reader.pressOffMain(item) }
         let reader = reader, handle = item.handle, label = item.label
         return Task {
             let nodes = await Task.detached(priority: .userInitiated) { reader.menu(of: handle) }.value
@@ -331,6 +376,9 @@ final class MenuApps {
         guard launches != nil, !scanning else { return }
         if now().timeIntervalSince(scanned) < 1 { Task { await pictures.refresh(list.flatMap(\.items)) } } else { refreshSoon() }
     }
+
+    /// Whether an item opens where it sits in the macOS menu bar rather than under the drawer (`Item.hosted`).
+    var opensInPlace: Bool { list.contains { $0.items.contains(where: \.hosted) } }
 
     /// Following launches, for the tests.
     var isFollowing: Bool { launches != nil }

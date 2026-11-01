@@ -18,6 +18,12 @@ public enum ChildProcess {
         public var description: String { "\(tool) timed out" }
     }
 
+    /// The child printed more than its caller's `limit` and was stopped with every process it started.
+    public struct TooLarge: Error, Equatable, CustomStringConvertible {
+        public let tool: String, limit: Int
+        public var description: String { "\(tool) printed more than \(limit) bytes" }
+    }
+
     /// This process's environment with the tool's own folder, then Homebrew's, first on PATH: npm runs `env node`, and
     /// Pilot runs with launchd's short PATH.
     public static func toolEnvironment(_ cli: String) -> [String: String] {
@@ -41,33 +47,34 @@ public enum ChildProcess {
     /// exits 1 when it lists anything. `lines` hears each stdout line as it is printed, on the reading thread: Clean's
     /// progress (card agent-bo-95423002). `input` goes to stdin in place of /dev/null, then stdin closes: text `ps` must
     /// not show (Quick AI, card agent-bo-95423050). `directory` is the child's working folder: an extension's own
-    /// (card agent-bo-95423242).
+    /// (card agent-bo-95423242). `limit` caps stdout and stderr in bytes: past it the child is stopped with every process it
+    /// started and TooLarge is thrown, so a widget's command never fills Pilot's memory (ADR 0016).
     public static func run(_ cli: String, _ arguments: [String], environment: [String: String]? = nil, input: Data? = nil,
-                           directory: URL? = nil, timeout: Duration? = nil, success: Set<Int32> = [0],
+                           directory: URL? = nil, timeout: Duration? = nil, success: Set<Int32> = [0], limit: Int? = nil,
                            lines: (@Sendable (String) -> Void)? = nil) async throws -> String {
         try await run(cli, arguments, environment: environment, input: input, directory: directory, timeout: timeout, success: success,
-                      lines: lines, launching: nil)
+                      limit: limit, lines: lines, launching: nil)
     }
 
     /// `run`'s stdout as bytes, not text: a file `gh api` fetched, which must hash as it was sent (the extension
     /// catalogue, 2026-10-10), or a picture a helper made from `input` (pilot-text's subject, P72).
     public static func data(_ cli: String, _ arguments: [String], environment: [String: String]? = nil, input: Data? = nil,
                             timeout: Duration? = nil) async throws -> Data {
-        try await output(cli, arguments, environment: environment, input: input, directory: nil, timeout: timeout, success: [0], lines: nil,
+        try await output(cli, arguments, environment: environment, input: input, directory: nil, timeout: timeout, success: [0], limit: nil, lines: nil,
                          launching: nil)
     }
 
     /// `launching` runs on the reading thread just before the child starts: a test's hold on the cancel window.
     static func run(_ cli: String, _ arguments: [String], environment: [String: String]?, input: Data?, directory: URL? = nil, timeout: Duration?,
-                    success: Set<Int32>, lines: (@Sendable (String) -> Void)?,
+                    success: Set<Int32>, limit: Int? = nil, lines: (@Sendable (String) -> Void)?,
                     launching: (@Sendable () -> Void)?) async throws -> String {
         String(decoding: try await output(cli, arguments, environment: environment, input: input, directory: directory, timeout: timeout,
-                                          success: success, lines: lines, launching: launching), as: UTF8.self)
+                                          success: success, limit: limit, lines: lines, launching: launching), as: UTF8.self)
     }
 
     /// What `run` and `data` share: the child's stdout as it printed it.
     private static func output(_ cli: String, _ arguments: [String], environment: [String: String]?, input: Data?, directory: URL?,
-                               timeout: Duration?, success: Set<Int32>, lines: (@Sendable (String) -> Void)?,
+                               timeout: Duration?, success: Set<Int32>, limit: Int?, lines: (@Sendable (String) -> Void)?,
                                launching: (@Sendable () -> Void)?) async throws -> Data {
         try Task.checkCancellation()
         let child = Child()
@@ -96,11 +103,12 @@ public enum ChildProcess {
                     }
                     defer { kill.cancel() }
                     // Drain before waiting, so a large listing never fills the pipe and stalls the child.
-                    let stdout = read(out.fileHandleForReading, lines: lines)
-                    let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                    let stdout = read(out.fileHandleForReading, lines: lines, limit: limit) { child.overflow() }
+                    let stderr = String(decoding: read(err.fileHandleForReading, lines: nil, limit: limit) { child.overflow() }, as: UTF8.self)
                     process.waitUntilExit()
                     let tool = URL(fileURLWithPath: cli).lastPathComponent
                     if child.isCancelled { continuation.resume(throwing: CancellationError()) }
+                    else if child.overflowed, let limit { continuation.resume(throwing: TooLarge(tool: tool, limit: limit)) }
                     else if child.timedOut { continuation.resume(throwing: TimedOut(tool: tool)) }
                     else if success.contains(process.terminationStatus) { continuation.resume(returning: stdout) }
                     else { continuation.resume(throwing: Failure(tool: tool,
@@ -115,15 +123,20 @@ public enum ChildProcess {
     }
 
     /// The handle's data to its end, handing each complete line, then a last unterminated one, to `lines` as it arrives.
-    private static func read(_ handle: FileHandle, lines: ((String) -> Void)?) -> Data {
-        guard let lines else { return handle.readDataToEndOfFile() }
+    /// Past `limit` bytes it calls `over` once (which stops the child) and keeps only what came before.
+    private static func read(_ handle: FileHandle, lines: ((String) -> Void)?, limit: Int?, over: () -> Void) -> Data {
+        guard lines != nil || limit != nil else { return handle.readDataToEndOfFile() }
         var data = Data()
         let buffer = LineBuffer()
         while case let chunk = handle.availableData, !chunk.isEmpty {
+            if let limit, data.count + chunk.count > limit {
+                over()
+                break
+            }
             data.append(chunk)
-            buffer.append(chunk).forEach(lines)
+            if let lines { buffer.append(chunk).forEach(lines) }
         }
-        buffer.flush().map(lines)
+        if let lines { buffer.flush().map(lines) }
         return data
     }
 
@@ -191,7 +204,7 @@ public enum ChildProcess {
     /// that lands before launch stops it from starting, and one that lands after terminates it (card agent-bo-95423085).
     private final class Child: @unchecked Sendable {
         let process = Process()
-        private let cancelled = Mutex(false), expired = Mutex(false)
+        private let cancelled = Mutex(false), expired = Mutex(false), overflown = Mutex(false)
 
         /// Sets the process up to run `cli` with `input` on its stdin; its stdout and stderr go to the pipes returned.
         func prepare(_ cli: String, _ arguments: [String], environment: [String: String]?, directory: URL?, input: Any) -> (out: Pipe, err: Pipe) {
@@ -223,6 +236,17 @@ public enum ChildProcess {
         }
 
         var timedOut: Bool { expired.withLock { $0 } }
+
+        /// Stops a child that printed past its limit, so it throws TooLarge.
+        func overflow() {
+            overflown.withLock {
+                guard !$0 else { return }
+                $0 = true
+                if process.isRunning { stop() }
+            }
+        }
+
+        var overflowed: Bool { overflown.withLock { $0 } }
 
         var isCancelled: Bool { cancelled.withLock { $0 } }
 

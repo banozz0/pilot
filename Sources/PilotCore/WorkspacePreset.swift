@@ -220,16 +220,28 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
 
     /// Where each app sits in `area` under this layout, in list order; `next` adds the spot the next app goes to, last.
     /// Own sizes are columns at their percents, the next spot an even share.
-    public func tiles(in area: CGRect, next: Bool = false) -> [CGRect] {
-        let n = apps.count + (next ? 1 : 0)
-        if let layout { return layout.tiles(n, in: area) }
-        let shares = apps.map { CGFloat($0.percent) / CGFloat(max(total, 1)) * CGFloat(apps.count) } + (next ? [1] : [])
+    public func tiles(in area: CGRect, next: Bool = false) -> [CGRect] { tiles(in: area, adding: next ? 1 : 0) }
+
+    /// The same with `open` empty spots after the apps, each an even share under own sizes.
+    private func tiles(in area: CGRect, adding open: Int) -> [CGRect] {
+        if let layout { return layout.tiles(apps.count + open, in: area) }
+        let shares = apps.map { CGFloat($0.percent) / CGFloat(max(total, 1)) * CGFloat(apps.count) } + Array(repeating: 1, count: open)
         let sum = shares.reduce(0, +)
         var x = area.minX
         return shares.map { share in
             defer { x += area.width * share / sum }
             return CGRect(x: x, y: area.minY, width: area.width * share / sum, height: area.height)
         }
+    }
+
+    /// The layout's shape while it has room: each placed app's tile, then the empty spots its picture has left (main +
+    /// stack's stacked pair under the main), each of which takes the next app. Nil once the apps fill them; `preview`
+    /// then draws the next app's strip.
+    public func shape(in area: CGRect) -> (apps: [CGRect], open: [CGRect])? {
+        let spots = LayoutPreset.spots(layout)
+        guard apps.count < spots else { return nil }
+        let all = tiles(in: area, adding: spots - apps.count)
+        return (Array(all.prefix(apps.count)), Array(all.dropFirst(apps.count)))
     }
 
     /// The popup's preview (mockup E): each placed app at the size it really gets, and the next app's spot as a strip
@@ -271,6 +283,7 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
         case .rows: return along(index, of: n, down, "row")
         case .columns: return along(index, of: n, across, "column")
         case .scrolling: return n == 1 ? "whole screen" : "column \(index + 1)"
+        case .stage: return index == 0 ? "stage" : "shelf \(index)"
         case nil: return "\(along(index, of: n, across, "column")), \(apps[index].percent) %"
         case .grid:
             // LayoutPreset's grid: columns of two, the last alone when the count is odd.

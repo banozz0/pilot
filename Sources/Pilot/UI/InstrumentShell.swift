@@ -164,7 +164,7 @@ private struct InstrumentPageList: View {
     }
 
     @ViewBuilder private func pages(_ area: AppArea) -> some View {
-        ForEach(area.pages, id: \.self) { page in
+        ForEach(area.shown, id: \.self) { page in
             InstrumentPageRow(model: model, page: page)
             // Extension pages under Extensions (story 161): pages of their own, so they stay rows (P36).
             if page == .extensions { ExtensionPageRows(model: model) { InstrumentExtensionRow(link: $0, on: $1, open: $2) } }
@@ -248,7 +248,7 @@ struct InstrumentSearchResults: View {
     let model: AppWindowModel
 
     var body: some View {
-        let places = AppPlace.search(model.query), panes = SettingsSearch.panes(model.query)
+        let places = AppPlace.search(model.query, developer: DeveloperPages.on), panes = SettingsSearch.panes(model.query)
         let bindHits = !BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: model.query).isEmpty
         VStack(alignment: .leading, spacing: 2) {
             ForEach(places, id: \.self) { place in
@@ -303,7 +303,7 @@ struct InstrumentToolbar: View {
                     Text(Self.stamp(context.date)).styleText(\.mono).foregroundStyle(style.color(\.text3))
                 }
             }
-            if !listed, page.area.pages.count > 1 { areaPages(page.area).padding(.leading, 8) }
+            if !listed, page.area.shown.count > 1 { areaPages(page.area).padding(.leading, 8) }
             if !model.tabs.isEmpty { tabs(page).padding(.leading, 8) }
             Spacer(minLength: 8)
             if page == .home {
@@ -344,7 +344,7 @@ struct InstrumentToolbar: View {
 
     /// Folded (no list beside): the area's pages as a segmented control, so every page stays a click away.
     private func areaPages(_ area: AppArea) -> some View {
-        let options = area.pages.map { (value: $0, title: $0.title) }
+        let options = area.shown.map { (value: $0, title: $0.title) }
         let selection = Binding(get: { model.page }, set: { model.go(AppPlace($0)) })
         return ViewThatFits(in: .horizontal) {
             InstrumentSegments(options: options, selection: selection).fixedSize()

@@ -42,6 +42,8 @@ final class AIChatModel {
     private(set) var unfolded: Set<String> = []
     /// What the input holds.
     var draft = ""
+    /// Bumped when Pilot types into the input for the person (`type`): the input takes focus with its caret at the end.
+    private(set) var typed = 0
     /// A capture waiting to go with the next message (story 191).
     var attachment: AIChat.Image?
     /// The provider and model the header names, read as the panel opens.
@@ -141,6 +143,30 @@ final class AIChatModel {
         conversation.clear()
         ControlSocket.plan.clear()
         (streaming, state, draft, attachment, calls, unfolded) = ("", .idle, "", nil, [:], [])
+    }
+
+    /// A picture pasted or dropped on the input waits like a capture (Q693: /widget builds a widget from one), read and
+    /// sized off the main thread, where the key tap runs; nothing when it does not read as a picture.
+    func attach(_ source: CaptureAskAI.Source) {
+        Task {
+            guard let picture = await Task.detached(priority: .userInitiated, operation: { CaptureAskAI.picture(source) }).value else { return }
+            attachment = picture
+        }
+    }
+
+    /// The picture a pasteboard holds, as Notes' paste reads one (MarkdownEditor.holdsPictures): a copied picture file,
+    /// else a picture with no text beside it, so ⌘V of words still pastes them.
+    static func pastedPicture(_ board: NSPasteboard = .general) -> CaptureAskAI.Source? {
+        let files = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        if !files.isEmpty { return files.first(where: NoteAttachments.isImage).map(CaptureAskAI.Source.file) }
+        guard board.availableType(from: [.string]) == nil, let data = board.data(forType: .png) ?? board.data(forType: .tiff) else { return nil }
+        return .data(data)
+    }
+
+    /// Puts `text` in the input, caret after it, for the person to go on typing (Create with AI's `/widget `).
+    func type(_ text: String) {
+        draft = text
+        typed += 1
     }
 
     /// Folds or unfolds a command's row.
@@ -282,8 +308,8 @@ final class AIChatPanel {
     /// The AI page's provider, read on every turn, for the message sent: /extension's maker, its agent when it can drive
     /// Pilot, else its chat.
     var route: (String) -> Result<AIChatModel.Turn, QuickAI.Failure> = { AISettings.shared.chatTurn(for: $0) }
-    /// A message with a capture goes as a chat turn, never the agent's (story 191).
-    var pictureRoute: () -> Result<AIChatModel.Turn, QuickAI.Failure> = { AISettings.shared.chatRunner().map(AIChatModel.turn) }
+    /// A message with a picture: a chat turn, never the agent's (story 191), or its maker's (/widget, Q693).
+    var pictureRoute: (String) -> Result<AIChatModel.Turn, QuickAI.Failure> = { AISettings.shared.pictureTurn(for: $0) }
     var routeName: () -> String = { AISettings.shared.routeName }
     var reset: () -> AIChat.Reset = { AISettings.shared.chatReset }
     var clock: () -> Date = { Date() }
@@ -325,6 +351,14 @@ final class AIChatPanel {
 
     func toggle() { isShown ? hide() : show() }
 
+    /// Opens the chat with `text` typed in its input, ready for the rest (the Widgets page's Create with AI); words already
+    /// typed there stay, after it.
+    func show(typing text: String) {
+        show()
+        let draft = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.type(draft.hasPrefix(text.trimmingCharacters(in: .whitespaces)) ? model.draft : text + draft)
+    }
+
     /// Ask AI about a capture (story 191): a new chat with the picture waiting on the input and its starters over it,
     /// dropped when the drop closes before it is sent.
     func ask(about picture: AIChat.Image) {
@@ -334,7 +368,8 @@ final class AIChatPanel {
     }
 
     func send(_ text: String? = nil) {
-        model.send(text, acting: model.attachment == nil ? route(text ?? model.draft) : pictureRoute())
+        let message = text ?? model.draft
+        model.send(text, acting: model.attachment == nil ? route(message) : pictureRoute(message))
     }
 
     func hide() { drops.close(.askAI) }
@@ -389,6 +424,9 @@ final class AIChatPanel {
         case (36, [.shift], _), (76, [.shift], _):
             (drops.window(.askAI)?.firstResponder as? NSTextView)?.insertNewlineIgnoringFieldEditor(nil)
         case (_, [.command], "n"): model.clear()
+        case (_, [.command], "v"):
+            guard let picture = AIChatModel.pastedPicture() else { return false }
+            model.attach(picture)
         case (_, [.command], "."): model.stop()
         default: return false
         }

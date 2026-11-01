@@ -6,4 +6,8 @@ public enum TopBarBackground: String, CaseIterable, Sendable {
     case solid, glass, clear
 
     public var title: String { rawValue.capitalized }
+
+    /// What a bar on this Background draws at Look's Transparency `transparency`: Glass goes Solid at 0 %, as the app
+    /// window does (Sven, Q714).
+    public func shown(transparency: Int) -> TopBarBackground { self == .glass && transparency <= 0 ? .solid : self }
 }

@@ -11,6 +11,7 @@ extension SharedLook {
 /// template glyphs in the bar's text colour (installed apps' own icons with the tile keyed out), and the spacer stretched
 /// to 160 points, plain and in edit mode with its grip. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-tbf PILOT_RENDER_DIR=/tmp/pilot-renders-tbf swift test --filter TopBarFixesRenders`
+/// With `PILOT_LIVE=1` too, `live` draws the bar from this Mac's own menu bar items: Accessibility reads only, no press.
 @MainActor
 @Suite("Top bar fixes renders")
 struct TopBarFixesRenders {
@@ -38,6 +39,50 @@ struct TopBarFixesRenders {
         let menuApps = MenuApps(reader: extras, ownPid: 13)
         await menuApps.refresh()
         menuApps.drawer.toggle()
+        let width: CGFloat = 1440
+        look.style = .instrument
+        let bar = try await Self.bar(menuApps).frame(width: width, height: 30)
+        try writeRender(bar, to: dir.appendingPathComponent("bar-instrument.png"), wait: 0.8)
+        // Each app's glyph alone, larger, beside its app icon: what the mark keyed off.
+        let row = HStack(spacing: 18) {
+            ForEach(Self.apps, id: \.1) { name, bundle in
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        if let icon = AppsModule.icon(bundle: bundle) { Image(nsImage: icon).resizable().frame(width: 32, height: 32) }
+                        MenuAppIcon(app: MenuExtrasApp(pid: 1, name: name, bundleId: bundle)).scaleEffect(2).frame(width: 40, height: 36)
+                    }
+                    Text(name).font(.caption)
+                }
+            }
+        }
+        .padding(16).environment(\.inTopBar, true).styled(.topBar).pilotTheme()
+        .background(Color(StyleTokens.of(.instrument, theme: look.theme).colors.canvas))
+        try writeRender(row, to: dir.appendingPathComponent("glyphs-instrument.png"), wait: 0.5)
+    }
+
+    /// macOS 27.2 gives no app an AXExtrasMenuBar; the items are read off MenuBarAgent's bar (Sven on 1.0.2 build 3:
+    /// Other apps gone from the top bar). Pictures stay off, so nothing asks Screen Recording.
+    @Test("This Mac's other apps in the top bar's open drawer", .enabled(if: env["PILOT_LIVE"] != nil && env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func live() async throws {
+        let dir = try ClockRenders.dir("topbar-fixes")
+        testApp()
+        let look = Look.shared
+        let (style, glass) = (look.style, look.glass)
+        look.glass = false
+        defer { (look.style, look.glass) = (style, glass) }
+        try #require(AXIsProcessTrusted(), "the test's process needs Accessibility to read the menu bar")
+        let menuApps = MenuApps(pictures: MenuItemPictures(isOn: { false }))
+        await menuApps.refresh()
+        print("other apps live: \(menuApps.list.map { "\($0.app.name) [\($0.items.map(\.label).joined(separator: ", "))]" })")
+        #expect(!menuApps.list.isEmpty)
+        menuApps.drawer.toggle()
+        look.style = .instrument
+        let bar = try await Self.bar(menuApps).frame(width: 1440, height: 30)
+        try writeRender(bar, to: dir.appendingPathComponent("bar-live-instrument.png"), wait: 0.8)
+    }
+
+    /// The bar: TextEdit's menus in the centre, other apps on the right, a 160-point spacer and the clock.
+    static func bar(_ menuApps: MenuApps) async throws -> TopBarView {
         let menus = AppMenus(reader: AppMenusTests.fake(), front: { AppMenusTests.textEdit }, center: NotificationCenter())
         let readings = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: Look(inputSources: SetupKeepAwakeTests.FakeSources()),
                                    menuApps: menuApps, appMenus: menus, readBattery: { nil }, readWiFi: { nil }, clock: { ClockRenders.now },
@@ -58,26 +103,7 @@ struct TopBarFixesRenders {
         readings.hold(.appMenus)
         defer { readings.release(.appMenus) }
         await menus.reading?.value
-
-        let width: CGFloat = 1440
-        look.style = .instrument
-        let bar = TopBarView(screen: Self.screen, sources: sources, store: store, frames: BarFrames()).frame(width: width, height: 30)
-        try writeRender(bar, to: dir.appendingPathComponent("bar-instrument.png"), wait: 0.8)
-        // Each app's glyph alone, larger, beside its app icon: what the mark keyed off.
-        let row = HStack(spacing: 18) {
-            ForEach(Self.apps, id: \.1) { name, bundle in
-                VStack(spacing: 6) {
-                    HStack(spacing: 8) {
-                        if let icon = AppsModule.icon(bundle: bundle) { Image(nsImage: icon).resizable().frame(width: 32, height: 32) }
-                        MenuAppIcon(app: MenuExtrasApp(pid: 1, name: name, bundleId: bundle)).scaleEffect(2).frame(width: 40, height: 36)
-                    }
-                    Text(name).font(.caption)
-                }
-            }
-        }
-        .padding(16).environment(\.inTopBar, true).styled(.topBar).pilotTheme()
-        .background(Color(StyleTokens.of(.instrument, theme: look.theme).colors.canvas))
-        try writeRender(row, to: dir.appendingPathComponent("glyphs-instrument.png"), wait: 0.5)
+        return TopBarView(screen: screen, sources: sources, store: store, frames: BarFrames())
     }
 }
 }

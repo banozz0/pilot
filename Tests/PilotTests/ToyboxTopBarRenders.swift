@@ -40,9 +40,11 @@ struct ToyboxTopBarRenders {
         let look: Look
         /// The bar drops' items unlit, or lit as their drops hang open (spec Bar drops T4).
         var lights = BarDropLights()
+        /// A dictation take in the bar, at its position.
+        var take: DictationOverlay? = nil
 
         var body: some View {
-            TopBarStrip(sides: sides) { TopBarSlot(slot: $0, screen: "Studio", sources: sources, store: .shared, lights: lights) }
+            TopBarStrip(sides: sides, live: take.map { AnyView(DictationBarItem(overlay: $0)) }, liveSide: take?.setup.barSide ?? .left) { TopBarSlot(slot: $0, screen: "Studio", sources: sources, store: .shared, lights: lights) }
                 .styled(.topBar, look: look).pilotTheme(look: look)
         }
     }
@@ -90,6 +92,11 @@ struct ToyboxTopBarRenders {
         }
         look.style = .toybox
         try writeRender(Bar(sides: sides, sources: sources, look: look).frame(width: 1440, height: 37), to: dir.appendingPathComponent("bar-toybox-dark-37.png"), wait: 0.8)
+        // Dictation's take at each position, a custom colour.
+        for side in TopBarSide.allCases {
+            try writeRender(Bar(sides: sides, sources: sources, look: look, take: DictationOverlayRenders.barTake(side, colour: .custom(0xFF5FA2)))
+                .frame(width: 1440, height: 30), to: dir.appendingPathComponent("bar-toybox-dark-dictation-\(side.rawValue).png"), wait: 0.8)
+        }
 
         // Each popover, the tooltip and the drag's chip, on the canvas.
         let store = BarItemsStore.shared

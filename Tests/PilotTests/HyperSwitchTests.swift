@@ -17,7 +17,7 @@ struct HyperSwitchTests {
         hyper.toggle()
         #expect(hyper.isOn && applied == [false, true])
         let switches = QuickSwitches(hyper: hyper, tiling: DropdownQuickSwitchesTests.Fake(true), topBar: DropdownQuickSwitchesTests.Fake(false),
-                                     keepAwake: DropdownQuickSwitchesTests.Fake(false), clipboard: DropdownQuickSwitchesTests.Fake(true))
+                                     keepAwake: DropdownQuickSwitchesTests.Fake(false), clipboard: DropdownQuickSwitchesTests.Fake(true), dictation: DropdownQuickSwitchesTests.Fake(true))
         switches[.hyper].toggle()
         #expect(!hyper.isOn && applied == [false, true, false])
     }

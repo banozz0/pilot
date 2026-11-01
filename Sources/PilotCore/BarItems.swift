@@ -76,10 +76,10 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// Round 4's styles, the first the default.
+    /// Round 4's styles, the first the default; Pilot's mark alone first (spec pilot-1-1 T28, Sven 2026-10-30).
     public var styles: [BarStyle] {
         switch self {
-        case .pilot: [.iconNumber, .icon, .number]
+        case .pilot: [.icon, .iconNumber, .number]
         case .workspaces: [.numbers, .dots, .current, .withApp, .icons]
         case .focusedApp: [.icon, .iconName]
         case .appMenus: [.text]
@@ -331,11 +331,11 @@ public struct BarSettings: Codable, Equatable, Sendable {
     /// Each extension's bar item as Sven placed it (Surfaces v2); one never placed is on in the macOS menu bar.
     public internal(set) var extensionItems: [ExtensionBarEntry] = []
 
-    /// Round 4's pick 7: Pilot's icon with the workspace number, the workspaces, one group of CPU, Memory and Network, and
+    /// Round 4's pick 7: Pilot's icon (the mark alone since spec pilot-1-1 T28: the workspaces item has the number), the workspaces, one group of CPU, Memory and Network, and
     /// the timer, in both places; the top bar adds the clock, the bar drops' items, the status lights and other apps' items,
     /// which it hides with the macOS bar. Capture's menu is on in the macOS menu bar only (Q368), never the top bar.
     public static let defaults: BarSettings = {
-        let on: [BarKind: BarStyle] = [.pilot: .iconNumber, .workspaces: .numbers, .group: .allInOne, .cpu: .text, .memory: .text,
+        let on: [BarKind: BarStyle] = [.pilot: .icon, .workspaces: .numbers, .group: .allInOne, .cpu: .text, .memory: .text,
                                        .network: .text, .timer: .countdown, .clock: .dateTime, .otherApps: .icons, .extensions: .text,
                                        .modes: .icons, .terminal: .iconName, .askAI: .iconName, .capture: .icon]
         var kinds = BarKind.allCases.filter { $0 != .group }

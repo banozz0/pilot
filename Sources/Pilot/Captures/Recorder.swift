@@ -75,6 +75,18 @@ final class Recorder {
 
     var isActive: Bool { phase != .idle }
 
+    /// The recording as the bars and the dropdown say it: its phase, and its time in whole seconds; nil while idle.
+    var reading: BarRecording? {
+        let seconds = clock.elapsed(at: Self.now()).rounded(.down)
+        return switch phase {
+        case .idle: nil
+        case .starting: .starting
+        case .counting(let n): .counting(n)
+        case .recording: .recording(seconds)
+        case .paused: .paused(seconds)
+        }
+    }
+
     #if DEBUG
     /// A render's state: `phase` with `elapsed` seconds on the timer, no stream.
     func pose(_ phase: Phase, elapsed: Double) {

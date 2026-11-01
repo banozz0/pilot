@@ -146,8 +146,9 @@ struct BindsMapModel {
 
 // MARK: Ink and type
 
-/// The map's colours, from Lagoon, Pilot's default theme: its ground, surfaces, lines and text, and four kind colours
-/// that never repeat (Lagoon's Windows and Captures share a teal on the Binds page; a map coloured by kind cannot).
+/// The map's colours, from the active theme (Q646, spec pilot-1-1 T30; Lagoon, Pilot's default, when none is given): its
+/// ground, surfaces, lines and text, and four kind colours that never repeat (Lagoon's Windows and Captures share a teal on
+/// the Binds page; a map coloured by kind cannot).
 struct MapInk {
     let theme: PilotTheme
     let ground, surface, raised, line, line2, text, text2, text3, accent, onAccent: Color
@@ -159,9 +160,16 @@ struct MapInk {
         ground = c(t.ground); surface = c(t.surface); raised = c(t.raised); line = c(t.line); line2 = c(t.line2)
         text = c(t.text); text2 = c(t.text2); text3 = c(t.text3); accent = c(t.accent); onAccent = c(t.onAccent)
         // App the accent, as Binds colours it (Q252); Window the amber; Capture the second colour (the third where it repeats
-        // the good one); Tool the second text, Instrument's neutral, which no theme's accent sits near (judge, round 2).
-        let capture = t.second == t.good ? t.third : t.second
+        // the good one, the good one where it is a grey, so Void's Captures are green, not a second grey); Tool the second
+        // text, Instrument's neutral, which no theme's accent sits near (judge, round 2).
+        let capture = t.second == t.good ? t.third : Self.isGrey(t.second) ? t.good : t.second
         kinds = [t.accent, t.amber, capture, t.text2].map(c)
+    }
+
+    /// Red, green and blue within 24 of each other.
+    static func isGrey(_ c: UInt32) -> Bool {
+        let rgb = Contrast.rgb(c)
+        return rgb.max()! - rgb.min()! <= 24
     }
 
     func kind(_ k: BindsMap.Kind) -> Color { kinds[k.rawValue] }
@@ -224,24 +232,23 @@ struct MapGlyph: View {
 
 // MARK: - The sheet
 
-/// The map: a card per layer, each of the busiest layers a whole keyboard with every bound key named and pictured in its
-/// kind's colour, the others as a list of their keys, two cards a row; the smallest layers stacked beside the mouse,
-/// drawn with its buttons numbered. Lagoon, as Pilot draws Binds; an A4 page (1240 by 1754 pt) while the binds fit it,
-/// longer when they do not.
+/// The map: a card per layer, the busiest layers each a whole keyboard with every bound key named and pictured in its
+/// kind's colour, the others as a list of their keys in three balanced columns with the mouse, drawn with its buttons
+/// numbered. Always one A4 page (1240 by 1754 pt) in the active theme (Q646): keyboards from the busiest layer down while
+/// the page still fits, measured by SwiftUI's own text (spec pilot-1-1 T30, the designer's fit by height); Pilot's mark and
+/// name at the top left (Q645).
 struct BindsMapSheet: View {
     let model: BindsMapModel
     var ink = MapInk()
 
-    static let width: CGFloat = 1240, a4: CGFloat = 1754, margin: CGFloat = 40, pad: CGFloat = 20, gap: CGFloat = 12
-    /// A layer with this many binds or more is drawn as a keyboard; Hyper always is.
+    static let width: CGFloat = 1240, a4: CGFloat = 1754, margin: CGFloat = 40, pad: CGFloat = 20, gap: CGFloat = 12, footnote: CGFloat = 24
+    /// A layer with this many binds or more may be drawn as a keyboard, while the page fits; Hyper always may.
     static let boardFrom = 25
-    /// A layer with this many binds or fewer stacks beside the mouse.
-    static let smallUpTo = 4
 
     /// The sheet as a PNG at `scale`, 2 by default (a 1240 pt sheet is 2480 px, A4's width at 300 dpi), its size in
-    /// points kept so it reads as a 144 dpi picture.
-    static func png(_ model: BindsMapModel, scale: CGFloat = 2) -> Data? {
-        let renderer = ImageRenderer(content: BindsMapSheet(model: model).environment(\.colorScheme, .dark))
+    /// points kept so it reads as a 144 dpi picture; in `theme`'s colours and colour scheme, the active theme's by default.
+    static func png(_ model: BindsMapModel, theme: PilotTheme = Look.shared.theme, scale: CGFloat = 2) -> Data? {
+        let renderer = ImageRenderer(content: BindsMapSheet(model: model, ink: MapInk(theme)).environment(\.colorScheme, theme.dark ? .dark : .light))
         renderer.scale = scale
         guard let image = renderer.cgImage else { return nil }
         let rep = NSBitmapImageRep(cgImage: image)
@@ -249,33 +256,29 @@ struct BindsMapSheet: View {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private var boards: [BindsMap.Layer] {
-        model.layers.enumerated().filter { $0.offset == 0 || $0.element.entries.count >= Self.boardFrom }.map(\.element)
+    /// The layers that may be keyboards, busiest first: Hyper, and any with `boardFrom` binds or more.
+    private var ranked: [Int] {
+        model.layers.indices.filter { $0 == 0 || model.layers[$0].entries.count >= Self.boardFrom }
+            .sorted { (model.layers[$0].entries.count, -$0) > (model.layers[$1].entries.count, -$1) }
     }
-    private var lists: [BindsMap.Layer] {
-        model.layers.enumerated().filter { $0.offset > 0 && (Self.smallUpTo + 1..<Self.boardFrom).contains($0.element.entries.count) }.map(\.element)
-    }
-    private var small: [BindsMap.Layer] { model.layers.dropFirst().filter { $0.entries.count <= Self.smallUpTo } }
 
-    /// A card under the keyboards: a layer's list, the smallest layers together, or the mouse.
-    private enum Block { case list(BindsMap.Layer), small([BindsMap.Layer]), mouse }
+    /// A card under the keyboards: a layer's list, or the mouse.
+    private enum Block { case list(BindsMap.Layer), mouse }
 
-    /// The cards under the keyboards in two columns, each card to the shorter column, by its lines' count, so neither
+    /// The cards under `boards` keyboards in three columns, each card to the shortest column by its lines' count, so no
     /// column stretches a card over empty room (judge, round 3).
-    private var columns: [[Block]] {
+    private func columns(lists: [BindsMap.Layer]) -> [[Block]] {
         var blocks = lists.map(Block.list)
-        if !small.isEmpty { blocks.append(.small(small)) }
         if !model.mouse.isEmpty { blocks.append(.mouse) }
         func height(_ b: Block) -> Int {
             switch b {
-            case .list(let layer): 3 + (lines(layer).count + 1) / 2
-            case .small(let layers): layers.reduce(0) { $0 + 3 + lines($1).count }
+            case .list(let layer): 3 + lines(layer).count
             case .mouse: 4 + model.mouse.count
             }
         }
-        var out: [[Block]] = [[], []], filled = [0, 0]
+        var out: [[Block]] = [[], [], []], filled = [0, 0, 0]
         for b in blocks {
-            let i = filled[0] <= filled[1] ? 0 : 1
+            let i = filled.indices.min { filled[$0] < filled[$1] } ?? 0
             out[i].append(b)
             filled[i] += height(b)
         }
@@ -283,62 +286,77 @@ struct BindsMapSheet: View {
     }
 
     var body: some View {
-        let columns = columns
-        VStack(alignment: .leading, spacing: Self.gap) {
+        // The first page that fits A4, from every candidate keyboard down to Hyper's alone.
+        ViewThatFits(in: .vertical) {
+            ForEach(Array(stride(from: ranked.count, through: 1, by: -1)), id: \.self) { page(boards: $0) }
+        }
+        .frame(width: Self.width, height: Self.a4, alignment: .top)
+        .overlay(alignment: .bottomLeading) {
+            Text("Print it at 100 %: one A4 page, 2480 by 3508 px at 300 dpi. Saved from Pilot › Binds › Export and import › Save map.")
+                .font(MapType.mono(11.5)).foregroundStyle(ink.text3).padding(Self.margin)
+        }
+        .background(ink.ground)
+    }
+
+    /// The page with the `count` busiest layers as keyboards, in the map's order, and every other layer as a list.
+    private func page(boards count: Int) -> some View {
+        let shown = Set(ranked.prefix(count))
+        let boards = model.layers.indices.filter(shown.contains).map { model.layers[$0] }
+        let columns = columns(lists: model.layers.indices.filter { !shown.contains($0) }.map { model.layers[$0] })
+        return VStack(alignment: .leading, spacing: Self.gap) {
             header.padding(.bottom, 1)
             ForEach(Array(boards.enumerated()), id: \.offset) { _, layer in card(layer) { board(layer) } }
             if !columns.joined().isEmpty {
                 HStack(alignment: .top, spacing: Self.gap) {
-                    ForEach(0..<2, id: \.self) { c in
+                    ForEach(0..<3, id: \.self) { c in
                         VStack(spacing: Self.gap) {
-                            ForEach(Array(columns[c].enumerated()), id: \.offset) { i, block in
-                                // The column's last card takes what is left, so the two columns end together.
-                                self.block(block, fill: i == columns[c].count - 1)
-                            }
+                            ForEach(Array(columns[c].enumerated()), id: \.offset) { _, block in self.block(block) }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .frame(maxWidth: .infinity, alignment: .top)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
-            Text(provenance).font(MapType.mono(11.5)).foregroundStyle(ink.text3)
         }
         .padding(Self.margin)
+        // The footnote's room (body draws it), kept without a spacer, which would count toward the fit.
+        .padding(.bottom, Self.footnote)
         .frame(width: Self.width, alignment: .topLeading)
-        .frame(minHeight: Self.a4, alignment: .top)
-        .background(ink.ground)
     }
 
-    @ViewBuilder private func block(_ block: Block, fill: Bool) -> some View {
+    @ViewBuilder private func block(_ block: Block) -> some View {
         switch block {
-        case .list(let layer): card(layer, fill: fill) { list(layer, columns: 2) }
-        case .small(let layers): smallCard(layers, fill: fill)
-        case .mouse: mouse(fill: fill)
+        case .list(let layer): card(layer) { list(layer) }
+        case .mouse: mouse
         }
     }
 
-    private var provenance: String {
-        "Saved from Pilot on \(model.date.formatted(.dateTime.day().month(.wide).year())), preset \(model.preset)"
-    }
-
+    /// Pilot's mark and name, the preset and the day it was saved; "My binds", the Hyper line and the counts; the kinds.
     private var header: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("KEYBOARD MAP").font(MapType.mono(12.5, 500)).tracking(1.4).foregroundStyle(ink.accent)
-                Text(model.preset).font(MapType.sans(34, 600)).tracking(-0.9).foregroundStyle(ink.text)
-                Text("Hold \(model.layerKey) for Hyper. \(model.keyCount) keys on \(model.layers.count) layers, \(model.mouseCount) on the mouse.")
-                    .font(MapType.sans(15)).foregroundStyle(ink.text2)
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    Path(PilotMarkShape.path(30, flipped: true, boxes: 1..<4)).fill(ink.text, style: FillStyle(eoFill: true))
+                    Path(PilotMarkShape.path(30, flipped: true, boxes: 0..<1)).fill(ink.accent)
+                }
+                .frame(width: 30, height: 30)
+                Text("pilot").font(MapType.mono(23, 500)).foregroundStyle(ink.text)
+                Spacer()
+                Text("\(model.preset) · saved \(model.date.formatted(.dateTime.day().month(.abbreviated).year()))")
+                    .font(MapType.mono(12.5)).foregroundStyle(ink.text3)
             }
-            Spacer()
-            Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 8) {
-                ForEach([0, 2], id: \.self) { i in
-                    GridRow {
-                        ForEach(BindsMap.Kind.allCases[i..<i + 2], id: \.self) { kind in
-                            HStack(spacing: 9) {
-                                RoundedRectangle(cornerRadius: 3).fill(ink.kind(kind)).frame(width: 12, height: 12)
-                                Text(kind.title).font(MapType.sans(13.5, 500)).foregroundStyle(ink.text2)
-                            }
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("My binds").font(MapType.sans(34, 600)).tracking(-0.9).foregroundStyle(ink.text)
+                    Text("Hyper is \(model.layerKey) · \(model.keyCount) keys on \(model.layers.count) layers · \(model.mouseCount) on the mouse")
+                        .font(MapType.sans(15)).foregroundStyle(ink.text2)
+                }
+                Spacer()
+                HStack(spacing: 18) {
+                    ForEach(BindsMap.Kind.allCases, id: \.self) { kind in
+                        HStack(spacing: 7) {
+                            RoundedRectangle(cornerRadius: 3).fill(ink.kind(kind)).frame(width: 12, height: 12)
+                            Text(kind.title).font(MapType.sans(13.5, 500)).foregroundStyle(ink.text2)
                         }
                     }
                 }
@@ -348,15 +366,12 @@ struct BindsMapSheet: View {
 
     // MARK: Cards
 
-    private func card(_ layer: BindsMap.Layer, fill: Bool = false, @ViewBuilder content: () -> some View) -> some View {
+    private func card(_ layer: BindsMap.Layer, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             title(layer)
             content()
         }
-        .padding(Self.pad)
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ink.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(ink.line, lineWidth: 1))
+        .mapCard(ink)
     }
 
     /// A layer's title row: its keys as caps (the layer key, then the held modifiers), its name, how to press, its count.
@@ -368,7 +383,8 @@ struct BindsMapSheet: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(layer.title).font(MapType.sans(19, 600)).tracking(-0.3).foregroundStyle(ink.text)
-                Text(layer.how(layerKey: model.layerKey)).font(MapType.sans(12.5)).foregroundStyle(ink.text2)
+                // "Hyper": the header names the layer keys once.
+                Text(layer.how(layerKey: "Hyper")).font(MapType.sans(12.5)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Text("\(layer.entries.count)").font(MapType.mono(14, 500)).foregroundStyle(ink.text3)
@@ -380,23 +396,6 @@ struct BindsMapSheet: View {
             .padding(.horizontal, 8).frame(minWidth: 26, minHeight: 25)
             .background(RoundedRectangle(cornerRadius: 6).fill(strong ? ink.accent : ink.accent.opacity(0.14)))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(ink.accent.opacity(strong ? 0 : 0.5), lineWidth: 1))
-    }
-
-    /// The smallest layers in one card, a section each, so a layer of one bind does not spend a card's frame.
-    private func smallCard(_ layers: [BindsMap.Layer], fill: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(layers.enumerated()), id: \.offset) { i, layer in
-                if i > 0 { Rectangle().fill(ink.line).frame(height: 1) }
-                VStack(alignment: .leading, spacing: 8) {
-                    title(layer)
-                    list(layer, columns: 1)
-                }
-            }
-        }
-        .padding(Self.pad)
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ink.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(ink.line, lineWidth: 1))
     }
 
     /// A key held with no Hyper: the line ring, not the signal colour, which means Hyper alone.
@@ -521,19 +520,14 @@ struct BindsMapSheet: View {
         return out
     }
 
-    private func list(_ layer: BindsMap.Layer, columns: Int) -> some View {
+    private func list(_ layer: BindsMap.Layer) -> some View {
         let lines = lines(layer)
-        let per = max(1, Int((Double(lines.count) / Double(columns)).rounded(.up)))
         // One chip column a list, as wide as its widest chip, so every picture and name starts on one line (judge, round 3).
         let chip = max(36, (lines.map { CGFloat($0.keys.count) }.max() ?? 1) * 7.3 + 14)
-        return HStack(alignment: .top, spacing: 14) {
-            ForEach(0..<columns, id: \.self) { c in
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(lines.dropFirst(c * per).prefix(per).enumerated()), id: \.offset) { _, line in row(line, chip: chip) }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
+        return VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in row(line, chip: chip) }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func row(_ line: Line, chip: CGFloat) -> some View {
@@ -553,14 +547,14 @@ struct BindsMapSheet: View {
     // MARK: Mouse
 
     /// The mouse: drawn from the top and the side, each bound button numbered, then each button alone and with Hyper.
-    private func mouse(fill: Bool) -> some View {
+    private var mouse: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "computermouse").font(.system(size: 15, weight: .semibold)).foregroundStyle(ink.accent)
                     .frame(width: 26, height: 25).background(RoundedRectangle(cornerRadius: 6).fill(ink.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Mouse").font(MapType.sans(19, 600)).tracking(-0.3).foregroundStyle(ink.text)
-                    Text("Each button alone, and with \(model.layerKey) held").font(MapType.sans(12.5)).foregroundStyle(ink.text2)
+                    Text("Each button alone, and with Hyper held").font(MapType.sans(12.5)).foregroundStyle(ink.text2)
                 }
                 Spacer(minLength: 8)
                 Text("\(model.mouseCount)").font(MapType.mono(14, 500)).foregroundStyle(ink.text3)
@@ -586,10 +580,7 @@ struct BindsMapSheet: View {
                 }
             }
         }
-        .padding(Self.pad)
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ink.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(ink.line, lineWidth: 1))
+        .mapCard(ink)
     }
 
     @ViewBuilder private func cell(_ b: BindsMapModel.Bound?) -> some View {
@@ -601,6 +592,16 @@ struct BindsMapSheet: View {
         } else {
             Text("—").font(MapType.sans(13.5)).foregroundStyle(ink.text3.opacity(0.6))
         }
+    }
+}
+
+extension View {
+    /// A card of the map: padded, full width, on the theme's surface in a hairline.
+    func mapCard(_ ink: MapInk) -> some View {
+        padding(BindsMapSheet.pad)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(ink.surface))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(ink.line, lineWidth: 1))
     }
 }
 

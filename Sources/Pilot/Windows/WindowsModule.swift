@@ -112,7 +112,11 @@ enum WindowsModule {
         // Show desktop (Sven, 2026-10-26): the workspace's windows out of the way and back, as the tiler hides an unseen
         // workspace. Never through tiled(): with the desktop clicked Finder is in front, and the press back must still work.
         add(&registry, "showDesktop", "Show desktop", nil) {
-            Task { await tiler.perform("windows.showDesktop") { try await $0.run(.toggleDesktop) } }
+            Task {
+                await tiler.perform("windows.showDesktop") { try await $0.run(.toggleDesktop) }
+                // The tiler sends no event for it; the desktop's widgets show over it (Q592).
+                WidgetDesk.shared.showDesktopChanged()
+            }
         }
         // Not F11: on a Mac keyboard the top row sends media events unless "Use F1, F2… as standard function keys" is on.
         add(&registry, "fullscreen", "Fullscreen on or off", Key("f", shift: true)) { timed("fullscreen") { fullscreen() } }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 
@@ -31,8 +32,9 @@ public enum WebAppStamper {
         try fm.createDirectory(at: contents.appending(path: "MacOS"), withIntermediateDirectories: true)
         try fm.createDirectory(at: contents.appending(path: "Resources"), withIntermediateDirectories: true)
         try fm.copyItem(at: template, to: contents.appending(path: "MacOS/\(WebAppSpec.executable)"))
-        let plist = try PropertyListSerialization.data(fromPropertyList: spec.infoPlist(hasIcon: icon != nil),
-                                                       format: .xml, options: 0)
+        var info = spec.infoPlist(hasIcon: icon != nil)
+        info[WebAppKey.template] = try digest(template)
+        let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
         try plist.write(to: contents.appending(path: "Info.plist"))
         try Data("APPL????".utf8).write(to: contents.appending(path: "PkgInfo"))
         if let icon { try icon.write(to: contents.appending(path: "Resources/\(WebAppSpec.iconName).icns")) }
@@ -69,6 +71,18 @@ extension WebAppStamper {
         let icon = try? Data(contentsOf: app.location.appending(path: "Contents/Resources/\(WebAppSpec.iconName).icns"))
         return try stamp(app.spec, template: template, into: app.location.deletingLastPathComponent(), icon: icon,
                          signingIdentity: signingIdentity, fileName: app.location.lastPathComponent)
+    }
+}
+
+extension WebAppStamper {
+    /// The template's SHA-256, which every stamp records; signing writes into the copied binary, so it is never compared.
+    public static func digest(_ template: URL) throws -> String {
+        SHA256.hash(data: try Data(contentsOf: template, options: .mappedIfSafe)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The template digest the app's Info.plist records; nil for one stamped before Pilot recorded it.
+    public static func recordedDigest(_ app: InstalledWebApp) -> String? {
+        NSDictionary(contentsOf: app.location.appending(path: "Contents/Info.plist"))?[WebAppKey.template] as? String
     }
 }
 

@@ -49,7 +49,7 @@ struct CaptureAskAITests {
         let panel = AIChatPanel(drops: BarDropPanelTests.drops(), page: { false })
         let sent = AIChatPanelTests.Sent(), agent = Mutex(0)
         panel.route = { _ in agent.withLock { $0 += 1 }; return .success(AIChatModel.turn(AIChatPanelTests.runner(sent))) }
-        panel.pictureRoute = { .success(AIChatModel.turn(AIChatPanelTests.runner(sent))) }
+        panel.pictureRoute = { _ in .success(AIChatModel.turn(AIChatPanelTests.runner(sent))) }
         panel.routeName = { "Claude Code · Haiku" }
         defer { panel.hide(); panel.model.clear() }
         panel.model.send("an earlier chat", through: .success(AIChatPanelTests.runner(sent)))
@@ -78,7 +78,7 @@ struct CaptureAskAITests {
         let drops = BarDropPanelTests.drops()
         let panel = AIChatPanel(drops: drops, page: { false })
         let sent = AIChatPanelTests.Sent()
-        panel.pictureRoute = { .success(AIChatModel.turn(AIChatPanelTests.runner(sent))) }
+        panel.pictureRoute = { _ in .success(AIChatModel.turn(AIChatPanelTests.runner(sent))) }
         panel.routeName = { "Claude Code · Haiku" }
         defer { panel.hide(); panel.model.clear() }
         let picture = try #require(CaptureAskAI.picture(Self.capture()))

@@ -71,17 +71,19 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     func edit(_ text: String, selection: NSRange) -> Edit {
         let s = text as NSString
         switch self {
-        case .bold: return Self.wrap(s, selection, "**")
-        case .italic: return Self.wrap(s, selection, "_")
+        case .bold: return Self.inline(s, selection, "**", MarkdownMarks.bold)
+        case .italic: return Self.inline(s, selection, "_", MarkdownMarks.italic)
         case .code:
-            let picked = s.substring(with: selection)
-            return picked.contains("\n") ? Self.fence(s, selection) : Self.wrap(s, selection, "`")
+            if let unfenced = Self.unfence(s, selection) { return unfenced }
+            return s.substring(with: Self.words(s, selection)).contains("\n") ? Self.fence(s, selection) : Self.inline(s, selection, "`", MarkdownMarks.code)
         case .link: return Self.link(s, selection)
         case .heading:
             let level = Self.headingLevel(s.substring(with: s.lineRange(for: NSRange(location: selection.location, length: 0))))
             let next = level >= 3 ? 0 : level + 1
             return Self.lines(s, selection) { line in
-                let body = Self.strip(line, Self.headingMark)
+                // A heading is never a list item: a list or check mark before the words goes.
+                let rest = String(line.drop { $0 == " " || $0 == "\t" })
+                let body = Self.has(rest, Self.listMark) ? Self.strip(rest, Self.listMark) : Self.strip(line, Self.headingMark)
                 return next == 0 ? body : String(repeating: "#", count: next) + " " + body
             }
         case .bullets: return Self.prefix(s, selection, "- ", has: Self.bulletMark)
@@ -91,22 +93,142 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
 
     // MARK: Inline
 
-    /// `mark` round the selection, or taken off when it is already there (inside the selection or just outside it); no
-    /// selection types the pair with the caret between.
-    private static func wrap(_ s: NSString, _ sel: NSRange, _ mark: String) -> Edit {
-        let m = (mark as NSString).length, picked = s.substring(with: sel)
-        if sel.length >= 2 * m, picked.hasPrefix(mark), picked.hasSuffix(mark) {
-            let inner = String(picked.dropFirst(mark.count).dropLast(mark.count))
-            return Edit(range: sel, replacement: inner, selection: NSRange(location: sel.location, length: (inner as NSString).length))
+    /// The marks a line starts with: its indent, a quote's `>`, then a heading's `#`s or a list or check mark.
+    static let lineMark = try! NSRegularExpression(pattern: #"^[ \t]*(?:>[ \t]?)*(?:"# + headingMark.pattern.dropFirst() + "|" + listMark.pattern.dropFirst() + ")?")
+
+    /// The words a selection picks: past the marks its line starts with, no space, line end or table pipe at either end
+    /// (a triple-click picks the line end too). No selection keeps the caret, moved past those marks.
+    static func words(_ s: NSString, _ sel: NSRange) -> NSRange {
+        func blank(_ i: Int) -> Bool { s.character(at: i) == 124 || (UnicodeScalar(s.character(at: i)).map(CharacterSet.whitespacesAndNewlines.contains) ?? false) }
+        var start = sel.location, end = NSMaxRange(sel)
+        while end > start, blank(end - 1) { end -= 1 }
+        while start < end, blank(start) { start += 1 }
+        if let m = lineMark.firstMatch(in: s as String, range: s.lineRange(for: NSRange(location: start, length: 0))), start < NSMaxRange(m.range) {
+            start = NSMaxRange(m.range)
+            end = max(end, start)
         }
-        if sel.location >= m, NSMaxRange(sel) + m <= s.length,
-           s.substring(with: NSRange(location: sel.location - m, length: m)) == mark,
-           s.substring(with: NSRange(location: NSMaxRange(sel), length: m)) == mark,
-           sel.length > 0 {
-            let outer = NSRange(location: sel.location - m, length: sel.length + 2 * m)
-            return Edit(range: outer, replacement: picked, selection: NSRange(location: outer.location, length: sel.length))
+        return NSRange(location: start, length: end - start)
+    }
+
+    /// Whether `range` holds the selection, or the caret strictly inside it.
+    private static func holds(_ range: NSRange, _ sel: NSRange) -> Bool {
+        sel.length > 0 ? NSIntersectionRange(range, sel) == sel : range.location < sel.location && sel.location < NSMaxRange(range)
+    }
+
+    /// The links on `sel`'s line, each with its `!` when it shows a picture.
+    private static func links(_ s: NSString, _ sel: NSRange) -> [(match: NSTextCheckingResult, whole: NSRange, picture: Bool)] {
+        MarkdownMarks.link.matches(in: s as String, range: s.lineRange(for: sel)).map { m in
+            let picture = m.range.location > 0 && s.character(at: m.range.location - 1) == 33
+            return (m, picture ? NSRange(location: m.range.location - 1, length: m.range.length + 1) : m.range, picture)
         }
-        return Edit(range: sel, replacement: mark + picked + mark, selection: NSRange(location: sel.location + m, length: sel.length))
+    }
+
+    /// Lines no mark is typed into: fenced code (its fence lines too), a line that only shows a picture and a table's
+    /// `|---|` line, or every table line for a format over lines (a mark round a row or across cells breaks the table).
+    private static func quiet(_ s: NSString, tables whole: Bool = false) -> [NSRange] {
+        let fences = MarkdownBlocks.fences(s).map(\.block)
+        let pictures = MarkdownMarks.image.matches(in: s as String, range: NSRange(location: 0, length: s.length)).map(\.range)
+        return fences + pictures + MarkdownBlocks.tables(s, skipping: fences).map { whole ? $0.block : $0.rows[1] }
+    }
+
+    private static func isQuiet(_ quiet: [NSRange], _ line: NSRange) -> Bool {
+        quiet.contains { NSIntersectionRange($0, line).length > 0 || NSLocationInRange(line.location, $0) }
+    }
+
+    /// The selection widened over what a mark never lands inside: a link's or a picture's address (to the whole link), a
+    /// bare address, and code's words, taken as typed (unless the mark is code's own).
+    private static func snap(_ s: NSString, _ sel: NSRange, code: Bool) -> NSRange {
+        let line = s.lineRange(for: sel)
+        var atoms = links(s, sel).map { l in (part: NSRange(location: NSMaxRange(l.match.range(at: 1)), length: NSMaxRange(l.match.range) - NSMaxRange(l.match.range(at: 1))), whole: l.whole) }
+        atoms += MarkdownMarks.bareURL.matches(in: s as String, range: line).map { ($0.range, $0.range) }
+        if code { atoms += MarkdownMarks.code.matches(in: s as String, range: line).map { ($0.range, $0.range) } }
+        return atoms.reduce(sel) { sel, atom in NSIntersectionRange(atom.part, sel).length > 0 || holds(atom.part, sel) ? NSUnionRange(sel, atom.whole) : sel }
+    }
+
+    /// Edits on separate lines, in order, as one edit picking all it wrote.
+    private static func splice(_ s: NSString, _ edits: [(range: NSRange, replacement: String)]) -> Edit {
+        let range = NSRange(location: edits[0].range.location, length: NSMaxRange(edits[edits.count - 1].range) - edits[0].range.location)
+        var replacement = "", at = range.location
+        for edit in edits {
+            replacement += s.substring(with: NSRange(location: at, length: edit.range.location - at)) + edit.replacement
+            at = NSMaxRange(edit.range)
+        }
+        return Edit(range: range, replacement: replacement, selection: NSRange(location: range.location, length: (replacement as NSString).length))
+    }
+
+    /// `mark` round the words picked, or taken off when they already have it. Over lines, each line's words on their own
+    /// (a mark never spans a line end), the marks coming off only when every line has them. Quiet lines are left alone.
+    private static func inline(_ s: NSString, _ sel: NSRange, _ mark: String, _ span: NSRegularExpression) -> Edit {
+        let words = words(s, sel), one = !s.substring(with: words).contains("\n"), quiet = quiet(s, tables: !one)
+        let each = pieces(s, words).compactMap { line -> (edit: Edit, off: Bool)? in
+            let start = max(line.range.location, words.location), end = min(NSMaxRange(line.range), NSMaxRange(words))
+            guard end >= start, !isQuiet(quiet, line.range) else { return nil }
+            let picked = Self.words(s, NSRange(location: start, length: end - start))
+            return one || picked.length > 0 ? wrap(s, picked, mark, span) : nil
+        }
+        if one, let only = each.first { return only.edit }
+        let off = !each.isEmpty && each.allSatisfy(\.off)
+        let edits = each.filter { $0.off == off }.map { ($0.edit.range, $0.edit.replacement) }
+        return edits.isEmpty ? unchanged(sel) : splice(s, edits)
+    }
+
+    /// No edit: the selection as it was.
+    private static func unchanged(_ sel: NSRange) -> Edit { Edit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel) }
+
+    /// `mark` round one line's words, or taken off (`off`) when they sit in a span the editor draws with it (`span`), the
+    /// marks picked or not, other marks between; same-style spans inside the words merge into the one wrap. No selection
+    /// types the pair with the caret between, and a second press takes the empty pair off. Never inside an address, nor
+    /// bold or italic inside code (`snap`); italic takes whole words, as the editor draws no `_` inside or beside one.
+    private static func wrap(_ s: NSString, _ sel: NSRange, _ mark: String, _ span: NSRegularExpression) -> (edit: Edit, off: Bool) {
+        func word(_ i: Int) -> Bool {
+            guard i >= 0, i < s.length, let c = UnicodeScalar(s.character(at: i)) else { return false }
+            return c == "_" || CharacterSet.alphanumerics.contains(c)
+        }
+        var sel = snap(s, sel, code: mark != "`")
+        let m = (mark as NSString).length
+        let spans = span.matches(in: s as String, range: s.lineRange(for: sel)).map(\.range)
+        // The empty pair, which no span matches: never part of a longer run of the mark (a fence's ```, `user__name`) unless
+        // that is a span's own mark beside it (`**a**` then the pair), nor the end of one span and the start of the next
+        // (`**a**|**b**`).
+        func same(_ i: Int) -> Bool { i >= 0 && i < s.length && s.character(at: i) == (mark as NSString).character(at: 0) }
+        if sel.length == 0, sel.location >= m, sel.location + m <= s.length,
+           s.substring(with: NSRange(location: sel.location - m, length: 2 * m)) == mark + mark,
+           !same(sel.location - m - 1) || spans.contains(where: { NSMaxRange($0) == sel.location - m }),
+           !same(sel.location + m) || spans.contains(where: { $0.location == sel.location + m }),
+           !(mark == "_" && word(sel.location - m - 1) && word(sel.location + m)),
+           !spans.contains(where: { NSMaxRange($0) == sel.location || $0.location == sel.location }) {
+            return (Edit(range: NSRange(location: sel.location - m, length: 2 * m), replacement: "", selection: NSRange(location: sel.location - m, length: 0)), true)
+        }
+        // `_` never opens or closes italic beside a word's letters: a caret touching a word takes the word.
+        if mark == "_", sel.length > 0 || word(sel.location - 1) || word(sel.location) {
+            var start = sel.location, end = NSMaxRange(sel)
+            while word(start - 1) { start -= 1 }
+            while word(end) { end += 1 }
+            // A word at an address's edge takes the whole address.
+            sel = snap(s, NSRange(location: start, length: end - start), code: true)
+        }
+        let picked = s.substring(with: sel)
+        let around = spans.first { r in
+            sel.length > 0 ? holds(r, sel) : r.location + m <= sel.location && sel.location <= NSMaxRange(r) - m
+        }
+        if let around {
+            let inner = NSRange(location: around.location + m, length: around.length - 2 * m)
+            func moved(_ i: Int) -> Int { min(max(i, inner.location), NSMaxRange(inner)) - m }
+            let start = moved(sel.location)
+            return (Edit(range: around, replacement: s.substring(with: inner), selection: NSRange(location: start, length: moved(NSMaxRange(sel)) - start)), true)
+        }
+        let inside = sel.length > 0 ? spans.filter { NSIntersectionRange($0, sel).length > 0 } : []
+        if !inside.isEmpty {
+            let whole = inside.reduce(sel, NSUnionRange)
+            var text = "", at = whole.location
+            for r in inside {
+                text += s.substring(with: NSRange(location: at, length: r.location - at)) + s.substring(with: NSRange(location: r.location + m, length: r.length - 2 * m))
+                at = NSMaxRange(r)
+            }
+            text += s.substring(with: NSRange(location: at, length: NSMaxRange(whole) - at))
+            return (Edit(range: whole, replacement: mark + text + mark, selection: NSRange(location: whole.location + m, length: (text as NSString).length)), false)
+        }
+        return (Edit(range: sel, replacement: mark + picked + mark, selection: NSRange(location: sel.location + m, length: sel.length)), false)
     }
 
     /// A selection over lines as a fenced code block, the fences on lines of their own.
@@ -119,9 +241,36 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         return Edit(range: lines, replacement: replacement, selection: NSRange(location: lines.location + 4, length: (body as NSString).length))
     }
 
+    /// The fenced block the selection sits in (its fence lines included), its fence lines taken off and every line between
+    /// kept; an unclosed one loses its opening line alone. Nil outside one.
+    private static func unfence(_ s: NSString, _ sel: NSRange) -> Edit? {
+        for fence in MarkdownBlocks.fences(s) {
+            guard sel.location >= fence.block.location, NSMaxRange(sel) <= fence.close.map(NSMaxRange) ?? NSMaxRange(fence.block) else { continue }
+            let inside = NSMaxRange(s.lineRange(for: fence.open))
+            guard let close = fence.close else {
+                let body = s.substring(with: NSRange(location: inside, length: NSMaxRange(fence.block) - inside))
+                return Edit(range: fence.block, replacement: body, selection: NSRange(location: fence.block.location, length: (body as NSString).length))
+            }
+            var body = s.substring(with: NSRange(location: inside, length: close.location - inside))
+            if body.hasSuffix("\n") { body.removeLast() }
+            let trailing = s.substring(with: NSRange(location: NSMaxRange(close), length: NSMaxRange(fence.block) - NSMaxRange(close)))
+            return Edit(range: fence.block, replacement: body + trailing, selection: NSRange(location: fence.block.location, length: (body as NSString).length))
+        }
+        return nil
+    }
+
     /// `[words](https://)` with the address picked to type over; a picked address becomes the link with the caret in
-    /// its words.
+    /// its words. Inside a link (its words or its address) the link comes off and its words stay; a picture's stays. One
+    /// line's words only; none on a quiet line.
     private static func link(_ s: NSString, _ sel: NSRange) -> Edit {
+        let first = words(s, sel), line = pieces(s, first)[0].range
+        guard !isQuiet(quiet(s), line) else { return unchanged(sel) }
+        let sel = snap(s, words(s, NSRange(location: first.location, length: max(min(NSMaxRange(first), NSMaxRange(line)) - first.location, 0))), code: true)
+        if let found = links(s, sel).first(where: { holds($0.whole, sel) }) {
+            guard !found.picture else { return unchanged(sel) }
+            let link = found.match, words = s.substring(with: link.range(at: 1))
+            return Edit(range: link.range, replacement: words, selection: NSRange(location: link.range.location, length: link.range(at: 1).length))
+        }
         let picked = s.substring(with: sel)
         if picked.hasPrefix("http://") || picked.hasPrefix("https://") {
             return Edit(range: sel, replacement: "[](\(picked))", selection: NSRange(location: sel.location + 1, length: 0))
@@ -183,7 +332,8 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
             let indent = String(line.prefix { $0 == " " || $0 == "\t" })
             let rest = String(line.dropFirst(indent.count))
             if picked.count > 1, rest.trimmingCharacters(in: .whitespaces).isEmpty { return line }
-            let body = strip(rest, listMark)
+            // A list item is never a heading: a heading's `#`s before the words go.
+            let body = strip(strip(rest, headingMark), listMark)
             return indent + (off ? body : mark + body)
         }
     }
@@ -197,26 +347,22 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         return out
     }
 
-    /// Each picked line through `change`. One line keeps the caret where it was in the words; more pick them all.
+    /// Each picked line through `change`. One line keeps the caret or the selection on the same words, never on the marks
+    /// before them; more pick them all.
     private static func lines(_ s: NSString, _ sel: NSRange, _ change: (String) -> String) -> Edit {
         let picked = pieces(s, sel)
-        let range = NSRange(location: picked[0].range.location, length: NSMaxRange(picked[picked.count - 1].range) - picked[0].range.location)
-        var replacement = "", at = range.location
-        for (i, piece) in picked.enumerated() {
-            if i > 0 {
-                let gap = NSRange(location: at, length: piece.range.location - at)
-                replacement += s.substring(with: gap)
-            }
-            replacement += change(piece.body)
-            at = NSMaxRange(piece.range)
+        let whole = splice(s, picked.map { ($0.range, change($0.body)) })
+        let range = whole.range, replacement = whole.replacement
+        guard picked.count == 1 else { return whole }
+        // A place in the words moves with them; one in the old marks lands where the new marks end.
+        let old = s.substring(with: range) as NSString, new = replacement as NSString
+        func marks(_ t: NSString) -> Int { lineMark.firstMatch(in: t as String, range: NSRange(location: 0, length: t.length)).map { NSMaxRange($0.range) } ?? 0 }
+        let from = marks(old), to = marks(new)
+        func moved(_ i: Int) -> Int {
+            let at = i - range.location
+            return at > old.length ? i + new.length - old.length : range.location + min(max(at - from, 0) + to, new.length)
         }
-        let length = (replacement as NSString).length
-        guard picked.count == 1, sel.length == 0 else {
-            return Edit(range: range, replacement: replacement, selection: NSRange(location: range.location, length: length))
-        }
-        // The caret keeps its place in the line's words as the mark before them grows or shrinks.
-        let shift = length - range.length
-        let location = min(max(sel.location + shift, range.location), range.location + length)
-        return Edit(range: range, replacement: replacement, selection: NSRange(location: location, length: 0))
+        let start = moved(sel.location)
+        return Edit(range: range, replacement: replacement, selection: NSRange(location: start, length: max(moved(NSMaxRange(sel)) - start, 0)))
     }
 }

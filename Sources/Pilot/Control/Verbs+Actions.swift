@@ -45,12 +45,12 @@ final class ControlActions {
     /// nothing done yet. Kept here, not on the modules' actions: a new one is added here too.
     static let onScreen: [String: OnScreen] = {
         var kinds: [String: OnScreen] = [
-            "apps.launcher": .menu, "apps.appsMenu": .menu, "system.menu": .menu, "captures.menu": .menu, "engine.sheet": .menu,
+            "apps.launcher": .menu, "apps.appsMenu": .menu, "apps.update": .menu, "apps.clean": .menu, "system.menu": .menu, "captures.menu": .menu, "engine.sheet": .menu,
             "system.killProcess": .picker, "system.rotateDisplay": .picker, "apps.emoji": .picker, "apps.lazygit": .picker,
             "apps.bitwardenFill": .picker, ExtensionCatalogueMenu.actionID: .picker,
             "apps.clipboard": .panel, "apps.clipboardOptionV": .panel, NotesPanel.toggleID: .panel, QuickAIActions.askID: .panel,
             AIChatPanel.chatID: .panel,
-            "engine.openWindow": .window, "apps.webApp": .window, "apps.reports": .window,
+            "engine.openWindow": .window, "apps.webApp": .window, "apps.reports": .window, "apps.install": .window,
             "apps.bitwardenSearch": .window, "apps.bitwardenGenerator": .window, "system.soundSettings": .window,
             "system.bluetoothSettings": .window, "system.wifiSettings": .window, "system.displaySettings": .window,
             "system.focusSettings": .window, "system.translationLanguages": .window,
@@ -96,7 +96,7 @@ final class ControlActions {
             + rows("script", ScriptCommand.actions([], with: ScriptCommand.find()))
             + rows("extension", Extension.actions([], with: Extension.find().extensions))
             + rows("quicklink", QuicklinkBook.shared.links.map { .init(id: $0.actionID, label: $0.name, module: apps) })
-            + rows("config", ConfigsModule.menuRows())
+            + rows("config", DeveloperPages.on ? ConfigsModule.menuRows() : [])
             + rows("output", SystemModule.outputRows())
             + rows("appAction", catalogueRows())
     }

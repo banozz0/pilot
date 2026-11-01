@@ -3,13 +3,24 @@ import PilotCore
 import SwiftUI
 
 /// Theme or Custom, and a colour well while Custom (Sven, 2026-10-10): the one picker for a ColourChoice, the top bar's
-/// colour and the focused window's border.
+/// colour and the focused window's border. With `plain`, a first segment of that name picks nil, no colour (Dictation's
+/// waveform, Sven 2026-11-01).
 struct ColourChoicePicker: View {
-    @Binding var choice: ColourChoice
+    @Binding var choice: ColourChoice?
     /// The theme's colour: what Theme draws and where the well starts once Custom is picked.
     let theme: UInt32
     /// What VoiceOver calls it.
     let label: String
+    var plain: String? = nil
+
+    init(choice: Binding<ColourChoice?>, theme: UInt32, label: String, plain: String) {
+        (_choice, self.theme, self.label, self.plain) = (choice, theme, label, plain)
+    }
+
+    init(choice: Binding<ColourChoice>, theme: UInt32, label: String) {
+        _choice = Binding(get: { choice.wrappedValue }, set: { if let new = $0 { choice.wrappedValue = new } })
+        (self.theme, self.label) = (theme, label)
+    }
 
     var body: some View {
         // The well beside the two segments, or under them where a row is short of room.
@@ -20,12 +31,16 @@ struct ColourChoicePicker: View {
     }
 
     private var segments: some View {
-        Segments(selection: Binding(get: { choice != .theme }, set: { choice = $0 ? .custom(choice.resolved(theme)) : .theme }),
-                 options: [(false, "Theme"), (true, "Custom")], label: label)
+        // nil Plain, false Theme, true Custom.
+        let options: [(Bool?, String)] = (plain.map { [(nil, $0)] } ?? []) + [(false, "Theme"), (true, "Custom")]
+        return Segments(selection: Binding(get: { choice.map { $0 != .theme } }, set: { custom in
+                            if custom != choice.map({ $0 != .theme }) { choice = custom.map { $0 ? .custom((choice ?? .theme).resolved(theme)) : .theme } }
+                        }),
+                        options: options.map { (value: $0.0, title: $0.1) }, label: label)
     }
 
     @ViewBuilder private var well: some View {
-        if case .custom(let rgb) = choice {
+        if case .custom(let rgb)? = choice {
             ColorPicker(label, selection: Binding(get: { Color(Paint(rgb)) }, set: { choice = .custom($0.rgb) }), supportsOpacity: false)
                 .labelsHidden()
                 .onAppear { ColourPanelCloser.shared.wellAppeared() }

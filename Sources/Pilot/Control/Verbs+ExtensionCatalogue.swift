@@ -1,7 +1,7 @@
 import Foundation
 import PilotCore
 
-/// `pilot ext catalogue|get` (CLI W15): the Extensions page's Catalogue tab, read through the model it shares with the
+/// `pilot ext catalogue|get` (CLI W15): the Extensions page's catalogue rows, read through the model it shares with the
 /// menu's catalogue, so the page's card shows an install the command started. The page installs on one click; the
 /// command asks Allow first, as `ext install` does, naming every file from the index the install checks each file
 /// against, and the commands of the extension.json that check pins.
@@ -107,18 +107,37 @@ extension ExtensionTools {
     }
 
     func catalogueAsk(_ entry: ExtensionCatalogue.Entry, _ had: ExtensionCatalogue.Installed?, _ commands: [String]) -> ControlGate.Ask {
-        let programs = entry.files.filter(\.executable).map { ControlGate.Ask.visible($0.path) }
-        let others = entry.files.filter { !$0.executable }.map { ControlGate.Ask.visible($0.path) }
-        let replaces = had.map { "updates \($0.version ?? "the copy") at \(ControlGate.Ask.visible($0.folder.path)) to \(entry.version), which goes to the Trash; its data and settings stay" }
-            ?? "replaces nothing: no extension \(entry.id) is installed"
-        return .install(.extension, """
-            \(entry.id) (\(ControlGate.Ask.visible(entry.title)) \(ControlGate.Ask.visible(entry.version))) from Pilot's catalogue, github.com/\(ExtensionCatalogue.repo)
-            into \(ControlGate.Ask.visible(extensions.appending(path: entry.id).path))
-            programs: \(programs.isEmpty ? "none marked executable" : programs.joined(separator: ", "))
-            other files: \(others.isEmpty ? "none" : others.joined(separator: ", ")); \(entry.files.count) files in all, \(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-            commands, run as you: \(commands.joined(separator: ", "))
-            \(replaces)
-            """)
+        let programs = entry.files.filter(\.executable).map(\.path)
+        let others = entry.files.filter { !$0.executable }.map(\.path)
+        // "updates" only to a newer version, as the headline says Update; any other copy is replaced.
+        let replaces = had.map { had in
+            let newer = ExtensionTools.checked(had.version).flatMap(ExtensionCatalogue.Version.init).flatMap { old in
+                ExtensionCatalogue.Version(entry.version).map { $0 > old } } ?? false
+            return (newer ? "updates \(had.version ?? "") at \(had.folder.path) to" : "replaces \(had.version ?? "the copy") at \(had.folder.path) with")
+                + " \(entry.version), which goes to the Trash; its data and settings stay"
+        } ?? "replaces nothing: no extension \(entry.id) is installed"
+        // Named by id, as every summary is (ExtensionTools.titled): the catalogue checked the id and the version, and an
+        // update or a downgrade is said only when the copy in has a version that reads; any other copy is replaced.
+        let to = entry.version, headline: String
+        if let had {
+            if let from = ExtensionTools.checked(had.version), let old = ExtensionCatalogue.Version(from), let new = ExtensionCatalogue.Version(to), old != new {
+                headline = "\(new < old ? "Downgrade" : "Update") extension \(entry.id) \(from) → \(to)?"
+            } else {
+                headline = "Replace extension \(ExtensionTools.titled(entry.id, had.version)) with \(to)?"
+            }
+        } else {
+            headline = "Install extension \(ExtensionTools.titled(entry.id, to))?"
+        }
+        let from = (had == nil ? "" : ExtensionTools.trashes(1) + " ") + "From Pilot's catalogue: github.com/\(ExtensionCatalogue.repo)"
+        // A line each, raw, as ext install's question (ExtensionTools.installAsk).
+        return ControlGate.Ask.install(.extension, lines: [
+            "\(entry.id) (\(entry.title) \(entry.version)) from Pilot's catalogue, github.com/\(ExtensionCatalogue.repo)",
+            "into \(extensions.appending(path: entry.id).path)",
+            "programs: \(programs.isEmpty ? "none marked executable" : programs.joined(separator: ", "))",
+            "other files: \(others.isEmpty ? "none" : others.joined(separator: ", ")); \(entry.files.count) files in all, \(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))",
+            "commands, run as you: \(commands.joined(separator: ", "))",
+            replaces,
+        ]).summed(headline, [ExtensionTools.runs(entry.files.filter(\.executable).map(\.path), commands: commands.count), from])
     }
 }
 

@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .pk { flex-direction: row; gap: 20px; padding-top: var(--pk-pad); }
+  .left { width: 132px; flex: none; display: flex; flex-direction: column; justify-content: space-between; }
+  pre.mark { margin: 4px 0 0; font: 500 12.5px/1.18 var(--pk-mono); white-space: pre; }
+  pre.mark span:nth-child(1), pre.mark span:nth-child(2) { color: var(--pk-good); }
+  pre.mark span:nth-child(3) { color: var(--pk-amber); }
+  pre.mark span:nth-child(4) { color: var(--pk-third); }
+  pre.mark span:nth-child(5) { color: var(--pk-problem); }
+  pre.mark span:nth-child(6) { color: var(--pk-second); }
+  pre.mark span:nth-child(7) { color: var(--pk-accent); }
+  .gauges { display: flex; flex-direction: column; gap: 7px; }
+  .gauges .pk-gauge { grid-template-columns: 30px minmax(0, 1fr) 30px; gap: 7px; font-size: 10.5px; }
+  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .who { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who i { font-style: normal; color: var(--pk-text3); font-weight: 400; }
+  .dash { height: 0; border-top: 1px dashed var(--pk-line2); margin: 1px 0 3px; }
+  .pk-kv { gap: 0 14px; }
+  .pk-kv dt, .pk-kv dd { line-height: 1.55; font-size: 11px; }
+  .pk-swatches { margin-top: auto; height: 10px; border-radius: 3px; }
+</style>
+<body class="pk">
+  <div class="left">
+    <pre class="mark" aria-hidden="true"><span>   .---------.</span>
+<span>  /         /|</span>
+<span> +---------+ |</span>
+<span> |  HYPER  | |</span>
+<span> |   ___   | +</span>
+<span> |         |/</span>
+<span> +---------+</span></pre>
+    <div class="gauges" id="gauges"></div>
+  </div>
+  <div class="right">
+    <div class="who" id="who">–</div>
+    <div class="dash"></div>
+    <dl class="pk-kv" id="facts"></dl>
+    <div class="pk-swatches" aria-hidden="true">
+      <i style="--c: var(--pk-text3)"></i><i style="--c: var(--pk-problem)"></i><i style="--c: var(--pk-good)"></i><i style="--c: var(--pk-amber)"></i>
+      <i style="--c: var(--pk-accent)"></i><i style="--c: var(--pk-second)"></i><i style="--c: var(--pk-third)"></i><i style="--c: var(--pk-text)"></i>
+    </div>
+  </div>
+</body>
+<script>
+  // Fed by feed.py: {user, host, os, kernel, arch, model, chip, cores, gpu, shell, packages, uptime,
+  // cpu: {percent, load}, memory: {used, total, percent}, disk: {used, total, percent}, battery: {percent, state} | null}.
+  const { $, esc, num } = PilotKit;
+  const gib = (b) => (b / 1073741824).toFixed(b >= 1073741824 * 100 ? 0 : 1);
+  const gb = (b) => Math.round(b / 1e9);
+
+  function draw(d) {
+    $("who").innerHTML = `${esc(d.user)}<i>@</i>${esc(d.host)}`;
+    const mem = d.memory || {}, disk = d.disk || {}, cpu = d.cpu || {};
+    const rows = [
+      ["OS", `${d.os || "macOS"}${d.arch ? " " + d.arch : ""}`],
+      ["Host", d.model],
+      ["Kernel", d.kernel],
+      ["CPU", [d.chip, d.cores].filter(Boolean).join(" · ")],
+      ["GPU", d.gpu],
+      ["Memory", num(mem.total) ? `${gib(mem.used)} / ${gib(mem.total)} GiB` : ""],
+      ["Disk", num(disk.total) ? `${gb(disk.used)} / ${gb(disk.total)} GB` : ""],
+      d.battery ? ["Battery", `${d.battery.percent}% · ${d.battery.state}`] : null,
+      ["Shell", d.shell],
+      ["Pkgs", num(d.packages) ? `${d.packages} (brew)` : ""],
+      ["Uptime", d.uptime],
+    ].filter((r) => r && r[1]);
+    $("facts").innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+    const gauge = (label, p) => `<div class="pk-gauge"><span>${label}</span>${PilotKit.meter(p, { tone: PilotKit.tone(p) })}<span>${num(p) == null ? "–" : p + "%"}</span></div>`;
+    $("gauges").innerHTML = gauge("CPU", cpu.percent) + gauge("Mem", mem.percent) + gauge("Disk", disk.percent);
+  }
+
+  PilotKit.on(draw);
+</script>

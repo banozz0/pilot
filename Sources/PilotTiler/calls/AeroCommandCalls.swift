@@ -27,8 +27,10 @@ func perform(_ command: AeroCommand) async throws -> String {
         case .listWindows(let scope): return try json(await listWindows(TilerWindowScope(scope)).map(\.cliFields))
         case .listVisibleWorkspaces:
             return try json(visibleWorkspaces().map {
-                var row: [String: Any] = ["workspace": $0.name, "monitor-id": $0.monitorId, "monitor-name": $0.monitorName]
+                var row: [String: Any] = ["workspace": $0.name, "monitor-id": $0.monitorId, "monitor-name": $0.monitorName,
+                                          "workspace-root-container-layout": $0.rootLayout.rawValue]
                 if let uuid = $0.displayUUID { row["display-uuid"] = uuid }
+                if $0.showingDesktop { row["workspace-showing-desktop"] = true }
                 return row
             })
         case .focusedWorkspace: return try json([focusedWorkspace().cliFields])
@@ -66,6 +68,7 @@ func perform(_ command: AeroCommand) async throws -> String {
             guard let layout = TilerLayout(rawValue: raw) else { throw refused }
             return try done(Workspace.get(byName: name).setRootLayout(toggling: [layout]))
         case .move(let id, let direction): return try done(window(id).move(CardinalDirection(direction)))
+        case .unminimize(let id): return try done(await window(id).unminimize())
     }
 }
 
@@ -103,6 +106,7 @@ extension TilerWindowScope {
             case .all: .all
             case .focused: .focused
             case .workspace(let name): .workspace(name)
+            case .minimized: .minimized
         }
     }
 }
@@ -110,8 +114,11 @@ extension TilerWindowScope {
 extension TilerWindow {
     /// AeroWindow.format's fields, keyed as the CLI's `--json` prints them.
     var cliFields: [String: Any] {
-        ["window-id": id, "app-name": appName, "app-bundle-id": bundleId, "app-pid": pid, "workspace": workspace,
-         "monitor-id": monitorId, "window-layout": layout, "window-title": title, "window-pinned": pinned]
+        var fields: [String: Any] = ["window-id": id, "app-name": appName, "app-bundle-id": bundleId, "app-pid": pid, "workspace": workspace,
+                                     "monitor-id": monitorId, "window-layout": layout, "window-title": title, "window-pinned": pinned]
+        if shelved { fields["window-shelved"] = true }
+        if let group { fields["window-group"] = group }
+        return fields
     }
 }
 

@@ -19,7 +19,7 @@ import WebApps
 /// and cut 4's: Pilot's window on Workspaces, Tiling, Stats, Update & Clean and Reports, the AI chat making an extension
 /// with /extension, and the video editor on a made-up recording (PILOT_FILM_RECORDING); and cut 5's, all in Dusk: Weather's item
 /// in the top bar, Activity, the views earlier cuts borrowed from other render tests, Keys › Mouse, Snippets, AI › Setup and
-/// Apps › Open with; and cut 6's: a tea timer in the bar, Extensions › Catalogue, Summarise in the selection pill, Capture text's
+/// Apps › Open with; and cut 6's: a tea timer in the bar, the one Extensions list, Summarise in the selection pill, Capture text's
 /// tip, and Weather's popover on Glass.
 /// Instrument in the film's theme (`theme`), Solid (glass draws nothing offscreen), with made-up notes, files, copies and
 /// windows, never this Mac's. Opt-in, in a moved home:
@@ -1027,13 +1027,14 @@ struct ExplainerFilmRenders {
                                     editor: EditorChoice(defaults: try #require(UserDefaults(suiteName: testSuite())), installed: { _ in true }))
         try page(openWith, "open-with", width: 793, height: 3600, on: .page(.openWith))
 
-        // Cut 6. Extensions › Catalogue on its test fixture: Ports installed, the rest to install. Never the network.
+        // Cut 6. The one Extensions list on the catalogue's test fixture: Ports installed, the rest to get. Never the network.
         let (catalogue, catalogueDir) = try ExtensionCatalogueModelTests.model()
         defer { try? FileManager.default.removeItem(at: catalogueDir) }
         await catalogue.open()
         await catalogue.install(try #require(catalogue.index?.entry("ports")))
         await catalogue.readInstalled()
-        try page(ExtensionCataloguePage(onScreen: false, model: catalogue), "catalogue", width: 1000, on: .page(.extensions))
+        try page(ExtensionsPageView(onScreen: false, settings: await ExtensionCatalogueRenders.settings(catalogue), pick: "pomodoro").frame(height: 640),
+                 "catalogue", width: 1000, on: .page(.extensions))
         // The selection pill with Summarise installed (Q481), and Capture text's tip on four lines of the billing page.
         try png(try #require(snapshot(drawing: SelectionPillView(summarise: true).padding(24).styled(.hud, look: look).pilotTheme(look: look))), "pill-summarise")
         let lines = ["Invoices", "1 Oct 2026  INV-0142  $12.00  Paid", "1 Sep 2026  INV-0131  $12.00  Paid", "1 Aug 2026  INV-0117  $12.00  Paid"]

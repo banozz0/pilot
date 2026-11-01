@@ -30,12 +30,18 @@ final class PilotSettings {
         showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
         bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? true
+        // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
+        // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
+        let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
+        defaults.set(developer, forKey: Self.developerKey)
+        self.developer = developer
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? true
         translatePair = TranslatePair(defaults: defaults)
         // Notes written in Application Support before Pilot's own folder moved to Documents (task N1) stay where they are.
         notesFolder = NotesFolder.kept(saved: defaults.string(forKey: "notes.folder"))
         if notesFolder != nil { defaults.set(notesFolder, forKey: "notes.folder") }
+        if defaults.isApp { Self.live = self }
     }
 
     /// Stored, not computed over UserDefaults: Observation tracks only stored properties, and on 2026-10-05 a computed one
@@ -146,6 +152,14 @@ final class PilotSettings {
     }
     /// The engine hands the running mouse tap the new modifier here.
     @ObservationIgnored var onDragModifierChange: () -> Void = {}
+    /// General's Developer switch (Pilot 1.0.2, Sven Q715): Configs, its Agents tab, and Repos show only while it is on
+    /// (AppPage.isDeveloper); DeveloperPages reads it.
+    var developer: Bool {
+        didSet { defaults.set(developer, forKey: Self.developerKey) }
+    }
+    static let developerKey = "general.developer"
+    /// The app's own settings, on its own defaults; never a test's, so a test's switch shows nowhere else.
+    static weak var live: PilotSettings?
     /// Off until switched on: a three-finger sideways swipe moves between workspaces (card agent-bo-95422973).
     var swipeWorkspaces: Bool {
         didSet {
@@ -218,12 +232,20 @@ final class Engine {
     let topBar: TopBarController
     /// Bind hints (card agent-bo-95422934).
     @ObservationIgnored private(set) lazy var nudger = BindNudger(engine: self)
+    /// The Window shelf on Stage workspaces (ADR 0015), its first place under the top bar's room and the outer gap.
+    @ObservationIgnored private(set) lazy var shelf = WindowShelf(tiler: observers.tiler, tiling: { [tilingSwitch] in tilingSwitch.isOn },
+                                                                  top: { [pilotBlock] name in
+        let block = pilotBlock.block
+        return CGFloat((block.topBar.first { $0.monitor == name }?.height ?? 0) + (block.gapsOn ? block.gaps.outer : 0))
+    })
     /// What the bar items draw from, for the macOS menu bar and the top bar alike (card agent-bo-95422911).
     let barSources: BarSources
     /// The dropdown's Tiling switch, kept here because the dropdown is made anew each time it opens.
     let tilingSwitch: TilingSwitch
     /// The Hyper key's switch (card agent-bo-95422986), on at every launch.
     let hyperSwitch: SessionSwitch
+    /// The dropdown's Dictation switch, kept here so off then on brings back the key it had.
+    @ObservationIgnored private(set) lazy var dictationSwitch = DictationKeySwitch(settings: settings)
     private(set) var registry = ActionRegistry()
     let binds = Binds()
     private let tap: HyperTap
@@ -438,8 +460,12 @@ final class Engine {
         // The bar needs no Accessibility: it comes back at launch if it was left on.
         topBar.start()
         // The speech model in use, compiled for a new pilot-dictate a minute in, so the first dictation after an update
-        // does not wait minutes (SpeechModel.prepareInBackground); with no model, nothing.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { SpeechModels.shared.prepareInBackground() }
+        // does not wait minutes (SpeechModel.prepareInBackground); with no model, nothing. Then the takes a quit left
+        // while the model loaded, written down into Recent takes.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+            SpeechModels.shared.prepareInBackground()
+            PilotDictation.shared.collectKept(audio: true)
+        }
         // Read aloud's Kokoro the same way, after it, so the two never load at once.
         DispatchQueue.main.asyncAfter(deadline: .now() + 120) { KokoroModel.shared.prepareInBackground() }
     }
@@ -457,9 +483,31 @@ final class Engine {
         TilerDropZone.show = { [dropZone] in dropZone.update($0, below: $1) }
         mouseTap.outline = { [dropZone] in dropZone.update($0, below: nil) }
         mouseTap.openFiles = { FileActionsMenu.open($0, at: $1) }
+        mouseTap.widgets = .init(over: { WidgetDesk.shared.over($0) }, grab: { WidgetDesk.shared.grab(at: $0, resize: $1) }, drag: { WidgetDesk.shared.drag(to: $0) },
+                                 drop: { WidgetDesk.shared.drop() }, menu: { WidgetDesk.shared.openMenu(at: $0) },
+                                 cancel: { WidgetDesk.shared.cancelGrab() })
+        WidgetDesk.shared.shownChanged = { [mouseTap] in mouseTap.widgetsShown = $0 }
         TilerGaps.show = { [gapHandles] in gapHandles.update($0) }
         observers.start()
         startTiler()
+        // The desktop's widgets (ADR 0016): nothing is armed while none is placed.
+        WidgetDesk.shared.askTrust = { id in
+            // Read first: the page may be open on an older read that does not know this widget.
+            WidgetsPageModel.shared.reload()
+            WidgetsPageModel.shared.asking = id
+            AppWindowController.shared.open(AppPlace(.widgets))
+        }
+        // Remove from Home (its right-click) and a desktop widget's menu: the Widgets page acts and says so.
+        WidgetDesk.shared.removePlacement = { WidgetsPageModel.shared.remove(id: $0) }
+        WidgetDesk.shared.placementMenu = { id in let menu = WidgetsPageModel.shared.menu(for: id); return (WidgetFolder.sections(id) + menu.sections, menu.checked) }
+        // Edit widget from its right-click: the Widgets page opens on that placement's sheet.
+        WidgetDesk.shared.editPlacement = { id in
+            WidgetsPageModel.shared.reload()
+            WidgetsPageModel.shared.editing = id
+            AppWindowController.shared.open(AppPlace(.widgets))
+        }
+        WidgetDesk.shared.start(tiler: observers.tiler)
+        shelf.start()
         nudger.start()
         presets.start()
         // Look › Wallpaper per workspace (Q333): a switch puts a workspace's own image, or the screen's own again, on its screen.
@@ -519,6 +567,7 @@ final class Engine {
 
     func quit() {
         // Every window the engine parked goes back on screen.
+        shelf.stop()
         observers.tiler.stopEngine()
         disarmBinds()
         if pressSave != nil { savePresses() }
@@ -649,6 +698,7 @@ final class Engine {
         WorkspacesModule.register(into: &registry, tiler: observers.tiler, block: pilotBlock, layouts: layouts)
         WindowRescue.register(into: &registry, rescue: rescue)
         WorkspaceSnapshots.register(into: &registry, snapshots: snapshots)
+        WorkspacePresets.register(into: &registry, presets: presets)
         AppsModule.register(into: &registry)
         CapturesModule.register(into: &registry)
         DriveModule.register(into: &registry)

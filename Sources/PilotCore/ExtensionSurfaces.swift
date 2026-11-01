@@ -141,10 +141,23 @@ extension Extension {
             /// 2026-10-17: a live box (`"live": true`) runs its action as Sven types, once typing pauses this long
             /// (`"debounce"` in ms, held to `pauses`); nil runs it on Return only.
             public let live: Duration?
+            /// 2026-10-31 (an extension page that does its job): more runs that take the box's text (`"actions"`, at most
+            /// `mostActions`), each its own titled button beside the action's, with its own context (Video downloader's
+            /// formats); and a Choose button for a file (`"files"`: the file extensions or type ids it takes, empty for any),
+            /// whose pick fills the box with its path, on a page only. Either draws the action as a titled button too.
+            public let actions: [Item.Action], files: [String]?
 
-            public init(placeholder: String? = nil, action: Item.Action, alt: Item.Action? = nil, live: Duration? = nil) {
+            public init(placeholder: String? = nil, action: Item.Action, alt: Item.Action? = nil, live: Duration? = nil,
+                        actions: [Item.Action] = [], files: [String]? = nil) {
                 self.placeholder = placeholder; self.action = action; self.alt = alt; self.live = live
+                self.actions = Array(actions.prefix(Self.mostActions)); self.files = files
             }
+
+            /// The most runs a box draws beside its action.
+            public static let mostActions = 5
+
+            /// Its runs as titled buttons, its action first; empty for a plain reply box, which keeps its arrow.
+            public var buttons: [Item.Action] { actions.isEmpty && files == nil ? [] : [action] + actions }
 
             /// A live box's pause by default, and the shortest and longest it may ask, in ms.
             public static let pause = 250, pauses = 50...2000
@@ -407,6 +420,8 @@ extension Extension.Block {
         let messages: [Lenient<MessageLine>]?, working: Bool?, placeholder: String?, action: Extension.Item.Action.Line?, alt: Extension.Item.Action.Line?
         /// 2026-10-17: a list's reorder, an input's live and its debounce in ms.
         let reorder: JSONValue?, live: Bool?, debounce: Double?
+        /// 2026-10-31: the file kinds an input's Choose button takes.
+        let files: [String]?
         let actions: [Extension.Item.Action.Line]?
         /// A meter's value and a hero's (omarchy-ideas T4), as written: a meter reads only a string, a hero a number too.
         let value: JSONValue?
@@ -422,7 +437,7 @@ extension Extension.Block {
 
         private enum CodingKeys: String, CodingKey {
             case type, title, label, text, note, tone, percent, actions, items, subtitle, aside, asideNote, blocks, resetsAt, mark, markTone, value, messages,
-                 working, placeholder, action, alt, glyph, unit, place, help, icon, word, reorder, live, debounce
+                 working, placeholder, action, alt, glyph, unit, place, help, icon, word, reorder, live, debounce, files
         }
 
         init(from decoder: any Decoder) throws {
@@ -454,6 +469,7 @@ extension Extension.Block {
                                   try? c.decode(String.self, forKey: .word))
             reorder = try? c.decode(JSONValue.self, forKey: .reorder)
             (live, debounce) = (try? c.decode(Bool.self, forKey: .live), try? c.decode(Double.self, forKey: .debounce))
+            files = (try? c.decode([String].self, forKey: .files)).map { $0.filter { !$0.isEmpty } }
         }
     }
 
@@ -513,7 +529,8 @@ extension Extension.Block {
                 return action
             }
             guard let action = run(line.action) else { return nil }
-            self = .input(Input(placeholder: line.placeholder, action: action, alt: run(line.alt), live: Input.live(line.live, debounce: line.debounce)))
+            self = .input(Input(placeholder: line.placeholder, action: action, alt: run(line.alt), live: Input.live(line.live, debounce: line.debounce),
+                                actions: (line.actions ?? []).compactMap(run), files: line.files))
         case .hero?:
             guard let value = Self.text(line.value) else { return nil }
             self = .hero(Hero(glyph: line.glyph, value: value, unit: line.unit, place: line.place, tone: tone(line.tone), stats: Self.stats(line.items)))

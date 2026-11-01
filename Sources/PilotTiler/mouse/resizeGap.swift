@@ -21,12 +21,13 @@ struct InnerGap {
 }
 
 /// Every inner gap of `workspace`'s tiles containers, read off the last layout only (no AX). A tile not laid out (dragged,
-/// fullscreen) has no gaps, and a scrolling strip none between its columns (they keep their own widths); its stacks do.
+/// fullscreen) has no gaps, and a scrolling strip none between its columns (they keep their own widths), nor a stage
+/// between its groups (equal widths, ADR 0015); their stacks do.
 @MainActor
 func innerGaps(of workspace: Workspace) -> [InnerGap] {
     var gaps: [InnerGap] = []
     func collect(_ container: TilingContainer) {
-        if container.layout == .scrolling {
+        if container.layout.isRow {
             for case let child as TilingContainer in container.children { collect(child) }
             return
         }

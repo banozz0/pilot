@@ -239,14 +239,7 @@ final class BarReadings: ScreenPausing {
     }
 
     private func readRecording() {
-        let seconds = recorder.clock.elapsed(at: Recorder.now()).rounded(.down)
-        let now: BarRecording? = switch recorder.phase {
-        case .idle: nil
-        case .starting: .starting
-        case .counting(let n): .counting(n)
-        case .recording: .recording(seconds)
-        case .paused: .paused(seconds)
-        }
+        let now = recorder.reading
         if now != recording { recording = now }
     }
 

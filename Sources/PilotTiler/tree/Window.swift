@@ -11,6 +11,8 @@ open class Window: TreeNode, Hashable {
     /// Pilot: a pinned pop-out (spec omarchy-ideas T1) follows every workspace its monitor shows, floating; tiler memory
     /// only, gone on a restart. Not a workspace pin (N7), which ties a workspace to a display.
     var isPinned = false
+    /// Pilot (ADR 0015, Q690): the workspace a minimized window was minimized from, so the Window shelf lists it there.
+    var minimizedFrom: String?
 
     @MainActor
     init(id: UInt32, _ app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) throws {

@@ -1,6 +1,7 @@
 import AppKit
 import PilotCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 // Surfaces v2, P3 (SPEC story 165): the blocks and row parts an extension's popover or page takes input with: a chat, a
 // reply box, a row's badges and inline buttons, and a run's ask, drawn in the row itself, never a modal.
@@ -67,32 +68,54 @@ struct ExtensionChatView: View {
 
 /// An input block: a field and a send button; Return runs its action, Option+Return its alt, the text handed on as
 /// `"input"`, then the field empties. A live one on a page (`typed`, 2026-10-17) runs its action as the text changes,
-/// once typing pauses, Return at once, and keeps its text.
+/// once typing pauses, Return at once, and keeps its text. A box with more runs or a Choose button (2026-10-31) draws its
+/// runs as titled buttons under the field in place of the arrow, each running with the text.
 struct ExtensionInputView: View {
     @Environment(\.ink) private var ink
     let input: Extension.Block.Input
     var compact = false
+    /// On a page: a Choose button for a file shows only there, since an open panel would close a popover.
+    var onPage = false
     var typed: ((Extension.Item.Action, Duration?) -> Void)?
     let act: (Extension.Item.Action) -> Void
     @State private var text = ""
 
+    private var blank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: input.buttons.isEmpty ? 4 : 8) {
             HStack(spacing: 6) {
                 ReturnField(text: $text, placeholder: input.placeholder ?? "Reply…", size: compact ? 12.5 : 13, ink: ink,
                             submit: { send(alt: $0) })
-                Button { send(alt: false) } label: {
-                    Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundStyle(ink.onAccent)
-                        .frame(width: 22, height: 22).background(ink.accent, in: .circle)
+                if onPage, let files = input.files {
+                    IconButton(symbol: "folder", label: "Choose a file", size: 22, glyph: 11) { choose(files) }
                 }
-                .buttonStyle(.plain)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help(input.action.label)
-                .accessibilityLabel(input.action.title ?? "Send")
+                if input.buttons.isEmpty {
+                    Button { send(alt: false) } label: {
+                        Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundStyle(ink.onAccent)
+                            .frame(width: 22, height: 22).background(ink.accent, in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(blank)
+                    .help(input.action.label)
+                    .accessibilityLabel(input.action.title ?? "Send")
+                }
             }
             .padding(.leading, 10).padding(.trailing, 5).padding(.vertical, 5)
             .background(ink.well, in: .rect(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(ink.accent.opacity(0.55)))
+            if !input.buttons.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(input.buttons.indices, id: \.self) { i in
+                        let run = { send(input.buttons[i]) }
+                        Group {
+                            if compact { Button(input.buttons[i].label, action: run).barButton(primary: i == 0) }
+                            else { Button(input.buttons[i].label, action: run).buttonStyle(i == 0 ? .pilotPrimary : .pilot) }
+                        }
+                        .disabled(blank)
+                    }
+                }
+            }
             Text(hint).font(ink.ui(compact ? 10.5 : 11)).foregroundStyle(ink.muted).lineLimit(1)
         }
         .onChange(of: text) { typed?(input.typed(text), input.live) }
@@ -109,6 +132,25 @@ struct ExtensionInputView: View {
         guard let action = input.submit(text, alt: alt) else { return }
         text = ""
         act(action)
+    }
+
+    /// One of its titled buttons: that run with the text.
+    private func send(_ action: Extension.Item.Action) {
+        guard let action = action.answering(text) else { return }
+        text = ""
+        act(action)
+    }
+
+    /// The open panel, a sheet on the page's window so it never opens behind it; the picked file's path fills the box.
+    private func choose(_ files: [String]) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = files.compactMap { UTType(filenameExtension: $0) ?? UTType($0) }
+        panel.prompt = "Choose"
+        let picked = { (response: NSApplication.ModalResponse) in
+            guard response == .OK, let url = panel.url else { return }
+            text = url.path
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: picked) } else { panel.begin(completionHandler: picked) }
     }
 }
 

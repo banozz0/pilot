@@ -80,7 +80,9 @@ final class ExtensionListSession: MenuSource {
                 dropped = items.reduce(0) { $0 + $1.dropped }
             case .detail(let detail):
                 items = [Extension.Item(title: command.title, actions: detail.actions)]
-                rows = [ExtensionList.detail(detail, of: command)]
+                var row = ExtensionList.detail(detail, of: command)
+                if ext.shownSurface != nil { row.extensionPage = ext.id }
+                rows = [row]
                 dropped = detail.dropped
             case .error(let reason):
                 items = []

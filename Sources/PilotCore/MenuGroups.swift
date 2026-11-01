@@ -41,7 +41,7 @@ public enum MenuGroups {
         return [rows[0]] + order.flatMap { g in rest.filter { group($0.kind) == g } }
     }
 
-    /// A live picker's rows gathered by their `section` (To-do B), each section where its first row stood and the order
+    /// A picker's rows gathered by their `section` (To-do B), each section where its first row stood and the order
     /// kept inside it, so a search Pilot ranks never heads one section twice; the rows as they are when none has one.
     public static func bySection(_ rows: [MenuEntry]) -> [MenuEntry] {
         guard rows.contains(where: { $0.section != nil }) else { return rows }
@@ -53,7 +53,7 @@ public enum MenuGroups {
         return order.flatMap { gathered[$0] ?? [] }
     }
 
-    /// A live picker's headings: each section's title over its first row; a row with none after a section heads nothing.
+    /// A picker's headings: each section's title over its first row; a row with none after a section heads nothing.
     public static func sections(_ rows: [MenuEntry]) -> [Int: Group] {
         var out: [Int: Group] = [:], last: String?
         for (i, row) in rows.enumerated() {

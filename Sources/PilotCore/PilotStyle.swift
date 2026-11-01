@@ -359,9 +359,9 @@ public struct StyleTokens: Equatable, Sendable {
             // (C3 moved the pages: Home sun, Binds grape, Workspaces mint, Menu bar sky), then round the wheel; Snippets
             // salmon and Files sage came with the Tools group, Stats' blush after Activity (2026-10-10), Captures' rose after
             // Clipboard, Voice's periwinkle after AI (2026-10-16); Agent instructions' seafoam left with its page (2026-10-17); Update & Clean's
-            // lime after Activity (2026-10-20).
+            // lime after Activity (2026-10-20); Widgets' slate last (2026-10-31); Repos' jade and Fonts' rose after Configs (2026-11-01).
             pageTiles: [0xFFC933, 0xA98BFF, 0xFF79C0, 0x3FD7A0, 0x6FE3C1, 0x5BC0FF, 0xD98CFF, 0xA5DC50, 0xF0567A, 0xC8F05A, 0xFFB3E6, 0x3CD2DB, 0xFF6F91,
-                        0xFF8A65, 0xFFB347, 0xB0E0A0, 0x8EE3F0, 0x9FB4FF, 0xFF9F4A, 0x7B8CFF, 0xE0C46B, 0xC9C4E4, 0xE3A86B]
+                        0xFF8A65, 0xFFB347, 0xB0E0A0, 0x8EE3F0, 0x9FB4FF, 0xFF9F4A, 0x7B8CFF, 0xE0C46B, 0x7FD8A8, 0xF28CB1, 0xC9C4E4, 0xE3A86B, 0x96A9C8]
                 .map { Paint($0) },
             // binds.html's .board: the Windows grape, a deep indigo in the dark.
             board: Paint(dark ? 0x3A3270 : 0xA98BFF))

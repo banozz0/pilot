@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
+import PilotCore
 import SwiftUI
 import Testing
 @testable import Pilot
@@ -48,6 +49,21 @@ struct DictationOverlayRenders {
                     .write(to: dir.appendingPathComponent("\(name)-\(ground).png"))
             }
         }
+    }
+}
+
+extension DictationOverlayRenders {
+    /// A take shown in the top bar alone at `side`, `colour` its waveform's, fixture levels, every word revealed: what the
+    /// top bar renders draw (Sven on build 9: left, centre or right).
+    static func barTake(_ side: TopBarSide, colour: ColourChoice? = .theme, words: String? = nil) -> DictationOverlay {
+        var steps: [@MainActor () -> Void] = []
+        let o = DictationOverlay(after: { _, step in steps.append(step); return Watch {} }, shows: false,
+                                 setup: { .init(showIn: .topBar, barSide: side, colour: colour, topBarShows: true) })
+        o.started(microphone: nil, words: words != nil)
+        o.levels([0, 0.05, 0.3, 0.7, 0.9, 0.6, 0.4, 0.8, 1, 0.5, 0.2, 0.35, 0.6, 0.3, 0.1, 0, 0.05, 0.2])
+        if let words { o.words(words) }
+        while !steps.isEmpty { steps.removeFirst()() }
+        return o
     }
 }
 

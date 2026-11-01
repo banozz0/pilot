@@ -6,6 +6,9 @@ public enum TilerEvent: Equatable, Sendable {
     case focusedMonitorChanged(workspace: String, monitorId: Int)
     case workspaceChanged(workspace: String, prevWorkspace: String)
     case windowDetected(windowId: UInt32, workspace: String?, appBundleId: String?, appName: String?)
+    /// Pilot (Window shelf, ADR 0015): a shown Stage workspace's windows or stage changed, or a shown workspace became or
+    /// stopped being one, with no focus event saying so (a layout cycled, a shelved window closed, the first layout).
+    case stagesChanged(workspace: String)
 }
 
 @MainActor private var subscribers: [UUID: AsyncStream<TilerEvent>.Continuation] = [:]

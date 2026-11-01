@@ -32,6 +32,18 @@ struct ExtensionDetailViewTests {
                    .init(label: "Branch", text: "ghostex/fa8c45f8-secure-input-tap-stall")],
         actions: [.open("https://github.com/example/repo/pull/42"), Extension.Item.Action(kind: .copy("#42"), title: "Copy PR Number")])
 
+    /// AI usage's detail as blocks (pilot-1-1 T5's drawing hD): two sections of meters, its facts beside them.
+    static let blocksDetail = Extension.Detail(
+        markdown: "",
+        metadata: [.init(label: "Pace", text: "8% ahead"), .init(label: "Today", text: "1.2M tokens"), .init(label: "Reset credits", text: "2 left")],
+        actions: [Extension.Item.Action(kind: .copy("Session 66% left"), title: "Copy summary")],
+        blocks: [.section(title: "Claude", subtitle: nil, asideNote: "Max", blocks: [
+                    .meter(.init(label: "Session", percent: 66, note: "66% left · 21:10")),
+                    .meter(.init(label: "Week · all models", percent: 39, note: "39% left · Mon 09:00"))]),
+                 .section(title: "Codex", subtitle: nil, asideNote: "Plus", blocks: [
+                    .meter(.init(label: "5 hours", percent: 80, note: "80% left · 22:40")),
+                    .meter(.init(label: "Week", percent: 71, note: "71% left · Tue"))])])
+
     /// The detail as a live picker's one row, as ExtensionRun.detail makes it.
     static func row(_ detail: Extension.Detail = detail) -> MenuEntry {
         var row = MenuEntry(title: "Pull request", target: .action("ext.github.pr#0"), isAnswer: true)
@@ -133,13 +145,17 @@ struct ExtensionDetailViewTests {
         return (window, host)
     }
 
-    @Test("The foot names Return after the detail's first action, Cmd+K its actions, Escape close or back")
+    @Test("The foot names Return after the detail's first action, Cmd+Return its page when it has one, Cmd+K its actions, Escape close or back")
     func footer() {
         func words(_ hints: [KeyHint]) -> [String] { hints.map { "\($0.key) \($0.label)" } }
         let model = MenuModel(nav: Self.liveNav([Self.row()]))
         #expect(model.nav.shownDetail == Self.detail)
         #expect(words(model.footer) == ["Esc close"])
         #expect(words(model.footerCommands) == ["↵ Open", "⌘K Actions"])
+        // An extension with a page (Q639): Cmd+Return opens it.
+        var paged = Self.row()
+        paged.extensionPage = "github"
+        #expect(words(MenuModel(nav: Self.liveNav([paged])).footerCommands) == ["↵ Open", "⌘↵ Open page", "⌘K Actions"])
         #expect(model.instrumentSize == MenuPanelSize.instrument(.wide, rows: 0, headings: 0, full: true))
 
         // Pushed over another view, Escape goes back to it.
@@ -227,18 +243,23 @@ extension SharedLook {
             let saved = (look.style, look.themeID, look.glass)
             defer { (look.style, look.themeID, look.glass) = saved; DisplayFaces.directory = faces }
             look.glass = false
-            let shots: [(name: String, style: PilotStyle, theme: String, actions: Bool)] = [
+            let shots: [(name: String, style: PilotStyle, theme: String, actions: Bool, blocks: Bool)] = [
                 // Instrument's own detail (batch 7, card agent-bo-95423181), in its theme's colours.
-                ("instrument-dark", .instrument, "lagoon", false),
-                ("instrument-porcelain", .instrument, "porcelain", false),
-                ("instrument-lagoon-actions", .instrument, "lagoon", true),
+                ("instrument-dark", .instrument, "lagoon", false, false),
+                ("instrument-porcelain", .instrument, "porcelain", false, false),
+                ("instrument-lagoon-actions", .instrument, "lagoon", true, false),
                 // Toybox's own detail (batch 7, card agent-bo-95423182), following the theme.
-                ("toybox", .toybox, "toybox", false),
-                ("toybox-night-actions", .toybox, "toybox-night", true),
+                ("toybox", .toybox, "toybox", false, false),
+                ("toybox-night-actions", .toybox, "toybox-night", true, false),
+                // pilot-1-1 T9: a detail's blocks in place of its words, its page a Cmd+Return away.
+                ("instrument-blocks", .instrument, "lagoon", false, true),
+                ("toybox-blocks", .toybox, "toybox", false, true),
             ]
             for shot in shots {
                 (look.style, look.themeID) = (shot.style, shot.theme)
-                let model = MenuModel(nav: ExtensionDetailViewTests.liveNav([ExtensionDetailViewTests.row()]))
+                var row = ExtensionDetailViewTests.row(shot.blocks ? ExtensionDetailViewTests.blocksDetail : ExtensionDetailViewTests.detail)
+                if shot.blocks { row.extensionPage = "ai-usage" }
+                let model = MenuModel(nav: ExtensionDetailViewTests.liveNav([row]))
                 if shot.actions { _ = model.nav.handle(.commandK) }
                 try InstrumentMenuRenders.render(MenuView(model: model), shot.name, in: dir)
             }

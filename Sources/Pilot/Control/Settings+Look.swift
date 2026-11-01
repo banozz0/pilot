@@ -18,6 +18,8 @@ extension SettingsSchema {
             .bool("look.glass", "Glass", page: "look", standard: false, read: { look.glass }, write: { look.glass = $0 }),
             .int("look.transparency", "Transparency, in percent", page: "look", range: 0...100, standard: 33,
                  read: { look.transparency }, write: { look.transparency = $0 }),
+            .choice("look.glassBlur", "Glass blur", page: "look", GlassBlur.allCases, standard: .full,
+                    read: { look.glassBlur }, write: { look.glassBlur = $0 }),
             .bool("look.windowBorder", "Border around the focused window", page: "tiling", standard: true,
                   read: { look.windowBorder }, write: { look.windowBorder = $0 }),
             .int("look.windowBorderWidth", "Border width, in points", page: "tiling", range: WindowBorder.widths,

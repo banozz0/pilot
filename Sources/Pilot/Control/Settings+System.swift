@@ -50,12 +50,18 @@ extension SettingsSchema {
                   }),
             // Voice › Dictation's speech model; automatic is the first one on disk. One not on disk waits for its
             // download on the page.
-            .choice(SpeechModels.key, "Speech model", page: "voice", ["automatic"] + SpeechChoice.allCases.map(\.rawValue), standard: "automatic",
+            .choice(SpeechModels.key, "Speech model", page: "voice", ["automatic"] + SpeechChoice.offered.map(\.rawValue), standard: "automatic",
                     read: { dictation.models.pick?.rawValue ?? "automatic" },
                     write: { dictation.models.pick = SpeechChoice(rawValue: $0) }),
             // Pilot's own dictation: what the pill shows while Sven speaks, and whether a typed take stays on the clipboard.
-            .choice(PilotDictation.whileSpeakingKey, "While you speak, the pill shows", page: "voice", PilotDictation.WhileSpeaking.allCases,
+            .choice(PilotDictation.whileSpeakingKey, "While you speak, dictation shows", page: "voice", PilotDictation.WhileSpeaking.allCases,
                     standard: .waveform, read: { dictation.whileSpeaking }, write: { dictation.whileSpeaking = $0 }),
+            .choice(PilotDictation.showInKey, "Dictation shows in the floating pill, the top bar or both", page: "voice",
+                    PilotDictation.ShowIn.allCases, standard: .pill, read: { dictation.showIn }, write: { dictation.showIn = $0 }),
+            .choice(PilotDictation.barSideKey, "In the top bar, dictation sits left (after Pilot's mark), centre or right", page: "voice",
+                    TopBarSide.allCases, standard: .left, read: { dictation.barSide }, write: { dictation.barSide = $0 }),
+            .colour(PilotDictation.waveColourKey, "Dictation's waveform colour", page: "voice", plain: { dictation.waveColour },
+                    write: { dictation.waveColour = $0 }),
             .bool(PilotDictation.copyKey, "Dictation also leaves its words on the clipboard", page: "voice", standard: false,
                   read: { dictation.copiesText }, write: { dictation.copiesText = $0 }),
             .bool(PilotDictation.pauseMediaKey, "Dictation pauses what is playing and plays it again after", page: "voice", standard: false,

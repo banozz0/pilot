@@ -43,6 +43,8 @@ struct CataloguePage: View {
     static let selfUpdatingTitle = "Update lists casks that update themselves"
 
     static let intro = "Apps and tools Pilot installs for you, each only after you confirm the command. Search finds anything else too."
+    /// The category Fonts' Get more fonts opens on.
+    static let fonts = "Fonts"
 
     /// One block of the catalogue: a category, or a search's matches.
     struct Section: Equatable {

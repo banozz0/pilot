@@ -21,7 +21,8 @@ public enum Speak {
     }
 
     /// FluidAudio's ~/.cache/fluidaudio becomes `base`/.cache/fluidaudio, and Core ML's compile of the chain lands in
-    /// `base`/Library/Caches, so Remove takes all of it. Before any Kokoro call, for the life of the process.
+    /// `base`/Library/Caches, so Remove takes all of it and no cache purge does. Before any model call, Kokoro's or a
+    /// speech model's, for the life of the process.
     public static func useFolder(_ base: URL) {
         setenv("CFFIXED_USER_HOME", base.path, 1)
     }

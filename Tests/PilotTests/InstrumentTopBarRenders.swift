@@ -45,9 +45,11 @@ struct InstrumentTopBarRenders {
         let look: Look
         /// The bar drops' items unlit, or lit as their drops hang open (spec Bar drops T4).
         var lights = BarDropLights()
+        /// A dictation take in the bar, at its position.
+        var take: DictationOverlay? = nil
 
         var body: some View {
-            TopBarStrip(sides: sides) { TopBarSlot(slot: $0, screen: InstrumentTopBarRenders.screen, sources: sources, store: .shared, lights: lights) }
+            TopBarStrip(sides: sides, live: take.map { AnyView(DictationBarItem(overlay: $0)) }, liveSide: take?.setup.barSide ?? .left) { TopBarSlot(slot: $0, screen: InstrumentTopBarRenders.screen, sources: sources, store: .shared, lights: lights) }
                 .styled(.topBar, look: look).pilotTheme(look: look)
         }
     }
@@ -97,6 +99,17 @@ struct InstrumentTopBarRenders {
                 .background(Color(StyleTokens.of(.instrument, theme: look.theme).colors.canvas)),
                             to: dir.appendingPathComponent("tooltip-\(name).png"), wait: 0.5)
         }
+        // Dictation's take at each position in the top bar, the words at the centre; at 1100 the words fold away.
+        look.style = .instrument
+        for side in TopBarSide.allCases {
+            try writeRender(Bar(sides: sides, sources: sources, look: look, take: DictationOverlayRenders.barTake(side)).frame(width: 1440, height: 30),
+                            to: dir.appendingPathComponent("bar-dark-1440-dictation-\(side.rawValue).png"), wait: 0.8)
+        }
+        let words = DictationOverlayRenders.barTake(.centre, words: DictationOverlayTests.long)
+        try writeRender(Bar(sides: sides, sources: sources, look: look, take: words).frame(width: 1440, height: 30),
+                        to: dir.appendingPathComponent("bar-dark-1440-dictation-centre-words.png"), wait: 0.8)
+        try writeRender(Bar(sides: sides, sources: sources, look: look, take: words).frame(width: 1100, height: 30),
+                        to: dir.appendingPathComponent("bar-dark-1100-dictation-centre-words.png"), wait: 0.8)
         // A paused timer, and the workspaces' icons style.
         timer.startFocus(paused: true)
         look.style = .instrument

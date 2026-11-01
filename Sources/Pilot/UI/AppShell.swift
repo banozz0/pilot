@@ -124,6 +124,7 @@ struct PageView: View {
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         case .look: LookPage()
+        case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
         case .activity: if section == .reports { ReportsPage(open: model.reportPick).onDisappear { model.reportPick = nil } } else { ActivityPage(onScreen: model.live) }
         case .upkeep: UpkeepPage { id in model.go(AppPlace(.reports)); model.reportPick = id }
@@ -143,21 +144,24 @@ struct PageView: View {
             switch section {
             case .webApps: WebAppsSettingsView()
             case .helpers: HelpersPage()
-            default: CataloguePage(search: InstallSearcher.search)
+            case .hiddenApps: HiddenAppsPage()
+            default: CataloguePage(category: model.catalogueCategory, search: InstallSearcher.search)
             }
         case .openWith: OpenWithPage()
         case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
+        case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
+        case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.catalogueCategory = CataloguePage.fonts })
         case .general: GeneralPage(section: section) { model.sections[.general] = nil }
         case .ai: if section == .aiSetup { AISetupPage() } else { AIPage() }
         case .voice: VoicePage()
         case .extensions:
             if let id = model.extensionPage {
                 ExtensionSurfacePage(id: id, onScreen: model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)
-            } else if section == .extensionCatalogue {
-                ExtensionCataloguePage(onScreen: model.onScreen, focus: $model.extensionFocus) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }
             } else {
-                ExtensionsPageView(onScreen: model.onScreen, focus: $model.extensionFocus, editBind: { model.editBind = $0; model.go(AppPlace(.binds)) },
-                                   openPage: { model.goExtensionPage($0) })
+                // One list (Q601): a link to the catalogue picks its first row once it is read.
+                ExtensionsPageView(onScreen: model.onScreen, focus: $model.extensionFocus, toCatalogue: section == .extensionCatalogue,
+                                   landedCatalogue: { model.sections[.extensions] = nil },
+                                   editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openPage: { model.goExtensionPage($0) })
             }
         }
     }

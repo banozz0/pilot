@@ -4,7 +4,7 @@ import Foundation
 /// the agents' settings (Sven 2026-10-10; moved off Configs 2026-10-19) and their instruction files.
 public enum ConfigGroup: CaseIterable, Sendable {
     case terminal, windows, code, agents, pilot
-    case agentRules, souls, repos
+    case agentRules, souls, claudeKit, codexKit, hermesKit, repos
 
     public var label: String {
         switch self {
@@ -13,8 +13,11 @@ public enum ConfigGroup: CaseIterable, Sendable {
         case .code: "Code"
         case .agents: "Agent settings"
         case .pilot: "Pilot"
-        case .agentRules: "Claude Code and Codex"
+        case .agentRules: "Agent instructions"
         case .souls: "Hermes souls"
+        case .claudeKit: "Claude Code skills, agents and styles"
+        case .codexKit: "Codex skills and rules"
+        case .hermesKit: "Hermes skills"
         case .repos: "Repos"
         }
     }
@@ -31,6 +34,10 @@ public struct AppConfig: Equatable, Sendable {
     public var generated = false
     /// Pilot's own file (Q261): previewed and shown in Finder, never opened in an editor from Configs.
     public var readOnly = false
+    /// The app reads every one of its paths that is there, each over the last (Ghostty): each found gets a card.
+    public var layered = false
+    /// The repo in ~/code whose brief or .claude file it is: the Agents tab groups its cards by it.
+    public var repo: String?
 
     /// Its name or id holds `query`, any case.
     func isNamed(_ query: String) -> Bool { name.localizedCaseInsensitiveContains(query) || id.localizedCaseInsensitiveContains(query) }
@@ -41,6 +48,10 @@ public struct AppConfig: Equatable, Sendable {
 public struct FoundConfig: Equatable, Sendable {
     public let config: AppConfig
     public let path: URL
+    /// Which of a layered config's files it is, 0 the first the app reads: the one its menu row and action open.
+    public var layer = 0
+    /// Its card's and row's id: the config's, a later layer's with `#<layer>`.
+    public var id: String { layer == 0 ? config.id : "\(config.id)#\(layer)" }
     public var real: URL { path.resolvingSymlinksInPath() }
     public var modified: Date? { (try? FileManager.default.attributesOfItem(atPath: real.path))?[.modificationDate] as? Date }
     public var isLinked: Bool { path != real }
@@ -81,7 +92,9 @@ public enum ConfigFilter: CaseIterable, Sendable {
 public enum AppConfigs {
     public static let known: [AppConfig] = [
         .init(id: "ghostty", name: "Ghostty", paths: [".config/ghostty/config", ".config/ghostty/config.ghostty",
-                                                      "Library/Application Support/com.mitchellh.ghostty/config"], group: .terminal, bundles: ["com.mitchellh.ghostty"]),
+                                                      "Library/Application Support/com.mitchellh.ghostty/config",
+                                                      "Library/Application Support/com.mitchellh.ghostty/config.ghostty"],
+              group: .terminal, bundles: ["com.mitchellh.ghostty"], layered: true),
         .init(id: "neovim", name: "Neovim", paths: [".config/nvim/init.lua", ".config/nvim/init.vim"], group: .code),
         .init(id: "aerospace", name: "AeroSpace", paths: [".aerospace.toml", ".config/aerospace/aerospace.toml"], group: .windows, bundles: ["bobko.aerospace"]),
         .init(id: "zsh", name: "zsh", paths: [".zshrc"], group: .terminal),
@@ -102,6 +115,15 @@ public enum AppConfigs {
         .init(id: "helix", name: "Helix", paths: [".config/helix/config.toml"], group: .code),
         .init(id: "skhd", name: "skhd", paths: [".config/skhd/skhdrc", ".skhdrc"], group: .windows),
         .init(id: "yabai", name: "yabai", paths: [".config/yabai/yabairc", ".yabairc"], group: .windows),
+        // Q718: the rest of Sven's ~/.config; ~/.ssh/config stays out (hosts and keys).
+        .init(id: "profile", name: "sh login", paths: [".profile"], group: .terminal),
+        .init(id: "atuin", name: "Atuin", paths: [".config/atuin/config.toml"], group: .terminal),
+        .init(id: "gh", name: "GitHub CLI", paths: [".config/gh/config.yml"], group: .code),
+        .init(id: "git-ignore", name: "git ignore", paths: [".config/git/ignore"], group: .code),
+        .init(id: "code-server", name: "code-server", paths: [".config/code-server/config.yaml"], group: .code),
+        .init(id: "ghostex", name: "Ghostex", paths: [".config/ghostex/ghostty/config.ghostty", ".config/ghostex/native-sidebar-settings.json",
+                                                      ".config/ghostex/gxserver/config.json"], group: .terminal, layered: true),
+        .init(id: "topline", name: "topline", paths: [".config/topline/config.json"], group: .windows),
         .init(id: "claude", name: "Claude Code", paths: [".claude/settings.json"], group: .agents, bundles: [claudeApp]),
         .init(id: "claude-local", name: "Claude Code · local", paths: [".claude/settings.local.json"], group: .agents, bundles: [claudeApp]),
         .init(id: "codex", name: "Codex", paths: [".codex/config.toml"], group: .agents),
@@ -152,20 +174,17 @@ public enum AppConfigs {
         return name == "auth.json" || name.hasPrefix(".env") || name.contains("credential") || name.hasSuffix(".pem") || name.hasSuffix(".key")
     }
 
-    /// Each config's first path that is a file (a link to one counts), never one holding secrets, and the known configs
-    /// with none; nil looks for every config (`all`).
+    /// Each config's first path that is a file (a link to one counts), each one for a layered config, never one holding
+    /// secrets, and the known configs with none; nil looks for every config (`all`).
     public static func find(home: URL, among configs: [AppConfig]? = nil) -> (found: [FoundConfig], missing: [AppConfig]) {
         var found: [FoundConfig] = [], missing: [AppConfig] = []
         for config in configs ?? all(home: home) {
-            let file = config.paths.lazy.filter { !holdsSecrets($0) }.map { home.appendingPathComponent($0) }.first { url in
+            let files = config.paths.lazy.filter { !holdsSecrets($0) }.map { home.appendingPathComponent($0) }.filter { url in
                 var folder: ObjCBool = false
                 return FileManager.default.fileExists(atPath: url.path, isDirectory: &folder) && !folder.boolValue
-            }
-            guard let file else {
-                if known.contains(config) { missing.append(config) }
-                continue
-            }
-            found.append(FoundConfig(config: config, path: file))
+            }.prefix(config.layered ? config.paths.count : 1)
+            if files.isEmpty, known.contains(config) { missing.append(config) }
+            found += files.enumerated().map { FoundConfig(config: config, path: $1, layer: $0) }
         }
         return (found, missing)
     }

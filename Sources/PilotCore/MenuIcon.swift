@@ -83,13 +83,14 @@ public struct MenuIcon: Hashable, Sendable {
         }
     }
 
-    /// Each Install catalogue category's glyph, all different (the shipped catalogue's thirteen, plus Pilot's own names);
+    /// Each Install catalogue category's glyph, all different (the shipped catalogue's sixteen, plus Pilot's own names);
     /// a category the table lacks a box.
     public static func category(_ name: String) -> MenuIcon {
         categories[name.lowercased()] ?? glyph("shippingbox", .neutral)
     }
 
     static let categories: [String: MenuIcon] = [
+        "featured": glyph("star", .amber), "chat": glyph("message", .accent),
         "ai agents": glyph("brain.head.profile", .third), "ai": glyph("sparkles", .accent),
         "ades": glyph("rectangle.3.group", .second), "services": glyph("cloud", .accent),
         "development": glyph("hammer", .amber), "editors": glyph("square.and.pencil", .good),

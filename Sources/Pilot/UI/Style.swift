@@ -272,16 +272,38 @@ private struct PopSurfaceFace: ViewModifier {
     }
 }
 
-/// The top bar's material as a SwiftUI background: an NSGlassEffectView, regular, tinted, at `cornerRadius` (the same
-/// view MaterialBackdrop puts behind the window and the bar). Offscreen it draws a flat grey: Sven's screen proves it.
-struct GlassFace: NSViewRepresentable {
+/// The top bar's material as a SwiftUI background: an NSGlassEffectView in Look's Blur's style, tinted, at `cornerRadius`
+/// (the same view MaterialBackdrop puts behind the window and the bar), or at Blur Off the tint alone. Offscreen the glass
+/// draws a flat grey: Sven's screen proves it.
+struct GlassFace: View {
     let tint: NSColor
     let cornerRadius: CGFloat
+
+    var body: some View {
+        if let style = Look.shared.glassBlur.effectStyle {
+            GlassEffect(tint: tint, cornerRadius: cornerRadius, style: style)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Color(nsColor: tint))
+        }
+    }
+}
+
+extension GlassBlur {
+    /// The glass's style at this blur, nil at Off: AppKit's for MaterialBackdrop and GlassFace, SwiftUI's for the widgets.
+    var effectStyle: NSGlassEffectView.Style? { self == .off ? nil : self == .light ? .clear : .regular }
+    var glass: Glass? { self == .off ? nil : self == .light ? .clear : .regular }
+}
+
+private struct GlassEffect: NSViewRepresentable {
+    let tint: NSColor
+    let cornerRadius: CGFloat
+    let style: NSGlassEffectView.Style
 
     func makeNSView(context: Context) -> NSGlassEffectView { NSGlassEffectView() }
 
     func updateNSView(_ view: NSGlassEffectView, context: Context) {
         if view.tintColor != tint { view.tintColor = tint }
         if view.cornerRadius != cornerRadius { view.cornerRadius = cornerRadius }
+        if view.style != style { view.style = style }
     }
 }

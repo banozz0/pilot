@@ -2,13 +2,16 @@ import PilotCore
 import SwiftUI
 
 /// One display's lock screen (Part 04, variant A): since when and the safety unlock's countdown in the top corners, the
-/// lock, "Keyboard locked", the ring that fills while Esc is held, Unlock for the mouse, and what no tap can stop.
+/// lock, "Keyboard locked", the ring that fills while Esc is held, Unlock and Screenshot for the mouse, and what no tap
+/// can stop.
 struct KeyboardLockView: View {
     @Environment(\.style) private var style
     @Environment(\.ink) private var ink
     let model: KeyboardLockModel
     /// Glass behind it (MaterialBackdrop): only a veil of the ground here; solid, the ground itself.
     let glass: Bool
+    /// A still of the screen, this screen in it; the keyboard stays locked.
+    var screenshot: () -> Void = {}
     let unlock: () -> Void
 
     var body: some View {
@@ -26,7 +29,14 @@ struct KeyboardLockView: View {
                 .styleText(\.body).foregroundStyle(style.color(\.text2))
                 .accessibilityElement(children: .combine)
                 // The panel is never key: the first click is the button's, as a tip's is (HUD.prepareTip).
-                Button("Unlock", action: unlock).buttonStyle(PilotButtonStyle(primary: true)).allowsWindowActivationEvents(true)
+                HStack(spacing: 8) {
+                    Button("Unlock", action: unlock).buttonStyle(PilotButtonStyle(primary: true)).allowsWindowActivationEvents(true)
+                    Button(action: screenshot) { Label("Screenshot", systemImage: "camera") }.buttonStyle(PilotButtonStyle())
+                        .help("Save a still of this screen; the keyboard stays locked").allowsWindowActivationEvents(true)
+                }
+                if let note = model.screenshot {
+                    Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3))
+                }
             }
             .padding(16)
         }

@@ -4,10 +4,10 @@ import PilotCore
 import SwiftUI
 
 /// Lock keyboard for cleaning (Part 04; Sven 2026-10-25, Q471, Q472, Q479): the tap takes every key (HyperTap.lockKeyboard)
-/// while a lock screen on every display says so, fills its ring while Esc is held and offers Unlock to the mouse, which
-/// stays live. Esc held 3 s, Unlock or 2 minutes end it, and so does every failure: the tap going off, paused or taken
-/// down (quit, Pilot switched off), the screen locking or the Mac sleeping, a password field taking the keyboard, or no
-/// lock screen to show. Bindable, with no default key (Q479).
+/// while a lock screen on every display says so, fills its ring while Esc is held and offers Unlock and Screenshot to the
+/// mouse, which stays live. Esc held 3 s, Unlock or 2 minutes end it, and so does every failure: the tap going off, paused
+/// or taken down (quit, Pilot switched off), the screen locking or the Mac sleeping, a password field taking the keyboard,
+/// or no lock screen to show. Bindable, with no default key (Q479).
 @MainActor
 final class KeyboardLockController {
     static let actionID = "system.lockKeyboard"
@@ -20,6 +20,9 @@ final class KeyboardLockController {
     private var observers: [(NotificationCenter, any NSObjectProtocol)] = []
     /// Bumped at every lock and unlock: a timer armed for an earlier lock finds it gone and does nothing.
     private var generation = 0
+    /// What follows each Screenshot taken during this lock (its thumbnail or the editor), held until the lock ends; nil
+    /// before the lock's first Screenshot, so an unlock without one never wakes the capture.
+    private var heldCaptures: [@MainActor () -> Void]?
 
     init(tap: HyperTap) {
         self.tap = tap
@@ -77,12 +80,32 @@ final class KeyboardLockController {
         let generation = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + KeyboardLock.escapeHold) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.generation == generation, let lock = self.tap.keyboardLock,
-                      lock.escapeDone(armedAt: time, now: ProcessInfo.processInfo.systemUptime,
-                                      held: CGEventSource.keyState(.hidSystemState, key: CGKeyCode(KeyCode.escape))) else { return }
+                guard let self, self.generation == generation, let lock = self.tap.keyboardLock else { return }
+                guard lock.escapeDone(armedAt: time, now: ProcessInfo.processInfo.systemUptime) else {
+                    // Let go or pressed again since: a later press arms its own check.
+                    return slog.notice("keyboard lock: esc hold from \(time, privacy: .public) not done")
+                }
                 self.tap.unlockKeyboard(.escape)
             }
         }
+    }
+
+    /// The lock screen's Screenshot (Sven on 1.0.2 build 9): a full-screen still as Hyper+A's, the click being the press
+    /// (ADR 0012), saved and copied as every capture; the keyboard stays locked. Its thumbnail, or the editor, would sit
+    /// under the lock screen, so it is held until the lock ends (Sven, 2026-11-01) and the screen says it was taken.
+    private func screenshot() {
+        let capture = PilotCapture.shared
+        guard capture.permitted() else {
+            model?.screenshot = "Screen Recording is off for Pilot: allow it once unlocked"
+            return
+        }
+        model?.screenshot = nil
+        // A save that ends after the lock follows at once.
+        if heldCaptures == nil { heldCaptures = [] }
+        capture.holdAfter = { [weak self] follow in
+            if let self, self.isLocked, self.heldCaptures != nil { self.heldCaptures?.append(follow) } else { follow() }
+        }
+        capture.run(.fullScreen) { [weak self] in self?.model?.screenshot = "Screenshot taken: it shows once you unlock" }
     }
 
     /// The lock screen on every display, made anew when the displays change; with none shown, the lock ends.
@@ -91,7 +114,9 @@ final class KeyboardLockController {
         panels.forEach { $0.close() }
         let look = Look.shared, glass = look.material(on: .menu) == .glass
         panels = NSScreen.screens.map { screen in
-            let view = KeyboardLockView(model: model, glass: glass) { [weak self] in self?.tap.unlockKeyboard(.button) }
+            let view = KeyboardLockView(model: model, glass: glass, screenshot: { [weak self] in self?.screenshot() }) { [weak self] in
+                self?.tap.unlockKeyboard(.button)
+            }
             let panel = Self.makePanel(view, frame: screen.frame, look: look)
             panel.orderFrontRegardless()
             return panel
@@ -140,10 +165,14 @@ final class KeyboardLockController {
         let closing = panels
         panels = []
         model = nil
+        let held = heldCaptures ?? []
+        if heldCaptures != nil { PilotCapture.shared.holdAfter = nil }
+        heldCaptures = nil
         slog.notice("keyboard unlocked: \(end.rawValue, privacy: .public)")
         DispatchQueue.main.async {
             closing.forEach { $0.close() }
             if let tip = Self.tip(end) { HUD.tip(tip, seconds: 4) }
+            held.forEach { $0() }
         }
     }
 
@@ -166,12 +195,15 @@ final class KeyboardLockModel {
     let since: Date
     var until: Date { since.addingTimeInterval(KeyboardLock.safety) }
     var escapeSince: Date?
+    /// What the last Screenshot came to, under the buttons; nil before one.
+    var screenshot: String?
     /// The clock the screen reads; a render fixes it.
     @ObservationIgnored let now: () -> Date
 
-    init(since: Date, escapeSince: Date? = nil, now: @escaping () -> Date = Date.init) {
+    init(since: Date, escapeSince: Date? = nil, screenshot: String? = nil, now: @escaping () -> Date = Date.init) {
         self.since = since
         self.escapeSince = escapeSince
+        self.screenshot = screenshot
         self.now = now
     }
 }

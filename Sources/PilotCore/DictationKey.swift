@@ -8,6 +8,9 @@ public enum DictationKey: String, CaseIterable, Sendable {
 
     public var label: String { layerKey?.label ?? "Off" }
 
+    /// Its side and sign as a key chip shows it ("right ⌃"; every dictation key is a right-hand one); nil when off.
+    public var sign: String? { layerKey.map { "right " + $0.symbol } }
+
     /// The layer key this key would be too, by the same name.
     public var layerKey: LayerKey? { LayerKey(rawValue: rawValue) }
 

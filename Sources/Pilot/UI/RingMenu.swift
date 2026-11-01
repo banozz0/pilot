@@ -396,7 +396,7 @@ final class RingMenuSource {
             let scripts = ScriptCommand.find()
             return (PilotMenu.entries(engine, scripts: scripts, extensions: Extension.find().extensions),
                     Set(scripts.filter(\.takesPassword).map(\.actionID)))
-        }, root: { MenuRootSettings.shared.root.shownRows() })
+        }, root: { MenuRootSettings.shared.root.listed.shownRows() })
     }
 
     /// The wedges of the branch `id` names, or of the root for nil.

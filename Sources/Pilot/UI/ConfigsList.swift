@@ -8,7 +8,10 @@ import SwiftUI
 /// filter and its chips narrow the cards; a click opens the preview under its group; Open edits it in the main editor.
 /// Pilot's own files (Q261) close the list, preview and Show in Finder only. Configs › Agents (Sven 2026-10-10) is the
 /// same list over everything agents read: their settings (Sven 2026-10-19: "All agents stuff should be in agents") and
-/// their instruction files. The files are read as the page opens, off the main thread.
+/// their instruction files, in groups that fold (Pilot 1.0.2, Sven: "a lot of md files lol how can we sort better?"):
+/// one per tool and one per repo, each folded but Agent instructions until the viewer opens it, which this Mac remembers.
+/// A Markdown file previews as GitHub shows it (MarkdownPreview), its source a click away. The files are read as the
+/// page opens, off the main thread.
 struct ConfigsList: View {
     @Environment(\.ink) private var ink
     /// Which files the list shows: app configs, or agents' settings and instruction files.
@@ -45,6 +48,10 @@ struct ConfigsList: View {
         var query = ""
         var hovered: String?
         var previewing: String?
+        /// A Markdown preview shown as its source.
+        var source = false
+        /// The Agents tab's open groups (Section.id); nil is the viewer's own, read from and saved to UserDefaults.
+        var open: Set<String>?
         /// The home folder whose configs show; nil is this Mac's.
         var home: URL?
         /// The moment each config's age counts from; nil is when the list appears.
@@ -61,7 +68,8 @@ struct ConfigsList: View {
         let paths: [String]
         /// The file's first lines that say something, the card's glimpse of it.
         var head: [String] = []
-        var id: String { card.config.id }
+        /// FoundConfig.id: a layered config's later file is its own card, opened as found.
+        var id = ""
     }
 
     /// The open preview: whose it is, its text, and that text's lines.
@@ -69,9 +77,12 @@ struct ConfigsList: View {
         let id: String
         let preview: AppConfigs.Preview
         let lines: [String]
+        /// A Markdown file, rendered unless Source is picked.
+        let markdown: Bool
 
         init(_ item: Item) {
             id = item.id
+            markdown = MarkdownHTML.isMarkdown(item.url)
             preview = AppConfigs.preview(item.url)
             guard case .text(let text, _) = preview else { lines = []; return }
             var lines = text.components(separatedBy: "\n")
@@ -88,6 +99,9 @@ struct ConfigsList: View {
     @State private var query: String
     @State private var filter = ConfigFilter.all
     @State private var opened: Opened?
+    @State private var source: Bool
+    /// The Agents tab's groups the viewer opened.
+    @State private var openGroups: Set<String>
     /// Off until the files are read, so the page never flashes No configs found.
     @State private var loaded = false
     private let start: Start
@@ -97,12 +111,18 @@ struct ConfigsList: View {
         self.kind = kind
         self.start = start
         _query = State(initialValue: start.query)
+        _source = State(initialValue: start.source)
+        _openGroups = State(initialValue: start.open ?? (UserDefaults.pilot().stringArray(forKey: Self.openKey)).map(Set.init) ?? Self.openFirst)
     }
+
+    /// Where the Agents tab's open groups are kept, and the one open before the viewer picks.
+    static let openKey = "configs.agents.openGroups"
+    static let openFirst: Set<String> = [Section.id(.agentRules)]
 
     var body: some View {
         let editorName = AppsModule.appName(editor.app) ?? editor.app
         let shown = Set(AppConfigs.filter(items.map(\.card), query: query, by: filter).map(\.config.id))
-        let visible = items.filter { shown.contains($0.id) }
+        let visible = items.filter { shown.contains($0.card.config.id) }
         DefaultsSection(title: kind.title, note: kind.note(editor: editorName)) {
             tools.padding(.top, 2).padding(.bottom, 4)
             if !loaded {} else if visible.isEmpty { empty } else { groups(visible, editor: editorName) }
@@ -162,25 +182,60 @@ struct ConfigsList: View {
 
     // MARK: Cards
 
+    /// One heading's cards: a group's, or on the Agents tab one repo's; the Agents tab's fold and sort by name.
+    struct Section: Identifiable {
+        let id: String, title: String, items: [Item]
+
+        static func id(_ group: ConfigGroup) -> String { "\(group)" }
+
+        /// The cards under their headings: Configs' in its groups' order as found; the Agents tab's by name in each tool's
+        /// group, then a group per repo by name, the agents repo first.
+        static func all(_ items: [Item], kind: Kind) -> [Section] {
+            guard kind == .instructions else {
+                return ConfigGroup.allCases.map { group in Section(id: id(group), title: group.label, items: items.filter { $0.card.config.group == group }) }
+                    .filter { !$0.items.isEmpty }
+            }
+            let byName = { (a: Item, b: Item) in a.card.config.name.localizedStandardCompare(b.card.config.name) == .orderedAscending }
+            let tools = ConfigGroup.allCases.filter { $0 != .repos }.map { group in
+                Section(id: id(group), title: group.label, items: items.filter { $0.card.config.group == group }.sorted(by: byName))
+            }
+            let repos = Dictionary(grouping: items.filter { $0.card.config.repo != nil }, by: { $0.card.config.repo! })
+                .sorted { a, b in a.key == "agents" || (b.key != "agents" && a.key.localizedStandardCompare(b.key) == .orderedAscending) }
+                .map { Section(id: "repo-\($0.key)", title: "\($0.key) repo", items: $0.value.sorted(by: byName)) }
+            return (tools + repos).filter { !$0.items.isEmpty }
+        }
+    }
+
     private func groups(_ visible: [Item], editor: String) -> some View {
-        let groups = ConfigGroup.allCases.map { group in (group: group, items: visible.filter { $0.card.config.group == group }) }
-            .filter { !$0.items.isEmpty }
+        // A filter typed opens every group it found something in, saved or not.
+        let folds = kind == .instructions, filtering = !query.trimmingCharacters(in: .whitespaces).isEmpty
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(groups, id: \.group) { group in
-                GroupHeading(title: group.group.label, count: group.items.count).padding(.top, 14)
-                // As wide as the row allows (Sven, 2026-10-07: half the page was empty), each card the same height as its row.
-                CardGrid(minimum: 300, fit: true, stretch: true) {
-                    ForEach(group.items) { item in
-                        ConfigCardView(item: item, editor: editor, previewing: opened?.id == item.id, hovered: start.hovered == item.id,
-                                       toggle: { toggle(item) }, open: { open(item) }, show: { reveal(item) })
+            ForEach(Section.all(visible, kind: kind)) { section in
+                let shown = !folds || filtering || openGroups.contains(section.id)
+                GroupHeading(title: section.title, count: section.items.count, open: folds && !filtering ? shown : nil) { fold(section.id) }
+                    .padding(.top, folds ? 8 : 14)
+                if shown {
+                    // As wide as the row allows (Sven, 2026-10-07: half the page was empty), each card the same height as its row.
+                    CardGrid(minimum: 300, fit: true, stretch: true) {
+                        ForEach(section.items) { item in
+                            ConfigCardView(item: item, editor: editor, previewing: opened?.id == item.id, hovered: start.hovered == item.id,
+                                           toggle: { toggle(item) }, open: { open(item) }, show: { reveal(item) })
+                        }
                     }
-                }
-                if let opened, let item = group.items.first(where: { $0.id == opened.id }) {
-                    ConfigPreview(item: item, opened: opened, show: { reveal(item) }, open: { open(item) })
-                        .padding(.top, 8)
+                    .padding(.bottom, folds ? 6 : 0)
+                    if let opened, let item = section.items.first(where: { $0.id == opened.id }) {
+                        ConfigPreview(item: item, opened: opened, source: $source, show: { reveal(item) }, open: { open(item) })
+                            .padding(.top, 8)
+                    }
                 }
             }
         }
+    }
+
+    /// Opens or folds a group on the Agents tab, kept for this viewer unless a render or a test set the groups.
+    private func fold(_ id: String) {
+        withAnimation(Kit.change) { if openGroups.contains(id) { openGroups.remove(id) } else { openGroups.insert(id) } }
+        if start.open == nil, start.home == nil { UserDefaults.pilot().set(openGroups.sorted(), forKey: Self.openKey) }
     }
 
     /// The configs Pilot knows that are not here.
@@ -212,7 +267,7 @@ struct ConfigsList: View {
             let modified = (try? FileManager.default.attributesOfItem(atPath: real.path))?[.modificationDate] as? Date
             return Item(card: ConfigCard(config: found.config, path: path, inDotfiles: FoundConfig.inDotfiles(real)), url: real,
                         real: AppConfigs.tilde(real.path, home: home.path), changed: modified.map { AppConfigs.changed($0, now: now ?? .now) },
-                        paths: AppConfigs.shortenings(path), head: head(real))
+                        paths: AppConfigs.shortenings(path), head: head(real), id: found.id)
         }
         return (items, result.missing)
     }
@@ -246,13 +301,35 @@ struct ConfigsList: View {
     }
 }
 
-/// A group's heading: its name, a hairline, its count.
+/// A group's heading: its name, a hairline, its count; one that folds leads with its chevron and is a button.
 private struct GroupHeading: View {
     @Environment(\.ink) private var ink
     let title: String
     var count: Int?
+    /// Whether its group shows, for one that folds; nil for one that does not.
+    var open: Bool?
+    var fold: () -> Void = {}
 
     var body: some View {
+        if let open {
+            Button(action: fold) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right").font(ink.ui(9.5, .bold)).foregroundStyle(ink.muted)
+                        .rotationEffect(.degrees(open ? 90 : 0)).frame(width: 12)
+                    heading
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.kitPress)
+            .accessibilityLabel("\(title), \(count ?? 0)")
+            .accessibilityHint(open ? "Folds the group" : "Shows its cards")
+            .accessibilityAddTraits(.isHeader)
+        } else {
+            heading
+        }
+    }
+
+    private var heading: some View {
         HStack(spacing: 8) {
             // Instrument's group label is its mono eyebrow, the count a mono number.
             if ink.isInstrument { InstrumentEyebrow(text: title) }
@@ -376,11 +453,13 @@ private struct CardIconButton: View {
 }
 
 /// The open config: its icon, name and real file, Show in Finder and Open, then its text in mono with line numbers, a
-/// comment muted and a setting's key lit; secret-looking values are dots (AppConfigs.hidingSecrets).
+/// comment muted and a setting's key lit, or a Markdown file rendered unless Source is picked; secret-looking values are
+/// dots (AppConfigs.hidingSecrets), in the rendering too.
 private struct ConfigPreview: View {
     @Environment(\.ink) private var ink
     let item: ConfigsList.Item
     let opened: ConfigsList.Opened
+    @Binding var source: Bool
     let show: () -> Void
     let open: () -> Void
 
@@ -396,6 +475,7 @@ private struct ConfigPreview: View {
                 Text(item.card.config.name).font(ink.ui(13, .semibold)).foregroundStyle(ink.text).lineLimit(1).fixedSize()
                 Text(item.real).font(ink.mono(11.5)).foregroundStyle(ink.muted).lineLimit(1).truncationMode(.middle).help(item.real)
                 Spacer(minLength: 8)
+                if opened.markdown { MarkdownModeToggle(source: $source) }
                 Button(action: show) { HStack(spacing: 6) { Image(systemName: "folder"); Text("Show in Finder") } }
                     .buttonStyle(.pilot).fixedSize()
                 if !item.card.config.readOnly {
@@ -413,26 +493,37 @@ private struct ConfigPreview: View {
         .clipShape(shape)
     }
 
+    /// The file's lines in mono with their numbers.
+    private func lineList(_ lines: [String]) -> some View {
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(lines.indices, id: \.self) { i in
+                    HStack(spacing: 14) {
+                        Text("\(i + 1)").foregroundStyle(ink.muted.opacity(0.6)).frame(width: 34, alignment: .trailing)
+                        ConfigLine.styled(lines[i], ink).lineLimit(1).truncationMode(.tail)
+                    }
+                    .frame(height: Self.line)
+                }
+            }
+            .font(ink.mono(11.5)).foregroundStyle(ink.text2)
+            .padding(.vertical, 10).padding(.trailing, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+        }
+        .frame(height: min(CGFloat(lines.count) * Self.line + 20, 360))
+    }
+
     @ViewBuilder private var content: some View {
         switch opened.preview {
         case .text(let text, let cut):
             let lines = opened.lines
-            ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(lines.indices, id: \.self) { i in
-                        HStack(spacing: 14) {
-                            Text("\(i + 1)").foregroundStyle(ink.muted.opacity(0.6)).frame(width: 34, alignment: .trailing)
-                            ConfigLine.styled(lines[i], ink).lineLimit(1).truncationMode(.tail)
-                        }
-                        .frame(height: Self.line)
-                    }
-                }
-                .font(ink.mono(11.5)).foregroundStyle(ink.text2)
-                .padding(.vertical, 10).padding(.trailing, 14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+            // MarkdownPreview checks the size and the render's budget itself: the dotted secrets make a 64 KB file longer.
+            if opened.markdown {
+                MarkdownPreview(text: text, file: item.url, showsSource: $source) { lineList(lines) }
+                    .frame(height: source ? nil : min(CGFloat(lines.count) * 22 + 60, 420))
+            } else {
+                lineList(lines)
             }
-            .frame(height: min(CGFloat(lines.count) * Self.line + 20, 360))
             let hides = text.contains(Self.hidden)
             if cut || hides {
                 ink.line.frame(height: 1)
@@ -465,13 +556,23 @@ extension AppConfig {
         "empryo": ("cpu", .accent), "opencode": ("chevron.left.forwardslash.chevron.right", .good),
         "claude-md": ("sparkles", .amber), "codex-agents": ("terminal", .neutral), "code-workspace": ("folder", .second),
         "pilot-binds": ("keyboard", .accent), "pilot-workspace-presets": ("rectangle.split.3x1", .accent),
+        "profile": ("terminal", .good), "atuin": ("clock.arrow.circlepath", .third), "gh": ("arrow.triangle.branch", .neutral),
+        "git-ignore": ("arrow.triangle.branch", .problem), "code-server": ("chevron.left.forwardslash.chevron.right", .accent),
+        "ghostex": ("terminal", .second), "topline": ("menubar.rectangle", .amber),
+        "agents-md-hermes": ("person.2", .third), "empryo-md": ("cpu", .accent),
     ]
 
     /// Its tile, mockup D's glyph for a config with no app installed.
     var tile: (symbol: String, colour: TileColour) {
         if let tile = Self.tiles[id] { return tile }
+        switch group {
+        case .claudeKit: return ("sparkles", .amber)
+        case .codexKit: return ("terminal", .neutral)
+        case .hermesKit: return ("person.2", .third)
+        default: break
+        }
         if id.hasPrefix("hermes-") || id.hasPrefix("soul-") { return ("person.2", .third) }
-        return id.hasPrefix("repo-") ? ("folder", .second) : ("doc.text", .neutral)
+        return repo != nil ? ("folder", .second) : ("doc.text", .neutral)
     }
 
     /// The app's own icon when one of its apps is installed, else its tile.

@@ -23,6 +23,8 @@ final class WorkspacePresets {
     @ObservationIgnored private var applying: Task<Void, Never>?
     /// An At login run is under way; a second start waits for the next answer.
     @ObservationIgnored private var openingAtLogin = false
+    /// The workspace Open this workspace's layout switched to: its switch opens what is missing.
+    @ObservationIgnored private var openOnArrival: String?
     private var tiler: TilerService { observers.tiler }
 
     init(observers: EngineObservers, store: WorkspacePresetStore = .standard, defaults: UserDefaults = .pilot(),
@@ -136,9 +138,42 @@ final class WorkspacePresets {
         return latest
     }
 
+    /// Open this workspace's layout (Sven, build 6 of 1.0.2): the workspace in front, or `workspace`, gets its preset
+    /// applied with what is missing opened, whatever its Open what is missing switch says. A workspace not in front is
+    /// switched to first; its switch runs the apply.
+    func openLayout(_ workspace: String? = nil) {
+        guard let name = workspace ?? tiler.focused else { return HUD.tip("No workspace in front") }
+        guard let preset = contents.preset(for: name), !preset.apps.isEmpty else {
+            return HUD.tip("Workspace \(name) has no layout saved: add apps under Opens here")
+        }
+        guard name != tiler.focused else { return apply(preset, on: name, openMissing: true) }
+        openOnArrival = name
+        Task {
+            await tiler.perform("workspaces.openLayout:\(name)") { client in
+                do { try await client.run(.workspace(name)) } catch { openOnArrival = nil; throw error }
+            }
+        }
+    }
+
+    static func register(into registry: inout ActionRegistry, presets: WorkspacePresets) {
+        do {
+            try registry.register(Action(id: "workspaces.openLayout", label: "Open this workspace's layout", module: .workspaces,
+                                         defaultKey: Key("o", .ctrl), tier: .v1) { presets.openLayout() })
+        } catch { wslog.error("workspaces.openLayout: \(String(describing: error), privacy: .public)") }
+    }
+
     private func switched(to workspace: String) {
+        let forced = openOnArrival == workspace
+        openOnArrival = nil
         // A named workspace with no app yet has nothing to open or lay out.
         guard let preset = contents.preset(for: workspace), !preset.apps.isEmpty else { return }
+        apply(preset, on: workspace, openMissing: forced || preset.openMissing)
+    }
+
+    /// One apply at a time: a newer one cancels the one running and starts once it has stopped.
+    private func apply(_ saved: WorkspacePreset, on workspace: String, openMissing: Bool) {
+        var preset = saved
+        preset.openMissing = openMissing
         let previous = applying
         previous?.cancel()
         applying = Task {

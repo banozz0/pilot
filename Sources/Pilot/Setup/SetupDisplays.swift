@@ -2,12 +2,14 @@ import AppKit
 import CoreGraphics
 import Foundation
 import Observation
+import PilotCore
 
 /// Setup › Displays (card agent-bo-95422804): every screen with its resolution, refresh rate, rotation and place. A new
 /// resolution applies for the session and goes back by itself after 15 s unless kept, as macOS's own Displays settings
 /// do, so a mode the screen cannot show never strands Sven; only Keep makes it permanent. A rotation is the other way
-/// round: it stays, and a tip offers Revert for 15 s (Sven 2026-10-24), since a turned screen still shows. One model for
-/// the app, so the way back runs even when the page or the window is closed in the meantime.
+/// round: it stays, and a tip offers Revert for 15 s (Sven 2026-10-24), since a turned screen still shows; a screen moved
+/// beside another (Sven 2026-10-30) stays too, with Undo in the tip. One model for the app, so the way back runs even
+/// when the page or the window is closed in the meantime.
 @Observable @MainActor
 final class SetupDisplays {
     static let shared = SetupDisplays(system: CoreGraphicsDisplays(), connections: .shared, offersRevert: true, defaults: .pilot())
@@ -155,6 +157,43 @@ final class SetupDisplays {
         if offersRevert { offerRevert(turn) }
     }
 
+    /// Puts `display` on `side` of `anchor` for good, centred along the edge they share (Sven 2026-10-30); for 15 s a tip
+    /// offers Undo, which puts every screen back. A move that would overlap a third screen does nothing.
+    func move(_ display: CGDirectDisplayID, to side: DisplayArrangement.Side, of anchor: CGDirectDisplayID) {
+        guard let origins = origins(display, to: side, of: anchor) else { return }
+        place(display, side, anchor, origins)
+    }
+
+    /// Puts `display` where its card was dropped (Sven 2026-10-31), `frame` being the drop in the global space: against
+    /// the nearest free edge of another screen (DisplayArrangement.snapped), with Undo as for `move`. A drop with no free
+    /// edge does nothing.
+    func drop(_ display: CGDirectDisplayID, at frame: CGRect) {
+        guard let main = displays.first(where: \.main)?.id,
+              let snap = DisplayArrangement.snapped(frames, moving: display, to: frame, main: main) else { return }
+        place(display, snap.side, snap.anchor, snap.origins)
+    }
+
+    private var frames: [CGDirectDisplayID: CGRect] { Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0.frame) }) }
+
+    private func place(_ display: CGDirectDisplayID, _ side: DisplayArrangement.Side, _ anchor: CGDirectDisplayID, _ origins: [CGDirectDisplayID: CGPoint]) {
+        let old = frames.mapValues(\.origin), changed = origins.filter { old[$0.key] != $0.value }
+        // A drop back where it was, or an arrow to the side it is on, moves nothing and says nothing.
+        guard !changed.isEmpty, arrange(changed), offersRevert else { return }
+        let name = { (id: CGDirectDisplayID) in self.displays.first { $0.id == id }.map(self.label) ?? "Display" }
+        HUD.tip("\(name(display)) moved \(side.words) \(name(anchor))", seconds: Self.keepWindow,
+                action: .init(title: "Undo") { [weak self] in _ = self?.arrange(old) })
+    }
+
+    /// Whether `move` would do anything: false where the screen would land on a third one.
+    func canMove(_ display: CGDirectDisplayID, to side: DisplayArrangement.Side, of anchor: CGDirectDisplayID) -> Bool {
+        origins(display, to: side, of: anchor) != nil
+    }
+
+    private func origins(_ display: CGDirectDisplayID, to side: DisplayArrangement.Side, of anchor: CGDirectDisplayID) -> [CGDirectDisplayID: CGPoint]? {
+        guard let main = displays.first(where: \.main)?.id else { return nil }
+        return DisplayArrangement.origins(frames, moving: display, beside: anchor, side: side, main: main)
+    }
+
     func keep() {
         if let turning {
             stopWaiting()
@@ -202,7 +241,11 @@ final class SetupDisplays {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.settling?.cancel()
-                self.settling = self.after(1) { [weak self] in self?.settleRotations() }
+                self.settling = self.after(1) { [weak self] in
+                    self?.settleRotations()
+                    // The page's screens as macOS now has them, after a move here or in System Settings.
+                    if self?.displays.isEmpty == false { self?.displays = self?.system.displays() ?? [] }
+                }
             }
         }
     }
@@ -248,6 +291,26 @@ final class SetupDisplays {
         } catch {
             problem = String(describing: error)
             slog.error("display \(display, privacy: .public) rotation: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
+    private func arrange(_ origins: [CGDirectDisplayID: CGPoint]) -> Bool {
+        guard !origins.isEmpty else { return true }
+        do {
+            try system.arrange(origins)
+            problem = nil
+            slog.notice("displays arranged: \(origins.map { "\($0.key) at \(Int($0.value.x)),\(Int($0.value.y))" }.joined(separator: "; "), privacy: .public)")
+            // The screens where they were asked to go: macOS moves them after the call returns, so a read now could
+            // still give the old places and draw each move one press late. The screens' change notice reads them again.
+            displays = displays.map { d in
+                origins[d.id].map { DisplayInfo(id: d.id, name: d.name, main: d.main, frame: CGRect(origin: $0, size: d.frame.size), mode: d.mode,
+                                                rotation: d.rotation, displayUUID: d.displayUUID) } ?? d
+            }
+            return true
+        } catch {
+            problem = String(describing: error)
+            slog.error("displays arrangement: \(String(describing: error), privacy: .public)")
             return false
         }
     }

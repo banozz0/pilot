@@ -19,7 +19,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
     }
 
     public let workspace: String
-    /// The root container's layout: h_tiles, v_tiles or h_scrolling.
+    /// The root container's layout: h_tiles, v_tiles, h_scrolling or h_stage.
     public let layout: String
     public let savedAt: Date
     /// Tiled windows in their layout order (left to right, or top to bottom on a vertical workspace), then floating ones.

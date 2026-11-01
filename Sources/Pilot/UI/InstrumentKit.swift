@@ -454,7 +454,8 @@ struct InstrumentCrumb: View {
 }
 
 /// Pilot's mark, the app icon's four boxes (Packaging/AppIcon.icon): a 2×2 of rounded squares, the top-left filled in
-/// the accent, the other three outlined in the foreground. A bar draws it all in its one colour (`accent: false`).
+/// the accent, the other three outlined in the foreground, in the top bars too (spec pilot-1-1 T28); `accent: false` draws it all
+/// in its one colour.
 struct InstrumentMark: View {
     @Environment(\.style) private var style
     var size: CGFloat = 15

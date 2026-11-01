@@ -4,16 +4,17 @@ import AppKit
 // focus-wide commands Pilot sends today, each the body of its AeroSpace 74a1bf17 `command/impl/` file.
 
 /// LayoutCmdArgs.LayoutDescription, the tiling part: what `layout --root` and Pilot's snapshots name. Scrolling is one
-/// horizontal strip, so it has no `v_` form.
+/// horizontal strip and a stage one row (ADR 0015), so neither has a `v_` form.
 public enum TilerLayout: String, CaseIterable, Sendable {
-    case tiles, scrolling, horizontal, vertical
-    case h_tiles, v_tiles, h_scrolling
+    case tiles, scrolling, stage, horizontal, vertical
+    case h_tiles, v_tiles, h_scrolling, h_stage
 
-    /// The layout and orientation this description names; nil for the part it leaves out. Scrolling is always `.h`.
+    /// The layout and orientation this description names; nil for the part it leaves out. Scrolling and stage are always `.h`.
     private var parts: (layout: Layout?, orientation: Orientation?) {
         switch self {
             case .tiles: (.tiles, nil)
             case .scrolling, .h_scrolling: (.scrolling, .h)
+            case .stage, .h_stage: (.stage, .h)
             case .horizontal: (nil, .h)
             case .vertical: (nil, .v)
             case .h_tiles: (.tiles, .h)
@@ -27,11 +28,11 @@ public enum TilerLayout: String, CaseIterable, Sendable {
     }
 
     /// LayoutCommand.swift `changeTilingLayout`: the parts this description leaves out stay as they are. A scrolling
-    /// strip stays horizontal: an orientation alone leaves it be.
+    /// strip and a stage stay horizontal: an orientation alone leaves them be.
     @MainActor fileprivate func apply(to container: TilingContainer) {
         let (layout, orientation) = parts
         container.layout = layout ?? container.layout
-        container.changeOrientation(container.layout == .scrolling ? .h : orientation ?? container.orientation)
+        container.changeOrientation(container.layout.isRow ? .h : orientation ?? container.orientation)
     }
 
     /// format.swift `toLayoutString`.
@@ -40,6 +41,7 @@ public enum TilerLayout: String, CaseIterable, Sendable {
             case (.tiles, .h): .h_tiles
             case (.tiles, .v): .v_tiles
             case (.scrolling, _): .h_scrolling
+            case (.stage, _): .h_stage
         }
     }
 }

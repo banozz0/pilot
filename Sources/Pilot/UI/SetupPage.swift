@@ -205,7 +205,7 @@ struct SetupPage: View {
         case .sound: nil
         case .wifi: "Pilot never logs or keeps a network's password. Turning Wi-Fi on or off may need an administrator if macOS's Wi-Fi settings ask for one."
         case .bluetooth: "Pairing a new device, forgetting one and turning Bluetooth on or off stay in Control Centre and System Settings: macOS gives apps no public way to do them."
-        case .displays: "A new resolution goes back by itself in 15 s unless you keep it; a rotation stays unless you press Revert. Pilot shows where your screens sit and leaves moving them, the main display and mirroring to macOS: a wrong position can lose a screen."
+        case .displays: "A new resolution goes back by itself in 15 s unless you keep it; a rotation stays unless you press Revert. Click a screen in the picture and an arrow to move it beside another, with Undo in the tip; the main display and mirroring stay with macOS."
         case .keepAwake: "Stops the display and the Mac sleeping while it is on; quitting Pilot ends it."
         case .keyboard: "Pilot switches between the layouts macOS has enabled and never adds or removes one; add more in System Settings › Keyboard › Text Input."
         case .mouse: "The speed is macOS's own Tracking speed: System Settings shows it too, and a mouse plugged in later gets it. Your mouse's DPI stays in the mouse."
@@ -307,7 +307,7 @@ struct SetupPage: View {
 
     @ViewBuilder private var displaySection: some View {
         if displays.displays.count > 1 {
-            Arrangement(displays: displays.displays, nicknames: displays.nicknames).padding(.bottom, 10)
+            Arrangement(section: displays).padding(.bottom, 10)
         }
         ForEach(Array(displays.displays.enumerated()), id: \.element.id) { i, display in
             let unique = displays.displays.filter { $0.displayUUID == display.displayUUID }.count == 1
@@ -627,42 +627,126 @@ extension SetupSection {
     }
 }
 
-/// Where the screens sit, as macOS's Displays settings draws them: each a box to scale, the main one outlined in the accent.
-private struct Arrangement: View {
+/// Where the screens sit, as macOS's Displays settings draws them: each a box to scale, the main one with a menu bar
+/// along its top. A click picks a screen to move (Sven 2026-10-30), outlined in the accent; the arrows under the picture
+/// put it left of, right of, above or below another, the side it is on now lit. With three or more screens a pick says
+/// which other. A screen dragged and dropped lands against the nearest free edge (Sven 2026-10-31).
+struct Arrangement: View {
     @Environment(\.ink) private var ink
-    let displays: [DisplayInfo]
-    var nicknames: DisplayNicknames = .shared
+    let section: SetupDisplays
+    @State private var picked: CGDirectDisplayID?
+    @State private var other: CGDirectDisplayID?
+    /// The card being dragged and how far, in the picture's points.
+    @State private var drag: Drag?
+
+    struct Drag: Equatable {
+        let display: CGDirectDisplayID
+        let by: CGSize
+    }
+
+    static let info = "Click a screen, then an arrow to put it left of, right of, above or below the other, centred along that edge; or drag it where you want it and it snaps to the nearest edge. It applies at once; Undo in the tip puts it back."
+
+    private var displays: [DisplayInfo] { section.displays }
 
     var body: some View {
+        // The screen to move: the one clicked, else the first that is not the main one; it moves beside the main one,
+        // or beside the main's neighbour when it is the main one, unless another was picked.
+        let moving = displays.first { $0.id == picked } ?? displays.first { !$0.main } ?? displays[0]
+        let others = displays.filter { $0.id != moving.id }
+        let anchor = others.first { $0.id == other } ?? others.first { $0.main } ?? others.first
+        VStack(spacing: 8) {
+            picture(moving: moving.id)
+            if let anchor { arrows(moving, anchor, others) }
+        }
+    }
+
+    private func picture(moving: CGDirectDisplayID) -> some View {
         let union = displays.map(\.frame).reduce(CGRect.null) { $0.union($1) }
-        GeometryReader { space in
+        return GeometryReader { space in
             let scale = min(space.size.width / union.width, space.size.height / union.height)
             let offset = CGPoint(x: (space.size.width - union.width * scale) / 2, y: (space.size.height - union.height * scale) / 2)
             ForEach(displays, id: \.id) { display in
-                let f = display.frame
+                let f = display.frame, name = section.label(display), picked = display.id == moving
+                let dragged = drag?.display == display.id ? drag?.by ?? .zero : .zero
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(ink.raised)
-                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(display.main ? ink.accent : ink.line2, lineWidth: display.main ? 2 : 1) }
+                    .fill(picked ? ink.selected : ink.raised)
+                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(picked ? ink.accent : ink.line2, lineWidth: picked ? 2 : 1) }
+                    .overlay(alignment: .top) {
+                        if display.main { UnevenRoundedRectangle(topLeadingRadius: 4, topTrailingRadius: 4).fill(ink.text2.opacity(0.55)).frame(height: 5).padding(picked ? 2 : 1) }
+                    }
                     .overlay {
                         VStack(spacing: 3) {
-                            Image(systemName: display.rotation == 0 ? "display" : "rectangle.portrait").font(ink.ui(14)).foregroundStyle(display.main ? ink.accent : ink.muted)
-                            Text(label(display)).font(ink.ui(12).weight(.semibold)).foregroundStyle(ink.text2).help(label(display))
+                            Image(systemName: display.rotation == 0 ? "display" : "rectangle.portrait").font(ink.ui(14)).foregroundStyle(picked ? ink.accent : ink.muted)
+                            Text(name).font(ink.ui(12).weight(.semibold)).foregroundStyle(picked ? ink.text : ink.text2).help(name)
                             Text(display.mode.sizeLabel).font(ink.mono(10)).foregroundStyle(ink.muted)
                         }
                         .lineLimit(1).minimumScaleFactor(0.7).padding(4)
                     }
                     .frame(width: f.width * scale - 4, height: f.height * scale - 4)
+                    .contentShape(.rect)
+                    .offset(dragged)
+                    .zIndex(dragged == .zero ? 0 : 1)
+                    // A press that barely moves is a click, which picks the screen; past 3 points it drags, and the drop
+                    // places it, the move scaled back to the screens' points.
+                    .gesture(DragGesture(minimumDistance: 0)
+                        .onChanged { change in
+                            guard hypot(change.translation.width, change.translation.height) >= 3 else { return }
+                            if self.picked != display.id { pick(display.id) }
+                            drag = Drag(display: display.id, by: change.translation)
+                        }
+                        .onEnded { end in
+                            let moved = hypot(end.translation.width, end.translation.height) >= 3
+                            withAnimation(Kit.change) {
+                                drag = nil
+                                if moved { section.drop(display.id, at: f.offsetBy(dx: end.translation.width / scale, dy: end.translation.height / scale)) } else { pick(display.id) }
+                            }
+                        })
                     .position(x: offset.x + (f.midX - union.minX) * scale, y: offset.y + (f.midY - union.minY) * scale)
+                    .accessibilityAddTraits(picked ? .isSelected : [])
             }
         }
         .frame(height: 190)
+        .animation(Kit.change, value: displays.map(\.frame))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Screen arrangement: " + displays.map(label).joined(separator: ", "))
+        .accessibilityLabel("Screen arrangement: " + displays.map(section.label).joined(separator: ", "))
     }
 
-    private func label(_ display: DisplayInfo) -> String {
-        let unique = displays.filter { $0.displayUUID == display.displayUUID }.count == 1
-        return nicknames.label(systemName: display.name, displayUUID: unique ? display.displayUUID : nil)
+    private func pick(_ display: CGDirectDisplayID) {
+        withAnimation(Kit.change) { picked = display; if other == display { other = nil } }
+    }
+
+    /// "Move 24G1WG4", the four arrows, each named for VoiceOver ("Left of CU34G4Z"), the side it is on lit, a side
+    /// that would land on a third screen off, and "beside CU34G4Z"; past two screens, a pick of which other.
+    private func arrows(_ moving: DisplayInfo, _ anchor: DisplayInfo, _ others: [DisplayInfo]) -> some View {
+        let now = DisplayArrangement.side(of: moving.frame, from: anchor.frame), beside = section.label(anchor)
+        return HStack(spacing: 6) {
+            Text("Move").font(ink.ui(12.5)).foregroundStyle(ink.text2)
+            Text(section.label(moving)).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.accentInk).lineLimit(1)
+            InfoMark(text: Self.info)
+            Spacer(minLength: 8)
+            ForEach(DisplayArrangement.Side.allCases, id: \.self) { side in
+                let can = others.count < 2 || section.canMove(moving.id, to: side, of: anchor.id)
+                IconButton(symbol: Self.symbol(side), label: "\(side.words.prefix(1).uppercased())\(side.words.dropFirst()) \(beside)",
+                           tint: side == now ? ink.accent : nil) { section.move(moving.id, to: side, of: anchor.id) }
+                    .disabled(!can).kitDimmed(can)
+            }
+            if others.count > 1 {
+                Text("beside").font(ink.ui(12)).foregroundStyle(ink.muted)
+                DropdownField(label: "Beside which screen", options: others.map { (value: $0.id, title: section.label($0)) }, picked: anchor.id) { other = $0 }
+                    .frame(width: 150)
+            } else {
+                Text("beside \(beside)").font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(1)
+            }
+        }
+    }
+
+    private static func symbol(_ side: DisplayArrangement.Side) -> String {
+        switch side {
+        case .left: "arrow.left"
+        case .right: "arrow.right"
+        case .above: "arrow.up"
+        case .below: "arrow.down"
+        }
     }
 }
 

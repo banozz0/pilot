@@ -10,10 +10,11 @@ protocol QuickLooking: AnyObject {
     func preview(_ url: URL)
 }
 
-/// The apps that open a file, its default first, and opening the file in one: Open With… on a file row.
+/// The apps that open a file, the suggested (its default first) and the rest, and opening the file in one: Open With…
+/// on a file row.
 @MainActor
 protocol OpeningApps: AnyObject {
-    func apps(toOpen url: URL) -> [URL]
+    func apps(toOpen url: URL) -> (suggested: [URL], others: [URL])
     func open(_ urls: [URL], with app: URL)
 }
 
@@ -40,17 +41,23 @@ enum FileActions {
         }
     }
 
-    /// The apps that open the first URL as a picker, the default first, each an app row (its icon from the app-icon
-    /// cache), and every URL opened in the one picked: a file row's Open With…, and the clipboard's (card agent-bo-95422994).
+    /// The apps that open the first URL as a picker, the suggested under Suggested (the default first, OpenWithApps) and
+    /// the rest under Other apps, each an app row (its icon from the app-icon cache), and every URL opened in the one
+    /// picked: a file row's Open With…, and the clipboard's (card agent-bo-95422994).
     static func openWith(_ urls: [URL], apps: OpeningApps = WorkspaceApps.shared,
                          pick: Pick = menuPick) {
         guard let first = urls.first else { return }
         var located: [String: URL] = [:]
-        let rows = apps.apps(toOpen: first).compactMap { app -> MenuEntry? in
-            let id = Bundle(url: app)?.bundleIdentifier ?? app.path
-            guard located[id] == nil else { return nil }
-            located[id] = app
-            return MenuEntry(title: AppsModule.appName(at: app), target: .app(id))
+        let listed = apps.apps(toOpen: first), headed = !listed.suggested.isEmpty && !listed.others.isEmpty
+        let rows = [("Suggested", listed.suggested), ("Other apps", listed.others)].flatMap { section, list in
+            list.compactMap { app -> MenuEntry? in
+                let id = Bundle(url: app)?.bundleIdentifier ?? app.path
+                guard located[id] == nil else { return nil }
+                located[id] = app
+                var row = MenuEntry(title: AppsModule.appName(at: app), target: .app(id))
+                if headed { row.section = section }
+                return row
+            }
         }
         let name = urls.count > 1 ? "\(urls.count) items" : first.isFileURL ? first.lastPathComponent : first.host ?? first.absoluteString
         pick(rows, "Open \(name) with") { row in
@@ -70,13 +77,16 @@ private let flog = Logger(subsystem: "dev.banozz.pilot", category: "files")
 final class WorkspaceApps: OpeningApps {
     static let shared = WorkspaceApps()
 
-    func apps(toOpen url: URL) -> [URL] {
-        let all = NSWorkspace.shared.urlsForApplications(toOpen: url)
-        guard let main = NSWorkspace.shared.urlForApplication(toOpen: url) else { return all }
-        return [main] + all.filter { $0.standardizedFileURL != main.standardizedFileURL }
+    func apps(toOpen url: URL) -> (suggested: [URL], others: [URL]) {
+        let type = OpenWithApps.type(of: url)
+        return OpenWithApps.split(NSWorkspace.shared.urlsForApplications(toOpen: url), type: type, ext: url.isFileURL ? url.pathExtension : nil,
+                                  main: NSWorkspace.shared.urlForApplication(toOpen: url))
     }
 
     func open(_ urls: [URL], with app: URL) {
+        if let first = urls.first, let type = OpenWithApps.type(of: first), let id = Bundle(url: app)?.bundleIdentifier {
+            OpenWithApps.picked(id, for: type)
+        }
         NSWorkspace.shared.open(urls, withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             if let error { flog.error("open with: \(error.localizedDescription, privacy: .public)") }
         }

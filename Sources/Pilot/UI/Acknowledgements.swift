@@ -38,7 +38,7 @@ struct Acknowledgement: Identifiable, Hashable {
         .init(name: "Sparkle", licence: "MIT and others", what: "Pilot's updates", files: ["Sparkle-LICENSE.txt"]),
         .init(name: "Display fonts", licence: "SIL OFL 1.1", what: "The themes' twelve faces", files: faces.map { "Fonts/\($0)/OFL.txt" }),
         .init(name: "Whisper", licence: "MIT", what: "OpenAI's speech models, downloaded on your click", files: ["Whisper-LICENSE.txt"]),
-        .init(name: "Parakeet TDT v3", licence: "CC BY 4.0", what: "NVIDIA's speech model, downloaded on your click",
+        .init(name: "Parakeet Ultra", licence: "CC BY 4.0", what: "Moondream's speech model on NVIDIA's Parakeet, downloaded on your click",
               files: ["Parakeet-LICENSE.txt"]),
         .init(name: "Kokoro-82M", licence: "Apache 2.0", what: "hexgrad's voices, downloaded on your click", files: ["Kokoro-LICENSE.txt"]),
         .init(name: "RealESRGAN x4plus", licence: "BSD 3-Clause", what: "The larger upscaler, downloaded on your click",

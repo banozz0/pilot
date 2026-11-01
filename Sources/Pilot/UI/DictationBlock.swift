@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 /// Voice › Dictation (Q144; Q452: Pilot's own alone): the two binds and the dictation key, the speech models (each
-/// downloaded, used and removed on its own), what the pill shows, and the microphone grant.
+/// downloaded, used and removed on its own), what shows while you speak and where, the waveform's colour, and the microphone grant.
 struct DictationBlock: View {
     @Environment(Engine.self) private var engine: Engine?
     let dictation: PilotDictation
@@ -24,8 +24,8 @@ struct DictationBlock: View {
             if let settings = engine?.settings { DictationKeyRows(settings: settings) }
             let models = dictation.models
             BlockRow { Text("Speech models").frame(maxWidth: .infinity, alignment: .leading) }
-            ForEach(models.all, id: \.choice) { SpeechModelRow(model: $0, models: models) }
-            PilotDictationRows(pilot: dictation)
+            ForEach(models.offered, id: \.choice) { SpeechModelRow(model: $0, models: models) }
+            PilotDictationRows(pilot: dictation, topBarOn: engine?.topBar.isOn ?? false)
             MicrophoneRow(microphone: microphone)
             BlockRow {
                 FinePrint(text: "Pilot records while you dictate, \(models.active?.choice.name ?? "the speech model") writes it down on this Mac "
@@ -35,13 +35,22 @@ struct DictationBlock: View {
     }
 }
 
-/// Pilot's own dictation: what the pill shows while Sven speaks, whether the words stay on the clipboard, and whether a
-/// take pauses what is playing.
+/// Pilot's own dictation: what shows while Sven speaks and where, the waveform's colour, whether the words stay on the
+/// clipboard, and whether a take pauses what is playing.
 private struct PilotDictationRows: View {
     @Bindable var pilot: PilotDictation
+    /// Pilot's top bar is on: off, Top bar falls back to the pill and the row says so.
+    let topBarOn: Bool
 
-    static let whileSpeakingInfo = "Waveform shows the small pill with your voice's level. Words shows a wider pill with the words "
-        + "as you say them. The words typed at the end are still the speech model's full take."
+    static let whileSpeakingInfo = "Waveform shows your voice's level. Words shows the words as you say them, beside a smaller "
+        + "waveform: a wider pill, or one line in the top bar while it has room. The words typed at the end are still the speech "
+        + "model's full take."
+    static let showInInfo = "Floating pill: at the foot of the screen, with ✕ and ✓. Top bar: in Pilot's top bar, where Position "
+        + "says; click it to finish, Esc cancels. Both: the two at once."
+    static let positionInfo = "Left: just after Pilot's mark. Centre: after the bar's centre items, which move aside by half its "
+        + "width while it shows. Right: before the status items."
+    static let colourInfo = "Plain: white on the pill, the bar's own ink in the top bar. Theme: the theme's signal colour. "
+        + "Custom: a colour you pick."
     static let copyInfo = "On: the words stay on the clipboard after they are typed. Off: your clipboard is left as it was. "
         + "When the app you spoke to is no longer in front, the words are copied either way, as the only way to get them."
 
@@ -54,6 +63,27 @@ private struct PilotDictationRows: View {
             HStack(spacing: 6) { Text("While you speak"); InfoMark(text: Self.whileSpeakingInfo) }.frame(maxWidth: .infinity, alignment: .leading)
             Segments(selection: $pilot.whileSpeaking, options: PilotDictation.WhileSpeaking.allCases.map { ($0, $0.label) },
                      label: "While you speak")
+        }
+        BlockRow {
+            HStack(spacing: 6) { Text("Show it in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+            Segments(selection: $pilot.showIn, options: PilotDictation.ShowIn.allCases.map { ($0, $0.label) }, label: "Show it in")
+        }
+        if pilot.showIn != .pill {
+            BlockRow {
+                HStack(spacing: 6) { Text("Position"); InfoMark(text: Self.positionInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                Segments(selection: $pilot.barSide, options: [(TopBarSide.left, "Left"), (.centre, "Centre"), (.right, "Right")],
+                         label: "Position in the top bar")
+            }
+        }
+        if pilot.showIn != .pill && !topBarOn {
+            BlockRow {
+                FinePrint(text: "Pilot's top bar is off, so dictation shows in the floating pill. Turn the top bar on in Menu bar.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        BlockRow {
+            HStack(spacing: 6) { Text("Waveform colour"); InfoMark(text: Self.colourInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+            ColourChoicePicker(choice: $pilot.waveColour, theme: Look.shared.theme.accent, label: "Waveform colour", plain: "Plain")
         }
         BlockRow {
             Toggle("Copy to clipboard", isOn: $pilot.copiesText).toggleStyle(.pilotSwitchRow(info: Self.copyInfo))
@@ -95,18 +125,20 @@ private struct DictationKeyRows: View {
 }
 
 /// One speech model: its size and what sets it apart before the download, the download's progress, the one-time
-/// preparing, then In use or Use, and Remove.
+/// preparing, then In use or Use, and Remove. A model that replaced another (Parakeet Ultra, 1.0.2, Q719) says while
+/// dictation still uses the old one's files, and once it no longer does, offers to remove them: never on its own.
 struct SpeechModelRow: View {
     @Environment(\.ink) private var ink
     let model: SpeechModel
     let models: SpeechModels
 
     var body: some View {
-        let choice = model.choice
+        let choice = model.choice, old = choice.replaces.map(models.model)
         BlockRow {
             VStack(alignment: .leading, spacing: 2) {
                 Text(choice.name)
                 FinePrint(text: "\(choice.size), \(choice.note)")
+                if let old, models.active === old { FinePrint(text: "Until it is downloaded, dictation uses your \(old.choice.name) files.") }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ModelStateControls(state: model.state, name: choice.name, size: choice.size, download: model.download, cancel: model.cancel) {
@@ -116,6 +148,13 @@ struct SpeechModelRow: View {
             }
         }
         ModelFailureRow(state: model.state)
+        // Measured only while the row shows: a walk of the old folder.
+        if let old, old.hasFiles, models.active !== old, let megabytes = SpeechModel.megabytes(old.folder) {
+            BlockRow {
+                FinePrint(text: "\(old.choice.name), the model \(choice.name) replaced, is still on this Mac.").frame(maxWidth: .infinity, alignment: .leading)
+                Button("Remove the old v3 files (\(megabytes) MB)") { models.remove(old.choice) }.buttonStyle(.pilot)
+            }
+        }
     }
 }
 

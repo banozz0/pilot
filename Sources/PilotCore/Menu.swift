@@ -423,6 +423,8 @@ public indirect enum MenuBranch: Hashable, Sendable {
     case about
     /// Trigger → QR: Make and Read a QR code, which Trigger also lists, for More rows' QR (Sven, Q398).
     case qr
+    /// Trigger → Define (Q596): a word's meanings, synonyms and Spanish, its picked row in full beside them (Define).
+    case define
     /// A category by name inside Install (a catalogue category), Remove or Update (card agent-bo-95423022).
     case category(String, in: MenuBranch = .install)
 
@@ -432,7 +434,7 @@ public indirect enum MenuBranch: Hashable, Sendable {
     public static let allCases: [MenuBranch] = [.apps, .learn, .trigger, .install, .remove, .update, .clean, .config, .extensions, .about, .system,
                                                 .keybindings, .capture,
                                                 .homebrew, .translate, .reminders, .snippets, .notes, .stickers, .emoji,
-                                                .activity, .stats, .qr]
+                                                .activity, .stats, .qr, .define]
 
     /// The branches under the root, which a root search finds by name: `top` and Config.
     public static let searched = allCases.filter { $0.parent == nil }
@@ -524,6 +526,19 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         }
 
         /// The entry's id in the frecency store; nil for a window, which is not a pick: the tiler's id ends with it.
+        /// The target a saved `key` names, for the kinds a Launcher tile keeps (Widget.isMenuKey): an app, an action, a
+        /// branch; nil for any other.
+        public init?(key: String) {
+            guard let colon = key.firstIndex(of: ":") else { return nil }
+            let id = String(key[key.index(after: colon)...])
+            switch key[..<colon] {
+            case "app": self = .app(id)
+            case "action": self = .action(id)
+            case "branch": guard let branch = MenuBranch(id: id) else { return nil }; self = .branch(branch)
+            default: return nil
+            }
+        }
+
         public var key: String? {
             switch self {
             case .app(let b): "app:\(b)"
@@ -589,8 +604,9 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
             switch self { case .file, .menuItem, .setting: 0.8; case .emoji: 0.6; default: 1 }
         }
 
-        /// The tab that lists the kind: a command is an action there, so it needs no tab of its own (P38).
-        public var tab: Kind { self == .command ? .action : self }
+        /// The tab that lists the kind: a command or an app's menu item is an action there, so it needs no tab of its own
+        /// (P38; Sven, 1.0.1: an app's actions counted only its catalogue commands).
+        public var tab: Kind { self == .command || self == .menuItem ? .action : self }
     }
 
     public var title: String, target: Target, home: MenuBranch?
@@ -623,10 +639,13 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var ownActions: [String]?
     /// Each of those actions' key, nil for one with none; nil when none has a key (To-do B): pressed, it runs that action.
     public var ownKeys: [Extension.Item.Action.Key?]?
-    /// The heading a live picker draws over this row and the rows after it that share it (an extension item's `section`).
+    /// The heading a picker draws over this row and the rows after it that share it (an extension item's `section`, Open
+    /// With…'s Suggested and Other apps).
     public var section: String?
     /// An extension's detail, which the panel draws in place of the list this row stands alone in (card agent-bo-95423245).
     public var extensionDetail: Extension.Detail?
+    /// The extension whose page Cmd+Return opens from its detail (pilot-1-1 T9, Q639); nil when it has none to open.
+    public var extensionPage: String?
     /// The installed extension an Extensions row stands for (story 158): Cmd+K offers Uninstall… on it.
     public var extensionID: String?
     /// What Return types into the search instead of running the row: a quicklink's keyword and a space, so the words
@@ -984,12 +1003,12 @@ public struct MenuNavigator: Sendable {
         selection = 0
         kindCounts = [:]
         guard let branch else {
-            if isList { rows = isLive ? MenuGroups.bySection(rank(entries)) : rank(entries); return }
+            if isList { rows = MenuGroups.bySection(rank(entries)); return }
             // Nothing typed: the root's branches, or the kind Tab shows (rootKind); the Files view (also when Search inside
             // emptied it) lists nothing until Sven types.
             guard !query.isEmpty else {
                 rows = only.map(rootKind) ?? rootRows
-                kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { $0.inSearch && $0.kind.tab == k }) })
+                kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { Self.listedUntyped($0) && $0.kind.tab == k }) })
                 return
             }
             // Under All, files wait for the Search files row (card agent-bo-95422968).
@@ -1007,13 +1026,20 @@ public struct MenuNavigator: Sendable {
             // Under All, Ask AI and Search the web for what was typed always, Search files with them: after the best match's
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
             let fallbacks = only == nil ? Self.fallbacks(query, after: rows, via: webVia) : []
+            let install = InstallSearch.Query(query).map { [MenuEntry(title: "Search to install \"\($0.text)\"", target: .searchInstall($0.text))] } ?? []
             // Nothing else matched: Install's search is offered too, first when the text reads as an app's name.
-            if only == nil, rows.isEmpty, let install = InstallSearch.Query(query) {
-                let offers = [MenuEntry(title: "Search to install \"\(install.text)\"", target: .searchInstall(install.text))] + files
+            if only == nil, rows.isEmpty, !install.isEmpty {
+                let offers = install + files
                 rows = fallbacks + (Self.looksLikeApp(query) ? offers : offers.reversed())
+            } else if only == .package {
+                // Packages lists the catalogue's matches; Install's search follows them (Sven, 1.0.1: "videorc").
+                rows += install
             } else {
-                let end = Self.bestMatchEnd(rows)
-                rows = Array(rows.prefix(end)) + fallbacks + files + rows.dropFirst(end)
+                // Something matched, but not an app on this Mac (an emoji for "videorc", Sven 1.0.1): an app's name is still
+                // offered to install.
+                let installs = only == nil && rows.first?.kind != .app && Self.looksLikeApp(query)
+                let end = Self.bestMatchEnd(rows), offers = fallbacks + files + (installs ? install : [])
+                rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end)
             }
             return
         }
@@ -1030,9 +1056,12 @@ public struct MenuNavigator: Sendable {
     /// for a search and say so (emptyLine).
     private func rootKind(_ kind: MenuEntry.Kind) -> [MenuEntry] {
         guard [.app, .window, .action].contains(kind) else { return [] }
-        let listed = entries.filter { $0.inSearch && $0.kind.tab == kind }
+        let listed = entries.filter { Self.listedUntyped($0) && $0.kind.tab == kind }
         return kind == .window ? listed : rank(listed.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
     }
+
+    /// A row a kind tab lists before anything is typed: an app's menu items are found only by typing (MenuItemSearch).
+    private static func listedUntyped(_ row: MenuEntry) -> Bool { row.inSearch && row.kind != .menuItem }
 
     /// How many rows `kind` holds at the root (the Rail's counts): with a search, what Tab to it lists, offers never
     /// counted; nothing typed, every app, window and action. Nil leaves it blank: files under All, which wait for Search
@@ -1417,7 +1446,7 @@ public enum MenuLayout {
         .learn: [.branch(.keybindings, opener: "engine.sheet")],
         .trigger: [.branch(.capture, opener: "captures.menu"), .branch(.emoji, opener: "apps.emoji"), .action("captures.pickColour"), .action("captures.makeQR"),
                    .action("captures.readQR"), .action("system.ejectAll"), .action("apps.clipboard"),
-                   .branch(.stickers), .branch(.translate), .branch(.reminders), .branch(.snippets), .branch(.notes),
+                   .branch(.stickers), .branch(.translate), .branch(.define), .branch(.reminders), .branch(.snippets), .branch(.notes),
                    .branch(.qr), .action("ai.ask"), .action("ai.chat"), .action("ai.fix"), .action("ai.selection"),
                    .action("speech.readAloud")],
         .capture: ["captures.area", "captures.activeWindow", "captures.fullscreen", "captures.scrolling", "captures.screenRecording",

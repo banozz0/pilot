@@ -32,18 +32,21 @@ extension Workspace {
     @MainActor
     func arrange(_ preset: LayoutPreset, order: [UInt32]) throws {
         let root = try rootTilingContainer
+        // A stage keeps its joined groups and the one in use (ADR 0015): a window that comes is already a group of its
+        // own (the new-window path, or a drop's bind), one that goes is already unbound; only a tiles root is rebuilt.
+        if preset == .stage, root.layout == .stage { return }
         let tiled = root.allLeafWindowsRecursive
         let windows = order.compactMap { id in tiled.first { $0.windowId == id } } + tiled.filter { !order.contains($0.windowId) }
         for window in windows { try window.unbindFromParent() }
         for child in root.children { try child.unbindFromParent() }
         let columns: [[Window]] = switch preset {
-            case .columns, .rows, .scrolling: windows.map { [$0] }
+            case .columns, .rows, .scrolling, .stage: windows.map { [$0] }
             case .mainStack: windows.count > 2 ? [[windows[0]], Array(windows[1...])] : windows.map { [$0] }
             case .grid: stride(from: 0, to: windows.count, by: 2).map { Array(windows[$0..<min($0 + 2, windows.count)]) }
         }
         // A grid of one column is that column, as AeroSpace's flatten normalization would leave it.
         let single = columns.count == 1 && columns[0].count > 1
-        root.layout = preset == .scrolling ? .scrolling : .tiles
+        root.layout = switch preset { case .scrolling: .scrolling; case .stage: .stage; default: .tiles }
         root.changeOrientation(preset == .rows || single ? .v : .h) // the root has no container above to flip
         for column in columns {
             if column.count == 1 || single {
@@ -63,7 +66,7 @@ extension TilingContainer {
     @MainActor
     func nextSlot(_ preset: LayoutPreset) throws -> BindingData {
         let parent: TilingContainer = switch preset {
-            case .columns, .rows, .scrolling: self
+            case .columns, .rows, .scrolling, .stage: self
             case .mainStack: children.count > 1 ? try children.last as? TilingContainer ?? stack([children[children.count - 1]]) : self
             case .grid: try nextGridColumn()
         }

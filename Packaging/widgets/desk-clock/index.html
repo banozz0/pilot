@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .time { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
+  .time .pk-hero { font-size: 46px; }
+  .time small { font-size: 12px; color: var(--pk-text2); letter-spacing: 0.04em; }
+  .zone { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 10px; }
+  .zone .city { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pk-text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zone .at { font-size: 15px; }
+  .rail { flex: none; position: relative; height: 4px; border-radius: 2px; background: var(--pk-track); margin: 4px 0; }
+  .rail > b { position: absolute; top: 0; bottom: 0; left: 29.2%; width: 50%; border-radius: 2px; background: color-mix(in srgb, var(--pk-text) 18%, transparent); }
+  .rail > i { position: absolute; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--pk-text2); box-shadow: 0 0 0 2px var(--pk-raised); }
+  .rail > i.here { background: var(--pk-accent); }
+</style>
+<body class="pk">
+  <div class="pk-head"><span class="pk-title" id="here">Clock</span><span class="pk-meta" id="day"></span></div>
+  <div>
+    <div class="time"><span class="pk-hero" id="now">–</span><small id="ampm"></small></div>
+    <div class="pk-sub" id="date"></div>
+  </div>
+  <div class="pk-rule"></div>
+  <div class="zone"><span class="city" id="city">–</span><span class="at" id="there">–</span><span class="pk-chip" id="offset">–</span></div>
+  <div class="rail" title="Day and night, here and there"><b></b><i id="railThere"></i><i class="here" id="railHere"></i></div>
+</body>
+<script>
+  // The time is the page's own; Pilot sends only the second zone (the "zone" setting). It redraws once a minute.
+  const $ = PilotKit.$;
+  let zone = "America/New_York";
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const city = (z) => (z.split("/").pop() || z).replace(/_/g, " ");
+
+  function parts(date, timeZone) {
+    const f = new Intl.DateTimeFormat("en-GB", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const p = Object.fromEntries(f.formatToParts(date).map((x) => [x.type, x.value]));
+    return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute };
+  }
+  const wall = (p) => Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi);
+  function clock(date, timeZone) {
+    const s = new Intl.DateTimeFormat(undefined, { timeZone, hour: "numeric", minute: "2-digit" }).format(date);
+    const m = s.match(/^(.*?)\s*([AaPp]\.?\s?[Mm]\.?)$/);
+    return m ? { t: m[1], ampm: m[2].toUpperCase() } : { t: s, ampm: "" };
+  }
+
+  function draw() {
+    const now = new Date();
+    const here = clock(now, localZone);
+    $("now").textContent = here.t;
+    $("ampm").textContent = here.ampm;
+    $("here").textContent = "Clock · " + city(localZone);
+    $("day").textContent = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(now);
+    $("date").textContent = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now);
+
+    let valid = true;
+    try { new Intl.DateTimeFormat("en-GB", { timeZone: zone }); } catch (e) { valid = false; }
+    const pHere = parts(now, localZone);
+    $("railHere").style.left = ((pHere.h * 60 + pHere.mi) / 1440 * 100) + "%";
+    if (!valid) {
+      $("city").textContent = "Unknown zone: " + zone;
+      $("there").textContent = "–"; $("offset").textContent = "Settings";
+      $("railThere").style.display = "none";
+      return;
+    }
+    const pThere = parts(now, zone);
+    const there = clock(now, zone);
+    const hours = (wall(pThere) - wall(pHere)) / 3600000;
+    const whole = Math.trunc(hours), mins = Math.round(Math.abs(hours - whole) * 60);
+    const sign = hours > 0 ? "+" : hours < 0 ? "−" : "±";
+    const dayShift = wall({ ...pThere, h: 0, mi: 0 }) - wall({ ...pHere, h: 0, mi: 0 });
+    const when = dayShift > 0 ? " tomorrow" : dayShift < 0 ? " yesterday" : "";
+    $("city").textContent = city(zone) + when;
+    $("there").textContent = there.t + (there.ampm ? " " + there.ampm : "");
+    $("offset").textContent = hours === 0 ? "same time" : sign + Math.abs(whole) + (mins ? ":" + String(mins).padStart(2, "0") : "") + " h";
+    $("railThere").style.display = "";
+    $("railThere").style.left = ((pThere.h * 60 + pThere.mi) / 1440 * 100) + "%";
+  }
+
+  PilotKit.on((data) => { if (typeof data.zone === "string" && data.zone.trim()) zone = data.zone.trim(); draw(); });
+  draw();
+  // Once a minute, on the minute.
+  setTimeout(function tick() { draw(); setTimeout(tick, 60000 - (Date.now() % 60000) + 50); }, 60000 - (Date.now() % 60000) + 50);
+</script>

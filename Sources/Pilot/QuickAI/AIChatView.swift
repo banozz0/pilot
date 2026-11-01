@@ -1,5 +1,7 @@
+import AppKit
 import PilotCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The AI chat panel's face (story 166), Ask AI's bar drop: hung from the top bar, square at the top and round at the
 /// bottom; the drops' header (BarDropHeader: `✦ Ask AI  Claude Code · Sonnet`, `esc close`, `⌘N new chat`; spec Bar
@@ -35,7 +37,7 @@ struct AIChatView: View {
                 Text(Self.hint).font(ink.ui(13)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             }
             ink.line.frame(height: 1)
-            AIChatInput(model: model, send: send)
+            AIChatInput(model: model, send: send, takesPictures: true)
         }
         .opacity(fadesIn && !entered ? 0 : 1)
         .onAppear { if fadesIn { withAnimation(BarDropMotion.contents) { entered = true } } }
@@ -200,7 +202,8 @@ struct AIChatCallRow: View, Equatable {
                     .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(ink.well, in: .rect(cornerRadius: 6))
             }
             if let asking = call.asking {
-                if asking.ask.rows.isEmpty { ask(asking) } else { AIPlanCard(asking: asking) { model.answer($0, asked: asking.asked) } }
+                if asking.ask.rows.isEmpty { AIChatAsk(asking: asking) { model.answer($0, asked: asking.asked) } }
+                else { AIPlanCard(asking: asking) { model.answer($0, asked: asking.asked) } }
             }
         }
     }
@@ -213,15 +216,35 @@ struct AIChatCallRow: View, Equatable {
         Image(systemName: "xmark.circle.fill").font(.system(size: 11)).foregroundStyle(ink.red)
     }
 
-    private func ask(_ asking: AIChatModel.Asking) -> some View {
+}
+
+/// A `pilot` row's Allow question, in the HUD's words (AllowPromptView): who asks and the thing whole, or a summary's
+/// headline and lines with the whole behind Show details; then Deny, primary, and Allow.
+private struct AIChatAsk: View {
+    @Environment(\.ink) private var ink
+    let asking: AIChatModel.Asking
+    let answer: (Bool) -> Void
+    @State private var details = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(AllowPromptView.question(asking.program)).font(ink.ui(13, .semibold)).foregroundStyle(ink.text)
-            Text(AllowPromptView.thing(asking.ask))
-                .font(ink.mono(11.5)).foregroundStyle(ink.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-            Text(AllowPromptView.warning).font(ink.ui(11.5)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
+            Text(AllowPromptView.heading(asking.ask, asking.program)).font(ink.ui(13, .semibold)).foregroundStyle(ink.text)
+            if let summary = asking.ask.summary, !details {
+                Text(AllowPromptView.points(summary))
+                    .font(ink.ui(12)).foregroundStyle(ink.text).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(AllowPromptView.thing(asking.ask))
+                    .font(ink.mono(11.5)).foregroundStyle(ink.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(asking.ask.summary == nil ? AllowPromptView.warning : "Asked by \(ControlGate.Ask.visible(asking.program)). " + AllowPromptView.warning)
+                .font(ink.ui(11.5)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Button("Deny") { model.answer(false, asked: asking.asked) }.buttonStyle(PilotButtonStyle(primary: true)).fixedSize()
-                Button("Allow") { model.answer(true, asked: asking.asked) }.buttonStyle(PilotButtonStyle(primary: false)).fixedSize()
+                Button("Deny") { answer(false) }.buttonStyle(PilotButtonStyle(primary: true)).fixedSize()
+                Button("Allow") { answer(true) }.buttonStyle(PilotButtonStyle(primary: false)).fixedSize()
+                if asking.ask.summary != nil {
+                    Button(details ? "Hide details" : "Show details") { details.toggle() }
+                        .buttonStyle(.plain).font(ink.ui(11.5)).foregroundStyle(ink.muted)
+                }
             }
             .padding(.top, 2)
         }
@@ -261,6 +284,8 @@ struct AIChatInput: View {
     var room: CGFloat = 430
     /// Told whether the Skills list is open, so the page's empty chat steps back behind it.
     var listOpen: Binding<Bool>?
+    /// A picture dropped on it waits on the input (the panel and the page; Q693).
+    var takesPictures = false
     @State private var selection: TextSelection?
     /// The bubble opened the list, its own search field first; else a / typed at the start of the field opens the list.
     /// A flag beside a plain String, never `Binding($optional)`: that binding force-unwraps on every read, and the list
@@ -288,9 +313,31 @@ struct AIChatInput: View {
             }
             field
         }
+        .onDrop(of: takesPictures ? [.image, .fileURL] : [], isTargeted: nil, perform: drop)
         .onChange(of: model.draft) { if closed { closed = false } }
+        // Typed for the person (AIChatModel.type): the field takes focus, its caret after the words.
+        .task(id: model.typed) {
+            guard model.typed > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(80))
+            focus?.wrappedValue = true
+            selection = TextSelection(insertionPoint: model.draft.endIndex)
+        }
         .onChange(of: query) { picked = 0 }
         .onChange(of: shown != nil, initial: true) { _, open in listOpen?.wrappedValue = open }
+    }
+
+    /// The first dropped picture file, or picture, waits on the input.
+    private func drop(_ providers: [NSItemProvider]) -> Bool {
+        let model = model
+        let attach: @Sendable (CaptureAskAI.Source?) -> Void = { source in
+            if let source { Task { @MainActor in model.attach(source) } }
+        }
+        if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) {
+            _ = item.loadObject(ofClass: URL.self) { url, _ in attach(url.flatMap { $0.isFileURL && NoteAttachments.isImage($0) ? .file($0) : nil }) }
+        } else if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }) {
+            _ = item.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in attach(data.map(CaptureAskAI.Source.data)) }
+        } else { return false }
+        return true
     }
 
     // MARK: Skills
@@ -347,7 +394,7 @@ struct AIChatInput: View {
     }
 
     @ViewBuilder private var field: some View {
-        let prompt = model.attachment == nil ? placeholder : "Ask about this capture"
+        let prompt = model.attachment == nil ? placeholder : "Ask about this picture, or /widget to make one like it"
         let row = HStack(alignment: .bottom, spacing: 10) {
             if !skills.isEmpty { SkillsBubble(open: open, toggle: toggle) }
             TextField("Message", text: $model.draft, selection: $selection, prompt: Text(prompt).foregroundStyle(ink.muted), axis: .vertical)

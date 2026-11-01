@@ -6,7 +6,8 @@ import PilotCore
 /// it and also we ship with a good default home page"): every block Pilot draws and every installed extension with a page,
 /// each shown or hidden, in their order. Edit Home changes a draft, Done saves it; Reset puts the default back.
 struct HomeLayout: Codable, Equatable, Sendable {
-    /// A block: one of Pilot's own, or an installed extension's page (`ext:<id>`).
+    /// A block: one of Pilot's own, an installed extension's page (`ext:<id>`), or a widget placed on Home
+    /// (`widget:<placement>`).
     struct Row: Codable, Equatable, Sendable, Identifiable {
         let id: String
         var shown: Bool
@@ -115,20 +116,36 @@ struct HomeLayout: Codable, Equatable, Sendable {
         row.hasPrefix(extensionPrefix) ? String(row.dropFirst(extensionPrefix.count)) : nil
     }
 
+    static let widgetPrefix = "widget:"
+    static func widgetRow(_ placement: String) -> String { widgetPrefix + placement }
+
+    /// The Home placement a row draws, if it is a widget's.
+    static func widgetID(_ row: String) -> String? {
+        row.hasPrefix(widgetPrefix) ? String(row.dropFirst(widgetPrefix.count)) : nil
+    }
+
+    /// A row beyond Pilot's own blocks, from what `extensions` lists: an extension's id is its page's row, a Home widget's
+    /// row is itself (an extension's id holds no colon).
+    private static func beyond(_ id: String) -> String { widgetID(id) != nil ? id : extensionRow(id) }
+
+    /// What `extensions` takes: the installed extensions with a page by id, then Home's widgets by their placements' rows.
+    static func beyond(pages: [String], widgets: [String]) -> [String] { pages + widgets.map(widgetRow) }
+
     /// The rows Edit Home lists and Home draws: the saved ones it can draw, in their order, then any block or extension
-    /// page added since, hidden. A row of an extension no longer installed stays saved, so reinstalling it puts it back
-    /// where it was, and is neither listed nor drawn.
+    /// page added since, hidden, and any widget put on Home since, shown (placing it there asked for it). `extensions`
+    /// lists the installed extensions with a page by id and Home's widgets by their rows. A row of an extension no
+    /// longer installed stays saved, so reinstalling it puts it back where it was, and is neither listed nor drawn.
     func resolved(extensions: [String]) -> [Row] {
         let known = Self.known(extensions: extensions)
         var rows = rows.filter { known.contains($0.id) }
         let have = Set(rows.map(\.id))
         rows += Block.allCases.map(\.rawValue).filter { !have.contains($0) }.map { Row(id: $0, shown: false) }
-        rows += extensions.map(Self.extensionRow).filter { !have.contains($0) }.map { Row(id: $0, shown: false) }
+        rows += extensions.map(Self.beyond).filter { !have.contains($0) }.map { Row(id: $0, shown: Self.widgetID($0) != nil) }
         return rows
     }
 
-    /// The rows Home can draw: Pilot's blocks and the installed extensions' pages.
-    static func known(extensions: [String]) -> Set<String> { Set(Block.allCases.map(\.rawValue)).union(extensions.map(extensionRow)) }
+    /// The rows Home can draw: Pilot's blocks, the installed extensions' pages and Home's widgets.
+    static func known(extensions: [String]) -> Set<String> { Set(Block.allCases.map(\.rawValue)).union(extensions.map(beyond)) }
 
     /// The ids Home draws, in order.
     func shown(extensions: [String]) -> [String] { resolved(extensions: extensions).filter(\.shown).map(\.id) }
@@ -265,6 +282,15 @@ final class HomeLayoutStore {
     func save(_ layout: HomeLayout) {
         self.layout = layout
         if let data = try? JSONEncoder().encode(layout) { defaults.set(data, forKey: Self.key) }
+    }
+
+    /// Drops the saved rows `gone` names (a widget taken off Home, whose placement's id never comes back); a layout left
+    /// as the default saves as nothing, as Done's does.
+    func forget(where gone: (String) -> Bool) {
+        guard layout.rows.contains(where: { gone($0.id) }) else { return }
+        var next = layout
+        next.rows.removeAll { gone($0.id) }
+        if next.isStandard(extensions: []) { reset() } else { save(next) }
     }
 
     /// Back to the default; nothing saved, so a later default is the one read.

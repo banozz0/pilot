@@ -204,6 +204,8 @@ extension TreeNode {
                                 : .v_tiles(try container.children.map { try $0.layoutDescription })
                         case .scrolling:
                             .h_scrolling(try container.children.map { try $0.layoutDescription })
+                        case .stage:
+                            .h_stage(try container.children.map { try $0.layoutDescription })
                     }
             }
         }
@@ -215,6 +217,7 @@ enum LayoutDescription: Equatable {
     case h_tiles([LayoutDescription])
     case v_tiles([LayoutDescription])
     case h_scrolling([LayoutDescription])
+    case h_stage([LayoutDescription])
     case floatingWindowsContainer([LayoutDescription])
     case window(UInt32)
     case macosPopupWindowsContainer

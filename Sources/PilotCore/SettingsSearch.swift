@@ -74,8 +74,8 @@ public enum SettingsSearch {
     /// then the panes (panes(_:)), a Setting each, so an app or action that matches as well stays above them, unless a setting's title is what was typed (P53). Provided per
     /// query, as emoji are: listed whole, their long keyword lists matched letters scattered across words ("gaps" found
     /// Export and import by its initials, "msg" the Menu page over Messages).
-    public static func entries(for query: String) -> [MenuEntry] {
-        AppPlace.search(query).map { place in
+    public static func entries(for query: String, developer: Bool = true) -> [MenuEntry] {
+        AppPlace.search(query, developer: developer).map { place in
             MenuEntry(title: place.path, target: .action(actionID(place)), keywords: place.keywords.joined(separator: " "),
                       ownKind: .setting, subtitle: "Pilot", icon: .glyph(place.page.symbol, .accent))
         } + panes(query).map { pane in
@@ -161,8 +161,9 @@ public enum SettingsSearch {
 }
 
 extension MenuNavigator {
-    /// The settings a root search finds (SettingsSearch.entries(for:)); none inside a branch.
-    public mutating func provideSettings(_ query: String) {
-        provide(.setting, branch == nil ? SettingsSearch.entries(for: query) : [])
+    /// The settings a root search finds (SettingsSearch.entries(for:)); none inside a branch. Developer pages only while
+    /// `developer` is on.
+    public mutating func provideSettings(_ query: String, developer: Bool = true) {
+        provide(.setting, branch == nil ? SettingsSearch.entries(for: query, developer: developer) : [])
     }
 }

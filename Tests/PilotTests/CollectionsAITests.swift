@@ -126,11 +126,14 @@ final class CollectionsAITests {
         #expect(asked.count == 1, "the joined request asked nothing")
     }
 
-    @Test("ai models lists the choices by the word set takes; --refresh fills codex's catalog and an endpoint's list, asking first when the key goes to a settable address")
+    @Test("ai models lists the choices by the word set takes; --refresh names claude's versions, fills codex's catalog and an endpoint's list, asking first when the key goes to a settable address")
     func models() async throws {
         #expect(await object("ai", ["models", "claudeCode"])["models"] == .array(["default", "haiku", "sonnet", "opus"].enumerated().map { i, id in
             .object(["id": .string(id), "title": .string(AIProvider.claudeCode.models[i].title)]) }))
-        #expect(await answer("ai", ["models", "claudeCode", "--refresh"]).error?.code == .badValue)
+        ai.listClaude = { [AIModelChoice(nil, "Claude Code's default · Opus 5.5"), AIModelChoice("opus", "Opus 5.5")] }
+        let claude = await object("ai", ["models", "claudeCode", "--refresh"])
+        #expect(claude["ok"] == .bool(true) && claude["models"] == .array(zip(["default", "haiku", "sonnet", "opus"], ["Claude Code's default · Opus 5.5", "Haiku", "Sonnet", "Opus 5.5"])
+            .map { .object(["id": .string($0), "title": .string($1)]) }))
         ai.findPlan = { p in
             PlanCLI(p, path: "/opt/homebrew/bin/codex", spawn: { _, arguments, _, _, _, _ in
                 arguments == ["debug", "models"] ? #"{"models":[{"slug":"gpt-6-sol","visibility":"list","priority":1}]}"# : ""

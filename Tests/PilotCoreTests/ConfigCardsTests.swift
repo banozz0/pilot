@@ -8,8 +8,9 @@ import Testing
 struct ConfigCardsTests {
     @Test("Every known config sits in one group")
     func groups() {
-        #expect(ConfigGroup.allCases.map(\.label) == ["Terminal and shell", "Windows and keys", "Code", "Agent settings", "Pilot", "Claude Code and Codex",
-                                                     "Hermes souls", "Repos"])
+        #expect(ConfigGroup.allCases.map(\.label) == ["Terminal and shell", "Windows and keys", "Code", "Agent settings", "Pilot", "Agent instructions",
+                                                     "Hermes souls", "Claude Code skills, agents and styles", "Codex skills and rules",
+                                                     "Hermes skills", "Repos"])
         let group = Dictionary(uniqueKeysWithValues: AppConfigs.known.map { ($0.id, $0.group) })
         #expect(group["ghostty"] == .terminal && group["zsh"] == .terminal && group["fish"] == .terminal)
         #expect(group["aerospace"] == .windows && group["karabiner"] == .windows)

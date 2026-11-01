@@ -48,11 +48,11 @@ func dropPlan(_ window: Window, at point: CGPoint) throws -> DropPlan? {
 
 extension WorkspaceArrangement {
     /// The order this auto workspace takes with `window` dropped at `point`: PilotCore's dropOrder over its tiled windows.
-    /// A strip goes by its x instead, over `columns`, the frames its columns have on screen: a hidden column has none
-    /// and is never the one dropped beside.
+    /// A strip or a stage goes by its x instead, over `columns`, the frames its windows have on screen: a hidden column
+    /// or a shelved window has none and is never the one dropped beside.
     func order(dropping window: UInt32, at point: CGPoint, among tiled: [UInt32], in area: Rect, columns: [UInt32: Rect]) -> [UInt32] {
         let others = tiled.filter { $0 != window }.map(Int.init)
-        let order = preset == .scrolling
+        let order = dropsByFrame
             ? LayoutPreset.dropOrder(others, inserting: Int(window), at: point, slots: others.map { columns[UInt32($0)].map { ($0.cgRect, false) } })
             : preset.dropOrder(others, inserting: Int(window), at: point, in: area.cgRect)
         return order.map { UInt32($0) }
@@ -60,12 +60,15 @@ extension WorkspaceArrangement {
 }
 
 extension WorkspaceArrangement {
-    /// On a strip, each of `tiled`'s frames from the last layout, what its drop reads; nothing for any other preset.
+    /// On a strip or a stage, each of `tiled`'s frames from the last layout, what its drop reads; nothing for any other preset.
     @MainActor
     func columnFrames(_ tiled: [UInt32]) -> [UInt32: Rect] {
-        guard preset == .scrolling else { return [:] }
+        guard dropsByFrame else { return [:] }
         return tiled.reduce(into: [:]) { frames, id in frames[id] = Window.get(byId: id)?.lastAppliedLayoutPhysicalRect }
     }
+
+    /// A strip or a stage: some of its windows are off screen, so a drop goes by the frames on screen, not the preset's slots.
+    private var dropsByFrame: Bool { preset == .scrolling || preset == .stage }
 }
 
 extension CGPoint {
@@ -136,6 +139,7 @@ func landing(of plan: DropPlan, for window: Window) throws -> Rect? {
         case .arrange(let target, let kept, let tiled):
             if target == window.nodeWorkspace && kept.order == tiled { return nil }
             guard let slot = kept.order.firstIndex(of: window.windowId) else { return nil }
+            if kept.preset == .stage { return try target.rootTilingContainer.stageLanding(of: window, at: nil, on: target.workspaceMonitor) }
             if kept.preset == .scrolling {
                 let others = kept.order.filter { $0 != window.windowId }.compactMap(Window.get(byId:))
                 return try target.rootTilingContainer.stripLanding(of: window, at: slot, among: others, on: target.workspaceMonitor)
@@ -146,6 +150,7 @@ func landing(of plan: DropPlan, for window: Window) throws -> Rect? {
             return kept.preset.tiles(kept.order.count, in: frame.cgRect)[slot].engineRect.inset(within: frame, by: inner)
         case .insert(let parent, let index):
             guard let target = parent.nodeWorkspace else { return nil }
+            if parent.layout == .stage { return parent.stageLanding(of: window, at: index, on: target.workspaceMonitor) }
             if parent.layout == .scrolling { return parent.stripLanding(of: window, at: index, among: parent.children, on: target.workspaceMonitor) }
             return try parent.insertedFrame(at: index, gaps: ResolvedGaps(gaps: config.gaps, monitor: target.workspaceMonitor))
                 ?? target.workspaceMonitor.visibleRectPaddedByOuterGaps

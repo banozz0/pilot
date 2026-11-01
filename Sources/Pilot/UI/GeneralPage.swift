@@ -288,8 +288,10 @@ struct GeneralPage: View {
     }
 
     /// Pilot's folder and the pilot command's link; export and import of the binds is Binds' (page map, Sven 2026-10-17).
+    /// The Developer switch (Q715) sits with the command's link: both are for people who live in a terminal.
     private var data: some View {
-        KitBlock(title: "Data", symbol: "folder") {
+        @Bindable var settings = engine.settings
+        return KitBlock(title: "Data", symbol: "folder") {
             BlockRow(first: true) {
                 TitledText(title: "Pilot's folder", detail: "Binds, settings, history and snapshots, in Application Support").padding(.vertical, 4)
                 InfoMark(text: "Opens the folder in Finder: what Pilot keeps of yours lives there, binds.json among it.")
@@ -297,6 +299,9 @@ struct GeneralPage: View {
                 Button("Show in Finder") { NSWorkspace.shared.open(PilotFolder.support) }.buttonStyle(.pilot)
             }
             CommandLineRow()
+            BlockRow {
+                Toggle("Developer pages", isOn: $settings.developer).toggleStyle(.pilotSwitchRow(info: DeveloperPages.help))
+            }
             BlockRow {
                 TitledText(title: "Uninstall", detail: "Speech models, caches, your data or Pilot itself, to the Trash").padding(.vertical, 4)
                 InfoMark(text: "Lists everything Pilot put on this Mac with its size; nothing of another app's. Ticked items go to the Trash, where Finder can put them back.")
@@ -394,10 +399,11 @@ struct MorePermissionRows: View {
     /// A row's right side: granted, its ask, Privacy & Security, or not read.
     enum Grant: Equatable { case granted, ask, openSettings, notChecked }
 
-    /// Screen Recording as Menu bar › Other apps reads it (ADR 0012): not read at all while Show exact menu bar items is
-    /// off; on, MenuItemPictures' check, and its pane, which MenuBarPage opens too.
-    static func screenRecording(exactItems: Bool, lacks: Bool) -> Grant {
-        guard exactItems else { return .notChecked }
+    /// Screen Recording as Menu bar › Other apps and the Window shelf read it (ADR 0012): not read at all while Show exact
+    /// menu bar items is off and the shelf has not read it (Window pictures Off, or no Stage workspace shown yet); else
+    /// their checks, and the pane they open.
+    static func screenRecording(exactItems: Bool, shelf: Bool = false, lacks: Bool) -> Grant {
+        guard exactItems || shelf else { return .notChecked }
         return lacks ? .openSettings : .granted
     }
 
@@ -422,8 +428,8 @@ struct MorePermissionRows: View {
         }
     }
 
-    static let screenRecordingInfo = "Menu bar › Other apps › Show exact menu bar items draws other apps' items with it. "
-        + "Pilot reads it only once that switch is on."
+    static let screenRecordingInfo = "Menu bar › Other apps › Show exact menu bar items draws other apps' items with it, and "
+        + "Tiling › Window shelf's pictures (Stills by default) show your shelved windows. Pilot reads it only for those, once a Stage workspace shows."
     static let inputMonitoringInfo = "Binds › Mouse needs it to tell a media key a mouse sends from your keyboard's."
     static let systemEventsInfo = "Sleep, restart, shut down and log out go through System Events, the one app Pilot automates. "
         + "While it is idle macOS may not say, so Allow can show though it is allowed."
@@ -468,9 +474,10 @@ struct MorePermissionRows: View {
     }
 
     private func read() {
-        // lacksPermission is false while the switch is off, before any Screen Recording read.
-        screenRecording = Self.screenRecording(exactItems: BarItemsStore.shared.settings.exactMenuItems,
-                                               lacks: engine.barSources.readings.menuApps.pictures.lacksPermission)
+        // Each lacksPermission is false while its switch is off, before any Screen Recording read.
+        let shelf = engine.shelf.pictures
+        screenRecording = Self.screenRecording(exactItems: BarItemsStore.shared.settings.exactMenuItems, shelf: shelf.mode != .off && shelf.checked,
+                                               lacks: engine.barSources.readings.menuApps.pictures.lacksPermission || shelf.lacksPermission)
         inputMonitoring = Self.inputMonitoring(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent))
         Task { await probeSystemEvents() }
     }

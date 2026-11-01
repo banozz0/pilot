@@ -126,11 +126,11 @@ struct WindowPageTabs: View {
     @Environment(\.style) private var style
     let model: AppWindowModel
 
-    static func shows(_ model: AppWindowModel) -> Bool { model.page.area.pages.count > 1 || !model.tabs.isEmpty }
+    static func shows(_ model: AppWindowModel) -> Bool { model.page.area.shown.count > 1 || !model.tabs.isEmpty }
 
     var body: some View {
         let page = model.page
-        let pages = page.area.pages.count > 1 ? page.area.pages.map { (value: $0, title: $0.title) } : []
+        let pages = page.area.shown.count > 1 ? page.area.shown.map { (value: $0, title: $0.title) } : []
         let tabs = model.tabs
         let pick = Binding(get: { model.page }, set: { model.go(AppPlace($0)) })
         let part = Binding(get: { model.section(of: page) }, set: { model.sections[page] = $0 })

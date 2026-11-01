@@ -77,27 +77,28 @@ struct OpenWithPage: View {
         }
     }
 
-    /// Every other kind, by group. One grid holds them, so every picker starts on one line and each kind's whole name
-    /// shows.
+    /// Every other kind, a block per group packed as many across as fit (Sven 2026-10-30: one long column left the
+    /// window's right half empty): each kind's name, then its picker filling the rest of its row, the pickers lined up within a block.
     private var others: some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+        CardGrid(minimum: 300) {
             ForEach(Self.otherGroups, id: \.name) { group in
-                GridRow {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(group.name).font(ink.ui(11.5, .semibold)).foregroundStyle(ink.muted)
                         .accessibilityAddTraits(.isHeader)
-                        .padding(.top, 10)
-                        .gridCellColumns(2)
-                }
-                ForEach(group.kinds, id: \.id) { kind in
-                    GridRow {
-                        KindName(kind: kind, model: kinds)
-                        KindPicker(kind: kind, model: kinds, compact: true).frame(maxWidth: 320)
+                        .padding(.bottom, 2)
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                        ForEach(group.kinds, id: \.id) { kind in
+                            GridRow {
+                                KindName(kind: kind, model: kinds)
+                                KindPicker(kind: kind, model: kinds, compact: true)
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 12)
+                .blockSurface()
             }
         }
-        .padding(.horizontal, 14).padding(.bottom, 12)
-        .blockSurface()
     }
 }
 
@@ -182,7 +183,8 @@ private struct KindCard: View {
     }
 }
 
-/// A kind's picker: the app it opens in, and every app macOS says can open it.
+/// A kind's picker: the app it opens in, the apps suggested for it (OpenWithApps), and every other app macOS says can
+/// open it folded under Other apps (Sven 2026-10-30: "it should recommend good apps depending on the file type").
 private struct KindPicker: View {
     let kind: FileKind
     let model: DefaultAppsModel
@@ -192,12 +194,25 @@ private struct KindPicker: View {
         let row = model.rows[kind.id]
         let current = row?.current
         let name = current.map { bundle in row?.choices.first { $0.bundle == bundle }?.name ?? AppsModule.appName(bundle) ?? bundle } ?? "None"
+        let choices = row?.choices ?? [], suggested = Set(row?.suggested ?? [])
+        let top = suggested.isEmpty ? choices : (row?.suggested ?? []).compactMap { b in choices.first { $0.bundle == b } }
+        let rest = suggested.isEmpty ? [] : choices.filter { !suggested.contains($0.bundle) }
+        let selection = Binding(get: { current ?? "" }, set: { bundle in Task { await model.change(kind, to: bundle) } })
         AppPickerField(bundle: current, name: name, label: kind.title, compact: compact) {
-            Picker(kind.title, selection: Binding(get: { current ?? "" }, set: { bundle in Task { await model.change(kind, to: bundle) } })) {
+            Picker(kind.title, selection: selection) {
                 if current == nil { Text("None").tag("") }
-                ForEach(row?.choices ?? [], id: \.bundle) { AppMenuItem(name: $0.name, bundle: $0.bundle).tag($0.bundle) }
+                ForEach(top, id: \.bundle) { AppMenuItem(name: $0.name, bundle: $0.bundle).tag($0.bundle) }
             }
             .pickerStyle(.inline).labelsHidden()
+            if !rest.isEmpty {
+                Divider()
+                Menu("Other apps") {
+                    Picker(kind.title, selection: selection) {
+                        ForEach(rest, id: \.bundle) { AppMenuItem(name: $0.name, bundle: $0.bundle).tag($0.bundle) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                }
+            }
         }
     }
 }

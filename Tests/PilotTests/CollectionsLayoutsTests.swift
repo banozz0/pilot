@@ -18,7 +18,7 @@ struct CollectionsLayoutsTests {
         store = HomeLayoutStore(defaults: defaults)
         let (store, picked) = (store, picked)
         verbs.registerHomeBlocks(HomeBlockStores(layout: { store }, pages: { [ExtensionPages.Link(id: "pomo", title: "Pomodoro", icon: "🍅")] },
-                                                 style: { picked.style }))
+                                                 style: { picked.style }, widgets: { [] }))
     }
 
     func answer(_ verb: String, _ args: [String]) async -> ControlAnswer {

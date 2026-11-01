@@ -127,10 +127,12 @@ extension Window {
     }
 
     /// LayoutCommand.swift, `layout horizontal vertical`: the window's tiling parent turns to the other orientation. A
-    /// scrolling workspace's strip stays horizontal and its stacks vertical, so nothing there flips.
+    /// scrolling workspace's strip stays horizontal and its stacks vertical, so nothing there flips; a stage's row stays
+    /// a row, its joined groups flip.
     @MainActor @discardableResult
     func flipSplit() throws -> Bool {
-        guard case .tilingContainer(let parent) = try windowParentCases, try nodeWorkspace?.rootTilingContainer.layout != .scrolling else { return false }
+        guard case .tilingContainer(let parent) = try windowParentCases, try nodeWorkspace?.rootTilingContainer.layout != .scrolling,
+              parent.layout != .stage else { return false }
         parent.changeOrientation(parent.orientation.opposite)
         return true
     }

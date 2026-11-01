@@ -16,6 +16,10 @@ public struct TilerWindow: Equatable, Sendable {
     public let title: String
     /// A pinned pop-out (spec omarchy-ideas T1).
     public var pinned = false
+    /// On a Stage workspace (ADR 0015): waiting in the hide corner, off the stage, for the Window shelf.
+    public var shelved = false
+    /// On a Stage workspace, the first window of the joined group it is in; nil for a window alone or elsewhere.
+    public var group: UInt32? = nil
 }
 
 /// A workspace with its monitor and root layout.
@@ -25,10 +29,13 @@ public struct TilerWorkspace: Equatable, Sendable {
     public let monitorName: String
     public let rootLayout: TilerLayout
     public var displayUUID: String? = nil
+    /// Show desktop holds its windows in the corner (the Window shelf hides there, ADR 0015).
+    public var showingDesktop = false
 }
 
 public enum TilerWindowScope: Equatable, Sendable {
-    case all, focused, workspace(String)
+    /// `minimized`: the windows macOS holds minimized (ADR 0015's shelf lists them on the workspace they left).
+    case all, focused, workspace(String), minimized
 }
 
 /// ListWindowsCommand.swift.
@@ -38,6 +45,7 @@ func listWindows(_ scope: TilerWindowScope) async throws -> [TilerWindow] {
         case .all: Workspace.all.flatMap(\.allLeafWindowsRecursive)
         case .focused: focus.windowOrNil.asList()
         case .workspace(let name): Workspace.get(byName: name).allLeafWindowsRecursive
+        case .minimized: macosMinimizedWindowsContainer.children.filterIsInstance(of: Window.self)
     }
     var monitorIds: [Workspace: Int] = [:] // the monitor sort runs once per workspace, not per window
     func monitorId(of workspace: Workspace?) -> Int {
@@ -47,19 +55,29 @@ func listWindows(_ scope: TilerWindowScope) async throws -> [TilerWindow] {
         monitorIds[workspace] = id
         return id
     }
+    var staged: [Workspace: Set<ObjectIdentifier>] = [:] // a stage's groups on it, once per workspace
+    func stage(of window: Window, on workspace: Workspace?) -> (shelved: Bool, group: UInt32?) {
+        guard let workspace, let root = try? workspace.rootTilingContainer, root.layout == .stage else { return (false, nil) }
+        let on = staged[workspace] ?? root.stagedIds
+        staged[workspace] = on
+        return root.shelving(window, staged: on)
+    }
     var result: [TilerWindow] = []
     for window in windows {
         let workspace = window.nodeWorkspace
+        let (shelved, group) = stage(of: window, on: workspace)
         result.append(TilerWindow(
             id: window.windowId,
             appName: window.app.name ?? "",
             bundleId: window.app.rawAppBundleId ?? "",
             pid: window.app.pid,
-            workspace: workspace?.name ?? "",
+            workspace: workspace?.name ?? window.minimizedFrom ?? "",
             monitorId: monitorId(of: workspace),
             layout: try layoutDescription(of: window),
             title: try await window.getTitle(.cancellable),
             pinned: window.isPinned,
+            shelved: shelved,
+            group: group,
         ))
     }
     return result
@@ -101,6 +119,7 @@ extension Workspace {
             monitorName: monitor.name,
             rootLayout: try TilerLayout(rootTilingContainer),
             displayUUID: uuid,
+            showingDesktop: shownDesktop?.workspace === self,
         )
     }
 }

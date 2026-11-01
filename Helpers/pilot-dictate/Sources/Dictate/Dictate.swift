@@ -8,19 +8,27 @@ import WhisperKit
 
 /// Pilot's own dictation (story 194): each speech model in a folder of its own Pilot can delete, read only on this Mac.
 /// Pilot names a model by its engine and that engine's name for it (SpeechModel.Choice): `whisperkit/<variant>`, argmax's
-/// Core ML builds of Whisper, or `fluidaudio/v3`, NVIDIA's Parakeet TDT v3 in FluidInference's Core ML build.
+/// Core ML builds of Whisper, or `fluidaudio/ultra`, Moondream's Parakeet Ultra (post-trained from NVIDIA's Parakeet TDT
+/// v3) in FluidInference's Core ML build. `fluidaudio/v3` still loads: a Mac that had v3 dictates on it until Ultra is
+/// downloaded (1.0.2, Q719).
 ///
 /// Measured on Sven's M4 (2026-10-16, 11 s of speech, model on disk): Whisper large-v3 turbo, 632 MB, loads in 1.2 s and
 /// transcribes in 0.9 s at a 163 MB footprint; whisper.cpp's turbo (q5_0, Metal) took 2.8 s at 880 MB. A model's first
-/// load compiles it for the Neural Engine, up to three minutes, and macOS keeps that compile for this helper's code
-/// signature alone (a renamed or re-signed copy compiled again; the same signature again did not): the download prepares
-/// it before the model counts as ready, and `prepare` again after a new helper.
+/// load compiles it for the Neural Engine, about four minutes for Whisper turbo (242 to 248 s, 2026-10-31), and Core ML keeps that compile under the
+/// home's Library/Caches/<process name>, per macOS build. ~/Library/Caches is purgeable: macOS's low-disk purge and Mole's
+/// clean emptied it and the next take compiled for minutes again (Sven, 2026-10-31: "it keeps happening"), so the helper
+/// takes the model's folder as its home (main.swift) and the compile lives and goes with the model. The download prepares
+/// it before the model counts as ready, and `prepare` again after a new helper, a new macOS or a compile gone.
 public enum Dictate {
     /// The file Pilot reads for "on disk": written once the model is downloaded and prepared, holding the model's name,
     /// which every later load reads back from here.
     public static let readyFile = "ready"
-    /// The code signature of the helper that last compiled the model, `preparedFile`'s content.
+    /// The code signature of the helper that last compiled the model and the macOS build, `preparedFile`'s content.
     static let preparedFile = "prepared"
+    /// Held while a helper loads the model from the folder (`loadingAlone`).
+    static let lockFile = "loading.lock"
+    /// A take's audio or text waiting beside the models for Pilot: `take-<pid>.wav` or `.txt` (`keep`).
+    public static let keptPrefix = "take-"
     /// The shortest take worth transcribing; Whisper makes words up from shorter ones.
     static let shortest = WhisperKit.sampleRate / 2
     /// The stretch `speech(in:)` judges at once: a tenth of a second, as WhisperKit's EnergyVAD does.
@@ -46,13 +54,14 @@ public enum Dictate {
     /// A model as Pilot names it.
     enum Model {
         case whisper(variant: String)
-        case parakeetV3
+        case parakeet(AsrModelVersion, Repo)
 
         init(_ name: String) throws {
             let parts = name.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "/", maxSplits: 1).map(String.init)
             switch (parts.count == 2 ? parts[0] : "", parts.last ?? "") {
             case ("whisperkit", let variant): self = .whisper(variant: variant)
-            case ("fluidaudio", "v3"): self = .parakeetV3
+            case ("fluidaudio", "ultra"): self = .parakeet(.ultra, .parakeetUltra)
+            case ("fluidaudio", "v3"): self = .parakeet(.v3, .parakeetV3)
             default: throw DictateError.unknownModel(name)
             }
         }
@@ -62,7 +71,7 @@ public enum Dictate {
         func folder(_ base: URL) -> URL {
             switch self {
             case .whisper(let variant): base.appending(path: "models/argmaxinc/whisperkit-coreml/openai_whisper-\(variant)")
-            case .parakeetV3: base.appending(path: Repo.parakeetV3.folderName)
+            case .parakeet(_, let repo): base.appending(path: repo.folderName)
             }
         }
     }
@@ -90,10 +99,10 @@ public enum Dictate {
             // time; the load then fetches the tokenizer beside the model.
             _ = try await WhisperKit(WhisperKitConfig(modelFolder: folder.path, tokenizerFolder: base, verbose: false, logLevel: .error,
                                                       prewarm: true, load: true, download: false))
-        case .parakeetV3:
+        case .parakeet(let version, _):
             // FluidAudio downloads, then compiles each part in this process; its downloading phase is the first half of its
             // fraction (ModelHub's ProgressReporter, downloadPhaseWeight 0.5 in 0.17.7).
-            _ = try await AsrModels.download(to: model.folder(base), version: .v3) { report in
+            _ = try await AsrModels.download(to: model.folder(base), version: version) { report in
                 if case .compiling = report.phase { preparing() } else { progress(min(report.fractionCompleted * 2, 1)) }
             }
             preparing()
@@ -109,34 +118,149 @@ public enum Dictate {
         return true
     }
 
-    /// Whether this helper compiled the model last, so loading it takes a second, not minutes.
+    /// Whether this helper on this macOS compiled the model last and every part of that compile is still there, so
+    /// loading it takes a second, not minutes. In doubt, not: a needless prepare is a load from the compile, a wrong yes
+    /// is minutes of "Listening…" with no words.
     public static func isPrepared(_ base: URL) -> Bool {
-        guard let signature else { return false }
-        return (try? String(contentsOf: base.appending(path: preparedFile), encoding: .utf8)) == signature
+        guard let stamp, let written = try? String(contentsOf: base.appending(path: preparedFile), encoding: .utf8),
+              written.hasPrefix(stamp + " "), let parts = Int(written.dropFirst(stamp.count + 1)), parts > 0 else { return false }
+        return compiled(base) >= parts
     }
 
-    /// The model `ready` names, from disk only; this helper is stamped as having compiled it.
+    /// How many parts of the model Core ML's compile holds in the folder: finished bundles in its cache for this macOS
+    /// build. A `.tmp.<pid>` one is a compile under way or cut off. A part that runs off the Neural Engine has none, so
+    /// the stamp keeps the count a whole load left (Whisper turbo 3 of its 5 parts) and fewer means a part is gone; a
+    /// stamp of 0 never counts, since a compile that left nothing is no compile.
+    static func compiled(_ base: URL) -> Int {
+        let cache = base.appending(path: "Library/Caches/\(ProcessInfo.processInfo.processName)/com.apple.e5rt.e5bundlecache/\(osBuild)")
+        let bundles = FileManager.default.enumerator(atPath: cache.path)
+        var count = 0
+        while let path = bundles?.nextObject() as? String {
+            if bundles?.level == 2, path.hasSuffix(".bundle"), !path.contains(".tmp.") { count += 1 }
+            if (bundles?.level ?? 0) >= 2 { bundles?.skipDescendants() }
+        }
+        return count
+    }
+
+    /// The model `ready` names, from disk only; this helper is stamped as having compiled it. One load at a time per
+    /// folder, across helpers: a press while another take's helper compiles the model waits for that compile and then
+    /// loads from it, where it compiled a copy of its own alongside (four at once on 2026-10-31, 430 MB each, each slowing
+    /// the others). The lock goes with the process, so a helper that dies never holds it.
     public static func load(_ base: URL) async throws -> any Transcriber {
+        try await alone(base) { try await loadModel(base) }
+    }
+
+    /// `work` while this process holds the folder's lock: a load, or a download, whose compile a relaunch's resume would
+    /// otherwise run a second time into the same folder. The lock goes with the process.
+    public static func alone<T>(_ base: URL, _ work: () async throws -> T) async throws -> T {
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let lock = open(base.appending(path: lockFile).path, O_CREAT | O_RDWR, 0o600)
+        if lock >= 0 {
+            await withCheckedContinuation { (locked: CheckedContinuation<Void, Never>) in
+                Thread.detachNewThread { flock(lock, LOCK_EX); locked.resume() }
+            }
+        }
+        defer { if lock >= 0 { close(lock) } }
+        return try await work()
+    }
+
+    private static func loadModel(_ base: URL) async throws -> any Transcriber {
         let model = try Model(String(contentsOf: base.appending(path: readyFile), encoding: .utf8))
         let transcriber: any Transcriber
         switch model {
         case .whisper:
-            transcriber = WhisperTranscriber(kit: try await WhisperKit(WhisperKitConfig(
-                modelFolder: model.folder(base).path, tokenizerFolder: base, verbose: false, logLevel: .error, load: true, download: false)))
-        case .parakeetV3:
+            let kit = try await WhisperKit(WhisperKitConfig(
+                modelFolder: model.folder(base).path, tokenizerFolder: base, verbose: false, logLevel: .error, load: true, download: false))
+            transcriber = WhisperTranscriber(kit: kit, prompt: promptTokens(words(beside: base), kit.tokenizer))
+        case .parakeet(let version, _):
             let asr = AsrManager(config: .default)
-            try await asr.loadModels(try AsrModels.loadLocal(from: model.folder(base), version: .v3))
+            try await asr.loadModels(try AsrModels.loadLocal(from: model.folder(base), version: version))
             transcriber = ParakeetTranscriber(asr: asr)
         }
         stampPrepared(base)
         return transcriber
     }
 
-    static func stampPrepared(_ base: URL) {
-        if let signature, !isPrepared(base) { try? Data(signature.utf8).write(to: base.appending(path: preparedFile)) }
+    /// The file Pilot keeps Sven's words in (DictationWords), in the Speech folder that holds each model's folder.
+    static let wordsFile = "vocabulary.json"
+    /// The most prompt tokens: the prompt shares Whisper's 224-token context with the text it writes, so it stays small.
+    static let promptCap = 60
+
+    /// The words Sven taught dictation, as one line for Whisper's prompt: "Claude, Codex, Ghostex"; nil when there are
+    /// none. Read from the file beside the model's folder, never from the arguments.
+    public static func words(beside base: URL) -> String? {
+        struct Taught: Decodable { let words: [String]? }
+        let file = base.deletingLastPathComponent().appending(path: wordsFile)
+        guard let data = try? Data(contentsOf: file), let words = (try? JSONDecoder().decode(Taught.self, from: data))?.words else { return nil }
+        let line = words.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: ", ")
+        return line.isEmpty ? nil : line
     }
 
-    /// This helper's code directory hash, what macOS keys the compiled model by.
+    /// `line` as Whisper's prompt tokens, a sentence: " I use Claude, Codex, Ghostex." Special tokens dropped (WhisperKit
+    /// adds <|startofprev|> itself), the list cut to `promptCap` at a word's end. A bare list lost a take's first word
+    /// ("Ask Claude to open…" came back "Claude to open…") and, without its full stop, went title case with no
+    /// punctuation; the sentence kept every clip whole (bleed check, 2026-10-30). Nil without words or a tokenizer.
+    static func promptTokens(_ line: String?, _ tokenizer: (any WhisperTokenizer)?) -> [Int]? {
+        guard let line, let tokenizer else { return nil }
+        func encode(_ text: String) -> [Int] { tokenizer.encode(text: text).filter { $0 < tokenizer.specialTokens.specialTokenBegin } }
+        let lead = encode(" I use"), stop = encode(".")
+        var list: [Int] = []
+        for word in line.components(separatedBy: ", ") {
+            let next = encode((list.isEmpty ? " " : ", ") + word)
+            guard lead.count + list.count + next.count + stop.count <= promptCap else { break }
+            list += next
+        }
+        return list.isEmpty ? nil : lead + list + stop
+    }
+
+    /// After a whole load: this helper, this macOS and the parts compiled. The compile stays out of backups, rebuilt in minutes.
+    static func stampPrepared(_ base: URL) {
+        guard let stamp else { return }
+        let file = base.appending(path: preparedFile), written = "\(stamp) \(compiled(base))"
+        if (try? String(contentsOf: file, encoding: .utf8)) != written { try? Data(written.utf8).write(to: file) }
+        excludeFromBackup(base.appending(path: "Library"))
+    }
+
+    /// Kept takes and the compile never reach Time Machine.
+    public static func excludeFromBackup(_ item: URL) {
+        var item = item, values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? item.setResourceValues(values)
+    }
+
+    /// This helper and this macOS: a new helper prepares once more, and Core ML's cache keeps a folder per macOS build.
+    /// `preparedFile` holds it, a space, and the parts compiled (`compiled`).
+    static let stamp = signature.map { "\($0) \(osBuild)" }
+
+    /// The macOS build, "26B123", the name of Core ML's cache folder for it.
+    static let osBuild: String = {
+        var size = 0
+        guard sysctlbyname("kern.osversion", nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var build = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("kern.osversion", &build, &size, nil, 0) == 0 else { return "" }
+        return String(decoding: build.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }()
+
+    /// The take's audio while the model loads, beside the models (`keptPrefix`), so a Pilot quit or relaunched meanwhile
+    /// finds it next time rather than lose it (Sven, 2026-10-31: the words never arrived); gone once answered.
+    /// "wav" for that, "txt" for its text when Pilot is gone by the time it is written down.
+    public static func kept(_ type: String, beside base: URL) -> URL {
+        base.deletingLastPathComponent().appending(path: "\(keptPrefix)\(getpid()).\(type)")
+    }
+
+    /// `samples` as a 16 kHz mono WAV that `samples(of:)` reads back.
+    static func write(_ samples: [Float], to file: URL) throws {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(WhisperKit.sampleRate), channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
+        buffer.frameLength = buffer.frameCapacity
+        samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        let audio = try AVAudioFile(forWriting: file, settings: format.settings)
+        try audio.write(from: buffer)
+        audio.close()
+        excludeFromBackup(file)
+    }
+
+    /// This helper's code directory hash.
     static let signature: String? = {
         var me: SecCode?, code: SecStaticCode?, info: CFDictionary?
         guard SecCodeCopySelf([], &me) == errSecSuccess, let me, SecCodeCopyStaticCode(me, [], &code) == errSecSuccess, let code,
@@ -159,7 +283,12 @@ public enum Dictate {
         try recording.start(buffer: { said(Self.levelLine($0)) }, lost: { said(inputLost); end.yield(.lost) })
         said("listening")
         if !isPrepared(base) { said("preparing") }
-        let transcriber = Task { try await loaded(base, said) }
+        let up = OSAllocatedUnfairLock(initialState: false)
+        let transcriber = Task {
+            let transcriber = try await loaded(base, said)
+            up.withLock { $0 = true }
+            return transcriber
+        }
         let partials = words ? Task { await Self.partials(transcriber, recording, said) } : nil
         Task { end.yield(await stop() ? .cancelled : .stopped) }
         var ending = End.stopped
@@ -171,6 +300,8 @@ public enum Dictate {
         // few words"). An input that went away has nothing more to give.
         if ending == .stopped { try? await Task.sleep(for: tail) }
         let samples = recording.stop()
+        // Still loading, which can be minutes: the take waits on disk too, until main.swift answers it.
+        if !up.withLock({ $0 }), speech(in: samples) != nil { try? write(samples, to: kept("wav", beside: base)) }
         // The last partial finishes first: one model never decodes twice at once, and no partial comes after the text.
         await partials?.value
         return try await transcribe(transcriber.value, samples)
@@ -330,6 +461,8 @@ public protocol Transcriber: Sendable {
 /// Whisper, the language detected once a take, a long take cut at its pauses.
 final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     let kit: WhisperKit
+    /// Sven's words as the decoder's prompt (Dictate.promptTokens), so Whisper spells them as taught; nil for none.
+    let prompt: [Int]?
     /// The take's language, read once from its first `solid` of speech and kept for the rest. Read again in each 30 s
     /// piece, a piece Whisper decoded again at a higher temperature drew its language at random too, and English came
     /// back Spanish (Sven, 2026-10-19).
@@ -341,8 +474,9 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     /// 30.9 s WAV). Whisper pads each window with the same zeros.
     static let padding = [Float](repeating: 0, count: WhisperKit.sampleRate)
 
-    init(kit: WhisperKit) {
+    init(kit: WhisperKit, prompt: [Int]? = nil) {
         self.kit = kit
+        self.prompt = prompt
         // WhisperKit cuts a take over 30 s in the longest quiet of each piece's second half, by an energy threshold of
         // its own (0.02, -34 dB) where a voice at a usual microphone level reads as quiet: the cut fell mid-word, and the
         // piece after it came back as one made-up line (Sven, 2026-10-19: about half of a 2 minute take typed). The
@@ -364,12 +498,14 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         } else {
             samples = take
         }
+        // Short takes keep Whisper's own language pick even with a prompt: reading it first cost 0.4 to 1.4 s a take
+        // (Sven, 2026-10-30, Q678); add it back if a short Spanish take comes out in English.
         let language = await language(of: samples)
         // No first-token check: a piece opening on room noise failed it however sure the rest was, and its decode again
         // at a higher temperature came back garbled or as one made-up line, one run in three on a noisy 85 s clip
         // (2026-10-19). The average log probability still sends a decode that failed as a whole round again.
         let options = DecodingOptions(language: language, detectLanguage: language == nil, skipSpecialTokens: true, withoutTimestamps: true,
-                                      firstTokenLogProbThreshold: nil, chunkingStrategy: .vad)
+                                      promptTokens: prompt, firstTokenLogProbThreshold: nil, chunkingStrategy: .vad)
         var pieces = try await kit.transcribe(audioArray: samples + Self.padding, decodeOptions: options)
             .map { (text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), start: Int(($0.seekTime ?? 0) * Float(WhisperKit.sampleRate))) }
             .filter { !$0.text.isEmpty && !Self.isTag($0.text) }
@@ -405,14 +541,14 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         String(piece.lowercased().map { $0.isLetter || $0.isNumber ? $0 : " " }).split(separator: " ").joined(separator: " ")
     }
 
-    /// The take's language once `samples` hold a `solid` stretch, detected at temperature 0 on their first 30 s; nil
-    /// before, or when detecting fails, so the pass keeps Whisper's own pick rather than losing the take.
+    /// The take's language once `samples` hold a `solid` stretch, detected at temperature 0 on their first 30 s and kept;
+    /// nil before, or when detecting fails, so the pass keeps Whisper's own pick rather than losing the take.
     private func language(of samples: [Float]) async -> String? {
         if let language = kept.withLock({ $0 }) { return language }
         guard samples.count >= Self.solid,
               let detected = try? await kit.detectLangauge(audioArray: Array(samples.prefix(WhisperKit.sampleRate * 30))).language
         else { return nil }
-        kept.withLock { $0 = detected }
+        if samples.count >= Self.solid { kept.withLock { $0 = detected } }
         return detected
     }
 
@@ -425,7 +561,7 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     }
 }
 
-/// Parakeet TDT v3, which reads any of its 25 European languages with no hint and cuts a long take itself.
+/// Parakeet Ultra or TDT v3, which read any of their 25 European languages with no hint and cut a long take themselves.
 struct ParakeetTranscriber: Transcriber {
     let asr: AsrManager
 

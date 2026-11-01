@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .pk-row.has-mark { grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; }
+  .pk-group b { font-weight: 400; color: var(--pk-text3); }
+  .pk-group.is-alert { color: var(--pk-problem); }
+</style>
+<body class="pk">
+  <div class="pk-head"><span class="pk-title"><b>To-do</b> · this Mac</span><span class="pk-meta" id="count"></span></div>
+  <div class="pk-list pk-grow pk-fade" id="list"><div class="pk-empty">Reading…</div></div>
+  <div class="pk-foot"><span id="done"></span><span>Hyper+Space › To-do</span></div>
+</body>
+<script>
+  // Fed by feed.py: {installed, groups: [{name, items: [{text, due}]}], open, doneToday, done: [{text}]}.
+  const { $, esc } = PilotKit;
+
+  function draw(d) {
+    const list = $("list");
+    if (d.installed === false) {
+      $("count").textContent = ""; $("done").textContent = "";
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("check")}<b>To-do is not installed</b><span>Add it from Pilot's Extensions page.</span></div>`;
+      return;
+    }
+    const groups = Array.isArray(d.groups) ? d.groups : [], done = Array.isArray(d.done) ? d.done : [];
+    $("count").textContent = d.open ? d.open + " open" : "";
+    $("done").textContent = d.doneToday ? d.doneToday + " done today" : "";
+    if (!groups.length && !done.length) {
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("check")}<b>Nothing to do</b><span>Type todo and a task in Hyper+Space to add one.</span></div>`;
+      return;
+    }
+    let html = "";
+    for (const g of groups) {
+      const late = g.name === "Overdue";
+      html += `<div class="pk-group ${late ? "is-alert" : ""}"><span>${esc(g.name)}</span><b>${g.items.length}</b></div>`;
+      html += g.items.map((t) => `<div class="pk-row has-mark"><span class="pk-mark"><span class="pk-check ${late ? "is-alert" : ""}"></span></span>`
+        + `<span class="pk-text">${esc(t.text)}</span><span class="pk-aside ${late ? "pk-alert" : ""}">${t.due && g.name !== "Today" ? esc(t.due) : ""}</span></div>`).join("");
+    }
+    if (done.length) {
+      html += `<div class="pk-group"><span>Done today</span><b>${d.doneToday}</b></div>`;
+      html += done.map((t) => `<div class="pk-row has-mark is-done"><span class="pk-mark"><span class="pk-check is-done"></span></span><span class="pk-text">${esc(t.text)}</span><span></span></div>`).join("");
+    }
+    list.innerHTML = html;
+  }
+
+  PilotKit.on(draw);
+</script>

@@ -437,15 +437,21 @@ extension AIChat {
 
         /// One turn: claude resumes its session; codex its thread, the prompt as its developer instructions (codexLock).
         /// Hands each event on as it arrives, on the reading thread; codex's second message onwards starts a paragraph, so
-        /// the text handed on is the answer returned.
+        /// the text handed on is the answer returned. A picture goes to claude as stream-json input, as the chat's does
+        /// (QuickAI.message): /widget's maker builds from a screenshot (Q693); the chat sends pictures to no agent.
         public func turn(_ request: Request, event: @escaping @Sendable (AgentEvent) -> Void) async throws(QuickAI.Failure) -> Reply {
             let session = request.session(for: provider)
-            let input = request.text(for: provider)
+            let text = request.text(for: provider)
+            // Only a maker's turn (claude with the file tools) takes one: the chat's agent never gets a picture (story 191).
+            let picture = provider == .claudeCode && reach == .files ? request.image : nil
+            let input = picture.map { QuickAI.message(text, image: $0) } ?? Data(text.utf8)
             let arguments: [String], environment: [String: String]
             if provider == .claudeCode {
                 arguments = Self.claudeArguments(prompt: prompt.path, session: session, model: model, effort: effort, reach: reach)
+                    + (picture == nil ? [] : QuickAI.pictureInput)
                 environment = Self.environment(cli: path, helpers: helpers)
             } else {
+                guard request.image == nil else { throw .unsupported("codex's agent takes no picture here") }
                 guard let instructions = try? String(contentsOf: prompt, encoding: .utf8) else { throw .failed("Pilot's agent prompt is missing") }
                 arguments = Self.codexArguments(directory: AICommand.folder.path, session: session, model: model, effort: effort,
                                                 instructions: instructions, helpers: helpers)
@@ -455,7 +461,7 @@ extension AIChat {
             let got = Mutex<(text: String, done: (said: String?, isError: Bool)?, session: String?)>(("", nil, nil))
             let parse = provider == .claudeCode ? Self.claudeEvents : Self.codexEvents
             do {
-                _ = try await spawn(path, arguments, environment, Data(input.utf8), timeout) { line in
+                _ = try await spawn(path, arguments, environment, input, timeout) { line in
                     for parsed in parse(line) {
                         let each = got.withLock { g -> AgentEvent in
                             switch parsed {

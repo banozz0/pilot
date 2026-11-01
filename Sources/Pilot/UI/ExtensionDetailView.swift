@@ -5,9 +5,11 @@ import SwiftUI
 /// surface), after Raycast's detail: its markdown, its facts in a quiet column beside it, each label over its value. Each
 /// side scrolls on its own and every word can be selected; Return and Cmd+K are its row's, which the panel runs. A live
 /// picker is always the wide panel, so the facts always fit beside the words. Instrument and Toybox draw their own
-/// (InstrumentExtensionDetail, ToyExtensionDetail).
+/// (InstrumentExtensionDetail, ToyExtensionDetail). A detail with blocks (pilot-1-1 T9, Q603) draws them in place of its
+/// markdown, as a page draws them, at the menu's width; a click on one's action goes to `act`.
 struct ExtensionDetailView: View, Equatable {
     let detail: Extension.Detail
+    var act: (Extension.Item.Action) -> Void = { _ in }
 
     /// The same detail draws the same, so a menu redraw (a pointer move, a Cmd+K filter) never splits its markdown again.
     nonisolated static func == (a: Self, b: Self) -> Bool { a.detail == b.detail }
@@ -16,7 +18,7 @@ struct ExtensionDetailView: View, Equatable {
     static let factsWidth: CGFloat = 208
 
     var body: some View {
-        DetailBody(detail: detail)
+        DetailBody(detail: detail, act: act)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .styled(.extensionDetail)
     }
@@ -26,21 +28,36 @@ struct ExtensionDetailView: View, Equatable {
 private struct DetailBody: View {
     @Environment(\.style) private var style
     let detail: Extension.Detail
+    let act: (Extension.Item.Action) -> Void
 
     var body: some View {
-        let blocks = DetailBlock.split(detail.markdown), facts = detail.metadata
-        if blocks.isEmpty, facts.isEmpty {
+        // Blocks in place of the markdown when it sends some.
+        let drawn = detail.blocks, blocks = drawn.isEmpty ? DetailBlock.split(detail.markdown) : [], facts = detail.metadata
+        if blocks.isEmpty, drawn.isEmpty, facts.isEmpty {
             nothing
         } else if style.kind == .instrument {
-            InstrumentExtensionDetail(blocks: blocks, facts: facts)
+            InstrumentExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
         } else {
-            ToyExtensionDetail(blocks: blocks, facts: facts)
+            ToyExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
         }
     }
 
     /// An empty detail, said as the menu says an empty list.
     private var nothing: some View {
         PanelEmptyText(text: "Nothing to show. The command sent an empty detail.").frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A detail's own blocks (pilot-1-1 T9) as a page draws them, at the menu's width, in the words' inset; Instrument's and
+/// Toybox's detail both draw it in place of the words.
+struct ExtensionDetailBlocks: View {
+    let blocks: [Extension.Block]
+    let act: (Extension.Item.Action) -> Void
+
+    var body: some View {
+        ScrollView {
+            ExtensionBlocksView(blocks: blocks, act: act).padding(EdgeInsets(top: 18, leading: 22, bottom: 20, trailing: 22))
+        }
     }
 }
 

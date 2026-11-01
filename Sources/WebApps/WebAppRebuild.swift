@@ -44,6 +44,29 @@ public enum WebAppRebuild {
         return outcomes
     }
 
+    /// After a Pilot update (bug 2026-11-01): each web app stamped from another template is rebuilt with this one, as
+    /// Rebuild does, but one that is running is left alone, never quit, until it has quit. `only` narrows it to one bundle
+    /// id. Nothing happens without a bundled template (swift run, tests) or with every app current.
+    @concurrent
+    public static func refreshStale(in folder: URL = WebAppStamper.applicationsFolder, only: String? = nil,
+                                    running: any RunningWebApps = WorkspaceRunningApps(), template: URL = WebAppStamper.bundledTemplate,
+                                    identity: @Sendable () -> String = SigningIdentity.resolve) async -> [Outcome] {
+        guard let digest = try? WebAppStamper.digest(template) else { return [] }
+        let stale = WebAppDirectory.list(in: folder).filter {
+            (only == nil || $0.bundleID == only) && WebAppStamper.recordedDigest($0) != digest && !running.isRunning($0.bundleID)
+        }
+        guard !stale.isEmpty else { return [] }
+        let signer = identity()
+        return stale.map { app in
+            do {
+                try WebAppStamper.rebuild(app, template: template, signingIdentity: signer)
+                return Outcome(name: app.name, failure: nil)
+            } catch {
+                return Outcome(name: app.name, failure: "\(app.name) was not updated: \(error.localizedDescription)")
+            }
+        }
+    }
+
     public struct StillRunning: Error, Equatable {
         public let name: String
         public var message: String { "\(name) is still running; quit it and press Rebuild again." }

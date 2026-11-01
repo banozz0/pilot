@@ -288,6 +288,11 @@ public struct FolderLooks: Sendable {
         }
         let earlier = records().first { $0.id == id }
         record(Record(id: id, path: path, design: design, unfinished: true))
+        // An icon already there is cleared first: setIcon over it rewrites the Icon file in place, and Finder kept showing
+        // the old one (Sven, 2026-10-30, a folder dressed by an older Pilot).
+        let replacing = FileManager.default.fileExists(atPath: Self.iconFile(folder).path)
+        if replacing { NSWorkspace.shared.setIcon(nil, forFile: folder.path, options: []) }
+        defer { if replacing { NSWorkspace.shared.noteFileSystemChanged(folder.path) } }
         guard NSWorkspace.shared.setIcon(Self.square(image), forFile: folder.path, options: []), let written = Self.iconFork(folder),
               let data = try? JSONEncoder().encode(Stamp(id: id, design: design, icon: Self.hash(written))), !faults.stamp,
               setxattr(folder.path, Self.stampName, (data as NSData).bytes, data.count, 0, 0) == 0 else {

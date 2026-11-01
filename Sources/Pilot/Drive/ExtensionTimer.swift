@@ -148,16 +148,18 @@ struct ExtensionAlertButton: Identifiable {
     }
 }
 
-/// The alert HUD: its heading, its note, then its buttons; `press` gets the action's index, nil for OK.
+/// The alert HUD: its heading, its note, then its buttons; `press` gets the action's index, nil for OK. `extra` sits
+/// before the buttons and answers nothing (the Allow prompt's Show details).
 struct ExtensionAlertView: View {
     @Environment(\.style) private var style
     let alert: Extension.AlertSpec
+    var extra: AnyView?
     var press: (Int?) -> Void = { _ in }
 
     var body: some View {
         switch style.kind {
-        case .instrument: InstrumentExtensionAlert(alert: alert, press: press)
-        case .toybox: ToyExtensionAlert(alert: alert, press: press)
+        case .instrument: InstrumentExtensionAlert(alert: alert, extra: extra, press: press)
+        case .toybox: ToyExtensionAlert(alert: alert, extra: extra, press: press)
         }
     }
 

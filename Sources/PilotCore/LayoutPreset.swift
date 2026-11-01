@@ -7,8 +7,9 @@ import Foundation
 /// column starts with join-with between two windows; a later window moves left into it, since a second join would nest
 /// it and the tiler's normalization would turn the inner pair sideways. Scrolling is every window a column on one strip,
 /// each at its own width, so it needs no groups and no equal sizes (spec Projects/Pilot/specs/scrolling-layout.html).
+/// Stage tiles the focused window's group in the centre and shelves the rest at the left edge (ADR 0015).
 public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
-    case mainStack, columns, rows, grid, scrolling
+    case mainStack, columns, rows, grid, scrolling, stage
 
     /// Scrolling replaced accordion (2026-10-12): a stored accordion reads as scrolling, since one value that fails to
     /// decode drops every workspace's layout (WorkspaceLayout.load) and preset.
@@ -27,6 +28,7 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
         case .rows: "Rows"
         case .grid: "Grid"
         case .scrolling: "Scrolling"
+        case .stage: "Stage"
         }
     }
 
@@ -44,9 +46,9 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
         let group: [AeroCommand] = switch self {
         case .mainStack: windows.dropFirst(2).prefix(1).map { .joinWith(id: $0, .left) } + windows.dropFirst(3).map { .move(id: $0, .left) }
         case .grid: windows.indices.filter { $0 % 2 == 1 }.map { .joinWith(id: windows[$0], .left) }
-        case .columns, .rows, .scrolling: []
+        case .columns, .rows, .scrolling, .stage: []
         }
-        let root = switch self { case .rows: "v_tiles"; case .scrolling: "h_scrolling"; default: "h_tiles" }
+        let root = switch self { case .rows: "v_tiles"; case .scrolling: "h_scrolling"; case .stage: "h_stage"; default: "h_tiles" }
         return [.flatten(workspace: workspace), .setRootLayout(workspace: workspace, root)] + order + group
             + (self == .scrolling ? [] : [.balanceSizes(workspace: workspace)])
     }
@@ -72,8 +74,15 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
     /// The tiles this preset lays `n` windows into within `area`, in order: the workspace editor's preview draws them.
     public func tiles(_ n: Int, in area: CGRect) -> [CGRect] { slots(n, in: area).map(\.rect) }
 
+    /// How much of the width the editor's Stage picture gives the shelf: its room on a 1440 pt wide screen.
+    static let shelfShare = CGFloat(PilotBlock.shelfWidth) / 1440
+
     /// How many of scrolling's columns the editor draws whole: a new window's third of the screen each.
     public static let shownColumns = 3
+
+    /// How many spots a layout shows before it is full, `layout` nil for own sizes (Sven 2026-10-30: a picked layout
+    /// draws its slots): grid's four, scrolling's columns drawn whole, the rest three. The layout pictures draw these.
+    public static func spots(_ layout: LayoutPreset?) -> Int { layout == .grid ? 4 : layout == .scrolling ? shownColumns : 3 }
 
     /// The tiles this preset lays `n` windows into within `area`, in order, each with whether it shares its column.
     /// Scrolling's strip: a lone window is the whole area, more are columns a third of it wide, and each past the third
@@ -99,6 +108,14 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
                 return (CGRect(x: x, y: area.minY, width: i < shown ? width : peek, height: area.height), false)
             }
         case .rows: return split(area, n, stacked: true)
+        case .stage:
+            // The first on the stage right of the shelf's room, the rest shelved down that room, at most a quarter high each.
+            let (shelf, stage) = area.divided(atDistance: area.width * Self.shelfShare, from: .minXEdge)
+            guard n > 1 else { return [(stage, false)] }
+            let height = min(shelf.height / CGFloat(n - 1), shelf.height / 4)
+            return [(stage, false)] + (0..<(n - 1)).map { i in
+                (CGRect(x: shelf.minX, y: shelf.minY + height * CGFloat(i), width: shelf.width, height: height), true)
+            }
         case .mainStack:
             guard n > 1 else { return [(area, false)] }
             let (main, stack) = area.divided(atDistance: area.width / 2, from: .minXEdge)

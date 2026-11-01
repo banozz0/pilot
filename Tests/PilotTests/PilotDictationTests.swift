@@ -123,7 +123,7 @@ struct PilotDictationTests {
         let prepare = ready.helper.last
         #expect(prepare.arguments == ["prepare", ready.folder.path])
         #expect(ready.pilot.toggle() && ready.helper.last.arguments == ["listen", ready.folder.path])
-        #expect(prepare.run.cancelled && ready.model.isReady, "a take stops the background prepare, the model stays")
+        #expect(!prepare.run.cancelled && ready.model.isReady, "a take leaves the background prepare to finish, its helper waits for that compile")
         // A folder holding another model's name is not this one: not on disk.
         try Data("whisperkit/large-v2".utf8).write(to: ready.folder.appending(path: SpeechModel.readyFile))
         #expect(!SpeechModel.onDisk(ready.folder, .whisperTurbo))
@@ -277,7 +277,7 @@ struct PilotDictationTests {
         pilot.hold(false)
         #expect(rig.helper.last.run.finished)
         rig.later.forEach { $0() }
-        #expect(rig.tips == ["Whisper large-v3 turbo is getting ready, a one-time wait of up to three minutes. Your words follow."])
+        #expect(rig.tips == ["Whisper large-v3 turbo is getting ready, a one-time wait of up to five minutes. Your words follow."])
     }
 
     @Test("Never typed into a password field or another app than the one spoken to; no words, nothing pasted")
@@ -355,7 +355,7 @@ struct PilotDictationTests {
     func choices() throws {
         let rig = Rig(), models = rig.models
         #expect(models.active == nil && models.pick == nil)
-        #expect(SpeechChoice.allCases.map(\.helperName) == ["fluidaudio/v3", "whisperkit/large-v3-v20240930_turbo_632MB", "whisperkit/small_216MB"])
+        #expect(SpeechChoice.offered.map(\.helperName) == ["fluidaudio/ultra", "whisperkit/large-v3-v20240930_turbo_632MB", "whisperkit/small_216MB"])
         models.model(.whisperSmall).download()
         #expect(rig.helper.last.arguments == ["download", rig.base.appending(path: "whisperSmall").path, "whisperkit/small_216MB"])
         try rig.onDisk(.whisperSmall)
@@ -363,17 +363,17 @@ struct PilotDictationTests {
         #expect(models.pick == .whisperSmall && models.active?.choice == .whisperSmall)
         #expect(rig.defaults.string(forKey: SpeechModels.key) == "whisperSmall")
 
-        models.model(.parakeet).download()
-        try rig.onDisk(.parakeet)
+        models.model(.parakeetUltra).download()
+        try rig.onDisk(.parakeetUltra)
         rig.helper.last.ended(0)
         #expect(models.active?.choice == .whisperSmall, "a later download never swaps the model in use")
-        models.pick = .parakeet
+        models.pick = .parakeetUltra
         rig.pilot.toggle()
-        #expect(rig.helper.last.arguments == ["listen", rig.base.appending(path: "parakeet").path])
+        #expect(rig.helper.last.arguments == ["listen", rig.base.appending(path: "parakeetUltra").path])
         rig.helper.last.ended(0)
 
-        models.remove(.parakeet)
-        #expect(models.pick == .whisperSmall && !FileManager.default.fileExists(atPath: rig.base.appending(path: "parakeet").path))
+        models.remove(.parakeetUltra)
+        #expect(models.pick == .whisperSmall && !FileManager.default.fileExists(atPath: rig.base.appending(path: "parakeetUltra").path))
         #expect(models.model(.whisperSmall).isReady, "removing one leaves the others")
     }
 

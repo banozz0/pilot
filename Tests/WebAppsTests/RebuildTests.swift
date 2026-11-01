@@ -59,6 +59,7 @@ struct RebuildTests {
         let binary = "Contents/MacOS/PilotWebApp"
         #expect(try digest(rebuilt.appending(path: binary)) == digest(reference.appending(path: binary)))
         #expect(try digest(rebuilt.appending(path: binary)) != digest(Self.oldTemplate))
+        #expect(after[WebAppKey.template] as? String == (try digest(Self.newTemplate)))  // what a Pilot update compares
         #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasSuffix(".app") } == ["My Example.app"])
     }
 
@@ -162,5 +163,16 @@ struct RebuildTests {
         #expect(Set(apps.quitAsked) == [other.bundleID])  // only the one running; asked again while it is waited for
         #expect(outcomes == [.init(name: "Example", failure: nil),
                              .init(name: "Other", failure: "Other is still running; quit it and press Rebuild again.")])
+
+        // A Pilot update: Other, still on the old template, is left alone while it runs and updated once it has quit; then
+        // nothing is left to update. First is current already.
+        let b = folder.appending(path: "b")
+        #expect(await WebAppRebuild.refreshStale(in: b, running: apps, template: Self.newTemplate, identity: { "-" }).isEmpty)
+        #expect(await WebAppRebuild.refreshStale(in: folder, running: FakeApps(running: [], quits: true), template: Self.newTemplate, identity: { "-" }).isEmpty)
+        apps.running.remove(other.bundleID)
+        #expect(await WebAppRebuild.refreshStale(in: b, only: other.bundleID, running: apps, template: Self.newTemplate, identity: { "-" })
+                == [.init(name: "Other", failure: nil)])
+        #expect(await WebAppRebuild.refreshStale(in: b, running: apps, template: Self.newTemplate, identity: { "-" }).isEmpty)
+        #expect(Set(apps.quitAsked) == [other.bundleID])  // never asked to quit by an update
     }
 }

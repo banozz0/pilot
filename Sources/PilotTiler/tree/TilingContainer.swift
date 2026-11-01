@@ -63,4 +63,11 @@ enum Layout: String {
     case tiles
     /// Pilot: each child a column on one horizontal strip that scrolls (layout/scrolling.swift); replaced accordion.
     case scrolling
+    /// Pilot: one group tiled in the centre, the rest shelved in the hide corner (layout/stage.swift, ADR 0015).
+    case stage
+
+    /// Pilot: the root is one row of groups (a strip's columns, a stage's groups): it is never flattened, stays
+    /// horizontal, keeps its frames within the displays beside it, takes a new window as a group of its own, and has no
+    /// gaps to drag between its groups.
+    var isRow: Bool { self != .tiles }
 }

@@ -13,11 +13,37 @@ public final class ControlGate {
         public let detail: String
         /// A plan's rows (ControlPlan), one line of `detail` each, for a surface that draws them as a card.
         public let rows: [ControlPlan.Change]
+        /// The detail's lines when its line breaks are its own (a widget's or an extension's question, Pilot's lines then
+        /// its words): a surface escapes each line and keeps the breaks between them, and a break typed inside one is only
+        /// marked ⏎, so a title or a path can never start a line that reads as Pilot's (review 2).
+        public let lines: [String]?
+        /// The question in plain words for the prompt to lead with, when the whole of it is long: a headline ("Install
+        /// Weather 1.3.0?") and at most two short lines naming every risk the whole shows (what runs as Sven, what goes
+        /// to the Trash, where it comes from). The whole stays one click away, behind Show details; nil shows it at once.
+        public private(set) var summary: Summary?
 
-        public init(_ title: String, _ detail: String, rows: [ControlPlan.Change] = []) { self.title = title; self.detail = detail; self.rows = rows }
+        public struct Summary: Equatable, Sendable {
+            public let headline: String, points: [String]
+        }
+
+        public init(_ title: String, _ detail: String, rows: [ControlPlan.Change] = []) {
+            self.title = title; self.detail = detail; self.rows = rows; lines = nil
+        }
+
+        public init(_ title: String, lines: [String]) {
+            self.title = title; detail = lines.joined(separator: "\n"); rows = []; self.lines = lines
+        }
 
         /// "Run shell: rm -rf ~/tmp".
         public var text: String { "\(title): \(detail)" }
+
+        /// This question led by `headline` and `points`, at most two.
+        public func summed(_ headline: String, _ points: [String]) -> Self {
+            assert(points.count <= 2, "a summary has at most two lines")
+            var ask = self
+            ask.summary = Summary(headline: headline, points: points)
+            return ask
+        }
     }
 
     /// Shows the question and answers true for Allow. An answer after `wait` counts for nothing.
@@ -84,16 +110,19 @@ extension ControlGate.Ask {
     /// longer one is denied unasked, never cut.
     public static let longest = 1200, mostLines = 20
 
-    /// Why the question cannot be shown whole; nil when it can.
+    /// Why the question cannot be shown whole; nil when it can. Its details open under its summary's headline, so that
+    /// counts too.
     var tooLong: String? {
-        let length = text.unicodeScalars.count, lines = text.unicodeScalars.count { $0 == "\n" }
+        let shown = text + (summary.map { "\n" + $0.headline } ?? "")
+        let length = shown.unicodeScalars.count, lines = shown.unicodeScalars.count { $0 == "\n" }
         if length > Self.longest { return "the question is \(length) characters, past the \(Self.longest) Pilot shows whole" }
         if lines > Self.mostLines { return "the question has \(lines) line breaks, past the \(Self.mostLines) Pilot shows whole" }
         return nil
     }
 
-    /// The setting keys whose pages already confirm a change: the layer key and Pilot's switch.
-    private static let confirmedSettings: Set<String> = ["layerKey", "switch.on"]
+    /// The setting keys whose pages already confirm a change: the layer key, Pilot's switch, and the Window shelf's
+    /// pictures (Stills and Live ask Screen Recording; Live warns first).
+    private static let confirmedSettings: Set<String> = ["layerKey", "switch.on", "shelf.pictures"]
 
     /// Prefixes whose ids run a command, a keystroke or a URL of any scheme: they ask by prefix, whatever follows parses
     /// or not, the rest shown as the request carries it.
@@ -170,6 +199,8 @@ extension ControlGate.Ask {
 
     public static func install(_ kind: Software, _ id: String) -> Self { Self("Install \(kind.rawValue)", id) }
     public static func remove(_ kind: Software, _ id: String) -> Self { Self("Remove \(kind.rawValue)", id) }
+    public static func install(_ kind: Software, lines: [String]) -> Self { Self("Install \(kind.rawValue)", lines: lines) }
+    public static func remove(_ kind: Software, lines: [String]) -> Self { Self("Remove \(kind.rawValue)", lines: lines) }
 
     /// The question `pilot add <collection>` asks: an install for packages, web apps and extensions; nil for Pilot's
     /// own lists (aliases, quicklinks, snippets, …), where adding runs nothing.

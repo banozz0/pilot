@@ -9,12 +9,13 @@ public enum BindsMap {
     public enum Kind: Int, CaseIterable, Sendable {
         case app, window, capture, tool
 
+        /// The map's legend, one word each (spec pilot-1-1 T30).
         public var title: String {
             switch self {
-            case .app: "Apps and sites"
-            case .window: "Windows and workspaces"
+            case .app: "Apps"
+            case .window: "Windows"
             case .capture: "Captures"
-            case .tool: "Tools and system"
+            case .tool: "Tools"
             }
         }
 

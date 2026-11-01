@@ -7,9 +7,10 @@ import SwiftUI
 // keycaps (the live workspace and an on switch raised, the rest sunk), the menu's sun row under the pointer. The same
 // blocks, switches, actions and words as PilotDropdown and StatPopover.
 
-/// Pilot's dropdown: the status with Pilot's mark, Hyper's sun cap while it is on, any problem on a coral-dotted well;
-/// the workspaces; the quick switches, Hyper's across the width with its switch; Now; the developer rows while Option is
-/// held; the footer's rows with their keys as caps.
+/// Pilot's dropdown, compact since spec pilot-1-1 T29 as Instrument's: the status with Pilot's mark, Hyper's sun cap
+/// while it is on, any problem on a coral-dotted well; the workspaces; six switches as keys in one row; Now while something
+/// runs; the rows in groups with their keys as caps; the developer rows while Option is held; Check for updates, Settings
+/// and Quit on one line.
 struct ToyDropdown: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -23,18 +24,24 @@ struct ToyDropdown: View {
         KitPopover(width: 340, inset: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Dropdown.blocks(option: option), id: \.self) { block in
-                    if block != .status { ToyRule() }
-                    Group {
-                        switch block {
-                        case .status: status(problems)
-                        case .workspaces: workspaces
-                        case .quickSwitches: quickSwitches
-                        case .now: ToyNowBlock(observers: engine.observers, presses: engine.presses)
-                        case .developer: developer
-                        case .footer: footer
+                    if block == .now {
+                        // Its own rule and room, and nothing while nothing runs.
+                        ToyNowBlock()
+                    } else {
+                        if block != .status { ToyRule() }
+                        Group {
+                            switch block {
+                            case .status: status(problems)
+                            case .workspaces: workspaces
+                            case .quickSwitches: quickSwitches
+                            case .rows: rows
+                            case .developer: developer
+                            case .footer: footer
+                            case .now: EmptyView()
+                            }
                         }
+                        .padding(.horizontal, block == .footer ? 8 : 16).padding(.vertical, block == .footer ? 8 : 14)
                     }
-                    .padding(.horizontal, block == .footer ? 8 : 16).padding(.vertical, block == .footer ? 8 : 14)
                 }
             }
         }
@@ -69,7 +76,6 @@ struct ToyDropdown: View {
                 Spacer(minLength: 0)
             }
             ForEach(problems, id: \.kind) { problem in problemRow(problem) }
-            if let share = ExtrasDownloads.shared.share { downloads(share) }
         }
     }
 
@@ -88,25 +94,6 @@ struct ToyDropdown: View {
             case (.tiler, _): Button("Restart") { engine.startTiler() }.buttonStyle(.pilotPrimary)
             case (_, let place?): Button("Open") { AppWindowController.shared.open(place) }.buttonStyle(.pilot)
             case (_, nil): EmptyView()
-            }
-        }
-        .padding(12)
-        .toyWell(radius: 16)
-    }
-
-    /// Onboarding's Extras still downloading (Sven, 2026-10-28, Q543): the share the menu-bar icon's meter shows, and each
-    /// download where it stands, on a sunk well.
-    private func downloads(_ share: Double) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Downloading extras").font(Toy.nunito(800, 13.5)).foregroundStyle(style.color(\.text))
-                Spacer()
-                Text("\(Int(share * 100))%").monospacedDigit().font(Toy.nunito(700, 12)).foregroundStyle(style.color(\.text2))
-            }
-            ToyChunkyMeter(share: share, colour: style.color(\.accent)).accessibilityHidden(true)
-            ForEach(ExtrasDownloads.shared.downloads, id: \.title) { download in
-                HStack { Text(download.title); Spacer(); Text(download.words).monospacedDigit() }
-                    .font(Toy.nunito(700, 12)).foregroundStyle(style.color(\.text2))
             }
         }
         .padding(12)
@@ -151,45 +138,33 @@ struct ToyDropdown: View {
         .accessibilityAddTraits(current ? .isSelected : [])
     }
 
-    // MARK: Quick switches
+    // MARK: Switches
 
-    /// Hyper across the full width with its switch; the other four two by two below it.
+    /// The six switches as keys in one row: raised with a candy tile while on, sunk while off, the word under each.
     private var quickSwitches: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ToyDropdownHeader(title: "Quick switches")
-            VStack(spacing: 8) {
-                switchTile(.hyper)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(Dropdown.Switch.grid, id: \.self) { switchTile($0) }
-                }
-            }
+        HStack(spacing: 6) {
+            ForEach(Dropdown.Switch.allCases, id: \.self) { switchTile($0) }
         }
     }
 
-    /// A quick switch as a key: raised on the panel colour with its glyph on a candy tile while on, sunk with a plain
-    /// glyph while off; Hyper's tile the sun and its switch at the right.
     private func switchTile(_ which: Dropdown.Switch) -> some View {
         let on = switches[which].isOn
         let layerKeys = engine.settings.layerKeys
         let candy = which == .hyper ? style.color(\.hyper) : Toy.module(Dropdown.Switch.allCases.firstIndex(of: which) ?? 0, style)
         return Button { switches[which].toggle() } label: {
-            HStack(spacing: 9) {
-                ToyTile(symbol: which.symbol(layerKeys: layerKeys), color: on ? candy : style.color(\.sunken), size: 26)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(which.title).font(Toy.nunito(800, 13)).foregroundStyle(style.color(\.text))
-                    Text(which.state(on, layerKeys: layerKeys, tiler: engine.observers.tiler.tilerName)).font(Toy.nunito(700, 11.5))
-                        .foregroundStyle(style.color(\.text2))
-                }
-                .lineLimit(1)
-                Spacer(minLength: 4)
-                if which == .hyper { ToySwitchFace(isOn: on, width: 40, height: 24).accessibilityHidden(true) }
+            VStack(spacing: 5) {
+                ToyTile(symbol: which.symbol(layerKeys: layerKeys), color: on ? candy : style.color(\.sunken), size: 24)
+                    .frame(maxWidth: .infinity).padding(.top, 6).padding(.bottom, on ? 8 : 6)
+                    .background { key(on ? style.color(\.raised) : nil) }
+                Text(which.short).font(Toy.nunito(800, 11)).foregroundStyle(style.color(on ? \.text : \.text2)).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, on ? 10 : 8)
-            .background { key(on ? style.color(\.raised) : nil) }
+            .frame(maxWidth: .infinity)
             .contentShape(.rect)
             .animation(Kit.change, value: on)
         }
         .buttonStyle(.kitPress)
+        .help(which.tooltip(on, layerKeys: layerKeys, tiler: engine.observers.tiler.tilerName))
+        .accessibilityLabel(which.title)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
@@ -213,20 +188,47 @@ struct ToyDropdown: View {
         }
     }
 
-    // MARK: Footer
+    // MARK: Rows
 
-    /// The footer's rows (Dropdown.Row), each group on a rule.
-    private var footer: some View {
-        VStack(spacing: 2) {
-            ForEach(Array(engine.dropdownFooter.enumerated()), id: \.offset) { index, group in
-                if index > 0 { ToyRule().padding(.horizontal, 8).padding(.vertical, 4) }
-                ForEach(group, id: \.self) { row in
-                    ToyDropdownRow(symbol: row.symbol, title: engine.dropdownTitle(row), key: engine.dropdownKey(row),
-                                   layerKeys: engine.settings.layerKeys) { engine.runDropdownRow(row) }
-                        .dropdownCommand(row)
+    /// The rows in their groups, each under its eyebrow.
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Dropdown.groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: 2) {
+                    ToyEyebrow(text: group.title).padding(.horizontal, 8).padding(.bottom, 2)
+                    ForEach(group.rows, id: \.self) { row in
+                        ToyDropdownRow(symbol: row.symbol, title: engine.dropdownTitle(row), key: engine.dropdownKey(row),
+                                       layerKeys: engine.settings.layerKeys) { engine.runDropdownRow(row) }
+                            .dropdownCommand(row)
+                    }
                 }
             }
         }
+    }
+
+    // MARK: Footer
+
+    /// Check for updates at the left, Settings and Quit with their caps at the right, on one line.
+    private var footer: some View {
+        HStack(spacing: 10) {
+            ForEach(engine.dropdownFooter, id: \.self) { row in
+                if row == .settings { Spacer(minLength: 0) }
+                Button { engine.runDropdownRow(row) } label: {
+                    HStack(spacing: 5) {
+                        if row != .quit { Image(systemName: row.symbol).font(.system(size: 11, weight: .bold)) }
+                        Text(engine.dropdownTitle(row))
+                        if let key = engine.dropdownKey(row) {
+                            ForEach(Array(ToyCaps.hint(key).enumerated()), id: \.offset) { ToyMenuCap(label: $1, height: 20) }
+                        }
+                    }
+                    .font(Toy.nunito(800, 12)).foregroundStyle(style.color(\.text2))
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.kitPress)
+                .dropdownCommand(row)
+            }
+        }
+        .padding(.horizontal, 8)
     }
 }
 
@@ -267,50 +269,59 @@ private struct ToyDropdownRow: View {
     }
 }
 
-/// The Now block: the timer (its ring in the tomato's coral while one runs), the app in front and the last press;
-/// its own view so the countdown redraws only it.
+/// Now, only while something runs (spec pilot-1-1 T29), with its own rule above: a recording with Stop, the focus timer
+/// (its ring in the tomato's coral) with its first button, Extras downloading with its share; its own view so the clock
+/// and countdown redraw only it.
 private struct ToyNowBlock: View {
     @Environment(\.style) private var style
-    let observers: EngineObservers
-    let presses: [Press]
 
     var body: some View {
-        let timer = ExtensionTimer.shared
-        let app = observers.focusedApp
-        VStack(alignment: .leading, spacing: 8) {
-            ToyDropdownHeader(title: "Now")
-            HStack(spacing: 8) {
-                TimerRing(left: timer.left ?? 0, lineWidth: 3.5, track: style.color(\.sunken), tint: Toy.module(3, style)).frame(width: 16, height: 16)
-                if let line = NowTimer.line(timer) {
-                    Text(line).monospacedDigit()
-                    Spacer()
-                    if let first = timer.buttons.first { textButton(first.label) { timer.press(0) } }
-                } else {
-                    Text("No timer running").foregroundStyle(style.color(\.text2))
-                    Spacer()
-                }
+        let items = DropdownNow.items
+        if !items.isEmpty {
+            ToyRule()
+            VStack(alignment: .leading, spacing: 8) {
+                ToyDropdownHeader(title: "Now")
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in self.item(item) }
             }
-            .frame(minHeight: 26)
-            if let app {
-                HStack(spacing: 8) {
-                    if let icon = app.icon { Image(nsImage: icon).resizable().frame(width: 16, height: 16) }
-                    Text("\(app.localizedName ?? "–")\(observers.tiler.focused.map { " · workspace \($0)" } ?? "")")
-                    Spacer()
-                }
+            .font(Toy.nunito(700, 13)).foregroundStyle(style.color(\.text))
+            .padding(.horizontal, 16).padding(.vertical, 14)
+        }
+    }
+
+    @ViewBuilder private func item(_ item: DropdownNow.Item) -> some View {
+        switch item {
+        case .recording:
+            line { Image(systemName: "video.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(style.color(\.problem)) } content: {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in Text(Recorder.shared.reading?.words ?? "").monospacedDigit() }
+                Spacer()
+                textButton("Stop") { Recorder.shared.stop() }
             }
-            HStack(spacing: 8) {
-                Image(systemName: "bolt.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(style.color(\.text3)).frame(width: 16)
-                if let press = presses.first {
-                    Text("Last: \(press.line)").lineLimit(1).truncationMode(.middle)
+        case .timer(let text):
+            let timer = ExtensionTimer.shared
+            line { TimerRing(left: timer.left ?? 0, lineWidth: 3.5, track: style.color(\.sunken), tint: Toy.module(3, style)) } content: {
+                Text(text).monospacedDigit()
+                Spacer()
+                if let first = timer.buttons.first { textButton(first.label) { timer.press(0) } }
+            }
+        case .download(let title, let share):
+            VStack(alignment: .leading, spacing: 6) {
+                line { Image(systemName: "arrow.down.to.line").font(.system(size: 11, weight: .bold)).foregroundStyle(style.color(\.text3)) } content: {
+                    Text(title).lineLimit(1).truncationMode(.middle)
                     Spacer()
-                    Text(press.time.formatted(date: .omitted, time: .shortened)).font(Toy.mono(11)).foregroundStyle(style.color(\.text3))
-                } else {
-                    Text("No presses yet").foregroundStyle(style.color(\.text2))
-                    Spacer()
+                    Text("\(Int(share * 100)) %").monospacedDigit().foregroundStyle(style.color(\.text2))
                 }
+                ToyChunkyMeter(share: share, colour: style.color(\.accent)).accessibilityHidden(true)
             }
         }
-        .font(Toy.nunito(700, 13)).foregroundStyle(style.color(\.text))
+    }
+
+    /// A line: its glyph in a 16 point column, then what it says.
+    private func line(@ViewBuilder glyph: () -> some View, @ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 8) {
+            glyph().frame(width: 16, height: 16)
+            content()
+        }
+        .frame(minHeight: 26)
     }
 
     /// A quiet action in the row's own height: its words in Nunito 800, the second ink.

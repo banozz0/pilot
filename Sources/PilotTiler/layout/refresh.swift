@@ -190,6 +190,7 @@ private func layoutWorkspaces() async throws {
             try await workspace.layoutWorkspace(unhidingColumns: true) // Unhide tiling windows from corner
         }
         forgetShownWorkspaces() // Pilot: back on, the tiler slides nothing until a switch
+        announceStages() // Pilot: the Window shelf hides
         return publishGaps()
     }
     // Pilot (spec omarchy-ideas T1): pinned windows move to the workspace their monitor shows before any hiding below,
@@ -219,6 +220,7 @@ private func layoutWorkspaces() async throws {
         try await hideInCorner(workspace, corner, slide: slides[workspace])
     }
     publishGaps() // Pilot: the gaps' handles (card agent-bo-95423035)
+    announceStages() // Pilot: the Window shelf (ADR 0015)
     windowHomes.record(Workspace.all.flatMap(\.allLeafWindowsRecursive)) // Pilot (Q437): for the next launch
     raiseWithoutFocus(carried)
 }

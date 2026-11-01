@@ -289,6 +289,12 @@ struct MenuItemPicturesTests {
         fake.moved = { CGRect(x: 3100 - (spacer.shown ? spacer.lengths.last ?? 0 : 0), y: 0, width: 24, height: 30) }
         #expect(await apps.press(popover, under: (pid: 11, view: button)).value)
         #expect(shown.count == 1 && spacer.lengths == [610] && fake.pressed == [popover.handle])
+
+        // A MenuBarAgent item (macOS 27.2) is pressed where it sits at once: no menu drawn, no room made.
+        let tailscale = MenuApps.Item(label: "Tailscale", handle: MenuItemHandle("tailscale" as NSString),
+                                      frame: CGRect(x: 3072, y: 3, width: 24, height: 24), hosted: true)
+        #expect(await apps.press(tailscale, under: (pid: 15, view: button)).value)
+        #expect(shown.count == 1 && spacer.lengths == [610] && fake.pressed == [popover.handle, tailscale.handle])
         apps.opener.putBack()
     }
 

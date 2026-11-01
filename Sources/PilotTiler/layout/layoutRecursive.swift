@@ -2,16 +2,18 @@
 import AppKit
 
 extension Workspace {
-    /// Pilot: `unhidingColumns`, the tiler is stopping: a scrolling strip lays every column on screen. `slide`, the
-    /// display just switched to this workspace (spaceSlide.swift).
+    /// Pilot: `unhidingColumns`, the tiler is stopping: a scrolling strip lays every column on screen, a stage every
+    /// group. `slide`, the display just switched to this workspace (spaceSlide.swift). A stage keeps the shelf's room.
     @MainActor
     func layoutWorkspace(unhidingColumns: Bool = false, slide: SpaceSlide? = nil) async throws {
         if isEffectivelyEmpty { return }
-        let rect = workspaceMonitor.visibleRectPaddedByOuterGaps
+        let layout = try rootTilingContainer.layout
+        let padded = workspaceMonitor.visibleRectPaddedByOuterGaps
+        let rect = layout == .stage && !unhidingColumns ? padded.leavingShelf() : padded
         // If monitors are aligned vertically and the monitor below has smaller width, then macOS may not allow the
         // window on the upper monitor to take full width. rect.height - 1 resolves this problem
         // But I also faced this problem in monitors horizontal configuration. ¯\_(ツ)_/¯
-        let context = LayoutContext(self, scrolling: try rootTilingContainer.layout == .scrolling, unhidingColumns: unhidingColumns, slide: slide)
+        let context = LayoutContext(self, layout: layout, unhidingColumns: unhidingColumns, slide: slide)
         try await layoutRecursive(rect.topLeftCorner, width: rect.width, height: rect.height - 1, virtual: rect, context)
     }
 }
@@ -60,6 +62,8 @@ extension TreeNode {
                         try await container.layoutTiles(point, width: width, height: height, virtual: virtual, context)
                     case .scrolling:
                         try await container.layoutScrolling(point, width: width, height: height, context)
+                    case .stage:
+                        try await container.layoutStage(point, width: width, height: height, context)
                 }
             case .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer,
                  .macosPopupWindowsContainer, .macosHiddenAppsWindowsContainer:
@@ -80,13 +84,14 @@ private struct LayoutContext {
     /// The workspace's screen, whose refresh paces its glides; nil when nothing glides.
     let glideScreen: GlideScreen?
     let unhidingColumns: Bool
-    /// A scrolling strip's: the x its columns keep within, clear of the displays beside its monitor (FrameSteps).
+    /// A scrolling strip's or a stage's: the x its windows keep within, clear of the displays beside its monitor (FrameSteps).
     let span: ClosedRange<CGFloat>?
     /// Pilot (space-switch slide): the display just switched to this workspace; its windows out of a hide corner slide in.
     let slide: SpaceSlide?
 
     @MainActor
-    init(_ workspace: Workspace, scrolling: Bool, unhidingColumns: Bool, slide: SpaceSlide?) {
+    init(_ workspace: Workspace, layout: Layout, unhidingColumns: Bool, slide: SpaceSlide?) {
+        let scrolling = layout == .scrolling
         self.workspace = workspace
         self.resolvedGaps = ResolvedGaps(gaps: config.gaps, monitor: workspace.workspaceMonitor)
         self.glideDuration = scrolling ? config.scrollingGlide ?? .zero : GlideSet.duration
@@ -94,7 +99,7 @@ private struct LayoutContext {
             && (currentlyManipulatedWithMouseWindowId == nil || currentlyManipulatedWithMouseWindowId == (draggedWindowId ?? cancelledDragWindowId))
         self.glideScreen = glides ? GlideScreen(workspace.workspaceMonitor) : nil
         self.unhidingColumns = unhidingColumns
-        self.span = scrolling ? workspace.workspaceMonitor.columnSpan(among: monitorInfos) : nil
+        self.span = layout.isRow ? workspace.workspaceMonitor.columnSpan(among: monitorInfos) : nil
         self.slide = slide
     }
 }
@@ -193,10 +198,39 @@ extension TilingContainer {
             if others.contains(where: { $0.overlaps(frame) }) {
                 child.hideColumn(frame.size, in: corner, of: monitor, span: context.span)
             } else {
-                let gap = CGFloat(context.resolvedGaps.inner.horizontal)
-                let virtual = Rect(topLeftX: frame.minX - gap / 2, topLeftY: frame.minY, width: frame.width + gap, height: frame.height)
-                try await child.layoutRecursive(frame.topLeftCorner, width: frame.width, height: frame.height, virtual: virtual, context)
+                try await child.layoutColumn(frame, context)
             }
         }
+    }
+
+    /// Pilot (Stage layout, ADR 0015): the staged groups (stage.swift) side by side at equal widths in the room right of
+    /// the shelf; every other group shelved in the hide corner as a strip's hidden column is, at the stage's size, a jump
+    /// either way, so no frame crosses onto another display (ADR 0014). Tiling off, every group is staged. A stage's
+    /// children keep their weights: the tree lets only a tiles parent change them.
+    @MainActor
+    fileprivate func layoutStage(_ point: CGPoint, width: CGFloat, height: CGFloat, _ context: LayoutContext) async throws {
+        let monitor = context.workspace.workspaceMonitor
+        let staged = context.unhidingColumns ? children : stagedChildren
+        if staged.count < children.count {
+            let corner = optimalHideCorner(of: monitor, among: monitorInfos), ids = Set(staged.map(ObjectIdentifier.init))
+            for child in children where !ids.contains(ObjectIdentifier(child)) {
+                child.hideColumn(CGSize(width: width, height: height), in: corner, of: monitor, span: context.span)
+            }
+        }
+        let usable = Rect(topLeftX: point.x, topLeftY: point.y, width: width, height: height)
+        let strip = Strip(fractions: staged.map { _ in 1 / CGFloat(staged.count) }, usable: usable, gap: CGFloat(context.resolvedGaps.inner.horizontal))
+        for (child, frame) in zip(staged, strip.frames(at: 0, on: monitor.rect, sliver: 0)) {
+            try await child.layoutColumn(frame, context)
+        }
+    }
+}
+
+extension TreeNode {
+    /// Pilot: one column of a strip or group of a stage laid out at `frame`, half the inner gap on each side its own.
+    @MainActor
+    fileprivate func layoutColumn(_ frame: Rect, _ context: LayoutContext) async throws {
+        let gap = CGFloat(context.resolvedGaps.inner.horizontal)
+        let virtual = Rect(topLeftX: frame.minX - gap / 2, topLeftY: frame.minY, width: frame.width + gap, height: frame.height)
+        try await layoutRecursive(frame.topLeftCorner, width: frame.width, height: frame.height, virtual: virtual, context)
     }
 }

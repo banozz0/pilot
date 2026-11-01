@@ -15,6 +15,10 @@ struct VoicePage: View {
     var body: some View {
         KitPage(intro: Self.intro) {
             DictationBlock()
+            // One column (the designer's layout A, round 2), "Fix a recent take" above the two lists (Q598).
+            DictationTakesBlock(takes: .shared, vocabulary: .shared)
+            DictationWordsBlock(vocabulary: .shared)
+            DictationReplacementsBlock(vocabulary: .shared)
             ReadAloudBlock(speech: speech, mine: sections.mine, rest: sections.rest)
         }
         .task(id: "\(speech.personal) \(speech.revision)") {

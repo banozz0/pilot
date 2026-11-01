@@ -335,8 +335,9 @@ struct AppWindowRenders {
                 document.scroll(NSPoint(x: 0, y: top))
             }
             // Instrument draws these as plain lists, empty on the fakes (Activity's processes, the catalogue, instructions,
-            // extensions): no card to find.
-            let lists: Set = ["activity", "activity-reports", "install-catalogue", "instructions", "extensions"]
+            // extensions): no card to find. Configs and its Agents part read this Mac's files off the main thread, which
+            // never hands back while this test holds it: ConfigsListTests draws their cards from a home of its own.
+            let lists: Set = ["activity", "activity-reports", "install-catalogue", "configs", "configs-agents", "extensions"]
             if cards < enough && !lists.contains(name) { withoutCards.append(name) }
         }
         // The Binds page searched (card agent-bo-95422785): each hit under its own layer's heading.
@@ -477,8 +478,8 @@ struct AppWindowRenders {
         // Every bar view (card agent-bo-95422914), the popovers and dropdown on Solid panels: Glass draws
         // only on screen, so its look is lane 1's live check.
         typealias On = DropdownQuickSwitchesTests.Fake
-        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true))
-        let hyperOff = QuickSwitches(hyper: On(false), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true))
+        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true), dictation: On(true))
+        let hyperOff = QuickSwitches(hyper: On(false), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true), dictation: On(true))
         let glass = Look.shared.glass
         Look.shared.glass = false
         timer.startFocus()

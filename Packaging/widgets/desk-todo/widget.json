@@ -1,0 +1,13 @@
+{
+  "id": "desk-todo",
+  "title": "To-do",
+  "icon": "☑️",
+  "version": "1.0",
+  "description": "Your open to-dos from Pilot's To-do extension, grouped as Overdue, Today, Upcoming and No date, with what you ticked off today. Reads only; add and tick in Hyper+Space.",
+  "draw": "html",
+  "data": {"command": ["./feed.py"], "every": 20},
+  "size": {"width": 290, "height": 340},
+  "settings": [
+    {"name": "showDone", "label": "Show done today", "type": "checkbox", "default": true}
+  ]
+}

@@ -83,9 +83,11 @@ public struct KeyboardLock: Sendable {
         }
     }
 
-    /// Esc has been down since `since` and is down now (`held`, read from the HID state, so a release the tap missed
-    /// never unlocks): the hold is done at `now`.
-    public func escapeDone(armedAt since: TimeInterval, now: TimeInterval, held: Bool) -> Bool {
-        held && escapeSince == since && now - since >= Self.escapeHold - 0.05
+    /// Esc has been down since `since`, by the tap's own events: the hold is done at `now`. Never the HID key state: a key
+    /// the HID tap takes may never reach it, so it read Esc as up and the full ring never unlocked (Sven on 1.0.2 build 9).
+    /// A release the tap missed needs no check: the tap went off or paused, the screen locked or a password field took the
+    /// keyboard, and each of those ends the lock first.
+    public func escapeDone(armedAt since: TimeInterval, now: TimeInterval) -> Bool {
+        escapeSince == since && now - since >= Self.escapeHold - 0.05
     }
 }

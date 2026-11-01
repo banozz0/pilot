@@ -88,7 +88,8 @@ extension MenuModel {
     /// The card the list draws in place of row `index`: the first row when it is an answer that copies a result, in the
     /// Rail and in Classic (at Classic's 6 pt corner, T8).
     func answerCard(_ row: MenuEntry, at index: Int) -> MenuAnswer? {
-        guard index == 0 else { return nil }
+        // Define's rows copy text too, but its pane draws them (DefinePane).
+        guard index == 0, row.home != .define else { return nil }
         return MenuAnswer(row, query: nav.query, branch: nav.branch)
     }
 }

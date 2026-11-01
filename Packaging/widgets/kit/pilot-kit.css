@@ -1,0 +1,219 @@
+/* Pilot widget look kit (ADR 0016): the look Pilot's desk widgets share, for ready widgets and AI-made ones alike.
+ *
+ * Use it: copy pilot-kit.css and pilot-kit.js beside the widget's index.html (a page is served from its own folder
+ * only, so it cannot link a shared copy), then
+ *   <link rel="stylesheet" href="pilot-kit.css"><script src="pilot-kit.js"></script>
+ *   <body class="pk"> … </body>
+ *   <script>PilotKit.on(data => { … })</script>
+ * PilotKit.on hands over each pilotdata event and the last data on load; a `theme` object in the data (PilotTheme's
+ * fields as #rrggbb: ground, surface, raised, line, line2, text, text2, text3, accent, second, third, good, amber,
+ * problem, graphs, dark) sets the tokens below. Without one the page follows the Mac's light or dark mode in Lagoon's
+ * and Porcelain's colours.
+ *
+ * The parts, each a class:
+ *   .pk                 the panel: the whole tile, a quiet veil over the glass, 14 px in
+ *   .pk-head            a header row: .pk-title (small caps) and .pk-meta at its right; .pk-live marks it live
+ *   .pk-rule            a hairline
+ *   .pk-hero            a big figure; <small> inside for its unit; .pk-sub for the line under it
+ *   .pk-stats           figures side by side: .pk-stat > span (label) + b (value)
+ *   .pk-kv              key and value rows (fetch style): <dl class="pk-kv"><dt>OS</dt><dd>macOS 27</dd></dl>
+ *   .pk-meter           a thin track: style="--v: 62" (0 to 100), --m for a mark; .is-good .is-warn .is-alert tone it
+ *   .pk-gauge           a label, a meter and its value on one row
+ *   .pk-spark           a sparkline's frame (PilotKit.spark draws the SVG)
+ *   .pk-list > .pk-row  list rows: .pk-time, .pk-mark (a check, dot or glyph), .pk-text (+ .pk-sub), .pk-aside
+ *   .pk-group           a list's small-caps group heading
+ *   .pk-check           a to-do ring; .is-done ticks it
+ *   .pk-chip            a small tag; .is-accent .is-warn .is-alert tone it
+ *   .pk-swatches        a colour strip: <i style="--c: var(--pk-accent)"></i> …
+ *   .pk-empty           an empty state: a glyph, a line, a hint
+ *   .pk-foot            a footer row at the panel's bottom
+ *   .pk-glyph           a line icon (PilotKit.icon); .pk-num tabular figures; .pk-dim, .pk-faint quieter text
+ * One signal: --pk-accent marks what is live or now, nothing else. Numbers are mono and tabular.
+ *
+ * Size: Pilot keeps one class on <html> from the tile's size (or Edit widget's Layout), no script needed: size-strip
+ * (short and wide: one line), size-square (small), size-wide (a rectangle), size-large (big in both). Style by it,
+ * `html.size-strip .days { display: none }`, or mark parts: .pk-only-strip shows only in a strip, .pk-not-strip hides
+ * there (and so on for square, wide and large). A page that does neither draws as it always did in every class.
+ */
+
+:root {
+  --pk-ground: #07101a; --pk-surface: #0c1724; --pk-raised: #13202f;
+  --pk-line: #162636; --pk-line2: #22374c;
+  --pk-text: #e4eef5; --pk-text2: #a8bbcb; --pk-text3: #6d8396;
+  --pk-accent: #2bc4f0; --pk-second: #22c7a9; --pk-third: #f59bbb;
+  --pk-good: #22c7a9; --pk-amber: #f0c06a; --pk-problem: #ff7a85;
+  --pk-g1: #2bc4f0; --pk-g2: #22c7a9; --pk-g3: #f59bbb;
+  --pk-veil: color-mix(in srgb, var(--pk-ground) 58%, transparent);
+  --pk-edge: color-mix(in srgb, var(--pk-text) 9%, transparent);
+  --pk-track: color-mix(in srgb, var(--pk-text) 11%, transparent);
+  --pk-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --pk-sans: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --pk-pad: 14px;
+  --pk-radius: 18px;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-pk-theme]) {
+    --pk-ground: #eef1f5; --pk-surface: #ffffff; --pk-raised: #f3f5f8;
+    --pk-line: #dce1e8; --pk-line2: #c3cad4;
+    --pk-text: #161a22; --pk-text2: #434b58; --pk-text3: #6e7685;
+    --pk-accent: #1e5ef5; --pk-second: #8839ef; --pk-third: #0b8fa6;
+    --pk-good: #2f9e44; --pk-amber: #c97b10; --pk-problem: #d20f39;
+    --pk-g1: #1e5ef5; --pk-g2: #8839ef; --pk-g3: #2f9e44;
+    color-scheme: light;
+  }
+}
+:root[data-pk-theme="light"] { color-scheme: light; --pk-veil: color-mix(in srgb, var(--pk-surface) 66%, transparent); }
+:root[data-pk-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; }
+body {
+  font: 400 11.5px/1.45 var(--pk-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--pk-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none; user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+/* The panel. */
+.pk {
+  display: flex; flex-direction: column; gap: 10px;
+  height: 100vh; padding: 12px var(--pk-pad) var(--pk-pad);
+  background: var(--pk-veil);
+  border-radius: var(--pk-radius);
+  box-shadow: inset 0 0 0 1px var(--pk-edge);
+  overflow: hidden auto;
+}
+/* Size classes: what shows in which (Pilot sets the class on <html>). */
+html:not(.size-strip) .pk-only-strip, html:not(.size-square) .pk-only-square,
+html:not(.size-wide) .pk-only-wide, html:not(.size-large) .pk-only-large,
+html.size-strip .pk-not-strip, html.size-square .pk-not-square,
+html.size-wide .pk-not-wide, html.size-large .pk-not-large { display: none !important; }
+/* What grows takes the room left and scrolls past it with the wheel or trackpad; the panel scrolls too when what does
+   not grow outgrows it. A bar shows only while the pointer is over one. */
+.pk-grow { flex: 1 1 auto; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+.pk::-webkit-scrollbar, .pk-grow::-webkit-scrollbar { width: 6px; background: transparent; }
+.pk::-webkit-scrollbar-thumb, .pk-grow::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.pk:hover::-webkit-scrollbar-thumb, .pk-grow:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--pk-text3) 60%, transparent); }
+.pk-fade { -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
+/* PilotKit lifts the fade once a list shows its end. */
+.pk-fade.pk-end { -webkit-mask-image: none; mask-image: none; }
+
+/* Header: small caps, quiet. */
+.pk-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pk-text3);
+  white-space: nowrap;
+}
+.pk-title { color: var(--pk-text2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.pk-title b { color: var(--pk-text); font-weight: 600; }
+.pk-meta { flex: none; }
+.pk-live::before {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 6px 1px 0; border-radius: 50%;
+  background: var(--pk-accent); vertical-align: middle;
+}
+.pk-rule { height: 1px; background: var(--pk-edge); flex: none; }
+
+/* A big figure. */
+.pk-hero { font-size: 38px; font-weight: 300; line-height: 1; letter-spacing: -0.03em; color: var(--pk-text); }
+.pk-hero small { font-size: 0.42em; font-weight: 400; letter-spacing: 0; color: var(--pk-text2); margin-left: 2px; vertical-align: 0.9em; }
+.pk-sub { font-size: 10.5px; color: var(--pk-text3); }
+
+/* Figures side by side. */
+.pk-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
+.pk-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pk-stat > span { font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pk-text3); white-space: nowrap; }
+.pk-stat > b { font-size: 15px; font-weight: 400; color: var(--pk-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Key and value rows. */
+.pk-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 0; }
+.pk-kv dt { font-weight: 600; color: var(--pk-text2); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.04em; line-height: 1.6; }
+.pk-kv dd { margin: 0; color: var(--pk-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.6; }
+
+/* Meters. */
+.pk-meter { position: relative; height: 4px; border-radius: 2px; background: var(--pk-track); flex: 1 1 auto; min-width: 24px; }
+.pk-meter > i {
+  position: absolute; inset: 0 auto 0 0; width: calc(clamp(0, var(--v, 0), 100) * 1%);
+  border-radius: inherit; background: var(--pk-text2);
+}
+.pk-meter.is-good > i { background: var(--pk-good); }
+.pk-meter.is-warn > i { background: var(--pk-amber); }
+.pk-meter.is-alert > i { background: var(--pk-problem); }
+.pk-meter.is-accent > i { background: var(--pk-accent); }
+.pk-meter > s {
+  position: absolute; top: -3px; bottom: -3px; left: calc(clamp(0, var(--m, 0), 100) * 1%); width: 1.5px; margin-left: -0.75px;
+  border-radius: 1px; background: var(--pk-text);
+}
+.pk-gauge { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.pk-gauge > span:first-child { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pk-text3); }
+.pk-gauge > span:last-child { color: var(--pk-text); text-align: right; min-width: 34px; }
+
+/* Sparklines: PilotKit.spark draws into one. */
+.pk-spark { display: block; width: 100%; color: var(--pk-text2); }
+.pk-spark .pk-area { fill: currentColor; opacity: 0.12; stroke: none; }
+.pk-spark .pk-line { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.pk-spark .pk-now { fill: var(--pk-accent); }
+
+/* Lists. */
+.pk-list { display: flex; flex-direction: column; min-height: 0; }
+.pk-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 10px;
+  padding: 5px 0; border-top: 1px solid var(--pk-edge);
+}
+.pk-row:first-child, .pk-group + .pk-row { border-top: 0; }
+.pk-row.has-time { grid-template-columns: 42px minmax(0, 1fr) auto; }
+.pk-row.has-time.has-mark { grid-template-columns: 42px 14px minmax(0, 1fr) auto; }
+.pk-row.has-mark { grid-template-columns: 14px minmax(0, 1fr) auto; }
+.pk-time { color: var(--pk-text3); white-space: nowrap; }
+.pk-mark { align-self: center; display: flex; }
+.pk-text { min-width: 0; font-family: var(--pk-sans); font-size: 12.5px; color: var(--pk-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-text .pk-sub { display: block; font-family: var(--pk-mono); margin-top: 1px; }
+.pk-aside { font-size: 10px; color: var(--pk-text3); white-space: nowrap; }
+.pk-row.is-now .pk-time { color: var(--pk-accent); }
+.pk-row.is-past { opacity: 0.5; }
+.pk-group {
+  font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pk-text3);
+  padding: 8px 0 2px; display: flex; justify-content: space-between;
+}
+.pk-group:first-child { padding-top: 0; }
+
+.pk-check { width: 12px; height: 12px; border-radius: 50%; border: 1.25px solid var(--pk-text3); flex: none; }
+.pk-check.is-done { border-color: var(--pk-text3); background: radial-gradient(circle, var(--pk-text3) 0 2.5px, transparent 3px); }
+.pk-check.is-alert { border-color: var(--pk-problem); }
+.pk-row.is-done .pk-text { color: var(--pk-text3); text-decoration: line-through; text-decoration-color: var(--pk-text3); }
+.pk-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pk-text3); }
+
+/* Chips. */
+.pk-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 16px; border-radius: 8px;
+  font-size: 9.5px; letter-spacing: 0.02em; color: var(--pk-text2); border: 1px solid var(--pk-line2); white-space: nowrap;
+}
+.pk-chip.is-accent { color: var(--pk-accent); border-color: color-mix(in srgb, var(--pk-accent) 45%, transparent); }
+.pk-chip.is-warn { color: var(--pk-amber); border-color: color-mix(in srgb, var(--pk-amber) 45%, transparent); }
+.pk-chip.is-alert { color: var(--pk-problem); border-color: color-mix(in srgb, var(--pk-problem) 45%, transparent); }
+
+/* A colour strip. */
+.pk-swatches { display: flex; height: 8px; border-radius: 2px; overflow: hidden; }
+.pk-swatches > i { flex: 1; background: var(--c); }
+
+/* Empty states. */
+.pk-empty {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center; color: var(--pk-text3); padding: 6px;
+}
+.pk-empty .pk-glyph { width: 22px; height: 22px; color: var(--pk-text3); }
+.pk-empty b { font-family: var(--pk-sans); font-size: 12.5px; font-weight: 500; color: var(--pk-text2); }
+
+.pk-foot { margin-top: auto; display: flex; justify-content: space-between; gap: 10px; font-size: 9.5px; color: var(--pk-text3); white-space: nowrap; }
+
+.pk-glyph { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.pk-num { font-variant-numeric: tabular-nums; }
+.pk-dim { color: var(--pk-text2); }
+.pk-faint { color: var(--pk-text3); }
+.pk-accent { color: var(--pk-accent); }
+.pk-alert { color: var(--pk-problem); }
+.pk-warn { color: var(--pk-amber); }

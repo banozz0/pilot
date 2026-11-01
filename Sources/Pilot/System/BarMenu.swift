@@ -38,6 +38,14 @@ final class BarMenu: NSObject {
         owner.pop(menu, at: NSEvent.mouseLocation, in: nil)
     }
 
+    /// Shows `sections` at the pointer, each its title over its picks, a check on each pick titled in `checked`; a pick
+    /// runs after the menu closes.
+    static func pop(sections: [(title: String, items: [(title: String, run: () -> Void)])], checked: Set<String> = []) {
+        let owner = BarMenu(), menu = owner.menu(sections: sections)
+        for item in menu.items where checked.contains(item.title) { item.state = .on }
+        owner.pop(menu, at: NSEvent.mouseLocation, in: nil)
+    }
+
     /// The front app's menu (the top bar's App menus), its items as `nodes` hold them, under `view`, the clicked title,
     /// as the menu bar hangs a menu: a pick hands back its title path inside the menu.
     static func show(appMenu nodes: [MenuItemNode], under view: NSView, pick: @escaping ([String]) -> Void) {

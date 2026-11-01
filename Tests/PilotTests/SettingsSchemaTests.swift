@@ -57,7 +57,7 @@ struct SettingsSchemaTests {
             hyper = SessionSwitch { [hyperFlips] in hyperFlips.log.append($0) }
             recording = SessionSwitch { [recordingFlips] in recordingFlips.log.append($0) }
             schema.registerPart1(general: (settings, hyper), look: look, clipboard: clipboard, recording: recording, files: files,
-                                 passwords: passwords, folders: folders, giphy: giphy, ai: ai)
+                                 passwords: passwords, folders: folders, giphy: giphy, ai: ai, fonts: PilotFonts(defaults: defaults))
             let schema = schema
             verbs.registerSettings(schema) { [unowned self] key, value, _ in
                 asked.append("\(key)=\(value)")
@@ -86,7 +86,7 @@ struct SettingsSchemaTests {
         "ai.model.anthropicAPI": "claude-opus-5-5", "ai.model.openAI": "gpt-5",
         "ai.model.ollama": "qwen3", "ai.model.openAICompatible": "my-model",
         "ai.baseURL.ollama": "http://localhost:1234", "ai.baseURL.openAICompatible": "https://example.test/v1",
-        "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19",
+        "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19", "fonts.ui": "Helvetica", "fonts.mono": "Menlo",
     ]
 
     /// Keys whose store has no value of its own but reads UserDefaults on each get.
@@ -292,7 +292,7 @@ struct SettingsSchemaTests {
               case .array(let look)? = await rig.ask("settings", "--page", "look").result else { Issue.record("no list"); return }
         guard case .object(let first) = look[0] else { Issue.record("not an object"); return }
         #expect(first["page"] == .string("look") && first["type"] != nil && first["label"] != nil && first["default"] != nil)
-        #expect(all.count == rig.schema.keys.count && look.count == 7)
+        #expect(all.count == rig.schema.keys.count && look.count == 8)
         let nowhere = await rig.ask("settings", "--page", "nowhere")
         #expect(nowhere.error?.code == .unknownPage && nowhere.error?.message.contains("look") == true)
         guard case .object(let schema) = rig.verbs.schema, case .array(let verbs)? = schema["verbs"] else { Issue.record("no schema"); return }
@@ -328,11 +328,11 @@ struct SettingsSchemaTests {
                 + "Takes its value from stdin alone, never a word; get says only set or unset; default unset.\nAsks Allow first.")
         #expect(throws: ControlError.self) { try get("no.such.key") }
         let look = try #require(try settings("look"))
-        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.windowLayout") && look.split(separator: "\n").count == 8)
+        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.windowLayout") && look.split(separator: "\n").count == 9)
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }
-        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
+        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
         #expect(await rig.ask("get", "look.glass", "--page", "look").error?.code == .unknownFlag)
         #expect(await rig.ask("set", "look.glass", "on", "--force").error?.code == .unknownFlag && !rig.look.glass)
     }

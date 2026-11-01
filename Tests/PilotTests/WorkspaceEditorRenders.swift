@@ -80,8 +80,12 @@ struct WorkspaceEditorRenders {
                                                              Self.app("Visual Studio Code", percent: 25), Self.app("Ghostty", percent: 25)],
                                         layout: .scrolling), to: "4")
         contents.presets["Chat"] = WorkspacePreset(name: "Chat", apps: [Self.app("Telegram", percent: 50), Self.app("WhatsApp", percent: 50)], layout: .columns)
+        // 5: main + stack with nothing in it, Sven's 2026-10-30 screenshot; 6: main + stack with one app. Both draw the
+        // layout's empty spots.
+        contents.assign(WorkspacePreset(name: "Solo", apps: [Self.app("Ghostty", percent: 100)], layout: .mainStack), to: "6")
         try WorkspacePresetStore.standard.save(contents)
-        WorkspaceLayout.save(["1": .init(preset: .mainStack, auto: true), "2": .init(preset: nil, auto: false), "4": .init(preset: .scrolling, auto: true)],
+        WorkspaceLayout.save(["1": .init(preset: .mainStack, auto: true), "2": .init(preset: nil, auto: false), "4": .init(preset: .scrolling, auto: true),
+                              "5": .init(preset: .mainStack, auto: true), "6": .init(preset: .mainStack, auto: true)],
                              to: .standard)
 
         let engine = Engine()
@@ -96,13 +100,17 @@ struct WorkspaceEditorRenders {
         typealias Start = WorkspaceEditor.Start
         let states: [(name: String, workspace: String, start: Start)] = [
             ("filled", "1", Start(hovered: 0, apps: Self.apps)),
-            ("picker", "1", Start(picking: .next, query: "s", pickerHover: 1, apps: Self.apps)),
+            ("picker", "1", Start(picking: .open(0), query: "s", pickerHover: 1, apps: Self.apps)),
             ("custom", "2", Start(apps: Self.apps)),
             ("empty", "3", Start(apps: Self.apps)),
             // Scrolling's strip with the mouse on the fourth column, which peeks in at the right edge.
             ("scrolling", "4", Start(hovered: 3, apps: Self.apps)),
             ("swap", "1", Start(picking: .app(1), apps: Self.apps)),
             ("rules", "2", Start(apps: Self.apps, scrolled: true)),
+            // A picked layout's shape before it is full: main + stack empty, with one app, and the picker on its last spot.
+            ("slots", "5", Start(apps: Self.apps)),
+            ("slots-one", "6", Start(apps: Self.apps)),
+            ("slots-picker", "6", Start(picking: .open(1), apps: Self.apps)),
         ]
         // PILOT_RENDER_ONLY narrows the renders to the file names holding it.
         let only = Self.env["PILOT_RENDER_ONLY"]
@@ -135,16 +143,19 @@ struct WorkspaceEditorRenders {
                 let image = try #require(rep.cgImage?.cropping(to: CGRect(x: crop.minX * 2, y: crop.minY * 2, width: crop.width * 2, height: crop.height * 2)))
                 try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("popup-\(name).png"))
             }
-            // The page itself with workspace 4 on screen: its card's small screen and the editor inline draw the strip.
-            let page = "\(Int(size.width))-page"
+            // The page itself with workspace 4 on screen: its card's small screen and the editor inline draw the strip,
+            // the Scrolling block under it; with 5 on screen the empty main + stack, and no Scrolling block.
+            for (focused, suffix) in [("4", ""), ("5", "-mainstack")] {
+            let page = "\(Int(size.width))-page\(suffix)"
             if only.map(page.contains) ?? true {
                 model.editingWorkspace = nil
-                engine.observers.tiler.seed(focused: "4", occupied: occupied)
+                engine.observers.tiler.seed(focused: focused, occupied: occupied)
                 RunLoop.main.run(until: Date().addingTimeInterval(0.6))
                 frame.layoutSubtreeIfNeeded()
                 let rep = try #require(snapshot(frame, scale: 2))
                 try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("window-\(page).png"))
                 engine.observers.tiler.seed(focused: "1", occupied: occupied)
+            }
             }
         }
         model.editingWorkspace = nil

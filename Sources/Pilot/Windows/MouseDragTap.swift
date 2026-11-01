@@ -27,6 +27,25 @@ final class MouseDragTap {
     var outline: (CGRect?) -> Void = { _ in }
     /// Hyper + right-click on a file: what the press named and where, after the callback returned (FileActionsMenu).
     var openFiles: (FileActionsMenu.Source, CGPoint) -> Void = { _, _ in }
+    /// The desktop's widgets (Q668): Hyper held alone and a left press on one moves it, a right press resizes it (Q695),
+    /// whatever the drag modifier; a plain right press opens its menu (Edit widget). `grab` (true for a resize) answers
+    /// inside the callback from the panels' own frames (no window server call), and so does `cancel`, before the press
+    /// that found a grab still held can start its own; the moves, the drop and the menu run after it returned.
+    struct WidgetHooks {
+        /// `over` says whether a shown widget is at the point, from the panels' frames alone, before the window list is read.
+        let over: (CGPoint) -> Bool, grab: (CGPoint, Bool) -> Bool, drag: (CGPoint) -> Void, drop: () -> Void
+        let menu: (CGPoint) -> Void
+        /// A grab whose release went by unseen ends with nothing kept: its panel back where it was, no save, no menu.
+        let cancel: () -> Void
+    }
+    var widgets: WidgetHooks?
+    /// A widget shows on the desktop: the tap is on for its right presses (its menu), else Finder would take them.
+    var widgetsShown = false { didSet { enable() } }
+    /// The right press a widget's menu took: its drags and its release are taken too, so Finder never sees half a click.
+    private var menuDown = false
+    /// A widget's press is held, and by which button: its drags and its release are taken too, so Finder never draws a
+    /// selection box or opens its menu.
+    private var widgetDown: MouseDrag.Button?
     /// A drag modifier is picked: the tap is on all the time, else only while Hyper is held or a file press is still down.
     var dragging = true { didSet { enable() } }
     private var hyperDown = false
@@ -37,7 +56,7 @@ final class MouseDragTap {
     private var waiting: (files: FileActionsMenu.Source, point: CGPoint, window: WindowInfo)?
     /// How far a waiting press moves before it is a resize, in points.
     static let clickSlop: CGFloat = 4
-    private var wanted: Bool { dragging || hyperDown || fileClickDown }
+    private var wanted: Bool { dragging || hyperDown || fileClickDown || widgetDown != nil || widgetsShown || menuDown }
     /// What the tap was last set to, so a Hyper press with a drag modifier picked costs no WindowServer call.
     private var enabled = false
 
@@ -109,7 +128,8 @@ final class MouseDragTap {
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil; source = nil
-        fileClickDown = false; enabled = false; waiting = nil
+        fileClickDown = false; enabled = false; waiting = nil; menuDown = false
+        if widgetDown != nil { widgetDown = nil; widgets?.drop() }
         end()
     }
 
@@ -124,9 +144,43 @@ final class MouseDragTap {
     /// Only cheap work here (a flag test, the window server's list): AX calls into other apps wait until the callback returned.
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
+        // Only a timeout turns back on (AGENTS.md): .tapDisabledByUserInput is Pilot's own switch-off, which a re-enable here
+        // would race, leaving the tap on while `enabled` says off.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap, wanted { CGEvent.tapEnable(tap: tap, enable: true) }
+            if type == .tapDisabledByTimeout, let tap, wanted { CGEvent.tapEnable(tap: tap, enable: true); enabled = true }
             return pass
+        }
+        // A press of the held button while a widget is still held: that grab's release went by unseen (a tap timeout), so
+        // it is cancelled now, inside the callback, before this press can start a grab of its own; the press goes on.
+        if let held = widgetDown, Self.button(type) == held, type == .leftMouseDown || type == .rightMouseDown {
+            widgetDown = nil
+            enable()
+            widgets?.cancel()
+        }
+        if let held = widgetDown, Self.button(type) == held, type != .leftMouseDown, type != .rightMouseDown {
+            let point = event.location, up = type == .leftMouseUp || type == .rightMouseUp
+            if up { widgetDown = nil; enable() }
+            DispatchQueue.main.async { [weak self] in if up { self?.widgets?.drop() } else { self?.widgets?.drag(point) } }
+            return nil
+        }
+        if type == .leftMouseDown || type == .rightMouseDown, tracker.session == nil, let widgets, layer.isHeldAlone(flags: event.flags.rawValue),
+           widgets.over(event.location), front(at: event.location, aboveDesktop: true) == nil, widgets.grab(event.location, type == .rightMouseDown) {
+            widgetDown = Self.button(type)
+            layer.layerUsed()
+            return nil
+        }
+        // A plain right press on a shown widget, with no window over it: its menu, after the callback returned.
+        if type == .rightMouseDown, tracker.session == nil, let widgets, widgetsShown, !layer.isHyperHeld(),
+           event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]).isEmpty,
+           widgets.over(event.location), front(at: event.location, aboveDesktop: true) == nil {
+            menuDown = true
+            let point = event.location
+            DispatchQueue.main.async { widgets.menu(point) }
+            return nil
+        }
+        if menuDown, type == .rightMouseDragged || type == .rightMouseUp {
+            if type == .rightMouseUp { menuDown = false; enable() }
+            return nil
         }
         if fileClickDown, type == .rightMouseDragged || type == .rightMouseUp {
             if type == .rightMouseUp { fileClickDown = false; enable() }
@@ -135,6 +189,7 @@ final class MouseDragTap {
         if type == .rightMouseDown {
             // A right press while one is still taken or waiting: that one's release went by unseen, so it lets go.
             if fileClickDown { fileClickDown = false; enable() }
+            if menuDown { menuDown = false; enable() }
             if waiting != nil { dropWaiting() }
             if tracker.session != nil, layer.isHyperHeld() { wlog.notice("file click: passed, a drag is still live") }
             if tracker.session == nil, let files = fileClick(at: event.location) {
@@ -188,19 +243,25 @@ final class MouseDragTap {
         tracker.end(); pending = nil; counts = (0, 0, .now); generation += 1
     }
 
+    /// The front window at `point`; the Dock's see-through one over a whole screen is looked through, as a drag does, and
+    /// so is an overlay app's (Cua Driver's agent cursor, layer 0, over the desktop), never a full-screen app's window.
+    /// `aboveDesktop` leaves out the desktop's own levels (Finder's icons, Pilot's widgets): a window at layer 0 or above
+    /// there, Pilot's menu or chat among them, keeps a Hyper press for itself, never a widget under it.
+    private func front(at point: CGPoint, aboveDesktop: Bool = false) -> (info: WindowInfo, layer: Int, alpha: Double)? {
+        let clickThrough = EngineObservers.clickThrough(), screens = Screens.frames
+        return EngineObservers.onScreen().first(where: {
+            $0.alpha > 0 && $0.info.frame.contains(point) && !clickThrough.contains($0.info.id) && (!aboveDesktop || $0.layer >= 0)
+                && !(screens.contains($0.info.frame) && ($0.layer != 0 || Self.overlay($0.info.pid)))
+        })
+    }
+
     /// What a right press under Hyper names for the file menu: a Finder window or the desktop (no window under the
     /// pointer) for Finder's Accessibility to read once the callback returned, or the menu's file row under the pointer.
     /// Anything else, Pilot's other windows too, gets its click as it was. Only cheap work here: the layer's state, the
     /// window server's list and the menu's own model.
     private func fileClick(at point: CGPoint) -> FileActionsMenu.Source? {
         guard layer.isHyperHeld() else { return nil }
-        let clickThrough = EngineObservers.clickThrough(), screens = Screens.frames
-        // The front window there; the Dock's see-through one over a whole screen is looked through, as a drag does, and so
-        // is an overlay app's (Cua Driver's agent cursor, layer 0, over the desktop), never a full-screen app's window.
-        guard let front = EngineObservers.onScreen().first(where: {
-            $0.alpha > 0 && $0.info.frame.contains(point) && !clickThrough.contains($0.info.id)
-                && !(screens.contains($0.info.frame) && ($0.layer != 0 || Self.overlay($0.info.pid)))
-        }) else { return .finder }
+        guard let front = front(at: point) else { return .finder }
         if front.info.pid == ProcessInfo.processInfo.processIdentifier {
             let file = PilotMenu.shared.file(at: CGPoint(x: point.x, y: Screens.primaryHeight - point.y))
             if file == nil { wlog.notice("file click: passed, Pilot's window \(front.info.id) has no file row under the pointer") }

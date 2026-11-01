@@ -75,12 +75,20 @@ struct ConfigsListTests {
                              (".hermes/profiles/dobby/config.yaml", "model: dobby\n"), (".empryo/config.json", "{}\n"),
                              (".claude/CLAUDE.md", "# Claude Code\n\n## Identity\n"), (".codex/AGENTS.md", "# Codex\n"),
                              (".hermes/profiles/harry/SOUL.md", "# Harry\n"), (".hermes/profiles/dobby/SOUL.md", "# Dobby\n"),
-                             ("code/pilot/AGENTS.md", "# pilot — agent brief\n"), ("code/agents/AGENTS.md", "# agents\n")] {
+                             ("code/pilot/AGENTS.md", "# pilot — agent brief\n"), ("code/agents/AGENTS.md", "# agents\n"),
+                             // Q718: skills and the like by tool, a brief in a repo's folder, a repo's .claude, Ghostty's second file.
+                             (".hermes/AGENTS.md", "# Hermes\n"), (".claude/skills/review/SKILL.md", "---\nname: review\ndescription: A strict PASS or REJECT\n---\n"),
+                             (".claude/agents/designer.md", "---\nname: designer\n---\n"), (".claude/output-styles/sven.md", "# Sven\n"),
+                             (".codex/skills/review/SKILL.md", "---\nname: review\n---\n"), (".codex/rules/git.rules", "prefix_rule(pattern = [\"git\"])\n"),
+                             (".hermes/skills/apple/notes/SKILL.md", "---\nname: notes\n---\n"), (".hermes/profiles/harry/skills/flights/SKILL.md", "---\nname: flights\n---\n"),
+                             ("code/agents/src/AGENTS.md", "# agents · src\n"), ("code/pilot/.claude/settings.json", "{}\n"),
+                             ("Library/Application Support/com.mitchellh.ghostty/config.ghostty", "font-size = 13\n")] {
             let url = home.appending(path: path)
             try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data(text.utf8).write(to: url)
             try fm.setAttributes([.modificationDate: now - 3 * 3600], ofItemAtPath: url.path)
         }
+        for repo in ["pilot", "agents"] { try fm.createDirectory(at: home.appending(path: "code/\(repo)/.git"), withIntermediateDirectories: true) }
         return home
     }
 
@@ -109,8 +117,18 @@ struct ConfigsListTests {
                         to: dir.appending(path: "configs-pilot-preview.png"))
         try writeRender(ConfigsPage(configs: .init(home: home, now: now)).frame(width: 1000, height: 1300).pilotTheme(look: look).background(Theme.background),
                         to: dir.appending(path: "configs.png"))
-        try writeRender(InstructionsPage(start: .init(home: home, now: now)).frame(width: 1000, height: 1100).pilotTheme(look: look).background(Theme.background),
+        // The Agents tab folded as a viewer first sees it, then filtered, then with Claude Code's group and the agents repo
+        // open and a skill's source showing.
+        try writeRender(InstructionsPage(start: .init(open: ConfigsList.openFirst, home: home, now: now)).frame(width: 1000, height: 1100)
+                            .pilotTheme(look: look).background(Theme.background),
                         to: dir.appending(path: "instructions.png"))
+        try writeRender(InstructionsPage(start: .init(query: "review", open: ConfigsList.openFirst, home: home, now: now)).frame(width: 1000, height: 900)
+                            .pilotTheme(look: look).background(Theme.background),
+                        to: dir.appending(path: "instructions-filtered.png"))
+        try writeRender(InstructionsPage(start: .init(previewing: "kit-.claude/skills/review/SKILL.md", source: true,
+                                                      open: ["agentRules", "claudeKit", "repo-agents"], home: home, now: now))
+                            .frame(width: 1000, height: 1500).pilotTheme(look: look).background(Theme.background),
+                        to: dir.appending(path: "instructions-open-source.png"))
         try writeRender(InstructionsPage(start: .init(previewing: "soul-harry", home: home, now: now)).frame(width: 1000, height: 1300)
                             .pilotTheme(look: look).background(Theme.background),
                         to: dir.appending(path: "instructions-preview.png"))

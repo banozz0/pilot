@@ -54,6 +54,11 @@ enum AppsModule {
         add(&registry, "webApp", "Make a web app", nil) { show(AppPlace(.webApps)) }
         // Every Update and Clean run, kept (story 153); Update's and Clean's own Reports rows open it too.
         add(&registry, "reports", "Update and Clean reports", nil) { show(AppPlace(.reports)) }
+        // Update and Clean themselves, each its menu branch with its own confirm, for a widget's button (Q697: the Mac upkeep
+        // widget) and anywhere else an action is picked.
+        add(&registry, "update", "Update apps", nil, keywords: "upgrade homebrew brew mas upkeep") { PilotMenu.shared.open(branch: .update) }
+        add(&registry, "install", "Install apps", nil, keywords: "recommended apps casks homebrew") { show(AppPlace(.install)) }
+        add(&registry, "clean", "Clean this Mac", nil, keywords: "mole caches junk free space upkeep") { PilotMenu.shared.open(branch: .clean) }
         add(&registry, "lazygit", "lazygit: pick a repo", Key("g", .shift)) { pickRepo() }
         // Vicinae's Bitwarden extension, rebuilt (card agent-bo-95422774): the app's own menu items and bw generate. Pilot
         // never unlocks the vault and never sees, says or logs an item or a password.
@@ -202,13 +207,14 @@ enum AppsModule {
 
     /// Every app the picker can offer: name and bundle id, from the usual application folders and the rest of the home
     /// folder (`homeApps`), plus Finder, which lives in CoreServices; no dot-named helper (.Karabiner-VirtualHIDDevice-Manager).
+    /// Hidden apps are left out after the scan's cache, so a hide shows at the next menu open.
     static func installedApps() -> [(name: String, bundle: String)] {
-        if let scanned, scanned.stamps == stamps(scanned.folders) { return scanned.apps }
+        if let scanned, scanned.stamps == stamps(scanned.folders) { return HiddenApps.shared.shown(scanned.apps, bundle: \.bundle) }
         let home = homeApps(), found = scan(home: home.apps)
         let apps = byName(found.map { ($0.name, $0.bundle) })
         let folders = appFolders + home.folders
         scanned = (folders, stamps(folders), apps, Dictionary(uniqueKeysWithValues: found.map { ($0.bundle, $0.url) }))
-        return apps
+        return HiddenApps.shared.shown(apps, bundle: \.bundle)
     }
     /// The last scan, the folders it read and their change dates: an app added, removed or renamed changes its folder's,
     /// so each menu open reads every bundle again only then. `files` opens an app LaunchServices has not met yet.
@@ -290,7 +296,7 @@ enum AppsModule {
         return out
     }
 
-    /// Every app macOS opens any of `types` with, each once, by name.
+    /// Every app macOS opens any of `types` with, each once, by name; hidden apps left out (`named`).
     static func apps(opening types: [UTType]) -> [(name: String, bundle: String)] {
         named(types.flatMap { NSWorkspace.shared.urlsForApplications(toOpen: $0) })
     }
@@ -302,9 +308,9 @@ enum AppsModule {
 
     private static func named(_ apps: [URL]) -> [(name: String, bundle: String)] {
         var seen = Set<String>()
-        return byName(apps.compactMap { url in
+        return HiddenApps.shared.shown(byName(apps.compactMap { url in
             Bundle(url: url)?.bundleIdentifier.flatMap { seen.insert($0).inserted ? (name: appName(at: url), bundle: $0) : nil }
-        })
+        }), bundle: \.bundle)
     }
 
     private static func byName(_ apps: [(name: String, bundle: String)]) -> [(name: String, bundle: String)] {
@@ -312,14 +318,16 @@ enum AppsModule {
     }
 
     /// Installed apps a person launches plus every running one, so apps outside the application folders (Finder) can
-    /// take a rule too: Add app's choices in Workspaces and Focus sessions.
-    static func pickableApps() -> [(name: String, bundle: String)] {
+    /// take a rule too: Add app's choices in Workspaces and Focus sessions. Hidden apps are left out, running or not, unless
+    /// `hidden` (Hidden apps' own picker).
+    static func pickableApps(hidden: Bool = false) -> [(name: String, bundle: String)] {
         let installed = scan().filter { isPickable($0.url, info: $0.info) }.map { (name: $0.name, bundle: $0.bundle) }
         let known = Set(installed.map(\.bundle))
         let running = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }.compactMap { app in
             app.bundleIdentifier.flatMap { known.contains($0) ? nil : (name: app.localizedName ?? $0, bundle: $0) }
         }
-        return byName(installed + running)
+        let apps = byName(installed + running)
+        return hidden ? apps : HiddenApps.shared.shown(apps, bundle: \.bundle)
     }
 
     /// An app a person launches: not dot-named (.Karabiner-VirtualHIDDevice-Manager), not an agent or background-only

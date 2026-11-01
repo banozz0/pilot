@@ -37,7 +37,7 @@ struct BarItemsTests {
         #expect(BarKind.allCases.count == 29)
         let styles = Dictionary(uniqueKeysWithValues: BarKind.allCases.map { ($0, $0.styles.map(\.title)) })
         #expect(styles == [
-            .pilot: ["icon + number", "icon", "number"], .workspaces: ["numbers", "dots", "current", "with app", "icons"],
+            .pilot: ["icon", "icon + number", "number"], .workspaces: ["numbers", "dots", "current", "with app", "icons"],
             .focusedApp: ["icon", "icon + name"], .appMenus: ["text"], .otherApps: ["icons", "one button"],
             .cpu: ["text", "graph", "bar"], .memory: ["text", "graph", "bar"], .network: ["text", "graph"],
             .graphics: ["text", "graph"], .storage: ["text", "bar"], .heat: ["text", "graph"],
@@ -57,7 +57,7 @@ struct BarItemsTests {
         #expect(s.entries.map(\.kind) == order)
         let on = s.entries.filter(\.on)
         #expect(on.map(\.kind) == [.pilot, .workspaces, .otherApps, .group, .cpu, .memory, .network, .terminal, .askAI, .capture, .modes, .clock, .timer, .extensions])
-        #expect(on.map(\.style) == [.iconNumber, .numbers, .icons, .allInOne, .text, .text, .text, .iconName, .iconName, .icon, .icons, .dateTime, .countdown, .text])
+        #expect(on.map(\.style) == [.icon, .numbers, .icons, .allInOne, .text, .text, .text, .iconName, .iconName, .icon, .icons, .dateTime, .countdown, .text])
         #expect(on.filter { $0.placement == .both }.map(\.kind) == [.pilot, .workspaces, .group, .cpu, .memory, .network, .timer])
         #expect(s.entry(.clock).placement == .topBar && s.entry(.otherApps).placement == .topBar && s.entry(.extensions).placement == .topBar)
         #expect(s.entry(.capture).placement == .menuBar)

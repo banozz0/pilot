@@ -42,6 +42,11 @@ final class PilotMenu {
     private var installSearch: Task<Void, Never>?
     /// Search rows are listed, so leaving the search clears them; otherwise a keystroke leaves the model untouched.
     private var installShown = false
+    /// The menu items read this menu by app: the front app's as it opens, and each running app a root search names
+    /// (provideAppMenu); the routes already listed as bound actions, never listed twice; the read waiting on a pause.
+    private var appMenus: [String: [MenuEntry]] = [:]
+    private var boundMenuRoutes: Set<String> = []
+    private var appMenuRead: Task<Void, Never>?
     /// The GIFs folder's pictures, read each time Stickers and GIFs opens.
     private var stickerFiles: [StickerFile] = []
     /// GIPHY in Stickers and GIFs (story 164): its key, read off the main thread as the branch opens; what the last
@@ -56,6 +61,8 @@ final class PilotMenu {
     private var translation: Task<Void, Never>?
     /// Apple's on-device translator, one translation at a time, the newest text winning; kept so its model stays warm.
     private let translator = TranslateRunner(translator: AppleTranslator())
+    /// Define's look-up for the current word, started once typing pauses (Define).
+    private var definition: Task<Void, Never>?
     /// The exchange rates the calculator answers money with (RatesStore, card agent-bo-95423047).
     private var rates: RateState?
     /// Remove's rows, kept between menus until Homebrew's folders change (InstallModule.removeStamp).
@@ -99,6 +106,18 @@ final class PilotMenu {
     /// the menu inside it (Omarchy's apps menu).
     func toggle(branch: MenuBranch? = nil) {
         DispatchQueue.main.async { self.toggleNow(branch: branch) }
+    }
+
+    /// Opens the menu inside `branch`, or keeps it there when it already shows it (a widget's Update and Clean, which a
+    /// second press must not close).
+    func open(branch: MenuBranch) {
+        DispatchQueue.main.async {
+            if self.panel != nil {
+                guard self.branch != branch else { return }
+                self.close(restoreFocus: false)
+            }
+            self.toggleNow(branch: branch)
+        }
     }
 
     /// The branch on screen, nil when the menu is closed or at its root: Clean's rows say a preview ended, so no tip
@@ -214,19 +233,21 @@ final class PilotMenu {
         extensions = found.extensions
         let entries = Self.entries(engine, scripts: scripts, extensions: extensions)
         var nav = MenuNavigator(entries: entries, branch: branch, frecency: frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
-                                aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root)
+                                aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
             self?.provideEmojiGrid($0)
-            self?.model?.nav.provideSettings($0)
+            self?.model?.nav.provideSettings($0, developer: DeveloperPages.on)
             self?.searchStickers($0)
             self?.searchGiphy($0)
             self?.answer($0)
             self?.searchInstall($0)
+            self?.provideAppMenu()
             self?.translate($0)
+            self?.define($0)
             self?.provideSnippets($0)
         }
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
@@ -260,6 +281,10 @@ final class PilotMenu {
         model.ownKey = Engine.shared?.binds.store.trigger(for: AppsModule.menuID)?.label
         model.frontApp = previousApp?.localizedName
         model.translatePair = Engine.shared?.settings.translatePair ?? .standard
+        model.defineAct = { [weak self, weak model] act in
+            guard let self, let model else { return }
+            defineAct(act, model)
+        }
         model.openEmojiCategories = { [weak self, weak model] in
             guard let self, let model else { return }
             model.chip = .emojiCategories(EmojiGrid.categories(in: Self.emoji), mostUsed: EmojiGrid.mostUsed(in: Self.emoji, picks: frecency ?? Frecency()).count,
@@ -268,7 +293,7 @@ final class PilotMenu {
         model.onClick = { [weak self] in _ = self?.apply($0, from: $1) }
         // Toybox keeps its own menu (ToyMenu); Instrument draws the Rail or Classic as Look says.
         model.layout = Look.shared.style == .toybox ? .classic : Look.shared.menuLayout
-        model.goTo = MenuRootSettings.shared.root.shown()
+        model.goTo = MenuRootSettings.shared.root.listed.shown()
         self.model = model
         let p = Self.makePanel(model)
         panel = p
@@ -329,7 +354,7 @@ final class PilotMenu {
         let built = MenuEntries.build(apps: apps, actions: Extension.actions(ScriptCommand.actions(engine.bindActions, with: scripts), with: extensions),
                                  store: engine.binds.store, roleApps: roleApps, menu: AppsModule.menuID, openID: AppsModule.openID(bundle:),
                                  running: running, extras: [MenuLayout.system("Sound"): SystemModule.outputRows(excluding: HiddenRows.shared.ids[.soundOutput] ?? []),
-                                                         .config: ConfigsModule.menuRows()].merging(installed.extras) { mine, _ in mine },
+                                                         .config: DeveloperPages.on ? ConfigsModule.menuRows() : []].merging(installed.extras) { mine, _ in mine },
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
         // Each app's own commands (P38), from the drive catalogue.
@@ -357,15 +382,39 @@ final class PilotMenu {
     /// The menu items of the app Sven was in (MenuItemSearch, card agent-bo-95423046), read off the main thread as the
     /// menu opens, so typing finds them; never Pilot's own. A drive route already listed as a bound action keeps its one row.
     private func provideMenuItems(listed: [MenuEntry]) {
-        guard let model, let app = previousApp, let bundle = app.bundleIdentifier, bundle != Bundle.main.bundleIdentifier else { return }
-        let pid = app.processIdentifier, started = Date()
-        let bound = Set(listed.compactMap { if case .action(let id) = $0.target, id.hasPrefix("drive.menu:") { id } else { nil } })
+        appMenus = [:]
+        boundMenuRoutes = Set(listed.compactMap { if case .action(let id) = $0.target, id.hasPrefix("drive.menu:") { id } else { nil } })
+        guard let app = previousApp else { return }
+        readAppMenu(app)
+    }
+
+    /// The menu items of the running app a root search's best match is, once typing pauses for 0.3 s, so typing any
+    /// running app's name lists its actions, not only the front app's (Sven, 1.0.1: "ghostex" listed one); each app's
+    /// menu bar read once a menu.
+    private func provideAppMenu() {
+        appMenuRead?.cancel()
+        guard let model, model.nav.branch == nil, let best = model.nav.rows.first, best.running, case .app(let bundle) = best.target,
+              appMenus[bundle] == nil else { return }
+        appMenuRead = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self, self.model === model,
+                  let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else { return }
+            self.readAppMenu(app)
+        }
+    }
+
+    /// One app's menu bar read off the main thread (AXMenuItems.read's bound), its rows listed beside those read before.
+    private func readAppMenu(_ app: NSRunningApplication) {
+        guard let model, let bundle = app.bundleIdentifier, bundle != Bundle.main.bundleIdentifier, appMenus[bundle] == nil else { return }
+        appMenus[bundle] = []
+        let pid = app.processIdentifier, name = app.localizedName, bound = boundMenuRoutes, started = Date()
         Task { [weak self] in
             let rows = await Task.detached(priority: .userInitiated) {
-                MenuItemSearch.entries(AXMenuItems.read(pid: pid), bundle: bundle, except: bound)
+                MenuItemSearch.entries(AXMenuItems.read(pid: pid), bundle: bundle, app: name, except: bound)
             }.value
             guard let self, self.model === model else { return }
-            model.nav.provide(.menuItem, rows)
+            self.appMenus[bundle] = rows
+            model.nav.provide(.menuItem, self.appMenus.keys.sorted().flatMap { self.appMenus[$0] ?? [] })
             mlog.notice("menu: \(rows.count) menu items for \(bundle, privacy: .public) in \(Int(-started.timeIntervalSinceNow * 1000)) ms")
         }
     }
@@ -592,6 +641,97 @@ final class PilotMenu {
         }
     }
 
+    /// Define (Q596): `def ` or `define ` at the root opens it with the rest typed, Escape going back to the root; inside,
+    /// once typing pauses for 0.25 s, the Mac's dictionary answers at once, a word it lacks is tried in English when it is
+    /// in another language, and the online dictionary's synonyms follow (FreeDictionary). A newer keystroke cancels the
+    /// older look-up, so the newest word wins and no request goes out per keystroke.
+    private func define(_ query: String) {
+        definition?.cancel()
+        guard let model else { return }
+        if model.nav.branch == nil, let rest = Define.text(after: query) {
+            // Not from inside onQuery: the other providers still read this query at the root.
+            DispatchQueue.main.async { [weak model] in
+                guard let model, model.nav.branch == nil, model.nav.query == query else { return }
+                model.nav.go(to: MenuNavigator.Spot(branch: .define, query: rest, rooted: .define))
+            }
+            return
+        }
+        guard let word = Define.word(for: query, in: model.nav.branch) else {
+            model.define = nil
+            return model.nav.provide(.answer, home: .define, [])
+        }
+        if model.define?.typed != word { model.define = nil }
+        let pair = model.translatePair, version = GeneralPage.shortVersion
+        definition = Task { [weak self, weak model, translator] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let model else { return }
+            // A word in another language with no English entry is defined in English: "efímero" as ephemeral.
+            var shown = DefineShown(typed: word, word: word, entry: await MacDictionary.entry(word))
+            let source = Translate.direction(for: word, pair: pair).source
+            if shown.entry == nil, source != "en",
+               let english = await Self.translated(word, from: source, to: "en", with: translator), let entry = await MacDictionary.entry(english) {
+                shown = DefineShown(typed: word, word: english, entry: entry, from: Translate.name(source))
+            }
+            guard !Task.isCancelled, self != nil, model.nav.branch == .define else { return }
+            // The Mac's meanings show at once; the translation and the online synonyms land as each answers. A word it
+            // lacks says so at once, then lists what it may have meant, each with its entry for the pane.
+            var translation: (language: String, text: String)?, synonyms: [String]?, suggestions: [String] = []
+            @MainActor func provide() {
+                model.define = shown
+                model.nav.provide(.answer, home: .define, Define.rows(word: shown.word, entry: shown.entry, synonyms: synonyms,
+                                                                       translation: translation, suggestions: suggestions))
+            }
+            provide()
+            if shown.entry == nil {
+                let guessed = await MacDictionary.suggestions(word, count: Define.shownSuggestions)
+                guard !Task.isCancelled, model.nav.branch == .define else { return }
+                for suggestion in guessed { model.defineGlossary[suggestion.word.lowercased()] = suggestion.entry }
+                suggestions = guessed.map(\.word)
+                if !suggestions.isEmpty { provide() }
+            }
+            mlog.notice("menu: define \(word.count) characters, \(shown.entry?.senses.count ?? 0) senses\(shown.from.map { ", from \($0)" } ?? "", privacy: .public)")
+            let asking = shown.entry != nil, looked = shown.word
+            async let asked: [String] = asking ? FreeDictionary.synonyms(for: looked, version: version) : []
+            let other = pair.home == "en" ? pair.other : pair.home, language = shown.from == nil ? other : source
+            translation = await Self.translated(shown.word, from: "en", to: language, with: translator).map { (Translate.name(language), $0) }
+            guard !Task.isCancelled, model.nav.branch == .define else { return }
+            if translation != nil { provide() }
+            let found = await asked
+            guard !Task.isCancelled, model.nav.branch == .define else { return }
+            shown.asking = false
+            synonyms = asking ? found : nil
+            provide()
+            // The synonyms' own first meanings, for the picked row in full; each from the Mac, at once.
+            for synonym in found.prefix(Define.shownSynonyms) where model.defineGlossary[synonym.lowercased()] == nil {
+                guard !Task.isCancelled, let entry = await MacDictionary.entry(synonym) else { continue }
+                model.defineGlossary[synonym.lowercased()] = entry
+            }
+        }
+    }
+
+    /// `text` in `target` by Apple's on-device translation, through the menu's one translator; nil when that language
+    /// is not on this Mac or it fails.
+    private static func translated(_ text: String, from source: String, to target: String, with translator: TranslateRunner) async -> String? {
+        guard source != target, let pair = TranslatePair(home: target, other: source),
+              case .copy(let out)? = await translator.rows(for: text, pair: pair, from: source)?.first?.target else { return nil }
+        return out
+    }
+
+    /// Define's keys and buttons (DefineKeys): the picked row pasted into the app the menu opened over, a word defined in
+    /// its place, or the word said in Pilot's voice.
+    private func defineAct(_ act: DefineKeys.Act, _ model: MenuModel) {
+        switch act {
+        case .paste:
+            guard case .copy(let text)? = model.nav.selected?.target else { return }
+            paste(text, "definition")
+        case .define(let word):
+            model.nav.query = word
+        case .say:
+            guard let word = model.define?.entry?.word ?? model.define?.word else { return }
+            ReadAloud.shared.read(service: word)
+        }
+    }
+
     /// The providers that fill a branch as it opens: Remove's and Update's (from any of their categories too, where Escape
     /// back from a confirm lands), Clean's rows; Translate warms its model.
     private func branchOpened(_ branch: MenuBranch?) {
@@ -606,6 +746,8 @@ final class PilotMenu {
             model?.nav.provide(.answer, home: .translate, [])
             Task { await translator.warm() }
         }
+        // Define's translation row uses the same model.
+        if branch == .define { Task { await translator.warm() } }
         if branch == .emoji { provideEmojiGrid(model?.nav.query ?? "") }
         if branch == .reminders { model?.nav.provide(.action, home: .reminders, Reminders.rows(ReminderScheduler.shared.list, now: .now)) }
         if branch != .stickers { giphySearch?.cancel(); giphyPage?.cancel(); giphyPage = nil }
@@ -845,6 +987,8 @@ final class PilotMenu {
         translation?.cancel()
         installSearch?.cancel()
         installShown = false
+        appMenuRead?.cancel()
+        appMenus = [:]
         giphySearch?.cancel()
         giphyPage?.cancel()
         giphyPage = nil
@@ -931,6 +1075,11 @@ final class PilotMenu {
         // A chip's list (Emoji's categories, Translate's languages) takes every key while it is open (MenuChips).
         if let model, model.chip != nil { return model.chipKey(code, flags, characters) }
         if let model, model.hasLineChips, model.nav.actions == nil, chipKey(model, code, flags) { return true }
+        // Define's own keys (DefineKeys): Return pastes, → defines a synonym, ⌘Return says the word.
+        if let model, model.showsDefine, model.nav.actions == nil, let act = DefineKeys.act(code, flags, on: model.nav.selected) {
+            defineAct(act, model)
+            return true
+        }
         guard let model, let key = Self.key(code, flags, numbers: numbers) else { return false }
         // At the Rail's root ↑ and ↓ walk the whole rail, its kinds over Go to's branches (Q119).
         if model.railKey(key) { return true }
@@ -948,6 +1097,7 @@ final class PilotMenu {
             return true
         }
         if model.nav.actions == nil, activityKey(model, key) { return true }
+        if model.nav.actions == nil, detailKey(model, key) { return true }
         let before = model.nav.branch, stepped = model.nav.actions != nil
         let taken = apply(model.nav.handle(key), from: before)
         // Line: out of Cmd+K's actions the search field takes the keyboard back with its text selected (SwiftUI's focus,
@@ -998,6 +1148,16 @@ final class PilotMenu {
         }
         if key != .return { model.forceArmed = nil; model.activityNote = nil }
         return false
+    }
+
+    /// ⌘Return on an extension's detail (pilot-1-1 T9, Q639): its page in the window, the menu closed; nothing when it has
+    /// no page.
+    private func detailKey(_ model: MenuModel, _ key: MenuNavigator.Key) -> Bool {
+        guard key == .commandReturn, model.nav.shownDetail != nil else { return false }
+        guard let id = model.nav.selected?.extensionPage else { return true }
+        close(restoreFocus: false)
+        AppWindowController.shared.openExtensionPage(id)
+        return true
     }
 
     /// Activity's rows while it shows (Q399): what the last read holds at once, then a read every 3 s, as the Activity page
@@ -1066,16 +1226,21 @@ final class PilotMenu {
     /// does, SelectionEdit.menuPaste), his clipboard back after; copied instead when the app has no Paste.
     private func pasteTranslation(_ model: MenuModel) {
         guard case .copy(let text)? = model.nav.rows.first?.target else { return }
+        paste(text, "translation")
+    }
+
+    /// `text` pasted into the app the menu opened over, once it is in front again; copied when it has no Paste.
+    private func paste(_ text: String, _ what: String) {
         let previous = previousApp
         close(restoreFocus: true)
-        runWhenFrontmost(previous, "translation") {
+        runWhenFrontmost(previous, what) {
             guard let app = previous else { return SystemModule.copy(text) }
             Task {
                 guard await SelectionEdit.menuPaste(app.processIdentifier, text) else {
                     SystemModule.copy(text)
                     return HUD.tip("Copied: \(app.localizedName ?? "that app") has no Paste")
                 }
-                mlog.notice("menu: pasted \(text.count) characters of translation into \(app.bundleIdentifier ?? "?", privacy: .public)")
+                mlog.notice("menu: pasted \(text.count) characters of \(what, privacy: .public) into \(app.bundleIdentifier ?? "?", privacy: .public)")
             }
         }
     }
@@ -1250,6 +1415,12 @@ final class PilotMenu {
             mlog.notice("menu: open \(bundle, privacy: .public) \(AppsModule.open(bundle: bundle) ? "opened" : "not installed", privacy: .public)")
         case .action("system.speedTest") where model?.layout == .line:
             showSpeedTest()
+        // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
+        case .action(let id) where entry.kind == .menuItem && entry.app != previous?.bundleIdentifier:
+            guard let bundle = entry.app, let route = DriveRoute(id: id) else { return }
+            close(restoreFocus: false)
+            mlog.notice("menu: \(bundle, privacy: .public)'s menu item, the app brought forward")
+            DriveModule.open(bundle, then: route)
         case .action(let id):
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { Engine.shared?.action(id)?.run() }
@@ -1544,6 +1715,16 @@ final class MenuModel {
     /// A click on a row or a Cmd+K action (card agent-bo-95422994): the panel carries out what it came to, as for Return.
     var onClick: ((_ outcome: MenuNavigator.Outcome, _ before: MenuBranch?) -> Void)?
     func click(at index: Int) { let before = nav.branch; onClick?(nav.click(at: index), before) }
+    /// A click on an extension detail's block (pilot-1-1 T9): the detail's own action that does the same (its kind, the
+    /// title and keys aside) runs as Cmd+K's would; any other runs nothing, so a detail never reaches past what its row
+    /// offers.
+    func runDetail(_ action: Extension.Item.Action) {
+        guard let row = nav.selected, let index = nav.shownDetail?.actions.firstIndex(where: { $0.kind == action.kind }) else {
+            return mlog.notice("menu: a detail block's action is not one of the detail's, so it does not run")
+        }
+        let before = nav.branch
+        onClick?(.own(index, row), before)
+    }
     func clickAction(at index: Int) { let before = nav.branch; onClick?(nav.clickAction(at: index), before) }
 
     /// Remove's order, which Tab changes.
@@ -1566,6 +1747,11 @@ final class MenuModel {
     var translateFrom: String?
     var translateSource: String?
     var translatePair = TranslatePair.standard
+    /// Define's word as shown (DefinePane); nil before a look-up answers. The synonyms' own entries by word, lowercased,
+    /// for the picked row in full; and the act a key or button asks of the panel (DefineKeys).
+    var define: DefineShown?
+    var defineGlossary: [String: DictionaryEntry] = [:]
+    var defineAct: ((DefineKeys.Act) -> Void)?
     /// The app the menu opened over, by name: the foot's Paste to Messages.
     var frontApp: String?
     /// What Stickers and GIFs asks GIPHY for, which Tab or the bar's chips flip; kept for the next menu.
@@ -1603,6 +1789,8 @@ final class MenuModel {
     var showsStats: Bool { nav.branch == .stats && !nav.isList && nav.actions == nil && scan == nil }
     /// About's cards and mark draw in the list's place (MenuAboutScreen, Q443), the same way.
     var showsAbout: Bool { nav.branch == .about && !nav.isList && nav.actions == nil && scan == nil }
+    /// Define's rows and entry draw in the list's place (DefinePane), Cmd+K's actions over their corner.
+    var showsDefine: Bool { nav.branch == .define && !nav.isList && scan == nil }
     /// About's height for the displays this Mac has now.
     var aboutHeight: CGFloat { MenuAboutScreen.height(displays: NSScreen.screens.count) }
 
@@ -1610,6 +1798,7 @@ final class MenuModel {
     var toyboxSize: CGSize {
         let size = MenuPanelSize.toybox(shape, rows: nav.rows.count)
         // About is taller than Toybox's fixed wide panel: room for its cards under the search and over the foot.
+        if showsDefine { return CGSize(width: size.width, height: max(size.height, Self.toyChrome + DefinePane.height)) }
         return showsAbout ? CGSize(width: size.width, height: max(size.height, Self.toyChrome + aboutHeight)) : size
     }
     /// Toybox's search, rule and foot around what the menu lists.
@@ -1622,6 +1811,7 @@ final class MenuModel {
         let band = railBand
         if showsStats { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight) }
+        if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height) }
         if scan != nil {
             return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: waitHeight)
         }
@@ -1638,6 +1828,7 @@ final class MenuModel {
         if scan != nil { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: waitHeight) }
         if showsStats { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: aboutHeight) }
+        if showsDefine { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         let headings = headings
         let card = cardRoom(headed: headings[0] != nil, row: shape == .wide ? MenuPanelSize.classicWideRow : MenuPanelSize.classicRow)
         return MenuPanelSize.classic(shape, rows: nav.rows.count, headings: atRoot ? 0 : headings.count, root: atRoot,
@@ -1653,6 +1844,7 @@ final class MenuModel {
         if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count) }
         if showsStats { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: aboutHeight) }
+        if showsDefine { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         // The emoji grid's cells and the translation's panes, not rows; the whole height while a chip's list is open.
         if hasLineChips, nav.actions == nil {
             let room = nav.branch == .translate ? TranslatePanes.height : nav.rows.isEmpty ? 180 : EmojiGridView.height(nav.rows)
@@ -1749,7 +1941,7 @@ final class MenuModel {
 
     /// A root search that found nothing but its search offers (Search to install, Search files): Instrument says so under
     /// them, in this much room.
-    var noMatch: Bool { searchingRoot && !nav.rows.isEmpty && nav.rows.allSatisfy(\.isOffer) }
+    var noMatch: Bool { searchingRoot && nav.only == nil && !nav.rows.isEmpty && nav.rows.allSatisfy(\.isOffer) }
     static let noMatchRoom: CGFloat = 76
     /// System or one of its sub-branches, whose rows wear their switches (Space flips them), whatever the panel's shape.
     var inSystem: Bool { !nav.isList && nav.branch?.browsed == .system }
@@ -1832,7 +2024,7 @@ extension MenuModel {
     /// no best match to head, and every window listed whole heads its workspace (frame B2).
     var headings: [Int: MenuGroups.Group] {
         if nav.branch == nil, !nav.isList, nav.query.isEmpty, nav.only == .window { return workspaceHeadings }
-        if nav.isLive || nav.branch == .activity && !nav.isList { return MenuGroups.sections(nav.rows) }
+        if nav.isList || nav.branch == .activity { return MenuGroups.sections(nav.rows) }
         return MenuGroups.headings(nav.rows, searching: nav.branch == nil && !nav.isList && !nav.query.isEmpty, branch: nav.branch)
     }
 
@@ -1892,11 +2084,14 @@ extension MenuModel {
 
     /// Mockup C's right side, at a root search, inside a branch and under an extension's detail: what Return does to the
     /// current row, unless the left already says (Apps, Update, Clean, Remove), and Actions ⌘K when the row has any. A
-    /// detail's Return is its first action, named as the extension names it.
+    /// detail's Return is its first action, named as the extension names it, then ⌘Return its page when it has one (Q639).
     var footerCommands: [KeyHint] {
         guard nav.actions == nil, chip == nil, let row = nav.selected, nav.shownDetail != nil || nav.isLive || (!nav.isList && !atRoot) else { return [] }
         // A detail's Cmd+K lists its own actions, so it has them exactly when Return has a first one.
-        if nav.shownDetail != nil { return row.ownActions?.first.map { [("↵", $0), ("⌘K", "Actions")] } ?? [] }
+        if nav.shownDetail != nil {
+            let page: [KeyHint] = row.extensionPage == nil ? [] : [("⌘↵", "Open page")]
+            return row.ownActions?.first.map { [("↵", $0)] + page + [("⌘K", "Actions")] } ?? page
+        }
         // An extension's row, as Raycast's bar: Return's action, the second when it has a key (To-do B), then Cmd+K.
         if nav.isLive {
             guard let own = row.ownActions, let first = own.first else { return [] }
@@ -1931,6 +2126,7 @@ extension MenuModel {
         if nav.branch == .about { return [("Esc", "close")] }
         let paste = "paste to \(frontApp ?? "the app")"
         if nav.branch == .emoji, !nav.rows.isEmpty { return [("↵", paste), ("⌘↵", "copy"), ("Esc", "back")] }
+        if nav.branch == .define { return DefineKeys.foot(nav.selected, frontApp: frontApp) }
         if nav.branch == .translate {
             guard case .copy? = nav.rows.first?.target else { return [("⇥", "languages"), ("Esc", "back")] }
             return [("↵", "copy"), ("⌘↵", paste), ("⌘S", "swap"), ("⇥", "languages")]

@@ -9,7 +9,7 @@ import Testing
 
 /// The panels in Toybox (card agent-bo-95423182, batch 5) beside Instrument, through HUD.makePanel as Pilot shows them: the
 /// tips, the rescue prompt and an extension's alert; the hold overlay's pages; the notes panel's
-/// states; the clipboard panel's; then the top bar's popovers, the Pilot dropdown and the bind editor. Toybox follows the
+/// states; the clipboard panel's; then the top bar's popovers, the Pilot dropdown at rest and while things run, and the bind editor. Toybox follows the
 /// theme, so each runs per theme. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ToyboxPanelsRenders`
 /// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=toybox,toybox-night,lagoon` (the defaults) narrow it;
@@ -162,7 +162,7 @@ struct ToyboxPanelsRenders {
         let windows = try AeroWindow.parse(HomeRenders.windows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows, perMonitor: [])
         typealias On = DropdownQuickSwitchesTests.Fake
-        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(true), clipboard: On(true))
+        let switches = QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(true), clipboard: On(true), dictation: On(true))
         let rows = [SystemStats.Row(name: "User", value: "9 %", explanation: "", topic: .cpu), SystemStats.Row(name: "System", value: "4 %", explanation: "", topic: .cpu),
                     SystemStats.Row(name: "Used", value: "11.2 GB", explanation: "", topic: .ram)]
         let sampler = SystemSampler.shared
@@ -198,17 +198,29 @@ struct ToyboxPanelsRenders {
                 defer { ExtrasDownloads.shared.seeded = nil }
                 try writeRender(PilotDropdown(switches: switches, option: false).environment(engine).styled(.topBar, look: look)
                     .pilotTheme(look: look).padding(24).background(canvas), to: bar.appendingPathComponent("4-dropdown-downloads.png"), wait: 0.5)
+                // The compact menu while things run (spec pilot-1-1 T29): Now with a recording, a focus block and the download.
+                Recorder.shared.pose(.recording, elapsed: 134)
+                ExtensionTimer.shared.startFocus()
+                try writeRender(PilotDropdown(switches: switches, option: false).environment(engine).styled(.topBar, look: look)
+                    .pilotTheme(look: look).padding(24).background(canvas), to: bar.appendingPathComponent("6-dropdown-running.png"), wait: 0.5)
+                ExtensionTimer.shared.stop()
+                Recorder.shared.pose(.idle, elapsed: 0)
                 let entry = try #require(BarSettings.defaults.entries.first { $0.kind == .pilot })
                 var inputs = BarInputs()
                 inputs.pilotTitle = "2"
                 inputs.pilotDownload = ExtrasDownloads.shared.share
                 let parts = try #require(BarParts.parts(entry, inputs))
-                let image = try #require(StatusItemImage.image([parts]))
-                let item = { (dark: Bool) in
-                    Image(nsImage: image).renderingMode(.template).foregroundStyle(dark ? Color.white : .black)
-                        .padding(.horizontal, 12).frame(height: 24).background(Color(white: dark ? 0.16 : 0.92))
+                // The mark keeps its accent box (spec pilot-1-1 T28): no template, drawn in each bar's appearance as macOS does.
+                var reps: [NSBitmapImageRep] = []
+                for menuBar in MenuBarIconRenders.bars.reversed() {
+                    try #require(NSAppearance(named: menuBar.appearance)).performAsCurrentDrawingAppearance {
+                        if let image = StatusItemImage.image([parts]), let rep = try? MenuBarIconRenders.onBar(image, ground: menuBar.ground, ink: menuBar.ink) { reps.append(rep) }
+                    }
                 }
-                try writeRender(HStack(spacing: 0) { item(false); item(true) }.padding(8), to: bar.appendingPathComponent("5-menu-bar-item.png"))
+                try #require(reps.count == 2)
+                try writeRender(HStack(spacing: 0) {
+                    ForEach(reps.indices, id: \.self) { Image(nsImage: NSImage(cgImage: reps[$0].cgImage!, size: reps[$0].size)).interpolation(.none) }
+                }.padding(8), to: bar.appendingPathComponent("5-menu-bar-item.png"))
             }
             if Self.wants("bind-editor") {
                 // Editor A (spec bind-editor T6), as BindEditorRenders draws Instrument's: the kinds on a free key, Ghostty

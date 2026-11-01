@@ -94,7 +94,8 @@ let elsewhere: [String: String] = ["emacs": "https://www.gnu.org/software/emacs/
                                    "dotnet-sdk": "https://github.com/dotnet.png?size=128",
                                    "rustup": "https://github.com/rust-lang.png?size=128",
                                    "appcleaner": "https://static.macupdate.com/products/25276/m/phpjbmgvl-logo.png",
-                                   "btop": "https://raw.githubusercontent.com/aristocratos/btop/main/Img/icon.png"]
+                                   "btop": "https://raw.githubusercontent.com/aristocratos/btop/main/Img/icon.png",
+                                   "aldente": "https://raw.githubusercontent.com/AppHouseKitchen/AlDente-Battery_Care_and_Monitoring/master/AlDente/Assets.xcassets/AppIcon.appiconset/512pt_Mac_1x.png"]
 /// Entries whose App Store artwork is found by another bundle id than their check's: Office by Word, its installed-check.
 let storeBundle: [String: String] = ["microsoft-office": "com.microsoft.Word"]
 

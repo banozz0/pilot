@@ -79,8 +79,9 @@ public enum MenuItemSearch {
     /// holds the drive routes already listed as bound actions, so one is never listed twice. The route keeps each title
     /// as the menu has it, since the press matches titles exactly. Two items on one path (Chrome's two Paste and Match
     /// Style, two History tabs of one title) are one route the press finds first, so one row: SwiftUI's list needs each
-    /// row's id once (Build 68 log, 2026-10-18).
-    public static func entries(_ bar: [MenuItemNode], bundle: String, except: Set<String> = []) -> [MenuEntry] {
+    /// row's id once (Build 68 log, 2026-10-18). `app`, the app's name, is searched too, so typing it lists the app's
+    /// items as its actions, as the catalogue's commands are (Sven, 1.0.1).
+    public static func entries(_ bar: [MenuItemNode], bundle: String, app: String? = nil, except: Set<String> = []) -> [MenuEntry] {
         var listed: Set<String> = []
         func rows(_ nodes: [MenuItemNode], _ path: [String]) -> [MenuEntry] {
             nodes.flatMap { node -> [MenuEntry] in
@@ -91,7 +92,7 @@ public enum MenuItemSearch {
                 let id = DriveRoute.menu(bundle: bundle, path: path + [title]).id
                 guard !path.isEmpty, !except.contains(id), listed.insert(id).inserted else { return [] }
                 return [MenuEntry(title: title.trimmingCharacters(in: .whitespaces), target: .action(id), detail: node.key,
-                                  detailIsKey: node.key != nil, keywords: path.joined(separator: " "), ownKind: .menuItem, app: bundle,
+                                  detailIsKey: node.key != nil, keywords: (path + [app].compactMap(\.self)).joined(separator: " "), ownKind: .menuItem, app: bundle,
                                   subtitle: DriveRoute.title(path))]
             }
         }

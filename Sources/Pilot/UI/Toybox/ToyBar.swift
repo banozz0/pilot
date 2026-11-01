@@ -118,7 +118,7 @@ struct ToyBarParts: View {
         case .graph(let points): ToySparkBars(points: points)
         case .bar(let share): ToyMeter(share: share, warn: warn)
         case .symbol(let name): Image(systemName: name).font(ToyBar.glyph).foregroundStyle(quiet)
-        case .mark: InstrumentMark(size: 14, accent: false).foregroundStyle(primary)
+        case .mark: InstrumentMark(size: 14).foregroundStyle(primary)
         case .ring(let left): ToyTomato(left: left)
         case .badge(let s): ToyBadge(text: s)
         case .workspaces(let names, let current, let app):

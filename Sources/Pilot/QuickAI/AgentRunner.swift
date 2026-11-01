@@ -48,7 +48,7 @@ extension AISettings {
     /// loop, so the chat can change Pilot (or why it cannot); else its chat alone. A message that starts with a skill's
     /// command carries its steps on every one of them (AIChat.Request.skilled, P29).
     func chatTurn(for message: String) -> Result<AIChatModel.Turn, QuickAI.Failure> {
-        if let idea = ExtensionMaker.idea(message) { return extensionTurn(idea) }
+        if let maker = maker(for: message) { return maker }
         let turn: Result<AIChatModel.Turn, QuickAI.Failure> =
             if provider.command != nil { agent().map { $0.turn } }
             else if let api = apiAgent() { api.map { $0.turn } }
@@ -56,18 +56,43 @@ extension AISettings {
         return turn.map { AISkills.skilled($0) }
     }
 
-    /// /extension on Claude Code alone: codex has no confined file tools, the API keys only `pilot`.
+    /// A message sent with a picture: /widget's maker, which builds from a screenshot (Q693), even with no words; any
+    /// other goes as a chat turn, never an agent's (story 191), /extension's included.
+    func pictureTurn(for message: String) -> Result<AIChatModel.Turn, QuickAI.Failure> {
+        if let idea = WidgetMaker.idea(message) { return widgetTurn(idea, picture: true) }
+        return chatRunner().map(AIChatModel.turn)
+    }
+
+    /// /extension's or /widget's turn when `message` starts with one; nil for any other.
+    private func maker(for message: String) -> Result<AIChatModel.Turn, QuickAI.Failure>? {
+        if let idea = ExtensionMaker.idea(message) { return extensionTurn(idea) }
+        if let idea = WidgetMaker.idea(message) { return widgetTurn(idea) }
+        return nil
+    }
+
+    /// /extension (and /widget, ADR 0016, Q670, in a folder beside it) on Claude Code whenever it is installed, whatever
+    /// the chat's provider (Sven's chat runs on codex): only claude's file tools are confined to the turn's folder
+    /// (`--restricted`). Without it they refuse: codex runs nothing but `pilot` (codexLock) and has no confined file tool
+    /// to write with (Agent refuses codex with `.files`), and an API key's loop has only `pilot`.
     private func extensionTurn(_ idea: String) -> Result<AIChatModel.Turn, QuickAI.Failure> {
-        guard provider == .claudeCode else {
-            return .failure(.unsupported("/extension needs Claude Code; pick it on the AI page"))
-        }
-        guard !idea.isEmpty else { return .failure(.unsupported("Say what it should make: /extension list my open ports")) }
+        makerTurn(idea, skill: ExtensionMaker.skill, kind: "extension", example: "/extension list my open ports",
+                  folder: { try ExtensionMaker.folder() })
+    }
+
+    private func widgetTurn(_ idea: String, picture: Bool = false) -> Result<AIChatModel.Turn, QuickAI.Failure> {
+        makerTurn(idea, skill: WidgetMaker.skill, kind: "widget", example: "/widget my battery and disk as two meters", picture: picture,
+                  folder: { try ExtensionMaker.folder(in: WidgetMaker.parent) })
+    }
+
+    /// One maker's turn: ExtensionMaker's confined agent in a fresh folder, on the skill's prompt. A picture is an idea of
+    /// its own, so words may be left out.
+    private func makerTurn(_ idea: String, skill: String, kind: String, example: String, picture: Bool = false,
+                           folder: @escaping @Sendable () throws -> URL) -> Result<AIChatModel.Turn, QuickAI.Failure> {
+        guard !idea.isEmpty || picture else { return .failure(.unsupported("Say what it should make: \(example)")) }
         guard let cli = findCLI() else { return .failure(.missing) }
-        guard let prompt = AISkills.url(ExtensionMaker.skill) else {
-            return .failure(.failed("Pilot's extension prompt is missing from the app"))
-        }
+        guard let prompt = AISkills.url(skill) else { return .failure(.failed("Pilot's \(kind) prompt is missing from the app")) }
         let (model, effort, helpers) = (model(for: .claudeCode)?.id, effort(for: .claudeCode), Self.helpers)
-        return .success(ExtensionMaker.turn { folder in
+        return .success(ExtensionMaker.turn(folder: folder) { folder in
             ExtensionMaker.agent(cli: cli.path, prompt: prompt, helpers: helpers, folder: folder, model: model, effort: effort)
         })
     }
@@ -79,16 +104,16 @@ extension AISettings {
 /// Pilot's AI skills (P29, Sven Q268): Packaging/skills/<name>/SKILL.md, in the bundle's Resources/skills, read once, in
 /// the Skills list's order. A new skill is its file and its name here.
 enum AISkills {
-    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", ExtensionMaker.skill]
+    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", ExtensionMaker.skill, WidgetMaker.skill]
         + (CataloguePublish.available ? ["publish"] : [])
     /// The guide topics before P29, which `pilot guide` still answers.
     static let renamed = ["extensions": "catalogue", "troubleshooting": "troubleshoot"]
     static let all = load()
 
-    /// The skills the chat's agent follows: all but /extension, the maker's own turn.
+    /// The skills the chat's agent follows: all but /extension and /widget, the makers' own turns.
     static let guides = guides(all)
 
-    static func guides(_ skills: [AISkill]) -> [AISkill] { skills.filter { $0.name != ExtensionMaker.skill } }
+    static func guides(_ skills: [AISkill]) -> [AISkill] { skills.filter { $0.name != ExtensionMaker.skill && $0.name != WidgetMaker.skill } }
 
     /// `run` with each skill's steps in the messages that pick it.
     static func skilled(_ run: @escaping AIChatModel.Turn, _ skills: [AISkill] = guides) -> AIChatModel.Turn {
@@ -101,6 +126,18 @@ enum AISkills {
     static func load(_ read: (String) -> String? = { url($0).flatMap { try? String(contentsOf: $0, encoding: .utf8) } }) -> [AISkill] {
         names.compactMap { read($0).flatMap(AISkill.init) }
     }
+}
+
+/// "/widget <idea>" in the chat (ADR 0016, Q670): ExtensionMaker's agent and fence on the widget skill
+/// (Packaging/skills/widget), which runs `pilot widget new` in its folder, `widget check` and `widget install`; the
+/// check's run and the install each wait on Allow, and only the install's Allow makes it made here.
+enum WidgetMaker {
+    static let skill = "widget"
+    static let command = "/" + skill
+    /// Its folders' parent, beside /extension's, inside the temporary folder `pilot widget check` reads unasked.
+    static var parent: URL { FileManager.default.temporaryDirectory.appending(path: "pilot-widget") }
+
+    static func idea(_ message: String) -> String? { AISkill.words(after: command, in: message) }
 }
 
 /// "/extension <idea>" in the chat (spec pilot-ai-helper T17): Claude Code with the file tools as well as `pilot`, in a
@@ -141,7 +178,7 @@ enum ExtensionMaker {
     static func turn(folder: @escaping @Sendable () throws -> URL = { try folder() }, _ agent: @escaping @Sendable (URL) -> AIChat.Agent) -> AIChatModel.Turn {
         { request, event throws(QuickAI.Failure) in
             let made: URL
-            do { made = try folder() } catch { throw .failed("no folder for the extension: \(error.localizedDescription)") }
+            do { made = try folder() } catch { throw .failed("no folder to make it in: \(error.localizedDescription)") }
             var fresh = request
             fresh.session = nil
             var reply = try await agent(made).turn(fresh, event: event)

@@ -61,6 +61,15 @@ struct ExtensionSurfaceRenders {
         await page.refresh()
         let stale = ExtensionPageModel(id: "ai-usage", folder: exts, storage: ExtensionSurfaceTests.storage(dir), run: { _, _ in .error("did not answer in 5 s") })
         await stale.refresh()
+        // pilot-1-1 T8 (Q638): an answer, then a failed ask: the last answer dimmed, why and the next try in the header.
+        final class Asks: @unchecked Sendable { var n = 0 }
+        let asks = Asks()
+        let dimmed = ExtensionPageModel(id: "ai-usage", folder: exts, storage: ExtensionSurfaceTests.storage(dir), run: { _, _ in
+            asks.n += 1
+            return asks.n == 1 ? .blocks(blocks) : .error("did not answer in 5 s")
+        })
+        await dimmed.refresh()
+        await dimmed.refresh(reread: true)
 
         func shot(_ name: String, _ model: ExtensionPageModel, style: PilotStyle, theme: String) throws {
             (look.themeID, look.style) = (theme, style)
@@ -71,6 +80,7 @@ struct ExtensionSurfaceRenders {
         try shot("instrument", page, style: .instrument, theme: "nightwatch")
         try shot("toybox", page, style: .toybox, theme: "toybox")
         try shot("instrument-failed", stale, style: .instrument, theme: "nightwatch")
+        try shot("instrument-dimmed", dimmed, style: .instrument, theme: "nightwatch")
 
         // The bar: the timer, the Extensions item (AI usage warns, GitHub alerts), the clock.
         let bar = ExtensionBar(folder: exts, storage: ExtensionSurfaceTests.storage(dir), run: { surface, _ in

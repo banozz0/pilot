@@ -105,7 +105,7 @@ private struct ToyPageList: View {
                     if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
                         ToySearchResults(model: model) {}
                     } else {
-                        ForEach(area.pages, id: \.self) { page in
+                        ForEach(area.shown, id: \.self) { page in
                             ToyPageRow(model: model, page: page)
                             // Extension pages under Extensions (story 161): pages of their own, so they stay rows (P36).
                             if page == .extensions { ExtensionPageRows(model: model) { ToyExtensionRow(link: $0, on: $1, rail: false, open: $2) } }
@@ -249,7 +249,7 @@ struct ToySearchResults: View {
     let picked: () -> Void
 
     var body: some View {
-        let places = AppPlace.search(model.query), panes = SettingsSearch.panes(model.query)
+        let places = AppPlace.search(model.query, developer: DeveloperPages.on), panes = SettingsSearch.panes(model.query)
         let bindHits = !BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: model.query).isEmpty
         VStack(alignment: .leading, spacing: 2) {
             ForEach(places, id: \.self) { place in row(place.path) { model.go(place); picked() } }
@@ -320,9 +320,9 @@ struct ToyPageHeader: View {
     }
 
     @ViewBuilder private func parts(_ page: AppPage) -> some View {
-        if !listed, page != .home, page.area.pages.count > 1 {
+        if !listed, page != .home, page.area.shown.count > 1 {
             ToySegments(selection: Binding(get: { model.page }, set: { model.go(AppPlace($0)) }),
-                        options: page.area.pages.map { (value: $0, title: $0.title) }, label: "\(page.area.title) pages")
+                        options: page.area.shown.map { (value: $0, title: $0.title) }, label: "\(page.area.title) pages")
         }
         if !model.tabs.isEmpty {
             ToySegments(selection: Binding(get: { model.section(of: page) }, set: { model.sections[page] = $0 }),

@@ -95,9 +95,6 @@ public enum AIProvider: String, CaseIterable, Sendable {
     /// Whether the provider has a list of models to fetch over its API.
     public var listsModels: Bool { command == nil }
 
-    /// Whether Refresh lists more models: an API's list, or codex's own catalog (PlanCLI.models).
-    public var refreshesModels: Bool { listsModels || self == .codex }
-
     /// Whether the route takes an effort (AIEffort): claude's and codex's flags, the Anthropic and OpenAI APIs' fields.
     /// Ollama and the endpoints have no shared field for it.
     public var takesEffort: Bool { [.claudeCode, .codex, .anthropicAPI, .openAI].contains(self) }

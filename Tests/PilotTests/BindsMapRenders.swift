@@ -35,7 +35,7 @@ struct BindsMapRenders {
                                   date: Date(timeIntervalSince1970: 1_792_368_000))
         #expect(model.layers.map(\.title) == ["Hyper", "Hyper + Shift", "Hyper + Ctrl", "Hyper + Alt", "Hyper + Shift + Ctrl",
                                               "Hyper + Ctrl + Alt", "Plain combos"])
-        #expect(model.keyCount == 132)
+        #expect(model.keyCount == 135)
         #expect(model.mouse.count == 5)
         let png = try #require(BindsMapSheet.png(model))
         try png.write(to: dir.appendingPathComponent("binds-map.png"))

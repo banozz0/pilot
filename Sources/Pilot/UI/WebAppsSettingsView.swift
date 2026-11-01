@@ -103,7 +103,7 @@ struct WebAppsSettingsView: View {
                 Spacer()
                 Segments(selection: $window.top, options: WindowTop.allCases.map { ($0, $0.title) }, label: "Window top")
             }
-            FinePrint(text: "Open web apps change at once. One made before this version needs Rebuild once.").padding(.vertical, 8)
+            FinePrint(text: "Open web apps change at once. One an older Pilot made updates itself once it has quit.").padding(.vertical, 8)
         }
     }
 

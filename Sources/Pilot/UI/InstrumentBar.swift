@@ -14,7 +14,7 @@ import SwiftUI
 /// The strip's measures (topbar.html), in points.
 enum InstrumentBar {
     /// Between two items: none, since each target's inset (BarMetrics.inset, 8 a side) already holds them 16 apart, the
-    /// mockup's 12 to 14 and a hover pill each.
+    /// mockup's 12 to 14.
     static let spacing: CGFloat = 0
     /// The room a hairline adds before what it leads, between two items (25 from ink to ink, the mockup's 12, the rule and
     /// 12) or two workspaces (`.tb-ws b.p`'s 9).
@@ -133,7 +133,7 @@ struct InstrumentBarParts: View {
             Sparkline(points: points).frame(width: InstrumentBar.graph.width, height: InstrumentBar.graph.height).foregroundStyle(level ?? style.color(warn ? \.accentText : \.text2))
         case .bar(let share): InstrumentMeter(share: share).frame(width: InstrumentBar.meter)
         case .symbol(let name): Image(systemName: name).font(style.font(\.barIcon)).foregroundStyle(ink)
-        case .mark: InstrumentMark(size: InstrumentBar.mark, accent: false).foregroundStyle(style.color(\.text2))
+        case .mark: InstrumentMark(size: InstrumentBar.mark).foregroundStyle(style.color(\.text2))
         case .ring: Circle().fill(style.color(\.accent)).frame(width: InstrumentBar.dot, height: InstrumentBar.dot)
         case .badge(let s): Text(s).styleText(\.barStrong).foregroundStyle(style.color(\.text)).lineLimit(1)
         case .workspaces(let names, let current, let app):

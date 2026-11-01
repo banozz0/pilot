@@ -7,9 +7,9 @@ import PilotCore
 enum ConfigsModule {
     static var home: URL { URL(fileURLWithPath: NSHomeDirectory()) }
 
-    /// One row per config found, for the Config branch.
+    /// One row per config found, for the Config branch: a layered config's first file only.
     static func menuRows(home: URL = home) -> [BindsPage.ActionInfo] {
-        AppConfigs.find(home: home).found.map {
+        AppConfigs.find(home: home).found.filter { $0.layer == 0 }.map {
             .init(id: AppConfigs.actionID($0.config.id), label: label($0.config), module: Module.apps.rawValue, icon: icon($0.config))
         }
     }

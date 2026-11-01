@@ -125,6 +125,10 @@ struct AppConfigsTests {
         try write("code/pilot/AGENTS.md", "# pilot\n")
         try write("code/agents/AGENTS.md", "# agents\n")
         try write("code/agents/deep/AGENTS.md", "# too deep\n")
+        for repo in ["pilot", "agents"] { try fm.createDirectory(at: home.appendingPathComponent("code/\(repo)/.git"), withIntermediateDirectories: true) }
+        // A worktree: its .git is a file, its brief its repo's.
+        try write("code/pilot-wt/.git", "gitdir: x\n")
+        try write("code/pilot-wt/AGENTS.md", "# pilot\n")
         try fm.createDirectory(at: home.appendingPathComponent("code/notes"), withIntermediateDirectories: true)
         return home
     }
@@ -163,15 +167,16 @@ struct AppConfigsTests {
         #expect(AppConfigs.all(home: URL(filePath: "/nonexistent")).allSatisfy { $0.paths.allSatisfy { !AppConfigs.holdsSecrets($0) } })
     }
 
-    @Test("Agent instructions: CLAUDE.md, each Hermes soul marked generated, each top-level repo's AGENTS.md and no deeper one")
+    @Test("Agent instructions: CLAUDE.md, each Hermes soul marked generated, each own repo's AGENTS.md and the briefs in its folders, no worktree's")
     func instructions() throws {
         let home = try agentsHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let found = AgentInstructions.find(home: home)
-        #expect(found.map(\.config.id) == ["claude-md", "soul-dobby", "soul-harry", "repo-agents", "repo-pilot"])
-        #expect(found.map(\.config.group) == [.agentRules, .souls, .souls, .repos, .repos])
+        #expect(found.map(\.config.id) == ["claude-md", "soul-dobby", "soul-harry", "repo-agents", "repo-agents/deep/AGENTS.md", "repo-pilot"])
+        #expect(found.map(\.config.group) == [.agentRules, .souls, .souls, .repos, .repos, .repos])
         #expect(found.filter(\.config.generated).map(\.config.id) == ["soul-dobby", "soul-harry"])
         #expect(found.first { $0.config.id == "repo-pilot" }?.path == home.appendingPathComponent("code/pilot/AGENTS.md"))
-        #expect(!found.contains { $0.path.path.contains("deep") })
+        #expect(found.first { $0.config.id == "repo-agents/deep/AGENTS.md" }?.config.name == "agents · deep")
+        #expect(!found.contains { $0.path.path.contains("pilot-wt") })
     }
 }

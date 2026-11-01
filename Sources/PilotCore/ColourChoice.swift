@@ -6,6 +6,9 @@ public enum ColourChoice: Equatable, Sendable, RawRepresentable {
     case theme
     case custom(UInt32)
 
+    /// The word for no colour picked, where a setting offers that (Dictation's waveform): saved and set, never a case.
+    public static let plain = "plain"
+
     public init?(rawValue: String) {
         if rawValue == "theme" { self = .theme; return }
         guard rawValue.count == 7, rawValue.hasPrefix("#"), let rgb = UInt32(rawValue.dropFirst(), radix: 16) else { return nil }

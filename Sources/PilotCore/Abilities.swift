@@ -38,6 +38,8 @@ public enum Abilities {
         typed("world", "Money, time zones and dates", "40 eur in usd, time in tokyo, today + 30 days; Return copies it.", "time in tokyo"),
         typed("ask", "Ask AI", "Type ask and a question; the AI chat opens under the top bar with it sent, answered by the AI picked on the AI page, on your own plan or key.", "ask "),
         typed("translate", "Translate", "Type tr and the words; Return copies the translation.", "tr hola"),
+        typed("define", "Define", "Type def and a word; its meanings, synonyms and Spanish fill the menu, Return pastes the one picked.",
+              "def serendipity"),
         typed("reminder", "Reminders", "Type a time and words, 20m stretch; Pilot reminds you then.", "20m stretch"),
         typed("event", "Calendar events", "Type event, the words and a day or time, event lunch with Ana tomorrow 1pm; Return adds it to your calendar without opening Calendar.",
               "event "),
@@ -137,11 +139,11 @@ public enum Abilities {
 
     static let noTryPrefixes = ["windows.", "drive.", "workspaces.move:", "workspaces.moveFollow:", "scripts.run:", "ext."]
     static let noTry: Set<String> = [
-        "workspaces.saveSnapshot", "workspaces.restoreSnapshot", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
+        "workspaces.saveSnapshot", "workspaces.restoreSnapshot", "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
         "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.ejectAll",
         "system.clearAllNotifications", "system.clearNotification", "system.idleLock",
         "engine.hyper", "engine.tilingOff", "engine.openWindow", "bar.peekMenuBar",
-        "apps.pastePlain", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "ai.selectionTools", "speech.readAloud",
+        "apps.pastePlain", "apps.bitwardenFill", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "ai.selectionTools", "speech.readAloud",
         "look.ghosttyApply", "look.ghosttyRemove",
         "dictation.toggle", "dictation.hold",
     ]
@@ -198,6 +200,9 @@ public enum Abilities {
         "apps.nextApp": "Brings forward the app you were in before, as a Command-Tab tap; again goes back.",
         "apps.previousApp": "Brings forward the app you used longest ago, as a Command-Shift-Tab tap; again walks back through them all.",
         "apps.reports": "Shows every Update and Clean run kept: what ran, how it ended, its output.",
+        "apps.update": "Opens Update in Hyper+Space: what can be updated, run only after you confirm.",
+        "apps.install": "Opens Install, the apps Pilot recommends, each installed through Homebrew after you confirm.",
+        "apps.clean": "Opens Clean in Hyper+Space: what Mole would clear, run only after you confirm.",
         "apps.bitwardenFill": "Fills the login for the site in front from Bitwarden.",
         "apps.bitwardenForget": "Forgets the unlocked Bitwarden session, so the next fill asks again.",
         "apps.bitwardenGenerator": "Opens Bitwarden's password generator.",
@@ -395,6 +400,7 @@ public enum Abilities {
         "workspaces.cycleLayout": "Turns the workspace's tiles to the next layout.",
         "workspaces.former": "Goes back to the workspace you were on.",
         "workspaces.next": "Shows the next workspace.",
+        "workspaces.openLayout": "Opens the apps the workspace's Opens here lists that are missing and puts each in its spot.",
         "workspaces.previous": "Shows the workspace before.",
         "workspaces.rescue": "Brings back windows stranded off screen or on a lost workspace.",
         "workspaces.restoreSnapshot": "Reopens and places the workspace's saved windows.",

@@ -47,6 +47,9 @@ struct MenuAppsTests {
             return tree
         }
         func press(_ handle: MenuItemHandle) -> Bool { pressed.append(handle); return true }
+        /// The items MenuBarAgent hosts by owning pid, as macOS 27.2 draws them.
+        var agentItems: [pid_t: [MenuExtrasRaw]] = [:]
+        func hosted(by agent: pid_t) throws -> [pid_t: [MenuExtrasRaw]] { agentItems }
     }
 
     static func make(_ fake: FakeExtras) -> MenuApps { MenuApps(reader: fake, ownPid: 13) }
@@ -59,6 +62,15 @@ struct MenuAppsTests {
         #expect(apps.list.map(\.app.name) == ["Shottr", "Control Centre"])
         #expect(apps.list[1].items.map(\.label) == ["Clock", "Control Centre"])
         #expect(apps.list[0].items.map(\.label) == ["Shottr"])
+        #expect(!apps.opensInPlace)
+        // macOS 27.2: an app with no bar of its own lists MenuBarAgent's items for it, which open where they sit.
+        fake.apps += [MenuExtrasApp(pid: 14, name: "MenuBarAgent", bundleId: MenuApps.menuBarAgent),
+                      MenuExtrasApp(pid: 15, name: "Tailscale", bundleId: "io.tailscale.ipn.macsys")]
+        fake.agentItems = [15: [MenuExtrasRaw(title: nil, description: "Tailscale", help: nil, handle: MenuItemHandle("tailscale" as NSString))]]
+        await apps.refresh()
+        #expect(apps.list.first { $0.app.pid == 15 }?.items.map(\.hosted) == [true])
+        #expect(apps.list.first { $0.app.pid == 10 }?.items.map(\.hosted) == [false])
+        #expect(apps.opensInPlace)
     }
 
     @Test("Control Centre's own button and its clock are left out, its other items kept; an app left with none is not listed (Sven on build 60)")

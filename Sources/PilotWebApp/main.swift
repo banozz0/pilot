@@ -1,6 +1,7 @@
 // The web-app template: one binary, stamped per site by the WebApps module; the site lives in Info.plist
 // (WebAppKey). Test-only env, honoured only with PILOT_HEADLESS=1 (no window, no Dock icon): PILOT_EVAL runs
-// JavaScript after the page loads, prints the result and the page's share of the window and quits a second later;
+// JavaScript after the page loads, prints the result and the page's share of the window and quits a second later, once no
+// popup is open (each prints as PILOT_POPUP, and PILOT_POPUP_DONE when it closes itself back on the site);
 // PILOT_DOWNLOADS puts downloads in that folder instead of ~/Downloads; PILOT_FIND searches the page for its text as the
 // find bar does, prints the bar's label and quits; the Dock badge prints as PILOT_BADGE; PILOT_WINDOW_TOP picks the window
 // top (a WindowTop raw value, else Standard), so a run never reads Sven's setting, and Slim strip's page colour prints as
@@ -22,7 +23,8 @@ let startURL: URL = {
     }
     return url
 }()
-let sameSite = SameSite(siteURL: startURL, extraHosts: info[WebAppKey.sameSiteHosts] as? [String] ?? [])
+let stampedSite = SameSite(siteURL: startURL, extraHosts: info[WebAppKey.sameSiteHosts] as? [String] ?? [])
+let sameSite = SameSite.forWebApp(siteURL: startURL, extraHosts: info[WebAppKey.sameSiteHosts] as? [String] ?? [])
 let headless = env["PILOT_HEADLESS"] == "1"
 let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPath: $0) } ?? Downloads.folder : Downloads.folder
 
@@ -48,6 +50,9 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     let downloads = NSStackView()
     var downloadRows: [ObjectIdentifier: DownloadRow] = [:]
     var popups: [NSWindow] = []
+    /// Each popup's sign-in trip, by its web view, and the page this window showed when it opened: one back on the site
+    /// after a sign-in page closes itself. Judged by the stamped site alone, so Messenger's popup is not home on Facebook.
+    var trips: [ObjectIdentifier: (trip: SignInTrip, opener: URL?)] = [:]
     var titleObservation: NSKeyValueObservation?
     /// The window top Pilot set (Q355), and the page colour Slim strip takes.
     var chrome: WindowChrome!
@@ -191,14 +196,15 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     }
     @objc func openInBrowser() { if let url = webView.url { openExternally(url) } }
 
-    // MARK: navigation — a clicked link to another site leaves the app; redirects (OAuth) stay.
+    // MARK: navigation — a clicked link to another site leaves the app; redirects (OAuth) and sign-in pages stay.
 
     func webView(_ wv: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
-        if let url = action.request.url, action.navigationType == .linkActivated,
-           action.targetFrame?.isMainFrame ?? true, !sameSite.contains(url) {
+        let mainFrame = action.targetFrame?.isMainFrame ?? true
+        if let url = action.request.url, mainFrame, sameSite.route(url, click: action.navigationType == .linkActivated) == .browser {
             openExternally(url); decisionHandler(.cancel); return
         }
+        if let url = action.request.url, mainFrame { trips[ObjectIdentifier(wv)]?.trip.visit(url) }  // redirects too
         if let url = action.request.url, !["http", "https", "about", "data", "blob"].contains(url.scheme ?? "") {
             NSWorkspace.shared.open(url); decisionHandler(.cancel); return  // mailto:, tel:, app links
         }
@@ -268,7 +274,8 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     }
 
     func webView(_ wv: WKWebView, didFinish nav: WKNavigation!) {
-        guard headless, wv === webView, !didRunTestHooks else { return }
+        if wv !== webView { return popupFinished(wv) }
+        guard headless, !didRunTestHooks else { return }
         if let query = env["PILOT_FIND"] {
             didRunTestHooks = true
             return findBar.search(query) { label, found in
@@ -281,8 +288,13 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
         wv.evaluateJavaScript(js) { result, error in
             print("PILOT_EVAL result=\(String(describing: result)) error=\(String(describing: error)) \(self.layoutLine)")
             fflush(stdout)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.terminate(nil) }
+            self.quitOncePopupsClose()
         }
+    }
+
+    /// A second after PILOT_EVAL, or later while a popup it opened is still on its way back (the 30 second cap still holds).
+    func quitOncePopupsClose() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.popups.isEmpty ? NSApp.terminate(nil) : self.quitOncePopupsClose() }
     }
 
     // MARK: UI delegate — target=_blank, window.open popups, alerts, file upload
@@ -290,12 +302,15 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     func webView(_ wv: WKWebView, createWebViewWith config: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let url = action.request.url else { return nil }
-        // target=_blank links (no size requested): stay in this window, or leave for the browser.
-        if windowFeatures.width == nil && windowFeatures.height == nil {
-            if sameSite.contains(url) { webView.load(action.request) } else { openExternally(url) }
-            return nil
+        // target=_blank links stay in this window or leave for the browser; script and sized windows (OAuth sign-in and
+        // the like) are a real child window sharing the session.
+        switch sameSite.route(url, click: action.navigationType == .linkActivated, newWindow: true,
+                              sized: windowFeatures.width != nil || windowFeatures.height != nil) {
+        case .here: webView.load(action.request); return nil
+        case .browser: openExternally(url); return nil
+        case .popup: break
         }
-        // Script popup (OAuth sign-in and the like): a real child window sharing the session.
+        if headless { print("PILOT_POPUP \(url)"); fflush(stdout) }
         let popup = WKWebView(frame: .zero, configuration: config)
         popup.uiDelegate = self
         popup.navigationDelegate = self
@@ -305,8 +320,11 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
         w.isReleasedWhenClosed = false
         w.contentView = popup
         w.center()
-        w.makeKeyAndOrderFront(nil)
+        if !headless { w.makeKeyAndOrderFront(nil) }
         popups.append(w)
+        var trip = SignInTrip(site: stampedSite)
+        trip.visit(url)
+        trips[ObjectIdentifier(popup)] = (trip, webView.url)
         // Closed with its close button too, not only by the page's window.close(): the window, its web view and the page's
         // scripts went on running until the app quit.
         NotificationCenter.default.addObserver(self, selector: #selector(popupClosed(_:)), name: NSWindow.willCloseNotification, object: w)
@@ -317,10 +335,26 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
         popups.first { $0.contentView === wv }?.close()
     }
 
+    /// A sign-in popup back on the site closes a moment later, once the page there has handed its result to the opener,
+    /// unless it moved on or closed itself first. Still open then, the site meant a new tab: this window, still on the
+    /// page that opened it, reloads with the sign-in's cookies (the landing URL may hold a one-time token).
+    func popupFinished(_ wv: WKWebView) {
+        guard let url = wv.url, let opened = trips[ObjectIdentifier(wv)], opened.trip.isOver(at: url) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak wv] in
+            guard let self, let wv, !wv.isLoading, wv.url == url, popups.contains(where: { $0.contentView === wv }) else { return }
+            if headless { print("PILOT_POPUP_DONE \(url)"); fflush(stdout) }
+            webViewDidClose(wv)
+            if webView.url == opened.opener { webView.reload() }
+        }
+    }
+
     @objc func popupClosed(_ note: Notification) {
         guard let w = note.object as? NSWindow else { return }
         NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: w)
-        (w.contentView as? WKWebView)?.stopLoading()
+        if let popup = w.contentView as? WKWebView {
+            popup.stopLoading()
+            trips[ObjectIdentifier(popup)] = nil
+        }
         popups.removeAll { $0 === w }
         // On the next pass, once the close is done with it: the web view goes with the window.
         DispatchQueue.main.async { w.contentView = nil }

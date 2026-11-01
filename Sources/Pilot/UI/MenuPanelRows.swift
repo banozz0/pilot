@@ -59,7 +59,7 @@ extension MenuBranch {
         .remove: ("trash", 5, "apps you added"), .update: ("arrow.clockwise", 4, "what can upgrade"),
         .clean: ("sparkles", 2, "caches, with a preview"), .system: ("power", 5, "lock, sleep, Wi-Fi"),
         .config: ("doc.text", 0, "open a config file"), .extensions: ("puzzlepiece.extension", 3, "yours, and the catalogue"), .keybindings: ("command", 1, ""), .capture: ("camera.viewfinder", 2, ""),
-        .homebrew: ("text.magnifyingglass", 3, ""), .translate: ("character.bubble", 3, ""), .reminders: ("bell", 4, ""),
+        .homebrew: ("text.magnifyingglass", 3, ""), .translate: ("character.bubble", 3, ""), .define: ("character.book.closed", 3, ""), .reminders: ("bell", 4, ""),
         .snippets: ("text.quote", 1, ""),
         .notes: ("note.text", 1, ""), .qr: ("qrcode", 0, ""),
         .stickers: ("face.smiling", 2, ""), .emoji: ("face.smiling", 2, ""),
@@ -196,6 +196,7 @@ extension MenuEntry {
         // Workspaces'.
         "workspaces.toggleGaps": ("squareshape.split.2x2.dotted", .third), "workspaces.cycleLayout": ("rectangle.3.offgrid", .accent),
         "workspaces.saveSnapshot": ("camera", .good), "workspaces.restoreSnapshot": ("clock.arrow.circlepath", .amber),
+        "workspaces.openLayout": ("square.grid.3x1.below.line.grid.1x2", .good),
         "workspaces.next": ("chevron.right.2", .accent),
         "workspaces.previous": ("chevron.left.2", .accent),
         // Media and notifications.

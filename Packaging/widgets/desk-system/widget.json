@@ -1,0 +1,10 @@
+{
+  "id": "desk-system",
+  "title": "System",
+  "icon": "🖥️",
+  "version": "1.0",
+  "description": "This Mac as a fetch card: macOS, model, chip, GPU, memory, disk, shell, Homebrew packages and uptime, with live CPU, memory and disk meters. Reads only.",
+  "draw": "html",
+  "data": {"command": ["./feed.py"], "every": 30},
+  "size": {"width": 460, "height": 270}
+}

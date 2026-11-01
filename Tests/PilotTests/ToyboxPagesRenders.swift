@@ -110,11 +110,49 @@ struct ToyboxPagesRenders {
             try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:]))
                 .write(to: dir.appendingPathComponent("\(name).png"))
         }
+        // Apps › Fonts, Use fonts in (Q711) and Get more fonts, in both styles: every app shown, on configs seeded in the moved home, one pick made so
+        // its Undo shows, Cursor without settings yet.
+        if wanted("fonts") {
+            let places = FontPlaces(home: URL(fileURLWithPath: home), support: URL(fileURLWithPath: home).appendingPathComponent("pilot-fonts"))
+            try Self.seedFonts(places)
+            let fonts = PilotFonts(defaults: try #require(UserDefaults(suiteName: testSuite())))
+            try fonts.set(.mono, "Menlo")
+            for (suffix, style) in [("toybox", PilotStyle.toybox), ("instrument", .instrument)] {
+                look.style = style
+                let page = FontsPage(fonts: fonts, places: places, installed: { _ in true })
+                let host = NSHostingView(rootView: InkGround { page }.styled(.page(.fonts)).pilotTheme().environment(engine))
+                host.frame.size = NSSize(width: 900, height: 1100)
+                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                host.layoutSubtreeIfNeeded()
+                try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:]))
+                    .write(to: dir.appendingPathComponent("fonts-\(suffix).png"))
+            }
+        }
         // The long pages whole, for the review: a window tall enough to show what the 900 pt one scrolls to.
         for (name, place) in Self.places where Self.tall.contains(name) {
             try shot("\(name)-toybox-light-tall", place, style: .toybox, dark: false, height: 1900)
             try shot("\(name)-toybox-dark-tall", place, style: .toybox, height: 1900)
         }
+    }
+
+    /// Each app's config as a fresh install of it might hold it, Ghostty's loading Pilot's include; no Cursor folder.
+    static func seedFonts(_ places: FontPlaces) throws {
+        let files = [
+            ".config/ghostty/config": "font-size = 13\n\n" + GhosttyConfigBlock.block(include: "pilot.conf") + "\n",
+            ".config/ghostty/pilot.conf": GhosttyLook(theme: nil).text + "font-family = \"\"\nfont-family = Iosevka Nerd Font Mono\n",
+            ".config/ghostex/native-sidebar-settings.json": "{\n  \"terminalFontFamily\": \"JetBrains Mono\",\n  \"terminalFontSize\": 16\n}",
+            "Library/Application Support/Code/User/settings.json": "{\n    // Ghostex's font, smaller\n    \"editor.fontFamily\": \"JetBrains Mono\",\n    \"editor.fontSize\": 15,\n}\n",
+            ".config/zed/settings.json": "{\n  \"buffer_font_size\": 15\n}\n",
+            ".config/kitty/kitty.conf": "font_family      Fira Code\nfont_size 13.0\n",
+            ".config/alacritty/alacritty.toml": "[font]\nsize = 13\n",
+        ]
+        for (path, text) in files {
+            let url = places.home.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        let vscode = try #require(FontPlace.known.first { $0.id == "vscode.editor" })
+        if places.earlier(vscode) == nil { try places.use("Menlo", in: vscode) }
     }
 }
 

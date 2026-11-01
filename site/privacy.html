@@ -182,7 +182,7 @@ button, input { font: inherit; color: inherit; }
 <main id="main">
   <div class="wrap doc"><!-- approved privacy text -->
 <h1>Pilot privacy</h1>
-<p class="muted">Last updated 18 October 2026</p>
+<p class="muted">Last updated 31 October 2026</p>
 
 <p>Pilot runs on your Mac. It has no account, no analytics and no crash-reporting service, and it never sends anything to its maker. It goes online only for the features in the table below, and only when you use them.</p>
 
@@ -190,6 +190,8 @@ button, input { font: inherit; color: inherit; }
 <ul>
   <li>Your clipboard history, the file index, your binds and settings, notes and snippets.</li>
   <li>Dictation and Read aloud: your voice and the text run on the Mac. Only the models are downloaded, once.</li>
+  <li>The words and replacements you teach dictation, and your last 20 dictation takes as text only, with Clear. Audio isn't kept. A take spoken while the model loads waits on your Mac until it's written down, then it's deleted.</li>
+  <li>Define's meanings, from the Mac's own dictionary.</li>
   <li>Text found in images (Apple's Vision) and image upscaling.</li>
   <li>AI keys you add, which live in the macOS Keychain.</li>
   <li>Pilot's own log, which stays in macOS's log on your Mac.</li>
@@ -201,6 +203,7 @@ button, input { font: inherit; color: inherit; }
 <tbody>
 <tr><td><code>api.anthropic.com</code>, <code>api.openai.com</code>, <code>openrouter.ai</code>, or an address you type</td><td>Quick AI, the AI chat and AI on selected text, only after you add a key or pick a provider</td><td>Your question, the text you selected and any screenshot you attach, with your own key</td></tr>
 <tr><td>Your own Claude Code or Codex app</td><td>When you pick it as the AI</td><td>Whatever that app sends, under your own plan</td></tr>
+<tr><td><code>api.dictionaryapi.dev</code></td><td>When you look up a word in Define, once you stop typing</td><td>The word</td></tr>
 <tr><td><code>api.giphy.com</code> and GIPHY's image servers</td><td>GIF search, after you add a GIPHY key</td><td>Your search words; the GIFs come back</td></tr>
 <tr><td><code>cdn.jsdelivr.net</code>, then <code>latest.currency-api.pages.dev</code></td><td>Currency conversion in the calculator, at most every 12 hours</td><td>A request for today's rates; nothing about you</td></tr>
 <tr><td><code>api.ipify.org</code></td><td>Stats › public address, if you turn it on; every 10 minutes while shown</td><td>A plain request; the answer is your public address</td></tr>

@@ -78,15 +78,15 @@ struct LayoutPresetTests {
         #expect(LayoutPreset.columns.commands(workspace: "3", windows: []).isEmpty)
     }
 
-    /// Cycle layout (workspaces.cycleLayout) walks this order; scrolling comes last, where its predecessor was.
-    @Test("The cycle: main + stack, columns, rows, grid, scrolling, and round again; a workspace with none starts at main + stack")
+    /// Cycle layout (workspaces.cycleLayout) walks this order; scrolling sits where its predecessor was, stage after it (ADR 0015).
+    @Test("The cycle: main + stack, columns, rows, grid, scrolling, stage, and round again; a workspace with none starts at main + stack")
     func cycle() {
-        #expect(LayoutPreset.allCases.map(\.label) == ["Main + stack", "Columns", "Rows", "Grid", "Scrolling"])
+        #expect(LayoutPreset.allCases.map(\.label) == ["Main + stack", "Columns", "Rows", "Grid", "Scrolling", "Stage"])
         #expect(LayoutPreset.next(after: nil) == .mainStack)
         var walked: [LayoutPreset] = []
         var preset: LayoutPreset? = nil
-        for _ in 0..<6 { preset = LayoutPreset.next(after: preset); walked.append(preset!) }
-        #expect(walked == [.mainStack, .columns, .rows, .grid, .scrolling, .mainStack])
+        for _ in 0..<7 { preset = LayoutPreset.next(after: preset); walked.append(preset!) }
+        #expect(walked == [.mainStack, .columns, .rows, .grid, .scrolling, .stage, .mainStack])
     }
 
     @Test("A rebuild is one tiler eval: the commands in order, separated by ;, an argument with a space quoted")

@@ -138,6 +138,27 @@ struct HomeRenders {
         try page("2-key-clicked", engine, width: 1440, picked: b)
         try page("2-key-clicked", engine, width: 1000, picked: b)
         try page("2-key-clicked", engine, width: 760, picked: b)
+        // Two widgets on Home, the Launcher and Notes, beside This Mac on the board: the desk's tiles as Home draws them.
+        if wanted("page-1440-5-widgets") {
+            let launcher = try #require(ReadyWidgets.widget(ReadyWidgets.launcher)), notes = try #require(ReadyWidgets.widget(ReadyWidgets.notes))
+            let tiles = [(launcher, "aa11"), (notes, "bb22")].map { widget, id in
+                let model = WidgetTileModel()
+                model.title = widget.title; model.icon = widget.icon
+                if widget.menuField != nil { model.tiles = WidgetRenders.tiles } else { model.blocks = WidgetRenders.blocks(widget) }
+                return HomeWidget(placement: Widget.Placement(id: id, widget: widget.id, screen: nil, x: 0, y: 0, width: widget.size.width,
+                                                             height: widget.size.height, home: true), model: model)
+            }
+            // Nothing saved: a widget on Home shows on the default layout, after its blocks.
+            let layouts = HomeLayoutStore(defaults: UserDefaults(suiteName: "pilot.renders.home.widgets.\(UUID().uuidString)")!)
+            var withWidgets = sources
+            withWidgets.widgets = { tiles }
+            withWidgets.drawWidget = { _, _ in }
+            withWidgets.layout = { layouts }
+            let saved = sources
+            sources = withWidgets
+            defer { sources = saved }
+            try page("5-widgets", engine, width: 1440)
+        }
         engine.hyperSwitch.toggle()
         try #require(!engine.hyperSwitch.isOn)
         for width in [1440, 1000, 760] { try page("3-hyper-off", engine, width: width) }

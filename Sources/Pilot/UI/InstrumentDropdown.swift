@@ -2,11 +2,11 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Pilot's dropdown in Instrument (card agent-bo-95423181, ADR 0008; mockup A's sidebar foot and Home): the status with
-/// Pilot's mark, the layer key's chip lit in the signal colour while Hyper is on, any problem after attention's tick;
-/// the workspaces as tiles with the live one's number in the signal's text colour; the quick switches, Hyper's lit;
-/// Now; the developer rows while Option is held; and the footer's rows with their keys as chips. Blocks on hairlines, on
-/// the style's popover (KitPopover). The same blocks, switches, actions and words as PilotDropdown.
+/// Pilot's dropdown in Instrument (card agent-bo-95423181, ADR 0008), compact since spec pilot-1-1 T29 (Q644 A, rows A of
+/// Q683): the status with Pilot's mark, the layer key's chip lit in the signal colour while Hyper is on, any problem after
+/// attention's tick; the workspaces in one row; six switches; Now while something runs; the rows with their keys as chips,
+/// in groups; the developer rows while Option is held; Check for updates, Settings and Quit on one line. One column on the
+/// style's popover (KitPopover). The same blocks, switches, rows and words as ToyDropdown.
 struct InstrumentDropdown: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -18,22 +18,20 @@ struct InstrumentDropdown: View {
                                          tilerRunning: engine.observers.tiler.isAnswering,
                                          lastError: engine.lastError)
         KitPopover(width: 330, inset: 0) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(Dropdown.blocks(option: option), id: \.self) { block in
-                    if block != .status { InstrumentRule() }
-                    Group {
-                        switch block {
-                        case .status: status(problems)
-                        case .workspaces: workspaces
-                        case .quickSwitches: quickSwitches
-                        case .now: InstrumentNowBlock(observers: engine.observers, presses: engine.presses)
-                        case .developer: developer
-                        case .footer: footer
-                        }
+                    switch block {
+                    case .status: status(problems)
+                    case .workspaces: workspaces
+                    case .quickSwitches: quickSwitches
+                    case .now: InstrumentNowBlock()
+                    case .rows: rows
+                    case .developer: developer
+                    case .footer: VStack(spacing: 6) { InstrumentRule(); footer }
                     }
-                    .padding(.horizontal, block == .footer ? 6 : 14).padding(.vertical, block == .footer ? 6 : 12)
                 }
             }
+            .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 8)
         }
     }
 
@@ -44,10 +42,7 @@ struct InstrumentDropdown: View {
         let hyperOn = switches[.hyper].isOn
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                InstrumentMark(size: 20).foregroundStyle(style.color(\.text2))
-                    .frame(width: 32, height: 32)
-                    .background(style.color(\.raised), in: .rect(cornerRadius: style.radii.control, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: style.radii.control, style: .continuous).strokeBorder(style.color(\.line)) }
+                InstrumentMark(size: 20).foregroundStyle(style.color(\.text2)).frame(width: 24, height: 24)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(Dropdown.headline(isOn: pilotSwitch.isOn, problems: problems.count))
                         .styleText(\.title).foregroundStyle(style.color(\.text))
@@ -69,29 +64,8 @@ struct InstrumentDropdown: View {
                 Spacer(minLength: 0)
             }
             ForEach(problems, id: \.kind) { problem in problemRow(problem) }
-            if let share = ExtrasDownloads.shared.share { downloads(share) }
         }
-    }
-
-    /// Onboarding's Extras still downloading (Sven, 2026-10-28, Q543): the share the menu-bar icon's meter shows, and each
-    /// download where it stands.
-    private func downloads(_ share: Double) -> some View {
-        let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Downloading extras").styleText(\.strong).foregroundStyle(style.color(\.text))
-                Spacer()
-                Text("\(Int(share * 100))%").styleText(\.caption).monospacedDigit().foregroundStyle(style.color(\.text3))
-            }
-            InstrumentMeter(share: share)
-            ForEach(ExtrasDownloads.shared.downloads, id: \.title) { download in
-                HStack { Text(download.title); Spacer(); Text(download.words).monospacedDigit() }
-                    .styleText(\.caption).foregroundStyle(style.color(\.text3))
-            }
-        }
-        .padding(10)
-        .background(style.color(\.raised), in: shape)
-        .overlay { shape.strokeBorder(style.color(\.line)) }
+        .padding(.horizontal, 2)
     }
 
     /// A problem: attention's tick, what is wrong and what to do, its one button (primary where it fixes it).
@@ -119,15 +93,15 @@ struct InstrumentDropdown: View {
 
     // MARK: Workspaces
 
+    /// The workspaces in one row (five a row), each its number over its apps' icons.
     private var workspaces: some View {
         let tiler = engine.observers.tiler
         let cells = tiler.homeCells
-        return VStack(alignment: .leading, spacing: 0) {
-            InstrumentDropdownHeader(title: "Workspaces", trailing: Dropdown.workspaceKeys(layerKeys: engine.settings.layerKeys, count: cells.count))
+        return Group {
             if !tiler.isAnswering {
                 Text("Tiling is off while \(tiler.tilerName) is stopped.").styleText(\.caption).foregroundStyle(style.color(\.text3))
             } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: max(min(cells.count, 5), 4)), spacing: 5) {
                     ForEach(cells, id: \.name) { workspace in
                         tile(workspace, current: workspace.name == tiler.focused) { tiler.go(workspace.name, from: "dropdown") }
                     }
@@ -137,18 +111,18 @@ struct InstrumentDropdown: View {
         .opacity(tiler.isAnswering ? 1 : 0.6)
     }
 
-    /// A workspace: its apps' icons over its number in mono; the live one ringed in the signal's line, its number in the
-    /// signal's text colour.
+    /// A workspace: its number in mono at the top left over its apps' icons; the live one ringed in the signal's line, its
+    /// number in the signal's text colour.
     private func tile(_ workspace: OccupiedWorkspace, current: Bool, go: @escaping () -> Void) -> some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
         return Button(action: go) {
-            VStack(spacing: 5) {
-                CompactApps(names: Array(workspace.apps.prefix(3)), bundles: workspace.bundles, spacing: 3)
-                .frame(height: 18)
-                Text(workspace.name).font(style.font(\.key, size: 11.5))
-                    .foregroundStyle(style.color(current ? \.accentText : workspace.apps.isEmpty ? \.text3 : \.text))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workspace.name).font(style.font(\.key, size: 10.5))
+                    .foregroundStyle(style.color(current ? \.accentText : workspace.apps.isEmpty ? \.text3 : \.text2))
+                CompactApps(names: Array(workspace.apps.prefix(2)), bundles: workspace.bundles, size: 13, spacing: 3).frame(height: 14)
             }
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .padding(.horizontal, 6).padding(.vertical, 5)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
             .background(style.color(current ? \.raised : \.sunken), in: shape)
             .overlay { shape.strokeBorder(style.color(current ? \.accentLine : \.line)) }
             .contentShape(shape)
@@ -158,54 +132,61 @@ struct InstrumentDropdown: View {
         .accessibilityAddTraits(current ? .isSelected : [])
     }
 
-    // MARK: Quick switches
+    // MARK: Switches
 
-    /// Hyper across the full width, its switch lit in the signal colour; the other four two by two below it.
+    /// The six switches in one row: a glyph on a key, raised while on, its word under it.
     private var quickSwitches: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            InstrumentDropdownHeader(title: "Quick switches")
-            VStack(spacing: 6) {
-                switchTile(.hyper)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(Dropdown.Switch.grid, id: \.self) { switchTile($0) }
-                }
-            }
+        HStack(spacing: 4) {
+            ForEach(Dropdown.Switch.allCases, id: \.self) { switchTile($0) }
         }
     }
 
-    /// A quick switch: its glyph, its name and what it is doing now, raised on a hairline ring while on; Hyper's, across the
-    /// width, its switch at the right in the signal colour.
     private func switchTile(_ which: Dropdown.Switch) -> some View {
         let on = switches[which].isOn
         let layerKeys = engine.settings.layerKeys
         let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
         return Button { switches[which].toggle() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: which.symbol(layerKeys: layerKeys)).font(style.font(\.icon)).foregroundStyle(style.color(on ? \.text : \.text3)).frame(width: 18)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(which.title).styleText(\.strong).foregroundStyle(style.color(\.text))
-                    Text(which.state(on, layerKeys: layerKeys, tiler: engine.observers.tiler.tilerName)).styleText(\.small)
-                        .foregroundStyle(style.color(\.text3))
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 4)
-                if which == .hyper { InstrumentSwitchFace(isOn: on).accessibilityHidden(true) }
+            VStack(spacing: 5) {
+                Image(systemName: which.symbol(layerKeys: layerKeys)).font(style.font(\.icon))
+                    .foregroundStyle(style.color(on ? \.text : \.text3))
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .background(style.color(on ? \.raised : \.panel), in: shape)
+                    .overlay { shape.strokeBorder(style.color(on ? \.line2 : \.line)) }
+                Text(which.short).styleText(\.small).foregroundStyle(style.color(on ? \.text : \.text3)).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .padding(8)
-            .background(style.color(on ? \.raised : \.panel), in: shape)
-            .overlay { shape.strokeBorder(style.color(on ? \.line2 : \.line)) }
-            .contentShape(shape)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
             .animation(Kit.change, value: on)
         }
         .buttonStyle(.plain)
+        .help(which.tooltip(on, layerKeys: layerKeys, tiler: engine.observers.tiler.tilerName))
+        .accessibilityLabel(which.title)
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    // MARK: Rows
+
+    /// The rows in their groups, each under its heading.
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Dropdown.groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: 0) {
+                    InstrumentEyebrow(text: group.title).padding(.horizontal, 6).padding(.bottom, 2)
+                    ForEach(group.rows, id: \.self) { row in
+                        InstrumentDropdownRow(symbol: row.symbol, title: engine.dropdownTitle(row), key: engine.dropdownKey(row),
+                                              layerKeys: engine.settings.layerKeys) { engine.runDropdownRow(row) }
+                            .dropdownCommand(row)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: Developer, Option held
 
     private var developer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            InstrumentDropdownHeader(title: "Developer · Option held")
+            InstrumentEyebrow(text: "Developer · Option held").padding(.bottom, 10)
             ForEach(Dropdown.Row.developer, id: \.self) { row in InstrumentDropdownRow(symbol: row.symbol, title: row.title) { engine.runDropdownRow(row) } }
             if !engine.presses.isEmpty {
                 DisclosureGroup("Recent presses") {
@@ -214,22 +195,30 @@ struct InstrumentDropdown: View {
                 .styleText(\.body)
             }
         }
+        .padding(.horizontal, 2)
     }
 
     // MARK: Footer
 
-    /// The footer's rows (Dropdown.Row), each group on a hairline.
+    /// Check for updates at the left, Settings and Quit with their keys at the right, on one line.
     private var footer: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(engine.dropdownFooter.enumerated()), id: \.offset) { index, group in
-                if index > 0 { InstrumentRule().padding(.horizontal, 8).padding(.vertical, 5) }
-                ForEach(group, id: \.self) { row in
-                    InstrumentDropdownRow(symbol: row.symbol, title: engine.dropdownTitle(row), key: engine.dropdownKey(row),
-                                          layerKeys: engine.settings.layerKeys) { engine.runDropdownRow(row) }
-                        .dropdownCommand(row)
+        HStack(spacing: 10) {
+            ForEach(engine.dropdownFooter, id: \.self) { row in
+                if row == .settings { Spacer(minLength: 0) }
+                Button { engine.runDropdownRow(row) } label: {
+                    HStack(spacing: 5) {
+                        if row != .quit { Image(systemName: row.symbol).font(style.font(\.icon, size: 11)) }
+                        Text(engine.dropdownTitle(row))
+                        if let key = engine.dropdownKey(row) { InstrumentKeys(caps: InstrumentHint.caps(key), hyper: false) }
+                    }
+                    .styleText(\.caption).foregroundStyle(style.color(\.text2))
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .dropdownCommand(row)
             }
         }
+        .padding(.horizontal, 6).padding(.vertical, 4)
     }
 }
 
@@ -268,65 +257,55 @@ private struct InstrumentDropdownRow: View {
     }
 }
 
-/// The Now block: the timer (its ring in the signal colour while one runs), the app in front and the last press; its own
-/// view so the countdown redraws only it.
+/// Now, only while something runs (spec pilot-1-1 T29): a recording with Stop, the focus timer with its first button,
+/// Extras downloading with its share; its own view so the clock and countdown redraw only it.
 private struct InstrumentNowBlock: View {
     @Environment(\.style) private var style
-    let observers: EngineObservers
-    let presses: [Press]
 
     var body: some View {
-        let timer = ExtensionTimer.shared
-        let app = observers.focusedApp
-        VStack(alignment: .leading, spacing: 8) {
-            InstrumentDropdownHeader(title: "Now")
-            HStack(spacing: 8) {
-                TimerRing(left: timer.left ?? 0, lineWidth: 2, track: style.color(\.line2), tint: style.color(\.accent)).frame(width: 14, height: 14)
-                if let line = NowTimer.line(timer) {
-                    Text(line).monospacedDigit()
-                    Spacer()
-                    if let first = timer.buttons.first { Button(first.label) { timer.press(0) }.buttonStyle(InstrumentButtonStyle(kind: .ghost)) }
-                } else {
-                    Text("No timer running").foregroundStyle(style.color(\.text3))
-                    Spacer()
-                }
+        let items = DropdownNow.items
+        if !items.isEmpty {
+            let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+            VStack(alignment: .leading, spacing: 8) {
+                InstrumentEyebrow(text: "Now")
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in self.item(item).frame(minHeight: 26) }
             }
-            .frame(minHeight: 24)
-            if let app {
-                HStack(spacing: 8) {
-                    if let icon = app.icon { Image(nsImage: icon).resizable().frame(width: 15, height: 15) }
-                    Text("\(app.localizedName ?? "–")\(observers.tiler.focused.map { " · workspace \($0)" } ?? "")")
-                    Spacer()
-                }
-            }
-            HStack(spacing: 8) {
-                Image(systemName: "bolt").foregroundStyle(style.color(\.text3)).frame(width: 15)
-                if let press = presses.first {
-                    Text("Last: \(press.line)").lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Text(press.time.formatted(date: .omitted, time: .shortened)).styleText(\.mono).foregroundStyle(style.color(\.text3))
-                } else {
-                    Text("No presses yet").foregroundStyle(style.color(\.text3))
-                    Spacer()
-                }
-            }
+            .styleText(\.body)
+            .padding(10)
+            .background(style.color(\.raised), in: shape)
+            .overlay { shape.strokeBorder(style.color(\.line)) }
         }
-        .styleText(\.body)
     }
-}
 
-/// A block's heading: mono capitals, a mono hint at the right.
-private struct InstrumentDropdownHeader: View {
-    @Environment(\.style) private var style
-    let title: String
-    var trailing: String?
-
-    var body: some View {
-        HStack {
-            InstrumentEyebrow(text: title)
-            Spacer()
-            if let trailing { Text(trailing).styleText(\.key).foregroundStyle(style.color(\.text3)) }
+    @ViewBuilder private func item(_ item: DropdownNow.Item) -> some View {
+        switch item {
+        case .recording:
+            line("video") {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in Text(Recorder.shared.reading?.words ?? "").monospacedDigit() }
+                Spacer()
+                Button("Stop") { Recorder.shared.stop() }.buttonStyle(InstrumentButtonStyle(kind: .raised))
+            }
+        case .timer(let text):
+            line("timer") {
+                Text(text).monospacedDigit()
+                Spacer()
+                if let first = ExtensionTimer.shared.buttons.first {
+                    Button(first.label) { ExtensionTimer.shared.press(0) }.buttonStyle(InstrumentButtonStyle(kind: .raised))
+                }
+            }
+        case .download(let title, let share):
+            line("arrow.down.to.line") {
+                Text(title).lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Text("\(Int(share * 100)) %").styleText(\.mono).monospacedDigit().foregroundStyle(style.color(\.text3))
+            }
         }
-        .padding(.bottom, 10)
+    }
+
+    private func line(_ symbol: String, @ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(style.font(\.icon)).foregroundStyle(style.color(\.text3)).frame(width: 16)
+            content()
+        }
     }
 }

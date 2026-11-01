@@ -24,14 +24,20 @@ struct ExtensionMakerTests {
         #expect(ExtensionMaker.idea("make an /extension for me") == nil)
     }
 
-    @Test("/extension on codex or an API key says it needs Claude Code; an empty idea asks for one")
+    @Test("/extension runs on Claude Code whatever the chat's provider, and says it is missing without it; an empty idea asks for one")
     func route() throws {
         let settings = AISettings(defaults: try #require(UserDefaults(suiteName: testSuite())), keys: AISettingsTests.FakeKeys(),
                                   http: AISettingsTests.NoNetwork())
         for provider in [AIProvider.codex, .anthropicAPI] {
             settings.provider = provider
+            settings.findCLI = { ClaudeCLI(path: "/usr/bin/true", timeout: .seconds(10)) }
+            switch settings.chatTurn(for: "/extension list my open ports") {
+            case .success, .failure(.failed): break   // past the provider and the CLI, on to the prompt a test bundle lacks
+            case .failure(let why): Issue.record("\(provider): \(why)")
+            }
+            settings.findCLI = { nil }
             guard case .failure(let why) = settings.chatTurn(for: "/extension list my open ports") else { Issue.record("\(provider) made one"); continue }
-            #expect(why == .unsupported("/extension needs Claude Code; pick it on the AI page") && why.hint == nil)
+            #expect(why == .missing)
         }
         settings.provider = .claudeCode
         guard case .failure(let why) = settings.chatTurn(for: "/extension ") else {

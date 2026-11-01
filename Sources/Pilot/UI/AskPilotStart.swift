@@ -8,6 +8,8 @@ import SwiftUI
 struct AskPilotStart: View {
     @Environment(\.ink) private var ink
     let provider: AIProvider
+    /// Claude Code, which runs the makers, is not known to be missing.
+    let makes: Bool
 
     var body: some View {
         GeometryReader { g in
@@ -25,8 +27,10 @@ struct AskPilotStart: View {
                 .accessibilityAddTraits(.isHeader)
             Text("Type it, or press / Skills for what Pilot knows how to do.")
                 .font(ink.ui(13)).foregroundStyle(ink.text2).padding(.top, 6)
-            if !AIPage.makes(provider) {
-                Text("Writing extensions needs Claude Code." + (provider.command == nil ? " A model that takes no tools only explains Pilot, and says so." : ""))
+            let notes = (makes ? [] : ["Making extensions and widgets needs Claude Code installed, whichever provider you chat with."])
+                + (provider.command == nil ? ["A model that takes no tools only explains Pilot, and says so."] : [])
+            if !notes.isEmpty {
+                Text(notes.joined(separator: " "))
                     .font(ink.ui(12)).foregroundStyle(ink.muted).padding(.top, 14)
             }
             reach.padding(.top, 22)

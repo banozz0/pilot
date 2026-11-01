@@ -238,13 +238,13 @@ struct MenuBarPage: View {
     /// Pilot's top bar as it draws, a drop on it landing as BarDrop says: the zones, the side's name and the caret show
     /// while a drag is over it.
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
-        let drop = topDrop(top)
-        return TopBarStrip(sides: top, background: store.background, colour: store.colour, itemColours: store.itemColours,
+        let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
+        return TopBarStrip(sides: top, background: background, colour: store.colour, itemColours: store.itemColours,
                            report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }) {
             stripSlot($0, store, inTopBar: true)
         }
         .frame(height: 30)
-        .background { if store.background == .glass { BarGlassGround(colour: store.colour) } }
+        .background { if background == .glass { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
         .overlay { if let overTop { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged?.kind)) } }
         .padding(.top, Self.room)
@@ -498,6 +498,9 @@ struct MenuBarPage: View {
             .toggleStyle(.pilotSwitchRow(info: "Off, the drawer shows a plain glyph for each app's item."))
             .font(ink.ui(12, .medium))
             FinePrint(text: "The drawer shows each app's items as macOS draws them. Needs Screen Recording, for this alone.")
+            if engine.barSources.readings.menuApps.opensInPlace {
+                FinePrint(text: "On macOS 27.2 an app's menu opens at its own spot in the menu bar, not under the drawer.")
+            }
             if store.settings.exactMenuItems, pictures.lacksPermission {
                 Button("Allow Screen Recording…") { PermissionDragPanel.openScreenRecording() }
                     .buttonStyle(.link).font(ink.ui(12))

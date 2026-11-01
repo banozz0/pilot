@@ -8,8 +8,9 @@ protocol BarTooltipPresenting: AnyObject {
     func hide()
 }
 
-/// The top bar's hover (card agent-bo-95423013, design JJPiA9o30SA, Shared 3): the item under the pointer lights its
-/// raised pill the frame the pointer lands, and its one-line tooltip shows after 500 ms. Moving straight on to another
+/// The top bar's hover (card agent-bo-95423013, design JJPiA9o30SA, Shared 3): the item under the pointer shows its
+/// one-line tooltip after 500 ms, and lights nothing, as a macOS menu bar item does (Sven, 2026-10-30: the hover's raised
+/// pill read as a plate behind the item). Moving straight on to another
 /// item while a tooltip shows swaps it at once, as macOS's own tooltips do. One for every bar, so one tooltip at most.
 @MainActor
 final class BarHover {
@@ -17,7 +18,7 @@ final class BarHover {
     private static func pause(_ duration: Duration) async { try? await Task.sleep(for: duration) }
     static let delay = Duration.milliseconds(500)
 
-    /// The hovered target, whose tooltip may show; its pill is its own state, so a hover redraws two targets, not all.
+    /// The hovered target, whose tooltip may show.
     private(set) var hovered: UUID?
     private let presenter: BarTooltipPresenting
     private let sleep: @MainActor (Duration) async -> Void
@@ -78,13 +79,13 @@ final class BarHover {
 }
 
 extension View {
-    /// The hover's raised pill behind a bar item (design JJPiA9o30SA direction A); at rest it draws nothing at all.
+    /// The raised pill behind a bar item while what it opens shows (design JJPiA9o30SA direction A); else nothing at all.
     func barHoverPill(_ lit: Bool) -> some View { modifier(InstrumentHoverPill(lit: lit)) }
 
-    /// A top bar target: its raised pill while the pointer is on it, its tooltip after BarHover's delay.
+    /// A top bar target: its tooltip after BarHover's delay.
     func barHoverTarget(_ tooltip: String?) -> some View { modifier(BarHoverTarget(tooltip: tooltip)) }
 
-    /// A top bar target `inset` each side of its ink, the bar's full height, which its hover pill fills.
+    /// A top bar target `inset` each side of its ink, the bar's full height, all of it taking the pointer.
     func barTarget(_ tooltip: String?, inset: CGFloat = BarMetrics.inset) -> some View {
         padding(.horizontal, inset).frame(maxHeight: .infinity).barHoverTarget(tooltip)
     }
@@ -93,17 +94,14 @@ extension View {
 private struct BarHoverTarget: ViewModifier {
     let tooltip: String?
     @State private var id = UUID()
-    @State private var lit = false
     @State private var anchor = ScreenAnchor.Box()
 
     func body(content: Content) -> some View {
         let hover = BarHover.shared
         content
             .contentShape(.rect)
-            .barHoverPill(lit)
             .background(ScreenAnchor(box: anchor))
             .onHover { [anchor] inside in
-                lit = inside
                 if inside { hover.enter(id, tooltip: tooltip, under: { anchor.view?.screenFrame }) } else { hover.leave(id) }
             }
             .onDisappear { hover.leave(id) }

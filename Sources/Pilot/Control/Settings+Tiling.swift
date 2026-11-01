@@ -7,7 +7,7 @@ extension SettingsSchema {
     /// mouse's drag modifier and the swipe are the engine's PilotSettings, which re-arm their taps at once. Of the scrolling
     /// layout's settings only the centre mode (T9) has a key, its row on Workspaces (2026-10-20), while Tiling's block stays
     /// hidden (Q43; page map, Sven 2026-10-17); the block still keeps the other four.
-    func registerTiling(block: PilotBlockStore, settings: PilotSettings) {
+    func registerTiling(block: PilotBlockStore, settings: PilotSettings, pictures: ShelfPictures) {
         register([
             .bool("tiling.gaps.on", "Gaps on", page: "tiling", standard: true,
                   read: { block.block.gapsOn }, write: { on throws(ControlError) in try await block.written { $0.gapsOn = on } }),
@@ -22,6 +22,8 @@ extension SettingsSchema {
                     write: { mode throws(ControlError) in try await block.written { $0.scrolling.centre = mode } }),
             .choice("windows.dragModifier", "Hold to move or resize with the mouse", page: "tiling", DragModifier.allCases,
                     standard: .default, read: { settings.dragModifier }, write: { settings.dragModifier = $0 }),
+            .choice("shelf.pictures", "The Window shelf's window pictures (Stills and Live ask Screen Recording)", page: "tiling",
+                    ShelfPictureMode.allCases, standard: .stills, confirms: true, read: { pictures.mode }, write: { pictures.set($0) }),
             .bool("windows.swipeWorkspaces", "A three-finger swipe changes workspace", page: "workspaces", standard: false,
                   read: { settings.swipeWorkspaces }, write: { settings.swipeWorkspaces = $0 }),
         ])

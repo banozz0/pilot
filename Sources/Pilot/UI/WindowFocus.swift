@@ -1,4 +1,5 @@
 import AppKit
+import PilotTiler
 
 /// Settings and Finish setup open from the menu bar. macOS 26 hands a menu-bar click to its own menu-bar host, so
 /// Pilot gets no user event and a cooperative NSApp.activate() is refused: the window opened behind the app Sven was
@@ -13,6 +14,8 @@ enum WindowFocus {
 
     /// Call right after opening the window (openSettings, openWindow): SwiftUI creates it on the next turn.
     static func bringForward() {
+        // A window Show desktop holds would come forward out of sight: the desktop's widgets hide as it ends.
+        if TilerOwnWindows.broughtForward() { WidgetDesk.shared.showDesktopChanged() }
         let front = NSWorkspace.shared.frontmostApplication
         if let front, front != .current { previousApp = front }
         NSRunningApplication.current.activate(from: front ?? .current, options: [])

@@ -51,6 +51,7 @@ struct WorkspacePresetTests {
                 case .all: windows
                 case .workspace(let name): windows.filter { $0.workspace == name }
                 case .focused: windows.filter { $0.id == focusedWindow }
+                case .minimized: [AeroWindow]()
                 }
                 return Self.json(listed.map { w in
                     ["window-id": w.id, "app-name": w.appName, "app-bundle-id": w.bundleId, "app-pid": Int(w.pid),

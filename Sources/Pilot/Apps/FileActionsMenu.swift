@@ -189,7 +189,7 @@ enum FileActionsMenu {
         return (0...3).lazy.compactMap { String(data: data.dropLast($0), encoding: .utf8) }.first ?? String(decoding: data, as: UTF8.self)
     }
 
-    nonisolated static func isMarkdown(_ url: URL) -> Bool { ["md", "markdown", "mdown", "mkd"].contains(url.pathExtension.lowercased()) }
+    nonisolated static func isMarkdown(_ url: URL) -> Bool { MarkdownHTML.isMarkdown(url) }
 
     /// The picture as Ask AI sends a capture, read no bigger than it is sent.
     nonisolated static func picture(_ url: URL) -> AIChat.Image? {

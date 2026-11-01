@@ -32,7 +32,8 @@ struct LookPage: View {
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
         static let theme = "Pilot's colours, and whether it is dark or light. Ghostty takes the theme's colours too."
         static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and Quick AI. Off, they are solid."
-        static let transparency = "How much of the desktop shows through the glass. Text stays readable however far you go."
+        static let transparency = "How much of the desktop shows through the glass, here and on a Glass top bar, which goes solid at 0 %. Text stays readable however far you go."
+        static let glassBlur = "How much the glass blurs the desktop behind it: Full, Light, or Off for a sharp desktop under the tint. Here, on a Glass top bar and on the widgets."
         static let appsShowAs = "How every list shows an app: its icon, its name or both. Icon only shows the name on hover; search still finds it by name."
     }
 
@@ -63,7 +64,7 @@ struct LookPage: View {
                     } action: { themeColumns = $0 }
                 CalmHeading(title: "Apps show as") { InfoMark(text: Info.appsShowAs) }
                 calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs }
-                // Glass and its Transparency alone (page map, Sven 2026-10-17); the rest went to Tiling › Focused window.
+                // Glass, its Transparency and its Blur alone (page map, Sven 2026-10-17; Blur 2026-11-01); the rest went to Tiling › Focused window.
                 KitBlock(title: "Glass") {
                     switchRow("Glass", Info.glass, isOn: $look.glass, first: true)
                     if look.glass {
@@ -71,6 +72,10 @@ struct LookPage: View {
                             setting("Transparency", Info.transparency); Spacer()
                             transparencySlider
                             transparencyValue(11.5).frame(width: 38, alignment: .trailing)
+                        }
+                        calmRow(44) {
+                            setting("Blur", Info.glassBlur); Spacer()
+                            Segments(selection: $look.glassBlur, options: GlassBlur.allCases.map { ($0, $0.title) }, label: "Blur")
                         }
                     }
                 }

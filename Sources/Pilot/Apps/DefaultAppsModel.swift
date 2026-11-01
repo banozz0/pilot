@@ -9,6 +9,12 @@ protocol DefaultAppsSystem {
     func choices(_ handlers: [DefaultHandler]) -> [(name: String, bundle: String)]
     func name(_ bundle: String) -> String
     func setDefault(_ bundle: String, for handler: DefaultHandler) async throws
+    /// Of `choices`, the ones the kind's picker suggests (OpenWithApps), the current default first.
+    func suggested(_ handlers: [DefaultHandler], current: String?, among choices: [String]) -> [String]
+}
+
+extension DefaultAppsSystem {
+    func suggested(_ handlers: [DefaultHandler], current: String?, among choices: [String]) -> [String] { current.map { [$0] } ?? [] }
 }
 
 /// Default apps (card agent-bo-95422842): each kind's default app and the apps that can open it, read on the page's
@@ -19,6 +25,8 @@ final class DefaultAppsModel {
         var current: String?
         /// The apps that open it, the current default first when macOS left it out of that list.
         var choices: [(name: String, bundle: String)]
+        /// Of the choices, the ones the picker lists first under Suggested; the rest fold under Other apps.
+        var suggested: [String] = []
         /// Why the last change did not take.
         var message: String?
     }
@@ -40,7 +48,9 @@ final class DefaultAppsModel {
         rows = Dictionary(uniqueKeysWithValues: kinds.map { kind in
             let current = kind.handlers.first.flatMap(system.current), apps = system.choices(kind.handlers)
             let missing = current.flatMap { c in apps.contains { $0.bundle == c } ? nil : (name: system.name(c), bundle: c) }
-            return (kind.id, Row(current: current, choices: (missing.map { [$0] } ?? []) + apps))
+            let choices = (missing.map { [$0] } ?? []) + apps
+            return (kind.id, Row(current: current, choices: choices,
+                                 suggested: system.suggested(kind.handlers, current: current, among: choices.map(\.bundle))))
         })
     }
 
@@ -73,6 +83,14 @@ struct LaunchServicesDefaults: DefaultAppsSystem {
     }
 
     func name(_ bundle: String) -> String { AppsModule.appName(bundle) ?? bundle }
+
+    /// A file kind's best claimers after its default; a link's default alone.
+    func suggested(_ handlers: [DefaultHandler], current: String?, among choices: [String]) -> [String] {
+        let type = handlers.lazy.compactMap { if case .contentType(let id) = $0 { UTType(id) } else { nil } }.first
+        let apps = choices.compactMap(AppsModule.url(forBundle:))
+        let split = OpenWithApps.split(apps, type: type, ext: type?.preferredFilenameExtension, main: current.flatMap(AppsModule.url(forBundle:)))
+        return split.suggested.compactMap { Bundle(url: $0)?.bundleIdentifier }
+    }
 
     func setDefault(_ bundle: String, for handler: DefaultHandler) async throws {
         guard let app = AppsModule.url(forBundle: bundle) else { throw CocoaError(.fileNoSuchFile) }

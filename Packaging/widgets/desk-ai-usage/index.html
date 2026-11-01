@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .providers { display: flex; flex-direction: column; gap: 11px; }
+  .provider { display: flex; flex-direction: column; gap: 6px; }
+  .name { display: flex; align-items: center; gap: 7px; }
+  .name b { font-family: var(--pk-sans); font-size: 12.5px; font-weight: 600; }
+  .name .pk-faint { margin-left: auto; font-size: 9.5px; }
+  .provider .pk-gauge { grid-template-columns: 50px minmax(0, 1fr) 32px 58px; gap: 8px; font-size: 11px; }
+  .provider .pk-gauge > span:last-child { color: var(--pk-text3); font-size: 9.5px; text-align: right; white-space: nowrap; }
+  .provider .left { text-align: right; color: var(--pk-text); }
+  .pk-meter.mark-alert > s { background: var(--pk-problem); }
+  .note { font-size: 9.5px; color: var(--pk-text3); padding-left: 58px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .off { display: flex; justify-content: space-between; color: var(--pk-text3); font-size: 10.5px; }
+</style>
+<body class="pk">
+  <div class="pk-head"><span class="pk-title"><b>AI usage</b> · left</span><span class="pk-meta pk-live" id="updated"></span></div>
+  <div class="providers pk-grow pk-fade" id="list"><div class="pk-empty">Reading…</div></div>
+</body>
+<script>
+  // Fed by feed.py: {installed, problem?, providers: [{name, plan, updated, state, windows: [{label, percent (left), tone,
+  // mark, markTone, resetsAt, note}], notes}]}. Each window's reset is counted here, from the page's own clock.
+  const { $, esc, num } = PilotKit;
+  let last = null;
+
+  function resets(at) {
+    if (!num(at)) return "";
+    const s = at - Date.now() / 1000;
+    if (s <= 60) return "now";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    if (h < 24) return h ? `${h}h ${m}m` : `${m}m`;
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at * 1000));
+  }
+  const tone = (t) => (t === "alert" ? "is-alert" : t === "warn" ? "is-warn" : "");
+
+  function draw(d) {
+    last = d;
+    const list = $("list");
+    if (d.installed === false) {
+      $("updated").textContent = "";
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("gauge")}<b>AI usage is not installed</b><span>Add it from Pilot's Extensions page.</span></div>`;
+      return;
+    }
+    if (d.problem) {
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("gauge")}<b>${esc(d.problem)}</b><span>It tries again in a minute.</span></div>`;
+      return;
+    }
+    const providers = Array.isArray(d.providers) ? d.providers : [];
+    const newest = providers.map((p) => p.updated).filter(Boolean).sort().pop();
+    $("updated").textContent = newest ? newest : "";
+    if (!providers.length) {
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("gauge")}<b>No accounts yet</b><span>Sign in to Claude Code or Codex.</span></div>`;
+      return;
+    }
+    list.innerHTML = providers.map((p) => {
+      if (!p.windows || !p.windows.length) {
+        return `<div class="off"><span>${esc(p.name)}</span><span>${esc(String(p.state || "").toLowerCase())}</span></div>`;
+      }
+      const rows = p.windows.map((w) => {
+        const left = num(w.percent) == null ? null : Math.round(w.percent);
+        const mark = num(w.mark) == null ? "" : `<s style="--m:${w.mark}"></s>`;
+        return `<div class="pk-gauge" title="${esc(w.note || "")}"><span>${esc(w.label)}</span>`
+          + `<div class="pk-meter ${tone(w.tone)} ${w.markTone === "alert" ? "mark-alert" : ""}" style="--v:${left || 0}"><i></i>${mark}</div>`
+          + `<span class="left">${left == null ? "–" : left + "%"}</span><span>${esc(resets(w.resetsAt))}</span></div>`;
+      }).join("");
+      const note = (p.notes || [])[0];
+      return `<div class="provider"><div class="name"><b>${esc(p.name)}</b>${p.plan ? `<span class="pk-chip">${esc(p.plan)}</span>` : ""}</div>${rows}${note ? `<div class="note">${esc(note)}</div>` : ""}</div>`;
+    }).join("");
+  }
+
+  PilotKit.on(draw);
+  // The resets count down between runs.
+  setInterval(() => { if (last) draw(last); }, 60000);
+</script>

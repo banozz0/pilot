@@ -282,8 +282,9 @@ private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, w
     // Pilot (scrolling layout): on a strip a new window is a new column, at a new column's width, right of the focused
     // one (the strip's own anchor: the workspace's most recent child may be its empty floating container); never a tile
     // in that column's stack.
+    // A stage's new window is a group of its own after the focused one, never inside a group Sven joined (ADR 0015).
     let root = try workspace.rootTilingContainer
-    if root.layout == .scrolling {
+    if root.layout.isRow {
         window?.columnWidth = nil
         return BindingData(parent: root, adaptiveWeight: WEIGHT_AUTO, index: root.focusedColumnIndex.map { $0 + 1 } ?? INDEX_BIND_LAST)
     }

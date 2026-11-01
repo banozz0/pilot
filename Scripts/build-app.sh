@@ -142,6 +142,7 @@ cp -R "$ROOT/Packaging/folder-designs" "$APP/Contents/Resources/folder-designs" 
 cp -R "$ROOT/Packaging/ext-template" "$APP/Contents/Resources/ext-template"  # pilot ext new's templates, one folder per mode (ExtensionTemplate)
 cp "$ROOT/Packaging/pilot-agent.md" "$APP/Contents/Resources/"  # the AI helper's system prompt (AIChat.Agent, AISettings.agent)
 cp -R "$ROOT/Packaging/skills" "$APP/Contents/Resources/skills"  # the AI's skills: the Skills list, pilot guide <topic>, /extension's prompt (AISkills)
+cp -R "$ROOT/Packaging/widgets" "$APP/Contents/Resources/widgets"  # the desk widgets' look kit (kit/) and the six desk-* widget folders, each with its own copy of the kit (ADR 0016)
 echo -n 'APPL????' > "$APP/Contents/PkgInfo"
 codesign --force --sign "$ID" --identifier dev.banozz.pilot.webapp "$APP/Contents/Helpers/PilotWebApp"
 codesign --force --sign "$ID" --identifier dev.banozz.pilot.files "$APP/Contents/Helpers/pilot-files"

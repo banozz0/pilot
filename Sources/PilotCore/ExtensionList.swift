@@ -242,7 +242,8 @@ extension Extension {
 
 extension Extension {
     /// A detail command's answer (card agent-bo-95423245): markdown Pilot renders, facts shown beside it, and actions
-    /// under Cmd+K, the first Return's.
+    /// under Cmd+K, the first Return's. pilot-1-1 T9 (Q603, ADR 0010 amended): it may carry a page's blocks, drawn in place
+    /// of the markdown; a block's action runs only when it is one of the detail's actions.
     public struct Detail: Equatable, Sendable, Decodable {
         public struct Fact: Equatable, Sendable, Decodable {
             public let label: String, text: String
@@ -250,21 +251,24 @@ extension Extension {
         }
 
         public let markdown: String, metadata: [Fact], actions: [Item.Action]
+        /// Its blocks, read as a page's are, the unknown and broken ones skipped; empty when it sends none.
+        public let blocks: [Block]
         /// How many of its actions were of a type Pilot does not know, or missing their field, and so dropped.
         public let dropped: Int
 
-        public init(markdown: String, metadata: [Fact], actions: [Item.Action]) {
-            self.markdown = markdown; self.metadata = metadata; self.actions = actions
+        public init(markdown: String, metadata: [Fact], actions: [Item.Action], blocks: [Block] = []) {
+            self.markdown = markdown; self.metadata = metadata; self.actions = actions; self.blocks = blocks
             dropped = 0
         }
 
-        private enum CodingKeys: String, CodingKey { case markdown, metadata, actions }
+        private enum CodingKeys: String, CodingKey { case markdown, metadata, actions, blocks }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             markdown = try c.decodeIfPresent(String.self, forKey: .markdown) ?? ""
             metadata = try c.decodeIfPresent([Fact].self, forKey: .metadata) ?? []
             (actions, dropped) = try Item.Action.decode(c, .actions)
+            blocks = Block.blocks((try? c.decodeIfPresent([Lenient<Block.Line>].self, forKey: .blocks))?.compactMap(\.value))
         }
     }
 }

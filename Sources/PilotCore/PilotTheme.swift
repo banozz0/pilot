@@ -240,6 +240,15 @@ public enum WindowMaterial: String, CaseIterable, Sendable, Codable {
     case solid, glass
 }
 
+/// How much Glass blurs what is behind it, the Look page's Blur (Sven, 2026-11-01: "options for glass for transparency
+/// and blur"): Full is Liquid Glass's regular style, the look until then; Light its clear style; Off no glass, the tint
+/// alone over a sharp desktop. macOS gives Liquid Glass no blur radius, only these two styles.
+public enum GlassBlur: String, CaseIterable, Sendable {
+    case off, light, full
+
+    public var title: String { rawValue.capitalized }
+}
+
 /// What a material at a strength means for a theme (the artifact's matVals()): how strong the window's ground is over
 /// what is behind it, how strong tiles, cards and rows keep their own surface, and the body text's contrast on them.
 /// The floor: surfaces stay at 72 % or more and rise in 2 % steps until body text reads at 4.5 : 1 against the

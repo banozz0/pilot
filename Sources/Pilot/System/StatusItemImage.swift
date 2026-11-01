@@ -1,11 +1,13 @@
 import AppKit
 import PilotCore
+import SwiftUI
 
 /// A menu-bar item as one small template picture (cards agent-bo-95422837 and 911). macOS redraws a status item once per
 /// menu bar (one per display) whenever it changes; a SwiftUI view there cost a full layout and render each time, which
 /// made the CPU and RAM item cost more than the Stats app's. The picture is drawn from the item's BarParts, the same
 /// parts the top bar draws in SwiftUI; it is a template, so macOS colours it for the menu bar, and it is redrawn only
-/// when its parts change.
+/// when its parts change. Pilot's mark is the one exception (spec pilot-1-1 T28): its top-left box is the theme's accent,
+/// so that picture is no template and draws itself in the bar's ink as macOS draws it.
 @MainActor
 enum StatusItemImage {
     static let height: CGFloat = 18
@@ -24,33 +26,65 @@ enum StatusItemImage {
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.black]
 
     /// The picture, or nil with nothing to draw. `items` are the slot's items, the group's readings each their own. Drawn once into a bitmap at twice the point size, so each menu bar's redraw copies pixels.
-    static func image(_ items: [[BarPart]]) -> NSImage? {
+    /// With Pilot's mark it is no template: the mark's filled box in `accent` (the theme's by default) as `markFill` moves
+    /// it, the rest in the bar's ink, white on a dark bar and black on a light one, picked from the appearance it is drawn in.
+    static func image(_ items: [[BarPart]], accent: UInt32? = nil) -> NSImage? {
         let items = items.map { $0.filter { switch $0 { case .app, .warn, .level: false; default: true } } }.filter { !$0.isEmpty }
         guard !items.isEmpty else { return nil }
         let partWidths = items.map { $0.map(width) }
         let widths = partWidths.map { $0.reduce(0, +) + gap * CGFloat($0.count - 1) }
         let inner = widths.reduce(0, +) + itemGap * CGFloat(widths.count - 1)
         let size = NSSize(width: (inner + padding * 2).rounded(.up), height: height)
+        func drawItems(_ pen: Pen) {
+            var x = padding
+            for (index, item) in items.enumerated() {
+                var partX = x
+                for (part, w) in zip(item, partWidths[index]) {
+                    draw(part, at: partX, width: w, pen: pen)
+                    partX += w + gap
+                }
+                x += widths[index] + itemGap
+            }
+        }
+        if items.joined().contains(.mark) {
+            // Drawn as macOS draws it, in the bar's appearance, as ExtensionGaugeIcon's picture is.
+            let accent = accent ?? Look.shared.theme.accent
+            let dark = Pen(ink: .white, markFill: NSColor(Color(hex: markFill(accent, dark: true)))),
+                light = Pen(ink: .black, markFill: NSColor(Color(hex: markFill(accent, dark: false))))
+            return NSImage(size: size, flipped: false) { _ in
+                drawItems(NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
+                return true
+            }
+        }
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * 2, pixelsHigh: Int(size.height) * 2,
                                             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
         bitmap.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-        var x = padding
-        for (index, item) in items.enumerated() {
-            var partX = x
-            for (part, w) in zip(item, partWidths[index]) {
-                draw(part, at: partX, width: w)
-                partX += w + gap
-            }
-            x += widths[index] + itemGap
-        }
+        drawItems(Pen())
         NSGraphicsContext.restoreGraphicsState()
         let image = NSImage(size: size)
         image.addRepresentation(bitmap)
         image.isTemplate = true
         return image
+    }
+
+    /// The mark's filled box on a bar (the drawing's reference grounds, #1E1E1E dark and #EBEBEB light): the accent while it
+    /// reaches 3:1 on the bar, else the accent moved toward the bar's ink in 5 % steps until it does.
+    static func markFill(_ accent: UInt32, dark: Bool) -> UInt32 {
+        let (ground, ink): (UInt32, UInt32) = dark ? (0x1E1E1E, 0xFFFFFF) : (0xEBEBEB, 0x000000)
+        var fill = accent
+        for step in 1...20 where Contrast.ratio(fill, ground) < 3 {
+            fill = Contrast.hex(Contrast.mix(Contrast.rgb(ink), Contrast.rgb(accent), Double(step) / 20))
+        }
+        return fill
+    }
+
+    /// What a picture is drawn in: the bar's ink (black for a template) and the mark's filled box, none on a template.
+    private struct Pen {
+        var ink = NSColor.black
+        var markFill: NSColor?
     }
 
     /// A part's width: a value the width of its widest reading, so the item never jumps as numbers change.
@@ -95,12 +129,13 @@ enum StatusItemImage {
         NSAttributedString(string: s, attributes: attributes).size().width.rounded(.up)
     }
 
-    private static func draw(_ part: BarPart, at x: CGFloat, width w: CGFloat) {
+    private static func draw(_ part: BarPart, at x: CGFloat, width w: CGFloat, pen: Pen) {
+        let ink = pen.ink
         switch part {
-        case .label(let s): centred(s, label, x: x)
-        case .reading(let stat): centred(stat.short, label, x: x)
-        case .value(let s, _): centred(s, value, x: x)
-        case .text(let s), .date(let s), .time(let s): centred(s, text, x: x)
+        case .label(let s): centred(s, label, x: x, ink: ink)
+        case .reading(let stat): centred(stat.short, label, x: x, ink: ink)
+        case .value(let s, _): centred(s, value, x: x, ink: ink)
+        case .text(let s), .date(let s), .time(let s): centred(s, text, x: x, ink: ink)
         case .graph(let points):
             let path = NSBezierPath(), step = graphWidth / CGFloat(max(points.count - 1, 1)), bottom: CGFloat = 3, top = height - 3
             for (i, point) in points.enumerated() {
@@ -109,13 +144,13 @@ enum StatusItemImage {
             }
             path.lineWidth = 1.2
             path.lineJoinStyle = .round
-            NSColor.black.setStroke()
+            ink.setStroke()
             path.stroke()
         case .bar(let share):
             let track = NSRect(x: x, y: (height - 5) / 2, width: barWidth, height: 5)
-            NSColor.black.withAlphaComponent(0.35).setFill()
+            ink.withAlphaComponent(0.35).setFill()
             NSBezierPath(roundedRect: track, xRadius: 2.5, yRadius: 2.5).fill()
-            NSColor.black.setFill()
+            ink.setFill()
             NSBezierPath(roundedRect: NSRect(x: x, y: track.minY, width: barWidth * CGFloat(min(max(share, 0), 1)), height: 5), xRadius: 2.5, yRadius: 2.5).fill()
         case .symbol(let name):
             let config = NSImage.SymbolConfiguration(pointSize: symbolSize, weight: .medium)
@@ -127,62 +162,72 @@ enum StatusItemImage {
             guard let context = NSGraphicsContext.current?.cgContext else { return }
             context.saveGState()
             context.translateBy(x: x.rounded(), y: ((height - markSize) / 2).rounded())
-            context.addPath(PilotMarkShape.path(markSize, flipped: false))
-            context.setFillColor(NSColor.black.cgColor)
+            context.addPath(PilotMarkShape.path(markSize, flipped: false, boxes: pen.markFill == nil ? 0..<4 : 1..<4))
+            context.setFillColor(ink.cgColor)
             context.fillPath(using: .evenOdd)
+            if let markFill = pen.markFill {
+                context.addPath(PilotMarkShape.path(markSize, flipped: false, boxes: 0..<1))
+                context.setFillColor(markFill.cgColor)
+                context.fillPath()
+            }
             context.restoreGState()
         case .ring(let left):
             let rect = NSRect(x: x + 1, y: (height - symbolSize) / 2 + 1, width: symbolSize - 2, height: symbolSize - 2)
             let track = NSBezierPath(ovalIn: rect)
             track.lineWidth = 2
-            NSColor.black.withAlphaComponent(0.3).setStroke()
+            ink.withAlphaComponent(0.3).setStroke()
             track.stroke()
             let arc = NSBezierPath()
             arc.appendArc(withCenter: NSPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: 90,
                           endAngle: 90 - 360 * CGFloat(min(max(left, 0), 1)), clockwise: true)
             arc.lineWidth = 2
-            NSColor.black.setStroke()
+            ink.setStroke()
             arc.stroke()
-        case .badge(let s): knockout(s, rect: NSRect(x: x, y: 2, width: w, height: height - 4))
+        case .badge(let s): knockout(s, rect: NSRect(x: x, y: 2, width: w, height: height - 4), ink: ink)
         case .workspaces(let names, let current, let app):
             var nx = x
             for name in names {
                 let isCurrent = name == current, label = BarParts.workspaceLabel(name, app: isCurrent ? app : nil)
                 let nw = workspaceWidth(name, current: isCurrent, app: isCurrent ? app : nil)
                 if isCurrent {
-                    knockout(label, rect: NSRect(x: nx, y: 2, width: nw, height: height - 4))
+                    knockout(label, rect: NSRect(x: nx, y: 2, width: nw, height: height - 4), ink: ink)
                 } else {
-                    let drawn = NSAttributedString(string: label, attributes: badge)
+                    let drawn = NSAttributedString(string: label, attributes: inked(badge, ink))
                     drawn.draw(at: NSPoint(x: nx + (nw - drawn.size().width) / 2, y: (height - drawn.size().height) / 2))
                 }
                 nx += nw + 2
             }
         case .dots(let count, let current):
             for i in 0..<count {
-                NSColor.black.withAlphaComponent(i == current ? 1 : 0.4).setFill()
+                ink.withAlphaComponent(i == current ? 1 : 0.4).setFill()
                 NSBezierPath(ovalIn: NSRect(x: x + CGFloat(i) * 9, y: (height - 6) / 2, width: 6, height: 6)).fill()
             }
         case .strength(let bars):
             for (i, h) in BarParts.strengthHeights.enumerated() {
-                NSColor.black.withAlphaComponent(i < bars ? 1 : 0.35).setFill()
+                ink.withAlphaComponent(i < bars ? 1 : 0.35).setFill()
                 NSBezierPath(roundedRect: NSRect(x: x + CGFloat(i) * 4.5, y: (height - 12) / 2, width: 3, height: h), xRadius: 1, yRadius: 1).fill()
             }
         case .divider:
-            NSColor.black.withAlphaComponent(0.35).setFill()
+            ink.withAlphaComponent(0.35).setFill()
             NSRect(x: x, y: 2, width: 1, height: height - 4).fill()
         case .extensionItem(let face): ExtensionGaugeIcon.draw(face, at: x) { _ in .black }
         case .app, .space, .warn, .level: break
         }
     }
 
-    private static func centred(_ s: String, _ attributes: [NSAttributedString.Key: Any], x: CGFloat) {
-        let drawn = NSAttributedString(string: s, attributes: attributes)
+    private static func centred(_ s: String, _ attributes: [NSAttributedString.Key: Any], x: CGFloat, ink: NSColor) {
+        let drawn = NSAttributedString(string: s, attributes: inked(attributes, ink))
         drawn.draw(at: NSPoint(x: x, y: (height - drawn.size().height) / 2))
     }
 
+    /// `attributes` in `ink`: as they are for a template's black, so the readings' redraws build nothing.
+    private static func inked(_ attributes: [NSAttributedString.Key: Any], _ ink: NSColor) -> [NSAttributedString.Key: Any] {
+        ink == .black ? attributes : attributes.merging([.foregroundColor: ink]) { $1 }
+    }
+
     /// A filled rounded box with its text cut out of it, so the menu bar's colour shows through the letters.
-    private static func knockout(_ s: String, rect: NSRect) {
-        NSColor.black.setFill()
+    private static func knockout(_ s: String, rect: NSRect, ink: NSColor) {
+        ink.setFill()
         NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
         let context = NSGraphicsContext.current
         let previous = context?.compositingOperation

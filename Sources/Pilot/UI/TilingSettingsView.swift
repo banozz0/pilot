@@ -39,6 +39,7 @@ struct TilingBody: View {
             }
             // Full width under the rest in both styles (page map, Sven 2026-10-17: off Look's Transparency block).
             FocusedWindowBlock(look: look)
+            ShelfSettingsBlock()
             if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
         }
     }

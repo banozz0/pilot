@@ -1,0 +1,10 @@
+{
+  "id": "desk-ai-usage",
+  "title": "AI usage",
+  "icon": "📊",
+  "version": "1.0",
+  "description": "How much of each Claude and Codex limit is left this session and this week, with the pace mark and when each resets, as the AI usage extension reads it.",
+  "draw": "html",
+  "data": {"command": ["./feed.py"], "every": 60},
+  "size": {"width": 300, "height": 300}
+}

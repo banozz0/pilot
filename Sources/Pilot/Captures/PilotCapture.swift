@@ -92,8 +92,9 @@ final class PilotCapture {
     }
 
     /// A capture key pressed. A second press while the overlay shows closes it, so a key never leaves it up; the record
-    /// key while a recording runs or counts down stops it.
-    func run(_ request: Request) {
+    /// key while a recording runs or counts down stops it. `taken` runs once a full screen's still is grabbed (the
+    /// keyboard lock's Screenshot, whose screen hides the thumbnail).
+    func run(_ request: Request, taken: (@MainActor () -> Void)? = nil) {
         if let overlay { return overlay.close() }
         if request == .record, recorder.isActive { return recorder.stop() }
         if request == .scroll || request == .scrollUp, let scrolling { return scrolling.end() }
@@ -131,7 +132,9 @@ final class PilotCapture {
                 if request == .fullScreen {
                     let grab = Self.underPointer(grabs)
                     Self.log.notice("capture fullScreen: grab \(Self.ms(grabbed), privacy: .public) ms")
-                    return deliver(grab.image, grab.scale)
+                    deliver(grab.image, grab.scale)
+                    taken?()
+                    return
                 }
                 let windows = (try? await grabber.windows()) ?? []
                 show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request),
@@ -372,8 +375,14 @@ final class PilotCapture {
     func saveAndEdit(_ image: CGImage, scale: CGFloat) async {
         let after = store.settings.afterCapture
         let file = await save(image, scale: scale, tip: after == .copy)
-        afterCapture(image, scale, file, after)
+        let still = Unchecked(image)
+        let follow: @MainActor () -> Void = { [afterCapture] in afterCapture(still.value, scale, file, after) }
+        if let holdAfter { holdAfter(follow) } else { follow() }
     }
+
+    /// Set while something covers the screen (the keyboard lock's Screenshot): it gets what follows a saved capture, the
+    /// thumbnail or the editor, to run once the screen is clear.
+    var holdAfter: (@MainActor (@escaping @MainActor () -> Void) -> Void)?
 
     /// What follows a saved capture; a test's records it.
     var afterCapture: @MainActor (CGImage, CGFloat, URL?, CaptureSettings.AfterCapture) -> Void = { image, scale, file, after in

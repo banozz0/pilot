@@ -130,7 +130,7 @@ final class BindFinder {
         sources = BindSearch.Sources(
             apps: apps(), browsers: Self.browsers(), actions: actions, catalogue: DriveModule.catalogue,
             scripts: ScriptCommand.actions([], with: ScriptCommand.find()), extensions: Extension.actions([], with: Extension.find().extensions),
-            quicklinks: BindSearch.quicklinks(QuicklinkBook.shared.links), configs: ConfigsModule.menuRows(), soundOutputs: SystemModule.outputRows())
+            quicklinks: BindSearch.quicklinks(QuicklinkBook.shared.links), configs: DeveloperPages.on ? ConfigsModule.menuRows() : [], soundOutputs: SystemModule.outputRows())
     }
 
     /// The apps that open web pages, by name, each once.

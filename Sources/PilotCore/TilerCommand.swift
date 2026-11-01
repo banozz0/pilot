@@ -70,17 +70,22 @@ public enum AeroCommand: Equatable, Sendable {
     case flatten(workspace: String)
     case setRootLayout(workspace: String, String)
     case move(id: Int, Direction)
+    /// The Window shelf's click on a minimized window (ADR 0015, Q690): macOS restores it onto the workspace it was
+    /// minimized from, and it takes the focus, so that workspace's stage.
+    case unminimize(id: Int)
 
     public enum Axis: String, Sendable { case width, height }
 
     public enum WindowScope: Equatable, Sendable {
-        case all, focused, workspace(String)
+        /// `minimized`: every window macOS holds minimized, each with the workspace it was minimized from.
+        case all, focused, workspace(String), minimized
 
         var arguments: [String] {
             switch self {
             case .all: ["--all"]
             case .focused: ["--focused"]
             case .workspace(let name): ["--workspace", name]
+            case .minimized: ["--minimized"]
             }
         }
     }
@@ -122,6 +127,7 @@ public enum AeroCommand: Equatable, Sendable {
         case .flatten(let workspace): ["flatten-workspace-tree", "--workspace", workspace]
         case .setRootLayout(let workspace, let layout): ["layout", "--workspace", workspace, "--root", layout]
         case .move(let id, let d): ["move", "--window-id", String(id), "--boundaries-action", "stop", d.rawValue]
+        case .unminimize(let id): ["unminimize", "--window-id", String(id)]
         }
     }
 }
@@ -154,20 +160,28 @@ public struct AeroWindow: AeroListing, Equatable, Sendable {
     public let pid: Int32
     public let workspace: String
     public let monitorId: Int
-    /// The parent container's layout: h_tiles, v_tiles, h_scrolling or floating.
+    /// The parent container's layout: h_tiles, v_tiles, h_scrolling, h_stage or floating.
     public let layout: String
     public let title: String
     /// A pinned pop-out (spec omarchy-ideas T1); the tiler's listing carries it beside `format`'s fields.
     public var pinned: Bool? = nil
+    /// On a Stage workspace (ADR 0015), off the stage in the hide corner; and the first window of the joined group it is
+    /// in. The tiler's listing carries them only when set.
+    public var shelved: Bool? = nil
+    public var group: Int? = nil
 
     public var isFloating: Bool { layout == "floating" }
     public var isPinned: Bool { pinned == true }
+    public var isShelved: Bool { shelved == true }
+    /// macOS holds it minimized; its `workspace` is the one it was minimized from.
+    public var isMinimized: Bool { layout == "macos_native_minimized" }
 
     public static let format = "%{window-id} %{app-name} %{app-bundle-id} %{app-pid} %{workspace} %{monitor-id} %{window-layout} %{window-title}"
 
     enum CodingKeys: String, CodingKey {
         case id = "window-id", appName = "app-name", bundleId = "app-bundle-id", pid = "app-pid"
         case workspace, monitorId = "monitor-id", layout = "window-layout", title = "window-title", pinned = "window-pinned"
+        case shelved = "window-shelved", group = "window-group"
     }
 }
 
@@ -177,11 +191,21 @@ public struct AeroMonitorWorkspace: AeroListing, Equatable, Sendable {
     public let monitorName: String
     public let workspace: String
     public var displayUUID: String? = nil
+    /// The workspace's root layout (h_tiles, v_tiles, h_scrolling, h_stage); the Window shelf shows on `h_stage`.
+    public var rootLayout: String? = nil
+    /// Show desktop holds its windows in the corner; set only then.
+    public var showingDesktop: Bool? = nil
 
-    enum CodingKeys: String, CodingKey { case monitorId = "monitor-id", monitorName = "monitor-name", workspace, displayUUID = "display-uuid" }
+    public var isStage: Bool { rootLayout == "h_stage" }
+    public var isShowingDesktop: Bool { showingDesktop == true }
+
+    enum CodingKeys: String, CodingKey {
+        case monitorId = "monitor-id", monitorName = "monitor-name", workspace, displayUUID = "display-uuid"
+        case rootLayout = "workspace-root-container-layout", showingDesktop = "workspace-showing-desktop"
+    }
 }
 
-/// A workspace and its root container's layout (h_tiles, v_tiles or h_scrolling).
+/// A workspace and its root container's layout (h_tiles, v_tiles, h_scrolling or h_stage).
 public struct AeroWorkspace: AeroListing, Equatable, Sendable {
     public let workspace: String
     public let rootLayout: String
@@ -227,11 +251,13 @@ public enum AeroEvent: Equatable, Sendable {
     case windowDetected(workspace: String)
     /// Focus moved, which is also how a closed window shows: the tiler has no window-closed event.
     case focusChanged(workspace: String)
+    /// A shown Stage workspace's windows or stage changed (the Window shelf's, ADR 0015).
+    case stagesChanged(workspace: String)
 
     /// A window opened or focus moved, rather than a workspace or monitor taking focus.
     public var isWindowEvent: Bool {
         switch self {
-        case .windowDetected, .focusChanged: true
+        case .windowDetected, .focusChanged, .stagesChanged: true
         case .focusedWorkspaceChanged, .focusedMonitorChanged: false
         }
     }
@@ -239,7 +265,7 @@ public enum AeroEvent: Equatable, Sendable {
     public var workspace: String {
         switch self {
         case .focusedWorkspaceChanged(let workspace, _), .focusedMonitorChanged(_, let workspace), .windowDetected(let workspace),
-             .focusChanged(let workspace): workspace
+             .focusChanged(let workspace), .stagesChanged(let workspace): workspace
         }
     }
 }

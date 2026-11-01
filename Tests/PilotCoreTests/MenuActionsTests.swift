@@ -60,7 +60,10 @@ struct MenuActionsTests {
         nav = Self.navigator()
         nav.query = "budget.xlsx"
         #expect(nav.rows.map(\.target) == [.ask("budget.xlsx"), .searchWeb("budget.xlsx"), .searchFiles, .searchInstall("budget.xlsx")])
-        // Anything matched, a narrowed kind, or one letter: no install row.
+        // Something matched but no app: an app's name is still offered to install, after Search files (Sven, 1.0.1,
+        // "videorc"); an app on this Mac leading, a narrowed kind or one letter: no install row.
+        nav.query = "vault"
+        #expect(nav.rows.firstIndex { $0.target == .searchFiles }.map { nav.rows[$0 + 1].target } == .searchInstall("vault"))
         nav.query = "bitwa"
         #expect(!nav.rows.contains { $0.target == .searchInstall("bitwa") })
         nav.query = "raycast"

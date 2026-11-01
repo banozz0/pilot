@@ -16,7 +16,7 @@ struct InstallCatalogueTests {
         return try! JSONSerialization.data(withJSONObject: ["entries": [e]])
     }
 
-    static let categories = ["AI agents", "AI", "ADEs", "Services", "Development", "Editors", "Fonts", "Gaming", "Browsers", "Terminals", "Productivity", "Utilities",
+    static let categories = ["Featured", "AI agents", "AI", "ADEs", "Services", "Chat", "Development", "Editors", "Fonts", "Gaming", "Browsers", "Terminals", "Productivity", "Utilities",
                              "Command-line tools", "Media"]
 
     /// Sven 2026-10-09, each by its real route: easy-cd from his tap (its command is ecd), Videorc's sign-in download page
@@ -70,21 +70,24 @@ struct InstallCatalogueTests {
     @Test("The shipped catalogue parses: every entry has a method, an installed-check, a vendor URL and a date")
     func shipped() throws {
         let entries = try InstallCatalogue.parse(Data(contentsOf: Self.shipped))
-        #expect(entries.count == 84)
-        // Omarchy's Install › Style › Font list as Nerd Font casks (card agent-bo-95422792), its default JetBrains Mono first.
+        #expect(entries.count == 113)
+        // Omarchy's Install › Style › Font list as Nerd Font casks (card agent-bo-95422792), its default JetBrains Mono first,
+        // then more coding fonts as Nerd Fonts and three interface fonts (Sven, 2026-11-01).
         #expect(entries.filter { $0.category == "Fonts" }.map(\.name) == ["JetBrains Mono", "Cascadia Mono", "Meslo LG Mono", "Fira Code",
-                                                                         "Victor Mono", "Bitstream Vera Mono", "Iosevka"])
+                                                                         "Victor Mono", "Iosevka", "Cascadia Code", "Hack", "Source Code Pro",
+                                                                         "IBM Plex Mono", "Geist Mono", "Monaspace", "Commit Mono", "Maple Mono",
+                                                                         "Recursive Mono", "Inter", "Geist", "IBM Plex Sans"])
         #expect(entries.first { $0.id == "font-iosevka" }?.method == .package(Package(.cask, "font-iosevka-nerd-font")!))
         #expect(entries.first { $0.id == "font-iosevka" }?.check == .paths(["~/Library/Fonts/IosevkaNerdFont-Regular.ttf"]))
         #expect(InstallCatalogue.categories(entries) == Self.categories)
-        #expect(entries.first?.name == "Claude Code")
-        // Omarchy's install picks mapped to Mac packages (card agent-bo-95422789), AI agents first.
-        #expect(entries.filter { $0.category == "AI agents" }.map(\.name) == ["Claude Code", "Codex", "Antigravity CLI", "opencode", "Empryo"])
+        #expect(entries.first?.name == "Ghostex")
+        // Sven's own apps featured first (Q622), then Omarchy's install picks mapped to Mac packages (card agent-bo-95422789).
+        #expect(entries.filter { $0.category == "AI agents" }.map(\.name) == ["Claude Code", "Codex", "Antigravity CLI", "opencode"])
         // Omarchy's own order within a category, Sven's earlier picks and the Mac additions around it.
         #expect(entries.filter { $0.category == "AI" }.map(\.name) == ["ChatGPT", "Claude", "Hermes Desktop", "LM Studio", "Ollama", "OpenClaw", "Perplexity"])
         #expect(entries.filter { $0.category == "Development" }.map(\.id).prefix(5) == ["ruby", "node", "bun", "deno", "go"])
-        #expect(entries.filter { $0.category == "ADEs" }.map(\.name) == ["Ghostex", "Herdr", "T3 Code", "Orca"])
-        #expect(entries.filter { $0.category == "Browsers" }.map(\.name) == ["Google Chrome", "Microsoft Edge", "Brave", "Brave Origin", "Firefox", "Zen"])
+        #expect(entries.filter { $0.category == "ADEs" }.map(\.name) == ["Herdr", "T3 Code", "Orca"])
+        #expect(entries.filter { $0.category == "Browsers" }.map(\.name) == ["Google Chrome", "Microsoft Edge", "Brave", "Firefox", "Zen"])
         #expect(entries.first { $0.id == "easy-cd" }?.method == .package(Package(.cask, "banozz0/tap/easy-cd")!))
         #expect(entries.first { $0.id == "telegram-tools" }?.method == .package(Package(.uv, "telegram-tools")!))
         #expect(entries.first { $0.id == "opencode" }?.method == .package(Package(.formula, "opencode")!))
@@ -164,7 +167,7 @@ struct InstallCatalogueTests {
         let rows = MenuEntries.install(entries, installed: ["coteditor"])
         var nav = MenuNavigator(entries: rows, branch: .install)
         #expect(nav.rows.map(\.title) == Self.categories)
-        #expect(nav.rows[0].detail == "Claude Code, Codex, Antigravity CLI, opencode, Empryo")
+        #expect(nav.rows[0].detail == "Ghostex, Videorc, Empryo")
         nav = MenuNavigator(entries: rows, branch: .category("Editors"))
         #expect(nav.rows.map(\.title) == ["CotEditor", "Visual Studio Code", "Cursor", "Zed", "Sublime Text", "Helix", "MacVim", "Emacs", "Neovim"])
         #expect(nav.rows[0].detail == "cask · installed")

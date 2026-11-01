@@ -16,6 +16,11 @@
 //                                         <folder>/samples/<voice>.wav unless it is there; exits 0 once all are.
 // The model's name is Pilot's to give (SpeechModel.Choice, Dictate.Model reads it); the other commands read it from the
 // folder's ready file.
+// listen and transcribe give Whisper the words Sven taught as its prompt: Pilot keeps them in vocabulary.json in the
+// folder that holds <folder> (the Speech folder), never in the arguments; Parakeet gets none.
+// A take whose model is still loading at the stop waits as take-<pid>.wav in that folder too; once written down, the text
+// goes to Pilot, or into take-<pid>.txt there when Pilot is gone (quit or relaunched meanwhile), and the WAV goes. A
+// transcribe of such a WAV answers the same way, and its WAV goes on a failure too: Pilot retries a kept take once. Pilot adds both to Voice › Recent takes (PilotDictation.collectKept).
 // Any failure is error <reason> and a non-zero exit; error microphone when macOS has not allowed Pilot to record, and
 // error no input device, exit 4, when the Mac has no microphone. A microphone gone mid-take says input lost, then the
 // take so far as text.
@@ -28,12 +33,30 @@ import os
 let saying = OSAllocatedUnfairLock()
 
 func say(_ line: String) {
-    saying.withLock { FileHandle.standardOutput.write(Data((line + "\n").utf8)) }
+    saying.withLock { try? FileHandle.standardOutput.write(contentsOf: Data((line + "\n").utf8)) }
 }
 
 func text(_ value: String) -> String {
     "text " + String(decoding: (try? JSONEncoder().encode(value)) ?? Data("\"\"".utf8), as: UTF8.self)
 }
+
+/// The take's text to Pilot, or beside the models when Pilot is gone; then the take's kept WAV, if any, goes.
+func answer(_ value: String, base: URL, kept: URL?) {
+    if getppid() != 1 { say(text(value)) } else if !value.isEmpty {
+        let file = Dictate.kept("txt", beside: base)
+        try? Data(value.utf8).write(to: file)
+        Dictate.excludeFromBackup(file)
+    }
+    if let kept { try? FileManager.default.removeItem(at: kept) }
+}
+
+/// Pilot gone mid-load: a line said then must not end a take's helper before its words are kept. Only `listen` and
+/// `transcribe`: a download whose Pilot quit ends at its next progress line, and one already compiling holds the folder's
+/// lock (Dictate.alone), so the relaunch's resume waits for it rather than run a second one into the same folder.
+func outliveParent() { signal(SIGPIPE, SIG_IGN) }
+
+// The takes, words and lock files are Sven's alone (0600, folders 0700).
+umask(0o077)
 
 func usage() -> Never {
     FileHandle.standardError.write(Data("usage: pilot-dictate download <folder> <model> | listen <folder> [--words] | prepare <folder> | transcribe <folder> <file> | speak <folder> <voice> <speed> [--out <file>] | samples <folder> (<voice> <line>)...\n".utf8))
@@ -60,8 +83,17 @@ func stopOrCancel() async -> Bool {
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard arguments.count >= 2 else { usage() }
 let base = URL(filePath: arguments[1])
-// Kokoro's files, FluidAudio's caches and Core ML's compile of them stay in its folder (Speak.useFolder).
-if arguments[0] == "speak" || arguments.count == 3 && arguments[2] == Speak.modelName || Speak.isKokoro(base) { Speak.useFolder(base) }
+// Every model's files, FluidAudio's caches and Core ML's compile of them stay in its folder (Speak.useFolder), out of
+// ~/Library/Caches, which macOS and cleaners empty (Dictate).
+Speak.useFolder(base)
+/// A transcribe of a take's kept WAV: Pilot's one retry of it (PilotDictation.collectKept), so it goes whether it answers
+/// or fails, and audio never piles up beside the models.
+let retried: URL? = {
+    guard arguments[0] == "transcribe", arguments.count == 3 else { return nil }
+    let file = URL(filePath: arguments[2])
+    return file.lastPathComponent.hasPrefix(Dictate.keptPrefix) && file.pathExtension == "wav"
+        && file.deletingLastPathComponent().standardizedFileURL == base.deletingLastPathComponent().standardizedFileURL ? file : nil
+}()
 do {
     switch arguments[0] {
     case "download" where arguments.count == 3:
@@ -71,24 +103,28 @@ do {
             let percent = Int(fraction * 100)
             if shown.withLock({ last in defer { last = percent }; return percent != last }) { say("progress \(String(format: "%.2f", fraction))") }
         }
-        if arguments[2] == Speak.modelName { try await Speak.download(to: base, progress: progress, preparing: { say("preparing") }) }
-        else { try await Dictate.download(to: base, model: arguments[2], progress: progress, preparing: { say("preparing") }) }
+        try await Dictate.alone(base) {
+            if arguments[2] == Speak.modelName { try await Speak.download(to: base, progress: progress, preparing: { say("preparing") }) }
+            else { try await Dictate.download(to: base, model: arguments[2], progress: progress, preparing: { say("preparing") }) }
+        }
     case "listen":
         // No microphone at all: said before the grant is read, which could ask for it.
         guard Dictate.hasInputDevice else { say(Dictate.noInput); exit(4) }
         guard Dictate.microphoneAllowed else { say("error microphone"); exit(3) }
+        outliveParent()
         // Pilot gone or the take dropped: nothing to type.
         let take = try await Dictate.listen(base, words: arguments.dropFirst(2).contains("--words"), said: say) {
             await stopOrCancel() || getppid() == 1
         }
-        if let take { say(text(take)) }
+        if let take { answer(take, base: base, kept: Dictate.kept("wav", beside: base)) }
     case "prepare":
         // A background chore: efficiency cores, so it never competes with what Sven is doing.
         setpriority(PRIO_DARWIN_PROCESS, 0, PRIO_DARWIN_BG)
         if try await Speak.isKokoro(base) ? Speak.prepare(base) : Dictate.prepare(base) { say("prepared") }
     case "transcribe" where arguments.count == 3:
+        outliveParent()
         let kit = try await Dictate.load(base)
-        say(text(try await Dictate.transcribe(kit, try Dictate.samples(of: URL(filePath: arguments[2])))))
+        answer(try await Dictate.transcribe(kit, try Dictate.samples(of: URL(filePath: arguments[2]))), base: base, kept: retried)
     case "speak" where arguments.count == 4 || arguments.count == 6 && arguments[4] == "--out":
         guard let speed = Float(arguments[3]) else { usage() }
         let text = String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
@@ -102,6 +138,8 @@ do {
     say(Dictate.noInput)
     exit(4)
 } catch {
+    // A live take's WAV stays for Pilot's one retry; the retry's goes now.
+    if let retried { try? FileManager.default.removeItem(at: retried) }
     say("error \(String(describing: error).replacingOccurrences(of: "\n", with: " "))")
     exit(1)
 }

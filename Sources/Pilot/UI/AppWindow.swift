@@ -33,6 +33,12 @@ final class AppWindowModel {
     var extensionPage: String?
     /// The run Reports opens on, from Update & Clean's Open report; leaving Reports or going anywhere else clears it.
     var reportPick: String?
+    /// The category Install's catalogue opens on, from Fonts' Get more fonts; going anywhere else clears it.
+    var catalogueCategory: String?
+    /// The repo Apps › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
+    /// opens, so a second open of the same repo starts the page on it again.
+    var repoPick: String?
+    var repoOpens = 0
     /// The action whose bind editor Binds opens (the menu's Set Hyper bind, card agent-bo-95422968); Binds clears it.
     var editBind: String?
     /// The row whose alias editor Launcher › Aliases opens (the menu's Set alias…, card agent-bo-95423037); Aliases clears it.
@@ -50,8 +56,9 @@ final class AppWindowModel {
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
-        // A page saved before the cut opens where it went.
-        page = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
+        // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
+        let saved = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
+        page = saved.isDeveloper && !DeveloperPages.on ? saved.area.shown.first ?? .home : saved
     }
 
     /// The part of `page` showing now: the one picked, else its first (a page's own content is nil).
@@ -63,6 +70,8 @@ final class AppWindowModel {
     func go(_ place: AppPlace) {
         extensionPage = nil
         reportPick = nil
+        catalogueCategory = nil
+        repoPick = nil
         searchOpen = false
         page = place.page
         if let section = place.section {
@@ -90,7 +99,14 @@ final class AppWindowModel {
         extensionPage = id
     }
 
-    /// Opens Installed on extension `id`'s card: an extension with nothing to show as a page.
+    /// Shows Apps › Repos on repo `name`, as a Repos widget's row opens it.
+    func goRepo(_ name: String) {
+        go(AppPlace(.repos))
+        repoPick = name
+        repoOpens += 1
+    }
+
+    /// Opens the Extensions list on extension `id`'s row: an extension with nothing to show as a page.
     func focusExtension(_ id: String) {
         go(AppPlace(.extensions))
         extensionFocus = id
@@ -99,7 +115,7 @@ final class AppWindowModel {
     /// ⌃Tab: the next page in the area, round to the first; in Extensions, Installed then each extension that opens a
     /// page, as the sidebar lists them.
     func nextPage(entries: [ExtensionPages.Link] = ExtensionPages.shared.pageEntries) {
-        guard page.area == .extensions, !entries.isEmpty else { return go(AppPlace(AppArea.next(after: page))) }
+        guard page.area == .extensions, !entries.isEmpty else { return go(AppPlace(AppArea.next(after: page, developer: DeveloperPages.on))) }
         let at = extensionPage.flatMap { id in entries.firstIndex { $0.id == id } }
         let next = at.map { $0 + 1 } ?? 0
         if next < entries.count { goExtensionPage(entries[next].id) } else { go(AppPlace(.extensions)) }
@@ -125,7 +141,7 @@ final class AppWindowModel {
 
     /// The search's Return: the first place it finds, else the first System Settings pane, as the list orders them.
     func goToFirstResult() {
-        if let first = AppPlace.search(query).first { go(first) }
+        if let first = AppPlace.search(query, developer: DeveloperPages.on).first { go(first) }
         else if let pane = SettingsSearch.panes(query).first { openPane(pane) }
         else { return }
         query = ""
@@ -161,6 +177,8 @@ final class AppWindowController: NSObject {
     /// `editBind` opens Binds' editor on that action (the menu's Set Hyper bind, card agent-bo-95422968), `editAlias`
     /// Launcher › Aliases' editor on that row (Set alias…, card agent-bo-95423037).
     func open(_ place: AppPlace? = nil, setup: SetupSection? = nil, extension focus: String? = nil, editBind: String? = nil, editAlias: Alias? = nil) {
+        // A developer page while the Developer switch is off (a link, a bind) opens General, where the switch is.
+        let place = place.map { $0.page.isDeveloper && !DeveloperPages.on ? AppPlace(.general) : $0 }
         // System's section (Hyper+Ctrl+A, B and W, card agent-bo-95422805) and the bind to edit, kept through a locked
         // screen's wait.
         if place?.page == .system, let setup { model.setupSection = setup }
@@ -192,12 +210,18 @@ final class AppWindowController: NSObject {
 
     func open(_ page: AppPage, setup: SetupSection? = nil) { open(AppPlace(page), setup: setup) }
 
-    /// Opens the window on extension `id`'s page (story 161): the bar item's Open page, its Installed card's.
+    /// Opens the window on extension `id`'s page (story 161): the bar item's Open page, its Extensions detail's.
     func openExtensionPage(_ id: String) {
         open(AppPlace(.extensions))
         model.goExtensionPage(id)
     }
     func open(_ section: AppSection) { open(AppPlace(section)) }
+
+    /// Opens the window on Apps › Repos at repo `name`: a Repos widget's row.
+    func openRepo(_ name: String) {
+        open(AppPlace(.repos))
+        model.goRepo(name)
+    }
 
     private func stopWaiting() {
         if let unlockObserver { DistributedNotificationCenter.default().removeObserver(unlockObserver) }
@@ -254,7 +278,7 @@ final class AppWindowController: NSObject {
         // One watch at a time: a close leaves its watch waiting, and the next open would add a second, one more per open.
         guard !followingLook else { return }
         followingLook = true
-        withObservationTracking { _ = (Look.shared.layers, Look.shared.style, Look.shared.theme) } onChange: { [weak self] in
+        withObservationTracking { _ = (Look.shared.layers, Look.shared.style, Look.shared.theme, Look.shared.glassBlur) } onChange: { [weak self] in
             Task { @MainActor in
                 self?.followingLook = false
                 self?.followLook()
@@ -265,7 +289,7 @@ final class AppWindowController: NSObject {
 
     /// The window as `look` says (design round 4, card agent-bo-95422890): Solid is opaque in the theme's ground; Glass
     /// is macOS 26's Liquid Glass (NSGlassEffectView) tinted with the ground at the ground layer's strength (Transparency,
-    /// round 15); Reduce transparency and Transparency 0 % make it Solid. The style grounds it in its canvas, dark or
+    /// round 15), in Blur's style (the tint alone at Off); Reduce transparency and Transparency 0 % make it Solid. The style grounds it in its canvas, dark or
     /// light as its theme is; Toybox's window stays opaque whatever the material (Sven, 2026-10-08).
     static func applyLook(_ look: Look, to window: NSWindow) {
         let tokens = StyleTokens.of(look.style, theme: look.theme)
@@ -274,7 +298,7 @@ final class AppWindowController: NSObject {
         let material = look.windowMaterial
         window.isOpaque = material == .solid
         window.backgroundColor = material == .solid ? ground : .clear
-        (window.contentView as? MaterialBackdrop)?.show(material, tint: look.glassTint(on: .window))
+        (window.contentView as? MaterialBackdrop)?.show(material, tint: look.glassTint(on: .window), blur: look.glassBlur)
     }
 
     /// The frame every open shares, and the renders: the theme's ground, the title bar hidden over the sidebar, the
@@ -369,12 +393,11 @@ final class PilotWindow: NSWindow {
 }
 
 /// A window's or a panel's content with its material behind it: nothing for Solid, an NSGlassEffectView for Glass (card
-/// agent-bo-95422890).
+/// agent-bo-95422890) in Look's Blur's style, or at Blur Off a plain view in the glass's tint.
 final class MaterialBackdrop: NSView {
     let content: NSView
     /// The material's view behind the content, nil when Solid.
     private(set) var effect: NSView?
-    private var shown: WindowMaterial = .solid
     private let cornerRadius: CGFloat
 
     /// `cornerRadius` rounds the material to a panel's corners; a window's own frame rounds it otherwise. The material
@@ -390,26 +413,58 @@ final class MaterialBackdrop: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError("not from a nib") }
 
-    func show(_ material: WindowMaterial, tint: NSColor) {
-        guard material != shown else {
-            (effect as? NSGlassEffectView)?.tintColor = tint
-            return
+    func show(_ material: WindowMaterial, tint: NSColor, blur: GlassBlur = Look.shared.glassBlur) {
+        let blur = material == .solid ? nil : blur
+        // Light and Full are one glass view in two styles; Solid, Off and glass swap the view.
+        if blur.map({ $0 != .off }) != effect.map({ $0 is NSGlassEffectView }) {
+            effect?.removeFromSuperview()
+            effect = blur.map(makeEffect)
         }
-        shown = material
-        effect?.removeFromSuperview()
-        effect = nil
+        if let glass = effect as? NSGlassEffectView, let style = blur?.effectStyle {
+            if glass.tintColor != tint { glass.tintColor = tint }
+            if glass.style != style { glass.style = style }
+        } else if let layer = effect?.layer, layer.backgroundColor != tint.cgColor {
+            layer.backgroundColor = tint.cgColor
+        }
+    }
+
+    private func makeEffect(_ blur: GlassBlur) -> NSView {
         let view: NSView
-        switch material {
-        case .solid: return
-        case .glass:
+        if blur == .off {
+            view = NSView()
+            view.wantsLayer = true
+            view.layer?.cornerRadius = cornerRadius
+            view.layer?.cornerCurve = .continuous
+        } else {
             let glass = NSGlassEffectView()
-            glass.tintColor = tint
             glass.cornerRadius = cornerRadius
             view = glass
         }
         view.frame = bounds
         view.autoresizingMask = [.width, .height]
         addSubview(view, positioned: .below, relativeTo: content)
-        effect = view
+        return view
+    }
+}
+
+/// General's Developer switch as the window, the searches and `pilot open` read it (AppPage.isDeveloper, Pilot 1.0.2, Sven
+/// Q715): the app's own settings, off where there are none (a test).
+@MainActor enum DeveloperPages {
+    static var on: Bool { PilotSettings.live?.developer ?? false }
+    static let help = "Developer pages: Configs, Agents and Repos, for people who live in config files and repos."
+}
+
+extension AppArea {
+    /// Its pages the window lists now: the developer pages only while the switch is on.
+    @MainActor var shown: [AppPage] { pages(developer: DeveloperPages.on) }
+}
+
+extension MenuRoot {
+    /// The root Hyper+Space and the Ring menu list now: the Config row only while the Developer switch is on.
+    @MainActor var listed: MenuRoot {
+        guard !DeveloperPages.on else { return self }
+        var root = self
+        root.extras.remove("config")
+        return root
     }
 }

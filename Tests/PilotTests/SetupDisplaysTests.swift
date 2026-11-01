@@ -22,11 +22,25 @@ struct SetupDisplaysTests {
         var modesByDisplay: [UInt32: [DisplayMode]] = [1: [wide, wideLow], 2: [portrait]]
         var applied: [(mode: DisplayMode, display: UInt32, permanently: Bool)] = []
 
-        func displays() -> [DisplayInfo] { screens }
+        func displays() -> [DisplayInfo] { stale ?? screens }
         func modes(_ display: UInt32) -> [DisplayMode] { modesByDisplay[display] ?? [] }
         func apply(_ mode: DisplayMode, to display: UInt32, permanently: Bool) throws {
             applied.append((mode, display, permanently))
             if let i = screens.firstIndex(where: { $0.id == display }) { screens[i].mode = mode }
+        }
+        /// Moves the screens as CoreGraphics would be asked to, so a render redraws them where they went. `lags` reads the
+        /// old places back until `settle`, as macOS may right after the call.
+        var arranged: [[UInt32: CGPoint]] = []
+        var lags = false, stale: [DisplayInfo]?
+        func settle() { stale = nil }
+        func arrange(_ origins: [UInt32: CGPoint]) throws {
+            arranged.append(origins)
+            if lags, stale == nil { stale = screens }
+            screens = screens.map { s in
+                guard let origin = origins[s.id] else { return s }
+                return DisplayInfo(id: s.id, name: s.name, main: s.main, frame: CGRect(origin: origin, size: s.frame.size), mode: s.mode,
+                                   rotation: s.rotation, displayUUID: s.displayUUID)
+            }
         }
     }
 

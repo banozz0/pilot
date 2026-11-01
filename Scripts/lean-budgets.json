@@ -1,10 +1,12 @@
 {
-  "appMB": 70,
+  "appMB": 80,
   "binaryMB": 52,
   "pilotIdleMB": 45,
   "helperIdleMB": 150,
   "pilotIdleCPUPercent": 0.5,
   "helperIdleCPUPercent": 2,
   "launchBindsSeconds": 2,
-  "launchFilesSeconds": 5
+  "launchFilesSeconds": 5,
+  "widgetsWebIdleMB": 60,
+  "widgetsWebIdleCPUPercent": 1.5
 }

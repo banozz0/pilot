@@ -424,7 +424,7 @@ extension HomeGreeting {
 
 /// A block's small card in the column, the same in every style; nil leaves it to the style (the Pilot block).
 struct HomeSmallBlock: View {
-    private enum Form { case workspaces, keyboard, mostUsed, clipboard, thisMac, page(String) }
+    private enum Form { case workspaces, keyboard, mostUsed, clipboard, thisMac, page(String), widget(HomeWidget) }
     private let form: Form
     private let parts: HomeParts
     /// Rows a list shows; nil fits them to the card's height.
@@ -441,8 +441,9 @@ struct HomeSmallBlock: View {
         case .thisMac?: form = .thisMac
         case .pilot?, .quickActions?: return nil
         case nil:
-            guard let ext = HomeLayout.extensionID(id) else { return nil }
-            form = .page(ext)
+            if let ext = HomeLayout.extensionID(id) { form = .page(ext) }
+            else if let widget = parts.widget(id) { form = .widget(widget) }
+            else { return nil }
         }
         self.parts = parts
         self.rows = rows
@@ -460,6 +461,7 @@ struct HomeSmallBlock: View {
             case .clipboard: HomeClipRows(parts: parts, rows: rows, fill: fill)
             case .thisMac: HomeMacRows(fill: fill)
             case .page(let ext): HomeExtensionBlock(id: ext, parts: parts, rows: rows, fill: fill)
+            case .widget(let widget): HomeWidgetBlock(widget: widget, parts: parts)
             }
         }
     }

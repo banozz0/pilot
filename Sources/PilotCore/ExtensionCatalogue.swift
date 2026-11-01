@@ -4,7 +4,7 @@ import Synchronization
 
 /// Pilot's extension catalogue (2026-10-10, ADR 0010): `index.json` at the root of banozz0/pilot-extensions, made by its
 /// `scripts/build-index.py`, lists each extension with its version, words, commands, what it says it touches and every
-/// file with its size and sha256. Pilot reads it only while the person looks at it (the Extensions page's Catalogue tab,
+/// file with its size and sha256. Pilot reads it only while the person looks at it (the Extensions page's one list, Q601,
 /// the menu's Extension catalogue, or Refresh), never at launch or in the background, and installs an entry's files
 /// only when each one hashes as listed (ExtensionInstaller).
 public enum ExtensionCatalogue {
@@ -256,6 +256,12 @@ public enum ExtensionCatalogue {
     /// The HUD after an install or update.
     public static func installedLine(_ entry: Entry, updated: Bool) -> String {
         "\(entry.title) \(updated ? "updated to \(entry.version)" : "installed"). Its commands are in Hyper+Space."
+    }
+
+    /// The HUD after Update all: how many updated, and which did not (each one's detail says why).
+    public static func updatedAllLine(updated: Int, failed: [String]) -> String {
+        if failed.isEmpty { return "Updated \(updated) extension\(updated == 1 ? "" : "s")." }
+        return "Updated \(updated) of \(updated + failed.count). \(spokenList(failed)) did not update; open \(failed.count == 1 ? "it" : "each") for why."
     }
 
     /// The HUD after a remove.

@@ -28,7 +28,7 @@ struct ClassicMenu: View {
             Group {
                 if model.atRoot {
                     ClassicRoot(model: model, pointer: pointer).overlay(alignment: .bottomTrailing) { actions(size.width) }
-                } else if nav.shownDetail == nil, model.scan == nil, !nav.rows.isEmpty {
+                } else if nav.shownDetail == nil, model.scan == nil, !model.showsDefine, !nav.rows.isEmpty {
                     HStack(spacing: 0) {
                         ClassicList(model: model, pointer: pointer)
                         // The Files view previews the selected file (spec file-search-v2 T2).

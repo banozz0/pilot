@@ -132,14 +132,25 @@ final class MicrophoneGrant {
 }
 
 /// The speech models Pilot's own dictation offers (story 194; Parakeet and the small Whisper added 2026-10-16, Sven:
-/// "download more speech models … Parakeet, the best one"). Each has a folder of its own under
-/// Speech, named by its raw value. Measured on Sven's M4 (2026-10-16): see SPEC story 194.
+/// "download more speech models … Parakeet, the best one"; Parakeet Ultra in place of TDT v3 in 1.0.2, Q719). Each has a
+/// folder of its own under Speech, named by its raw value. Measured on Sven's M4 (2026-10-16): see SPEC story 194.
 enum SpeechChoice: String, CaseIterable, Sendable {
-    case parakeet, whisperTurbo, whisperSmall
+    case parakeetUltra, whisperTurbo, whisperSmall
+    /// Parakeet TDT v3 in Speech/parakeet, which Ultra replaced: never offered or downloaded again, dictated on until
+    /// Ultra is on disk, removed on Sven's click.
+    case parakeetV3 = "parakeet"
+
+    /// What a page, onboarding and `pilot set` offer.
+    static let offered: [SpeechChoice] = [.parakeetUltra, .whisperTurbo, .whisperSmall]
+
+    /// The model this one took the place of, whose files dictation keeps using until this one is on disk.
+    var replaces: SpeechChoice? { self == .parakeetUltra ? .parakeetV3 : nil }
+    var replacement: SpeechChoice? { Self.allCases.first { $0.replaces == self } }
 
     var name: String {
         switch self {
-        case .parakeet: "Parakeet TDT v3"
+        case .parakeetUltra: "Parakeet Ultra"
+        case .parakeetV3: "Parakeet TDT v3"
         case .whisperTurbo: "Whisper large-v3 turbo"
         case .whisperSmall: "Whisper small"
         }
@@ -147,7 +158,8 @@ enum SpeechChoice: String, CaseIterable, Sendable {
 
     var megabytes: Int {
         switch self {
-        case .parakeet: 469
+        case .parakeetUltra: 632
+        case .parakeetV3: 469
         case .whisperTurbo: 632
         case .whisperSmall: 214
         }
@@ -158,7 +170,8 @@ enum SpeechChoice: String, CaseIterable, Sendable {
     /// What sets it apart, in a few words, with the credit its licence asks for.
     var note: String {
         switch self {
-        case .parakeet: "the fastest and lightest, best in English · NVIDIA, CC BY 4.0, through FluidAudio"
+        case .parakeetUltra: "the fastest, best in English · Moondream on NVIDIA's Parakeet, CC BY 4.0, through FluidAudio"
+        case .parakeetV3: "the fastest and lightest, best in English · NVIDIA, CC BY 4.0, through FluidAudio"
         case .whisperTurbo: "the most accurate, Spanish and 98 more languages · OpenAI, MIT"
         case .whisperSmall: "a third of the size, best in English · OpenAI, MIT"
         }
@@ -168,7 +181,8 @@ enum SpeechChoice: String, CaseIterable, Sendable {
     /// the folder's ready file last and reads it back from there.
     var helperName: String {
         switch self {
-        case .parakeet: "fluidaudio/v3"
+        case .parakeetUltra: "fluidaudio/ultra"
+        case .parakeetV3: "fluidaudio/v3"
         case .whisperTurbo: "whisperkit/large-v3-v20240930_turbo_632MB"
         case .whisperSmall: "whisperkit/small_216MB"
         }
@@ -206,13 +220,13 @@ final class SpeechModel {
     let choice: SpeechChoice
     let folder: URL
     private(set) var state: State
+    /// Whether its folder is there, a download cut short included: what Remove the old v3 files offers to delete.
+    private(set) var hasFiles: Bool
     @ObservationIgnored private let helper: DictateHelper
     /// Told when a download leaves the model on disk.
     @ObservationIgnored var onReady: (@MainActor () -> Void)?
     @ObservationIgnored private var run: DictateRun?
     @ObservationIgnored private var failure: String?
-    /// `run` is the background prepare, not a download.
-    @ObservationIgnored private var preparingInBackground = false
     /// Counts runs, so a stopped one's last lines and exit, which come up to seconds later, never touch the next.
     @ObservationIgnored private var generation = 0
 
@@ -221,6 +235,7 @@ final class SpeechModel {
         folder = base.appending(path: choice.rawValue)
         self.helper = helper
         state = Self.onDisk(folder, choice) ? .ready : .absent
+        hasFiles = FileManager.default.fileExists(atPath: folder.path)
     }
 
     var isReady: Bool { state == .ready }
@@ -229,12 +244,14 @@ final class SpeechModel {
         (try? String(contentsOf: folder.appending(path: readyFile), encoding: .utf8)) == choice.helperName
     }
 
-    /// Fetches and prepares the model; Download again after a failure or a cancel picks up the files already there.
+    /// Fetches and prepares the model; Download again after a failure or a cancel picks up the files already there. One
+    /// no longer offered never downloads, nor resumes.
     func download() {
-        guard run == nil, !isReady else { return }
+        guard run == nil, !isReady, SpeechChoice.offered.contains(choice) else { return }
         failure = nil
         state = .downloading(0)
         Self.markDownloading(folder, true)
+        hasFiles = true
         generation += 1
         let mine = generation
         run = helper.run(["download", folder.path, choice.helperName], heard: { [weak self] line in
@@ -265,15 +282,29 @@ final class SpeechModel {
         cancel()
         do { try FileManager.default.removeItem(at: folder) } catch { whisperLog.error("speech model: \(String(describing: error), privacy: .public)") }
         state = .absent
+        hasFiles = FileManager.default.fileExists(atPath: folder.path)
         whisperLog.notice("speech model \(self.choice.rawValue, privacy: .public): removed")
     }
 
     /// Reads the folder again after something outside moved it (Uninstall's Trash): gone, it waits for Download again.
-    func refresh() { state = Self.onDisk(folder, choice) ? .ready : .absent }
+    func refresh() {
+        state = Self.onDisk(folder, choice) ? .ready : .absent
+        hasFiles = FileManager.default.fileExists(atPath: folder.path)
+    }
 
-    /// The Neural Engine keeps its compile of the model for one helper's code signature, so a Pilot with a new helper
-    /// would make the first dictation wait minutes: the helper compiles it again in the background, a minute after launch
-    /// (Engine), and does nothing when it already has.
+    /// The folder's size on disk in MB, the Neural Engine's compile included; nil once it is gone.
+    nonisolated static func megabytes(_ folder: URL) -> Int? {
+        let files = FileManager.default
+        guard files.fileExists(atPath: folder.path), let walk = files.enumerator(at: folder, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])
+        else { return nil }
+        var bytes = 0
+        for case let file as URL in walk { bytes += (try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0 }
+        return bytes / 1_000_000
+    }
+
+    /// The Neural Engine's compile of the model lives in its folder (Helpers/pilot-dictate, Dictate), and a new helper, a
+    /// new macOS or a compile gone would make the first dictation wait minutes: the helper compiles it again in the
+    /// background, a minute after launch (Engine), and does nothing when it already has.
     func prepareInBackground() {
         guard isReady, run == nil else { return }
         generation += 1
@@ -283,18 +314,17 @@ final class SpeechModel {
         }, ended: { [weak self] _ in
             guard let self, generation == mine else { return }
             run = nil
-            preparingInBackground = false
         })
-        preparingInBackground = run != nil
+        // Takes wait on its compile (Dictate.load's lock), so a prepare still running after 10 minutes, past the longest
+        // compile measured (8 min, behind three others, 2026-10-31), counts as hung and stops; the next take compiles itself.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prepareLimit) { [weak self] in
+            guard let self, generation == mine, run != nil else { return }
+            whisperLog.error("speech model \(self.choice.rawValue, privacy: .public): prepare still running after \(Int(Self.prepareLimit)) s, stopped")
+            cancel()
+        }
     }
 
-    /// A take is starting: its own helper compiles the model if it must, so the background one stops rather than compile
-    /// it twice at once.
-    func stopPreparing() {
-        guard preparingInBackground else { return }
-        preparingInBackground = false
-        cancel()
-    }
+    static let prepareLimit: TimeInterval = 600
 
     private func heard(_ line: DictateLine) {
         switch line {
@@ -320,7 +350,8 @@ final class SpeechModel {
 
 /// Every speech model and the one in use (`dictation.model`): Sven's pick while on disk. The first model to reach the
 /// disk becomes the pick, and after that only Use changes it, so a later download never swaps the model he is used to;
-/// with the pick gone, the first one on disk in SpeechChoice's order takes over.
+/// with the pick gone, the first one on disk in SpeechChoice's order takes over. A pick of a replaced model (Parakeet v3)
+/// becomes its replacement, which dictates on the old files until it is downloaded itself.
 @Observable @MainActor
 final class SpeechModels {
     static let shared = SpeechModels()
@@ -328,22 +359,37 @@ final class SpeechModels {
     static let standardBase = PilotFolder.support.appending(path: "Speech")
 
     let all: [SpeechModel]
+    /// The Speech folder that holds each model's folder, and the takes a quit left (PilotDictation.collectKept).
+    let base: URL
     var pick: SpeechChoice? { didSet { defaults.set(pick?.rawValue, forKey: Self.key) } }
     @ObservationIgnored private let defaults: UserDefaults
 
     init(base: URL = standardBase, helper: DictateHelper = BundledDictateHelper(), defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
+        self.base = base
         Self.moveSingleModel(in: base)
         all = SpeechChoice.allCases.map { SpeechModel($0, base: base, helper: helper) }
-        pick = defaults.string(forKey: Self.key).flatMap(SpeechChoice.init)
+        let saved = defaults.string(forKey: Self.key).flatMap(SpeechChoice.init)
+        pick = saved?.replacement ?? saved
+        if let saved, saved.replacement != nil {
+            defaults.set(pick?.rawValue, forKey: Self.key)
+            whisperLog.notice("speech model: the pick \(saved.rawValue, privacy: .public) moved to \(self.pick?.rawValue ?? "", privacy: .public)")
+        }
         for model in all { model.onReady = { [weak self] in self?.settle() } }
         settle()
     }
 
     func model(_ choice: SpeechChoice) -> SpeechModel { all.first { $0.choice == choice }! }
 
-    /// The model dictation uses: the pick while on disk, else the first one on disk.
-    var active: SpeechModel? { pick.map(model).flatMap { $0.isReady ? $0 : nil } ?? all.first(where: \.isReady) }
+    /// The models a page lists: all but a replaced one.
+    var offered: [SpeechModel] { all.filter { SpeechChoice.offered.contains($0.choice) } }
+
+    /// The model dictation uses: the pick while on disk, the model it replaced while that one is, else the first one on disk.
+    var active: SpeechModel? { pick.flatMap(usable) ?? all.first(where: \.isReady) }
+
+    private func usable(_ choice: SpeechChoice) -> SpeechModel? {
+        [choice, choice.replaces].compactMap { $0 }.map(model).first(where: \.isReady)
+    }
 
     func remove(_ choice: SpeechChoice) {
         model(choice).remove()
@@ -360,13 +406,11 @@ final class SpeechModels {
     /// At launch: each download a quit cut off, from Settings or setup alike, starts again.
     func resume() { all.forEach { $0.resume() } }
 
-    func stopPreparing() { all.forEach { $0.stopPreparing() } }
-
-    /// No pick on disk: the first model that is becomes it.
+    /// No pick on disk: the first model that is becomes it, or its replacement when it was replaced.
     private func settle() {
-        guard pick.map(model)?.isReady != true, let first = all.first(where: \.isReady) else { return }
-        pick = first.choice
-        defaults.set(first.choice.rawValue, forKey: Self.key)
+        guard pick.flatMap(usable) == nil, let first = all.first(where: \.isReady) else { return }
+        pick = first.choice.replacement ?? first.choice
+        defaults.set(pick?.rawValue, forKey: Self.key)
     }
 
     /// Build 53 kept its one model, Whisper large-v3 turbo, in Speech itself: it moves into its own folder with the
@@ -385,6 +429,77 @@ final class SpeechModels {
             whisperLog.notice("speech model: moved Build 53's Whisper into its own folder")
         } catch {
             whisperLog.error("speech model: moving Build 53's Whisper: \(String(describing: error), privacy: .public)")
+        }
+    }
+}
+
+/// Voice › Words (Q598): the words and replacements Sven taught dictation (DictationWords), in the Speech folder beside
+/// the models, where pilot-dictate reads the words for Whisper's prompt. Every change is written at once.
+@Observable @MainActor
+final class DictationVocabulary {
+    static let shared = DictationVocabulary()
+
+    let file: URL
+    private(set) var taught: DictationWords
+
+    init(file: URL = DictationWords.file(in: SpeechModels.standardBase)) {
+        self.file = file
+        taught = DictationWords.read(file)
+    }
+
+    func learn(_ word: String) { change { $0.learn(word) } }
+    func forget(word: String) { change { $0.words.removeAll { $0 == word } } }
+    func replace(_ heard: String, with written: String) { change { $0.replace(heard, with: written) } }
+    func forget(_ replacement: DictationWords.Replacement) { change { $0.replacements.removeAll { $0 == replacement } } }
+
+    private func change(_ edit: (inout DictationWords) -> Void) {
+        var next = taught
+        edit(&next)
+        guard next != taught else { return }
+        taught = next
+        do { try next.write(to: file) } catch {
+            whisperLog.error("dictation words: not saved: \(String(describing: error), privacy: .public)")
+        }
+        whisperLog.notice("dictation words: \(next.words.count) words, \(next.replacements.count) replacements")
+    }
+}
+
+/// Voice › Recent takes (Q599): the last 20 takes' text as the model wrote it, when, how long, by which model and into
+/// which app, in one file in Pilot's folder; Clear empties it. No audio is kept, but for a take whose model was still loading
+/// at its stop, until it is written down (PilotDictation.collectKept).
+@Observable @MainActor
+final class DictationTakes {
+    static let shared = DictationTakes()
+
+    let file: URL
+    private(set) var takes: [DictationTake]
+
+    init(file: URL = PilotFolder.support.appending(path: "dictation-takes.json")) {
+        self.file = file
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        takes = (try? Data(contentsOf: file)).flatMap { try? decoder.decode([DictationTake].self, from: $0) } ?? []
+    }
+
+    func add(_ take: DictationTake) {
+        takes = DictationTake.adding(take, to: takes)
+        save()
+    }
+
+    func clear() {
+        takes = []
+        try? FileManager.default.removeItem(at: file)
+        whisperLog.notice("dictation takes: cleared")
+    }
+
+    private func save() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try encoder.encode(takes).write(to: file, options: .atomic)
+        } catch {
+            whisperLog.error("dictation takes: not saved: \(String(describing: error), privacy: .public)")
         }
     }
 }
@@ -423,7 +538,25 @@ final class PilotDictation {
         var label: String { self == .waveform ? "Waveform" : "Words" }
     }
 
+    /// Where a take shows (Sven, 2026-11-01): the floating pill, Pilot's top bar, or both. The top bar while it is off
+    /// falls back to the pill.
+    enum ShowIn: String, CaseIterable, Sendable {
+        case pill, topBar, both
+        var label: String {
+            switch self {
+            case .pill: "Floating pill"
+            case .topBar: "Top bar"
+            case .both: "Both"
+            }
+        }
+    }
+
+    static let openVoice = HUD.TipAction(title: "Open") { AppWindowController.shared.open(.voice) }
+    /// Dictate.keptPrefix in Helpers/pilot-dictate: a take's audio or text a quit left beside the models.
+    static let keptPrefix = "take-"
+
     static let whileSpeakingKey = "dictation.whileSpeaking", copyKey = "dictation.copy", pauseMediaKey = "dictation.pauseMedia"
+    static let showInKey = "dictation.showIn", waveColourKey = "dictation.waveColour", barSideKey = "dictation.barSide"
 
     private(set) var state = State.idle {
         didSet { if isLive != (oldValue == .starting || oldValue == .listening) { onLive(isLive) } }
@@ -433,6 +566,13 @@ final class PilotDictation {
     /// Told as a take becomes live and as it stops being live.
     @ObservationIgnored var onLive: @MainActor (Bool) -> Void = { _ in }
     var whileSpeaking: WhileSpeaking { didSet { defaults.set(whileSpeaking.rawValue, forKey: Self.whileSpeakingKey) } }
+    var showIn: ShowIn { didSet { defaults.set(showIn.rawValue, forKey: Self.showInKey) } }
+    /// Where in the top bar a take shows (Sven on build 9): left just after Pilot's mark, the centre beside its items, or
+    /// right before the status items.
+    var barSide: TopBarSide { didSet { defaults.set(barSide.rawValue, forKey: Self.barSideKey) } }
+    /// The waveform's colour, saved as "plain", "theme" or "#RRGGBB": nil is Plain, the look before this setting (white
+    /// on the pill, the bar's own ink in the top bar).
+    var waveColour: ColourChoice? { didSet { defaults.set(waveColour?.rawValue ?? ColourChoice.plain, forKey: Self.waveColourKey) } }
     /// A typed take's words are left on the clipboard too. Off, the paste puts Sven's own copy back, as before this
     /// setting: the words pass through the clipboard for half a second and the history skips them.
     var copiesText: Bool { didSet { defaults.set(copiesText, forKey: Self.copyKey) } }
@@ -442,6 +582,9 @@ final class PilotDictation {
     var isListening: Bool { state == .listening }
 
     let models: SpeechModels
+    /// What Sven taught dictation, and the takes kept for Voice › Recent takes.
+    let vocabulary: DictationVocabulary
+    let takes: DictationTakes
     @ObservationIgnored private let helper: DictateHelper
     @ObservationIgnored private let microphone: MicrophoneGrant
     @ObservationIgnored private let defaults: UserDefaults
@@ -463,6 +606,8 @@ final class PilotDictation {
     @ObservationIgnored private var slowTip: Watch?
     /// A lasting tip of ours is up and goes when the take is written down.
     @ObservationIgnored private var waitingTip = false
+    /// The kept takes' audio being written down now, by file name, so none is written down twice.
+    @ObservationIgnored private var recovering: [String: DictateRun] = [:]
 
     /// One take, in its own pilot-dictate. Each keeps what it was spoken to, so a take left to finish in the background
     /// (✕ while it is written down, or a press that starts the next one) types or offers its own words when they come and
@@ -486,7 +631,8 @@ final class PilotDictation {
         }
     }
 
-    init(models: SpeechModels = .shared, helper: DictateHelper = BundledDictateHelper(), microphone: MicrophoneGrant = .shared,
+    init(models: SpeechModels = .shared, vocabulary: DictationVocabulary = .shared, takes: DictationTakes = .shared,
+         helper: DictateHelper = BundledDictateHelper(), microphone: MicrophoneGrant = .shared,
          defaults: UserDefaults = .pilot(),
          paste: @escaping @MainActor (String, Bool) -> Void = { SnippetPaster().paste($0, thenCopy: $1 ? $0 : nil) },
          copy: @escaping @MainActor (String) -> Void = { NSPasteboard.general.clearContents(); NSPasteboard.general.setString($0, forType: .string) },
@@ -501,10 +647,15 @@ final class PilotDictation {
              return audio.defaultDevice(.input).map { id in audio.devices(.input).contains { $0.id == id } } ?? false
          }) {
         self.models = models
+        self.vocabulary = vocabulary
+        self.takes = takes
         self.helper = helper
         self.microphone = microphone
         self.defaults = defaults
         whileSpeaking = defaults.string(forKey: Self.whileSpeakingKey).flatMap(WhileSpeaking.init) ?? .waveform
+        showIn = defaults.string(forKey: Self.showInKey).flatMap(ShowIn.init) ?? .pill
+        barSide = defaults.string(forKey: Self.barSideKey).flatMap(TopBarSide.init) ?? .left
+        waveColour = defaults.string(forKey: Self.waveColourKey).flatMap(ColourChoice.init(rawValue:))
         copiesText = defaults.bool(forKey: Self.copyKey)
         pausesMedia = defaults.bool(forKey: Self.pauseMediaKey)
         self.media = MediaPause(media: media)
@@ -581,7 +732,7 @@ final class PilotDictation {
 
     private func start() -> Bool {
         guard let model = models.active else {
-            tell("Download a speech model first, in Voice › Dictation", 4, HUD.TipAction(title: "Open") { AppWindowController.shared.open(.voice) })
+            tell("Download a speech model first, in Voice › Dictation", 4, Self.openVoice)
             return false
         }
         guard hasMicrophone() else {
@@ -600,7 +751,8 @@ final class PilotDictation {
             tell(MicrophoneGrant.offTip, 4, MicrophoneGrant.open)
             return false
         }
-        models.stopPreparing()
+        // A background prepare goes on: the take's helper waits for its compile (Dictate.load's lock) and loads from it,
+        // where stopping it threw minutes of compiling away and the take started its own from nothing.
         let words = whileSpeaking == .words, take = Take()
         take.run = helper.run(["listen", model.folder.path] + (words ? ["--words"] : []),
                               heard: { [weak self] in self?.heard($0, take) }, ended: { [weak self] in self?.ended($0, take) })
@@ -636,7 +788,7 @@ final class PilotDictation {
         slowTip = after(4) { [weak self] in
             guard let self, current === take, state == .writing, !take.loaded else { return }
             waitingTip = true
-            tell("\(models.active?.choice.name ?? "The speech model") is getting ready, a one-time wait of up to three minutes. "
+            tell("\(models.active?.choice.name ?? "The speech model") is getting ready, a one-time wait of up to five minutes. "
                  + "Your words follow.", .infinity, nil)
         }
     }
@@ -658,11 +810,13 @@ final class PilotDictation {
             tell("The microphone went away: writing down what you said", 3, nil)
             stop()
         case .levels(let levels): show.levels(levels)
-        case .partial(let words): show.words(words)
+        // Replacements once, on the helper's own words: Undo's words come back through deliver already replaced.
+        case .partial(let words): show.words(vocabulary.taught.replaced(words))
         case .text(let text):
             take.answered = true
             whisperLog.notice("pilot dictation: text \(take.ms(since: take.stopped)) ms after the stop")
-            deliver(text, by: take)
+            keep(text, take)
+            deliver(vocabulary.taught.replaced(text), by: take)
         case .error(let reason):
             take.answered = true
             switch reason {
@@ -674,6 +828,15 @@ final class PilotDictation {
         }
     }
 
+    /// The take's words as the model wrote them, for Voice › Recent takes.
+    private func keep(_ text: String, _ take: Take) {
+        // Words said into a password field are never typed, so never kept either.
+        guard !text.isEmpty, !secureInput() else { return }
+        let seconds = take.stopped.map { ($0 - take.started).inSeconds }
+        let app = take.target.flatMap(NSRunningApplication.init(processIdentifier:))?.localizedName
+        takes.add(DictationTake(text: text, at: .now, seconds: seconds, model: models.active?.choice.name, app: app))
+    }
+
     /// `take`'s helper is gone. Each take has its own, so the next press starts a fresh one; one that quit before its
     /// words says so rather than leave the take silently empty.
     private func ended(_ status: Int32, _ take: Take) {
@@ -682,6 +845,9 @@ final class PilotDictation {
         if !take.answered, !take.cancelled, status != 0 {
             tell("Dictation stopped: the speech helper quit (exit \(status)). Press again to dictate.", 4, nil)
         }
+        // A take an earlier Pilot left may have been written down meanwhile. A helper that failed leaves its kept audio
+        // (Dictate.kept), which gets its one retry now rather than wait for the next launch.
+        collectKept(audio: status != 0)
         guard take === current else { return }
         current = nil
         media.takeEnded()
@@ -689,6 +855,69 @@ final class PilotDictation {
         dismissWaitingTip()
         show.ended()
     }
+
+    /// Takes a quit or relaunch left beside the models (Helpers/pilot-dictate main.swift; Sven, 2026-10-31: three takes
+    /// lost while the model compiled): the text of one written down after Pilot went, and with `audio` the audio of one
+    /// whose helper is gone, which the model in use writes down now. Text as each take ends; audio a minute after launch
+    /// (Engine) and as a take whose helper failed ends, never on a press, where its load would hold up the take's. Both go to Voice › Recent takes with a tip,
+    /// never typed into what is in front by now.
+    func collectKept(audio: Bool = false) {
+        let files = FileManager.default, prefix = Self.keptPrefix
+        let kept = ((try? files.contentsOfDirectory(at: models.base, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix(prefix) }
+        func modified(_ file: URL) -> Date { (try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .now }
+        // Words are never kept while a password field has the keyboard (keep): the text files wait for the next look.
+        // The audio retry goes on whatever it says, since secure input can stay on for hours; a text it brings back
+        // then waits as a file too (add(kept:)).
+        for file in kept where file.pathExtension == "txt" && !secureInput() {
+            if let text = try? String(contentsOf: file, encoding: .utf8), !text.isEmpty { add(kept: text, at: modified(file)) }
+            try? files.removeItem(at: file)
+        }
+        guard audio else { return }
+        let model = models.active
+        for file in kept where file.pathExtension == "wav" {
+            let name = file.lastPathComponent
+            guard recovering[name] == nil, let pid = pid_t(file.deletingPathExtension().lastPathComponent.dropFirst(prefix.count)),
+                  !Self.isHelper(pid) else { continue }
+            // No model left to write it down (removed meanwhile): the audio goes rather than wait for one.
+            guard let model else {
+                try? files.removeItem(at: file)
+                whisperLog.notice("pilot dictation: a take left by helper \(pid) dropped, no speech model on disk")
+                continue
+            }
+            let at = modified(file)
+            // One retry: the helper takes the WAV away once it answers or fails, and its end does if it was killed or
+            // crashed, so no audio waits beside the models for a second try.
+            recovering[name] = helper.run(["transcribe", model.folder.path, file.path], heard: { [weak self] line in
+                if case .text(let text) = line, !text.isEmpty { self?.add(kept: text, at: at) }
+            }, ended: { [weak self] status in
+                if FileManager.default.fileExists(atPath: file.path) {
+                    try? FileManager.default.removeItem(at: file)
+                    whisperLog.error("pilot dictation: a take left by helper \(pid) could not be written down (exit \(status)), dropped")
+                }
+                self?.recovering[name] = nil
+            })
+            whisperLog.notice("pilot dictation: a take left by helper \(pid) is written down again")
+        }
+    }
+
+    private func add(kept text: String, at: Date) {
+        // A password field took the keyboard meanwhile: back beside the models, Sven's alone, for the next look.
+        if secureInput() {
+            var file = models.base.appending(path: "\(Self.keptPrefix)\(UUID().uuidString).txt")
+            FileManager.default.createFile(atPath: file.path, contents: Data(text.utf8), attributes: [.posixPermissions: 0o600])
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? file.setResourceValues(values)
+            return
+        }
+        takes.add(DictationTake(text: text, at: at, model: models.active?.choice.name))
+        whisperLog.notice("pilot dictation: a take Pilot could not type, \(text.count) characters, kept in Recent takes")
+        tell("A take Pilot could not type is in Voice › Recent takes", 5, Self.openVoice)
+    }
+
+    /// Whether `pid` is a pilot-dictate still at work, whose take is its own to answer.
+    static func isHelper(_ pid: pid_t) -> Bool { SecureInputMonitor.processName(pid) == "pilot-dictate" }
 
     private func dismissWaitingTip() {
         slowTip?.cancel()

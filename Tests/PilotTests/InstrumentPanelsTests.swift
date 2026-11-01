@@ -118,7 +118,7 @@ struct InstrumentPanelsTests {
         },
         Case(name: "dropdown", surface: .barPopovers) {
             typealias On = DropdownQuickSwitchesTests.Fake
-            return AnyView(PilotDropdown(switches: QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true)),
+            return AnyView(PilotDropdown(switches: QuickSwitches(hyper: On(true), tiling: On(true), topBar: On(false), keepAwake: On(false), clipboard: On(true), dictation: On(true)),
                                          option: false).environment(Engine()))
         },
         // Binds' sheet draws in the Binds page's style (the page itself is another designer's).

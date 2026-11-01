@@ -1,0 +1,10 @@
+{
+  "id": "desk-calendar",
+  "title": "Calendar",
+  "icon": "📅",
+  "version": "1.0",
+  "description": "This week as a strip and today's events, read from Calendar once access is given in the clock's popover.",
+  "draw": "html",
+  "data": {"reading": ["clock", "calendar"]},
+  "size": {"width": 280, "height": 280}
+}

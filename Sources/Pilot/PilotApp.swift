@@ -65,8 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KokoroModel.shared.resume()
         // Nothing about this Mac is read while the screen is locked or asleep (card agent-bo-95422839).
         // The sampler, the bars' timed readings, the secure-input check and the clipboard's poll all wait for an unlock.
-        let engine: [any ScreenPausing] = Engine.shared.map { [$0.barSources.readings, $0.secureInput] } ?? []
-        ScreenEvents.shared.start(pausing: [SystemSampler.shared, ClipboardHistory.shared, WallpaperSettings.shared] + engine)
+        let engine: [any ScreenPausing] = Engine.shared.map { [$0.barSources.readings, $0.secureInput, $0.shelf.pictures] } ?? []
+        ScreenEvents.shared.start(pausing: [SystemSampler.shared, ClipboardHistory.shared, WallpaperSettings.shared, WidgetDesk.shared] + engine)
         // Look › Wallpaper's Change on its own (story 160): a timer only while an interval is set.
         WallpaperSettings.shared.schedule()
         // Defaults › Folders' GIFs folder, handed to Stickers before the menu first lists it.
@@ -94,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         // The pilot command's socket (ADR 0013).
         ControlSocket.serve()
+        // Web apps an older Pilot made get this one's web app, each once it is not running (bug 2026-11-01).
+        InstallModule.updateWebApps()
     }
 
     /// pilot://press?layer=capslock|lctl|rctl|lopt|ropt|lcmd|rcmd|chord|plain&key=k[&tap=1][&shift=1][&ctrl=1][&alt=1|left|right][&cmd=…][&app=Finder]&token=… posts the keys itself (the manual test

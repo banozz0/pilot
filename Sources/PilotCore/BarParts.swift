@@ -116,6 +116,16 @@ public struct BarInputs: Sendable {
 /// Pilot's recorder as Capture's item draws it (Recorder.phase), the time in seconds with pauses left out.
 public enum BarRecording: Equatable, Sendable {
     case starting, counting(Int), recording(Double), paused(Double)
+
+    /// "Recording in 3", "Recording · 2:14", "Recording paused · 2:14": the bar's tooltip and the dropdown's Now say it so.
+    public var words: String {
+        switch self {
+        case .starting: "Recording is starting"
+        case .counting(let n): "Recording in \(n)"
+        case .recording(let seconds): "Recording · \(RecordingClock.label(seconds))"
+        case .paused(let seconds): "Recording paused · \(RecordingClock.label(seconds))"
+        }
+    }
 }
 
 /// One hit target of an item: the parts it draws and what a click on them does.

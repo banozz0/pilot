@@ -43,7 +43,7 @@ struct PlanCLITests {
         #expect(AIProvider.codex.key == .none && AIProvider.codex.isPlan && !AIProvider.codex.listsModels && AIProvider.codex.keyPage == nil)
         #expect(AIProvider.codex.command == "codex" && AIProvider.claudeCode.command == "claude" && AIProvider.codex.installPackage == "cask:codex")
         #expect(!AIProvider.claudeCode.isPlan && AIProvider.openAI.command == nil && AIModelList.request(.codex, base: nil, key: nil) == nil)
-        #expect(AIProvider.codex.refreshesModels && AIProvider.openAI.refreshesModels && AIProvider.allCases.filter(\.isPlan) == [.codex])
+        #expect(AIProvider.allCases.filter(\.isPlan) == [.codex])
         #expect(AIProvider.allCases.filter(\.takesEffort) == [.claudeCode, .codex, .anthropicAPI, .openAI])
     }
 

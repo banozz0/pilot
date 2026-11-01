@@ -136,6 +136,11 @@ public struct PilotBlock: Codable, Equatable, Sendable {
                   glide: try c.decodeIfPresent(Bool.self, forKey: .glide) ?? true)
     }
 
+    /// The Window shelf's room at the left edge of a monitor showing a Stage workspace, in points (ADR 0015: Q660's 172,
+    /// grown for Sven's bigger cards, about Stage Manager's strip on a 1440 pt tall screen): the tiler keeps it free and
+    /// the shelf panel fills it.
+    public static let shelfWidth = 232
+
     /// What yabai floated that Pilot keeps (card agent-bo-95422769, Sven's call 2026-10-05): Finder, by bundle id (C8).
     public static let yabaiFloats = ["com.apple.finder"]
 

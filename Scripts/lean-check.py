@@ -13,8 +13,11 @@ Idle waits --settle seconds (default 60, 0 for a Pilot up a while), then reads R
 --window seconds, so the helper's startup walk is not counted. Run it with Pilot left alone: nothing open, no menu, nothing typed.
 Pilot's idle RAM is read only before its app window first opens: memory a page took stays counted after the window
 closes (malloc keeps what it freed until the Mac runs short), so a Pilot whose window opened since launch is missing.
+Idle also counts the WebKit processes serving Pilot's web widgets (ADR 0016, T25): XPC services, not Pilot's children,
+found by the process macOS holds responsible for them. Until lean-budgets.json has their keys (widgetsWebIdleMB,
+widgetsWebIdleCPUPercent; they change only on Sven's yes) the line is printed with the proposed budget and fails nothing.
 """
-import argparse, datetime, json, os, re, select, subprocess, sys, time
+import argparse, ctypes, datetime, json, os, re, select, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MARKS = {"binds": ":engine] tap installed", "files": 'files: {"ready":true'}
@@ -59,6 +62,29 @@ def pids():
     return int(pilot[0]), int(helper[0]) if helper else None
 
 
+# The widgets' WebKit budget proposed from T15's numbers (one page: WebContent 12, GPU 12, Networking 4.7 MB; each
+# further page 13 to 22 MB; a shown static page 0.0 % CPU): two pages' worth, and Pilot's own idle CPU line.
+PROPOSED_WEB = {"widgetsWebIdleMB": 60, "widgetsWebIdleCPUPercent": 1.5}
+
+
+def webkit(pilot):
+    """The WebKit processes macOS holds Pilot responsible for (WebContent, GPU, Networking), as Activity Monitor groups
+    them: responsibility_get_pid_responsible_for_pid, in libSystem; None when it is not there, so the line says MISSING
+    rather than reading as no page open."""
+    try:
+        responsible = ctypes.CDLL(None).responsibility_get_pid_responsible_for_pid
+    except AttributeError:
+        return None
+    responsible.restype, responsible.argtypes = ctypes.c_int, [ctypes.c_int]
+    out = subprocess.run(["ps", "-A", "-o", "pid=,comm="], capture_output=True, text=True).stdout
+    found = []
+    for line in out.splitlines():
+        pid, _, comm = line.strip().partition(" ")
+        if "com.apple.WebKit." in comm and pid.isdigit() and responsible(int(pid)) == pilot:
+            found.append(int(pid))
+    return found
+
+
 def window_opened(pid):
     """When Pilot's app window first opened since this launch ("2026-10-10 19:04:52"), None when it has not."""
     started = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
@@ -78,7 +104,11 @@ class Report:
         self.code = self.code or 2
         print(f"MISSING {name}: {why}")
 
-    def check(self, name, value, budget, unit):
+    def check(self, name, value, budget, unit, proposed=False):
+        """`proposed`: a reading with no budget in lean-budgets.json yet, shown with the one proposed, never failing."""
+        if proposed:
+            shown = "no reading" if value is None else f"{value:.2f} {unit}"
+            return print(f"info {name}: {shown} (proposed budget {budget:g} {unit}, not in lean-budgets.json)")
         if value is None:
             return self.missing(name)
         ok = value <= budget
@@ -102,17 +132,32 @@ def idle(budgets, report, settle, window):
             procs.append((name, key, pid))
         else:
             report.missing(f"{name} running")
-    before = {pid: cpu_seconds(pid) for _, _, pid in procs}
+    found = webkit(pilot) if pilot else []
+    web = found or []
+    before = {pid: cpu_seconds(pid) for pid in [p for _, _, p in procs] + web}
     time.sleep(window)
+
+    def cpu_percent(pid):
+        after = cpu_seconds(pid)
+        return None if after is None or before.get(pid) is None else (after - before[pid]) / window * 100
+
     opened = window_opened(pilot) if pilot else None
     for name, key, pid in procs:
-        after = cpu_seconds(pid)
-        used = None if after is None or before[pid] is None else (after - before[pid]) / window * 100
+        used = cpu_percent(pid)
         if pid == pilot and opened:
             report.missing(f"{name} idle RAM", f"the app window opened at {opened}, so relaunch Pilot (lane 1: `all`)")
         else:
             report.check(f"{name} idle RAM", footprint_mb(pid), budgets[f"{key}IdleMB"], "MB")
         report.check(f"{name} idle CPU over {window} s", used, budgets[f"{key}IdleCPUPercent"], "%")
+    # The widgets' pages, summed: none open reads 0 MB and 0 %.
+    rams, cpus = [footprint_mb(pid) for pid in web], [cpu_percent(pid) for pid in web]
+    ram, cpu = (None if None in rams else sum(rams)), (None if None in cpus else sum(cpus))
+    if found is None:
+        return report.missing("widgets' WebKit", "macOS's responsible-process lookup is not there, so its processes cannot be found")
+    name = f"widgets' WebKit ({len(web)} process{'' if len(web) == 1 else 'es'})"
+    for key, value, label, unit in (("widgetsWebIdleMB", ram, f"{name} idle RAM", "MB"),
+                                    ("widgetsWebIdleCPUPercent", cpu, f"{name} idle CPU over {window} s", "%")):
+        report.check(label, value, budgets.get(key, PROPOSED_WEB[key]), unit, proposed=key not in budgets)
 
 
 def quit_pilot():

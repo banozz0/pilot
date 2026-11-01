@@ -60,10 +60,12 @@ struct ToyAsk<Buttons: View, Foot: View>: View {
 /// one, last.
 struct ToyExtensionAlert: View {
     let alert: Extension.AlertSpec
+    var extra: AnyView?
     var press: (Int?) -> Void
 
     var body: some View {
         ToyAsk(symbol: "bell.fill", module: 3, title: alert.text, detail: alert.note) {
+            extra
             ForEach(ExtensionAlertButton.all(alert).reversed()) { button in
                 if button.primary { Button(button.title) { press(button.id) }.buttonStyle(.pilotPrimary) }
                 else { Button(button.title) { press(button.id) }.buttonStyle(.pilot) }

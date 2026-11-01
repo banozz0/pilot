@@ -57,9 +57,9 @@ struct InstallSearchRenders {
         let shipped = try FileManager.default.contentsOfDirectory(atPath: packaging.path).filter { $0.hasSuffix(".png") }
         #expect(shipped.count >= 60)
         let catalogue = try InstallCatalogue.parse(Data(contentsOf: packaging.deletingLastPathComponent().appending(path: "install-catalogue.json")))
-        // Every app has its picture; only fonts and four command-line tools with no logo of their own keep their glyph.
+        // Every app has its picture; only fonts and the command-line tools with no logo of their own keep their glyph.
         let bare = catalogue.filter { !shipped.contains("\($0.id).png") }.map(\.id)
-        #expect(bare.allSatisfy { $0.hasPrefix("font-") || ["telegram-tools", "discord-tools-cli", "easy-cd", "lazygit"].contains($0) }, "\(bare)")
+        #expect(bare.allSatisfy { $0.hasPrefix("font-") || ["telegram-tools", "discord-tools-cli", "easy-cd", "lazygit", "ripgrep", "fzf", "bat", "zoxide", "fd", "jq", "tmux"].contains($0) }, "\(bare)")
         let spotify = try #require(catalogue.first { $0.id == "spotify" })
         #expect(MenuIcon.catalogue(spotify).bundled == "spotify")
         #expect(MenuEntries.install(catalogue, installed: []).first { $0.title == "Spotify" }?.icon?.bundled == "spotify",

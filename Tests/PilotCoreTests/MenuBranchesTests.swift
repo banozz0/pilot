@@ -62,10 +62,10 @@ struct MenuBranchesTests {
         #expect(nav.selected?.title == "Learn")
     }
 
-    @Test("Trigger holds Capture, the emoji grid, the colour picker, clipboard history, Stickers and GIFs, Translate, Reminders, Snippets, Notes and QR; Capture holds the grabs")
+    @Test("Trigger holds Capture, the emoji grid, the colour picker, clipboard history, Stickers and GIFs, Translate, Define, Reminders, Snippets, Notes and QR; Capture holds the grabs")
     func trigger() {
         let trigger = MenuNavigator(entries: Self.entries(), branch: .trigger)
-        #expect(ids(trigger) == ["branch:capture", "branch:emoji", "captures.pickColour", "apps.clipboard", "branch:stickers", "branch:translate", "branch:reminders",
+        #expect(ids(trigger) == ["branch:capture", "branch:emoji", "captures.pickColour", "apps.clipboard", "branch:stickers", "branch:translate", "branch:define", "branch:reminders",
                                "branch:snippets", "branch:notes", "branch:qr"])
         #expect(trigger.rows[0].detail == "Hyper+Ctrl+C")
         let capture = MenuNavigator(entries: Self.entries(), branch: .capture)

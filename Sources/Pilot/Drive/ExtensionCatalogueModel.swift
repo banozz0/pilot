@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import PilotCore
 
-/// The extension catalogue's state (2026-10-10), shared by the Extensions page's Catalogue tab and the menu's Extension
+/// The extension catalogue's state (2026-10-10), shared by the Extensions page's one list (Q601) and the menu's Extension
 /// catalogue: the index, read from GitHub only when one of them opens or Refresh is pressed and kept ten minutes; which
 /// extensions are installed at which version, read from the Extensions folder each time; and each entry's install,
 /// update or remove while it runs, with why it failed.

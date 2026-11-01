@@ -129,8 +129,11 @@ public enum QuickAI {
     public static func chatArguments(session: String?, model: String? = nil, effort: AIEffort = .low, now: AIChat.Now = .current,
                                      picture: Bool = false) -> [String] {
         arguments(prompt: AIChat.prompt(at: now), session: .kept(session), model: model, effort: effort)
-            + (picture ? ["--input-format", "stream-json"] : [])
+            + (picture ? pictureInput : [])
     }
+
+    /// The flags that make claude read its message as stream-json, a picture in it (QuickAI.message).
+    public static let pictureInput = ["--input-format", "stream-json"]
 
     /// A message with a picture as claude's `--input-format stream-json` takes it on stdin (story 191; probed on 2.1.296,
     /// 2026-10-16): one user message, the image block then the text, on one line.
@@ -267,6 +270,77 @@ public struct ClaudeCLI: Sendable {
         guard let (answer, isError) = final.withLock({ $0 }) else { throw .failed("no answer came back") }
         guard !isError else { throw await signedIn() ? .failed(answer) : .signedOut }
         return (answer, session.withLock { $0 })
+    }
+
+    // MARK: Models
+
+    /// `claude -p /model`, which the CLI answers itself with no model turn (2.1.312, probed 2026-10-31: num_turns 0, no
+    /// cost): the init line names the model the alias runs, the answer lists the aliases. Low effort and no session, so a
+    /// CLI that one day sends it to a model spends the least.
+    static func modelArguments(_ alias: String?) -> [String] {
+        ["-p", "/model", "--output-format", "stream-json", "--verbose", "--tools", "", "--safe-mode", "--effort", "low",
+         "--no-session-persistence"] + (alias.map { ["--model", $0] } ?? [])
+    }
+
+    /// What `/model` printed: the model id the init line names, and the plain aliases its usage line lists ("Available:
+    /// sonnet, opus, haiku, fable, best, sonnet[1m], …, opusplan, default, or a full model ID"), less the CLI's default,
+    /// `best` and `opusplan`, which pick a model rather than name one. `spent` when a model turn ran after all, or the
+    /// result line no longer says none did (num_turns 0, cost 0, no model usage).
+    public struct ModelReport: Equatable, Sendable {
+        public let model: String
+        public let aliases: [String]
+        public let spent: Bool
+    }
+
+    public static func modelReport(_ output: String) -> ModelReport? {
+        var model: String?, aliases: [String] = [], spent = true
+        for line in output.split(separator: "\n") where line.contains(#""type":"system""#) || line.contains(#""type":"result""#) {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+            if object["subtype"] as? String == "init" { model = object["model"] as? String }
+            guard object["type"] as? String == "result" else { continue }
+            spent = object["num_turns"] as? Int != 0 || (object["total_cost_usd"] as? Double ?? 1) > 0
+                || (object["modelUsage"] as? [String: Any])?.isEmpty != true
+            let said = object["result"] as? String ?? ""
+            guard let start = said.range(of: "Available: ") else { continue }
+            aliases = said[start.upperBound...].prefix { $0 != "\n" }.components(separatedBy: ", ")
+                .filter { $0.allSatisfy(\.isLowercase) && !$0.isEmpty && !["default", "best", "opusplan"].contains($0) }
+        }
+        return model.map { ModelReport(model: $0, aliases: aliases, spent: spent) }
+    }
+
+    /// "Opus 5.5" for `claude-opus-5-5`, "Haiku 4.5" for `claude-haiku-4-5-20251001`, "Sonnet 3.5" for the older
+    /// `claude-3-5-sonnet-…`: the family, then the version, the date and any `[1m]` dropped. Any other id as it is.
+    public static func modelName(_ id: String) -> String {
+        guard id.hasPrefix("claude-") else { return id }
+        let parts = id.dropFirst("claude-".count).prefix { $0 != "[" }.split(separator: "-")
+        let words = parts.filter { !$0.allSatisfy(\.isNumber) }, numbers = parts.filter { $0.allSatisfy(\.isNumber) && $0.count < 8 }
+        guard !words.isEmpty, !numbers.isEmpty else { return id }
+        return words.map(\.capitalized).joined(separator: " ") + " " + numbers.joined(separator: ".")
+    }
+
+    /// The picker's rows, versions read from the CLI: its default first, then each alias, named by what it runs ("Opus
+    /// 5.5"), or by both when the person's own settings send it elsewhere ("Haiku · runs Opus 5.5"). One `/model` at a
+    /// time; one that ran a model turn stops the rest.
+    public func models() async throws(QuickAI.Failure) -> [AIModelChoice] {
+        let first = try await report(nil)
+        var rows = [AIModelChoice(nil, "Claude Code's default · \(Self.modelName(first.model))")]
+        for alias in first.aliases {
+            let name = Self.modelName(try await report(alias).model)
+            rows.append(AIModelChoice(alias, name.lowercased().hasPrefix(alias) ? name : "\(alias.capitalized) · runs \(name)"))
+        }
+        return rows
+    }
+
+    private func report(_ alias: String?) async throws(QuickAI.Failure) -> ModelReport {
+        let out: String
+        do {
+            out = try await ChildProcess.run(path, Self.modelArguments(alias), environment: ChildProcess.toolEnvironment(path), timeout: .seconds(20))
+        } catch {
+            throw await signedIn() ? .failed((error as? ChildProcess.Failure)?.message ?? error.localizedDescription) : .signedOut
+        }
+        guard let report = Self.modelReport(out) else { throw .failed("claude's /model came back in a shape Pilot does not read") }
+        guard !report.spent else { throw .failed("claude answered /model with a model turn, so Pilot stopped asking") }
+        return report
     }
 
     /// `claude auth status --json`'s loggedIn, nothing else read; true when it cannot tell, so the CLI's own message shows.

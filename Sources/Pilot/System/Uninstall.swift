@@ -122,8 +122,12 @@ enum Uninstall {
         // The rest of Pilot's folder: binds, settings, reports, notes, snapshots. The socket stays: the pilot command
         // talks over it until Pilot quits.
         let claimed = Set(([speech, upscale, giphy, index, support.appending(path: "pilot.sock")] + clipboard + extensions).map(\.lastPathComponent))
+        // Speech's own files beside the models (the words dictation was taught, DictationWords) go with the rest.
+        let speechFiles = ((try? fm.contentsOfDirectory(at: speech, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true }
+            .map(\.lastPathComponent).sorted().map { speech.appending(path: $0) }
         let rest = ((try? fm.contentsOfDirectory(atPath: support.path(percentEncoded: false))) ?? [])
-            .filter { !claimed.contains($0) }.sorted().map { support.appending(path: $0) }
+            .filter { !claimed.contains($0) }.sorted().map { support.appending(path: $0) } + speechFiles
         add(.rest, "Binds, settings and reports", "Everything else in Pilot's folder, and its preferences", rest,
             measured: [places.library.appending(path: "Preferences/\(id).plist")])
 
@@ -255,7 +259,8 @@ struct UninstallLive {
     static let none = UninstallLive(before: { _ in }, after: { _ in }, relaunch: {}, quit: {})
 
     /// Nothing reads a model while it goes: the take, downloads, prepares and Read aloud stop. The file index helper
-    /// ends without saving, and the login item goes while the bundle is still where it was registered from.
+    /// ends without saving, and the login item goes while the bundle is still where it was registered from. Finder's
+    /// hidden flags Pilot set (Hidden apps) come off with its settings or with Pilot.
     @MainActor static func stop(_ items: [UninstallItem]) {
         for item in items {
             switch item.kind {
@@ -266,7 +271,10 @@ struct UninstallLive {
                 if ReadAloud.shared.isBusy { ReadAloud.shared.stop() }
                 KokoroModel.shared.cancel()
             case .fileIndex: FileIndex.shared.discard()
+            // Finder shows the apps Pilot hid there again before the list goes with the preferences, or Pilot with it.
+            case .rest: HiddenApps.shared.clearFinderFlags()
             case .pilot:
+                HiddenApps.shared.clearFinderFlags()
                 do { try SMAppService.mainApp.unregister() } catch { ulog.error("uninstall: login item: \(error.localizedDescription, privacy: .public)") }
             default: break
             }

@@ -395,12 +395,12 @@ struct ExtensionCatalogueTests {
 
     // MARK: The page's place
 
-    @Test("pilot://open?page=extensions&tab=catalogue opens Extensions' Catalogue, Install's catalogue keeps its own; the tabs are Installed and Catalogue")
+    @Test("pilot://open?page=extensions&tab=catalogue opens the one Extensions list at its catalogue, Install's catalogue keeps its own; Extensions has no tabs (Q601)")
     func place() {
         #expect(AppPlace.linked(URL(string: "pilot://open?page=extensions&tab=catalogue")!) == AppPlace(.extensions, .extensionCatalogue))
         #expect(AppPlace.linked(URL(string: "pilot://open?page=install&tab=catalogue")!) == AppPlace(.install, .catalogue))
         #expect(AppPlace.linked(URL(string: "pilot://open?page=pomodoro")!) == AppPlace(.extensions, .extensionCatalogue))
-        #expect(AppPage.extensions.tabs.map(\.title) == ["Installed", "Catalogue"] && AppPage.extensions.firstSection == nil)
+        #expect(AppPage.extensions.tabs.isEmpty && AppPage.extensions.firstSection == nil)
         #expect(AppPlace.search("pomodoro").first == AppPlace(.extensionCatalogue) && AppPlace.search("install extension") == [AppPlace(.extensionCatalogue)])
     }
 }

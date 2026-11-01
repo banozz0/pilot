@@ -20,7 +20,7 @@ extension ControlVerbs {
             let row = await tools.prefRow(preference, of: ext)
             // A password set is deleted from the Keychain only after Allow; anything else goes back to its default as the page's field does.
             if row.passwordSet == true {
-                let ask = ControlGate.Ask("Clear extension password", "\(ExtensionTools.named(ext))'s \(ControlGate.Ask.visible(preference.title)) (\(ext.id).\(preference.name)) is deleted from your Keychain")
+                let ask = ControlGate.Ask("Clear extension password", "\(ExtensionTools.named(ext))'s \(preference.title) (\(ext.id).\(preference.name)) is deleted from your Keychain")
                 try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in try await tools.save(nil, for: preference, of: ext) }
             } else if row.passwordSet == nil {
                 try await tools.save(nil, for: preference, of: ext)

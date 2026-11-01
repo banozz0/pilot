@@ -440,3 +440,24 @@ enum VisibleTerminal {
         ilog.notice("visible run: \(command, privacy: .public)")
     }
 }
+
+extension InstallModule {
+    /// Web apps an older Pilot made get this one's web app (bug 2026-11-01: Messenger's sign-in left for Chrome): each
+    /// that is not running now, and each running one as it quits; none is ever quit for it. Off the main thread.
+    static func updateWebApps() {
+        update(only: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { note in
+            guard let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier,
+                  id.hasPrefix(WebAppSpec.bundleIDPrefix) else { return }
+            Task { @MainActor in update(only: id) }
+        }
+    }
+
+    private static func update(only id: String?) {
+        Task {
+            for outcome in await WebAppRebuild.refreshStale(only: id) {
+                ilog.notice("web app update \(outcome.name, privacy: .public): \(outcome.failure ?? "done", privacy: .public)")
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 ---
 name: extension
-title: Write an extension
+title: Make an extension
 description: Writes, tests and installs a new Hyper+Space command from your idea
 when: The user wants a new extension made
 symbol: hammer

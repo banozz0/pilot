@@ -41,9 +41,9 @@ final class ControlStatus {
     /// read the Mac or wait on a reading, so only `--part` asks them).
     enum Part: String, CaseIterable {
         case line, hyper, `switch`, permissions, engine, problems, today, loginItem, commandLink, update, folder
-        case workspaces, onboarding, presses, mac
+        case workspaces, onboarding, presses, mac, widgets, shelf
 
-        var shown: Bool { ![.workspaces, .onboarding, .presses, .mac].contains(self) }
+        var shown: Bool { ![.workspaces, .onboarding, .presses, .mac, .widgets, .shelf].contains(self) }
 
         var help: String {
             switch self {
@@ -62,6 +62,8 @@ final class ControlStatus {
             case .onboarding: "onboarding's Permissions, each row done or not (runs pgrep and TCC checks)"
             case .presses: "the 20 most run actions of all time, from the counts behind the overlay's most used"
             case .mac: "Home's This Mac: chip, CPU, memory, disk, temperature (waits up to 5 s for a reading)"
+            case .widgets: "the desktop's widgets: each installed one with its trust, each placement shown or hidden and why, each screen's workspace and Show desktop"
+            case .shelf: "the Window shelf on each screen showing a Stage workspace, its pictures, and Pilot's memory and CPU over 2 s"
             }
         }
     }
@@ -153,6 +155,10 @@ final class ControlStatus {
             return Self.counts(engine.topPresses(20))
         case .mac:
             return Self.thisMac(await sample())
+        case .widgets:
+            return WidgetDesk.shared.status()
+        case .shelf:
+            return await engine.shelf.status()
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import PilotCore
 import SwiftUI
 
 /// What shows while Pilot dictates (Q239, Sven 2026-10-17): a small dark pill at
@@ -6,10 +7,28 @@ import SwiftUI
 /// microphone as a take starts, and after a cancel one offering its words back. Mode lights' microphone light still
 /// follows Pilot's listening. The panel never becomes key, so the app Sven speaks to keeps the keyboard and the paste.
 /// With Dictation › While you speak on Words, the pill is wider and shows the words so far, the newest in view, beside a
-/// smaller waveform; a pass's new words come in one by one, the ones it kept staying put.
+/// smaller waveform; a pass's new words come in one by one, the ones it kept staying put. Dictation › Show it in puts the
+/// waveform in Pilot's top bar instead of the pill, or in both (DictationBarItem); the toasts stay at the foot of the screen.
 @Observable @MainActor
 final class DictationOverlay: DictationShowing {
-    static let shared = DictationOverlay()
+    static let shared = DictationOverlay(setup: {
+        let dictation = PilotDictation.shared
+        return Setup(showIn: dictation.showIn, barSide: dictation.barSide, colour: dictation.waveColour, topBarShows: Engine.shared?.topBar.isOn ?? false)
+    })
+
+    /// Where a take shows and the waveform's colour, read as each take starts (Sven, 2026-11-01).
+    struct Setup: Equatable {
+        var showIn = PilotDictation.ShowIn.pill
+        /// Where in the top bar: Dictation › Position.
+        var barSide = TopBarSide.left
+        /// nil is Plain: white on the pill, the bar's own ink in the bar.
+        var colour: ColourChoice?
+        /// Pilot's top bar is on; off, a take meant for it shows in the pill.
+        var topBarShows = false
+
+        var inBar: Bool { showIn != .pill && topBarShows }
+        var inPill: Bool { showIn != .topBar || !topBarShows }
+    }
 
     enum Phase: Equatable { case hidden, listening, writing }
     enum Toast: Equatable {
@@ -21,6 +40,8 @@ final class DictationOverlay: DictationShowing {
 
     /// The bars the waveform draws, newest on the right; the words pill draws the last `wordsBars`.
     static let bars = 18, wordsBars = 8
+    /// The top bar's waveform: the last 12 readings, so it takes little of the bar.
+    static let topBarBars = 12
     static let microphoneSeconds: TimeInterval = 2, recoverSeconds: TimeInterval = 6
 
     private(set) var phase = Phase.hidden
@@ -31,7 +52,15 @@ final class DictationOverlay: DictationShowing {
     /// Every word of the latest words so far, and how many of them show yet.
     private(set) var spoken: [SpokenWord] = []
     private(set) var revealed = 0
+    /// This take's: the pill, the top bar, and the waveform's colour.
+    private(set) var setup = Setup()
+    /// The pill, or the top bar, shows this take. The bars read only `inBar`, the setup first: with Show it in on the pill
+    /// alone they never read the phase, so a take never redraws them.
+    var inPill: Bool { phase != .hidden && setup.inPill }
+    var inBar: Bool { setup.inBar && phase != .hidden }
     var words: String { spoken.map(\.text).joined(separator: " ") }
+    /// The words that show yet.
+    var shown: [SpokenWord] { Array(spoken.prefix(revealed)) }
 
     @ObservationIgnored private(set) var cancel: @MainActor () -> Void = {}
     @ObservationIgnored private(set) var finish: @MainActor () -> Void = {}
@@ -46,14 +75,17 @@ final class DictationOverlay: DictationShowing {
     @ObservationIgnored private var passGap: TimeInterval?
     /// False in the renders: the model changes, no panel opens.
     @ObservationIgnored private let shows: Bool
+    @ObservationIgnored private let readSetup: @MainActor () -> Setup
     @ObservationIgnored private var panel: NSPanel?
     /// The bottom centre the panel grows up from, picked as it opens.
     @ObservationIgnored private var anchor = CGPoint.zero
 
-    init(after: @escaping Watch.After = Watch.after, now: @escaping () -> Date = Date.init, shows: Bool = true) {
+    init(after: @escaping Watch.After = Watch.after, now: @escaping () -> Date = Date.init, shows: Bool = true,
+         setup: @escaping @MainActor () -> Setup = { Setup() }) {
         self.after = after
         self.now = now
         self.shows = shows
+        readSetup = setup
     }
 
     func bind(cancel: @escaping @MainActor () -> Void, finish: @escaping @MainActor () -> Void, recover: @escaping @MainActor (String) -> Void) {
@@ -61,6 +93,8 @@ final class DictationOverlay: DictationShowing {
     }
 
     func started(microphone: String?, words: Bool) {
+        let read = readSetup()
+        if read != setup { setup = read }
         phase = .listening
         levels = Array(repeating: 0, count: Self.bars)
         showsWords = words
@@ -174,10 +208,11 @@ final class DictationOverlay: DictationShowing {
 
     // MARK: The panel
 
-    /// Open while there is a pill or a toast to show, closed otherwise.
+    /// Open while there is a pill or a toast to show, closed otherwise: a take shown in the top bar alone opens it for
+    /// its toasts only.
     private func refresh() {
         guard shows else { return }
-        if phase == .hidden && toast == nil {
+        if !inPill && toast == nil {
             panel?.orderOut(nil)
             panel = nil
             return
@@ -229,7 +264,7 @@ struct DictationOverlayView: View {
             case .recover?: DictationRecoverToast(overlay: overlay)
             case nil: EmptyView()
             }
-            if overlay.phase != .hidden {
+            if overlay.inPill {
                 if overlay.showsWords { DictationWordsPill(overlay: overlay) } else { DictationPill(overlay: overlay) }
             }
         }
@@ -247,7 +282,7 @@ struct DictationPill: View {
         HStack(spacing: 8) {
             Button { overlay.cancel() } label: { DictationCircle(symbol: "xmark", light: false) }
                 .accessibilityLabel("Cancel dictation")
-            DictationWave(levels: overlay.levels).opacity(writing ? 0.35 : 1)
+            DictationLiveWave(overlay: overlay, bars: DictationOverlay.bars).opacity(writing ? 0.35 : 1)
             Button { overlay.finish() } label: { DictationCircle(symbol: "checkmark", light: true) }
                 .disabled(writing).opacity(writing ? 0.35 : 1)
                 .accessibilityLabel("Finish dictation")
@@ -275,7 +310,7 @@ struct DictationWordsPill: View {
 
     var body: some View {
         let writing = overlay.phase == .writing
-        let shown = Array(overlay.spoken.prefix(overlay.revealed))
+        let shown = overlay.shown
         HStack(spacing: 10) {
             Button { overlay.cancel() } label: { DictationCircle(symbol: "xmark", light: false) }
                 .accessibilityLabel("Cancel dictation")
@@ -296,7 +331,7 @@ struct DictationWordsPill: View {
             .fixedSize(horizontal: false, vertical: true)
             .clipped()
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.25)], startPoint: .top, endPoint: .bottom))
-            DictationLiveWave(overlay: overlay).opacity(writing ? 0.35 : 1)
+            DictationLiveWave(overlay: overlay, bars: DictationOverlay.wordsBars).opacity(writing ? 0.35 : 1)
             Button { overlay.finish() } label: { DictationCircle(symbol: "checkmark", light: true) }
                 .disabled(writing).opacity(writing ? 0.35 : 1)
                 .accessibilityLabel("Finish dictation")
@@ -308,11 +343,69 @@ struct DictationWordsPill: View {
     }
 }
 
-/// The words pill's small waveform, reading the levels itself: ten readings a second redraw it alone, never the words.
+/// A waveform of the last `bars` readings, reading the levels itself: ten readings a second redraw it alone, never the
+/// words or the bar around it. Its size is fixed, so a reading never lays out what holds it.
 struct DictationLiveWave: View {
     let overlay: DictationOverlay
+    let bars: Int
+    /// Plain's colour: the pill's white, the bar's ink.
+    var plain = DictationWave.white
 
-    var body: some View { DictationWave(levels: Array(overlay.levels.suffix(DictationOverlay.wordsBars))) }
+    var body: some View {
+        DictationWave(levels: Array(overlay.levels.suffix(bars)), colour: overlay.waveColour(plain: plain))
+            .frame(width: CGFloat(bars) * 4.5 - 2, height: 18)
+    }
+}
+
+/// The take in Pilot's top bar (Dictation › Show it in), just after Pilot's mark: the waveform, and at Words the newest
+/// words on one line beside it while the bar has room (it folds to the waveform alone first). A click finishes the take as
+/// the pill's ✓ does; Esc still cancels it.
+struct DictationBarItem: View {
+    @Environment(\.style) private var style
+    let overlay: DictationOverlay
+
+    static let wordsWidth: CGFloat = 170
+
+    var body: some View {
+        let writing = overlay.phase == .writing
+        Button { overlay.finish() } label: {
+            HStack(spacing: 0) {
+                DictationLiveWave(overlay: overlay, bars: DictationOverlay.topBarBars, plain: BarMetrics.glyphInk(style))
+                if overlay.showsWords {
+                    // The words while the bar has room, else nothing: one waveform either way.
+                    ViewThatFits(in: .horizontal) {
+                        DictationBarWords(overlay: overlay).frame(width: Self.wordsWidth, alignment: .leading).padding(.leading, 8)
+                        Color.clear.frame(width: 0)
+                    }
+                }
+            }
+            .opacity(writing ? 0.35 : 1)
+            .padding(.horizontal, 4)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(writing)
+        .help("Dictating: click to finish, Esc cancels")
+        .accessibilityLabel("Finish dictation")
+        .toyIsland(.pilot)
+    }
+}
+
+/// The top bar's words: one line, the newest in view, the oldest cut at the front.
+struct DictationBarWords: View {
+    @Environment(\.style) private var style
+    let overlay: DictationOverlay
+
+    var body: some View {
+        let shown = overlay.shown.map(\.text).joined(separator: " ")
+        Text(shown.isEmpty ? "Listening…" : shown)
+            .foregroundStyle(shown.isEmpty ? style.color(\.text3) : style.color(\.text))
+            .lineLimit(1).truncationMode(.head)
+            // Each word that comes in is a reveal step under an animation: unanimated here, or the bar redraws at the
+            // display's rate while Sven speaks.
+            .transaction { $0.animation = nil }
+    }
 }
 
 /// The pill's round buttons: ✕ quiet, ✓ white.
@@ -326,14 +419,24 @@ struct DictationCircle: View {
     }
 }
 
+extension DictationOverlay {
+    /// The waveform's colour this take: Plain draws `plain` (the pill's white, the bar's ink), Theme the theme's signal
+    /// colour, Custom the one picked.
+    func waveColour(plain: Color) -> Color {
+        setup.colour.map { Color(Paint($0.resolved(Look.shared.theme.accent))) } ?? plain
+    }
+}
+
 /// The microphone's last readings as bars of dots: a dot each while it is quiet.
 struct DictationWave: View {
+    static let white = Color.white.opacity(0.92)
     let levels: [Double]
+    let colour: Color
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(levels.indices, id: \.self) { i in
-                Capsule().fill(.white.opacity(0.92)).frame(width: 2.5, height: 2.5 + 13 * levels[i])
+                Capsule().fill(colour).frame(width: 2.5, height: 2.5 + 13 * levels[i])
             }
         }
         // Unanimated: ten readings a second already move, and an animation would redraw at the display's rate.

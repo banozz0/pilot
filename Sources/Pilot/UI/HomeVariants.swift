@@ -8,9 +8,12 @@ import SwiftUI
 
 /// What a block's smaller sizes keep of an extension's page.
 enum HomeVariant {
-    /// A medium card: the page's first stats or meter block and at most `rows` rows of its first list, or its first
-    /// buttons when it has no list; a page with none of them keeps its first block.
+    /// A medium card: a page of usage cards keeps just their meters (`usage`); else the page's first stats or meter block
+    /// and at most `rows` rows of its first list, or its first buttons when it has no list; a page with none of them keeps
+    /// its first block.
     static func medium(_ blocks: [Extension.Block], rows: Int = 3) -> [Extension.Block] {
+        let cards = usage(blocks)
+        if !cards.isEmpty { return cards }
         let flat = flattened(blocks)
         var kept: [Extension.Block] = []
         if let figures = flat.first(where: { if case .stats = $0 { true } else if case .meter = $0 { true } else { false } }) { kept.append(figures) }
@@ -20,6 +23,20 @@ enum HomeVariant {
             kept.append(buttons)
         }
         return kept.isEmpty ? Array(flat.prefix(1)) : kept
+    }
+
+    /// The page's usage cards, cut to their meters: each top-level section holding a meter and no list (AI usage's
+    /// Claude and Codex), so Home shows just the usage lines, each under its card's head; the status rows, links and
+    /// buttons stay on the page (Sven on 1.0.2: "ai usage should show just usage lines"). A section with a list (Now
+    /// playing's track) is no usage card.
+    static func usage(_ blocks: [Extension.Block]) -> [Extension.Block] {
+        blocks.compactMap { block in
+            guard case .section(let title, let subtitle, let aside, let asideNote, let inner, let icon, let help) = block,
+                  !inner.contains(where: { if case .list = $0 { true } else { false } }) else { return nil }
+            let meters = inner.filter { if case .meter = $0 { true } else { false } }
+            return meters.isEmpty ? nil
+                : .section(title: title, subtitle: subtitle, aside: aside, asideNote: asideNote, blocks: meters, icon: icon, help: help)
+        }
     }
 
     /// An icon tab's figure: the first stat, else the first meter's value; its label under it.
@@ -34,8 +51,10 @@ enum HomeVariant {
         return nil
     }
 
-    /// The rows of the page's first list, which a small card folds.
+    /// The rows of the page's first list, which a small card folds; none on a page of usage cards, whose small card is
+    /// its usage lines too.
     static func list(_ blocks: [Extension.Block]) -> [Extension.Item]? {
+        guard usage(blocks).isEmpty else { return nil }
         for block in flattened(blocks) { if case .list(_, let items, _) = block { return items } }
         return nil
     }
@@ -66,14 +85,17 @@ extension HomeLayout.Block {
 /// A block's large or medium form that every style draws alike: an extension's page, and Workspaces and the keyboard
 /// medium (a strip, a small board); nil leaves the block to its style.
 struct HomeSharedBlock: View {
-    private enum Form { case page(String), strip, board }
+    private enum Form { case page(String), widget(HomeWidget), strip, board }
     private let form: Form
     private let parts: HomeParts
 
     init?(id: String, parts: HomeParts) {
         let medium = parts.size(id) != .large
         switch HomeLayout.Block(rawValue: id) {
-        case nil: guard let ext = HomeLayout.extensionID(id) else { return nil }; form = .page(ext)
+        case nil:
+            if let ext = HomeLayout.extensionID(id) { form = .page(ext) }
+            else if let widget = parts.widget(id) { form = .widget(widget) }
+            else { return nil }
         case .workspaces where medium: form = .strip
         case .keyboard where medium: form = .board
         default: return nil
@@ -84,6 +106,7 @@ struct HomeSharedBlock: View {
     var body: some View {
         switch form {
         case .page(let ext): HomeExtensionBlock(id: ext, parts: parts)
+        case .widget(let widget): HomeWidgetBlock(widget: widget, parts: parts)
         case .strip: HomeWorkspaceStrip(parts: parts)
         case .board: HomeMiniBoard(parts: parts)
         }
@@ -115,6 +138,8 @@ private struct GlanceReader<Content: View>: View {
     var body: some View {
         if let block = HomeLayout.Block(rawValue: id) {
             content(builtIn(block))
+        } else if let widget = parts.widget(id) {
+            content(HomeGlance(emoji: widget.model.icon, title: widget.title))
         } else if let ext = HomeLayout.extensionID(id) {
             let model = parts.pageModel(ext)
             let link = parts.pages.first { $0.id == ext }
@@ -152,6 +177,7 @@ private struct GlanceReader<Content: View>: View {
 @MainActor
 private func openFull(_ id: String, parts: HomeParts) {
     if let block = HomeLayout.Block(rawValue: id) { parts.go(block.place) } else if let ext = HomeLayout.extensionID(id) { parts.openExtension(ext) }
+    else if HomeLayout.widgetID(id) != nil { parts.go(AppPlace(.widgets)) }
 }
 
 /// A block closed to a tab in the column: its symbol and its figure as a badge; resting on it shows the block's small

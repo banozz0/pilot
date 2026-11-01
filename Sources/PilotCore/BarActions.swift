@@ -195,12 +195,11 @@ public enum BarTooltip {
         case .askAI: return "Drop Ask AI · click shows or hides it"
         case .modes: return StatusDots.summary(i.statusLights)
         case .capture:
-            switch i.recording {
-            case nil: return "Capture · click for every capture and recording"
-            case .starting: return "Recording is starting"
-            case .counting(let n): return "Recording in \(n)"
-            case .recording(let seconds): return "Recording · \(RecordingClock.label(seconds)) · click to stop or pause"
-            case .paused(let seconds): return "Recording paused · \(RecordingClock.label(seconds)) · click to resume or stop"
+            guard let recording = i.recording else { return "Capture · click for every capture and recording" }
+            switch recording {
+            case .starting, .counting: return recording.words
+            case .recording: return recording.words + " · click to stop or pause"
+            case .paused: return recording.words + " · click to resume or stop"
             }
         case .spacer, .divider, .group: return kind.title
         }

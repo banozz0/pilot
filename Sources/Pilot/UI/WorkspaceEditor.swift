@@ -89,9 +89,9 @@ struct WorkspaceEditor: View {
         var overflows: ((Bool) -> Void)?
     }
 
-    /// A spot on the preview: a placed app's, the dashed one where the next app goes, or (on the page) the Add of the
-    /// apps that always land on the workspace.
-    enum Spot: Hashable { case app(Int), next, rule }
+    /// A spot on the preview: a placed app's, one of the layout's empty ones or the strip where the next app goes (each
+    /// adds the app, which lands in the first), or (on the page) the Add of the apps that always land on the workspace.
+    enum Spot: Hashable { case app(Int), open(Int), rule }
 
     /// An app or a web app the picker offers; a web app shows its site.
     struct AppChoice: Hashable {
@@ -435,10 +435,20 @@ struct WorkspaceEditorPanel: View {
                 .padding(.bottom, 6)
             OpensHere(draft: $draft)
             VStack(spacing: 0) {
-                Toggle(isOn: $draft.openMissing) {
-                    Text("Open what is missing when I switch here").font(ink.ui(13)).foregroundStyle(ink.text)
+                HStack(spacing: 6) {
+                    Toggle(isOn: $draft.openMissing) {
+                        Text("Open what is missing when I switch here").font(ink.ui(13)).foregroundStyle(ink.text).lineLimit(1)
+                    }
+                    .toggleStyle(.pilotSwitchRow(info: Self.openMissingInfo))
+                    ink.line.frame(width: 1, height: 18).padding(.horizontal, 4)
+                    Button("Open now") { presets.openLayout(workspace) }
+                        .buttonStyle(PilotButtonStyle(ghost: true))
+                        .disabled(draft.apps.isEmpty)
+                        .help(Self.openNowInfo)
+                    BindKey(action: "workspaces.openLayout")
+                    InfoMark(text: Self.openNowInfo)
                 }
-                .toggleStyle(.pilotSwitchRow(info: Self.openMissingInfo))
+                .font(ink.ui(12))
                 .frame(minHeight: 38)
                 ink.line.frame(height: 1)
                 Toggle(isOn: Binding(get: { draft.keepsLayout }, set: { draft.keepLayout = $0 })) {
@@ -466,6 +476,7 @@ struct WorkspaceEditorPanel: View {
     }
 
     static let openMissingInfo = "Switching here also opens each of these apps that has no window yet, instead of only pulling in the windows already open."
+    static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off. Restore is different: it puts back a window snapshot."
     static let keepLayoutInfo = "On (the default): Pilot lays this workspace out again in this layout every time a window opens or closes on it. Off: a new window goes wherever the tiler puts it."
     static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Home's keys. It saves when you press Return or click elsewhere."
     static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two apps to set how wide each is. Every change saves at once."
@@ -522,11 +533,13 @@ struct WorkspaceEditorPanel: View {
         if let spot = picking, let frame = spots[spot] {
             let placed = Set(draft.apps.map(\.bundleId))
             let offered = switch spot {
-            case .next: choices.filter { !placed.contains($0.bundle) }
+            case .open: choices.filter { !placed.contains($0.bundle) }
             case .rule: choices.filter { !(extras?.ruled.contains($0.bundle) ?? false) }
             case .app: choices
             }
             let matches = AppPicker.Matches(offered, query: query)
+            // Only a placed app's picker marks the apps already here, which it trades spots with.
+            let marked: Set<String> = if case .app = spot { placed } else { [] }
             GeometryReader { g in
                 let natural = AppPicker.height(for: matches)
                 let room = (below: g.size.height + 14 - frame.maxY - 6, above: frame.minY - 6 + 14)
@@ -534,11 +547,11 @@ struct WorkspaceEditorPanel: View {
                 let height = min(natural, under ? room.below : room.above)
                 ZStack(alignment: .topLeading) {
                     Color.clear.contentShape(.rect).onTapGesture { withAnimation(Kit.change) { picking = nil } }
-                    AppPicker(matches: matches, height: height, placed: spot == .next || spot == .rule ? [] : placed,
+                    AppPicker(matches: matches, height: height, placed: marked,
                               query: $query, hover: $pickerHover) { choice in
                         withAnimation(Kit.change) {
                             switch spot {
-                            case .next: draft.add(bundleId: choice.bundle, name: choice.name)
+                            case .open: draft.add(bundleId: choice.bundle, name: choice.name)
                             case .app(let i): draft.replace(at: i, bundleId: choice.bundle, name: choice.name)
                             case .rule: extras?.addRule(choice.bundle)
                             }
@@ -826,8 +839,8 @@ private struct LayoutPicture: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// The picture's blocks in a unit square: a ready layout as it lays three apps (four for the grid, and for scrolling,
-    /// whose fourth peeks in at the edge), own sizes three columns of their own widths.
+    /// The picture's blocks in a unit square: a ready layout as it lays its spots (and for scrolling one more, which peeks
+    /// in at the edge), own sizes three columns of their own widths.
     private var blocks: [CGRect] {
         let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
         switch choice.preset {
@@ -836,7 +849,7 @@ private struct LayoutPicture: View {
             var x: CGFloat = 0
             return widths.map { w in defer { x += w / sum }; return CGRect(x: x, y: 0, width: w / sum, height: 1) }
         case let preset?:
-            return preset.tiles(preset == .grid || preset == .scrolling ? 4 : 3, in: unit)
+            return preset.tiles(LayoutPreset.spots(preset) + (preset == .scrolling ? 1 : 0), in: unit)
         }
     }
 }

@@ -55,8 +55,9 @@ final class ExtensionTools {
     func installed(_ id: String) -> Extension? { Extension.find(in: extensions).extensions.first { $0.id == id } }
 
     /// The commands as their action ids with the file each runs, a hidden one marked: what runs as Sven once it is in.
+    /// Raw, as `named` is: the question escapes each of its lines once (AllowPromptView.thing).
     static func commands(_ ext: Extension) -> String {
-        ext.commands.map { "\($0.actionID) (\($0.mode.rawValue)\($0.hidden ? ", hidden" : "")) runs \(ControlGate.Ask.visible(program($0, in: ext)))" }
+        ext.commands.map { "\($0.actionID) (\($0.mode.rawValue)\($0.hidden ? ", hidden" : "")) runs \(program($0, in: ext))" }
             .joined(separator: ", ")
     }
 
@@ -65,8 +66,31 @@ final class ExtensionTools {
         String(command.program.standardizedFileURL.path.dropFirst(ext.folder.standardizedFileURL.path.count + 1))
     }
 
-    static func named(_ ext: Extension) -> String {
-        "\(ext.id) (\(ControlGate.Ask.visible(ext.title))\(ext.version.map { " \(ControlGate.Ask.visible($0))" } ?? ""))"
+    static func named(_ ext: Extension) -> String { "\(ext.id) (\(ext.title)\(ext.version.map { " \($0)" } ?? ""))" }
+
+    // A summary's words (ControlGate.Ask.summed), raw, as the prompt escapes them once, each line kept one line. Pilot
+    // speaks in them: an extension is named by its id, which the check holds to a-z, 0-9 and hyphens, and a version only
+    // when it reads as one, never by its own title (review 1); and whatever the caller or the extension names, a path or
+    // a file, comes last on its line, after a colon, so none of Pilot's words follow it.
+
+    /// "weather 1.3.0": the id, then the version when it reads as one.
+    static func titled(_ id: String, _ version: String?) -> String { id + (checked(version).map { " \($0)" } ?? "") }
+
+    /// `version` when it reads as one (digits and dots), else nil.
+    static func checked(_ version: String?) -> String? { version.flatMap { ExtensionCatalogue.Version($0) == nil ? nil : $0 } }
+
+    /// "Runs its own program as you: main.py", or each command once for a test; up to three files named, then "…".
+    static func runs(_ programs: [String], commands: Int, once: Bool = false) -> String {
+        let what = once ? "each of its \(commands) command\(commands == 1 ? "" : "s") once" : programs.isEmpty
+            ? "its \(commands) command\(commands == 1 ? "" : "s")" : "its own program\(programs.count == 1 ? "" : "s")"
+        guard !programs.isEmpty else { return "Runs \(what) as you" }
+        return "Runs \(what) as you: " + programs.prefix(3).joined(separator: ", ") + (programs.count > 3 ? ", …" : "")
+    }
+
+    /// What an install does to the copies in, before where it comes from.
+    static func trashes(_ copies: Int) -> String {
+        copies == 1 ? "The installed copy goes to the Trash, its data and settings stay."
+            : "The \(copies) installed copies go to the Trash, their data and settings stay."
     }
 
     /// The install's question: the folder it was read from, every file it copies (the files commands run and every executable first, then
@@ -76,36 +100,49 @@ final class ExtensionTools {
     func installAsk(_ ext: Extension, _ entry: ExtensionCatalogue.Entry, from source: URL) -> ControlGate.Ask {
         let runs = Dictionary(grouping: ext.commands) { Self.program($0, in: ext) }
         let programs = entry.files.filter { runs[$0.path] != nil || $0.executable }.map { file in
-            ControlGate.Ask.visible(file.path) + (runs[file.path].map { " (runs \($0.map(\.name).joined(separator: ", ")))" } ?? " (executable)")
+            file.path + (runs[file.path].map { " (runs \($0.map(\.name).joined(separator: ", ")))" } ?? " (executable)")
         }
-        let others = entry.files.filter { runs[$0.path] == nil && !$0.executable }.map { ControlGate.Ask.visible($0.path) }
-        let replaces: String
+        let others = entry.files.filter { runs[$0.path] == nil && !$0.executable }.map(\.path)
+        let replaces: String, headline: String, fromLine: String
+        let from = "From the folder: \(source.path)", version = Self.checked(ext.version) ?? "this copy"
         do {
             let old = try ExtensionCheck.replaced(ext.id, in: extensions)
             replaces = old.isEmpty ? "replaces nothing: no extension \(ext.id) is installed" : "replaces " + old.map { folder in
-                ((try? Extension(folder: folder)).map(Self.named) ?? ext.id) + " at " + ControlGate.Ask.visible(folder.path)
+                ((try? Extension(folder: folder)).map(Self.named) ?? ext.id) + " at " + folder.path
             }.joined(separator: " and ") + ", which go\(old.count == 1 ? "es" : "") to the Trash; its data and settings stay"
+            // A folder says what it likes about itself, so a copy in is only ever replaced, never "updated"; the one copy's
+            // version is named, two or more are only counted.
+            let was = old.count == 1 ? (try? Extension(folder: old[0]))?.version : nil
+            headline = old.isEmpty ? "Install extension \(Self.titled(ext.id, ext.version))?" : "Replace extension \(Self.titled(ext.id, was)) with \(version)?"
+            fromLine = old.isEmpty ? from : "\(Self.trashes(old.count)) \(from)"
         } catch {
             replaces = ExtensionCatalogue.Problem.reason(error)
+            headline = "Replace what is in place of extension \(ext.id) with \(version)?"
+            fromLine = "Its place in Extensions holds something else; Show details says what. \(from)"
         }
-        return .install(.extension, """
-            \(Self.named(ext)) from \(ControlGate.Ask.visible(source.path))
-            into \(ControlGate.Ask.visible(extensions.appending(path: ext.id).path))
-            programs: \(programs.joined(separator: ", "))
-            other files: \(others.isEmpty ? "none" : others.joined(separator: ", ")); \(entry.files.count) files in all, \(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-            commands, run as you: \(Self.commands(ext))
-            \(replaces)
-            """)
+        // Every program the whole names, the ones commands run and every other executable.
+        let named = entry.files.filter { runs[$0.path] != nil || $0.executable }.map(\.path)
+        // A line each, raw: the question escapes each once and keeps it one line, a break typed in a title or a path only
+        // marked ⏎ (AllowPromptView.thing), so none starts a line of its own.
+        return ControlGate.Ask.install(.extension, lines: [
+            "\(Self.named(ext)) from \(source.path)",
+            "into \(extensions.appending(path: ext.id).path)",
+            "programs: \(programs.joined(separator: ", "))",
+            "other files: \(others.isEmpty ? "none" : others.joined(separator: ", ")); \(entry.files.count) files in all, \(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))",
+            "commands, run as you: \(Self.commands(ext))",
+            replaces,
+        ]).summed(headline, [Self.runs(named, commands: ext.commands.count), fromLine])
     }
 
     /// Read again after Allow: an extension changed or gone while asking denies.
     func removeAsk(_ id: String) -> ControlGate.Ask {
         guard let ext = installed(id) else { return .remove(.extension, "\(id), not installed") }
-        return .remove(.extension, """
-            \(Self.named(ext)) at \(ControlGate.Ask.visible(ext.folder.path)) goes to the Trash
-            commands that go with it: \(Self.commands(ext))
-            its data and settings stay in \(ControlGate.Ask.visible(data.appending(path: id).path))
-            """)
+        return ControlGate.Ask.remove(.extension, lines: [
+            "\(Self.named(ext)) at \(ext.folder.path) goes to the Trash",
+            "commands that go with it: \(Self.commands(ext))",
+            "its data and settings stay in \(data.appending(path: id).path)",
+        ]).summed("Remove extension \(Self.titled(ext.id, ext.version))?",
+                        ["It goes to the Trash with its \(ext.commands.count) command\(ext.commands.count == 1 ? "" : "s"); its data and settings stay"])
     }
 
     /// The question reading `folder` asks before the check reads it, nil inside `readable`. The folder is compared with
@@ -113,7 +150,7 @@ final class ExtensionTools {
     func readAsk(_ folder: URL) -> ControlGate.Ask? {
         let real = folder.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         guard !readable.contains(where: { real.starts(with: $0.pathComponents) }) else { return nil }
-        return ControlGate.Ask("Read folder", "Pilot reads \(ControlGate.Ask.visible(folder.path)) to check it as an extension; only the check's summary comes back")
+        return ControlGate.Ask("Read folder", "Pilot reads \(folder.path) to check it as an extension; only the check's summary comes back")
     }
 
     /// `folder` read into a temporary copy once Pilot may read it (Moody on W15): its path resolved once, asked about
@@ -136,10 +173,13 @@ final class ExtensionTools {
 
     /// `ext test`'s question: each command runs once as Sven, so it asks as a script does.
     static func testAsk(_ ext: Extension, from source: URL) -> ControlGate.Ask {
-        ControlGate.Ask("Test extension", """
-            run each command of \(named(ext)) once, as you, from a copy of \(ControlGate.Ask.visible(source.path)), HOME in a temporary folder
-            commands: \(commands(ext))
-            """)
+        let programs = Array(Set(ext.commands.map { program($0, in: ext) })).sorted()
+        return ControlGate.Ask("Test extension", lines: [
+            "run each command of \(named(ext)) once, as you, from a copy of \(source.path), HOME in a temporary folder",
+            "commands: \(commands(ext))",
+        ]).summed("Test extension \(titled(ext.id, ext.version))?",
+                        [runs(programs, commands: ext.commands.count, once: true),
+                         "HOME in a temporary folder, from a copy of the folder: \(source.path)"])
     }
 }
 

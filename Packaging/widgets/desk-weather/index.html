@@ -1,0 +1,103 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .now { display: flex; align-items: center; gap: 12px; }
+  .now .pk-glyph { width: 34px; height: 34px; stroke-width: 1.25; color: var(--pk-text2); }
+  .now .pk-hero { font-size: 44px; }
+  .now .range-today { margin-left: auto; text-align: right; font-size: 11px; color: var(--pk-text2); line-height: 1.5; }
+  .now .range-today span { color: var(--pk-text3); font-size: 9.5px; letter-spacing: 0.08em; }
+  .hours { position: relative; }
+  .ticks { position: relative; height: 26px; margin-top: 4px; }
+  .ticks > div { position: absolute; top: 0; transform: translateX(-50%); text-align: center; line-height: 1.25; }
+  .ticks > div:first-child { transform: none; text-align: left; }
+  .ticks > div:last-child { transform: translateX(-100%); text-align: right; }
+  .ticks b { display: block; font-weight: 400; color: var(--pk-text); }
+  .ticks span { font-size: 9.5px; color: var(--pk-text3); }
+  .days { display: flex; flex-direction: column; gap: 2px; }
+  .day { display: grid; grid-template-columns: 34px 16px 30px minmax(0, 1fr) 28px 28px; align-items: center; gap: 8px; height: 20px; }
+  .day .name { color: var(--pk-text2); }
+  .day .pk-glyph { color: var(--pk-text2); }
+  .day .rain { font-size: 9.5px; color: var(--pk-text3); text-align: right; }
+  .day .lo { color: var(--pk-text3); text-align: right; }
+  .day .hi { text-align: right; }
+  .range { position: relative; height: 4px; border-radius: 2px; background: var(--pk-track); }
+  .range > i { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--pk-text2); }
+  .day.today .name { color: var(--pk-text); }
+  .day.today .range > i { background: var(--pk-accent); }
+  #body { display: flex; flex-direction: column; gap: 10px; }
+  .now .place { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--pk-text2); }
+  /* By size (Pilot's class on <html>; the kit's .pk-only-* and .pk-not-* show and hide the parts). Large: everything.
+     Wide: now, feels and rain beside the next days. Square: now, feels and rain. Strip: the now line, its place beside it. */
+  html.size-strip .pk { padding-top: 8px; padding-bottom: 8px; }
+  html.size-strip #body { justify-content: center; }
+  html.size-strip .now .pk-hero { font-size: 28px; }
+  html.size-strip .now .pk-glyph { width: 24px; height: 24px; }
+  html:not(.size-large) .now .range-today { display: none; }
+  html.size-square .pk-stat:nth-child(n+3), html.size-wide .pk-stat:nth-child(n+3) { display: none; }
+  html.size-square .pk-stats, html.size-wide .pk-stats { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 6px; }
+  html.size-wide #body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto 1fr; grid-auto-flow: column; gap: 10px 18px; }
+  html.size-wide .days { grid-column: 2; grid-row: 1 / span 2; }
+  html.size-wide .day { grid-template-columns: 34px 16px minmax(0, 1fr) 28px 28px; }
+  html.size-wide .day .rain { display: none; }
+</style>
+<body class="pk">
+  <div class="pk-head pk-not-strip"><span class="pk-title" id="title">Weather</span><span class="pk-meta" id="unit"></span></div>
+  <div id="body" class="pk-grow">
+    <div class="pk-empty">Asking Open-Meteo…</div>
+  </div>
+  <div class="pk-foot pk-only-large"><span>Open-Meteo</span><span id="updated"></span></div>
+</body>
+<script>
+  // Fed by feed.py: {place, unit, wind, now: {temp, feels, code, day, humidity, wind, rain}, hours: [{hour, temp, rain, code, day}],
+  // days: [{date, code, high, low, rain}], updated, stale} or {problem}.
+  const { $, esc, icon, num } = PilotKit;
+  const deg = (v) => (num(v) == null ? "–" : Math.round(v) + "°");
+
+  function draw(d) {
+    if (d.problem) {
+      $("title").textContent = "Weather";
+      $("body").innerHTML = `<div class="pk-empty">${icon("globe")}<b>${esc(d.problem)}</b><span>Check City in this widget's Settings.</span></div>`;
+      return;
+    }
+    const now = d.now || {}, w = PilotKit.weather(now.code, now.day);
+    $("title").innerHTML = `<b>${esc(d.place)}</b> · ${esc(w.words)}`;
+    $("unit").textContent = d.unit || "";
+    $("updated").textContent = (d.stale ? "offline · " : "") + (d.updated ? "updated " + d.updated : "");
+
+    const hours = Array.isArray(d.hours) ? d.hours : [];
+    const temps = hours.map((h) => h.temp);
+    const ticks = hours.map((h, i) => ({ h, i })).filter(({ i }) => i % 3 === 0);
+    const last = Math.max(1, hours.length - 1);
+
+    const days = (Array.isArray(d.days) ? d.days : []).slice(0, 5);
+    const lows = days.map((x) => x.low).filter((v) => num(v) != null), highs = days.map((x) => x.high).filter((v) => num(v) != null);
+    const lo = Math.min(...lows), hi = Math.max(...highs), span = hi - lo || 1;
+    const dayRows = days.map((x, i) => {
+      const name = i === 0 ? "Today" : new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(new Date(x.date + "T12:00:00"));
+      const left = ((x.low - lo) / span) * 100, width = Math.max(4, ((x.high - x.low) / span) * 100);
+      return `<div class="day ${i === 0 ? "today" : ""}"><span class="name">${esc(name)}</span>${icon(PilotKit.weather(x.code, true).icon)}`
+        + `<span class="rain">${num(x.rain) != null && x.rain >= 20 ? Math.round(x.rain) + "%" : ""}</span>`
+        + `<div class="range"><i style="left:${left}%;width:${width}%"></i></div><span class="lo">${deg(x.low)}</span><span class="hi">${deg(x.high)}</span></div>`;
+    }).join("");
+
+    $("body").innerHTML = `
+      <div class="now">${icon(w.icon)}<span class="pk-hero">${deg(now.temp)}</span><span class="place pk-only-strip">${esc(d.place)} · ${esc(w.words)}</span><span class="range-today">${days[0] ? `<span>H</span> ${deg(days[0].high)}<br><span>L</span> ${deg(days[0].low)}` : ""}</span></div>
+      <div class="pk-stats pk-not-strip">
+        <div class="pk-stat"><span>Feels</span><b>${deg(now.feels)}</b></div>
+        <div class="pk-stat"><span>Rain</span><b>${num(now.rain) == null ? "–" : Math.round(now.rain) + "%"}</b></div>
+        <div class="pk-stat"><span>Wind</span><b>${num(now.wind) == null ? "–" : Math.round(now.wind)}<small class="pk-faint" style="font-size:10px"> ${esc(d.wind || "")}</small></b></div>
+        <div class="pk-stat"><span>Humid</span><b>${num(now.humidity) == null ? "–" : Math.round(now.humidity) + "%"}</b></div>
+      </div>
+      <div class="pk-rule pk-only-large"></div>
+      <div class="hours pk-only-large">
+        ${PilotKit.spark(temps, { width: 272, height: 30, now: 0 })}
+        <div class="ticks">${ticks.map(({ h, i }) => `<div style="left:${(i / last) * 100}%"><b>${deg(h.temp)}</b><span>${i === 0 ? "now" : esc(h.hour)}</span></div>`).join("")}</div>
+      </div>
+      <div class="pk-rule pk-only-large"></div>
+      <div class="days pk-not-strip pk-not-square">${dayRows}</div>`;
+  }
+
+  PilotKit.on(draw);
+</script>

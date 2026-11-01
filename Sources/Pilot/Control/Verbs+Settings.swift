@@ -3,7 +3,10 @@ import PilotCore
 
 extension ControlVerbs {
     /// The question a confirmed setting asks: the prompt, a plan's row and the plan's cover all build it here, so they match.
-    static func settingAsk(_ key: String, _ shown: String) -> ControlGate.Ask { .init("Set \(key)", shown) }
+    /// Live window pictures ask with their warning, as the Window shelf block shows it before Live turns on (Q662).
+    static func settingAsk(_ key: String, _ shown: String) -> ControlGate.Ask {
+        .init("Set \(key)", key == ShelfPictures.key && shown == ShelfPictureMode.live.rawValue ? "live. \(ShelfPictures.liveWarning)" : shown)
+    }
 
 }
 
@@ -20,6 +23,7 @@ extension SettingsSchema {
         schema.registerSelection(.shared)
         schema.registerCaptures(.shared)
         schema.registerWebApps(.shared)
+        schema.registerHiddenApps(.shared)
         schema.registerMenuRoot(.shared)
         if CataloguePublish.available { schema.registerExtensionPublish() }
         if let engine = Engine.shared {
@@ -35,9 +39,11 @@ extension SettingsSchema {
     /// Part 1's families, one per page; the app and the tests register the same ones.
     /// General's needs the engine's settings and Hyper switch, so it is left out until the engine is up.
     func registerPart1(general: (settings: PilotSettings, hyper: SessionSwitch)?, look: Look, clipboard: ClipboardHistory, recording: SessionSwitch,
-                       files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey, ai: AISettings) {
+                       files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey, ai: AISettings,
+                       fonts: PilotFonts = .shared) {
         if let general { registerGeneral(general.settings, hyper: general.hyper) }
         registerLook(look)
+        registerFonts(fonts)
         registerClipboard(clipboard, recording: recording)
         registerMenu(files: files, passwords: passwords, folders: folders, giphy: giphy)
         registerAI(ai)
@@ -47,11 +53,11 @@ extension SettingsSchema {
     /// folder change, so it never lists Sven's notes.
     func registerPart2(settings: PilotSettings, list: WorkspaceList, snapshots: WorkspaceSnapshots, block: PilotBlockStore, bar: BarItemsStore,
                        topBar: TopBarController, wallpaper: WallpaperSettings, recommendations: Recommendations, pilotSwitch: any PilotSwitching,
-                       dictation: PilotDictation = .shared,
+                       dictation: PilotDictation = .shared, pictures: ShelfPictures = .shared,
                        notesIn: @escaping @MainActor (URL) -> Int = { NotesFolder.notes(in: $0).count },
                        changeNotes: @escaping @MainActor (URL) throws -> Void = { try NotesPanel.shared.changeFolder(to: $0, move: false) }) {
         registerWorkspaces(list: list, snapshots: snapshots)
-        registerTiling(block: block, settings: settings)
+        registerTiling(block: block, settings: settings, pictures: pictures)
         registerBar(bar, topBar: topBar)
         registerSystem(settings: settings, wallpaper: wallpaper, recommendations: recommendations, pilotSwitch: pilotSwitch,
                        dictation: dictation, notesIn: notesIn, changeNotes: changeNotes)

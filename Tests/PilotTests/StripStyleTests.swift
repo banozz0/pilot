@@ -152,7 +152,7 @@ struct StripStyleTests {
         #expect(await SettingsSchemaPart2Tests.Rig().ask("get", "bar.style").error?.code == .unknownKey)
     }
 
-    @Test("Hover lights the raised pill at once and shows the tooltip after 500 ms on the clock; leaving first shows none (card agent-bo-95423013, AC 4)")
+    @Test("Hover shows the tooltip after 500 ms on the clock, leaving first shows none; the raised pill draws only while lit (card agent-bo-95423013, AC 4)")
     func hover() async throws {
         let sleep = FakeSleep(), tips = FakeTips()
         let hover = BarHover(presenter: tips) { await sleep.sleep($0) }
@@ -190,7 +190,7 @@ struct StripStyleTests {
         hover.pressed()
         #expect(tips.hidden == hidden + 1)
 
-        // The pill is the raised colour behind the item, drawn the frame the hover lands.
+        // The pill (an open drawer's or menu's) is the raised colour behind the item, drawn the frame it lights.
         let raised = Self.bytes(Theme.selected)
         for lit in [false, true] {
             let rep = try rendered(Text("3").font(Theme.mono(12)).padding(.horizontal, 8).frame(height: 24).barHoverPill(lit)

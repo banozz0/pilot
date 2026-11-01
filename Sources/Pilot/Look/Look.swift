@@ -34,6 +34,9 @@ final class Look {
             defaults.set(transparency, forKey: Key.transparency)
         }
     }
+    /// How much the glass blurs the desktop behind it (Full by default, today's look): the window's, the panels', a Glass
+    /// top bar's and the widgets'.
+    var glassBlur: GlassBlur { didSet { defaults.set(glassBlur.rawValue, forKey: Key.glassBlur) } }
     /// A line in the accent around the focused window (card agent-bo-95422950: on, 2 points, from 1 to 8).
     var windowBorder: Bool { didSet { defaults.set(windowBorder, forKey: Key.windowBorder) } }
     var windowBorderWidth: Int {
@@ -163,7 +166,8 @@ final class Look {
     @ObservationIgnored private var followingSystem: NSObjectProtocol?
 
     private enum Key {
-        static let layout = "look.layout", style = "look.style", theme = "look.theme", glass = "look.glass", transparency = "look.transparency"
+        static let layout = "look.layout", style = "look.style", theme = "look.theme", glass = "look.glass", transparency = "look.transparency",
+                   glassBlur = "look.glassBlur"
         /// The Strength slider's and the material's (Solid, Tinted or Glass), read only to carry them over to Transparency
         /// and Glass; left in place, so an older Pilot still reads them.
         static let strength = "look.strength", material = "look.material"
@@ -203,6 +207,7 @@ final class Look {
         }
         glass = defaults.bool(forKey: Key.glass)
         self.transparency = transparency
+        glassBlur = defaults.string(forKey: Key.glassBlur).flatMap(GlassBlur.init(rawValue:)) ?? .full
         windowBorder = defaults.object(forKey: Key.windowBorder) as? Bool ?? true
         windowBorderWidth = defaults.object(forKey: Key.windowBorderWidth) == nil
             ? WindowBorder.defaultWidth : WindowBorder.clamped(defaults.integer(forKey: Key.windowBorderWidth))

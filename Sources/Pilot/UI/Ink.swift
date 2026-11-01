@@ -112,18 +112,21 @@ struct Ink {
 
     // MARK: Faces
 
-    /// The window's words: Nunito a step heavier under Toybox (its 600 reads as a regular), Geist under Instrument.
+    /// The window's words: Nunito a step heavier under Toybox (its 600 reads as a regular), Geist under Instrument; the
+    /// family picked in Use fonts in over both (PilotFonts).
     func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
+        if let picked = PilotFonts.shared.face(.ui, size, weight) { return picked }
         return switch style.kind {
         case .toybox: Toy.nunito(Self.nunito(weight), size + 0.5)
         case .instrument: Font(DisplayFaces.font(StyleTokens.geist(weight == .regular ? 400 : weight == .medium ? 500 : 600), size: size))
         }
     }
 
-    /// Ids, paths and numbers: the style's mono.
+    /// Ids, paths and numbers: the style's mono, or the one picked in Use fonts in.
     func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
+        if let picked = PilotFonts.shared.face(.mono, size, weight) { return picked }
         // Light weights for an extension's big figures (Q475, the Omarchy weather look): the variable face's 200 and 300.
         let wght = switch weight {
         case .ultraLight, .thin: 200

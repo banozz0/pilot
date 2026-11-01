@@ -44,6 +44,7 @@ private func normalizeLayoutReason(of window: Window, on workspace: Workspace) a
                     try window.bind(to: try workspace.macOsNativeFullscreenWindowsContainer, adaptiveWeight: WEIGHT_DOESNT_MATTER, index: INDEX_BIND_LAST)
                 case isMacosMinimized:
                     window.layoutReason = .macos(prevParentKind: try parent.kind)
+                    window.minimizedFrom = workspace.name // Pilot (ADR 0015, Q690): the Window shelf lists it there
                     try window.bind(to: macosMinimizedWindowsContainer, adaptiveWeight: 1, index: INDEX_BIND_LAST)
                 case isMacosWindowOfHiddenApp:
                     window.layoutReason = .macos(prevParentKind: try parent.kind)

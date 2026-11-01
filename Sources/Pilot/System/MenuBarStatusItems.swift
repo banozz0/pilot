@@ -41,6 +41,8 @@ final class BarItemsStore {
         didSet { defaults.set(pagePlacement.rawValue, forKey: Self.pagePlacementKey) }
     }
     static let pagePlacementKey = "bar.pagePlacement"
+    /// Set at the first start, or once a saved Pilot item has moved to the mark alone (spec pilot-1-1 T28).
+    static let markAloneKey = "bar.pilotMarkAlone"
     /// The top bar switched on or off: the page shows the bar the items now sit in, Top bar or Menu bar; a pick by hand
     /// after it stays until the next switch (Sven, 2026-10-11).
     func topBarSwitched(_ on: Bool) { pagePlacement = on ? .topBar : .menuBar }
@@ -68,7 +70,16 @@ final class BarItemsStore {
         background = defaults.string(forKey: Self.backgroundKey).flatMap(TopBarBackground.init(rawValue:)) ?? .solid
         colour = defaults.string(forKey: Self.colourKey).flatMap(ColourChoice.init(rawValue:)) ?? .theme
         itemColours = defaults.object(forKey: Self.itemColoursKey) as? Bool ?? true
-        if let data = defaults.data(forKey: Self.key), let saved = try? JSONDecoder().decode(BarSettings.self, from: data) {
+        if let data = defaults.data(forKey: Self.key), var saved = try? JSONDecoder().decode(BarSettings.self, from: data) {
+            // Pilot's mark alone, once (spec pilot-1-1 T28, Sven Q643): a bar saved with the workspace number beside the mark
+            // moves to the mark; a style picked after this stays.
+            if !defaults.bool(forKey: Self.markAloneKey) {
+                if saved.entry(.pilot).style == .iconNumber {
+                    saved.set(.pilot, style: .icon)
+                    defaults.set(try? JSONEncoder().encode(saved), forKey: Self.key)
+                }
+                defaults.set(true, forKey: Self.markAloneKey)
+            }
             settings = saved
             return
         }
@@ -84,6 +95,7 @@ final class BarItemsStore {
         settings = BarSettings.migrated(stats: stats, topBar: decode(TopBarSettings.self, "topBar.settings"),
                                         pomodoroCountdown: defaults.object(forKey: "pomodoro.countdown") as? Bool)
         defaults.set(try? JSONEncoder().encode(settings), forKey: Self.key)
+        defaults.set(true, forKey: Self.markAloneKey)
         let on = settings.entries.filter(\.on).map { "\($0.kind.rawValue) \($0.placement.rawValue)" }.joined(separator: ", ")
         log.notice("bar items carried over: \(on, privacy: .public)")
     }
@@ -123,6 +135,8 @@ struct StatusItemContent: Equatable {
     var tooltip = ""
     /// An extension's own item (Surfaces v2): its id, part of its identity.
     var extensionID: String? = nil
+    /// The theme's accent for Pilot's mark (spec pilot-1-1 T28), so a theme change redraws the item; nil without the mark.
+    var accent: UInt32? = nil
 
     /// Its identity in the menu bar, and its autosave name's end.
     var key: String { kinds.map(\.rawValue).joined(separator: "+") + (extensionID.map { ".\($0)" } ?? "") }
@@ -181,9 +195,11 @@ final class MenuBarStatusItems {
             let slots = store.slots(in: .menuBar)
             let kinds = Set(slots.flatMap(\.kinds))
             let inputs = sources.inputs(for: slots.flatMap(\.entries))
+            let accent = Look.shared.theme.accent
             let contents = slots.compactMap { slot in
                 BarParts.parts(slot, inputs, settings: settings).map {
-                    StatusItemContent(kinds: slot.kinds, parts: $0, isGroup: slot.isGroup, tooltip: BarTooltip.text(slot, inputs))
+                    StatusItemContent(kinds: slot.kinds, parts: $0, isGroup: slot.isGroup, tooltip: BarTooltip.text(slot, inputs),
+                                      accent: $0.joined().contains(.mark) ? accent : nil)
                 }
             }
             // Each extension's own item after Pilot's (Surfaces v2). The bar items are always held here: one never placed
@@ -255,7 +271,7 @@ final class PopoverWatch {
 }
 
 /// The real menu bar: one NSStatusItem per item, showing a template picture of its parts (StatusItemImage, cards
-/// agent-bo-95422837 and 911), redrawn only when they change; the focused app shows its own icon and name. No SwiftUI in
+/// agent-bo-95422837 and 911; Pilot's mark keeps its accent box), redrawn only when they or the accent change; the focused app shows its own icon and name. No SwiftUI in
 /// the item: macOS redraws it once per menu bar on every change, and a hosted view cost a layout and render each time.
 @MainActor
 final class StatusBarHost: NSObject, StatusItemHosting {
@@ -274,7 +290,7 @@ final class StatusBarHost: NSObject, StatusItemHosting {
                 let (before, after) = (shown[index].content, items[index])
                 shown[index].content = after
                 if before.tooltip != after.tooltip { shown[index].item.button?.toolTip = after.tooltip }
-                if before.parts != after.parts || before.isGroup != after.isGroup { draw(shown[index]) }
+                if before.parts != after.parts || before.isGroup != after.isGroup || before.accent != after.accent { draw(shown[index]) }
             }
             return
         }
@@ -319,7 +335,7 @@ final class StatusBarHost: NSObject, StatusItemHosting {
             entry.item.length = NSStatusItem.variableLength
             return
         }
-        let image = StatusItemImage.image(entry.content.parts)
+        let image = StatusItemImage.image(entry.content.parts, accent: entry.content.accent)
         // A reading past its threshold turns amber; the group's picture is one template, so only a lone item can.
         button.contentTintColor = !entry.content.isGroup && entry.content.parts.joined().contains(.warn) ? NSColor(Theme.yellow) : nil
         button.title = ""

@@ -20,7 +20,7 @@ extension MenuView {
             if model.showsGiphyBar { GiphyKindBar(model: model).padding(.horizontal, 20).padding(.bottom, 12) }
             ToyRule()
             if let detail = nav.shownDetail {
-                ExtensionDetailView(detail: detail).overlay(alignment: .bottomTrailing) { toyActions(size) }
+                ExtensionDetailView(detail: detail, act: model.runDetail).overlay(alignment: .bottomTrailing) { toyActions(size) }
             } else if let scan = model.scan {
                 ToyScan(scan: scan, tools: model.tools)
                 Spacer(minLength: 0)
@@ -30,6 +30,9 @@ extension MenuView {
             } else if model.showsAbout {
                 MenuAboutScreen(displays: NSScreen.screens.count)
                 Spacer(minLength: 0)
+            } else if model.showsDefine {
+                // The word's rows and its entry beside them (Q596, layout C), as Instrument draws them.
+                DefinePane(model: model).overlay(alignment: .bottomTrailing) { toyActions(size) }
             } else if nav.rows.isEmpty {
                 ToyMenuEmpty(text: model.emptyText, branch: nav.isList ? nil : nav.branch)
             } else {

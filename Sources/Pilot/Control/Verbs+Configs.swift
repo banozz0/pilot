@@ -23,7 +23,7 @@ final class ControlConfigs {
         let config = found.config, real = found.real, modified = found.modified
         var head: [String] = []
         if case .text(let text, _) = AppConfigs.preview(real, cap: 4096) { head = AppConfigs.head(text, 6) }
-        return ["id": .string(config.id), "name": .string(config.name), "group": .string(config.group.label), "present": .bool(true),
+        return ["id": .string(found.id), "name": .string(config.name), "group": .string(config.group.label), "present": .bool(true),
                 "path": .string(AppConfigs.tilde(found.path.path, home: home.path)), "real": .string(AppConfigs.tilde(real.path, home: home.path)),
                 "inDotfiles": .bool(FoundConfig.inDotfiles(real)), "generated": .bool(config.generated),
                 "readOnly": .bool(config.readOnly),
@@ -47,7 +47,7 @@ final class ControlConfigs {
     func file(_ id: String) throws(ControlError) -> FoundConfig {
         for kind in [ConfigsList.Kind.configs, .instructions] {
             let result = find(kind)
-            if let found = result.found.first(where: { $0.config.id == id }) { return found }
+            if let found = result.found.first(where: { $0.id == id }) { return found }
             if let config = result.missing.first(where: { $0.id == id }) {
                 throw ControlError(.badValue, "no \(config.name) config on this Mac; Pilot looks for it at ~/\(config.paths[0])")
             }
@@ -76,7 +76,7 @@ final class ControlConfigs {
         guard !found.config.readOnly else { throw ControlError(.badValue, "\(found.config.id) is Pilot's own file: show or reveal it, Pilot never opens it from Configs") }
         let editor = editor()
         guard open(found.real, editor) else { throw ControlError(.badValue, "the main editor is not installed; pick one on Default apps") }
-        return ["id": .string(found.config.id), "opened": .bool(true), "real": .string(AppConfigs.tilde(found.real.path, home: home.path)),
+        return ["id": .string(found.id), "opened": .bool(true), "real": .string(AppConfigs.tilde(found.real.path, home: home.path)),
                 "editor": .string(AppsModule.appName(editor) ?? editor)]
     }
 }

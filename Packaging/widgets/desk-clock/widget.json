@@ -1,0 +1,13 @@
+{
+  "id": "desk-clock",
+  "title": "Clock",
+  "icon": "🕰️",
+  "version": "1.0",
+  "description": "The time here, large, and a second time zone under it with its offset. Set the zone in Settings, as Europe/London or America/New_York.",
+  "draw": "html",
+  "data": {"setting": "zone"},
+  "size": {"width": 280, "height": 180},
+  "settings": [
+    {"name": "zone", "label": "Second time zone", "type": "text", "default": "America/New_York"}
+  ]
+}

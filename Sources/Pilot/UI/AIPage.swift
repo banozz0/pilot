@@ -16,7 +16,7 @@ extension EnvironmentValues {
 
 /// AI › Chat (C3, Sven 2026-10-10; any provider, story 159; subscriptions, story 162; the chat owns the page, T13, Sven
 /// 2026-10-11; Q177, Sven 2026-10-16; two tabs, page map, Sven 2026-10-17): one block, Chat, filling the page, the same
-/// conversation as Ask AI's panel. Its input holds the Skills bubble (P29; /extension only where it runs, AskPilotSkills);
+/// conversation as Ask AI's panel. Its input holds the Skills bubble (P29, AskPilotSkills; the makers on every provider, which say when they need Claude Code);
 /// the empty chat says what Pilot may change (AskPilotStart). Its header's menu holds the model, the effort and Providers…, which opens AI › Setup (AISetupPage),
 /// where every setting is; while the picked provider cannot answer, one line says so with a button there.
 struct AIPage: View {
@@ -37,13 +37,9 @@ struct AIPage: View {
     static let intro = "Talk to Pilot about Pilot: your keys, workspaces, settings and extensions. It reads your setup with the pilot command, "
         + "proposes its changes as one plan, and makes them once you Allow. Ask AI opens the same chat under the top bar."
 
-    /// Whether `provider` writes extensions: /extension runs Claude Code alone (T17).
-    static func makes(_ provider: AIProvider) -> Bool { provider == .claudeCode }
-
-    /// The skills `provider` can take, in the Skills list (P29): /extension only where it runs.
-    static func skills(for provider: AIProvider, from skills: [AISkill] = AISkills.all) -> [AISkill] {
-        makes(provider) ? skills : AISkills.guides(skills)
-    }
+    /// Whether the makers (/extension, /widget) can run: on Claude Code, whatever the chat's provider, so not once it is
+    /// found missing (T17, AISettings.makerTurn).
+    static func makes(_ claude: AISettings.CLIStatus) -> Bool { claude != .missing }
 
     /// What the agent may touch, as three short columns on the empty chat (the `pilot` command's Allow gate, ADR 0013).
     static let reach: [(title: String, text: String)] = [
@@ -183,8 +179,8 @@ private struct AIPageBody: View {
                     .frame(maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { above = $0 }
                 AIChatInput(model: chat, send: send, boxed: true, placeholder: AIPage.placeholder(ready: ready), focus: $typing,
-                            skills: ready && !codexSignIn ? AIPage.skills(for: provider) : [], room: above,
-                            listOpen: $skillsOpen)
+                            skills: ready && !codexSignIn ? AISkills.all : [], room: above,
+                            listOpen: $skillsOpen, takesPictures: true)
                     .frame(maxWidth: 720)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -227,7 +223,7 @@ private struct AIPageBody: View {
             .multilineTextAlignment(.center)
             .padding(.bottom, 24)
         } else {
-            AskPilotStart(provider: provider).opacity(skillsOpen ? 0 : 1).accessibilityHidden(skillsOpen)
+            AskPilotStart(provider: provider, makes: AIPage.makes(settings.cli)).opacity(skillsOpen ? 0 : 1).accessibilityHidden(skillsOpen)
         }
     }
 }
@@ -266,8 +262,9 @@ struct AIProviderSetup: View {
                 address = settings.address(for: provider)
                 typedModel = provider.typesModel ? settings.model(for: provider)?.id ?? "" : ""
                 if provider.command != nil { await settings.refreshCLI(provider) }
-                // codex's own catalog fills its picker by itself once per launch, as soon as codex is connected.
-                if provider == .codex, settings.ready(.codex), !settings.asked.contains(.codex) { await list(.codex) }
+                // codex's own catalog, and the versions claude's aliases run, fill the picker by themselves once per launch,
+                // as soon as the command is signed in.
+                if provider.command != nil, settings.ready(provider), !settings.asked.contains(provider) { await list(provider) }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 guard signingIn else { return }
@@ -479,40 +476,29 @@ struct AIProviderSetup: View {
 
     // MARK: Model
 
-    /// A list to refresh, or more than the CLI's default to pick from.
-    private var picksModel: Bool { provider.refreshesModels || settings.models(for: provider).count > 1 }
-
+    /// Every provider's list refreshes: an API's, codex's catalog (PlanCLI.models), the versions claude's aliases run
+    /// (ClaudeCLI.models).
     @ViewBuilder private var modelRow: some View {
         let models = settings.models(for: provider)
-        if picksModel {
-            BlockRow {
-                Text("Answers with")
-                InfoMark(text: provider.refreshesModels ? "The model that answers; Refresh asks \(provider.name) for the ones it has."
-                         : "The model that answers the chat, Ask AI and Fix selected text.")
-                Spacer()
-                if !provider.refreshesModels {
-                    DropdownField(label: "Model", options: models.map { ($0.id ?? "", $0.title) }, picked: settings.model(for: provider)?.id ?? "") {
-                        settings.setModel($0, for: provider)
-                    }
-                    .frame(maxWidth: 220)
-                } else {
-                    if provider.typesModel {
-                        TextField("Model id", text: $typedModel, prompt: Text(verbatim: "Model id").foregroundStyle(ink.muted))
-                            .labelsHidden().font(ink.mono(12)).pilotField().frame(maxWidth: 200)
-                            .onChange(of: typedModel) { settings.setModel(typedModel, for: provider) }
-                    }
-                    if !models.isEmpty {
-                        DropdownField(label: "Model", options: models.map { ($0.id ?? "", $0.title) }, picked: settings.model(for: provider)?.id ?? "") {
-                            settings.setModel($0, for: provider)
-                            typedModel = $0
-                        }
-                        .frame(maxWidth: 200)
-                    }
-                    Button("Refresh") { refresh() }.buttonStyle(.pilot).disabled(listing == .running)
-                }
+        BlockRow {
+            Text("Answers with")
+            InfoMark(text: "The model that answers; Refresh asks \(provider.name) for the ones it has.")
+            Spacer()
+            if provider.typesModel {
+                TextField("Model id", text: $typedModel, prompt: Text(verbatim: "Model id").foregroundStyle(ink.muted))
+                    .labelsHidden().font(ink.mono(12)).pilotField().frame(maxWidth: 200)
+                    .onChange(of: typedModel) { settings.setModel(typedModel, for: provider) }
             }
+            if !models.isEmpty {
+                DropdownField(label: "Model", options: models.map { ($0.id ?? "", $0.title) }, picked: settings.model(for: provider)?.id ?? "") {
+                    settings.setModel($0, for: provider)
+                    typedModel = $0
+                }
+                .frame(maxWidth: 220)
+            }
+            Button("Refresh") { refresh() }.buttonStyle(.pilot).disabled(listing == .running)
         }
-        if provider.refreshesModels, let listing {
+        if let listing {
             BlockRow {
                 switch listing {
                 case .running: ProgressView().controlSize(.small); FinePrint(text: "Asking \(provider.name) for its models…")

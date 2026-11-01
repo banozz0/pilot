@@ -18,12 +18,13 @@ enum HomeNowBlock {
         return "\(arrangement(windows)), \(count.0) \(count.1)"
     }
 
-    /// How the workspace's tiled windows sit: Columns, Rows, Scrolling, Tiled, or Floating with none tiled.
+    /// How the workspace's tiled windows sit: Columns, Rows, Scrolling, Stage, Tiled, or Floating with none tiled.
     static func arrangement(_ windows: [AeroWindow]) -> String {
         switch windows.first(where: { !$0.isFloating })?.layout {
         case "h_tiles": "Columns"
         case "v_tiles": "Rows"
         case "h_scrolling": "Scrolling"
+        case "h_stage": "Stage"
         case nil: "Floating"
         default: "Tiled"
         }

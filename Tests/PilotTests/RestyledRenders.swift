@@ -131,11 +131,11 @@ struct RestyledRenders {
                 try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(width)-\(state).png"))
             }
         }
-        // All kinds folded out, at the least width.
-        if wanted("page-760-allkinds") {
+        // All kinds folded out, at the least width and the widest, where the groups sit side by side.
+        for width in [760, 1440] where wanted("page-\(width)-allkinds") {
             let page = OpenWithPage(allKinds: true, kinds: kinds(), editor: editor).environment(engine)
-                .frame(width: 553, height: 4400).pilotTheme(look: .shared).background(Theme.background)
-            try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-760-allkinds.png"))
+                .frame(width: CGFloat(width - 207), height: 4400).pilotTheme(look: .shared).background(Theme.background)
+            try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(width)-allkinds.png"))
         }
         Look.shared.themeID = PilotTheme.defaultID
     }

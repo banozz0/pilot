@@ -1,0 +1,15 @@
+{
+  "id": "desk-weather",
+  "title": "Weather",
+  "icon": "🌤️",
+  "version": "1.0",
+  "description": "Now, feels like, rain and wind, the next 12 hours and 5 days, from Open-Meteo: free, no account or key. Empty City uses your Mac's time zone city.",
+  "draw": "html",
+  "data": {"command": ["./feed.py"], "every": 900},
+  "hosts": ["api.open-meteo.com", "geocoding-api.open-meteo.com"],
+  "size": {"width": 300, "height": 380},
+  "settings": [
+    {"name": "city", "label": "City", "type": "text", "default": ""},
+    {"name": "units", "label": "Units", "type": "choice", "choices": ["celsius", "fahrenheit"], "default": "celsius"}
+  ]
+}

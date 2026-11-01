@@ -40,7 +40,9 @@ struct DictationBlockRenders {
             ("3-preparing", try block(.authorized) { $0.model.download(); $0.helper.last.heard(.preparing) }),
             ("4-ready", try block(.authorized) { try $0.onDisk() }),
             ("5-ready-mic-denied", try block(.denied) { try $0.onDisk() }),
-            ("7-two-on-disk", try block(.authorized) { try $0.onDisk(.parakeet); try $0.onDisk(.whisperTurbo) }),
+            ("7-two-on-disk", try block(.authorized) { try $0.onDisk(.parakeetUltra); try $0.onDisk(.whisperTurbo) }),
+            // Top bar picked while the bar is off (no engine here): the fallback line; a custom waveform colour's well.
+            ("8-top-bar-custom-colour", try block(.authorized) { try $0.onDisk(); $0.pilot.showIn = .topBar; $0.pilot.waveColour = .custom(0xFF5FA2) }),
             ("6-failed", try block(.authorized) {
                 $0.model.download(); $0.helper.last.heard(.error("The Internet connection appears to be offline.")); $0.helper.last.ended(1)
             }),

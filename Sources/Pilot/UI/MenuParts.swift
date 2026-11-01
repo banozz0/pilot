@@ -39,7 +39,7 @@ struct MenuBody: View {
     var body: some View {
         Group {
             if let detail = nav.shownDetail {
-                ExtensionDetailView(detail: detail).overlay(alignment: .bottomTrailing) { rowActions }
+                ExtensionDetailView(detail: detail, act: model.runDetail).overlay(alignment: .bottomTrailing) { rowActions }
             } else if let scan = model.scan {
                 // At its own height, which the panel takes (MenuModel.instrumentSize), so no band shows under it.
                 InstrumentScan(scan: scan, tools: model.tools)
@@ -51,6 +51,9 @@ struct MenuBody: View {
             } else if model.showsAbout {
                 // About's mark and cards, which list no rows (Q443).
                 MenuAboutScreen(displays: NSScreen.screens.count)
+            } else if model.showsDefine {
+                // The word's rows and its entry beside them, whatever it holds (Q596, layout C).
+                DefinePane(model: model).overlay(alignment: .bottomTrailing) { rowActions }
             } else if model.hasLineChips, nav.branch == .translate {
                 // Its text and translation side by side, whatever it holds (P40).
                 TranslatePanes(model: model).overlay(alignment: .bottomTrailing) { rowActions }

@@ -5,13 +5,13 @@ import Testing
 /// Ask Pilot's skills (P29, Sven Q268–Q271, 2026-10-18; the starters before, Q177): a pick puts the command and its starter
 /// in the chat box and never sends; /extension routes to the extension maker and waits for the idea; a message that starts
 /// with a guide's command carries its steps to every provider, in the message itself; every provider may change Pilot
-/// (the API keys since Q193, codex since Q203), only Claude Code writes extensions, and the list and placeholder say which.
+/// (the API keys since Q193, codex since Q203), only Claude Code makes extensions and widgets, which the Skills list offers on every provider (Sven, 2026-10-31).
 @MainActor
 @Suite("Ask Pilot starters")
 struct AskPilotStartersTests {
     static let skills = AgentGuidesTests.skills
 
-    @Test("Write an extension puts /extension and waits; the maker takes the turn once an idea follows")
+    @Test("Make an extension puts /extension and waits; the maker takes the turn once an idea follows")
     func extensionRoutes() throws {
         let skill = try #require(Self.skills.first { $0.name == ExtensionMaker.skill })
         let draft = AskPilotSkills.draft(picking: skill, over: "")
@@ -20,9 +20,9 @@ struct AskPilotStartersTests {
         #expect(ExtensionMaker.idea(draft + "list my open ports") == "list my open ports")
     }
 
-    @Test("Nine skills, each with its line and starter; a pick fills the box over a typed / and keeps typed words")
+    @Test("Ten skills, each with its line and starter; a pick fills the box over a typed / and keeps typed words")
     func starters() throws {
-        #expect(Self.skills.count == 9)
+        #expect(Self.skills.count == 10)
         for skill in Self.skills {
             #expect(!skill.title.isEmpty && !skill.description.isEmpty && !skill.when.isEmpty && !skill.body.isEmpty, "\(skill.name)")
             #expect(AskPilotSkills.draft(picking: skill, over: "") == skill.command + " " + skill.starter)
@@ -31,7 +31,7 @@ struct AskPilotStartersTests {
         #expect(AskPilotSkills.draft(picking: binds, over: "/bi") == "/binds Suggest Hyper binds for the apps I use most.")
         #expect(AskPilotSkills.draft(picking: binds, over: "Slack on L") == "/binds Slack on L")
         #expect(AskPilotSkills.matching(Self.skills, "se").map(\.name) == ["settings", "preset"])
-        #expect(AskPilotSkills.matching(Self.skills, "").count == 9)
+        #expect(AskPilotSkills.matching(Self.skills, "").count == 10)
         // The steps go in the message, every user turn's, the maker's /extension left to its own turn.
         let request = AIChat.Request(history: [.init(.user, "/binds"), .init(.assistant, "Five keys.")], message: "/settings menu width")
             .skilled(AgentGuidesTests.guides)
@@ -43,16 +43,15 @@ struct AskPilotStartersTests {
         #expect(AIChat.Request(message: "/bindsx").skilled(AgentGuidesTests.guides).message == "/bindsx")
     }
 
-    @Test("Every provider acts, only Claude Code makes extensions; the placeholder and skills follow")
-    func acts() {
-        #expect(AIProvider.allCases.filter { AIPage.makes($0) } == [.claudeCode])
+    @Test("Every provider acts, the makers run wherever Claude Code is installed; the list offers both makers, the placeholder follows")
+    func acts() throws {
+        #expect(AIPage.makes(.signedIn(path: "/c")) && AIPage.makes(.checking) && !AIPage.makes(.missing))
         #expect(AIPage.placeholder(ready: true) == "Tell Pilot what to change, or pick a skill")
         #expect(AIPage.placeholder(ready: false) == "Ask anything")
-        let names = Self.skills.map(\.name)
-        #expect(AIPage.skills(for: .claudeCode, from: Self.skills).map(\.name) == names)
-        for provider in [AIProvider.codex, .anthropicAPI, .ollama] {
-            #expect(AIPage.skills(for: provider, from: Self.skills).map(\.name) == names.filter { $0 != "extension" })
-        }
+        let widget = try #require(Self.skills.first { $0.name == WidgetMaker.skill })
+        #expect(widget.title == "Make a widget" && widget.example == "my battery and disk as two meters")
+        #expect(AskPilotSkills.draft(picking: widget, over: "") == "/widget ")
+        #expect(Self.skills.first { $0.name == ExtensionMaker.skill }?.title == "Make an extension")
     }
 
     @Test("An API key's provider gets Pilot's tool loop; a subscription its CLI")

@@ -255,7 +255,7 @@ struct ExtensionSurfaceTests {
         #expect(model.page == .extensions && model.extensionPage == "usage" && model.section(of: .extensions) == nil)
         #expect(!model.shows(.extensions) && model.tabs.isEmpty && model.title.hasSuffix("usage"))
         model.go(AppPlace(.extensions))
-        #expect(model.extensionPage == nil && model.shows(.extensions) && model.tabs.map(\.title) == ["Installed", "Catalogue"])
+        #expect(model.extensionPage == nil && model.shows(.extensions) && model.tabs.isEmpty)
         model.goExtensionPage("usage")
         model.go(AppPlace(.binds))
         #expect(model.extensionPage == nil && model.shows(.binds))

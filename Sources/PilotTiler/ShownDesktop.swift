@@ -39,3 +39,11 @@ func workspaceShowingDesktop() -> Workspace? {
     }
     return shown.workspace
 }
+
+/// The workspace Show desktop holds out now, by name, nil when it is off or that workspace is no longer shown: Pilot's
+/// widgets show over it (Q592). A read only; the tiler's own refresh ends a stale one.
+@MainActor
+public func showDesktopWorkspace() -> String? {
+    guard let shown = shownDesktop, shown.workspace.isVisible else { return nil }
+    return shown.workspace.name
+}

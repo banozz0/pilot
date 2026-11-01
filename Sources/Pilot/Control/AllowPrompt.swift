@@ -35,7 +35,8 @@ enum AllowPrompt {
         let mine = showing
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                let p = HUD.makePanel(AllowPromptView(program: program(peer), ask: ask) { close(allowing: $0) })
+                let p = HUD.makePanel(AllowPromptView(program: program(peer), ask: ask) { close(allowing: $0) }
+                    .onGeometryChange(for: CGSize.self, of: \.size) { refit($0, mine) })
                 p.escape = { close(allowing: false) }
                 p.orderFrontRegardless()
                 open = (p, continuation)
@@ -43,6 +44,16 @@ enum AllowPrompt {
         } onCancel: {
             Task { @MainActor in if showing == mine { close(allowing: false) } }
         }
+    }
+
+    /// The panel fitted about its centre to the prompt's new size, as Show details opens or closes; nothing once another
+    /// showing replaced it.
+    private static func refit(_ face: CGSize, _ mine: Int) {
+        guard showing == mine, let panel = open?.panel as? KeyPanel else { return }
+        let size = PopSurface.window(face, panel.margins)
+        guard abs(panel.frame.width - size.width) >= 1 || abs(panel.frame.height - size.height) >= 1 else { return }
+        panel.setFrame(CGRect(x: panel.frame.midX - size.width / 2, y: panel.frame.midY - size.height / 2,
+                              width: size.width, height: size.height), display: true)
     }
 
     private static func close(allowing allowed: Bool) {
@@ -87,20 +98,28 @@ extension ControlGate.Ask {
 
 /// The prompt's face: the extension alert in Sven's style, naming who asks, then the exact thing whole with every hidden
 /// character written out (ControlGate.Ask.visible; the gate denies one too long to show whole), then Deny, primary, and
-/// Allow.
+/// Allow. An ask with a summary leads with its headline and short lines instead, the whole behind Show details, which
+/// answers nothing.
 struct AllowPromptView: View {
+    @Environment(\.style) private var style
     let program: String
     let ask: ControlGate.Ask
+    @State var details = false
     let answer: (Bool) -> Void
 
     var body: some View {
         // The kinds never run: a press answers by its index, and the first button, Deny, is the primary one.
         let buttons = [Extension.Item.Action(kind: .hud("Deny"), title: "Deny"), Extension.Item.Action(kind: .hud("Allow"), title: "Allow")]
-        let note = Self.thing(ask, joiner: ":\n") + "\n\n" + Self.warning
-        ExtensionAlertView(alert: Extension.AlertSpec(text: Self.question(program), note: note, actions: buttons)) {
+        let toggle = ask.summary.map { _ in
+            AnyView(Button(details ? "Hide details" : "Show details") { details.toggle() }
+                .buttonStyle(.plain).styleText(\.caption).foregroundStyle(style.color(\.text2)).padding(.trailing, 6))
+        }
+        ExtensionAlertView(alert: Extension.AlertSpec(text: Self.heading(ask, program), note: Self.note(ask, program, details: details),
+                                                      actions: buttons), extra: toggle) {
             answer($0 == 1)
         }
         .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // The words both faces say, the HUD and the chat's row (T16).
@@ -108,13 +127,36 @@ struct AllowPromptView: View {
     /// "Allow pilot, from claude?"
     static func question(_ program: String) -> String { "Allow \(ControlGate.Ask.visible(program))?" }
 
-    /// "Run shell: brew upgrade", every hidden character written out; a plan's rows a line each, a line break inside
-    /// one written out.
+    /// The summary's headline, else who asks.
+    static func heading(_ ask: ControlGate.Ask, _ program: String) -> String {
+        ask.summary.map { line($0.headline) } ?? question(program)
+    }
+
+    /// The summary's lines, one each.
+    static func points(_ summary: ControlGate.Ask.Summary) -> String { summary.points.map(line).joined(separator: "\n") }
+
+    /// `text` escaped as the thing is, but a line break inside it only marked ⏎, so a path or a name in a summary can
+    /// never start a line of its own that reads as Pilot's.
+    static func line(_ text: String) -> String { ControlGate.Ask.visible(text).replacingOccurrences(of: "⏎\n", with: "⏎", options: .literal) }
+
+    /// Under the heading: the summary's lines, or with `details` the thing whole, then who asks and the warning; an ask
+    /// with no summary shows the thing whole and the warning, as it always has.
+    static func note(_ ask: ControlGate.Ask, _ program: String, details: Bool) -> String {
+        guard let summary = ask.summary else { return thing(ask, joiner: ":\n") + "\n\n" + warning }
+        let asked = "Asked by \(ControlGate.Ask.visible(program))."
+        if details { return thing(ask, joiner: ":\n") + "\n\n" + asked + " " + warning }
+        return points(summary) + "\n\n" + asked + " " + deadline
+    }
+
+    /// "Run shell: brew upgrade", every hidden character written out; a plan's rows a line each, a line break inside one
+    /// written out; an ask's own lines a line each, a line break inside one only marked ⏎ (`line`).
     static func thing(_ ask: ControlGate.Ask, joiner: String = ": ") -> String {
-        let detail = ask.rows.isEmpty ? ControlGate.Ask.visible(ask.detail) : ask.rows.map { ControlGate.Ask.visible($0.line) }.joined(separator: "\n")
+        let detail = !ask.rows.isEmpty ? ask.rows.map { ControlGate.Ask.visible($0.line) }.joined(separator: "\n")
+            : ask.lines.map { $0.map(line).joined(separator: "\n") } ?? ControlGate.Ask.visible(ask.detail)
         return ControlGate.Ask.visible(ask.title) + joiner + detail
     }
 
     static let warning = "Program names are what each process calls itself. Nothing runs unless you press Allow; no answer in "
         + "\(ControlGate.wait.components.seconds) s denies."
+    static let deadline = "No answer in \(ControlGate.wait.components.seconds) s denies."
 }

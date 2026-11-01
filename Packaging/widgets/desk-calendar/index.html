@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="pilot-kit.css">
+<script src="pilot-kit.js"></script>
+<style>
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+  .week span { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pk-text3); }
+  .week b { display: block; margin: 3px auto 0; width: 24px; height: 24px; line-height: 24px; border-radius: 50%; font-weight: 400; font-size: 12px; color: var(--pk-text2); }
+  .week .past b { color: var(--pk-text3); }
+  .week .today span { color: var(--pk-accent); }
+  .pk-row.has-time { grid-template-columns: 50px minmax(0, 1fr) auto; }
+  .week .today b { color: var(--pk-text); box-shadow: inset 0 0 0 1.25px var(--pk-accent); }
+</style>
+<body class="pk">
+  <div class="pk-head"><span class="pk-title" id="title">Today</span><span class="pk-meta" id="count"></span></div>
+  <div class="week" id="week"></div>
+  <div class="pk-rule"></div>
+  <div class="pk-list pk-grow pk-fade" id="events"></div>
+</body>
+<script>
+  // Fed by the clock and calendar readings: {clock: {time, date, iso}, calendar: {access, events: [{title, allDay, start}]}}.
+  const { $, esc } = PilotKit;
+
+  // "09:30", "9:30 AM" → minutes since midnight; null when it reads otherwise.
+  function minutes(s) {
+    const m = String(s || "").match(/^(\d{1,2})[:.](\d{2})\s*([AaPp])?/);
+    if (!m) return null;
+    let h = +m[1] % 24;
+    if (m[3]) h = (h % 12) + (/[Pp]/.test(m[3]) ? 12 : 0);
+    return h * 60 + +m[2];
+  }
+
+  function draw(data) {
+    const clock = data.clock || {}, cal = data.calendar || {};
+    const now = clock.iso ? new Date(clock.iso) : new Date();
+    $("title").innerHTML = "<b>Today</b> · " + esc(new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(now));
+
+    // Monday to Sunday of this week.
+    const monday = new Date(now); monday.setHours(12, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    let week = "";
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
+      const same = d.toDateString() === now.toDateString(), past = d < now && !same;
+      week += `<div class="${same ? "today" : past ? "past" : ""}"><span>${esc(new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(d).slice(0, 2))}</span><b>${d.getDate()}</b></div>`;
+    }
+    $("week").innerHTML = week;
+
+    const list = $("events");
+    if (cal.access === false) {
+      $("count").textContent = "";
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("lock")}<b>Calendar access is off</b><span>Give it in the clock's popover in the menu bar.</span></div>`;
+      return;
+    }
+    const events = Array.isArray(cal.events) ? cal.events : [];
+    $("count").textContent = events.length ? events.length + (events.length === 1 ? " event" : " events") : "";
+    if (!events.length) {
+      list.innerHTML = `<div class="pk-empty">${PilotKit.icon("calendar")}<b>Nothing on today</b><span>The rest of the day is yours.</span></div>`;
+      return;
+    }
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const allDay = events.filter((e) => e && e.allDay), timed = events.filter((e) => e && !e.allDay);
+    let next = timed.findIndex((e) => { const m = minutes(e.start); return m != null && m >= nowMin; });
+    let rows = allDay.map((e) => `<div class="pk-row has-time"><span class="pk-time"><span class="pk-chip">all day</span></span><span class="pk-text">${esc(e.title)}</span><span></span></div>`).join("");
+    rows += timed.map((e, i) => {
+      const m = minutes(e.start);
+      const state = i === next ? "is-now" : m != null && m < nowMin && (next === -1 || i < next) ? "is-past" : "";
+      return `<div class="pk-row has-time ${state}"><span class="pk-time">${esc(e.start)}</span><span class="pk-text">${esc(e.title)}</span><span class="pk-aside">${i === next ? "next" : ""}</span></div>`;
+    }).join("");
+    list.innerHTML = rows;
+  }
+
+  PilotKit.on(draw);
+</script>

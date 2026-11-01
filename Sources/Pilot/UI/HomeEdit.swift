@@ -470,7 +470,7 @@ extension HomeParts {
     func beginEdit(byHold: Bool = false) {
         guard editing.wrappedValue == nil else { return }
         if byHold { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
-        let session = HomeEditSession(layout: sources.layout().layout, extensions: pages.map(\.id))
+        let session = HomeEditSession(layout: sources.layout().layout, extensions: beyond)
         withAnimation(HomeMotion.enter) { editing.wrappedValue = HomeEditMode(session: session) }
         AccessibilityNotification.Announcement(HomeEditMode.entered).post()
     }
@@ -493,14 +493,15 @@ extension HomeParts {
     func change(_ edit: (HomeEditSession) -> Void) {
         let mode = editing.wrappedValue
         withAnimation(mode?.settle ?? HomeMotion.enter) {
-            editing.wrappedValue = HomeEditMode.staging(edit, in: mode, layout: sources.layout().layout, extensions: pages.map(\.id))
+            editing.wrappedValue = HomeEditMode.staging(edit, in: mode, layout: sources.layout().layout, extensions: beyond)
         }
     }
 
-    /// A block's name: Pilot's own, else its extension page's title.
+    /// A block's name: Pilot's own, else its extension page's title, else its Home widget's.
     func title(_ id: String) -> String {
         let ext = HomeLayout.extensionID(id)
-        return HomeLayout.Block(rawValue: id)?.title ?? pages.first { $0.id == ext }?.title ?? ext ?? id
+        return HomeLayout.Block(rawValue: id)?.title ?? pages.first { $0.id == ext }?.title
+            ?? widget(id)?.title ?? ext ?? id
     }
 }
 
@@ -573,6 +574,8 @@ struct HomeEditBar: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.never)
+            // A sideways ScrollView takes only sideways deltas: a mouse wheel or an up-down swipe over it turns sideways.
+            .background(SidewaysWheel())
             .accessibilityLabel("Hidden blocks")
             Button("Reset") { withAnimation(mode.settle) { session.reset() } }
                 .buttonStyle(.pilot)
@@ -604,6 +607,58 @@ struct HomeEditBar: View {
         .padding(Self.margin)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Edit Home")
+    }
+}
+
+/// Over its frame, a scroll that is more up-down than sideways (a mouse wheel, an up-down swipe) goes on as the same
+/// scroll sideways, momentum and all, so the edit bar's Hidden tray scrolls with either (Sven on 1.0.2 build 6: "i cant
+/// scroll horizontally for 'hidden'"). Clicks and drags pass through.
+struct SidewaysWheel: NSViewRepresentable {
+    func makeNSView(context: Context) -> Catcher { Catcher() }
+    func updateNSView(_ view: Catcher, context: Context) {}
+    static func dismantleNSView(_ view: Catcher, coordinator: ()) { view.stop() }
+
+    final class Catcher: NSView {
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, event.window === self.window else { return event }
+                return self.turn(event) ? nil : event
+            }
+        }
+
+        /// Hands an up-down scroll over this frame sideways to the view under it; false leaves the event as it is.
+        func turn(_ event: NSEvent) -> Bool {
+            guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX), bounds.contains(convert(event.locationInWindow, from: nil)),
+                  let under = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+            under.scrollWheel(with: Self.sideways(event))
+            return true
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+        /// The event with its up-down deltas moved to the sideways axis; down scrolls on to the right.
+        static func sideways(_ event: NSEvent) -> NSEvent {
+            guard let copy = event.cgEvent?.copy() else { return event }
+            let pairs: [(CGEventField, CGEventField)] = [(.scrollWheelEventDeltaAxis1, .scrollWheelEventDeltaAxis2),
+                                                         (.scrollWheelEventPointDeltaAxis1, .scrollWheelEventPointDeltaAxis2)]
+            for (down, side) in pairs {
+                copy.setIntegerValueField(side, value: copy.getIntegerValueField(down))
+                copy.setIntegerValueField(down, value: 0)
+            }
+            copy.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: copy.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1))
+            copy.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: 0)
+            return NSEvent(cgEvent: copy) ?? event
+        }
     }
 }
 
@@ -860,6 +915,12 @@ struct HomeEditBlock: ViewModifier {
 
     @ViewBuilder private func menu(_ mode: HomeEditMode?) -> some View {
         let name = parts.title(id)
+        // A widget on Home: its own settings, as its right-click on the desktop offers.
+        if mode == nil, let placement = HomeLayout.widgetID(id) {
+            Button("Edit widget…") { WidgetDesk.shared.editPlacement(placement) }
+            Button("Remove from Home") { WidgetDesk.shared.removePlacement(placement) }
+            Divider()
+        }
         if mode == nil { Button("Edit Home") { parts.beginEdit() } }
         Menu("Size") {
             Picker("Size", selection: Binding(get: { parts.size(id) }, set: { size in parts.change { $0.size(id, size) } })) {

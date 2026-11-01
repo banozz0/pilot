@@ -1,7 +1,7 @@
 import Foundation
 import PilotCore
 
-/// `pilot ext show|broken|run|page|open` (CLI W15): an extension's Installed card read back, the folders the page lists as
+/// `pilot ext show|broken|run|page|open` (CLI W15): an extension's Extensions detail read back, the folders the page lists as
 /// not read, a command's or a page's answer, and the page or card opened. A run and a page ask Allow (they run the
 /// extension's program as Sven) and read nothing back while a password preference is set, since the program is handed it.
 extension ControlVerbs {
@@ -157,7 +157,9 @@ extension ControlVerbs {
                             "messages": .array(chat.shown.map { .object(["role": .string($0.role.rawValue), "text": .string($0.text)]) })])
         case .input(let input):
             return some(["type": .string("input"), "placeholder": text(input.placeholder), "action": action(input.action),
-                         "live": input.live.map { .number(($0 / .milliseconds(1)).rounded()) }])
+                         "live": input.live.map { .number(($0 / .milliseconds(1)).rounded()) },
+                         "actions": input.actions.isEmpty ? nil : .array(input.actions.map(action)),
+                         "files": input.files.map { .array($0.map(JSONValue.string)) }])
         case .hero(let hero):
             return some(["type": .string("hero"), "glyph": text(hero.glyph), "value": .string(hero.value), "unit": text(hero.unit), "place": text(hero.place),
                          "tone": text(hero.tone?.rawValue),

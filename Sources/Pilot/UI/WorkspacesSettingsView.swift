@@ -7,8 +7,8 @@ import PilotCore
 /// Add and Delete over them (Sven 2026-10-17: Delete takes the picked one), each a small screen of its apps in their spots
 /// under its name, and under them the picked one in the editor itself: the preview whose spots take an app, the layout
 /// pictures, Opens here and its two rules, the apps that always land there and its window snapshot. Every change saves
-/// at once (Sven 2026-10-17, no Save button). Under the editor the scrolling layout's centre mode and column rules, then
-/// each workspace's monitor and the swipe between them (Sven's Q207 page map, from Tiling). Gaps, the always-float lists
+/// at once (Sven 2026-10-17, no Save button). Under the editor, while the picked workspace is Scrolling, that layout's
+/// centre mode and column rules, then each workspace's monitor and the swipe between them (Sven's Q207 page map, from Tiling). Gaps, the always-float lists
 /// and the Pilot block sit under Tiling. Every rule change saves the Pilot block's settings and reloads the tiler.
 struct WorkspacesSettingsView: View {
     @Environment(Engine.self) private var engine
@@ -84,7 +84,10 @@ struct WorkspacesBody: View {
                 }
                 .id(name)
                 .frame(maxHeight: .infinity)
-                WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
+                // Only while the picked workspace's layout is Scrolling (Sven 2026-10-30), as the editor shows it.
+                if draft(name).layout == .scrolling {
+                    WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
+                }
                 if let monitors {
                     WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents)
                 }
@@ -248,7 +251,8 @@ extension View {
 }
 
 /// The scrolling layout's centre mode and column rules (spec scrolling-layout T9, T11; Sven via coordinator 21,
-/// 2026-10-20): under the editor where a workspace picks Scrolling, while Tiling's Scrolling block stays hidden (Q43).
+/// 2026-10-20): under the editor while the picked workspace's layout is Scrolling (Sven 2026-10-30), while Tiling's
+/// Scrolling block stays hidden (Q43).
 /// A rule added here changes nothing until its width or focus does.
 struct WorkspaceScrollingBlock: View {
     @Environment(\.ink) private var ink
@@ -402,38 +406,38 @@ private struct WorkspaceCard: View {
         }
     }
 
-    /// The workspace in miniature: its apps' tiles with their icons, or a dashed screen when nothing is placed. Scrolling's
-    /// strip is drawn as the editor's preview draws it: three columns whole, the rest peeking in at the right edge.
+    /// The workspace in miniature, in its layout (Sven 2026-10-30): its apps' tiles with their icons, then the layout's
+    /// empty spots dashed, as the editor's preview draws them. Scrolling's strip is drawn as the preview draws it: three
+    /// columns whole, the rest peeking in at the right edge.
     private var screen: some View {
         let shape = RoundedRectangle(cornerRadius: ink.radius(6), style: .continuous)
         return GeometryReader { g in
             let area = CGRect(origin: .zero, size: g.size).insetBy(dx: 3, dy: 3).offsetBy(dx: 0, dy: 4)
             let inner = CGRect(x: area.minX, y: area.minY, width: area.width, height: area.height - 4)
-            if draft.apps.isEmpty {
-                Image(systemName: "plus").font(ink.ui(12, .medium)).foregroundStyle(ink.muted)
-                    .frame(width: g.size.width, height: g.size.height)
-            } else {
-                ForEach(Array(zip(draft.apps, draft.tiles(in: inner)).enumerated()), id: \.offset) { i, pair in
-                    let r = pair.1.insetBy(dx: 1.5, dy: 1.5)
-                    let tile = RoundedRectangle(cornerRadius: ink.radius(3), style: .continuous)
-                    tile.fill(picked ? ink.accent.opacity(0.22) : ink.tile)
-                        .overlay { tile.strokeBorder(ink.outline, lineWidth: 1.5) }
-                        .overlay {
-                            if min(r.width, r.height) >= 18 {
-                                AppGlyph(bundles: [pair.0.bundleId], symbol: "app.dashed", size: min(18, min(r.width, r.height) - 6))
-                            }
+            let layout = draft.shape(in: inner) ?? (draft.tiles(in: inner), [])
+            let tile = RoundedRectangle(cornerRadius: ink.radius(3), style: .continuous)
+            ForEach(Array(zip(draft.apps, layout.apps).enumerated()), id: \.offset) { i, pair in
+                let r = pair.1.insetBy(dx: 1.5, dy: 1.5)
+                tile.fill(picked ? ink.accent.opacity(0.22) : ink.tile)
+                    .overlay { tile.strokeBorder(ink.outline, lineWidth: 1.5) }
+                    .overlay {
+                        if min(r.width, r.height) >= 18 {
+                            AppGlyph(bundles: [pair.0.bundleId], symbol: "app.dashed", size: min(18, min(r.width, r.height) - 6))
                         }
-                        .frame(width: max(0, r.width), height: max(0, r.height))
-                        .offset(x: r.minX, y: r.minY)
-                }
+                    }
+                    .frame(width: max(0, r.width), height: max(0, r.height))
+                    .offset(x: r.minX, y: r.minY)
+            }
+            ForEach(layout.open.indices, id: \.self) { k in
+                let r = layout.open[k].insetBy(dx: 1.5, dy: 1.5)
+                tile.strokeBorder(picked ? ink.accent.opacity(0.6) : ink.line3, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .frame(width: max(0, r.width), height: max(0, r.height))
+                    .offset(x: r.minX, y: r.minY)
             }
         }
         .background(ink.well, in: shape)
         .overlay(alignment: .top) { ink.text.opacity(0.05).frame(height: 4).clipShape(shape) }
-        .overlay {
-            if draft.apps.isEmpty { shape.strokeBorder(ink.line3, style: StrokeStyle(lineWidth: ink.stroke, dash: [4, 3])) }
-            else { shape.strokeBorder(ink.outline, lineWidth: ink.stroke) }
-        }
+        .overlay { shape.strokeBorder(ink.outline, lineWidth: ink.stroke) }
         .accessibilityHidden(true)
     }
 }

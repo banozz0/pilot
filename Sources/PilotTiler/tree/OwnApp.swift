@@ -190,6 +190,16 @@ private func onMain(_ body: @escaping @MainActor @Sendable () -> Void) {
 /// behind Ghostex).
 public enum TilerOwnWindows {
     @MainActor public static func shown() { refreshOnWindowEvent(kAXWindowCreatedNotification) }
+    /// One of Pilot's windows was brought forward on purpose (opened, or raised again): Show desktop ends, else a window
+    /// it holds in the hide corner, which raising it again (it was in front at the press) never brings back, opens out
+    /// of sight (Sven on 1.0.2 build 6, Edit widget on a desktop widget). Not on key alone: Cmd+Tab back to the app in
+    /// front at the press keeps it. True when it ended.
+    @MainActor @discardableResult public static func broughtForward() -> Bool {
+        guard shownDesktop != nil else { return false }
+        shownDesktop = nil
+        refreshOnWindowEvent(kAXWindowCreatedNotification)
+        return true
+    }
     /// One of Pilot's windows the tiler lays out (tiled or floating), not a panel, sheet, child or raised window.
     @MainActor public static func isLaidOut(_ window: NSWindow) -> Bool { window.engineWindowType != .popup }
 }

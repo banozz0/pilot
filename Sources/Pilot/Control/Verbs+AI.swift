@@ -107,7 +107,6 @@ extension ControlVerbs {
         guard refresh else {
             return .object(["id": .string(p.rawValue), "model": s.settings.model(for: p).map { .string(word($0)) } ?? .null, "models": models(p, s.settings)])
         }
-        guard p.refreshesModels else { throw ControlError(.badValue, "\(p.name)'s models are fixed; pilot ai models \(p.rawValue) lists them") }
         return try await s.gate.allow(keyLeaves(p, s.settings, "Refresh"), peer: peer) { () throws(ControlError) in
             answer(p, s, failed: await s.settings.refreshModels(for: p))
         }

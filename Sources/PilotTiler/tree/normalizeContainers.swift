@@ -10,9 +10,10 @@ extension Workspace {
 
 extension TilingContainer {
     @MainActor fileprivate func unbindEmptyAndAutoFlatten() throws {
-        // Pilot (scrolling layout): a strip's root stays the strip with one stack left in it, or the workspace would stop scrolling
+        // Pilot (scrolling layout, Stage layout): a strip's or a stage's root stays itself with one stack left in it, or the
+        // workspace would stop scrolling or lose its shelf's room
         if let child = children.singleOrNil(), config.enableNormalizationFlattenContainers && (child is TilingContainer || !isRootContainer)
-            && !(isRootContainer && layout == .scrolling)
+            && !(isRootContainer && layout.isRow)
         {
             try child.unbindFromParent()
             let mru = parent?.mostRecentChild

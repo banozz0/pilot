@@ -141,6 +141,7 @@ extension AeroEvent {
             case .workspaceChanged(let workspace, let previous): self = .focusedWorkspaceChanged(workspace: workspace, previous: previous)
             case .windowDetected(_, let workspace?, _, _): self = .windowDetected(workspace: workspace)
             case .windowDetected(_, nil, _, _): return nil
+            case .stagesChanged(let workspace): self = .stagesChanged(workspace: workspace)
         }
     }
 }

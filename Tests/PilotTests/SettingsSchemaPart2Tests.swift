@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import PilotCore
 @testable import PilotTiler
 import Testing
@@ -23,6 +24,14 @@ struct SettingsSchemaPart2Tests {
         struct Refused: Error, CustomStringConvertible { var description: String { "not allowed" } }
         func isHidden() async throws -> Bool { throw Refused() }
         func setHidden(_ hidden: Bool) async throws { throw Refused() }
+    }
+
+    /// Screen Recording granted, nothing captured: the shelf's pictures never ask or capture in a test.
+    struct NoCapture: ShelfCapturing {
+        func allowed() -> Bool { true }
+        func stills(_ ids: [Int], width: Int) async -> (images: [Int: ShelfStill], refused: Bool) { ([:], false) }
+        @MainActor func live(_ id: Int, width: Int, frame: @escaping @MainActor (CGImage) -> Void,
+                             ended: @escaping @MainActor () -> Void) async -> ShelfLiveStart { .failed }
     }
 
     @MainActor final class Rig {
@@ -63,6 +72,7 @@ struct SettingsSchemaPart2Tests {
             schema.registerPart2(settings: settings, list: list, snapshots: snapshots, block: block, bar: bar, topBar: topBar,
                                  wallpaper: wallpaper, recommendations: recommendations, pilotSwitch: pilotSwitch,
                                  dictation: PilotDictationTests.Rig().pilot,
+                                 pictures: ShelfPictures(defaults: defaults, capture: NoCapture()),
                                  notesIn: { [unowned self] _ in notesLeft },
                                  changeNotes: { [settings] in settings.notesFolder = NotesFolder.setting($0) })
             schema.registerStats(views: views, bar: bar)
@@ -102,7 +112,7 @@ struct SettingsSchemaPart2Tests {
         try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
-        #expect(rig.schema.keys.count == 47)
+        #expect(rig.schema.keys.count == 51)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -198,7 +208,7 @@ struct SettingsSchemaPart2Tests {
         #expect(await allowing.ask("set", "switch.on", "off").ok && allowing.pilotSwitch.flips == [false])
         // The keys that confirm are the ones the gate asks about, so the prompt has its question.
         let confirms = allowing.schema.sorted.filter(\.confirms).map(\.key)
-        #expect(confirms == ["switch.on"])
+        #expect(confirms == ["shelf.pictures", "switch.on"])
         #expect(confirms.allSatisfy { ControlGate.Ask.set($0, to: "on") != nil })
     }
 
@@ -210,7 +220,7 @@ struct SettingsSchemaPart2Tests {
         "layerKey", "quickTapEscape", "general.bindNudges", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay", "system.publicIP",
         "windows.dragModifier", "windows.swipeWorkspaces", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
         "translate.home", "translate.other",
-        "look.style", "look.theme", "look.glass", "look.transparency", "look.windowBorder", "look.windowBorderWidth",
+        "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
         "look.windowBorderColour", "look.defocusStrength", "look.defocusDim", "look.defocusShake", "look.defocusShakeSwings",
         "look.defocusShakeWithin", "look.appsShowAs", "look.windowLayout", "look.strength", "look.material",
         "clipboard.keepCount", "clipboard.keepDays", "clipboard.saveImages", "clipboard.returnAction", "clipboard.sort",
@@ -226,7 +236,7 @@ struct SettingsSchemaPart2Tests {
         "wallpaper.folders", "wallpaper.screenSources", "wallpaper.fitShape", "wallpaper.workspaces", "wallpaper.workspaceSources",
         "wallpaper.workspaceImages",
         "recommendations.show", "switch.on",
-        "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.copy", "dictation.pauseMedia", "home.blocks", "stats.views", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
+        "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.showIn", "dictation.barSide", "dictation.waveColour", "dictation.copy", "dictation.pauseMedia", "home.blocks", "stats.views", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
         "setup.wifi.shown", "setup.bluetooth.shown", "pilot.notifications.decision", "pilot.notifications.macOSOffSaid",
         "AppleInterfaceStyle",
     ]

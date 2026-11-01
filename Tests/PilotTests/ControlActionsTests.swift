@@ -288,7 +288,7 @@ struct ControlActionsTests {
         #expect(rig.log.opened == [AppPlace(.tiling), AppPlace(.general)])
         let unknown = await rig.ask("open", "nosuchpage")
         #expect(unknown.error?.code == .unknownPage)
-        #expect(AppPage.allCases.allSatisfy { unknown.error?.message.contains($0.rawValue) == true })
+        #expect(AppPage.allCases.filter { !$0.isDeveloper }.allSatisfy { unknown.error?.message.contains($0.rawValue) == true })
         #expect(await rig.ask("open", "system", "--section", "nosuch").error?.code == .unknownSection)
         #expect(rig.log.opened.count == 2)
     }

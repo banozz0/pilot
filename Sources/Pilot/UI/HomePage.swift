@@ -72,15 +72,16 @@ struct HomePage: View {
                                          lastError: engine.lastError)
         // In edit mode Done holds Return.
         let held = editing != nil ? .none : HomeReturn.target(picked: picked != nil, problems: problems, searching: searching)
-        let pages = sources.pages()
+        let pages = sources.pages(), widgets = sources.widgets()
         let home = editing?.session.preview ?? sources.layout().layout
-        let shown = home.shown(extensions: pages.map(\.id))
+        let beyond = HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id))
+        let shown = home.shown(extensions: beyond)
         let parts = HomeParts(problems: problems, held: held, picked: $picked, copy: copy, binds: binds ?? HomeBinds(engine: engine),
                               blocks: HomeLayout.drawn(shown, style: style.kind, needsYou: !problems.isEmpty),
                               pages: pages, pageModel: { [pageModels, sources] in pageModels.model($0, make: sources.page) }, onScreen: onScreen,
                               editing: $editing, searching: searching,
                               go: go, editBind: editBind, openExtension: openExtension, sources: sources, restartTiler: { [engine] in engine.startTiler() },
-                              size: home.size(of:), clashes: clashes)
+                              size: home.size(of:), clashes: clashes, widgets: widgets)
         Group {
             if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentHome(parts: parts) }
         }
@@ -92,7 +93,7 @@ struct HomePage: View {
             if let code = givenStart?.picked { picked = code }
             let start = givenStart ?? start
             guard start.editing, editing == nil else { return }
-            editing = HomeEditMode(session: HomeEditSession(layout: sources.layout().layout, extensions: sources.pages().map(\.id)))
+            editing = HomeEditMode(session: HomeEditSession(layout: sources.layout().layout, extensions: beyond))
         }
         // Leaving Home throws an edit away (Sven, 2026-10-12: only Done saves).
         .onDisappear { editing = nil }
@@ -147,6 +148,10 @@ struct HomeSources: Sendable {
     /// Instrument's Clipboard panel and Toybox's Clipboard block (cards agent-bo-95423181, 95423182): the newest kept copies, newest first; none while the
     /// history is not running.
     var recentCopies: @MainActor @Sendable () -> [StoredClip] = { ClipboardHistory.shared.recent() }
+    /// The widgets placed on Home, with the tiles the desk feeds while Home draws them.
+    var widgets: @MainActor @Sendable () -> [HomeWidget] = { WidgetDesk.shared.homeWidgets() }
+    /// A Home widget's tile is drawn in the window on screen, or no longer: its feed starts or stops, its page ended.
+    var drawWidget: @MainActor @Sendable (String, Bool) -> Void = { WidgetDesk.shared.drawnOnHome($0, $1) }
 }
 
 extension EnvironmentValues {
@@ -229,6 +234,14 @@ struct HomeParts {
     var size: (String) -> HomeLayout.Size = HomeLayout.Size.standard
     /// Binds' clashes, as the window counts them: the greeting says them.
     var clashes = 0
+    /// The widgets placed on Home (HomeWidgetBlock draws each).
+    var widgets: [HomeWidget] = []
+
+    /// The rows past Pilot's own blocks, as HomeLayout takes them: the extension pages by id, Home's widgets by row.
+    var beyond: [String] { HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id)) }
+
+    /// The Home widget a row draws, if it is one.
+    func widget(_ row: String) -> HomeWidget? { widgets.first { $0.row == row } }
 
     func fix(_ problem: HomeProblems.Problem) -> (title: String, run: @MainActor () -> Void)? {
         HomeFix.of(problem, go: go, restartTiler: restartTiler)

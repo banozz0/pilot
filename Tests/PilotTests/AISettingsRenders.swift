@@ -11,7 +11,8 @@ import Testing
 /// Instrument and Toybox on Lagoon, and Instrument on Porcelain, in each state: the subscription signed in, signed out and
 /// missing, the Anthropic key missing, saved and tested, and rejected, OpenAI with no key, Ollama with a listed model
 /// that is not running, an endpoint set up, and the ChatGPT and Google subscriptions connected, not connected and
-/// missing. Fake Keychain, network and CLIs; nothing is read, run or sent.
+/// missing; Claude Code's picker named by the versions its aliases run (Sven 2026-10-31, build 3). Fake Keychain, network
+/// and CLIs; nothing is read, run or sent.
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter AISettingsRenders`
 extension SharedLook {
 @MainActor
@@ -20,7 +21,7 @@ struct AISettingsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
     @Test("AI › Setup renders in each style and state", .enabled(if: env["PILOT_RENDER_DIR"] != nil))
-    func render() throws {
+    func render() async throws {
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("ai-settings")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         testApp()
@@ -40,10 +41,22 @@ struct AISettingsRenders {
             let ai = AISettings(defaults: defaults, keys: keys, http: AISettingsTests.NoNetwork())
             ai.provider = provider
             ai.checkCLI = { $0 == provider ? cli : .missing }
+            ai.listClaude = { Self.claudeRows }
             return AISetupPage(settings: ai, test: test)
         }
+
+        // Refresh on Claude Code keeps each alias's version for the picker, the default's too.
+        let listed = AISettings(defaults: try #require(UserDefaults(suiteName: testSuite())), keys: AISettingsTests.FakeKeys(), http: AISettingsTests.NoNetwork())
+        listed.listClaude = { Self.claudeRows }
+        let failed = await listed.refreshModels(for: .claudeCode)
+        print("claude picker: \(listed.models(for: .claudeCode).map(\.title))")
+        #expect(failed == nil && listed.models(for: .claudeCode).map(\.title)
+            == ["Claude Code's default · Opus 5.5", "Haiku · runs Opus 5.5", "Sonnet 5.5", "Opus 5.5", "Fable 5.1"])
         let states: [(String, AISetupPage)] = [
-            ("1-cli-signed-in", try block(.claudeCode, cli: .signedIn(path: path))),
+            ("1-cli-signed-in", try block(.claudeCode, cli: .signedIn(path: path)) {
+                $0.set(Dictionary(Self.claudeRows.map { ($0.id ?? "", $0.title) }, uniquingKeysWith: { a, _ in a }), forKey: AISettings.titlesKey(.claudeCode))
+                $0.set("sonnet", forKey: AISettings.modelKey(.claudeCode))
+            }),
             ("2-cli-signed-out", try block(.claudeCode, cli: .signedOut(path: path), test: .failed(.signedOut))),
             ("3-cli-missing", try block(.claudeCode)),
             ("4-api-no-key", try block(.anthropicAPI)),
@@ -75,6 +88,10 @@ struct AISettingsRenders {
             }
         }
     }
+
+    /// What claude's `/model` gives on a Mac whose settings send haiku to Opus, in the CLI's order.
+    static let claudeRows = [AIModelChoice(nil, "Claude Code's default · Opus 5.5"), AIModelChoice("sonnet", "Sonnet 5.5"), AIModelChoice("opus", "Opus 5.5"),
+                             AIModelChoice("haiku", "Haiku · runs Opus 5.5"), AIModelChoice("fable", "Fable 5.1")]
 }
 
 /// The block on its style's ground, as the page lays it.

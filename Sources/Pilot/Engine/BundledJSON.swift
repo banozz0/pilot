@@ -20,11 +20,18 @@ enum BundledJSON {
         Bundle.main.url(forResource: name, withExtension: ext, subdirectory: folder) ?? overridden([folder, "\(name).\(ext)"].compactMap(\.self).joined(separator: "/"))
     }
 
+    /// A folder in the app's Resources, else in the renders' copy of them; nil when there is none.
+    static func folder(_ path: String) -> URL? {
+        Bundle.main.resourceURL.map { $0.appending(path: path, directoryHint: .isDirectory) }
+            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } ?? overridden(path)
+    }
+
     /// The offscreen renders' copy of the app's Resources (PILOT_RESOURCES, a folder), which the test bundle lacks; a
-    /// debug build only.
+    /// debug build only. Nil for a file it lacks, as Bundle answers.
     private static func overridden(_ path: String) -> URL? {
         #if DEBUG
         ProcessInfo.processInfo.environment["PILOT_RESOURCES"].map { URL(filePath: $0).appending(path: path) }
+            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
         #else
         nil
         #endif

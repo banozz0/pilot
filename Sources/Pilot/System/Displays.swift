@@ -57,11 +57,14 @@ protocol DisplaySystem: AnyObject {
     func canRotate(_ display: CGDirectDisplayID) -> Bool
     /// Turns the screen to 0, 90, 180 or 270 degrees; macOS keeps a rotation by itself.
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws
+    /// Puts each screen's top-left corner at its point in the global space, for good, as System Settings' arrangement does.
+    func arrange(_ origins: [CGDirectDisplayID: CGPoint]) throws
 }
 
 extension DisplaySystem {
     func canRotate(_ display: CGDirectDisplayID) -> Bool { false }
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws { throw DisplayRotation.Unavailable() }
+    func arrange(_ origins: [CGDirectDisplayID: CGPoint]) throws { throw CoreGraphicsDisplays.Refused(status: .notImplemented) }
 }
 
 /// Screen rotation (Sven 2026-10-22). macOS has no public call: this is MonitorPanel's MPDisplay, the private class behind
@@ -112,12 +115,13 @@ enum DisplayRotation {
     }
 }
 
-/// CoreGraphics's public display calls (Setup › Displays, card agent-bo-95422804). Arrangement, the main display and
-/// mirroring are read only: CGConfigureDisplayOrigin is public, but a wrong origin can lose a screen.
+/// CoreGraphics's public display calls (Setup › Displays, card agent-bo-95422804). The arrangement moves one screen beside
+/// another (Sven 2026-10-30), its origins from DisplayArrangement so none lands on a third; the main display and
+/// mirroring are read only.
 final class CoreGraphicsDisplays: DisplaySystem {
     struct Refused: Error, CustomStringConvertible {
         let status: CGError
-        var description: String { "macOS refused the mode (CoreGraphics error \(status.rawValue))" }
+        var description: String { "macOS refused the change (CoreGraphics error \(status.rawValue))" }
     }
 
     func displays() -> [DisplayInfo] {
@@ -156,6 +160,18 @@ final class CoreGraphicsDisplays: DisplaySystem {
 
     func canRotate(_ display: CGDirectDisplayID) -> Bool { DisplayRotation.canRotate(display) }
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws { try DisplayRotation.rotate(display, to: degrees) }
+
+    func arrange(_ origins: [CGDirectDisplayID: CGPoint]) throws {
+        var config: CGDisplayConfigRef?
+        var status = CGBeginDisplayConfiguration(&config)
+        guard status == .success else { throw Refused(status: status) }
+        for (display, origin) in origins {
+            status = CGConfigureDisplayOrigin(config, display, Int32(origin.x), Int32(origin.y))
+            guard status == .success else { CGCancelDisplayConfiguration(config); throw Refused(status: status) }
+        }
+        status = CGCompleteDisplayConfiguration(config, .permanently)
+        guard status == .success else { throw Refused(status: status) }
+    }
 
     private func all(_ display: CGDirectDisplayID) -> [CGDisplayMode] {
         let options = [kCGDisplayShowDuplicateLowResolutionModes: kCFBooleanTrue] as CFDictionary

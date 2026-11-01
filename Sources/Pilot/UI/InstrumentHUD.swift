@@ -54,10 +54,12 @@ private struct InstrumentAsk<Buttons: View, Foot: View>: View {
 /// An extension's alert: its heading, its note, then its buttons raised with the primary one last, at the right.
 struct InstrumentExtensionAlert: View {
     let alert: Extension.AlertSpec
+    var extra: AnyView?
     var press: (Int?) -> Void
 
     var body: some View {
         InstrumentAsk(title: alert.text, detail: alert.note) {
+            extra
             ForEach(ExtensionAlertButton.all(alert).reversed()) { button in
                 Button(button.title) { press(button.id) }.buttonStyle(InstrumentButtonStyle(kind: button.primary ? .primary : .raised))
             }

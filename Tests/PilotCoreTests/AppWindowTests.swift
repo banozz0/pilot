@@ -4,27 +4,30 @@ import Testing
 
 @Suite("App window")
 struct AppWindowTests {
-    @Test("Twenty-three pages in Home, eight areas and Pilot at the foot; Cmd+1 to 9 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
+    @Test("Twenty-six pages in Home, eight areas and Pilot at the foot; Cmd+1 to 9 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
     func pages() {
         #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Look", "System", "Activity",
                                                    "Update & Clean", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
-                                                   "Configs", "General", "Extensions"])
+                                                   "Configs", "Repos", "Fonts", "General", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Launcher", "Desktop", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
         // Every page in exactly one area.
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
         for page in AppPage.allCases { #expect(page.area.pages.contains(page), "\(page)") }
         #expect(AppArea.home.pages == [.home] && AppArea.keys.pages == [.binds] && AppArea.launcher.pages == [.menu])
-        #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .look])
+        #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .look, .widgets])
         #expect(AppArea.mac.pages == [.system, .activity, .upkeep, .stats])
         #expect(AppArea.tools.pages == [.clipboard, .captures, .snippets, .notes, .files, .voice])
-        #expect(AppArea.apps.pages == [.install, .openWith, .configs])
+        #expect(AppArea.apps.pages == [.install, .openWith, .configs, .repos, .fonts])
+        // The Developer switch off (Q715) leaves Configs and Repos out of the list, Ctrl+Tab and the search.
+        #expect(AppArea.apps.pages(developer: false) == [.install, .openWith, .fonts])
+        #expect(AppArea.next(after: .openWith, developer: false) == .fonts && AppPlace.search("zshrc", developer: false).isEmpty)
         // AI and Extensions are areas of their own (Sven 2026-10-16).
         #expect(AppArea.ai.pages == [.ai] && AppArea.extensions.pages == [.extensions])
         #expect(AppArea.pilot.pages == [.general])
         #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", ","])
         #expect(AppArea.main.count == 9 && !AppArea.main.contains(.pilot))
         // Ctrl+Tab steps through the area's pages, round to the first; a page alone stays.
-        #expect(AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .look) == .workspaces)
+        #expect(AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .look) == .widgets && AppArea.next(after: .widgets) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout: the rail by default, for a name it does not know and for the hub, taken out on 2026-10-11.
         #expect(WindowShape(saved: nil) == .rail && WindowShape(saved: "nope") == .rail && WindowShape(saved: "hub") == .rail)
@@ -49,7 +52,7 @@ struct AppWindowTests {
         #expect(AppPage.files.tabs.map(\.title) == ["Convert", "File search", "Duplicates", "Folders"])
         #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
         #expect(AppPage.activity.tabs.map(\.title) == ["Now", "Reports"])
-        #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "Helpers"])
+        #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "Helpers", "Hidden apps"])
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Overlay", "Mouse", "Swap keys", "Export and import"], "Overlay stays a Binds tab (story 56)")
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
         #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])

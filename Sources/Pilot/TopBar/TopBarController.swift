@@ -188,7 +188,8 @@ final class TopBarWindows: TopBarPanels {
         let look = Look.shared, wallpapers = BarWallpapers.shared
         panels.forEach { Self.applyLook(look, store: store, wallpaper: wallpapers.strips[$0.key], to: $0.value) }
         withObservationTracking {
-            _ = (look.appearance(for: .topBar), look.style, look.theme, look.transparency, store.background, store.colour, wallpapers.strips)
+            _ = (look.appearance(for: .topBar), look.style, look.theme, look.transparency, look.glassBlur, store.background, store.colour,
+                 wallpapers.strips)
         } onChange: { [weak self] in
             Task { @MainActor in self?.followLook() }
         }
@@ -196,16 +197,17 @@ final class TopBarWindows: TopBarPanels {
 
     /// A bar's window as its own Background and Colour say (BarItemsStore), never Look's Glass: on that the wallpaper
     /// drowned its text (Sven, 2026-10-10, build 29). Solid leaves the ground to the strip (TopBarStrip); Glass puts the
-    /// glass behind it, tinted with the bar's colour at Look's Transparency; Clear puts nothing, the items straight on the
+    /// glass behind it, tinted with the bar's colour at Look's Transparency, in Look's Blur, and Solid at Transparency 0 %; Clear puts nothing, the items straight on the
     /// wallpaper as on the macOS menu bar (Sven on build 60). Dark or light as the style, or as the bar's
     /// ink once its text was inked for its colour or for the `wallpaper` under it (StyleTokens.inked, BarTone),
     /// so the glass and system glyphs go with the text.
     static func applyLook(_ look: Look, store: BarItemsStore, wallpaper: WallpaperStrip.Grid? = nil, to panel: NSPanel) {
         let tokens = tokens(look)
-        let inked = TopBarColour.ink(store.colour, style: tokens, background: store.background, wallpaper: wallpaper, look: look).tokens
+        let background = store.background.shown(transparency: look.transparency)
+        let inked = TopBarColour.ink(store.colour, style: tokens, background: background, wallpaper: wallpaper, look: look).tokens
         panel.appearance = inked.inked ? NSAppearance(named: inked.dark ? .darkAqua : .aqua) : look.appearance(for: .topBar)
-        (panel.contentView as? MaterialBackdrop)?.show(store.background == .glass ? .glass : .solid,
-                                                         tint: TopBarColour.tint(store.colour, style: tokens, look: look))
+        (panel.contentView as? MaterialBackdrop)?.show(background == .glass ? .glass : .solid,
+                                                         tint: TopBarColour.tint(store.colour, style: tokens, look: look), blur: look.glassBlur)
     }
 
     /// The tokens the bar draws in (the topBar surface's style).

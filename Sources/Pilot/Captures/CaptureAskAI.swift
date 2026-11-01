@@ -25,6 +25,22 @@ enum CaptureAskAI {
         }
     }
 
+    /// A picture pasted or dropped on the AI chat (Q693): a picture file, or a picture's bytes.
+    enum Source: Sendable { case file(URL), data(Data) }
+
+    /// A pasted or dropped picture decoded no larger than it is sent, never whole, then encoded as a capture is; nil when it
+    /// is no picture.
+    nonisolated static func picture(_ source: Source) -> AIChat.Image? {
+        let image: CGImage? = switch source {
+        case .file(let url): NoteAttachments.picture(at: url, pixels: Int(longest))
+        case .data(let data): CGImageSourceCreateWithData(data as CFData, nil).flatMap {
+            CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                                                        kCGImageSourceThumbnailMaxPixelSize: Int(longest)] as CFDictionary)
+        }
+        }
+        return image.flatMap(picture)
+    }
+
     /// The picture as it is sent: its pixels, shrunk to `longest` on its longer side when bigger.
     nonisolated static func size(_ width: Int, _ height: Int) -> CGSize {
         let w = CGFloat(width), h = CGFloat(height), fit = min(1, longest / max(w, h, 1))

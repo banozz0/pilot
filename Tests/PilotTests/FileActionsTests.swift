@@ -20,7 +20,7 @@ struct FileActionsTests {
     final class FakeApps: OpeningApps {
         let record: Record
         init(_ record: Record) { self.record = record }
-        func apps(toOpen url: URL) -> [URL] { [URL(filePath: "/System/Applications/Preview.app"), URL(filePath: "/Applications/Zen.app")] }
+        func apps(toOpen url: URL) -> (suggested: [URL], others: [URL]) { ([URL(filePath: "/System/Applications/Preview.app")], [URL(filePath: "/Applications/Zen.app")]) }
         func open(_ urls: [URL], with app: URL) { record.opened.append((urls, app)) }
     }
 

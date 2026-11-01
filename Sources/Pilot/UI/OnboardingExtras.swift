@@ -121,7 +121,7 @@ final class OnboardingExtras {
     static let recommendedSpeech = SpeechChoice.whisperTurbo
 
     /// The dictation rows: Skip, then every model.
-    static let speechChoices: [SpeechChoice?] = [nil] + SpeechChoice.allCases
+    static let speechChoices: [SpeechChoice?] = [nil] + SpeechChoice.offered
     static func speechTitle(_ choice: SpeechChoice?) -> String { choice.map { "Dictation: \($0.name)" } ?? "Dictation: skip for now" }
     static func speechDetail(_ choice: SpeechChoice?) -> String {
         choice.map { "\($0.size) · \($0.note)" } ?? "Pilot's own dictation runs on this Mac; download a model any time"
@@ -317,7 +317,7 @@ final class ExtrasDownloads {
         let names = defaults.stringArray(forKey: Self.key) ?? []
         guard !names.isEmpty else { return }
         log.notice("extras: resuming \(names.joined(separator: ", "), privacy: .public)")
-        begin(speech: names.lazy.compactMap(SpeechChoice.init).first, voices: names.contains(Self.voicesName),
+        begin(speech: names.lazy.compactMap(SpeechChoice.init).first(where: SpeechChoice.offered.contains), voices: names.contains(Self.voicesName),
               upscaler: names.contains(Self.upscalerName))
     }
 

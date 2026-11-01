@@ -44,8 +44,8 @@ public enum OmarchyThemes {
 }
 
 /// What Pilot sets in Ghostty: a theme's colours through Omarchy's ghostty.conf.tpl mapping (MIT, basecamp/omarchy);
-/// with no theme, Ghostty keeps its own colours. Never a font (Sven, 2026-10-09): `text` is the include without one, and
-/// GhosttyFiles carries over the font lines an older Pilot wrote.
+/// with no theme, Ghostty keeps its own colours. `text` is the include without a font: its font lines are Install's Use
+/// fonts in pick (FontPlaces, Sven Q711), which GhosttyFiles carries over on every rewrite.
 public struct GhosttyLook: Equatable, Sendable {
     public var theme: OmarchyTheme?
 
@@ -71,8 +71,8 @@ public struct GhosttyLook: Equatable, Sendable {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// The `font-` lines of an include as written before (the font picker's, until 2026-10-09), in order: kept as they are
-    /// on every rewrite, so a pick never changes Ghostty's font.
+    /// The `font-` lines of an include (Use fonts in's, and the old font picker's until 2026-10-09), in order: kept as they
+    /// are on every rewrite, so a theme pick never changes Ghostty's font.
     public static func fontLines(in include: String?) -> [String] {
         (include ?? "").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("font-") }

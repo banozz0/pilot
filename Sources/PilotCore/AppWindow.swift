@@ -9,10 +9,12 @@ import Foundation
 /// Voice holds Dictation (was on Open with) and Read aloud (was System › Keyboard), so both sit with the tools (2026-10-16).
 /// Page map (Sven, 2026-10-17, Q207-Q211): Agent instructions is Configs' Agents tab, Ask is AI. The menu's page is Launcher, in an
 /// area of its own (P37, Sven 2026-10-18, Q284, Q285); still `menu` in links. Update & Clean left the top of Activity ›
-/// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac").
+/// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac"). Fonts left
+/// Install for a page of its own after Configs (Sven, 2026-11-01: "for fonts i think its better to have its own page").
+/// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 public enum AppPage: String, CaseIterable, Sendable {
     case home, binds, menu, workspaces, tiling, menuBar, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
-         install, openWith, configs, general, extensions
+         install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
     public var area: AppArea { AppArea.allCases.first { $0.pages.contains(self) } ?? .home }
@@ -38,10 +40,13 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .install: "Install"
         case .openWith: "Open with"
         case .configs: "Configs"
+        case .repos: "Repos"
+        case .fonts: "Fonts"
         case .general: "General"
         case .ai: "AI"
         case .voice: "Voice"
         case .extensions: "Extensions"
+        case .widgets: "Widgets"
         }
     }
 
@@ -67,10 +72,13 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .install: "shippingbox"
         case .openWith: "arrow.up.forward.app"
         case .configs: "doc.badge.gearshape"
+        case .repos: "arrow.triangle.branch"
+        case .fonts: "textformat"
         case .general: "gearshape"
         case .ai: "sparkles"
         case .voice: "waveform"
         case .extensions: "puzzlepiece.extension"
+        case .widgets: "square.grid.2x2"
         }
     }
 
@@ -78,13 +86,17 @@ public enum AppPage: String, CaseIterable, Sendable {
     public var colour: Int {
         switch self {
         case .home, .clipboard, .captures, .upkeep: 0
-        case .binds, .look, .ai, .snippets: 1
+        case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
         case .menu, .menuBar, .general, .activity: 3
-        case .install, .extensions, .files, .stats: 4
+        case .install, .extensions, .files, .stats, .fonts, .repos: 4
         case .openWith, .configs, .notes: 5
         }
     }
+
+    /// Developer pages (Pilot 1.0.2, Sven Q715): Configs, with its Agents tab, and Repos show only while General's Developer
+    /// switch is on; off, the sidebar, the searches and `pilot open` leave them out and nothing reads their files.
+    public var isDeveloper: Bool { self == .configs || self == .repos }
 
     /// The parts a page holds as tabs or places on it (Binds' conflicts open as a sheet, not a tab).
     public var sections: [AppSection] { AppSection.allCases.filter { $0.page == self } }
@@ -104,11 +116,9 @@ public enum AppPage: String, CaseIterable, Sendable {
         return hasOwnContent ? [(nil, ownTitle)] + parts : parts
     }
 
-    /// The tab of a page's own content: Extensions' is what is installed, Menu's the rows Hyper+Space shows, Activity's
-    /// what runs now.
+    /// The tab of a page's own content: Menu's the rows Hyper+Space shows, Activity's what runs now.
     var ownTitle: String {
         switch self {
-        case .extensions: "Installed"
         case .binds: "Keyboard"
         case .menu: "Your menu"
         case .activity: "Now"
@@ -151,9 +161,12 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .openWith: ["default app", "open with", "main editor", "editor", "vs code", "browser", "defaults", "terminal app", "notes app",
                          "password manager", "music app"]
         case .configs: ["config", "dotfiles", "ghostty", "neovim", "zshrc", "gitconfig", "starship", "tmux", "settings.json"]
+        case .repos: ["repo", "repos", "repository", "git", "branch", "commit", "code folder", "file tree", "source code"]
+        case .fonts: ["font", "fonts", "typeface", "mono", "use fonts in", "nerd font"]
         case .general: ["hyper", "layer key", "caps lock", "escape", "overlay", "launch at login", "startup", "uninstall"]
         case .ai: ["ai", "ask", "chat", "quick ai", "claude", "ask claude", "ai chat"]
         case .extensions: ["extension", "preference", "password", "permission", "extensions folder"]
+        case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note"]
         case .voice: ["dictation", "dictate", "read aloud", "speech", "speak", "voice", "text to speech",
                       "tts", "speed", "speech to text", "whisper", "parakeet", "speech model", "transcribe"]
         }
@@ -175,10 +188,10 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .home: [.home]
         case .keys: [.binds]
         case .launcher: [.menu]
-        case .desktop: [.workspaces, .tiling, .menuBar, .look]
+        case .desktop: [.workspaces, .tiling, .menuBar, .look, .widgets]
         case .mac: [.system, .activity, .upkeep, .stats]
         case .tools: [.clipboard, .captures, .snippets, .notes, .files, .voice]
-        case .apps: [.install, .openWith, .configs]
+        case .apps: [.install, .openWith, .configs, .repos, .fonts]
         case .ai: [.ai]
         case .extensions: [.extensions]
         case .pilot: [.general]
@@ -220,13 +233,16 @@ public enum AppArea: String, CaseIterable, Sendable {
         self == .pilot ? "," : Character(String((AppArea.allCases.firstIndex(of: self) ?? 0) + 1))
     }
 
+    /// Its pages the window lists: all of them while `developer` is on, else all but the developer pages.
+    public func pages(developer: Bool) -> [AppPage] { developer ? pages : pages.filter { !$0.isDeveloper } }
+
     /// The areas above the foot, in order; Pilot sits apart at the foot.
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
 
-    /// The page after `page` in its area, round to the first (Ctrl+Tab).
-    public static func next(after page: AppPage) -> AppPage {
-        let pages = page.area.pages
-        return pages[((pages.firstIndex(of: page) ?? 0) + 1) % pages.count]
+    /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
+    public static func next(after page: AppPage, developer: Bool = true) -> AppPage {
+        let pages = page.area.pages(developer: developer)
+        return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
 }
 
@@ -302,9 +318,12 @@ public enum AppSection: String, CaseIterable, Sendable {
     case catalogue, webApps
     /// Install's tab: the command-line tools other features run (General's until the page map, Sven 2026-10-17).
     case helpers
+    /// Install's tab: apps left out of Pilot's lists, and Finder's where it can (Pilot 1.0.2, Sven Q713).
+    case hiddenApps
     /// General's places a link scrolls to.
     case permissions, about
-    /// Extensions' second tab, the extension catalogue (2026-10-10); `tab=catalogue` names it on the Extensions page.
+    /// The extension catalogue's part of the one Extensions list (2026-10-10; a tab until Q601): `tab=catalogue` names it on
+    /// the Extensions page, which picks its first row.
     case extensionCatalogue
     /// Binds' third tab: what the hold-Hyper overlay shows, a switch per bind (story 56, 2026-10-10).
     case overlay
@@ -333,7 +352,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .abilities, .aliases, .quicklinks, .rings: .menu
         case .fileSearch, .duplicates, .folders: .files
         case .reports: .activity
-        case .catalogue, .webApps, .helpers: .install
+        case .catalogue, .webApps, .helpers, .hiddenApps: .install
         case .permissions, .about: .general
         case .extensionCatalogue: .extensions
         case .agents: .configs
@@ -358,9 +377,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// conflicts a sheet.
     public var isTab: Bool { !opensAsSheet && !isMerged }
 
-    /// Parts drawn on their page's own body: Plain combos as a sublayer, and General's places, which a link scrolls to.
-    /// The search still lands on them.
-    public var isMerged: Bool { self == .plainCombos || page == .general }
+    /// Parts drawn on their page's own body: Plain combos as a sublayer, and General's places and the extension catalogue
+    /// (Q601), which a link scrolls to. The search still lands on them.
+    public var isMerged: Bool { self == .plainCombos || page == .general || self == .extensionCatalogue }
 
     public var title: String {
         switch self {
@@ -376,6 +395,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .catalogue: "Catalogue"
         case .webApps: "Web apps"
         case .helpers: "Helpers"
+        case .hiddenApps: "Hidden apps"
         case .permissions: "Permissions"
         case .exportImport: "Export and import"
         case .about: "About"
@@ -405,6 +425,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .catalogue: ["install catalogue", "catalogue", "homebrew", "cask", "formula"]
         case .webApps: ["web app", "url", "site", "sign out"]
         case .helpers: ["helper", "homebrew", "brew", "mole", "mas", "npm", "cargo", "command-line tools"]
+        case .hiddenApps: ["hide app", "hidden app", "unhide", "hide from finder", "declutter", "chess"]
         case .permissions: ["accessibility", "secure input", "health", "diagnostics", "log", "full disk access", "permission", "microphone",
                             "screen recording", "input monitoring", "system events", "automation"]
         case .exportImport: ["export", "import", "pack", "second mac", "backup"]
@@ -480,11 +501,11 @@ public struct AppPlace: Hashable, Sendable {
 
     /// Places whose title holds the query first (a page's, then a part's), then places with a setting that does; when
     /// none, those a typo of it finds, the closest first, a title before a setting (FuzzyRanker.Filter); empty for a
-    /// blank query.
-    public static func search(_ query: String) -> [AppPlace] {
+    /// blank query. Developer pages and their parts only while `developer` is on.
+    public static func search(_ query: String, developer: Bool = true) -> [AppPlace] {
         let filter = FuzzyRanker.Filter(query)
         guard !filter.typed.isEmpty else { return [] }
-        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.map { AppPlace($0) }
+        let all = (AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.map { AppPlace($0) }).filter { developer || !$0.page.isDeveloper }
         let byTitle = all.filter { filter.holds([$0.title]) }
         let held = byTitle + all.filter { place in !byTitle.contains(place) && filter.holds(place.keywords) }
         guard held.isEmpty else { return held }

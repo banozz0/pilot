@@ -13,8 +13,8 @@ public struct SettingKey: Sendable {
         case choices([String])
         /// A free word (a folder, a model id, an address); its store checks it.
         case text
-        /// "theme" or "#RRGGBB".
-        case colour
+        /// "theme" or "#RRGGBB"; with `plain`, "plain" too (no colour picked, ColourChoice.plain).
+        case colour(plain: Bool)
         /// A Keychain item: `get` says only whether it is set; `set` takes it from stdin alone (`--stdin`), never as a word.
         case secret
     }
@@ -103,8 +103,10 @@ public struct SettingKey: Sendable {
             return value
         case .text:
             return .string(word)
-        case .colour:
-            guard ColourChoice(rawValue: word) != nil else { throw ControlError(.badValue, "\(key) is theme or #RRGGBB, not \(word)") }
+        case .colour(let plain):
+            guard ColourChoice(rawValue: word) != nil || plain && word == ColourChoice.plain else {
+                throw ControlError(.badValue, "\(key) is \(plain ? "plain, " : "")theme or #RRGGBB, not \(word)")
+            }
             return .string(word)
         case .secret:
             throw Self.keychainOnly(key)
@@ -138,7 +140,9 @@ public struct SettingKey: Sendable {
             entry["type"] = .string("choices")
             entry["choices"] = .array(choices.map(JSONValue.string))
         case .text: entry["type"] = .string("text")
-        case .colour: entry["type"] = .string("colour")
+        case .colour(let plain):
+            entry["type"] = .string("colour")
+            if plain { entry["plain"] = .bool(true) }
         case .secret:
             entry["type"] = .string("secret")
             entry["secret"] = .bool(true)
@@ -233,9 +237,20 @@ extension SettingKey {
     /// "theme" or "#RRGGBB".
     public static func colour(_ key: String, _ label: String, page: String, read: @escaping @Sendable @MainActor () -> ColourChoice,
                               write: @escaping @Sendable @MainActor (ColourChoice) async throws(ControlError) -> Void) -> SettingKey {
-        SettingKey(key, label, page: page, kind: .colour, standard: .string(ColourChoice.theme.rawValue), read: { .string(read().rawValue) },
+        SettingKey(key, label, page: page, kind: .colour(plain: false), standard: .string(ColourChoice.theme.rawValue), read: { .string(read().rawValue) },
                    write: { value throws(ControlError) in
                        if case .string(let s) = value, let colour = ColourChoice(rawValue: s) { try await write(colour) }
+                   })
+    }
+
+    /// "plain" (nil, the default), "theme" or "#RRGGBB".
+    public static func colour(_ key: String, _ label: String, page: String, plain read: @escaping @Sendable @MainActor () -> ColourChoice?,
+                              write: @escaping @Sendable @MainActor (ColourChoice?) async throws(ControlError) -> Void) -> SettingKey {
+        SettingKey(key, label, page: page, kind: .colour(plain: true), standard: .string(ColourChoice.plain),
+                   read: { .string(read()?.rawValue ?? ColourChoice.plain) },
+                   write: { value throws(ControlError) in
+                       guard case .string(let s) = value else { return }
+                       try await write(ColourChoice(rawValue: s))
                    })
     }
 

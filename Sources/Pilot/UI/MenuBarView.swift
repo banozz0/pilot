@@ -10,10 +10,12 @@ protocol QuickSwitchable: AnyObject {
 }
 
 /// The dropdown's quick switches (card agent-bo-95422912): the Hyper key (card agent-bo-95422986), the tiler's tiling,
-/// the top bar, Keep awake and the clipboard's recording; injected, so tests run each over fakes of what it drives.
+/// the top bar, Keep awake, the clipboard's recording and the dictation key (spec pilot-1-1 T29); injected, so tests run
+/// each over fakes of what it drives.
 @MainActor
 struct QuickSwitches {
-    let hyper: QuickSwitchable, tiling: QuickSwitchable, topBar: QuickSwitchable, keepAwake: QuickSwitchable, clipboard: QuickSwitchable
+    let hyper: QuickSwitchable, tiling: QuickSwitchable, topBar: QuickSwitchable, keepAwake: QuickSwitchable, clipboard: QuickSwitchable,
+        dictation: QuickSwitchable
 
     subscript(_ which: Dropdown.Switch) -> QuickSwitchable {
         switch which {
@@ -22,6 +24,29 @@ struct QuickSwitches {
         case .topBar: topBar
         case .keepAwake: keepAwake
         case .clipboard: clipboard
+        case .dictation: dictation
+        }
+    }
+}
+
+/// The dropdown's Dictation switch (spec pilot-1-1 T29): Voice › Dictation key on or off. Off remembers the key, so on
+/// brings it back; a key Hyper took since, or none remembered, comes back as the first key on offer.
+@MainActor
+final class DictationKeySwitch: QuickSwitchable {
+    private let settings: PilotSettings
+    private var last: DictationKey?
+
+    init(settings: PilotSettings) { self.settings = settings }
+
+    var isOn: Bool { settings.dictationKey != .off }
+
+    func toggle() {
+        if isOn {
+            last = settings.dictationKey
+            settings.dictationKey = .off
+        } else {
+            let offered = DictationKey.offered(layerKeys: settings.layerKeys).filter { $0 != .off }
+            settings.dictationKey = last.flatMap { offered.contains($0) ? $0 : nil } ?? offered.first ?? .off
         }
     }
 }
@@ -85,9 +110,9 @@ final class SessionSwitch: QuickSwitchable {
     func set(_ on: Bool) { if on != isOn { toggle() } }
 }
 
-/// Pilot's menu-bar dropdown in round 3's five blocks (card agent-bo-95422912, design round 4's ddBody, card
-/// agent-bo-95422914): Status with any problem first, Workspaces, Quick switches, Now, the footer; holding
-/// Option adds the developer rows. Everything the old dropdown offered is here (Dropdown.carried).
+/// Pilot's menu-bar dropdown (card agent-bo-95422912, compact since spec pilot-1-1 T29): Status with any problem first,
+/// the workspaces, six switches, Now while something runs, the rows with their keys, then Check for updates, Settings
+/// and Quit; holding Option adds the developer rows. Everything the old dropdown offered is here (Dropdown.carried).
 struct PilotDropdown: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -119,11 +144,11 @@ struct PilotDropdown: View {
 }
 
 extension Engine {
-    /// Pilot's dropdown (card agent-bo-95422912), with its quick switches on the real tiler, top bar, Keep awake and
-    /// clipboard.
+    /// Pilot's dropdown (card agent-bo-95422912), with its quick switches on the real tiler, top bar, Keep awake,
+    /// clipboard and dictation key.
     var dropdown: AnyView {
         AnyView(PilotDropdown(switches: QuickSwitches(hyper: hyperSwitch, tiling: tilingSwitch, topBar: topBar, keepAwake: KeepAwake.shared,
-                                                      clipboard: SessionSwitch.clipboard)).environment(self))
+                                                      clipboard: SessionSwitch.clipboard, dictation: dictationSwitch)).environment(self))
     }
 
 }

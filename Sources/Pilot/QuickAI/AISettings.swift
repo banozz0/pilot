@@ -24,6 +24,8 @@ final class AISettings {
     @ObservationIgnored var findPlan: (AIProvider) -> PlanCLI? = { PlanCLI.locate($0, path: ProcessInfo.processInfo.environment["PATH"]) }
     /// Stands in for `claude auth status` and `codex login status` in the renders.
     @ObservationIgnored var checkCLI: ((AIProvider) async -> CLIStatus)?
+    /// Stands in for claude's `/model` in the renders (ClaudeCLI.models).
+    @ObservationIgnored var listClaude: (() async throws(QuickAI.Failure) -> [AIModelChoice])?
 
     var provider: AIProvider {
         didSet { defaults.set(provider.rawValue, forKey: "ai.provider") }
@@ -39,6 +41,9 @@ final class AISettings {
     private var efforts: [AIProvider: AIEffort] = [:]
     /// Each provider's list from its last Refresh.
     private var fetched: [AIProvider: [String]] = [:]
+    /// Each row's name from the last Refresh where the list names its models, by id ("" for the CLI's default): claude's
+    /// aliases with the version each runs ("Opus 5.5").
+    private var titles: [AIProvider: [String: String]] = [:]
     /// The providers whose list was asked for since launch, so the AI page lists codex's by itself once.
     @ObservationIgnored private(set) var asked: Set<AIProvider> = []
     /// Ollama's and the endpoint's address as typed.
@@ -69,6 +74,7 @@ final class AISettings {
             picked[route] = defaults.string(forKey: Self.modelKey(route))
             efforts[route] = defaults.string(forKey: Self.effortKey(route)).flatMap(AIEffort.init(rawValue:))
             fetched[route] = defaults.stringArray(forKey: Self.listKey(route))
+            titles[route] = defaults.dictionary(forKey: Self.titlesKey(route)) as? [String: String]
             addresses[route] = defaults.string(forKey: Self.addressKey(route))
             if route.key != .none && keys.hasKey(route) { keyed.insert(route) }
         }
@@ -76,13 +82,15 @@ final class AISettings {
 
     static func modelKey(_ provider: AIProvider) -> String { "ai.model.\(provider.rawValue)" }
     static func listKey(_ provider: AIProvider) -> String { "ai.models.\(provider.rawValue)" }
+    static func titlesKey(_ provider: AIProvider) -> String { "ai.modelTitles.\(provider.rawValue)" }
     static func effortKey(_ provider: AIProvider) -> String { "ai.effort.\(provider.rawValue)" }
     static func addressKey(_ provider: AIProvider) -> String { "ai.baseURL.\(provider.rawValue)" }
 
-    /// The provider's fixed models, then those its last Refresh listed.
+    /// The provider's fixed models, then those its last Refresh listed, each under the name that Refresh gave it.
     func models(for provider: AIProvider) -> [AIModelChoice] {
-        let fixed = provider.models
-        return fixed + (fetched[provider] ?? []).filter { id in !fixed.contains { $0.id == id } }.map { AIModelChoice($0, $0, effort: false) }
+        let fixed = provider.models, named = titles[provider] ?? [:]
+        return fixed.map { AIModelChoice($0.id, named[$0.id ?? ""] ?? $0.title, effort: $0.effort) }
+            + (fetched[provider] ?? []).filter { id in !fixed.contains { $0.id == id } }.map { AIModelChoice($0, named[$0] ?? $0, effort: false) }
     }
 
     /// The pick when it is still offered (the endpoint's typed id always is), else the default; nil when Ollama or the
@@ -214,13 +222,22 @@ final class AISettings {
         return .success(OpenAIChat(provider: provider, base: provider.apiBase(base), key: key, model: id, effort: fixed ?? effort(for: provider), http: http))
     }
 
-    /// Refresh: the provider's model list, kept for the picker; nil when it came back. codex's comes from its own
-    /// catalog, an API's over the network.
+    /// Refresh: the provider's model list, kept for the picker; nil when it came back. claude's names the version each
+    /// alias runs, codex's comes from its own catalog, an API's over the network.
     func refreshModels(for provider: AIProvider) async -> QuickAI.Failure? {
         asked.insert(provider)
         do throws(QuickAI.Failure) {
             let ids: [String]
-            if provider == .codex {
+            if provider == .claudeCode {
+                let rows: [AIModelChoice]
+                if let listClaude { rows = try await listClaude() } else {
+                    guard let found = findCLI() else { throw .notInstalled(provider) }
+                    rows = try await found.models()
+                }
+                ids = rows.compactMap(\.id)
+                titles[provider] = Dictionary(rows.map { ($0.id ?? "", $0.title) }, uniquingKeysWith: { a, _ in a })
+                defaults.set(titles[provider], forKey: Self.titlesKey(provider))
+            } else if provider == .codex {
                 guard let plan = findPlan(provider) else { throw .notInstalled(provider) }
                 ids = try await plan.models()
             } else {

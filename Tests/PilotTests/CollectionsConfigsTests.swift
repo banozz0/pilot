@@ -28,6 +28,7 @@ struct CollectionsConfigsTests {
             try write(".hermes/profiles/harry/SOUL.md", "# Harry\n")
             try write(".claude/CLAUDE.md", "# Operating contract\n")
             try write("code/pilot/AGENTS.md", "# pilot\n")
+            try FileManager.default.createDirectory(at: home.appending(path: "code/pilot/.git"), withIntermediateDirectories: true)
             try Data([0, 1, 2]).write(to: home.appending(path: ".tmux.conf"))
             app.home = home
             app.editor = { "com.example.editor" }

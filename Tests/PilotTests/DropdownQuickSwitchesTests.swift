@@ -25,8 +25,9 @@ struct DropdownQuickSwitchesTests {
         let keepAwake = KeepAwake(power: power)
         let panels = TopBarControllerTests.FakePanels()
         let topBar = TopBarControllerTests.make(TopBarControllerTests.defaults(), panels: panels)
-        let switches = QuickSwitches(hyper: Fake(true), tiling: tiling, topBar: topBar, keepAwake: keepAwake, clipboard: clipboard)
-        #expect(Dropdown.Switch.allCases.map { switches[$0].isOn } == [true, true, false, false, true])
+        let switches = QuickSwitches(hyper: Fake(true), tiling: tiling, topBar: topBar, keepAwake: keepAwake, clipboard: clipboard,
+                                     dictation: Fake(false))
+        #expect(Dropdown.Switch.allCases.map { switches[$0].isOn } == [true, true, false, false, true, false])
         switches[.tiling].toggle()
         #expect(try await SystemSamplerTests.wait { sent == [false] && !tiling.isOn })
         switches[.tiling].toggle()
