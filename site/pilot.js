@@ -24,7 +24,7 @@
   const wireSeg = (el, name, fn) => $$(`[data-sg="${name}"] button`, el).forEach(b => b.addEventListener('click', () => { $$(`[data-sg="${name}"] button`, el).forEach(x => x.setAttribute('aria-pressed', x === b)); fn(+b.dataset.v); }));
   const menuShell = (mode, q, ph, filters, foot, split) => `<div class="p-menu"><div class="mnu pn"><label class="q">${mode ? `<span class="md">${mode}</span>` : ''}<span class="pr">❱</span><input type="text" value="${esc(q)}" placeholder="${ph}" autocomplete="off" spellcheck="false" aria-label="Search, as in Pilot's menu"></label>${filters || ''}<div class="bd${split ? ' split' : ''}"><div class="res" role="listbox" aria-label="Results"></div>${split ? '<div class="pvw"></div>' : ''}</div><div class="ft">${foot}</div></div></div>`;
 
-  /* ------------------------------------------------ the sixteen previews */
+  /* ------------------------------------------------ the seventeen previews */
   const P = {};
 
   /* ---------------------------------------------------------------- Windows: Pilot's tiler with real app windows */
@@ -35,7 +35,7 @@
   const winBody = (k) => ({
     ghostty: `<div class="wc term2"><p><b>❯</b> pilot status</p><p class="d">Pilot 1.0 · tiling on · 51 binds on Hyper</p><p><b>❯</b> git log --oneline -3</p><p class="d">c90eae8 site: pill nav with GitHub</p><p class="d">64fc573 site: area lists show keys</p><p class="d">6a79521 site: one mini Pilot desktop</p><p><b>❯</b> <i class="cur"></i></p></div>`,
     zed: `<div class="wc code2">${[['1', '<k>const</k> show = (s) => {'], ['2', '  <k>if</k> (!P[s]) <k>return</k>;'], ['3', '  cur = s;'], ['4', '  fill(s);'], ['5', '};'], ['6', ''], ['7', '<k>export</k> <k>function</k> <f>tile</f>(ws) {'], ['8', '  <k>return</k> ws.<f>layout</f>(<s>"tiles"</s>);'], ['9', '}']].map(([n, l]) => `<p><i>${n}</i>${l}</p>`).join('')}</div>`,
-    safari: `<div class="wc web2"><div class="url">${IC('lock')}pilot-mac.vercel.app</div><div class="hero3"><b>Window manager. Launcher. Pilot.</b><span></span><span class="s"></span></div><div class="cards3"><i></i><i></i><i></i></div></div>`,
+    safari: `<div class="wc web2"><div class="url">${IC('lock')}${esc(D.host || '')}</div><div class="hero3"><b>Window manager. Launcher. Pilot.</b><span></span><span class="s"></span></div><div class="cards3"><i></i><i></i><i></i></div></div>`,
     mail: `<div class="wc mail2">${[['Maya Lind', 'Design review moved to Thursday', '09:41', 1], ['GitHub', '[pilot] CI passed on main', '09:12', 1], ['Shippers Club', 'Demo night: who is in?', 'Yesterday', 0], ['Stripe', 'Your receipt from Vercel', 'Tue', 0]].map(([f, s, t, u]) => `<p class="${u ? 'u' : ''}"><b>${f}</b><span>${s}</span><small>${t}</small></p>`).join('')}</div>`,
     notes: `<div class="wc note2"><b>Launch week</b><p>☑ Record the film</p><p>☑ Site pass</p><p>☐ Post on X at 16:00</p><p>☐ Reply to every comment</p></div>`,
     music: `<div class="wc music2"><i class="art"></i><b>Hold On</b><small>Chord Overstreet</small><span class="pr"><i></i></span><span class="ctl">⏮ ⏸ ⏭</span></div>`,
@@ -133,7 +133,7 @@
       { id: 'e', t: 'Spanish: ser vs estar', when: '', grp: 'Yesterday', html: '<h1>Spanish: ser vs estar</h1><p><b>Ser</b> is what something is; <b>estar</b> is how or where it is.</p><div class="todo done" contenteditable="false"><i>✓</i><span>Soy de Malta</span></div><div class="todo" contenteditable="false"><i></i><span>Estoy cansado, ¿y tú?</span></div>' },
     ];
     let cur = 'n', drawer = false;
-    el.innerHTML = `<div class="p-notes2"><div class="np pn"><div class="nh"><button type="button" class="nbt" data-drawer aria-label="Notes drawer" aria-pressed="false">${IC('list')}</button><span class="crumb3"><span class="when"></span> › <b class="ttl"></b></span><span class="wc2"></span><span class="k2 s">⌘K</span><button type="button" class="nbt" data-new aria-label="New note">+</button></div><div class="nbd"><aside class="ndr"><label class="nq">${IC('search')}<input type="text" placeholder="Find a note" aria-label="Find a note"></label><div class="nl2"></div><div class="nft2"><span>↵ Open</span><span>⌘K Actions</span><span>esc Hide</span></div></aside><div class="nwrap"><div class="nfmt" role="toolbar" aria-label="Format">${[['AA', 'formatBlock', 'h2'], ['B', 'bold'], ['I', 'italic'], ['code', 'code'], ['•', 'insertUnorderedList'], ['☑', 'todo']].map(([l, c, v]) => `<button type="button" data-c="${c}" data-v="${v || ''}">${l === 'code' ? IC('code') : l}</button>`).join('')}</div><div class="ned2" contenteditable="true" spellcheck="false" aria-label="The note"></div></div></div><div class="nsn">${IC('snippet')}<span>Snippets work in any app: try <b>;cm</b>, <b>;date</b> or <b>;addr</b> in the note</span></div></div></div>`;
+    el.innerHTML = `<div class="p-notes2"><div class="np pn"><div class="nh"><button type="button" class="nbt" data-drawer aria-label="Notes drawer" aria-pressed="false">${IC('list')}</button><span class="crumb3"><span class="when"></span> › <b class="ttl"></b></span><span class="wc2"></span><span class="k2 s">⌘K</span><button type="button" class="nbt" data-new aria-label="New note">+</button></div><div class="nbd"><aside class="ndr"><label class="nq">${IC('search')}<input type="text" placeholder="Find a note" aria-label="Find a note"></label><div class="nl2"></div><div class="nft2"><span>↵ Open</span><span>⌘K Actions</span><span>esc Hide</span></div></aside><div class="nwrap"><div class="nfmt" role="toolbar" aria-label="Format">${[['AA', 'formatBlock', 'h2'], ['B', 'bold'], ['I', 'italic'], ['code', 'code'], ['•', 'insertUnorderedList'], ['☑', 'todo']].map(([l, c, v]) => `<button type="button" data-c="${c}" data-v="${v || ''}"${l === 'code' ? ' aria-label="Code"' : ''}>${l === 'code' ? IC('code') : l}</button>`).join('')}</div><div class="ned2" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="The note"></div></div></div><div class="nsn">${IC('snippet')}<span>Snippets work in any app: try <b>;cm</b>, <b>;date</b> or <b>;addr</b> in the note</span></div></div></div>`;
     const ed = $('.ned2', el), list = $('.nl2', el), np = $('.np', el), q = $('.nq input', el);
     const words = () => { const n = ed.innerText.trim().split(/\s+/).filter(Boolean).length; $('.wc2', el).textContent = `${n} words · ${hhmm()}`; };
     const save = () => { const n = N.find(x => x.id === cur); n.html = ed.innerHTML; const h = ed.querySelector('h1'); if (h) n.t = h.textContent.trim() || n.t; };
@@ -249,6 +249,108 @@
     wireSeg(el, 'gl', (i) => desk.classList.toggle('solid', i === 1));
   } };
 
+  /* ---------------------------------------------------------------- Desktop and widgets (1.0.2, 1.0.3): the desk widgets (WidgetRenders,
+     DeskWidgetRenders), Hyper + right-click's desktop menu (DesktopMenu), the wallpaper Gallery (GalleryWindow) and Home's grid
+     (HomeLayoutRenders). A page cannot see Hyper, so a plain right-click (or a tap) stands in for it. */
+  const WALLS = [
+    ['Dunes', 'linear-gradient(165deg, #F2C48D 0%, #D9875A 42%, #7A3F33 100%)'], ['Night', 'radial-gradient(90% 70% at 70% 20%, #3B4C8C 0%, #141A33 55%, #07090F 100%)'],
+    ['Fern', 'radial-gradient(80% 80% at 20% 90%, #9CC77A 0%, #3E6B3A 45%, #16261A 100%)'], ['Tide', 'linear-gradient(200deg, #BFE3EA 0%, #4E9BB4 45%, #173B57 100%)'],
+    ['Haze', 'radial-gradient(100% 80% at 85% 10%, #E6F7A8 0%, #A7C66A 30%, #2E3A26 100%)'], ['Paper', 'linear-gradient(180deg, #F4F1EA 0%, #E2DDD2 100%)'],
+    ['Ember', 'radial-gradient(90% 90% at 50% 100%, #FF8A4C 0%, #9B2D3A 50%, #1B0C14 100%)'], ['Slate', 'linear-gradient(150deg, #5D6672 0%, #2B3038 60%, #15181C 100%)'],
+  ];
+  const NOTES_MD = [['Launch week', 'Record the film · Site pass · Post at 16:00'], ['Reading list', 'Designing Data-Intensive Apps, ch. 7'], ['Groceries', 'Oats, lemons, coffee beans'], ['Ideas', 'A widget for the train times']];
+  P.desktop = { app: 'Finder', try: '<b>Right-click</b> (or tap) the bare desktop: <b>Change wallpaper</b>, <b>Add widget</b>, <b>Desktop icons</b>; drag a widget (Hyper + drag in Pilot); open <b>Home</b> and drag a block’s corner', render(el) {
+    const desk = $('#desk');
+    const st = { icons: true, playing: true, home: false, view: 0 };
+    const spark = '0,30 12,26 24,28 36,18 48,21 60,12 72,15 84,8 96,11 108,4 120,6';
+    const W = {
+      clock: [.03, .05, 240, 128, () => `<div class="wg-clock"><p class="eb"><span>Clock · Lisbon</span><span>${now().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span></p><b>${hhmm()}</b><small>${now().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</small></div>`],
+      music: [.03, .36, 260, 110, () => `<div class="wg-np"><i class="art"></i><span class="tx"><p class="eb"><span>Now playing</span></p><b>Night Trains</b><small>Pilot film</small><span class="ctl"><button type="button" data-np="prev" aria-label="Previous">${IC('chev')}</button><button type="button" class="pp" data-np="play" aria-label="${st.playing ? 'Pause' : 'Play'}">${st.playing ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10l8-5z" fill="currentColor"/></svg>'}</button><button type="button" data-np="next" aria-label="Next">${IC('chev')}</button></span></span></div>`],
+      markets: [.30, .05, 300, 150, () => `<div class="wg-mk"><p class="eb"><span>BTCUSD</span><span>Crypto</span></p><p class="px"><b>77,907.05</b><small>▲ 1.84%</small></p><button type="button" class="chart" data-tv aria-label="Open BTCUSD on TradingView"><svg viewBox="0 0 120 34" preserveAspectRatio="none"><polyline points="${spark}"/></svg></button><span class="rk">${['1D', '1W', '1M', '1Y'].map((k, i) => `<button type="button" data-rk aria-pressed="${i === 0}">${k}</button>`).join('')}</span></div>`],
+      github: [.30, .40, 300, 96, () => `<div class="wg-gh"><p class="eb"><span>GitHub</span><span>1,284 this year</span></p><span class="cells">${Array.from({ length: 26 * 5 }, (_, i) => `<i style="--a:${[0, 0, .14, .14, .3, .5, .75, 0, .3][(i * 7 + (i >> 3) * 5) % 9]}"></i>`).join('')}</span></div>`],
+      notes: [.58, .05, 220, 172, () => `<div class="wg-nt"><p class="eb"><span>Notes</span><span>${NOTES_MD.length}</span></p>${NOTES_MD.map(([t]) => `<span>${t}</span>`).join('')}</div>`],
+      folder: [.58, .42, 220, 76, () => `<div class="wg-fd"><p class="eb"><span>Downloads</span><span>3</span></p><span class="fl">${[['doc', 'invoice.pdf'], ['video', 'clip.mov'], ['image', 'IMG_2041']].map(([i, n]) => `<span>${IC(i)}<small>${n}</small></span>`).join('')}</span></div>`],
+      mac: [0, 0, 176, 104, () => `<div class="wg-mac"><p class="eb"><span>This Mac</span></p>${[['CPU', 18], ['Mem', 56], ['Disk', 71]].map(([n, v]) => `<p><span>${n}</span><i><b style="width:${v}%"></b></i><small>${v}%</small></p>`).join('')}</div>`],
+      weather: [0, 0, 176, 84, () => `<div class="wg-wx"><p class="eb"><span>Lisbon · Sunny</span></p><b>24°</b><small>H 26° · L 19°</small></div>`],
+    };
+    const TITLES = { clock: 'Clock and calendar', music: 'Now playing', markets: 'Markets', github: 'GitHub', notes: 'Notes', folder: 'Folder', mac: 'This Mac', weather: 'Weather' };
+    const placed = ['clock', 'music', 'markets', 'github', 'notes', 'folder'];
+    el.innerHTML = `<div class="p-desk"><div class="dk"><div class="dk-ic">${[['folder', 'Projects'], ['image', 'Screenshot.png'], ['doc', 'Invoice.pdf']].map(([i, n]) => `<span>${IC(i)}<small>${n}</small></span>`).join('')}</div><div class="dk-w"></div></div><div class="home2" hidden></div><div class="bar">${seg('dv', ['Desktop', 'Home'], 0)}<span class="sp"></span><button type="button" class="bt" data-open>${IC('rightclick')}Desktop menu</button></div></div>`;
+    const root = $('.p-desk', el), dk = $('.dk', el), wl = $('.dk-w', el);
+    const pos = {};
+    const draw = () => {
+      wl.innerHTML = placed.map(k => { const [x, y, w, h, body] = W[k]; const p = pos[k] || (pos[k] = [Math.round(x * dk.clientWidth), Math.round(y * dk.clientHeight)]); return `<div class="wg pn" data-w="${k}" style="left:${p[0]}px;top:${p[1]}px;width:${w}px;height:${h}px" aria-label="${TITLES[k]} widget">${body()}</div>`; }).join('');
+    };
+    const setWall = (i, scope) => { dk.style.background = WALLS[i][1]; dk.dataset.w = i; if (scope) toast(`${WALLS[i][0]} is the wallpaper for this ${scope}`); };
+    const close = () => $$('.cmenu2, .gal', el).forEach(m => m.remove());
+    const place = (m, x, y) => { const r = el.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(x - r.left, r.width - m.offsetWidth - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y - r.top, r.height - m.offsetHeight - 8)) + 'px'; };
+    const gallery = () => {
+      close(); const g = document.createElement('div'); g.className = 'gal pn'; g.setAttribute('role', 'dialog'); g.setAttribute('aria-label', 'Gallery');
+      const body = (v) => v === 0
+        ? WALLS.map(([n, bg], i) => `<button type="button" class="gc${dk.dataset.w !== undefined && +dk.dataset.w === i ? ' on' : ''}" data-wall="${i}"><i style="background:${bg}"></i><small>${n.toLowerCase()}.jpg</small></button>`).join('')
+        : NOTES_MD.map(([t, l]) => `<button type="button" class="gc md" data-md><span><b>${t}</b><small>${l}</small></span><small>${t.toLowerCase().replace(/ /g, '-')}.md</small></button>`).join('');
+      g.innerHTML = `<div class="gt"><span class="dots"><i></i><i></i><i></i></span><b>Gallery</b><small data-gn>Wallpapers · ${WALLS.length} pictures</small><span class="sp"></span>${seg('gf', ['Wallpapers', 'Notes'], 0)}</div><div class="gg">${body(0)}</div><div class="gs"><span data-gs>A click sets it for this screen</span><span class="sp"></span>${seg('gsc', ['Screen', 'Workspace'], 0)}</div>`;
+      el.appendChild(g); let scope = 'screen';
+      wireSeg(g, 'gf', (v) => { $('.gg', g).innerHTML = body(v); $('[data-gn]', g).textContent = v ? `~/Notes · ${NOTES_MD.length} notes` : `Wallpapers · ${WALLS.length} pictures`; $('[data-gs]', g).textContent = v ? 'A click previews; right-click acts' : `A click sets it for this ${scope}`; });
+      wireSeg(g, 'gsc', (v) => { scope = v ? 'workspace' : 'screen'; $('[data-gs]', g).textContent = `A click sets it for this ${scope}`; });
+      $('.gg', g).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-wall]'); if (b) { setWall(+b.dataset.wall, scope); $$('[data-wall]', g).forEach(x => x.classList.toggle('on', x === b)); return; }
+        const m = e.target.closest('[data-md]'); if (m) toast(`${$('b', m).textContent}: a preview, as Quick Look shows it`);
+      });
+    };
+    const menu = (x, y) => {
+      close(); const free = Object.keys(W).filter(k => !placed.includes(k));
+      const m = document.createElement('div'); m.className = 'cmenu2 pn'; m.setAttribute('role', 'menu');
+      m.innerHTML = `<div class="mh2">${LOGO_MINI}<b>Pilot</b><span>Desktop</span></div>${[['gallery', 'Change wallpaper…', 'gal'], ['mountain', 'Wallpaper settings…', 'set']].map(([i, n, a]) => `<button type="button" class="mi" role="menuitem" data-m="${a}">${IC(i)}<span>${n}</span></button>`).join('')}<div class="sub2"><span class="mi lbl">${IC('widgets')}<span>Add widget</span></span><div class="fmts2">${free.length ? free.map(k => `<button type="button" data-add="${k}">${TITLES[k]}</button>`).join('') : '<small>Every widget is placed</small>'}</div></div>${[['note', 'New note', 'note', 'Hyper+N'], ['display', 'Show desktop', 'show', '⌥↓'], ['shapes', 'Style: Instrument', 'style', ''], ['eyeoff', 'Desktop icons', 'icons', st.icons ? '✓' : '']].map(([i, n, a, k]) => `<button type="button" class="mi" role="menuitem" data-m="${a}">${IC(i)}<span>${n}</span>${k ? `<small>${k}</small>` : ''}</button>`).join('')}`;
+      el.appendChild(m); place(m, x, y);
+      m.addEventListener('click', (ev) => {
+        const add = ev.target.closest('[data-add]'); if (add) { const k = add.dataset.add, r = dk.getBoundingClientRect(); pos[k] = [Math.max(8, Math.min(x - r.left, r.width - W[k][2] - 8)), Math.max(8, Math.min(y - r.top, r.height - W[k][3] - 8))]; placed.push(k); draw(); m.remove(); toast(`${TITLES[k]} sits where you clicked`); return; }
+        const a = ev.target.closest('[data-m]'); if (!a) return; m.remove();
+        ({ gal: gallery, set: () => toast('Look › Wallpaper opens at this screen’s row'), note: () => toast('A new note opens in the notes panel'),
+           show: () => toast('Every window steps aside; a click in the Dock brings one back'), style: () => toast('Style and theme switch here as on the Look page'),
+           icons: () => { st.icons = !st.icons; $('.dk-ic', el).hidden = !st.icons; toast(st.icons ? 'Finder’s desktop icons are back' : 'Finder’s desktop icons are hidden'); } })[a.dataset.m]();
+      });
+    };
+    dk.addEventListener('contextmenu', (e) => { if (e.target.closest('.wg')) { e.preventDefault(); const k = e.target.closest('.wg').dataset.w; close(); const m = document.createElement('div'); m.className = 'cmenu2 pn'; m.innerHTML = `<div class="mh2">${LOGO_MINI}<b>${TITLES[k]}</b><span>Widget</span></div><button type="button" class="mi" data-e>${IC('edit')}<span>Edit widget…</span></button><button type="button" class="mi" data-r>${IC('xwin')}<span>Remove from desktop</span></button>`; el.appendChild(m); place(m, e.clientX, e.clientY); m.addEventListener('click', (ev) => { if (ev.target.closest('[data-r]')) { placed.splice(placed.indexOf(k), 1); draw(); toast(`${TITLES[k]} left the desktop; Add widget brings it back`); } else if (ev.target.closest('[data-e]')) toast('Edit widget: its layout, symbols, folder or note'); m.remove(); }); return; } e.preventDefault(); menu(e.clientX, e.clientY); });
+    dk.addEventListener('click', (e) => {
+      if (e.target.closest('.gal, .cmenu2')) return;
+      const np = e.target.closest('[data-np]'); if (np) { if (np.dataset.np === 'play') { st.playing = !st.playing; draw(); } else toast(np.dataset.np === 'next' ? 'Next track' : 'Previous track'); return; }
+      if (e.target.closest('[data-tv]')) { toast('BTC opens on TradingView'); return; }
+      const rk = e.target.closest('[data-rk]'); if (rk) { $$('[data-rk]', rk.parentNode).forEach(x => x.setAttribute('aria-pressed', x === rk)); return; }
+      if (e.target.closest('.wg')) return;
+      if ($('.cmenu2, .gal', el)) { close(); return; }
+      menu(e.clientX, e.clientY);
+    });
+    $('[data-open]', el).addEventListener('click', (e) => { e.stopPropagation(); const r = dk.getBoundingClientRect(); menu(r.left + r.width * .62, r.top + r.height * .3); });
+    /* drag a widget: Hyper + drag in Pilot */
+    wl.addEventListener('pointerdown', (e) => {
+      const w = e.target.closest('.wg'); if (!w || e.button !== 0 || e.target.closest('button') || getComputedStyle(w).position !== 'absolute') return;
+      const k = w.dataset.w, r = dk.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, [ox, oy] = pos[k]; w.setPointerCapture(e.pointerId); w.classList.add('drag');
+      const mv = (ev) => { pos[k] = [Math.max(0, Math.min(ox + ev.clientX - sx, r.width - w.offsetWidth)), Math.max(0, Math.min(oy + ev.clientY - sy, r.height - w.offsetHeight))]; w.style.left = pos[k][0] + 'px'; w.style.top = pos[k][1] + 'px'; };
+      const up = () => { w.classList.remove('drag'); w.removeEventListener('pointermove', mv); w.removeEventListener('pointerup', up); };
+      w.addEventListener('pointermove', mv); w.addEventListener('pointerup', up);
+    });
+    /* Home: blocks on a grid of cells, each resized by its corner (Edit Home) */
+    const H = [['Status', 'ok', 4, 2, '<p class="hs"><i></i>Pilot is running · 51 binds on Hyper</p>'], ['Keyboard map', 'command', 8, 4, `<div class="hk">${'QWERTYUIOPASDFGHJKLZXCVBNM'.split('').map((c, i) => `<i class="${[1, 4, 9, 12, 17, 22].includes(i) ? 'on' : ''}">${c}</i>`).join('')}</div>`], ['This Mac', 'laptop', 4, 2, '<p class="hs">CPU 18% · Memory 56% · Disk 71%</p>'], ['Now playing', 'music', 4, 2, '<p class="hs">Night Trains · Pilot film</p>'], ['Most used', 'trend', 6, 2, '<p class="hs">Hyper+Space · Hyper+V · Hyper+1</p>']];
+    const home = $('.home2', el);
+    const drawHome = () => {
+      home.innerHTML = `<div class="hh"><b>Home</b><span class="sp"></span><button type="button" class="bt${st.edit ? ' ink' : ''}" data-edit>${st.edit ? 'Done' : 'Edit Home'}</button></div><div class="hg${st.edit ? ' edit' : ''}">${H.map(([t, i, c, r, b], n) => `<div class="hb pn" data-b="${n}" style="grid-column:span ${c};grid-row:span ${r}"><p class="ht">${IC(i)}${t}${st.edit ? `<small>${c} × ${r}</small>` : ''}</p>${b}${st.edit ? `<span class="grip" data-grip="${n}" role="slider" tabindex="0" aria-label="Resize ${t}: arrow keys" aria-valuetext="${c} by ${r} cells"></span>` : ''}</div>`).join('')}</div>`;
+      $('[data-edit]', home).addEventListener('click', () => { st.edit = !st.edit; drawHome(); if (st.edit) toast('Drag a block’s corner: the others make room'); });
+    };
+    const resize = (n, dc, dr) => { H[n][2] = Math.max(2, Math.min(12, H[n][2] + dc)); H[n][3] = Math.max(1, Math.min(5, H[n][3] + dr)); };
+    home.addEventListener('pointerdown', (e) => {
+      const g = e.target.closest('[data-grip]'); if (!g) return; e.preventDefault();
+      const n = +g.dataset.grip, cell = $('.hg', home).getBoundingClientRect().width / 12, sx = e.clientX, sy = e.clientY, c0 = H[n][2], r0 = H[n][3];
+      const mv = (ev) => { const c = Math.round((ev.clientX - sx) / cell), r = Math.round((ev.clientY - sy) / 34); if (c0 + c !== H[n][2] || r0 + r !== H[n][3]) { H[n][2] = c0; H[n][3] = r0; resize(n, c, r); drawHome(); } };
+      const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
+      addEventListener('pointermove', mv); addEventListener('pointerup', up);
+    });
+    home.addEventListener('keydown', (e) => { const g = e.target.closest('[data-grip]'); const d = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key]; if (!g || !d) return; e.preventDefault(); const n = +g.dataset.grip; resize(n, ...d); drawHome(); $(`[data-grip="${n}"]`, home)?.focus(); });
+    wireSeg(el, 'dv', (v) => { close(); st.home = v === 1; dk.hidden = st.home; home.hidden = !st.home; setApp(st.home ? 'Pilot' : 'Finder'); if (st.home) drawHome(); });
+    draw();
+    if (desk) desk.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  } };
+
   /* ================================================================ the mini Pilot desktop (preview pass, Sven 2026-10-29, Q576)
      One desktop with Pilot's real top bar; the sidebar of areas drives it. Each surface is drawn from Pilot's own offscreen renders:
      the menu (InstrumentMenuRenders), Binds (InstrumentBindsRenders, Pilot default from PilotDefault.swift), the clipboard panel
@@ -345,7 +447,7 @@
   let runUpdate = () => {};
   const keyCap = (k) => ({ return: '↵', space: 'SPACE', escape: 'ESC', left: '←', right: '→', up: '↑', down: '↓', tab: '⇥', delete: '⌫' }[k] || k.toUpperCase());
   function lmenu(el, start, firstQuery = '') {
-    el.innerHTML = `<div class="p-menu"><div class="lm pn"><label class="lq"><span class="lmode"></span><span class="lchev">❱</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Search, as in Pilot's menu"></label><div class="lflt"></div><div class="lbody"><div class="lres" role="listbox" aria-label="Results"></div><div class="lpv"></div></div><div class="lft"><span class="lchip"></span><span class="ltabs"></span><span class="lhints"></span></div></div></div>`;
+    el.innerHTML = `<div class="p-menu"><div class="lm pn"><label class="lq"><span class="lmode"></span><span class="lchev">❱</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Search, as in Pilot's menu"></label><div class="lflt"></div><div class="lbody"><div class="lres" role="listbox" aria-label="Results" tabindex="0"></div><div class="lpv"></div></div><div class="lft"><span class="lchip"></span><span class="ltabs"></span><span class="lhints"></span></div></div></div>`;
     const q = $('input', el), res = $('.lres', el), ft = $('.lft', el), chip = $('.lchip', el), tabs = $('.ltabs', el), hints = $('.lhints', el), md = $('.lmode', el), flt = $('.lflt', el), pv = $('.lpv', el), box = $('.lm', el);
     const stack = [start]; let rows = [], sel = 0, kind = 'all';
     q.value = firstQuery;
@@ -634,7 +736,7 @@
   const studio = $('#studio'), areaEl = $('#area-preview');
   let cur = null;
   const stage = document.createElement('div'); stage.className = 'stage2';
-  stage.innerHTML = `<div class="scr" id="desk" role="region" aria-label="A live Pilot desktop">${topBar()}<div class="pv" id="pv"></div></div><div class="capR" aria-live="polite"><div><p class="h4" id="cap-h"></p><p id="cap-p"></p></div><div class="rt"><span class="try" id="cap-try"></span><a class="more" href="#" id="cap-a"></a></div></div>`;
+  stage.innerHTML = `<div class="scr" id="desk" role="region" aria-label="A live Pilot desktop">${topBar()}<div class="pv" id="pv"></div></div><div class="capR" aria-live="polite"><div><p class="h4" id="cap-h"></p><p id="cap-p"></p></div><div class="rt"><span class="try dtag">Playing a demo. Click the desktop to take over.</span><span class="try" id="cap-try"></span><a class="more" href="#" id="cap-a"></a></div></div>`;
   const fill = (s) => {
     const a = A[s], p = P[s]; closePop(); setApp(p.app); topExt();
     const dk = $('#desk'); if (dk && s !== 'look') { dk.removeAttribute('style'); dk.classList.remove('toybox', 'solid'); }
@@ -668,6 +770,256 @@
     if (!e.target.closest('.pop2')) closePop();
   });
   if (!reduced) setInterval(() => { const t = $('#tb-time'); if (t) t.textContent = hhmm(); cpuNow = Math.max(3, Math.min(31, cpuNow + Math.round((Math.random() - .5) * 6))); const c = $('#tb-cpu'); if (c) c.textContent = cpuNow + '%'; }, 2000);
+
+  /* ------------------------------------------------ the demo (P88, 2026-11-03): a Mac pointer uses each preview as a person
+     would. It glides on a hand's speed curve (a curved reach that lands a little short, then settles), presses with a ring, types at
+     human speed and shows the keys it holds, Hyper lit. It plays only while the desktop is on screen and the tab is visible, never
+     under reduced motion, and stops for good the moment the visitor clicks, taps, types or tabs into it; scrolled away and back, it plays
+     again. Its events are the previews' own handlers; while it plays, focus and scrollIntoView inside it are held so the page
+     never jumps. On the home page it tours the areas through the sidebar; on an area page it repeats that area. */
+  const DEMO = {
+    launcher: async (d) => {
+      await d.caps(['Hyper', 'Space'], 900);
+      await d.type('.lm input', 'ghost'); await d.wait(650);
+      await d.key('.lm input', 'Enter'); await d.wait(900);
+      await d.erase('.lm input'); await d.type('.lm input', '12*7'); await d.wait(1300);
+      await d.erase('.lm input'); await d.type('.lm input', '5 km in mi'); await d.wait(1400);
+      await d.erase('.lm input'); await d.type('.lm input', '#C6F432'); await d.wait(1400);
+      await d.erase('.lm input');
+    },
+    files: async (d) => {
+      await d.wait(700); await d.erase('.lm input'); await d.type('.lm input', 'delivery'); await d.wait(900);
+      await d.key('.lm input', 'ArrowDown'); await d.wait(1200);
+      await d.erase('.lm input'); await d.type('.lm input', 'invoce'); await d.wait(1200);
+    },
+    windows: async (d) => {
+      await d.click(['.win[data-a="zed"]', .5, .4]);
+      await d.key('.p-win', 'ArrowLeft', { hyper: true });
+      await d.key('.p-win', 'ArrowRight', { hyper: true });
+      await d.key('.p-win', 'ArrowLeft', { hyper: true, shift: true });
+      await d.click('[data-act="float"]', { dwell: 1000 }); await d.click('[data-act="float"]');
+      await d.click('[data-sg="lay"] button[data-v="1"]', { dwell: 900 });
+      await d.key('.p-win', 'ArrowRight', { hyper: true });
+      await d.click('[data-sg="lay"] button[data-v="0"]');
+      await d.click('#desk .tbws [data-ws="3"]', { dwell: 1000 }); await d.click('#desk .tbws [data-ws="2"]');
+    },
+    desktop: async (d) => {
+      await d.click(['.dk', .86, .8]);
+      await d.click('.cmenu2 [data-m="gal"]', { dwell: 700 });
+      await d.click('.gal [data-wall="3"]', { dwell: 1000 }); await d.click('.gal [data-wall="1"]', { dwell: 1000 });
+      await d.key('#desk', 'Escape');
+      await d.drag(['.wg[data-w="notes"]', .5, .12], ['.dk', .66, .62], { caps: ['Hyper'] });
+      await d.click('[data-sg="dv"] button[data-v="1"]', { dwell: 700 });
+      await d.click('[data-edit]', { dwell: 700 });
+      await d.drag('[data-grip="0"]', ['[data-grip="0"]', 4, .5]);
+      await d.click('[data-edit]', { dwell: 600 });
+      await d.click('[data-sg="dv"] button[data-v="0"]');
+    },
+    dictation: async (d) => {
+      await d.hold('.hold', 4300); await d.wait(1100);
+      await d.click('[data-read]', { dwell: 3200 });
+    },
+    captures: async (d) => {
+      await d.caps(['Hyper', 'S'], 800);
+      await d.drag(['.p-cap .main .h5', -.04, -.5], ['.p-cap .main .card:last-of-type', 1.02, 1.3]);
+      await d.wait(700);
+      await d.drag(['.editor .emarks', .82, .82], ['.editor .emarks', .6, .5]);
+      await d.click('.editor [data-tool="Blur"]');
+      await d.drag(['.editor .emarks', .05, .72], ['.editor .emarks', .55, .9]);
+      await d.click('.editor [data-done]', { dwell: 1200 });
+    },
+    ai: async (d) => {
+      await d.caps(['Hyper', 'Q'], 800);
+      await d.click('.sug button[data-s="0"]', { dwell: 3200 });
+      await d.select('.selp p', 0, 42); await d.wait(900);
+      await d.click('.rw [data-r="Make concise"]', { dwell: 2600 });
+    },
+    clipboard: async (d) => {
+      await d.caps(['Hyper', 'V'], 800);
+      await d.key('.p-clip input', 'ArrowDown'); await d.key('.p-clip input', 'ArrowDown');
+      await d.click('.p-clip .fl [data-k="colour"]', { dwell: 900 });
+      await d.click('.p-clip .fl [data-k="all"]');
+      await d.type('.p-clip input', 'git'); await d.wait(700);
+      await d.key('.p-clip input', 'Enter', { dwell: 1200 }); await d.erase('.p-clip input');
+    },
+    keys: async (d) => {
+      await d.hold('[data-hold]', 2600, ['Hyper']); await d.wait(600);
+      await d.click('.si[data-side="1"]', { dwell: 900 });
+      await d.click('.bboard [data-k="v"]', { dwell: 1400 });
+    },
+    convert: async (d) => {
+      await d.click('.fi2[data-i="0"]', { dwell: 800 });
+      await d.click('.cmenu2 [data-t="PNG"]', { dwell: 1600 });
+    },
+    menubar: async (d) => {
+      await d.click('#desk [data-tb="clock"]', { dwell: 1400 });
+      await d.click('#desk [data-tb="vol"]', { dwell: 1200 });
+      await d.click('#desk [data-tb="pilot"]', { dwell: 1600 }); await d.click('#desk [data-tb="pilot"]');
+    },
+  };
+  const TOUR = ['launcher', 'windows', 'desktop', 'dictation', 'captures', 'ai', 'clipboard', 'keys', 'files', 'convert', 'menubar'];
+  const layer = studio || (areaEl && stage.isConnected ? stage : null), deskEl = $('#desk');
+  if (layer && deskEl && !reduced && (studio || DEMO[cur])) {
+    layer.classList.add('dlayer');
+    const ptr = document.createElement('div'); ptr.className = 'ptr'; ptr.setAttribute('aria-hidden', 'true');
+    ptr.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5.5 2.8v16.4l4.2-4 2.7 6.2 2.9-1.2-2.7-6.1h5.9z"/></svg><i></i>';
+    layer.appendChild(ptr);
+    const kc = document.createElement('div'); kc.className = 'kcast'; kc.setAttribute('aria-hidden', 'true'); deskEl.appendChild(kc);
+    const capR = $('.capR', stage);
+    let pos = null, tok = null, touched = false, seen = false, wake = 0, downEl = null, kcT = 0;
+    const STOP = new Error('demo stopped');
+    const sleep = (t, ms) => new Promise((ok, no) => setTimeout(() => (t.dead ? no(STOP) : ok()), ms));
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const lr = () => layer.getBoundingClientRect();
+    const draw = () => { ptr.style.transform = `translate(${pos[0].toFixed(1)}px, ${pos[1].toFixed(1)}px)`; };
+    const client = () => { const L = lr(); return [L.left + pos[0], L.top + pos[1]]; };
+    /* held while the demo plays: no focus, page scroll or pointer-capture error from the previews' own handlers */
+    const F0 = HTMLElement.prototype.focus, S0 = Element.prototype.scrollIntoView, C0 = Element.prototype.setPointerCapture, R0 = Element.prototype.releasePointerCapture;
+    const inner = (el) => { for (let p = el.parentElement; p && p !== layer; p = p.parentElement) { const cs = getComputedStyle(p); if (/auto|scroll/.test(cs.overflowY + cs.overflowX) && (p.scrollHeight > p.clientHeight || p.scrollWidth > p.clientWidth)) { const r = el.getBoundingClientRect(), q = p.getBoundingClientRect(); if (r.top < q.top) p.scrollTop -= q.top - r.top; else if (r.bottom > q.bottom) p.scrollTop += r.bottom - q.bottom; if (r.left < q.left) p.scrollLeft -= q.left - r.left + 16; else if (r.right > q.right) p.scrollLeft += r.right - q.right + 16; return; } } };
+    HTMLElement.prototype.focus = function (o) { if (tok && layer.contains(this)) return; return F0.call(this, o); };
+    Element.prototype.scrollIntoView = function (o) { if (tok && layer.contains(this)) return inner(this); return S0.call(this, o); };
+    Element.prototype.setPointerCapture = function (id) { try { return C0.call(this, id); } catch (_) { /* a demo's pointer is not a live one */ } };
+    Element.prototype.releasePointerCapture = function (id) { try { return R0.call(this, id); } catch (_) { /* as above */ } };
+    const fire = (el, type, o = {}) => {
+      const [x, y] = client(), P = type.startsWith('pointer'), down = /down|move/.test(type) && downEl;
+      const init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y, button: type.endsWith('move') ? -1 : 0, buttons: down ? 1 : 0, ...o };
+      if (P) Object.assign(init, { pointerId: 1, pointerType: 'mouse', isPrimary: true, width: 1, height: 1, pressure: down ? .5 : 0 });
+      (el.isConnected ? el : document).dispatchEvent(P ? new PointerEvent(type, init) : new MouseEvent(type, init));
+    };
+    const hit = (el) => { const [x, y] = client(), h = document.elementFromPoint(x, y); return h && el.contains(h) ? h : el; };
+    const press = (on) => { ptr.classList.toggle('down', on); if (on) { const i = $('i', ptr); i.classList.remove('go'); void i.offsetWidth; i.classList.add('go'); } };
+    const LABEL = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Enter: '↵', Escape: 'esc', Backspace: '⌫', Shift: '⇧' };
+    const caps = (ks, ms) => { clearTimeout(kcT); kc.innerHTML = ks.map(k => k === 'Hyper' ? '<kbd class="hy">⇪ Hyper</kbd>' : `<kbd>${esc(LABEL[k] || k)}</kbd>`).join('<span>+</span>'); kc.classList.add('on'); if (ms) kcT = setTimeout(() => kc.classList.remove('on'), ms); };
+    const bez = (a, b, c, e, s) => { const u = 1 - s; return [0, 1].map(i => u * u * u * a[i] + 3 * u * u * s * b[i] + 3 * u * s * s * c[i] + s * s * s * e[i]); };
+    const ease = (s) => s * s * s * (10 - 15 * s + 6 * s * s);   // minimum jerk: a hand's reach, still at both ends
+    const leg = (t, from, to, ms, bend, onMove) => new Promise((ok, no) => {
+      const dx = to[0] - from[0], dy = to[1] - from[1], n = [-dy, dx], L = Math.hypot(dx, dy) || 1, k = bend / L;
+      const c1 = [from[0] + dx * .3 + n[0] * k, from[1] + dy * .3 + n[1] * k], c2 = [from[0] + dx * .72 + n[0] * k * .55, from[1] + dy * .72 + n[1] * k * .55];
+      const t0 = performance.now();
+      const step = (now) => { if (t.dead) return no(STOP); const s = Math.min(1, (now - t0) / ms); pos = bez(from, c1, c2, to, ease(s)); draw(); onMove && onMove(); if (s < 1) requestAnimationFrame(step); else ok(); };
+      requestAnimationFrame(step);
+    });
+    const glide = async (t, to, onMove) => {
+      const from = pos || [to[0] + 90, to[1] + 70]; if (!pos) { pos = from; draw(); }
+      const dist = Math.hypot(to[0] - from[0], to[1] - from[1]); if (dist < 2) return;
+      const ms = Math.min(1150, 260 + 150 * Math.log2(1 + dist / 40)), bend = dist * rnd(.06, .16) * (Math.random() < .5 ? -1 : 1);
+      if (dist < 90) return leg(t, from, to, ms, bend * .4, onMove);
+      const ux = (to[0] - from[0]) / dist, uy = (to[1] - from[1]) / dist, short = Math.min(9, dist * .045);
+      await leg(t, from, [to[0] - ux * short + rnd(-2, 2), to[1] - uy * short + rnd(-2, 2)], ms * .84, bend, onMove);   // lands a touch short…
+      await leg(t, pos, to, Math.max(110, ms * .2), 0, onMove);                                                          // …then settles
+    };
+    const api = (t) => {
+      const at = (spec) => {
+        let s = spec, fx = .5, fy = .5; if (Array.isArray(spec)) [s, fx = .5, fy = .5] = spec;
+        const el = typeof s === 'string' ? $(s, layer) : s; if (!el || !el.isConnected) return null;
+        const r = el.getBoundingClientRect(); if (!r.width && !r.height) return null;
+        const L = lr(), j = (w) => rnd(-1, 1) * Math.min(5, w * .12);
+        return { el, x: r.left - L.left + r.width * fx + j(r.width), y: r.top - L.top + r.height * fy + j(r.height) };
+      };
+      const d = {
+        wait: (ms) => sleep(t, ms),
+        caps: (ks, ms) => { caps(ks, ms); return sleep(t, ms * .75); },
+        move: async (spec) => { const p = at(spec); if (p) await glide(t, [p.x, p.y]); return p; },
+        click: async (spec, o = {}) => {
+          const p = await d.move(spec); if (!p) return;
+          await sleep(t, rnd(90, 210)); const h = hit(p.el);
+          press(true); fire(h, 'pointerdown'); fire(h, 'mousedown'); await sleep(t, rnd(70, 120));
+          fire(h, 'pointerup'); fire(h, 'mouseup'); press(false); fire(h, 'click');
+          await sleep(t, o.dwell ?? rnd(380, 560));
+        },
+        type: async (spec, text) => {
+          const el = typeof spec === 'string' ? $(spec, layer) : spec; if (!el) return;
+          const r = el.getBoundingClientRect(), L = lr(); if (!pos || Math.hypot(pos[0] - (r.left - L.left + 30), pos[1] - (r.top - L.top + r.height / 2)) > 40) await d.click([el, .12, .5], { dwell: 200 });
+          for (const ch of text) { el.value += ch; el.dispatchEvent(new InputEvent('input', { bubbles: true, data: ch, inputType: 'insertText' })); await sleep(t, ch === ' ' ? rnd(120, 200) : rnd(65, 150) + (Math.random() < .08 ? 220 : 0)); }
+        },
+        erase: async (spec) => {
+          const el = typeof spec === 'string' ? $(spec, layer) : spec; if (!el || !el.value) return;
+          caps(['Backspace']); await sleep(t, 160);
+          while (el.value) { el.value = el.value.slice(0, -1); el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' })); await sleep(t, rnd(32, 50)); }
+          kc.classList.remove('on'); await sleep(t, 260);
+        },
+        key: async (spec, key, o = {}) => {
+          const el = typeof spec === 'string' ? $(spec, layer) : spec; if (!el) return;
+          caps([...(o.hyper ? ['Hyper'] : []), ...(o.shift ? ['Shift'] : []), key], 900); await sleep(t, 160);
+          const init = { key, bubbles: true, cancelable: true, shiftKey: !!o.shift };
+          el.dispatchEvent(new KeyboardEvent('keydown', init)); await sleep(t, 110); el.dispatchEvent(new KeyboardEvent('keyup', init));
+          await sleep(t, o.dwell ?? rnd(520, 700));
+        },
+        hold: async (spec, ms, ks) => {
+          const p = await d.move(spec); if (!p) return; await sleep(t, rnd(120, 200));
+          downEl = hit(p.el); press(true); if (ks) caps(ks); fire(downEl, 'pointerdown'); fire(downEl, 'mousedown');
+          await sleep(t, ms); fire(downEl, 'pointerup'); fire(downEl, 'mouseup'); downEl = null; press(false); kc.classList.remove('on');
+        },
+        drag: async (a, b, o = {}) => {
+          const p = await d.move(a); if (!p) return; await sleep(t, rnd(120, 200));
+          downEl = hit(p.el); press(true); if (o.caps) caps(o.caps); fire(downEl, 'pointerdown'); fire(downEl, 'mousedown'); await sleep(t, 120);
+          const q = at(b); if (q) await glide(t, [q.x, q.y], () => fire(downEl, 'pointermove'));
+          await sleep(t, 90); fire(downEl, 'pointerup'); fire(downEl, 'mouseup'); downEl = null; press(false); kc.classList.remove('on');
+          await sleep(t, o.dwell ?? 500);
+        },
+        select: async (spec, from, to) => {   // drag across words: the selection follows the pointer, as it does in Pilot
+          const el = $(spec, layer), node = el && el.firstChild; if (!node || node.nodeType !== 3) return;
+          const rg = document.createRange(), L = lr();
+          const xy = (i, end) => { rg.setStart(node, i); rg.setEnd(node, i + 1); const r = rg.getBoundingClientRect(); return [(end ? r.right : r.left) - L.left, r.top + r.height * .55 - L.top]; };
+          await glide(t, xy(from)); await sleep(t, 160); press(true); fire(el, 'pointerdown'); fire(el, 'mousedown');
+          const s = getSelection();
+          for (let i = from; i < Math.min(to, node.length); i++) { pos = xy(i, true); draw(); rg.setStart(node, from); rg.setEnd(node, i + 1); s.removeAllRanges(); s.addRange(rg.cloneRange()); await sleep(t, rnd(16, 30)); }
+          fire(el, 'pointerup'); fire(el, 'mouseup'); press(false);
+        },
+      };
+      return d;
+    };
+    const stop = () => {
+      if (!tok) return; tok.dead = true; tok = null;
+      if (downEl) { fire(downEl, 'pointerup'); downEl = null; }
+      ptr.classList.remove('on', 'down'); kc.classList.remove('on'); stage.classList.remove('demo'); capR?.setAttribute('aria-live', 'polite');
+    };
+    const play = async () => {
+      if (tok || touched || !seen || document.hidden) return;
+      const t = tok = { dead: false }, d = api(t);
+      stage.classList.add('demo'); capR?.setAttribute('aria-live', 'off');
+      ptr.classList.add('on');
+      try {
+        if (studio) {
+          const order = TOUR.filter(s => DEMO[s] && P[s]); let i = 0;
+          for (;;) { const s = order[i++ % order.length], k = $(`#k-${s}`); if (k) inner(k); await d.click(k, { dwell: 900 }); await DEMO[s](d); await sleep(t, 1500); }
+        } else {
+          for (;;) { await DEMO[cur](d); await sleep(t, 2600); show(cur); await sleep(t, 900); }
+        }
+      } catch (e) { if (e !== STOP) { stop(); touched = true; } }
+    };
+    const take = (e) => { if (!e.isTrusted) return; if (tok) stop(); touched = true; };
+    layer.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'touch') take(e); }, true);
+    ['click', 'keydown', 'contextmenu', 'focusin'].forEach(ty => layer.addEventListener(ty, take, true));
+    let moved = 0; layer.addEventListener('pointermove', (e) => { if (!tok || !e.isTrusted || e.pointerType !== 'mouse') return; moved += Math.abs(e.movementX) + Math.abs(e.movementY); if (moved > 40) { moved = 0; take(e); } }, { passive: true });
+    new IntersectionObserver(([e]) => {
+      seen = e.intersectionRatio >= .55; clearTimeout(wake);
+      if (seen) wake = setTimeout(play, 900); else { stop(); touched = false; moved = 0; }
+    }, { threshold: [0, .55, 1] }).observe(deskEl);
+    document.addEventListener('visibilitychange', () => { clearTimeout(wake); if (document.hidden) stop(); else if (seen) wake = setTimeout(play, 900); });
+  }
+
+  /* ------------------------------------------------ the showcase (P88): each still loads half a screen ahead; each clip gets its source as it nears the screen,
+     plays muted while half of it is on screen and pauses off it; reduced motion and Save-Data keep the still. ?showcase=sticky or
+     ?showcase=rows previews the other layout. */
+  const showEl = $('.show'), lay = new URLSearchParams(location.search).get('showcase');
+  if (showEl && (lay === 'rows' || lay === 'sticky')) showEl.dataset.layout = lay;
+  const stills = $$('.sbox img[data-src]');
+  if (stills.length) {
+    const load = (i) => { i.src = i.dataset.src; i.removeAttribute('data-src'); };
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { load(e.target); io.unobserve(e.target); } }), { rootMargin: '0px 0px 50% 0px' }); stills.forEach(i => io.observe(i)); }
+    else stills.forEach(load);
+  }
+  const clips = $$('.sbox video[data-src]');
+  if (clips.length && !reduced && !(navigator.connection && navigator.connection.saveData) && 'IntersectionObserver' in window) {
+    const src = (v) => { if (v.getAttribute('src')) return; v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto'; v.src = v.dataset.src; };
+    const near = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { src(e.target); near.unobserve(e.target); } }), { rootMargin: '0px 0px 120px 0px' });
+    const run = (v) => { if (v.dataset.paused || document.hidden) return; src(v); v.play().then(() => { v.classList.add('on'); const b = v.nextElementSibling; if (b) b.hidden = false; }).catch(() => {}); };
+    const inView = new IntersectionObserver((es) => es.forEach(e => { const v = e.target; v._in = e.intersectionRatio >= .5; if (v._in) run(v); else v.pause(); }), { threshold: [0, .5] });
+    clips.forEach(v => { near.observe(v); inView.observe(v); const b = v.nextElementSibling;
+      b?.addEventListener('click', () => { const off = !v.dataset.paused; if (off) { v.dataset.paused = '1'; v.pause(); } else { delete v.dataset.paused; run(v); } b.setAttribute('aria-label', b.getAttribute('aria-label').replace(off ? 'Pause' : 'Play', off ? 'Play' : 'Pause')); $('path', b).setAttribute('d', off ? 'M5 3v10l8-5z' : 'M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z'); }); });
+    document.addEventListener('visibilitychange', () => clips.forEach(v => { if (document.hidden) v.pause(); else if (v._in) run(v); }));
+  }
 
   /* ------------------------------------------------ the hero: strike, film */
   const hero = $('.hero');

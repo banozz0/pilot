@@ -11,7 +11,7 @@ import PilotTiler
 /// release (DragSession). Writes follow the mouse at the screen's rate, newest point first (LatestWins); another app's
 /// window is written through AX off the main thread, so a slow app never stalls the tap; Pilot's own window through
 /// AppKit, since AX from Pilot to itself can block the main thread (OwnApp). Hyper + right-click on a file (story 199)
-/// is this tap's too, so it and a Hyper resize never race in two taps: with Hyper the drag modifier, a right press over
+/// or the empty desktop (its own menu, Q743) is this tap's too, so it and a Hyper resize never race in two taps: with Hyper the drag modifier, a right press over
 /// a file waits for its release, a resize once it moves past `clickSlop`, the file menu if it never does; with no drag
 /// modifier picked, the tap is on only while Hyper is held.
 @MainActor
@@ -25,7 +25,7 @@ final class MouseDragTap {
     private let tiler: TilerService
     /// A tiled resize's outline, in AppKit coordinates; nil hides it. Engine draws it as the drop zone.
     var outline: (CGRect?) -> Void = { _ in }
-    /// Hyper + right-click on a file: what the press named and where, after the callback returned (FileActionsMenu).
+    /// Hyper + right-click on a file or the desktop: what the press named and where, after the callback returned (FileActionsMenu).
     var openFiles: (FileActionsMenu.Source, CGPoint) -> Void = { _, _ in }
     /// The desktop's widgets (Q668): Hyper held alone and a left press on one moves it, a right press resizes it (Q695),
     /// whatever the drag modifier; a plain right press opens its menu (Edit widget). `grab` (true for a resize) answers
@@ -256,12 +256,13 @@ final class MouseDragTap {
     }
 
     /// What a right press under Hyper names for the file menu: a Finder window or the desktop (no window under the
-    /// pointer) for Finder's Accessibility to read once the callback returned, or the menu's file row under the pointer.
+    /// pointer, nor a widget, whose press is its own) for Finder's Accessibility to read once the callback returned, or the
+    /// menu's file row under the pointer.
     /// Anything else, Pilot's other windows too, gets its click as it was. Only cheap work here: the layer's state, the
     /// window server's list and the menu's own model.
     private func fileClick(at point: CGPoint) -> FileActionsMenu.Source? {
         guard layer.isHyperHeld() else { return nil }
-        guard let front = front(at: point) else { return .finder }
+        guard let front = front(at: point) else { return widgets?.over(point) == true ? .finder : .desktop }
         if front.info.pid == ProcessInfo.processInfo.processIdentifier {
             let file = PilotMenu.shared.file(at: CGPoint(x: point.x, y: Screens.primaryHeight - point.y))
             if file == nil { wlog.notice("file click: passed, Pilot's window \(front.info.id) has no file row under the pointer") }

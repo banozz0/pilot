@@ -830,6 +830,11 @@ struct WidgetRenders {
             try Widget(manifest: Data(#"{"id": "my-markets", "title": "M", "data": {"markets": "s"}, "settings": [{"name": "s", "type": "text"}]}"#.utf8),
                        folder: URL(filePath: "/var/empty/my-markets"))
         }
+        // A click on a symbol opens its TradingView page.
+        #expect(WidgetMarkets.symbols(.array(["pair:BITSTAMP:BTCUSD", "stock:NASDAQ:NVDA", "pair:FX:EURUSD", "pair:SP:SPX", "pair:CME_MINI:ES1!", "stock:NYSE:BRK.B", "pair:X:A/B"].map(JSONValue.string)))
+            .compactMap(\.page?.absoluteString) == ["https://www.tradingview.com/symbols/BITSTAMP-BTCUSD/", "https://www.tradingview.com/symbols/NASDAQ-NVDA/",
+                "https://www.tradingview.com/symbols/FX-EURUSD/", "https://www.tradingview.com/symbols/SP-SPX/", "https://www.tradingview.com/symbols/CME_MINI-ES1!/",
+                "https://www.tradingview.com/symbols/NYSE-BRK.B/", "https://www.tradingview.com/symbols/X-A%2FB/"])
         let quote = try #require(Self.marketQuotes["stock:NASDAQ:AAPL"].flatMap(WidgetMarkets.quote))
         #expect(quote.moved(.month).percent == 4.18 && quote.moved(.day).high == 349.19 && quote.previous == 344.63 + 4.29)
         // No Markets extension in the moved home: the tile says what to install, and nothing ran.

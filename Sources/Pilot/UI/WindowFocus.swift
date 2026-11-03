@@ -15,7 +15,7 @@ enum WindowFocus {
     /// Call right after opening the window (openSettings, openWindow): SwiftUI creates it on the next turn.
     static func bringForward() {
         // A window Show desktop holds would come forward out of sight: the desktop's widgets hide as it ends.
-        if TilerOwnWindows.broughtForward() { WidgetDesk.shared.showDesktopChanged() }
+        TilerOwnWindows.broughtForward()
         let front = NSWorkspace.shared.frontmostApplication
         if let front, front != .current { previousApp = front }
         NSRunningApplication.current.activate(from: front ?? .current, options: [])

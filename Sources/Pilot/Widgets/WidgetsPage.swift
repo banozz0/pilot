@@ -47,10 +47,11 @@ final class WidgetsPageModel {
     // MARK: Actions
 
     /// Add to desktop: a new placement, a step down and right from the last, at the widget's own size, on its own
-    /// workspace (its widget.json's) or every one.
-    func add(_ widget: Widget) {
+    /// workspace (its widget.json's) or every one. `screen`, `x` and `y` put its top left where the desktop's Hyper +
+    /// right-click › Add widget was: that display, and fractions of it.
+    func add(_ widget: Widget, screen: String? = nil, x: Double? = nil, y: Double? = nil) {
         var all = store.placements()
-        all.append(.new(widget, after: all.count))
+        all.append(.new(widget, after: all.count, screen: screen, x: x, y: y))
         let on = widget.workspace.map { "workspace \($0)" } ?? "an empty workspace"
         save(all, done: "\(widget.title) is on the desktop; it shows on \(on) or with Show desktop.")
     }

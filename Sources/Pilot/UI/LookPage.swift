@@ -16,14 +16,32 @@ struct LookPage: View {
     let screens: [WallpaperScreen]?
     /// The theme columns, measured from the grid's width (calmColumns): only a change of count redraws the page.
     @State private var themeColumns = 4
+    /// The place a link asked for (Wallpaper), scrolled to and then cleared through `landed`; the row Wallpaper lights.
+    let section: AppSection?
+    let focus: WallpaperBlock.Focus?
+    let landed: () -> Void
 
-    init(look: Look = .shared, wallpaper: WallpaperSettings = .shared, screens: [WallpaperScreen]? = nil) {
+    init(look: Look = .shared, wallpaper: WallpaperSettings = .shared, screens: [WallpaperScreen]? = nil, section: AppSection? = nil,
+         focus: WallpaperBlock.Focus? = nil, landed: @escaping () -> Void = {}) {
         self.look = look
         self.wallpaper = wallpaper
         self.screens = screens
+        self.section = section
+        self.focus = focus
+        self.landed = landed
     }
 
-    var body: some View { column }
+    var body: some View {
+        ScrollViewReader { proxy in
+            column.onChange(of: section, initial: true) {
+                guard let section else { return }
+                Task { @MainActor in
+                    withAnimation(Kit.change) { proxy.scrollTo(section, anchor: .top) }
+                    landed()
+                }
+            }
+        }
+    }
 
     /// What each setting does, the ⓘ's words: one or two plain lines.
     enum Info {
@@ -79,7 +97,7 @@ struct LookPage: View {
                         }
                     }
                 }
-                WallpaperBlock(settings: wallpaper, screens: screens)
+                WallpaperBlock(settings: wallpaper, screens: screens, focus: focus).id(AppSection.wallpaper)
                 errorLine.padding(.top, 12)
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 30)

@@ -68,12 +68,14 @@ struct NotesTests {
         #expect(try file("Meeting-261008.md") == "Meeting\nnotes")
     }
 
-    @Test("A pin is kept in pins.json and follows its note through a rename; Scratch cannot be pinned")
+    @Test("A pin is kept in pins.json and follows its note through a rename; Scratch cannot be pinned; the welcome note stays over the pins")
     func pins() throws {
         let s = store()
+        _ = try NotesWelcome.write(in: folder)
         let note = try s.create(text: "Plan")
         try s.setPinned(note.id, true)
         #expect(try s.load().filter(\.pinned).map(\.id) == [note.id])
+        #expect(try s.load().map(\.id) == ["Scratch.md", NotesWelcome.name, note.id])
         #expect(try file("pins.json").contains(note.id))
         let renamed = try s.save(note.id, text: "Plans")
         #expect(try s.load().filter(\.pinned).map(\.id) == [renamed])
@@ -82,7 +84,7 @@ struct NotesTests {
         #expect(try s.load().filter(\.pinned).isEmpty)
     }
 
-    @Test("A .md file added to the folder outside Pilot shows on the next read, titled by its first line; other files do not")
+    @Test("A .md file added to the folder outside Pilot shows on the next read, titled by its first line as plain text; other files do not")
     func outsideFileAppears() throws {
         let s = store()
         _ = try s.load()
@@ -91,6 +93,9 @@ struct NotesTests {
         let notes = try s.load()
         #expect(notes.map(\.id).sorted() == ["Scratch.md", "Vault note.md"])
         #expect(notes.first { $0.id == "Vault note.md" }?.title == "From Obsidian")
+        #expect(Notes.title(of: "**_Craft anything -> crm - farmops_**\nbody") == "Craft anything -> crm - farmops")
+        #expect(Notes.title(of: "- [ ] Ring `Ana` about [the farm](https://x.com)") == "Ring Ana about the farm")
+        #expect(Notes.title(of: "```\n1. *Plan* __B__") == "Plan B" && Notes.title(of: "#\n\n") == "Untitled")
     }
 
     @Test("A line added to Scratch goes on a line of its own at the end")
@@ -134,7 +139,7 @@ struct NotesTests {
         #expect(try !file("pins.json").contains("gone"))
     }
 
-    @Test("The list groups Scratch alone, then Pinned, Today, Yesterday and Earlier, newest edited first")
+    @Test("The list groups Scratch alone, the welcome note right under it, then Pinned, Today, Yesterday and Earlier, newest edited first")
     func groups() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -144,10 +149,11 @@ struct NotesTests {
             Note(id: id, text: id, edited: now.addingTimeInterval(-ago), pinned: pinned)
         }
         let notes = [note("old", 5 * day), note("today1", 3600), note("Scratch.md", 9 * day),
-                     note("yest", day), note("today2", 60), note("pin", 2 * day, pinned: true), note("older", 3 * day)]
+                     note("yest", day), note("today2", 60), note("pin", 2 * day, pinned: true), note("older", 3 * day),
+                     note(NotesWelcome.name, 20 * day)]
         let groups = Notes.groups(notes, now: now, calendar: calendar)
-        #expect(groups.map(\.notes).map { $0.map(\.id) } == [["Scratch.md"], ["pin"], ["today2", "today1"], ["yest"], ["older", "old"]])
-        #expect(groups.map(\.title) == ["Scratch", "Pinned", "Today", "Yesterday", "Earlier"] && groups[0].section == .scratch)
+        #expect(groups.map(\.notes).map { $0.map(\.id) } == [["Scratch.md"], [NotesWelcome.name], ["pin"], ["today2", "today1"], ["yest"], ["older", "old"]])
+        #expect(groups.map(\.title) == ["Scratch", "Welcome", "Pinned", "Today", "Yesterday", "Earlier"] && groups[0].section == .scratch)
     }
 
     @Test("Typing note and text at the menu root offers New note; note alone, or another word, offers nothing")

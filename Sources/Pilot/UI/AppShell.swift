@@ -123,7 +123,7 @@ struct PageView: View {
         case .tiling: TilingSettingsView()
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
-        case .look: LookPage()
+        case .look: LookPage(section: section, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
         case .activity: if section == .reports { ReportsPage(open: model.reportPick).onDisappear { model.reportPick = nil } } else { ActivityPage(onScreen: model.live) }

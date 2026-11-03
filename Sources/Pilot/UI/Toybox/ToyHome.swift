@@ -2,37 +2,35 @@ import Clipboard
 import PilotCore
 import SwiftUI
 
-/// Home in Toybox (card agent-bo-95423182, mockup B: home-dark.png, home-light.png, src/home.html), on direction 2 "Now
-/// beside the board" (HomeNowPage, Sven's pick 2026-10-12): the column of now (the greeting with the Pilot mark where Capsy
-/// was, then the small blocks) beside the board: the Pilot card (the one thing that needs you, else All clear with the
-/// menu's keys), the Hyper keyboard (Binds' Toybox board), the workspaces with the one you are on in sun yellow, today's
-/// most pressed binds as bars in their module colours, the newest copies, This Mac's four meters and extension pages.
+/// Home in Toybox (card agent-bo-95423182, mockup B: home-dark.png, home-light.png, src/home.html), on Home's grid
+/// (HomeNowPage; P91): the greeting with the Pilot mark where Capsy was, and the blocks, Large in Toybox's own forms: the
+/// Pilot card (the one thing that needs you, else All clear with the menu's keys), the Hyper keyboard (Binds' Toybox
+/// board), the workspaces with the one you are on in sun yellow, today's most pressed binds as bars in their module
+/// colours, the newest copies and This Mac's four meters.
 /// Quick actions are not in the mockup's Home, so Toybox leaves them to the menu.
 struct ToyHome: View {
     let parts: HomeParts
 
     var body: some View {
-        HomeNowPage(parts: parts, side: 26, gap: 18) {
+        HomeNowPage(parts: parts, side: 26) {
             EmptyView()
-        } board: { id, _, width in
-            block(id, width: width)
+        } own: { id, size in
+            own(id, width: size.width)
         }
     }
 
-    /// A board block; the forms every style shares (HomeSharedBlock) first.
-    @ViewBuilder private func block(_ id: String, width: CGFloat) -> some View {
-        if let shared = HomeSharedBlock(id: id, parts: parts) { shared } else { own(id, width: width) }
-    }
-
+    /// A block in Toybox's own form, at its cells' width (today's Large, and the Pilot card).
     @ViewBuilder private func own(_ id: String, width: CGFloat) -> some View {
         switch HomeLayout.Block(rawValue: id) {
         case .pilot: ToyPilotCard(parts: parts, row: width > 600)
-        case .keyboard: ToyHyperKeyboard(parts: parts, whole: width >= HomeNow.wholeBoard)
+        // Whole at every width, its names shrunk (split, its halves stacked would outgrow its cells); its keys keep their
+        // height, so the board sits in the middle of its cells.
+        case .keyboard: ToyHyperKeyboard(parts: parts, whole: true).frame(maxHeight: .infinity)
         case .workspaces: ToyWorkspaces(columns: width < 640 ? 2 : 4).frame(height: width < 640 ? 440 : 296)
         case .mostUsed: ToyMostPressed(parts: parts, spread: false)
         case .clipboard: ToyClipboard(parts: parts)
         case .thisMac: ToyThisMac(parts: parts)
-        case .quickActions, nil: EmptyView()
+        case .greeting, .quickActions, nil: EmptyView()
         }
     }
 
@@ -192,7 +190,7 @@ private struct ToyHyperKeyboard: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
     let parts: HomeParts
-    /// The board whole, its names shrunk, rather than split (HomeNow.wholeBoard).
+    /// The board whole, its names shrunk, rather than split.
     var whole = false
 
     var body: some View {

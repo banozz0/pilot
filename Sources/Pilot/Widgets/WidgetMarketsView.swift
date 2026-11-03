@@ -6,7 +6,8 @@ import SwiftUI
 /// One symbol: Large is the overview (its line against the day's open close, price, change, high and low, range keys
 /// that take clicks); Wide the line with the price beside it; Square the price, change and a small line; Strip one line.
 /// Several: Large and Wide rows, each a small line, the price and the change (Wide in two columns when it holds them);
-/// Square the top rows; Strip a still ticker line, as many as fit.
+/// Square the top rows; Strip a still ticker line, as many as fit. A click on a symbol (its row, figures or chart) opens
+/// its TradingView page in the default browser; the range keys keep showing their range.
 struct WidgetMarketsPanel: View {
     @Environment(\.deskKit) private var kit
     @Environment(\.widgetFit) private var fit
@@ -95,6 +96,24 @@ enum Markets {
     }
 
     private static let money = ["EUR": "€", "USD": "$", "GBP": "£", "JPY": "¥", "CHF": "₣", "CNY": "¥", "INR": "₹", "KRW": "₩"]
+}
+
+/// A click on a symbol: its TradingView page in the default browser.
+private struct MarketsOpens: ViewModifier {
+    let symbol: WidgetMarkets.Symbol
+
+    func body(content: Content) -> some View {
+        content.contentShape(.rect)
+            .onTapGesture(perform: open)
+            .help("Open \(symbol.symbol) on TradingView")
+            .accessibilityAddTraits(.isLink).accessibilityAction(.default, open)
+    }
+
+    private func open() { if let page = symbol.page { NSWorkspace.shared.open(page) } }
+}
+
+private extension View {
+    func opens(_ symbol: WidgetMarkets.Symbol) -> some View { modifier(MarketsOpens(symbol: symbol)) }
 }
 
 /// `.mk`: a symbol's mark in a ring on the meter's track.
@@ -212,24 +231,27 @@ private struct MarketsOne: View {
         switch fit.size {
         case .large:
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 9) {
-                    MarketsMark(text: Markets.mark(symbol, figures.quote), side: 24)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(symbol.symbol).font(kit.mono(12, .semibold)).tracking(0.24).foregroundStyle(kit.text)
-                        Text([figures.name, figures.quote?.currency].compactMap { $0 }.joined(separator: " · "))
-                            .font(kit.sans(10.5)).foregroundStyle(kit.text3)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 9) {
+                        MarketsMark(text: Markets.mark(symbol, figures.quote), side: 24)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(symbol.symbol).font(kit.mono(12, .semibold)).tracking(0.24).foregroundStyle(kit.text)
+                            Text([figures.name, figures.quote?.currency].compactMap { $0 }.joined(separator: " · "))
+                                .font(kit.sans(10.5)).foregroundStyle(kit.text3)
+                        }
+                        .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text(figures.kind.uppercased()).font(kit.mono(9.5)).tracking(0.86).foregroundStyle(kit.text3).lineLimit(1)
                     }
-                    .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Text(figures.kind.uppercased()).font(kit.mono(9.5)).tracking(0.86).foregroundStyle(kit.text3).lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(figures.price).font(kit.mono(28, .light)).tracking(-0.84).monospacedDigit().foregroundStyle(kit.text)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                        if let currency = figures.quote?.currency { Text(currency).font(kit.mono(10)).foregroundStyle(kit.text3) }
+                        MarketsChange(figures: figures, money: true)
+                    }
+                    chart(line, previous, figures)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(figures.price).font(kit.mono(28, .light)).tracking(-0.84).monospacedDigit().foregroundStyle(kit.text)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    if let currency = figures.quote?.currency { Text(currency).font(kit.mono(10)).foregroundStyle(kit.text3) }
-                    MarketsChange(figures: figures, money: true)
-                }
-                chart(line, previous, figures)
+                .opens(symbol)
                 HStack(spacing: 8) {
                     MarketsKeys(board: board)
                     Spacer(minLength: 0)
@@ -239,19 +261,22 @@ private struct MarketsOne: View {
         case .wide:
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 7) {
-                        MarketsMark(text: Markets.mark(symbol, figures.quote), side: 20)
-                        Text(symbol.symbol).font(kit.mono(12, .semibold)).foregroundStyle(kit.text).lineLimit(1)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            MarketsMark(text: Markets.mark(symbol, figures.quote), side: 20)
+                            Text(symbol.symbol).font(kit.mono(12, .semibold)).foregroundStyle(kit.text).lineLimit(1)
+                        }
+                        Text(figures.price).font(kit.mono(24, .light)).tracking(-0.72).monospacedDigit().foregroundStyle(kit.text)
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                        MarketsChange(figures: figures, size: 11)
                     }
-                    Text(figures.price).font(kit.mono(24, .light)).tracking(-0.72).monospacedDigit().foregroundStyle(kit.text)
-                        .lineLimit(1).minimumScaleFactor(0.5)
-                    MarketsChange(figures: figures, size: 11)
+                    .opens(symbol)
                     Spacer(minLength: 0)
                     if let highLow = figures.highLow { Text(highLow).font(kit.mono(9.5)).foregroundStyle(kit.text3).lineLimit(1).minimumScaleFactor(0.8) }
                     MarketsKeys(board: board).padding(.horizontal, -6)
                 }
                 .frame(width: min(150, max(110, fit.width * 0.4)), alignment: .leading)
-                chart(line, previous, figures)
+                chart(line, previous, figures).opens(symbol)
             }
         case .square:
             VStack(alignment: .leading, spacing: 4) {
@@ -266,6 +291,7 @@ private struct MarketsOne: View {
                 MarketsChange(figures: figures, size: 11)
                 if line.count > 1 { MarketsChart(points: line, up: figures.up, full: false).padding(.top, 6) } else { Spacer(minLength: 0) }
             }
+            .opens(symbol)
         case .strip:
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 MarketsMark(text: Markets.mark(symbol, figures.quote), side: 18).alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
@@ -276,6 +302,7 @@ private struct MarketsOne: View {
             }
             .lineLimit(1)
             .accessibilityElement(children: .combine)
+            .opens(symbol)
         }
     }
 
@@ -318,6 +345,7 @@ private struct MarketsSeveral: View {
                     .lineLimit(1).fixedSize()
                     .padding(.horizontal, 12)
                     .accessibilityElement(children: .combine)
+                    .opens(rows[i].symbol)
                 }
             }
             .padding(.horizontal, -12)
@@ -345,6 +373,7 @@ private struct MarketsSeveral: View {
                             }
                             .frame(height: 26)
                             .accessibilityElement(children: .combine)
+                            .opens(rows[i].symbol)
                         }
                     }
                 }
@@ -393,6 +422,7 @@ private struct MarketsSeveral: View {
                 }
                 .padding(.vertical, 6)
                 .accessibilityElement(children: .combine)
+                .opens(rows[i].symbol)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

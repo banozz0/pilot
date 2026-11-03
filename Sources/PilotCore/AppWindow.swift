@@ -101,9 +101,9 @@ public enum AppPage: String, CaseIterable, Sendable {
     /// The parts a page holds as tabs or places on it (Binds' conflicts open as a sheet, not a tab).
     public var sections: [AppSection] { AppSection.allCases.filter { $0.page == self } }
 
-    /// Pages whose own content is their first tab, before their parts, or whose parts are places on it (General); every
-    /// other page with parts is its parts.
-    public var hasOwnContent: Bool { [.binds, .menu, .activity, .files, .general, .extensions, .configs, .ai, .captures].contains(self) }
+    /// Pages whose own content is their first tab, before their parts, or whose parts are places on it (General, Look); every
+    /// other page with parts is its parts. Look opens on its top, its Wallpaper a place on it.
+    public var hasOwnContent: Bool { [.binds, .menu, .activity, .files, .general, .extensions, .configs, .ai, .captures, .look].contains(self) }
 
     /// The part a page opens on: none for a page with its own content, else its first.
     public var firstSection: AppSection? { hasOwnContent ? nil : sections.first }
@@ -345,6 +345,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     case recording
     /// Captures' tab: every capture and recording, and Combine images (P73); `tab=history` already means Stats.
     case captureHistory
+    /// Look's Wallpaper block, which a link and the desktop's Hyper + right-click › Wallpaper settings… scroll to.
+    case wallpaper
 
     public var page: AppPage {
         switch self {
@@ -358,6 +360,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup: .ai
         case .recording, .captureHistory: .captures
+        case .wallpaper: .look
         }
     }
 
@@ -377,9 +380,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// conflicts a sheet.
     public var isTab: Bool { !opensAsSheet && !isMerged }
 
-    /// Parts drawn on their page's own body: Plain combos as a sublayer, and General's places and the extension catalogue
-    /// (Q601), which a link scrolls to. The search still lands on them.
-    public var isMerged: Bool { self == .plainCombos || page == .general || self == .extensionCatalogue }
+    /// Parts drawn on their page's own body: Plain combos as a sublayer, and General's places, the extension catalogue
+    /// (Q601) and Look's Wallpaper, which a link scrolls to. The search still lands on them.
+    public var isMerged: Bool { self == .plainCombos || page == .general || self == .extensionCatalogue || self == .wallpaper }
 
     public var title: String {
         switch self {
@@ -408,6 +411,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .aiSetup: "Setup"
         case .recording: "Recording"
         case .captureHistory: "History"
+        case .wallpaper: "Wallpaper"
         }
     }
 
@@ -443,6 +447,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                         "fix selected text", "new chat after", "ai keys"]
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "frame rate", "fps", "show clicks", "countdown"]
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
+        case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "per workspace wallpaper", "cycle wallpaper"]
         }
     }
 }

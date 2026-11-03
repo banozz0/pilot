@@ -412,6 +412,12 @@ final class NotesPanel {
         noteslog.notice("notes panel shown on \(model.current, privacy: .public), \(model.notes.count) notes")
     }
 
+    /// Shows the panel on a new note, as its own New note makes one: the desktop's Hyper + right-click › New note.
+    func showNew() {
+        show()
+        model?.new()
+    }
+
     /// Saves, then hides; the model stays, so the next show lands on the same note. The panel itself goes, as the menu's
     /// and the clipboard's do, so the next show is built in the Look of that moment (the style, the theme, the glass).
     func hide() {

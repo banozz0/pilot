@@ -52,6 +52,22 @@ enum WallpaperSwitch {
         }
     }
 
+    /// The gallery's pick (P90): `url` on the screen with display UUID `display`, else on `fallback`, alone, queued
+    /// behind any step and kept as the screen's current, so Next steps on from it; while the workspace shown there cycles
+    /// its own folders, also as that workspace's image. The tip says where it went.
+    static func set(_ url: URL, display: String?, fallback: NSScreen?, settings: WallpaperSettings = .shared) {
+        guard let screen = screen(display) ?? fallback ?? NSScreen.main else { return HUD.tip("No screen to set the wallpaper on") }
+        let workspace = DisplayIdentity.uuid(of: screen).flatMap(settings.ownWorkspace(on:))
+        enqueue {
+            guard show(url, on: screen, replacing: current(on: screen), quiet: false) else { return }
+            if let workspace { settings.shown(url, workspace: workspace) }
+            looklog.notice("wallpaper picked on \(screen.localizedName, privacy: .public): \(url.lastPathComponent, privacy: .public)")
+            NotificationCenter.default.post(name: changed, object: nil)
+            let place = workspace.map { Engine.shared?.presets.contents.title(for: $0) ?? WorkspacePreset.unnamed($0) } ?? screen.localizedName
+            HUD.tip("\(url.deletingPathExtension().lastPathComponent) · \(place)", seconds: 2)
+        }
+    }
+
     /// Sets `url` on `screen` and keeps it as the screen's current; false, logged and tipped unless `quiet`, when macOS
     /// refuses it.
     private static func show(_ url: URL, on screen: NSScreen, replacing current: URL?, quiet: Bool) -> Bool {
@@ -75,7 +91,7 @@ enum WallpaperSwitch {
     static func workspaceShown(_ workspace: String, after previous: String?, display: String?, settings: WallpaperSettings = .shared) {
         let own = settings.cyclesOwn(workspace), leaving = previous.map(settings.cyclesOwn) ?? false
         guard own || leaving,
-              let screen = display.flatMap({ d in NSScreen.screens.first { DisplayIdentity.uuid(of: $0) == d } }) ?? Screens.focusedScreen
+              let screen = screen(display) ?? Screens.focusedScreen
         else { return }
         let key = display ?? DisplayIdentity.uuid(of: screen)
         let last = own ? settings.workspaceImages[workspace].map { URL(filePath: $0) } : key.flatMap { screenImages[$0] }
@@ -92,6 +108,11 @@ enum WallpaperSwitch {
             looklog.notice("wallpaper workspace \(workspace, privacy: .public) on \(screen.localizedName, privacy: .public): \(last.lastPathComponent, privacy: .public)")
             NotificationCenter.default.post(name: changed, object: nil)
         }
+    }
+
+    /// The screen with this display UUID, when it is connected.
+    private static func screen(_ display: String?) -> NSScreen? {
+        display.flatMap { d in NSScreen.screens.first { DisplayIdentity.uuid(of: $0) == d } }
     }
 
     /// Each screen's own image by its display UUID, kept when a workspace with its own folders takes the screen over, for

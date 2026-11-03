@@ -236,7 +236,7 @@ struct NotesList: View {
 
     @ViewBuilder private var groupedRows: some View {
         ForEach(Array(model.groups.enumerated()), id: \.element.title) { index, group in
-            if group.section != .scratch {
+            if group.section != .scratch && group.section != .welcome {
                 NotesEyebrow(text: group.title).padding(.horizontal, 10).padding(.top, index == 0 ? 8 : 16).padding(.bottom, 6)
             }
             ForEach(group.notes) { note in
@@ -259,13 +259,13 @@ struct NotesList: View {
     }
 
     /// When a row says it was edited (the mockup's): the clock under Today, the day under Earlier, none under Pinned and
-    /// Yesterday; Scratch says it is empty.
+    /// Yesterday nor on the welcome note; Scratch says it is empty.
     private func time(_ note: Note, in section: Notes.Section) -> String? {
         switch section {
         case .scratch: "empty"
         case .today: NotesText.stamp(note.edited, clock: true)
         case .earlier: NotesText.stamp(note.edited, clock: false)
-        case .pinned, .yesterday: nil
+        case .welcome, .pinned, .yesterday: nil
         }
     }
 

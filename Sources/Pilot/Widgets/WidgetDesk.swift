@@ -122,6 +122,8 @@ final class WidgetDesk: ScreenPausing {
     private func arm() {
         guard events == nil, let tiler else { return }
         let runner = tiler.runner
+        // Show desktop ended with no focus event (a Pilot window raised, a Dock click): the widgets hide again.
+        showDesktopEnded = { [weak self] in self?.showDesktopChanged() }
         events = Task { [weak self] in
             // Window events too, which TilerService drops: a first window on an empty workspace hides its widgets.
             for await _ in runner.events() {

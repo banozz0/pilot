@@ -247,6 +247,7 @@ private struct RepoBrowser: View {
         Button("Show in Finder") { reveal(entry.url) }
         Button("Open in \(editorName)") { ConfigsModule.edit(entry.url, editor: editor.app) }
         Button("Copy path") { SystemModule.copy(entry.url.path, tip: "Copied the path") }
+        if entry.isFolder { Button("Open as gallery") { GalleryWindow.shared.open(entry.url) } }
     }
 
     /// A folder opens or closes, its children read off the main thread the first time (the tap runs there); a file shows

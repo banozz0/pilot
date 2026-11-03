@@ -10,7 +10,7 @@ extension Widget {
     /// - Wide: any other rectangle at least 1.3 times as wide as it is tall.
     /// - Square: the rest, near-square and small, and any portrait shape.
     /// Today's default sizes: 240×160, 260×160 and 300×170 are Wide; 260×220, 260×230, 280×200 and 280×260 Large.
-    public enum SizeClass: String, CaseIterable, Sendable {
+    public enum SizeClass: String, CaseIterable, Codable, Sendable {
         case strip, square, wide, large
 
         public static let stripHeight = 110.0, stripRatio = 1.6, wideRatio = 1.3

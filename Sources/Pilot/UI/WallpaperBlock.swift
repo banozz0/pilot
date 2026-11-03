@@ -6,7 +6,7 @@ import SwiftUI
 /// Look › Wallpaper (story 160, Sven 2026-10-10: "where do I even set which wallpapers cycle?"): each screen with its
 /// wallpaper now, its place in the cycle and Previous and Next; the folders and images that cycle as chips with Add and
 /// Reset, the same for every screen or each screen its own (Sven 2026-10-17), under its row; workspaces on their screen's
-/// folders or each its own (Sven 2026-10-19, Q333), a row per workspace; By name or Shuffle; the screen in front or every screen; and Change on its own. Self-contained, so the layout
+/// folders or each its own (Sven 2026-10-19, Q333), a row per workspace; Browse as gallery (P90); By name or Shuffle; the screen in front or every screen; and Change on its own. Self-contained, so the layout
 /// rework can move it; it reads the screens on appear and after every step.
 struct WallpaperBlock: View {
     @Environment(\.ink) private var ink
@@ -18,12 +18,23 @@ struct WallpaperBlock: View {
     let nicknames: DisplayNicknames
     /// The workspaces with a row while each can have its own folders; nil reads Pilot's list.
     private let names: [String]?
+    /// The row the desktop's Hyper + right-click › Wallpaper settings… asked for, and the row it lights a moment.
+    let focus: Focus?
+    @State private var lit: Lit?
+    private enum Lit: Equatable { case screen(String), workspace(String) }
+
+    /// A screen by its display UUID, and the workspace it shows (Q333): that workspace's row lights while each workspace
+    /// has its own, else the screen's.
+    struct Focus: Equatable {
+        let display: String?, workspace: String?
+    }
 
     init(settings: WallpaperSettings = .shared, screens: [WallpaperScreen]? = nil, count: Int? = nil, nicknames: DisplayNicknames = .shared,
-         workspaces: [String]? = nil) {
+         workspaces: [String]? = nil, focus: Focus? = nil) {
         self.settings = settings
         self.nicknames = nicknames
         names = workspaces
+        self.focus = focus
         _screens = State(initialValue: screens ?? [])
         _count = State(initialValue: count)
         reads = screens == nil
@@ -49,7 +60,7 @@ struct WallpaperBlock: View {
             BindKey(action: "system.nextWallpaper")
         } content: {
             ForEach(Array(screens.enumerated()), id: \.element.id) { i, screen in
-                BlockRow(first: i == 0) { screenRow(screen) }
+                BlockRow(first: i == 0) { screenRow(screen) }.focusBorder(on: screen.displayUUID.map { lit == .screen($0) } ?? false, radius: ink.style.radii.control)
             }
             BlockRow(first: screens.isEmpty) {
                 label("Folders", Info.folders)
@@ -63,7 +74,7 @@ struct WallpaperBlock: View {
             }
             if settings.workspaces == .perWorkspace {
                 ForEach(workspaceNames, id: \.self) { workspace in
-                    BlockRow { workspaceRow(workspace) }
+                    BlockRow { workspaceRow(workspace) }.focusBorder(on: lit == .workspace(workspace), radius: ink.style.radii.control)
                 }
             }
             BlockRow {
@@ -97,6 +108,19 @@ struct WallpaperBlock: View {
         .onReceive(NotificationCenter.default.publisher(for: WallpaperSwitch.changed)) { _ in
             if reads { Task { await read() } }
         }
+        .onChange(of: focus, initial: true) { lit = focus.flatMap(row) }
+        .task(id: lit) {
+            guard lit != nil, (try? await Task.sleep(for: ExtensionsPageView.litFor)) != nil else { return }
+            withAnimation(Kit.change) { lit = nil }
+        }
+    }
+
+    /// The row `focus` lights: its workspace's while each workspace has its own and that one has a row, else its screen's.
+    private func row(_ focus: Focus) -> Lit? {
+        if settings.workspaces == .perWorkspace, let workspace = focus.workspace, workspaceNames.contains(workspace) {
+            return .workspace(workspace)
+        }
+        return focus.display.map(Lit.screen)
     }
 
     private func label(_ title: String, _ info: String) -> some View {
@@ -213,6 +237,8 @@ struct WallpaperBlock: View {
                 if settings.folders == .shared { label("Images from", Info.images) } else { label("Shared folders", Info.shared) }
                 if let count { Text(count == 1 ? "1 image" : "\(count) images").font(ink.ui(12)).foregroundStyle(ink.muted) }
                 if !settings.isStandard { Button("Reset") { withAnimation(Kit.change) { settings.reset() } }.buttonStyle(.pilot) }
+                Button("Browse as gallery") { GalleryWindow.shared.openWallpapers(display: focus?.display) }.buttonStyle(.pilot)
+                    .help("The wallpaper folders as a grid of pictures: click one to make it the wallpaper.")
                 Button("Add…") { add(display: nil) }.buttonStyle(.pilot)
             }
             chips(settings.sources, display: nil)

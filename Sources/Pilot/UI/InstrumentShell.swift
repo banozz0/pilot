@@ -291,6 +291,7 @@ private struct InstrumentListRow: View {
 struct InstrumentToolbar: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
+    @Environment(\.homeSources) private var sources
     @Bindable var model: AppWindowModel
     /// The page list shows beside: the area's pages are there, not here. The page's parts are here at every width.
     let listed: Bool
@@ -300,7 +301,7 @@ struct InstrumentToolbar: View {
         InstrumentPageBar(title: model.title) {
             if page == .home {
                 TimelineView(.everyMinute) { context in
-                    Text(Self.stamp(context.date)).styleText(\.mono).foregroundStyle(style.color(\.text3))
+                    Text(Self.stamp(sources.now(context.date))).styleText(\.mono).foregroundStyle(style.color(\.text3))
                 }
             }
             if !listed, page.area.shown.count > 1 { areaPages(page.area).padding(.leading, 8) }

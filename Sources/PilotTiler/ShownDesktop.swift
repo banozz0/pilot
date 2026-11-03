@@ -28,7 +28,8 @@ func toggleShownDesktop() throws {
 
 /// The workspace whose windows wait in the corner this pass, nil once it ended: its monitor shows another workspace,
 /// or another of its windows took focus (a new window, Cmd+Tab to another app). Focus on no window, a click on the
-/// desktop, keeps it, and so does Cmd+Tab back to the app in front at the press.
+/// desktop, keeps it, and so does Cmd+Tab back to the app in front at the press; a Dock click on that app ends it
+/// (`endShownDesktopOnDockClick`).
 @MainActor
 func workspaceShowingDesktop() -> Workspace? {
     guard let shown = shownDesktop else { return nil }
@@ -46,4 +47,45 @@ func workspaceShowingDesktop() -> Workspace? {
 public func showDesktopWorkspace() -> String? {
     guard let shown = shownDesktop, shown.workspace.isVisible else { return nil }
     return shown.workspace.name
+}
+
+/// Pilot's widgets hear Show desktop end on a path that sends no focus event (a Pilot window raised, a Dock click).
+@MainActor public var showDesktopEnded: @MainActor () -> Void = {}
+
+/// Show desktop ends with no focus change: the workspace lays out again. True when it was on.
+@MainActor @discardableResult
+func endShownDesktop() -> Bool {
+    guard shownDesktop != nil else { return false }
+    shownDesktop = nil
+    refreshOnWindowEvent(kAXWindowCreatedNotification)
+    showDesktopEnded()
+    return true
+}
+
+/// A click at `point` (top-left origin, as AX) on the Dock icon of an app with a window Show desktop holds brings them
+/// all back. The app in front at the press is active already, so its icon activates nothing and no focus event ends
+/// it (Sven on 1.0.2: the Dock icon left him on the desktop); after a click on the desktop the icon brings back the
+/// window focused at the press, which `workspaceShowingDesktop` keeps it for.
+@MainActor
+func endShownDesktopOnDockClick(at point: CGPoint) async {
+    guard let shown = shownDesktop else { return }
+    // Off the main thread: a hung Dock waits out the AX timeout there, not in the key tap.
+    guard let clicked = await Task.detached(operation: { dockAppPath(at: point) }).value,
+          shownDesktop?.workspace === shown.workspace else { return }
+    let held = Set(shown.workspace.allLeafWindowsRecursive.map(\.app.pid))
+    if held.contains(where: { NSRunningApplication(processIdentifier: $0)?.bundleURL?.standardizedFileURL.path == clicked }) {
+        endShownDesktop()
+    }
+}
+
+/// The bundle path of the app whose Dock icon is at `point`, nil off one (a folder, the Trash, a minimised window).
+nonisolated private func dockAppPath(at point: CGPoint) -> String? {
+    var hit: AXUIElement?
+    guard unsafe AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit) == .success,
+          let hit else { return nil }
+    var subrole: CFTypeRef?, url: CFTypeRef?
+    guard unsafe AXUIElementCopyAttributeValue(hit, kAXSubroleAttribute as CFString, &subrole) == .success,
+          subrole as? String == kAXApplicationDockItemSubrole,
+          unsafe AXUIElementCopyAttributeValue(hit, kAXURLAttribute as CFString, &url) == .success else { return nil }
+    return (url as? URL)?.standardizedFileURL.path
 }

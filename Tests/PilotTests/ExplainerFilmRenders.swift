@@ -20,7 +20,7 @@ import WebApps
 /// with /extension, and the video editor on a made-up recording (PILOT_FILM_RECORDING); and cut 5's, all in Dusk: Weather's item
 /// in the top bar, Activity, the views earlier cuts borrowed from other render tests, Keys › Mouse, Snippets, AI › Setup and
 /// Apps › Open with; and cut 6's: a tea timer in the bar, the one Extensions list, Summarise in the selection pill, Capture text's
-/// tip, and Weather's popover on Glass.
+/// tip, and Weather's popover on Glass; and for the 1.0.3 film (P89), dictation's take in the top bar.
 /// Instrument in the film's theme (`theme`), Solid (glass draws nothing offscreen), with made-up notes, files, copies and
 /// windows, never this Mac's. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter ExplainerFilmRenders`
@@ -311,6 +311,14 @@ struct ExplainerFilmRenders {
         sources.extensionBar = tea.bar
         try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: Look.shared).frame(width: 1920, height: 32),
                         to: dir.appendingPathComponent("bar-w12-tea.png"), wait: 0.8)
+        // The 1.0.3 film's dictation short (P89): a take in the top bar at its centre, the waveform alone, then with the words.
+        try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: Look.shared, take: DictationOverlayRenders.barTake(.centre))
+                            .frame(width: 1920, height: 32),
+                        to: dir.appendingPathComponent("bar-w12-dictation.png"), wait: 0.8)
+        try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: Look.shared,
+                                                    take: DictationOverlayRenders.barTake(.centre, words: Self.dictated.last))
+                            .frame(width: 1920, height: 32),
+                        to: dir.appendingPathComponent("bar-w12-dictation-words.png"), wait: 0.8)
     }
 
     /// The film's tiling gaps, in points (Sven's cut 6 note: wider, so more wallpaper shows); gen.py's GO and GI match.

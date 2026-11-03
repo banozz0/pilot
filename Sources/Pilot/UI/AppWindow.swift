@@ -39,6 +39,8 @@ final class AppWindowModel {
     /// opens, so a second open of the same repo starts the page on it again.
     var repoPick: String?
     var repoOpens = 0
+    /// The Wallpaper row Look lights, from the desktop's Wallpaper settings…; going anywhere else clears it.
+    var wallpaperFocus: WallpaperBlock.Focus?
     /// The action whose bind editor Binds opens (the menu's Set Hyper bind, card agent-bo-95422968); Binds clears it.
     var editBind: String?
     /// The row whose alias editor Launcher › Aliases opens (the menu's Set alias…, card agent-bo-95423037); Aliases clears it.
@@ -72,6 +74,7 @@ final class AppWindowModel {
         reportPick = nil
         catalogueCategory = nil
         repoPick = nil
+        wallpaperFocus = nil
         searchOpen = false
         page = place.page
         if let section = place.section {
@@ -223,6 +226,12 @@ final class AppWindowController: NSObject {
         model.goRepo(name)
     }
 
+    /// Opens the window on Look › Wallpaper, `focus`'s row lit: the desktop's Hyper + right-click › Wallpaper settings….
+    func openWallpaper(_ focus: WallpaperBlock.Focus) {
+        open(AppPlace(.wallpaper))
+        model.wallpaperFocus = focus
+    }
+
     private func stopWaiting() {
         if let unlockObserver { DistributedNotificationCenter.default().removeObserver(unlockObserver) }
         unlockObserver = nil
@@ -303,7 +312,7 @@ final class AppWindowController: NSObject {
 
     /// The frame every open shares, and the renders: the theme's ground, the title bar hidden over the sidebar, the
     /// content on a MaterialBackdrop that the material goes behind.
-    static func makeWindow(content: NSView) -> PilotWindow {
+    static func makeWindow(content: NSView, size: NSSize = size, minSize: NSSize = minSize) -> PilotWindow {
         let w = PilotWindow(contentRect: NSRect(origin: .zero, size: size),
                             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                             backing: .buffered, defer: false)

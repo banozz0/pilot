@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// A widget on Home, the first page of Pilot's window, drawn as on the desktop at its placement's height and its lane's width: its
+/// A widget on Home, the first page of Pilot's window, drawn as on the desktop at its cells' size on Home's grid: its
 /// blocks and buttons, its Trust to run card, or its page. It is fed, and its page runs, only while this tile is drawn in
 /// the window on screen (WidgetDesk.drawnOnHome). Its right-click (HomeEdit's block menu) edits it or takes it off Home.
 struct HomeWidgetBlock: View {
@@ -12,8 +12,7 @@ struct HomeWidgetBlock: View {
     var body: some View {
         WidgetTile(model: widget.model) { WidgetDesk.shared.askTrust($0) }
             .overlay { if widget.model.page != nil { HomeWidgetPage(id: widget.id) } }
-            .frame(maxWidth: .infinity)
-            .frame(height: widget.placement.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(widget.title)
             // Drawn while this tile is on screen, released when it goes or the window hides: one pair per tile, so a copy

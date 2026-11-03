@@ -11,19 +11,24 @@ import UniformTypeIdentifiers
 /// Nothing is kept once the picker closes.
 @MainActor
 enum FileActionsMenu {
-    /// What the press named: Finder's files under its point, read through Accessibility, or a file Pilot already lists.
-    enum Source { case finder, files([URL]) }
+    /// What the press named: Finder's files under its point, read through Accessibility, on the desktop (no window
+    /// there) or in a Finder window, or a file Pilot already lists.
+    enum Source { case finder, desktop, files([URL]) }
 
     /// The picker for what lies under `point` (a CGEvent's location, top left), after the tap's callback returned. Over
-    /// Finder with no file there nothing opens: the press is already taken.
+    /// a Finder window with no file there nothing opens: the press is already taken; over the empty desktop its own
+    /// menu does (DesktopMenu).
     static func open(_ source: Source, at point: CGPoint) {
         let anchor = CGPoint(x: point.x, y: Screens.primaryHeight - point.y)
         switch source {
         case .files(let urls): show(urls, at: anchor)
-        case .finder:
+        case .finder, .desktop:
             Task {
                 let urls = await Task.detached(priority: .userInitiated) { FinderItems.at(point) }.value
-                guard !urls.isEmpty else { return flog.notice("file menu: no file under the pointer") }
+                guard !urls.isEmpty else {
+                    if case .desktop = source { return DesktopMenu.open(at: point) }
+                    return flog.notice("file menu: no file under the pointer")
+                }
                 show(urls, at: anchor)
             }
         }

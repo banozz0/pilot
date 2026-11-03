@@ -68,6 +68,8 @@ enum GlobalObserver {
                 // Pilot: a dragged tiled window lands where it was released (dropWithMouse.swift); one Esc cancelled, nowhere
                 if draggedWindowId != nil || cancelledDragWindowId != nil { return try await endMouseDrag(at: mouseLocation, allowed) }
                 let mouseLocation = mouseLocation
+                // Pilot: a Dock click on an app Show desktop holds brings its windows back (ShownDesktop.swift)
+                if shownDesktop != nil { await endShownDesktopOnDockClick(at: mouseLocation) }
                 let clickedMonitor = mouseLocation.monitorApproximation
                 switch true {
                     // Detect clicks on desktop of different monitors

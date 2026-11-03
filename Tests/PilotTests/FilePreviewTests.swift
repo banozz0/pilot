@@ -54,6 +54,24 @@ struct FilePreviewTests {
         #expect(preview.facts.contains(.init(label: "Dimensions", value: "64 × 32")))
     }
 
+    @Test("A gallery card: images, Markdown, folders and the rest; a Markdown card's title and first lines; the filter")
+    func galleryCards() {
+        func item(_ name: String, folder: Bool = false) -> FolderItem {
+            FolderItem(url: URL(filePath: "/g/\(name)"), name: name, isFolder: folder, size: nil, modified: nil, kind: "", type: nil)
+        }
+        let items = [item("Dunes.HEIC"), item("plan.md"), item("Shots", folder: true), item("a.zip"), item("b.webp")]
+        #expect(items.map(Gallery.kind) == [.image, .markdown, .folder, .other, .image])
+        #expect(Gallery.filter(items, " dun ").map(\.name) == ["Dunes.HEIC"])
+        #expect(Gallery.filter(items, "").count == 5)
+        let card = Gallery.markdownCard("---\ntitle: x\n---\n\n# **Launch** plan\n\n- Ship `Pilot`\n1. Typo search\n> quoted\n---\n```\n", name: "plan")
+        #expect(card == Gallery.MarkdownCard(title: "Launch plan", lines: ["Ship Pilot", "Typo search", "quoted"]))
+        #expect(Gallery.markdownCard("just text", name: "notes").title == "notes", "no heading: the file name")
+        #expect(Gallery.pixels(120) == 320 && Gallery.pixels(200) == 480 && Gallery.pixels(512) == 800)
+        // The wallpaper folders: an image picked on its own brings its folder, each once.
+        let folders = WallpaperSettings.containingFolders([URL(filePath: "/w/a"), URL(filePath: "/w/a/x.png"), URL(filePath: "/w/b/y.jpg"), URL(filePath: "/w/b")])
+        #expect(folders.map(\.path) == ["/w/a", "/w/b"])
+    }
+
     @Test("Edited reads today, yesterday or the date")
     func edited() {
         let now = Date(timeIntervalSince1970: 1_792_000_000)
@@ -118,6 +136,43 @@ struct FilePreviewRenders {
             }
         }
         #expect(green > 1000, "the png's picture fills the pane")
+    }
+
+    /// The gallery window's face (P90) on a folder of two pngs, a Markdown file and a subfolder: the pngs as their
+    /// pictures (the fake QuickLook's green), the Markdown as its title and lines. PILOT_RENDER_DIR keeps gallery.png.
+    @Test("The gallery draws a folder as cards", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func gallery() async throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        testApp()
+        let dir = try FilePreviewTests.folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try SharedLook.FileThumbnailRenders.png(dir.appending(path: "dunes.png"), width: 320, height: 200)
+        try SharedLook.FileThumbnailRenders.png(dir.appending(path: "lagoon.png"), width: 200, height: 320)
+        try "# Launch\n\n- Ship Pilot to the Shippers Club\n- Typo search: 7 ms\n".write(to: dir.appending(path: "launch.md"), atomically: true, encoding: .utf8)
+        try "zip".write(to: dir.appending(path: "notes.zip"), atomically: true, encoding: .utf8)
+        let model = GalleryModel(folder: dir)
+        model.make = FileThumbnailRenders.fake
+        model.show(dir, wallpaper: true, display: nil, sources: [dir])
+        defer { model.close() }
+        let host = NSHostingView(rootView: GalleryView(model: model).styled(.window).pilotTheme().background(Theme.background))
+        host.frame = CGRect(origin: .zero, size: GalleryWindow.size)
+        let w = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        defer { w.close() }
+        w.contentView = host
+        let deadline = Date().addingTimeInterval(4)
+        while model.items.count < 5, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(model.items.map(\.name) == ["Shots", "dunes.png", "lagoon.png", "launch.md", "notes.zip"], "folders first, then by name")
+        try await Task.sleep(for: .milliseconds(1500))
+        host.layoutSubtreeIfNeeded()
+        let rep = try #require(snapshot(host, scale: 2))
+        if let out = Self.env["PILOT_RENDER_DIR"] {
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(filePath: out).appending(path: "gallery.png"))
+        }
+        #expect(FileThumbnailRenders.green(rep) > 4000, "both pngs draw as their pictures")
+        model.query = "lag"
+        #expect(model.shown.map(\.name) == ["lagoon.png"])
     }
 }
 }

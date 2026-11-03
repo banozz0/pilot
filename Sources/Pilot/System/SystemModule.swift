@@ -25,6 +25,10 @@ enum SystemModule {
         add(&registry, "darkMode", "Dark mode on or off", Key("d", shift: true), .system) {
             appleScript("tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode", what: "dark mode")
         }
+        // Finder's own desktop icons off and on (Sven, Q745), Finder started again so it applies; no key in either preset.
+        add(&registry, "desktopIcons", "Desktop icons on or off", nil, .system, keywords: "finder hide desktop icons clean desktop") {
+            FinderDesktopIcons.toggle()
+        }
         // Omarchy's control panels open Pilot's own Setup page (card agent-bo-95422805, Sven's yes 2026-10-05); the ids stay,
         // so the binds and the Omarchy preset's Hyper+Ctrl+A, B and W keep working.
         add(&registry, "soundSettings", "Sound in Pilot", nil, .system) { AppWindowController.shared.open(.system, setup: .sound) }

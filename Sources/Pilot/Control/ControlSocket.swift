@@ -23,8 +23,8 @@ final class ControlSocket {
 
     /// Every verb family the app answers: a family adds its own `verbs.register…()` line here, as modules do in
     /// Engine.registerActions. Registering reads no live state, so the tests build it too; the sandbox host hands in its own
-    /// `status` reads.
-    static func registered(status: ControlStatus = ControlStatus()) -> ControlVerbs {
+    /// `status` reads, and may hand in a Home layout store seeded from a file.
+    static func registered(status: ControlStatus = ControlStatus(), homeBlocks: HomeBlockStores = HomeBlockStores()) -> ControlVerbs {
         let verbs = ControlVerbs(plan: plan)
         verbs.registerCore()
         verbs.registerPlan(gate: AllowPrompt.gate)
@@ -52,7 +52,7 @@ final class ControlSocket {
         verbs.registerConfigs(ControlConfigs())
         verbs.registerFonts(ControlFonts())
         verbs.registerInstall(ControlInstall())
-        verbs.registerHomeBlocks()
+        verbs.registerHomeBlocks(homeBlocks)
         verbs.registerAI(ControlAI())
         verbs.registerLight()
         verbs.registerUninstall()

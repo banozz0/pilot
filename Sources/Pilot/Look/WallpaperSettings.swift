@@ -90,6 +90,14 @@ final class WallpaperSettings: ScreenPausing {
     /// Whether `workspace` shows its own sources: each workspace can have its own and it has some.
     func cyclesOwn(_ workspace: String) -> Bool { workspaces == .perWorkspace && !workspaceOwn(workspace).isEmpty }
 
+    /// The folders of a list of sources, an image picked on its own as its folder, each once, in order: what the gallery
+    /// browses (P90).
+    nonisolated static func containingFolders(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.map { WallpaperCycle.isImage($0) ? $0.deletingLastPathComponent() : $0 }
+            .map(\.standardizedFileURL).filter { seen.insert($0.path).inserted }
+    }
+
     /// The screen's own folders and images; empty when it takes the shared ones.
     func ownSources(_ display: String) -> [String] { screenSources[display] ?? [] }
 

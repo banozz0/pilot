@@ -46,6 +46,21 @@ final class BarMenu: NSObject {
         owner.pop(menu, at: NSEvent.mouseLocation, in: nil)
     }
 
+    /// One row of a native menu: a pick, checked or not, its hint greyed at the right; a submenu; a section header; a
+    /// separator. A bar item's rows (BarMenuRow) become these, and the desktop's Hyper + right-click builds them.
+    enum Row {
+        case pick(String, checked: Bool = false, hint: String? = nil, run: () -> Void)
+        case submenu(String, [Row])
+        case header(String)
+        case separator
+    }
+
+    /// Shows `rows` at `point`, in AppKit's screen coordinates, and returns once the menu closes; a pick runs after that.
+    static func pop(_ rows: [Row], at point: NSPoint) {
+        let owner = BarMenu()
+        owner.pop(owner.menu(rows: rows), at: point, in: nil)
+    }
+
     /// The front app's menu (the top bar's App menus), its items as `nodes` hold them, under `view`, the clicked title,
     /// as the menu bar hangs a menu: a pick hands back its title path inside the menu.
     static func show(appMenu nodes: [MenuItemNode], under view: NSView, pick: @escaping ([String]) -> Void) {
@@ -110,6 +125,30 @@ final class BarMenu: NSObject {
         return menu
     }
 
+    /// A menu of `rows`, a submenu's rows inside it; the hints line up right of the widest pick.
+    private func menu(rows: [Row]) -> NSMenu {
+        let menu = self.menu([])
+        let font = NSFont.menuFont(ofSize: 0)
+        let titles = rows.compactMap { if case .pick(let title, _, _, _) = $0 { title } else { nil } }
+        let widest = titles.map { NSAttributedString(string: $0, attributes: [.font: font]).size().width }.max() ?? 0
+        for row in rows {
+            switch row {
+            case .pick(let title, let checked, let hint, let run):
+                let item = self.item(title, pick: run)
+                item.state = checked ? .on : .off
+                if let hint { item.attributedTitle = Self.title(title, hint: hint, font: font, at: widest + 48) }
+                menu.addItem(item)
+            case .submenu(let title, let rows):
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                item.submenu = self.menu(rows: rows)
+                menu.addItem(item)
+            case .header(let title): menu.addItem(.sectionHeader(title: title))
+            case .separator: menu.addItem(.separator())
+            }
+        }
+        return menu
+    }
+
     /// A menu of `sections`, each its title as a header over its picks.
     func menu(sections: [(title: String, items: [(title: String, run: () -> Void)])]) -> NSMenu {
         let menu = self.menu([])
@@ -129,27 +168,16 @@ final class BarMenu: NSObject {
     }
 
     private func menu(_ rows: [BarMenuRow], perform: @escaping (BarAction) -> Void) -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let font = NSFont.menuFont(ofSize: 0)
-        let titles = rows.compactMap { if case .action(let title, _, _, _) = $0 { title } else { nil } }
-        let widest = titles.map { NSAttributedString(string: $0, attributes: [.font: font]).size().width }.max() ?? 0
-        for row in rows {
-            switch row {
-            case .separator: menu.addItem(.separator())
-            case .header(let title): menu.addItem(.sectionHeader(title: title))
-            case .submenu(let title, let rows):
-                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                item.submenu = self.menu(rows, perform: perform)
-                menu.addItem(item)
-            case .action(let title, let action, let checked, let hint):
-                let item = self.item(title) { perform(action) }
-                item.state = checked ? .on : .off
-                if let hint { item.attributedTitle = Self.title(title, hint: hint, font: font, at: widest + 48) }
-                menu.addItem(item)
-            }
+        menu(rows: rows.map { Self.row($0, perform: perform) })
+    }
+
+    private static func row(_ row: BarMenuRow, perform: @escaping (BarAction) -> Void) -> Row {
+        switch row {
+        case .separator: .separator
+        case .header(let title): .header(title)
+        case .submenu(let title, let rows): .submenu(title, rows.map { Self.row($0, perform: perform) })
+        case .action(let title, let action, let checked, let hint): .pick(title, checked: checked, hint: hint) { perform(action) }
         }
-        return menu
     }
 
     /// The title, then its hint right-aligned at `at` in the secondary colour.

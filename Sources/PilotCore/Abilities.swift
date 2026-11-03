@@ -288,6 +288,7 @@ public enum Abilities {
         "system.clearAllNotifications": "Clears every notification.",
         "system.clearNotification": "Clears the latest notification.",
         "system.darkMode": "Switches macOS between dark and light.",
+        "system.desktopIcons": "Hides Finder's icons on the desktop, or shows them again; Finder restarts once so it takes the change.",
         "system.displaySettings": "Opens System on Displays.",
         "system.rotateDisplay": "Turns a screen to 0, 90, 180 or 270 degrees; it stays unless you press Revert within 15 s.",
         "system.focusSettings": "Opens Focus in System Settings.",

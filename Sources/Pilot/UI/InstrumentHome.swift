@@ -4,34 +4,31 @@ import PilotCore
 import SwiftUI
 
 /// Home in Instrument (mockup A's home.html, card agent-bo-95423181, ADR 0008), on direction 2 "Now beside the board"
-/// (HomeNowPage, Sven's pick 2026-10-12): what needs you as a notice with an accent tick across the top, the column of
-/// now, and the board: the Hyper keyboard, the workspace map on each display, Presses, Clipboard (as many copies as its
-/// block holds), This Mac and extension pages, medium ones two to a row.
+/// (HomeNowPage, Sven's pick 2026-10-12; on the grid since P91): what needs you as a notice with an accent tick across
+/// the top, then the blocks, Large in Instrument's own forms: the Hyper keyboard, the workspace map on each display,
+/// Presses, Clipboard (as many copies as its block holds) and This Mac.
 struct InstrumentHome: View {
     let parts: HomeParts
 
     var body: some View {
-        HomeNowPage(parts: parts, side: 28, gap: 16) {
+        HomeNowPage(parts: parts, side: 28) {
             ForEach(Array(parts.problems.enumerated()), id: \.offset) { i, problem in InstrumentNotice(parts: parts, problem: problem, index: i) }
-        } board: { id, fill, width in
-            block(id, width: width, fill: fill)
+        } own: { id, size in
+            own(id, width: size.width, fill: true)
         }
     }
 
-    /// A board block; the forms every style shares (HomeSharedBlock) first.
-    @ViewBuilder private func block(_ id: String, width: CGFloat, fill: Bool) -> some View {
-        if let shared = HomeSharedBlock(id: id, parts: parts) { shared } else { own(id, width: width, fill: fill) }
-    }
-
+    /// A block in Instrument's own form, at its cells' size (today's Large).
     @ViewBuilder private func own(_ id: String, width: CGFloat, fill: Bool) -> some View {
         switch HomeLayout.Block(rawValue: id) {
-        case .keyboard: InstrumentHyperKeyboard(parts: parts, whole: width >= HomeNow.wholeBoard)
+        // Whole at every width, its names shrunk: split, its halves stacked would outgrow its cells.
+        case .keyboard: InstrumentHyperKeyboard(parts: parts, whole: true)
         case .workspaces: InstrumentWorkspaces(width: width)
         case .mostUsed: InstrumentPresses(fill: fill)
         case .clipboard: InstrumentClipboard(parts: parts)
         // This Mac's readings carry their own heading.
         case .thisMac: InstrumentMac(fill: fill).frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading).styleSurface(\.card)
-        case .pilot, .quickActions, nil: EmptyView()
+        case .greeting, .pilot, .quickActions, nil: EmptyView()
         }
     }
 }
@@ -87,7 +84,7 @@ private struct InstrumentNotice: View {
 private struct InstrumentHyperKeyboard: View {
     @Environment(Engine.self) private var engine
     let parts: HomeParts
-    /// The board whole, its names shrunk, rather than split (HomeNow.wholeBoard).
+    /// The board whole, its names shrunk, rather than split.
     var whole = false
 
     var body: some View {
@@ -105,6 +102,8 @@ private struct InstrumentHyperKeyboard: View {
             .opacity(off ? 0.38 : 1)
             .allowsHitTesting(!off)
             .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 16)
+            // Its keys keep their height: the panel fills its cells and the board sits in the middle of it.
+            .frame(maxHeight: .infinity)
         }
     }
 }

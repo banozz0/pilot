@@ -1,14 +1,13 @@
 import PilotCore
 import SwiftUI
 
-// Home's block sizes (story 167, Sven 2026-10-10 on build 22: "every new addition should become optimised to fit in the home
-// screen, have different variants of how all widgets can look, some maybe can even look closed with just a tab with icon
-// and just show their info on hover"): what a medium extension card keeps, and the icon tab every style
-// draws through the Kit, its one figure; an icon's hover shows the block's small card.
+// Home's block layouts (story 167, Sven 2026-10-10 on build 22: "every new addition should become optimised to fit in the
+// home screen, have different variants of how all widgets can look"; P91: the desktop widgets' four classes): what an
+// extension's Wide card keeps, and the Strip and Square every block draws alike through the Kit, from its one figure.
 
 /// What a block's smaller sizes keep of an extension's page.
 enum HomeVariant {
-    /// A medium card: a page of usage cards keeps just their meters (`usage`); else the page's first stats or meter block
+    /// A Wide card: a page of usage cards keeps just their meters (`usage`); else the page's first stats or meter block
     /// and at most `rows` rows of its first list, or its first buttons when it has no list; a page with none of them keeps
     /// its first block.
     static func medium(_ blocks: [Extension.Block], rows: Int = 3) -> [Extension.Block] {
@@ -39,7 +38,7 @@ enum HomeVariant {
         }
     }
 
-    /// An icon tab's figure: the first stat, else the first meter's value; its label under it.
+    /// A Strip's or Square's figure: the first stat, else the first meter's value; its label under it.
     static func figure(_ blocks: [Extension.Block]) -> (value: String, label: String, tone: Extension.Tone?)? {
         for block in flattened(blocks) {
             switch block {
@@ -68,13 +67,13 @@ enum HomeVariant {
 }
 
 extension HomeLayout.Block {
-    /// The page a block's icon tab opens.
+    /// The page a block's Strip or Square opens.
     var place: AppPlace {
         switch self {
         case .workspaces: AppPlace(.workspaces)
         case .keyboard: AppPlace(.binds)
         case .mostUsed: AppPlace(.activity)
-        case .pilot: AppPlace(.general)
+        case .greeting, .pilot: AppPlace(.general)
         case .thisMac: AppPlace(.stats)
         case .clipboard: AppPlace(.clipboard)
         case .quickActions: AppPlace(.menu)
@@ -82,39 +81,7 @@ extension HomeLayout.Block {
     }
 }
 
-/// A block's large or medium form that every style draws alike: an extension's page, and Workspaces and the keyboard
-/// medium (a strip, a small board); nil leaves the block to its style.
-struct HomeSharedBlock: View {
-    private enum Form { case page(String), widget(HomeWidget), strip, board }
-    private let form: Form
-    private let parts: HomeParts
-
-    init?(id: String, parts: HomeParts) {
-        let medium = parts.size(id) != .large
-        switch HomeLayout.Block(rawValue: id) {
-        case nil:
-            if let ext = HomeLayout.extensionID(id) { form = .page(ext) }
-            else if let widget = parts.widget(id) { form = .widget(widget) }
-            else { return nil }
-        case .workspaces where medium: form = .strip
-        case .keyboard where medium: form = .board
-        default: return nil
-        }
-        self.parts = parts
-    }
-
-    var body: some View {
-        switch form {
-        case .page(let ext): HomeExtensionBlock(id: ext, parts: parts)
-        case .widget(let widget): HomeWidgetBlock(widget: widget, parts: parts)
-        case .strip: HomeWorkspaceStrip(parts: parts)
-        case .board: HomeMiniBoard(parts: parts)
-        }
-    }
-}
-
-/// What a block's icon tab shows: its symbol or emoji, its title, one figure with its label, and the short figure its
-/// badge carries.
+/// What a block's Strip and Square show: its symbol or emoji, its title, and one figure with its label.
 struct HomeGlance {
     var symbol: String?
     var emoji: String?
@@ -122,8 +89,6 @@ struct HomeGlance {
     var value: String?
     var label: String?
     var tone: Color?
-    /// An icon tab's badge: the figure while it is short.
-    var badge: String? { value.flatMap { $0.count <= 4 ? $0 : nil } }
 }
 
 /// Reads a block's glance and hands it on: a built-in block's from the engine, an extension's from its bar item's text or
@@ -154,6 +119,8 @@ private struct GlanceReader<Content: View>: View {
     private func builtIn(_ block: HomeLayout.Block) -> HomeGlance {
         var glance = HomeGlance(symbol: block.symbol, title: block.title)
         switch block {
+        case .greeting:
+            (glance.value, glance.label) = (HomeGreeting.hello(at: .now), Date.now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
         case .workspaces:
             let tiler = engine.observers.tiler
             (glance.value, glance.label) = tiler.focused.map { ($0, "workspace now") } ?? ("–", "tiling stopped")
@@ -173,61 +140,71 @@ private struct GlanceReader<Content: View>: View {
     }
 }
 
-/// Opens what an icon tab stands for: an extension's page, a block's page.
+/// Opens what a Strip or Square stands for: an extension's page, a block's page.
 @MainActor
 private func openFull(_ id: String, parts: HomeParts) {
     if let block = HomeLayout.Block(rawValue: id) { parts.go(block.place) } else if let ext = HomeLayout.extensionID(id) { parts.openExtension(ext) }
     else if HomeLayout.widgetID(id) != nil { parts.go(AppPlace(.widgets)) }
 }
 
-/// A block closed to a tab in the column: its symbol and its figure as a badge; resting on it shows the block's small
-/// card, a click opens its page.
-struct HomeIconTab<Medium: View>: View {
+/// A block as a Strip, one line: its symbol, its title, and its figure with its label; a click opens its page (P91: what
+/// today's icon tabs became).
+struct HomeStripBlock: View {
     @Environment(\.ink) private var ink
-    @Environment(\.style) private var style
     let id: String
     let parts: HomeParts
-    @ViewBuilder let medium: Medium
-    @State private var overTab = false
-    @State private var overCard = false
-    @State private var showing = false
 
     var body: some View {
         GlanceReader(id: id, parts: parts) { glance in
-            Button { showing = false; openFull(id, parts: parts) } label: {
-                GlanceIcon(glance: glance, size: 30)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .blockSurface()
-                    .frame(width: HomeLayout.Size.tab, height: HomeLayout.Size.tab)
-                    .overlay(alignment: .topTrailing) {
-                        if let badge = glance.badge {
-                            Text(badge).font(ink.mono(10, weight: .semibold)).monospacedDigit().lineLimit(1)
-                                .foregroundStyle(ink.onAccent).padding(.horizontal, 5).frame(minWidth: 18, minHeight: 16)
-                                .background(glance.tone == ink.red ? ink.red : ink.accent, in: .capsule)
-                                .offset(x: 6, y: -6)
-                        }
+            Button { openFull(id, parts: parts) } label: {
+                HStack(spacing: 10) {
+                    GlanceIcon(glance: glance, size: 24)
+                    Text(glance.title).font(ink.ui(12.5, .medium)).foregroundStyle(ink.text).lineLimit(1).layoutPriority(1)
+                    Spacer(minLength: 6)
+                    if let value = glance.value {
+                        Text(value).font(ink.mono(13, weight: .semibold)).monospacedDigit().foregroundStyle(glance.tone ?? ink.text).lineLimit(1)
                     }
-                    .contentShape(.rect)
+                    if let label = glance.label { Text(label).font(ink.ui(11.5)).foregroundStyle(ink.muted).lineLimit(1) }
+                }
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .blockSurface()
+                .contentShape(.rect)
             }
             .buttonStyle(.kitPress)
-            .onHover { overTab = $0 }
             .accessibilityLabel([glance.title, glance.value, glance.label].compactMap(\.self).joined(separator: ", "))
             .help(glance.title)
         }
-        // Shows after a moment's rest and closes a beat after the mouse leaves both the tab and the card, as InfoMark's does.
-        .task(id: overTab || overCard) {
-            let want = overTab || overCard
-            guard want != showing, (try? await Task.sleep(for: .milliseconds(want ? 350 : 150))) != nil else { return }
-            showing = want
-        }
-        .popover(isPresented: $showing, arrowEdge: .bottom) {
-            medium
-                .frame(width: 360)
-                .padding(10)
-                .background(Theme.windowFill(style.color(\.canvas)))
-                .onHover { overCard = $0 }
-                .environment(\.homeBlockAsks, false)
-                .floating()
+    }
+}
+
+/// A block as a Square: its figure big, its label and its title; a click opens its page.
+struct HomeSquareBlock: View {
+    @Environment(\.ink) private var ink
+    let id: String
+    let parts: HomeParts
+
+    var body: some View {
+        GlanceReader(id: id, parts: parts) { glance in
+            Button { openFull(id, parts: parts) } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        GlanceIcon(glance: glance, size: 22)
+                        Text(glance.title).font(ink.ui(12, .medium)).foregroundStyle(ink.text2).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Text(glance.value ?? "–").font(ink.display(30)).monospacedDigit().foregroundStyle(glance.tone ?? ink.text)
+                        .lineLimit(1).minimumScaleFactor(0.4)
+                    if let label = glance.label { Text(label).font(ink.ui(11.5)).foregroundStyle(ink.muted).lineLimit(2) }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .blockSurface()
+                .contentShape(.rect)
+            }
+            .buttonStyle(.kitPress)
+            .accessibilityLabel([glance.title, glance.value, glance.label].compactMap(\.self).joined(separator: ", "))
+            .help(glance.title)
         }
     }
 }
@@ -251,7 +228,7 @@ private struct GlanceIcon: View {
 
 extension View {
     /// Asks an extension's page on its pace while the window shows, unless the place it is drawn in says not to
-    /// (homeBlockAsks: an icon tab's hover card, whose tab asks).
+    /// (homeBlockAsks: a carried block's copy, whose block asks).
     func asksPage(_ model: ExtensionPageModel, onScreen: Bool) -> some View { modifier(AsksPage(model: model, onScreen: onScreen)) }
 }
 
@@ -268,56 +245,7 @@ private struct AsksPage: ViewModifier {
     }
 }
 
-/// Workspaces as a medium card: a strip of the workspaces, each its name and its apps' icons, the one you are on lit; a
-/// click goes there.
-struct HomeWorkspaceStrip: View {
-    @Environment(Engine.self) private var engine
-    @Environment(\.ink) private var ink
-    let parts: HomeParts
-
-    var body: some View {
-        let tiler = engine.observers.tiler
-        let cells = tiler.homeCells
-        Tile(title: "Workspaces", symbol: HomeLayout.Block.workspaces.symbol, fill: true) {
-            AccentLink(title: "Open") { parts.go(AppPlace(.workspaces)) }
-        } content: {
-            if tiler.focused == nil {
-                FinePrint(text: "Tiling is stopped; your binds still work.")
-            } else {
-                // As many as fit the card's width.
-                ViewThatFits(in: .horizontal) {
-                    ForEach([8, 6, 5, 4, 3, 2], id: \.self) { count in
-                        HStack(spacing: 6) { ForEach(Array(cells.prefix(count)), id: \.name) { cell(for: $0, tiler) } }
-                    }
-                }
-            }
-        }
-    }
-
-    private func cell(for workspace: OccupiedWorkspace, _ tiler: TilerService) -> some View {
-        let on = workspace.name == tiler.focused
-        return Button { tiler.go(workspace.name, from: "home") } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(workspace.name).font(ink.mono(13, weight: .semibold)).foregroundStyle(on ? ink.accentInk : ink.text)
-                Group {
-                    if workspace.apps.isEmpty { Text("empty").font(ink.ui(11)).foregroundStyle(ink.muted) }
-                    else { CompactApps(names: Array(workspace.apps.prefix(3)), bundles: workspace.bundles, size: 16, spacing: 3) }
-                }
-                .frame(height: 16)
-            }
-            .padding(.horizontal, 9).padding(.vertical, 8)
-            .frame(minWidth: 66, maxWidth: .infinity, alignment: .leading)
-            .background(on ? ink.selection : ink.well, in: .rect(cornerRadius: ink.radius(8), style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: ink.radius(8), style: .continuous).strokeBorder(on ? ink.accent : .clear, lineWidth: 1.5) }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.kitPress)
-        .help("Go to workspace \(workspace.name)")
-        .accessibilityLabel("Workspace \(workspace.name)\(on ? ", here" : ""): \(workspace.apps.joined(separator: ", "))")
-    }
-}
-
-/// The Hyper keyboard as a medium card: the board small, each bound key in its kind's colour with its letter, no names or
+/// The Hyper keyboard as a Square or Wide card: the board small, each bound key in its kind's colour with its letter, no names or
 /// legend; a click on a key opens its bind, its name shows under the mouse.
 struct HomeMiniBoard: View {
     @Environment(\.ink) private var ink

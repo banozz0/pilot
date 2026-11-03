@@ -54,6 +54,7 @@ struct ControlSystemVerbTests {
                 return layoutRefusal
             }
             system.dark = { true }
+            system.desktopIcons = { false }
             let pointer = PointerSpeed(system: SharedLook.PointerSpeedRenders.FakePointer())
             system.pointer = { pointer }
             verbs.registerSystem(system)
@@ -192,7 +193,10 @@ struct ControlSystemVerbTests {
         let rig = Rig()
         let all = await rig.ask()
         guard case .object(let o)? = all.result else { Issue.record("not an object: \(all)"); return }
-        #expect(Set(o.keys) == ["sound", "displays", "awake", "layouts", "dark", "mouse"] && o["dark"] == .bool(true))
+        #expect(Set(o.keys) == ["sound", "displays", "awake", "layouts", "dark", "desktopIcons", "mouse"] && o["dark"] == .bool(true))
+        // Finder's desktop icons on the fake: read, never written.
+        let appearance = await rig.ask("appearance").result
+        #expect(o["desktopIcons"] == .bool(false) && Self.path(appearance, "desktopIcons") == .bool(false))
         // The pointer speed on the fake: read, never set.
         #expect(Self.path(o["mouse"], "speed") == .number(1.5) && Self.path(o["mouse"], "picked") == .string("Normal"))
         #expect(Self.path(await rig.ask("appearance").result, "dark") == .bool(true))

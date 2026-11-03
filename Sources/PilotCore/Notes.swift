@@ -10,6 +10,8 @@ public struct Note: Equatable, Identifiable, Sendable {
     /// the Trash (notes round 2, Sven 2026-10-10).
     public var title: String { isScratch ? "Scratch" : Notes.title(of: text) }
     public var isScratch: Bool { id == NoteStore.scratch }
+    /// The note Pilot wrote into an empty folder; it stays right under Scratch until it goes to the Trash (Sven 2026-11-02).
+    public var isWelcome: Bool { id == NotesWelcome.name }
 
     public init(id: String, text: String, edited: Date, pinned: Bool) {
         self.id = id; self.text = text; self.edited = edited; self.pinned = pinned
@@ -39,7 +41,8 @@ public struct NoteStore: Sendable {
         self.folder = folder; self.now = now; self.newID = newID; self.trashItem = trash
     }
 
-    /// Every note, Scratch first, then pinned, then newest edited; Scratch.md is written first when it is missing.
+    /// Every note, Scratch first, then the welcome note, then pinned, then newest edited; Scratch.md is written first
+    /// when it is missing.
     public func load() throws -> [Note] {
         try ensureScratch()
         let pins = try loadPins()
@@ -50,9 +53,8 @@ public struct NoteStore: Sendable {
             let id = url.lastPathComponent
             return Note(id: id, text: text, edited: edited, pinned: id != Self.scratch && pins.contains(id))
         }
-        return notes.sorted { a, b in
-            (a.isScratch ? 0 : a.pinned ? 1 : 2, b.edited) < (b.isScratch ? 0 : b.pinned ? 1 : 2, a.edited)
-        }
+        func rank(_ note: Note) -> Int { note.isScratch ? 0 : note.isWelcome ? 1 : note.pinned ? 2 : 3 }
+        return notes.sorted { a, b in (rank(a), b.edited) < (rank(b), a.edited) }
     }
 
     /// A new note holding `text`, written at once so it has a file to rename.
@@ -152,12 +154,11 @@ public struct NoteStore: Sendable {
 
 /// What the panel and the menu show of the notes.
 public enum Notes {
-    /// The first line that has text, without Markdown's heading marks, past a line that only shows an image; "Untitled"
-    /// for an empty note.
+    /// The first line that has words, as plain text (`words`: no heading, list, bold, italic, code or link marks, a
+    /// link's text kept), past a line that only shows an image; "Untitled" for an empty note. The one source of every
+    /// title Pilot shows: the list, the widget, the menu's rows (Sven 2026-11-02: "**_Craft…_**" listed raw).
     public static func title(of text: String) -> String {
-        let line = text.split(whereSeparator: \.isNewline).lazy.map { $0.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty && !NoteAttachments.isImageLine($0) }
-        return line ?? "Untitled"
+        words(text, upTo: 1).first ?? "Untitled"
     }
 
     /// Scratch with nothing in it: no words, or only the "# Scratch" heading Pilot used to write.
@@ -179,10 +180,11 @@ public enum Notes {
         return slug.isEmpty ? "untitled" : slug
     }
 
-    /// The list's sections, top to bottom: Scratch alone on top in a section of its own, then Pinned, Today, Yesterday
-    /// and Earlier (Sven 2026-10-18, direction B: "add scratch uptop as like its own section and pinned under it").
+    /// The list's sections, top to bottom: Scratch alone on top in a section of its own, the welcome note right under
+    /// it (Sven 2026-11-02), then Pinned, Today, Yesterday and Earlier (Sven 2026-10-18, direction B: "add scratch uptop
+    /// as like its own section and pinned under it"). Neither of the first two shows a heading.
     public enum Section: String, CaseIterable, Sendable {
-        case scratch, pinned, today, yesterday, earlier
+        case scratch, welcome, pinned, today, yesterday, earlier
 
         public var title: String { rawValue.capitalized }
     }
@@ -201,9 +203,11 @@ public enum Notes {
         }
     }
 
-    /// The section a note is listed in: Scratch's own, Pinned, else the day it was last edited; the head's crumb names it.
+    /// The section a note is listed in: Scratch's own, the welcome note's, Pinned, else the day it was last edited; the
+    /// head's crumb names it.
     public static func section(of note: Note, now: Date, calendar: Calendar = .current) -> Section {
         if note.isScratch { return .scratch }
+        if note.isWelcome { return .welcome }
         if note.pinned { return .pinned }
         let ago = calendar.dateComponents([.day], from: calendar.startOfDay(for: note.edited), to: calendar.startOfDay(for: now)).day ?? 0
         return ago <= 0 ? .today : ago == 1 ? .yesterday : .earlier

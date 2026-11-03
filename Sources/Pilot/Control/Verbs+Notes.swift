@@ -46,7 +46,7 @@ final class ControlNotes {
         return row
     }
 
-    /// Rows in the page's order, each with its group: Scratch, Pinned, Today, Yesterday, Earlier.
+    /// Rows in the page's order, each with its group: Scratch, Welcome, Pinned, Today, Yesterday, Earlier.
     func rows(_ notes: [Note]) -> JSONValue {
         let folder = model().store.folder
         return .array(Notes.groups(notes, now: .now).flatMap { group in group.notes.map { .object(Self.row($0, folder: folder, group: group.title)) } })

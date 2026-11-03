@@ -166,7 +166,7 @@ extension MenuEntry {
         "system.lock": ("lock", .neutral), "system.lockKeyboard": ("lock.rectangle", .neutral), "system.sleep": ("moon", .accent), "system.restart": ("arrow.triangle.2.circlepath", .amber),
         "system.shutDown": ("power", .problem), "system.logOut": ("rectangle.portrait.and.arrow.right", .neutral), "system.ejectAll": ("eject", .neutral),
         "system.darkMode": ("circle.lefthalf.filled", .second), "system.keepAwake": ("cup.and.saucer", .amber),
-        "system.nightShift": ("sun.min", .amber), "system.idleLock": ("hourglass", .neutral),
+        "system.nightShift": ("sun.min", .amber), "system.desktopIcons": ("rectangle.grid.3x2", .neutral), "system.idleLock": ("hourglass", .neutral),
         "system.wifi": ("wifi", .accent), "system.bluetoothSettings": ("dot.radiowaves.left.and.right", .accent),
         "system.displaySettings": ("display", .third), "system.rotateDisplay": ("rotate.right", .third), "system.focusSettings": ("moon.stars", .second),
         "workspaces.rescue": ("lifepreserver", .good), "system.killProcess": ("xmark.circle", .problem),

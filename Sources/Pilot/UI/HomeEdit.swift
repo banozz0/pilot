@@ -2,37 +2,37 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-// Home's edit mode (spec home-edit, direction B "Workbench", Sven 2026-10-12) and Home's extension blocks, drawn in every
-// style through the Kit. Edit mode is on Home itself: the blocks wiggle under their size chips and ✕, hidden ones wait in
-// the edit bar's tray, and Done keeps the edit while Escape and Cancel throw it away (HomeEditSession decides the layout).
+// Home's edit mode (spec home-edit, direction B "Workbench", Sven 2026-10-12; P91's grid, model A) and Home's extension
+// blocks, drawn in every style through the Kit. Edit mode is on Home itself: the blocks wiggle under their corner brackets,
+// edge grips, Layout chip and ✕, the cells show as dots, hidden blocks wait in the edit bar's tray, and Done keeps the edit
+// while Escape and Cancel throw it away (HomeEditSession decides the layout).
 
-/// Home in edit mode: the session every edit goes through, the size chip under the pointer, whose block's new frame the
-/// page draws dashed (HomeEditPreview), and the block the pointer carries (T5).
+/// Home in edit mode: the session every edit goes through, and the block the pointer carries or resizes (T5): a drag on a
+/// block moves it, a drag on one of its handles resizes it; either snaps to whole cells, the others making room.
 @Observable @MainActor
 final class HomeEditMode {
-    typealias Place = HomeEditSession.Place
+    /// The sides a handle moves: a corner two, an edge grip one.
+    typealias Edges = HomeCell.Edges
 
-    struct Hover: Equatable {
-        let id: String
-        let size: HomeLayout.Size
-    }
-
-    /// A block the pointer carries: the slots and the page's shape taken at pick-up, kept until the drop so nothing moves
-    /// under the pointer (HomeSlots), the frame it was lifted from (page space) and where the pointer holds it.
+    /// A block the pointer holds: its cells and frame (page space) at pick-up, where the pointer took it (global) and
+    /// where it holds it, and whether it is carried whole or resized by `edges`.
     struct Lift {
         let id: String
-        let slots: HomeSlots
-        let shape: HomeNow.Shape
+        /// Empty: carried whole; else the sides a handle resizes.
+        let edges: Edges
+        let start: HomeCell
         let frame: CGRect
+        let from: CGPoint
         let grab: CGSize
         /// Dragged out of the tray: it floats as its chip.
         let fromTray: Bool
         /// One a pick-up, so each lift draws afresh.
         let serial: Int
+
+        var resizing: Bool { !edges.isEmpty }
     }
 
     let session: HomeEditSession
-    var hover: Hover?
     /// The block lifted, from pick-up until it has landed.
     private(set) var lift: Lift?
     /// The pointer while carrying, global: the floating block follows it 1:1.
@@ -48,7 +48,7 @@ final class HomeEditMode {
     @ObservationIgnored var frames: HomeFrames?
     @ObservationIgnored private var dwell: Timer?
     @ObservationIgnored private var landed: Timer?
-    @ObservationIgnored private var pending: Place?
+    @ObservationIgnored private var pending: HomeCell?
     @ObservationIgnored private var gesture: CGPoint?
     @ObservationIgnored private var lifts = 0
     /// Reduce Motion is on (the page hands it over): no wiggle, lift scale or spring; changes fade 150 ms.
@@ -58,90 +58,118 @@ final class HomeEditMode {
     var focus: String?
     private(set) var keyed = false
 
-    init(session: HomeEditSession, hover: Hover? = nil) {
+    init(session: HomeEditSession) {
         self.session = session
-        self.hover = hover
     }
 
-    /// The block carried now: lifted and not yet dropped, put back or hidden.
+    /// The block held now: lifted and not yet dropped, put back or hidden.
     var carrying: Lift? { lift.flatMap { session.carried == $0.id ? $0 : nil } }
 
-    // MARK: Carrying
+    // MARK: Carrying and resizing
 
     /// A drag on Home's page, global: its first move lifts the block under where it began; then the block follows. A drag
     /// whose block went back (Escape) moves nothing until the pointer lets go.
     func drag(from start: CGPoint, to point: CGPoint) {
-        if start != gesture {
-            gesture = start
-            if let origin = frames?.origin, let id = frames?.block(at: start - origin) { pickUp(id, at: start - origin) }
+        follow(from: start, to: point) { origin in
+            if let id = frames?.block(at: start - origin) { pickUp(id, at: start - origin, from: start) }
         }
-        move(to: point)
+    }
+
+    /// A drag on one of a block's handles, global: its first move takes the block by those sides.
+    func resize(_ id: String, edges: Edges, from start: CGPoint, to point: CGPoint) {
+        follow(from: start, to: point) { origin in
+            guard let rect = frames?.frame(of: id) else { return }
+            lift(id, edges: edges, frame: rect, from: start, grab: CGSize(width: start.x - origin.x - rect.minX, height: start.y - origin.y - rect.minY),
+                 fromTray: false)
+        }
     }
 
     /// A tray chip dragged, global: a hidden block lifted as its chip, shown where it is dropped.
     func dragHidden(_ id: String, from start: CGPoint, to point: CGPoint) {
+        follow(from: start, to: point) { origin in
+            lift(id, edges: [], frame: CGRect(origin: start - origin, size: .zero), from: start, grab: .zero, fromTray: true)
+        }
+    }
+
+    /// A drag's move: its first (a new start) lifts with `begin`, given the page's origin; every one moves the held block.
+    private func follow(from start: CGPoint, to point: CGPoint, begin: (CGPoint) -> Void) {
         if start != gesture {
             gesture = start
-            if let origin = frames?.origin {
-                lift(id, frame: CGRect(origin: start - origin, size: .zero), grab: .zero, fromTray: true)
-            }
+            if let origin = frames?.origin { begin(origin) }
         }
         move(to: point)
     }
 
     /// Lifts `id` where the page drew it, held at `point` in the page's space.
-    func pickUp(_ id: String, at point: CGPoint) {
-        guard let rect = frames?.rects[.block(id)] else { return }
-        lift(id, frame: rect, grab: CGSize(width: point.x - rect.minX, height: point.y - rect.minY), fromTray: false)
+    func pickUp(_ id: String, at point: CGPoint, from start: CGPoint) {
+        guard let rect = frames?.frame(of: id) else { return }
+        lift(id, edges: [], frame: rect, from: start, grab: CGSize(width: point.x - rect.minX, height: point.y - rect.minY), fromTray: false)
     }
 
-    private func lift(_ id: String, frame: CGRect, grab: CGSize, fromTray: Bool) {
-        guard let frames, let drawn = frames.drawn else { return }
+    private func lift(_ id: String, edges: Edges, frame: CGRect, from: CGPoint, grab: CGSize, fromTray: Bool) {
+        guard let frames else { return }
         session.pickUp(id)
         guard session.carried == id else { return }
         dwell?.invalidate()
         landed?.invalidate()
-        (dwell, landed, pending, hover, landing, overTray) = (nil, nil, nil, nil, nil, false)
+        (dwell, landed, pending, landing, overTray) = (nil, nil, nil, nil, false)
         lifts += 1
-        lift = Lift(id: id, slots: HomeSlots(frames, carrying: id, size: session.draft.size(of:)), shape: drawn.shape, frame: frame,
-                    grab: grab, fromTray: fromTray, serial: lifts)
-        if let origin = frames.origin { pointer = CGPoint(x: frame.minX + grab.width + origin.x, y: frame.minY + grab.height + origin.y) }
+        let draft = session.draft
+        let start = frames.cells[id] ?? draft.cell(of: id) ?? HomeGrid.foot(HomeLayout.size(of: id), under: [])
+        lift = Lift(id: id, edges: edges, start: start, frame: frame, from: from, grab: grab, fromTray: fromTray, serial: lifts)
+        pointer = from
     }
 
-    /// The carried block under a new pointer, global.
+    /// The held block under a new pointer, global.
     func move(to point: CGPoint) {
-        guard carrying != nil else { return }
+        guard let lift = carrying else { return }
         pointer = point
-        overTray = frames?.bar?.contains(point) == true
+        overTray = !lift.resizing && frames?.bar?.contains(point) == true
         aimScroll()
         aim()
     }
 
-    /// The slot under the pointer, in the page as it lies now (it may have scrolled): a new one counts once the pointer
-    /// has rested in it 80 ms, and the page makes room for it.
+    /// The cells the held block would take with the pointer where it is now: a carried block's frame snapped to the
+    /// nearest cells at its own size (its width cut at the grid's right edge), a resized one's sides moved by whole cells.
+    func cells(for lift: Lift) -> HomeCell? {
+        guard !overTray, let frames, let origin = frames.origin, let inner = frames.inner else { return nil }
+        if lift.resizing {
+            let across = HomeGrid.cellWidth(inner) + HomeGrid.gap
+            return lift.start.resized(lift.edges, dx: Int(((pointer.x - lift.from.x) / across).rounded()),
+                                      dy: Int(((pointer.y - lift.from.y) / HomeGrid.pitch).rounded()))
+        }
+        let at = pointer - origin
+        let frame = CGRect(x: at.x - lift.grab.width, y: at.y - lift.grab.height, width: 1, height: 1)
+        guard let near = frames.cell(nearest: frame) else { return nil }
+        return HomeCell(x: near.x, y: near.y, w: lift.start.w, h: lift.start.h).clamped
+    }
+
+    /// The cells under the pointer: a resize follows at once; a carried block's new cells count once the pointer has
+    /// rested on them 80 ms, and the page makes room for it.
     func aim() {
-        guard let lift = carrying, let origin = frames?.origin else { return }
-        let place = overTray ? nil : lift.slots.slot(at: pointer - origin)?.place
-        guard place != session.target else {
+        guard let lift = carrying else { return }
+        let cell = cells(for: lift)
+        guard cell != session.target else {
             dwell?.invalidate()
             dwell = nil
             return
         }
-        if dwell != nil, pending == place { return }
+        if lift.resizing { return target(cell) }
+        if dwell != nil, pending == cell { return }
         dwell?.invalidate()
-        pending = place
-        dwell = Self.after(HomeMotion.rest) { [weak self] in self?.target(place) }
+        pending = cell
+        dwell = Self.after(HomeMotion.rest) { [weak self] in self?.target(cell) }
     }
 
-    private func target(_ place: Place?) {
+    private func target(_ cell: HomeCell?) {
         dwell = nil
-        guard carrying != nil, session.target != place else { return }
-        withAnimation(settle) { session.hover(place) }
-        if place != nil { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+        guard carrying != nil, session.target != cell else { return }
+        withAnimation(settle) { session.hover(cell) }
+        if cell != nil { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
     }
 
-    /// The pointer lets go: on the tray the block hides; on a slot it drops there, at the slot's size, rested in or not;
-    /// off every slot it goes back. The floating block flies to where it now lies.
+    /// The pointer lets go: on the tray the block hides; else it takes the cells under the pointer, rested on or not;
+    /// a resize that went nowhere changes nothing. The floating block flies to where it now lies.
     func release() {
         // The next drag lifts afresh, even from the same point.
         gesture = nil
@@ -154,15 +182,14 @@ final class HomeEditMode {
             withAnimation(HomeMotion.fade) { self.lift = nil; overTray = false }
             return
         }
-        let place = frames?.origin.flatMap { lift.slots.slot(at: pointer - $0)?.place }
         withAnimation(settle) {
-            session.hover(place)
+            session.hover(cells(for: lift))
             session.drop()
         }
         land(lift)
     }
 
-    /// The carried block back where it was (Escape, ⌘Z while carrying), the draft unchanged.
+    /// The held block back where it was (Escape, ⌘Z while carrying), the draft unchanged.
     func putBack() {
         guard let lift = carrying else { return }
         dwell?.invalidate()
@@ -173,14 +200,14 @@ final class HomeEditMode {
     }
 
     /// The floating block to the frame its block takes once the page has drawn the drop, fading as it lands; a block
-    /// left hidden (a tray chip dropped off every slot), or any under Reduce Motion, just fades.
+    /// left hidden (a tray chip dropped off the grid), a resize, or any under Reduce Motion, just ends.
     private func land(_ lift: Lift) {
         landed?.invalidate()
-        if reduceMotion { return finish(lift) }
+        if reduceMotion || lift.resizing { return finish(lift) }
         landed = Self.after(.milliseconds(20)) { [weak self] in
             guard let self, self.lift?.serial == lift.serial else { return }
             let shown = session.draft.shown(extensions: session.extensions).contains(lift.id)
-            guard shown, let rect = frames?.rects[.block(lift.id)], let origin = frames?.origin else { return finish(lift) }
+            guard shown, let rect = frames?.frame(of: lift.id), let origin = frames?.origin else { return finish(lift) }
             withAnimation(settle) { landing = rect.offsetBy(dx: origin.x, dy: origin.y) }
             landed = Self.after(.milliseconds(300)) { [weak self] in self?.finish(lift) }
         }
@@ -205,14 +232,13 @@ final class HomeEditMode {
     /// A layout change's animation: the spring, or under Reduce Motion a 150 ms fade.
     var settle: Animation { HomeMotion.settle(reduce: reduceMotion) }
 
-    /// Escape: a carried block goes back first (by pointer or by keyboard); else the edit is thrown away and edit mode
-    /// ends (true).
+    /// Escape: a held block goes back first; else the edit is thrown away and edit mode ends (true).
     func escape() -> Bool {
         if carrying != nil { putBack(); return false }
         return session.escape()
     }
 
-    /// ⌘Z: a carried block goes back first; else one edit back.
+    /// ⌘Z: a held block goes back first; else one edit back.
     func undo() {
         if carrying != nil { putBack() } else { session.undo() }
     }
@@ -237,51 +263,43 @@ final class HomeEditMode {
 
     // MARK: Keyboard and VoiceOver
 
-    /// A key on the focused block in edit mode (spec home-edit, check 11). Escape, Return and ⌘Z are the edit bar's.
+    /// A key on the focused block in edit mode (spec home-edit, check 11; P91). Escape, Return and ⌘Z are the edit bar's.
     enum Key: Equatable {
         /// Tab and Shift-Tab: the next block or the one before; past either end the window's own Tab goes on (the bar).
         case tab, backTab
-        /// The arrows, up and left earlier, down and right later: the focus, or the carried block slot by slot.
-        case earlier, later
-        /// Space: picks the focused block up, or drops the carried one.
-        case space
-        /// 1 to 4: Icon, Small, Medium, Large.
-        case size(HomeLayout.Size)
-        /// ⌫: hides the focused block.
-        case hide
+        /// The arrows move the block a cell, Shift and the arrows size it, 1 to 4 keep Strip, Square, Wide or Large (0
+        /// Auto), ⌫ hides it.
+        case edit(Edit)
+
+        static func move(dx: Int, dy: Int) -> Key { .edit(.move(dx: dx, dy: dy)) }
+        static func resize(dw: Int, dh: Int) -> Key { .edit(.resize(dw: dw, dh: dh)) }
+        static func layout(_ layout: Widget.SizeClass?) -> Key { .edit(.layout(layout)) }
+        static let hide = Key.edit(.hide)
     }
 
-    /// An edit VoiceOver offers on a block, as its mouse twin makes it: a drag to a slot, a size chip, the ✕.
+    /// An edit a key or VoiceOver makes on a block, as its mouse twin does: a drag, a handle, the Layout chip, the ✕.
     enum Edit: Equatable {
-        case move(Place)
-        case size(HomeLayout.Size)
+        case move(dx: Int, dy: Int)
+        case resize(dw: Int, dh: Int)
+        case layout(Widget.SizeClass?)
         case hide
     }
 
-    /// The block the keyboard (or VoiceOver) carries: picked up with no pointer.
-    var keyCarried: String? { carrying == nil ? session.carried : nil }
+    /// The blocks focus walks, in reading order: by row, then column, as `blocks` (the ones Home draws) sit in the draft.
+    func order(_ blocks: [String]) -> [String] { HomeLayout.reading(session.draft.cells(blocks)) }
 
-    /// A key on the focused block, `blocks` the ones Home draws and `across` the board's columns: true when edit mode takes
-    /// it. While the pointer carries a block the keys wait.
-    func press(_ key: Key, blocks: [String], across: Int) -> Bool {
+    /// A key on the focused block, `blocks` the ones Home draws: true when edit mode takes it. While the pointer holds a
+    /// block the keys wait.
+    func press(_ key: Key, blocks: [String]) -> Bool {
         if carrying != nil { return true }
         keyed = true
-        let order = Self.order(drawn(session.draft, blocks), size: session.draft.size(of:), across: across)
-        if let id = keyCarried {
-            switch key {
-            case .space: keyDrop(id, blocks: blocks, across: across)
-            case .earlier, .later: step(id, by: key == .earlier ? -1 : 1, blocks: blocks, across: across)
-            case .hide: hide(id, order: order)
-            case .tab, .backTab, .size: break
-            }
-            return true
-        }
+        let order = order(blocks)
         guard let id = focus, let at = order.firstIndex(of: id) else {
             // Nothing focused yet: the first block takes the focus (the last, going back).
             switch key {
-            case .tab, .earlier, .later: focus = order.first
+            case .tab, .edit(.move): focus = order.first
             case .backTab: focus = order.last
-            case .space, .size, .hide: return false
+            case .edit: return false
             }
             return focus != nil
         }
@@ -290,28 +308,35 @@ final class HomeEditMode {
             let next = at + (key == .tab ? 1 : -1)
             guard order.indices.contains(next) else { return false }
             focus = order[next]
-        case .earlier, .later: focus = order[min(order.count - 1, max(0, at + (key == .earlier ? -1 : 1)))]
-        case .space: session.pickUp(id)
-        case .size(let size): session.size(id, size)
-        case .hide: hide(id, order: order)
+        case .edit(.hide):
+            let rest = order.filter { $0 != id }
+            session.hide(id)
+            focus = rest.isEmpty ? nil : rest[min(at, rest.count - 1)]
+        case .edit(let edit): perform(edit, on: id)
         }
         return true
     }
 
-    /// What VoiceOver offers on a block (check 12): Move earlier and later (the nearest slot at its size, as the arrows
-    /// find them), Move to the column or the board (the lane's end), every other size, and Hide. A move that would leave
-    /// it where it is is not offered.
-    func actions(for id: String, blocks: [String], across: Int) -> [(name: String, edit: Edit)] {
-        let size = session.draft.size(of: id), slots = slots(carrying: id, blocks: blocks, across: across)
-        var out: [(name: String, edit: Edit)] = []
-        if let home = slots.home {
-            let same = { (k: Int) in slots.places[k].size(carrying: size) == size }
-            if let k = (0..<home).last(where: same) { out.append(("Move earlier", .move(slots.places[k]))) }
-            if let k = (home + 1..<slots.places.count).first(where: same) { out.append(("Move later", .move(slots.places[k]))) }
-        }
-        if size != .small { out.append(("Move to the column", .move(.column(before: nil)))) }
-        if size.lane != .board { out.append(("Move to the board", .move(.board(before: nil)))) }
-        out += HomeLayout.Size.allCases.filter { $0 != size }.map { ("Size \($0.title)", .size($0)) }
+    /// What VoiceOver offers on a block (check 12): the moves and sizes that change what Home draws, each Layout but its
+    /// own, and Hide.
+    func actions(for id: String) -> [(name: String, edit: Edit)] {
+        // Each move is tried on the draft, so a block's list is worked out once a draft, not on every redraw.
+        if offered?.draft != session.draft { offered = (session.draft, [:]) }
+        if let known = offered?.actions[id] { return known }
+        let out = offers(for: id)
+        offered?.actions[id] = out
+        return out
+    }
+
+    @ObservationIgnored private var offered: (draft: HomeLayout, actions: [String: [(name: String, edit: Edit)]])?
+
+    private func offers(for id: String) -> [(name: String, edit: Edit)] {
+        let moves: [(String, Int, Int)] = [("Move left", -1, 0), ("Move right", 1, 0), ("Move up", 0, -1), ("Move down", 0, 1)]
+        let sizes: [(String, Int, Int)] = [("Wider", 1, 0), ("Narrower", -1, 0), ("Taller", 0, 1), ("Shorter", 0, -1)]
+        var out: [(name: String, edit: Edit)] = moves.filter { session.moved(id, dx: $0.1, dy: $0.2) != nil }.map { ($0.0, .move(dx: $0.1, dy: $0.2)) }
+        out += sizes.filter { session.resized(id, dw: $0.1, dh: $0.2) != nil }.map { ($0.0, .resize(dw: $0.1, dh: $0.2)) }
+        let kept = session.draft.layout(of: id)
+        out += ([nil] + Widget.SizeClass.allCases.map(Optional.some)).filter { $0 != kept }.map { ("Layout \($0?.title ?? "Auto")", .layout($0)) }
         out.append(("Hide", .hide))
         return out
     }
@@ -320,84 +345,18 @@ final class HomeEditMode {
     func perform(_ edit: Edit, on id: String) {
         guard carrying == nil else { return }
         switch edit {
-        case .move(let place):
-            session.pickUp(id)
-            session.hover(place)
-            session.drop()
-        case .size(let size): session.size(id, size)
+        case .move(let dx, let dy): session.move(id, dx: dx, dy: dy)
+        case .resize(let dw, let dh): session.resize(id, dw: dw, dh: dh)
+        case .layout(let layout): session.layout(id, layout)
         case .hide: session.hide(id)
         }
         focus = id
     }
 
-    /// Where the keyboard can take `id`, in reading order (the icon row, the column, then the board, a lone medium's empty
-    /// half after its row), each kept once by what Home would draw; and the one that leaves it where it is.
-    func slots(carrying id: String, blocks: [String], across: Int) -> (places: [Place], home: Int?) {
-        let draft = session.draft, listed = draft.resolved(extensions: session.extensions).map(\.id)
-        let lanes = HomeLayout.lanes(drawn(draft, blocks), size: draft.size(of:), across: across)
-        var places: [Place] = lanes.icons.filter { $0 != id }.map { .icons(before: $0) } + [.icons(before: nil)]
-        places += lanes.column.filter { $0 != id }.map { .column(before: $0) } + [.column(before: nil)]
-        for row in lanes.board {
-            let ids = row.filter { $0 != id }
-            guard let first = ids.first else { continue }
-            places.append(.board(before: first))
-            // Its empty half is the left one only when its pair there is the block carried (HomeSlots).
-            if across == 2, ids.count == 1, draft.size(of: first) == .medium { places.append(.beside(first, trailing: row.first != id)) }
-        }
-        places.append(.board(before: nil))
-        // What Home draws of a layout: its lanes and the carried block's size.
-        func look(_ layout: HomeLayout) -> (HomeLayout.Lanes, HomeLayout.Size) {
-            (HomeLayout.lanes(drawn(layout, blocks), size: layout.size(of:), across: across), layout.size(of: id))
-        }
-        var seen: [(HomeLayout.Lanes, HomeLayout.Size)] = [], kept: [Place] = []
-        for place in places {
-            var layout = draft
-            layout.put(id, at: place, listed: listed)
-            let drawn = look(layout)
-            if !seen.contains(where: { $0 == drawn }) { seen.append(drawn); kept.append(place) }
-        }
-        let here = look(draft)
-        return (kept, seen.firstIndex { $0 == here })
-    }
-
-    /// The blocks focus walks, in reading order: the icon row, the column, the board.
-    static func order(_ blocks: [String], size: (String) -> HomeLayout.Size, across: Int) -> [String] {
-        let lanes = HomeLayout.lanes(blocks, size: size, across: across)
-        return lanes.icons + lanes.column + lanes.board.flatMap { $0 }
-    }
-
-    /// `layout`'s shown blocks that Home draws, in its order.
-    private func drawn(_ layout: HomeLayout, _ blocks: [String]) -> [String] {
-        let drawn = Set(blocks)
-        return layout.shown(extensions: session.extensions).filter(drawn.contains)
-    }
-
-    /// The carried block to the next slot or the one before, from where it hovers (else where it is).
-    private func step(_ id: String, by way: Int, blocks: [String], across: Int) {
-        let slots = slots(carrying: id, blocks: blocks, across: across)
-        guard !slots.places.isEmpty else { return }
-        let at = session.target.flatMap(slots.places.firstIndex(of:)) ?? slots.home ?? (way > 0 ? -1 : slots.places.count)
-        session.hover(slots.places[min(slots.places.count - 1, max(0, at + way))])
-    }
-
-    /// Space on a carried block: dropped where it hovers; back where it was if that is where it is, so no undo step.
-    private func keyDrop(_ id: String, blocks: [String], across: Int) {
-        let slots = slots(carrying: id, blocks: blocks, across: across)
-        if let target = session.target, slots.places.firstIndex(of: target) != slots.home { session.drop() } else { session.putBack() }
-        focus = id
-    }
-
-    /// ⌫: hidden, the focus to the block after it (the one before, at the end).
-    private func hide(_ id: String, order: [String]) {
-        let rest = order.filter { $0 != id }, at = order.firstIndex(of: id) ?? 0
-        session.hide(id)
-        focus = rest.isEmpty ? nil : rest[min(at, rest.count - 1)]
-    }
-
     /// A change from a block's right-click, staged in edit mode's draft: edit mode `mode`, else a new one on `layout`, so
     /// Done keeps it and ⌘Z, Escape or Cancel take it back (Moody on T4: at rest it saved at once).
-    static func staging(_ edit: (HomeEditSession) -> Void, in mode: HomeEditMode?, layout: HomeLayout, extensions: [String]) -> HomeEditMode {
-        let mode = mode ?? HomeEditMode(session: HomeEditSession(layout: layout, extensions: extensions))
+    static func staging(_ edit: (HomeEditSession) -> Void, in mode: HomeEditMode?, make: () -> HomeEditSession) -> HomeEditMode {
+        let mode = mode ?? HomeEditMode(session: make())
         edit(mode.session)
         return mode
     }
@@ -466,11 +425,14 @@ extension HomeParts {
     /// Home's edit mode while it is on.
     var editMode: HomeEditMode? { editing.wrappedValue }
 
+    /// An edit session on the saved layout, packing the blocks this style draws.
+    func newSession() -> HomeEditSession { HomeEditSession(layout: sources.layout().layout, extensions: beyond, style: style) }
+
     /// Edit mode on, on the saved layout; a hold says so with a tap under the finger.
     func beginEdit(byHold: Bool = false) {
         guard editing.wrappedValue == nil else { return }
         if byHold { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
-        let session = HomeEditSession(layout: sources.layout().layout, extensions: beyond)
+        let session = newSession()
         withAnimation(HomeMotion.enter) { editing.wrappedValue = HomeEditMode(session: session) }
         AccessibilityNotification.Announcement(HomeEditMode.entered).post()
     }
@@ -488,12 +450,12 @@ extension HomeParts {
         withAnimation(Kit.change) { editing.wrappedValue = nil }
     }
 
-    /// A size or a hide from a block's right-click: a change to edit mode's draft, edit mode turned on first at rest;
+    /// A Layout or a hide from a block's right-click: a change to edit mode's draft, edit mode turned on first at rest;
     /// nothing is saved until Done.
     func change(_ edit: (HomeEditSession) -> Void) {
         let mode = editing.wrappedValue
         withAnimation(mode?.settle ?? HomeMotion.enter) {
-            editing.wrappedValue = HomeEditMode.staging(edit, in: mode, layout: sources.layout().layout, extensions: beyond)
+            editing.wrappedValue = HomeEditMode.staging(edit, in: mode, make: newSession)
         }
     }
 
@@ -517,7 +479,7 @@ struct HomeEditFoot: View {
             }
             .buttonStyle(.pilot)
             .keyboardShortcut("e", modifiers: .command)
-            .help("Size, hide and add Home's blocks (⌘E, or hold a block's title bar)")
+            .help("Move, size, hide and add Home's blocks (⌘E, or hold a block's title bar)")
         }
     }
 }
@@ -542,7 +504,7 @@ struct HomeEditBar: View {
     var body: some View {
         let session = mode.session
         let hidden = session.draft.resolved(extensions: session.extensions)
-            .filter { !$0.shown && (HomeLayout.Block(rawValue: $0.id)?.drawn(in: style.kind) ?? true) }
+            .filter { !$0.shown && HomeLayout.draws($0.id, in: style.kind) }
         let shape = RoundedRectangle(cornerRadius: ink.radius(14), style: .continuous)
         HStack(spacing: 8) {
             Text("Hidden").font(ink.ui(11.5, .semibold)).foregroundStyle(ink.muted).fixedSize()
@@ -564,7 +526,7 @@ struct HomeEditBar: View {
                             .gesture(DragGesture(minimumDistance: 4, coordinateSpace: .global)
                                 .onChanged { mode.dragHidden(row.id, from: $0.startLocation, to: $0.location) }
                                 .onEnded { _ in mode.release() })
-                            .help("Show \(name) where it was, or drag it onto Home")
+                            .help("Show \(name) where it was, or drag it onto Home's cells")
                             .accessibilityElement(children: .ignore)
                             .accessibilityAddTraits(.isButton)
                             .accessibilityLabel("Show \(name)")
@@ -662,141 +624,190 @@ struct SidewaysWheel: NSViewRepresentable {
     }
 }
 
-/// A block's size chips and its ✕, on its top edge in edit mode: a size in the other lane moves the block there; the chip
-/// under the pointer has the page draw the block's new frame dashed.
-struct HomeSizeChips: View {
+/// A block's Layout chip and its ✕, on its top edge in edit mode: Auto, or one of the four classes kept (the desktop's
+/// Edit widget offers the same), and the ✕ that hides it.
+struct HomeLayoutChip: View {
     @Environment(\.ink) private var ink
     let id: String
     let parts: HomeParts
     let mode: HomeEditMode
+    /// The class the block draws now.
+    let drawn: Widget.SizeClass
 
     var body: some View {
-        let current = parts.size(id), name = parts.title(id)
+        let kept = mode.session.draft.layout(of: id), name = parts.title(id)
         HStack(spacing: 4) {
-            HStack(spacing: 0) {
-                ForEach(HomeLayout.Size.allCases, id: \.self) { size in
-                    HomeSizeChip(size: size, on: size == current, name: name) { over in
-                        let hover = HomeEditMode.Hover(id: id, size: size)
-                        withAnimation(Kit.change) {
-                            if over, size != current { mode.hover = hover } else if mode.hover == hover { mode.hover = nil }
-                        }
-                    } pick: {
-                        mode.hover = nil
-                        withAnimation(mode.settle) { mode.session.size(id, size) }
-                    }
-                }
-            }
-            .padding(2)
-            .background(ink.raised, in: .capsule)
-            .overlay { Capsule().strokeBorder(ink.line2) }
-            Button {
-                mode.hover = nil
-                withAnimation(mode.settle) { mode.session.hide(id) }
+            Menu {
+                HomeLayoutPicker(selection: Binding(get: { kept }, set: { layout in withAnimation(mode.settle) { mode.session.layout(id, layout) } }))
             } label: {
-                Image(systemName: "xmark").font(ink.system(9.5, weight: .bold)).foregroundStyle(ink.text2)
-                    .frame(width: 24, height: 24)
-                    .background(ink.raised, in: .circle)
-                    .overlay { Circle().strokeBorder(ink.line2) }
-                    .contentShape(.circle)
+                HStack(spacing: 5) {
+                    Text("Layout").font(ink.ui(11.5, .medium)).foregroundStyle(ink.text2)
+                    Text("\(kept == nil ? "Auto · " : "")\(drawn.title)").font(ink.ui(11.5, .semibold)).foregroundStyle(ink.accentInk)
+                }
+                .padding(.horizontal, 9).frame(height: 24)
+                .background(ink.raised, in: .capsule)
+                .overlay { Capsule().strokeBorder(ink.line2) }
+                .contentShape(.capsule)
             }
-            .buttonStyle(.kitPress)
-            .help("Hide \(name); it waits in the tray")
-            .accessibilityLabel("Hide \(name)")
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .help("Layout: Auto picks it by size; a class keeps it")
+            .accessibilityLabel("\(name) layout: \(kept?.title ?? "Auto, \(drawn.title)")")
+            HomeHideButton(id: id, parts: parts, mode: mode)
         }
         .shadow(color: .black.opacity(0.16), radius: 6, y: 2)
         .fixedSize()
     }
 }
 
-/// One size chip: lit when it is the block's size.
-private struct HomeSizeChip: View {
-    @Environment(\.ink) private var ink
-    let size: HomeLayout.Size
-    let on: Bool
-    let name: String
-    let hover: (Bool) -> Void
-    let pick: () -> Void
-    @State private var over = false
+/// A block's Layout as a menu's choices: Auto, or one of the four classes, as Edit widget offers them on the desktop.
+private struct HomeLayoutPicker: View {
+    let selection: Binding<Widget.SizeClass?>
 
     var body: some View {
-        Button(action: pick) {
-            Text(size.title).font(ink.ui(11.5, on ? .semibold : .medium))
-                .foregroundStyle(on ? ink.accentInk : over ? ink.text : ink.text2)
-                .padding(.horizontal, 8).frame(height: 20)
-                .background(on ? ink.selection : ink.text.opacity(over ? 0.07 : 0), in: .capsule)
-                .contentShape(.capsule)
+        Picker("Layout", selection: selection) {
+            Text("Auto: by its size").tag(Widget.SizeClass?.none)
+            ForEach(Widget.SizeClass.allCases, id: \.self) { Text($0.title).tag(Widget.SizeClass?.some($0)) }
         }
-        .buttonStyle(.kitPress)
-        .onHover { over = $0; hover($0) }
-        .animation(Kit.change, value: over)
-        .help("\(size.title): \(size.place)")
-        .accessibilityLabel("\(name): \(size.title)")
-        .accessibilityAddTraits(on ? .isSelected : [])
+        .pickerStyle(.inline).labelsHidden()
+    }
+}
+
+/// A block's ✕ in edit mode: hidden, it waits in the tray.
+private struct HomeHideButton: View {
+    let id: String
+    let parts: HomeParts
+    let mode: HomeEditMode
+
+    var body: some View {
+        let name = parts.title(id)
+        Button { withAnimation(mode.settle) { mode.session.hide(id) } } label: { HomeHideBadge() }
+            .buttonStyle(.kitPress)
+            .help("Hide \(name); it waits in the tray")
+            .accessibilityLabel("Hide \(name)")
+    }
+}
+
+/// A block's corner brackets and its left, right and bottom edge grips in edit mode: a drag on one resizes the block by
+/// whole cells from that side, the others making room.
+private struct HomeHandles: View {
+    @Environment(\.ink) private var ink
+    let id: String
+    let mode: HomeEditMode
+    /// The block is being resized: its handles in the accent.
+    let on: Bool
+
+    private static let corners: [(HomeEditMode.Edges, Alignment, FrameResizePosition)] = [
+        ([.top, .left], .topLeading, .topLeading), ([.top, .right], .topTrailing, .topTrailing),
+        ([.bottom, .left], .bottomLeading, .bottomLeading), ([.bottom, .right], .bottomTrailing, .bottomTrailing),
+    ]
+    private static let edges: [(HomeEditMode.Edges, Alignment, FrameResizePosition)] = [
+        (.left, .leading, .leading), (.right, .trailing, .trailing), (.bottom, .bottom, .bottom),
+    ]
+
+    var body: some View {
+        let colour = on ? ink.accent : ink.text2.opacity(0.8)
+        ZStack {
+            ForEach(Self.corners, id: \.0.rawValue) { edges, alignment, position in
+                Bracket(edges: edges).stroke(colour, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .frame(width: 14, height: 14).padding(3)
+                    .contentShape(.rect)
+                    .grip(id, edges, mode, position)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                    .offset(x: edges.contains(.left) ? -5 : 5, y: edges.contains(.top) ? -5 : 5)
+            }
+            ForEach(Self.edges, id: \.0.rawValue) { edges, alignment, position in
+                let across = edges == .bottom
+                Capsule().fill(colour)
+                    .frame(width: across ? 26 : 4, height: across ? 4 : 26)
+                    .padding(across ? .vertical : .horizontal, 6)
+                    .contentShape(.rect)
+                    .grip(id, edges, mode, position)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                    .offset(x: edges == .left ? -8 : edges == .right ? 8 : 0, y: across ? 8 : 0)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// A corner's L, drawn along the sides it moves.
+    private struct Bracket: Shape {
+        let edges: HomeEditMode.Edges
+
+        func path(in rect: CGRect) -> Path {
+            let x = edges.contains(.left) ? rect.minX : rect.maxX, y = edges.contains(.top) ? rect.minY : rect.maxY
+            var path = Path()
+            path.move(to: CGPoint(x: edges.contains(.left) ? rect.maxX : rect.minX, y: y))
+            path.addLine(to: CGPoint(x: x, y: y))
+            path.addLine(to: CGPoint(x: x, y: edges.contains(.top) ? rect.maxY : rect.minY))
+            return path
+        }
+    }
+}
+
+private extension View {
+    /// A handle's drag: the block resized by `edges`, under the resize pointer.
+    func grip(_ id: String, _ edges: HomeEditMode.Edges, _ mode: HomeEditMode, _ position: FrameResizePosition) -> some View {
+        pointerStyle(.frameResize(position: position))
+            .highPriorityGesture(DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                .onChanged { mode.resize(id, edges: edges, from: $0.startLocation, to: $0.location) }
+                .onEnded { _ in mode.release() })
     }
 }
 
 extension View {
-    /// A block on Home, as edit mode draws it (HomeEditBlock).
-    func homeEditable(_ id: String, _ parts: HomeParts, tab: Bool = false) -> some View {
-        modifier(HomeEditBlock(id: id, parts: parts, tab: tab))
+    /// A block on Home, as edit mode draws it (HomeEditBlock), drawing `drawn` on `cell`.
+    func homeEditable(_ id: String, _ parts: HomeParts, drawn: Widget.SizeClass, wide: Bool) -> some View {
+        modifier(HomeEditBlock(id: id, parts: parts, drawn: drawn, wide: wide))
     }
 }
 
 /// A block on Home. At rest a 0.5 s hold on its title bar (or on empty page, HomeNowPage's) enters edit mode, a hold on
-/// its content stays a press, and its right-click offers Edit Home, Size and Hide. In edit mode it rests a little smaller
-/// and wiggles under its size chips; its content takes no press, row or hover card while its readings go on. The
-/// keyboard reaches it (Tab and the arrows, Space, 1 to 4, ⌫) and VoiceOver offers its moves, sizes and Hide; under
-/// Reduce Motion it stays still, outlined dashed.
+/// its content stays a press, and its right-click offers Edit Home, Layout and Hide. In edit mode it rests a little
+/// smaller and wiggles under its corner brackets, edge grips, Layout chip and ✕; its content takes no press, row or hover
+/// while its readings go on. The keyboard reaches it (Tab, the arrows move it a cell, Shift and the arrows size it, 1 to 4
+/// and 0 its Layout, ⌫ hides it) and VoiceOver offers the same; under Reduce Motion it stays still, outlined dashed.
 struct HomeEditBlock: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let id: String
     let parts: HomeParts
-    /// An icon tab: its ✕ at its corner, its size chips while the pointer is on it.
-    var tab = false
+    /// The class it draws now, which its Layout chip says.
+    let drawn: Widget.SizeClass
+    /// Wide enough for its Layout chip (over 170 pt); narrower, just its ✕ at its corner.
+    let wide: Bool
     @State private var pointer = HomePointer()
     @FocusState private var focused: Bool
-    /// The pointer on the tab, on its chips, and the chips showing: they close a beat after it leaves both.
-    @State private var over = false
-    @State private var overChips = false
-    @State private var chips = false
 
     func body(content: Content) -> some View {
         let mode = parts.editMode
-        // Carried, it is a dashed well at the size it lands at, where it lands (the page draws the drop's preview), while
-        // the pointer carries a copy of it (HomeCarryLayer); carried by the keyboard it shows under the well.
-        let carried = mode?.session.carried == id, floated = carried && mode?.carrying != nil
+        // Carried whole, it leaves its cells empty (the page outlines where it lands) while the pointer carries a copy of it
+        // (HomeCarryLayer); resized, it draws at its new cells as it goes.
+        let held = mode?.carrying?.id == id ? mode?.carrying : nil
+        let floated = held.map { !$0.resizing } ?? false
         content
             .allowsHitTesting(mode == nil)
-            // In edit mode VoiceOver finds the block, its size and its actions, not its inert content.
+            // In edit mode VoiceOver finds the block, its cells and its actions, not its inert content.
             .accessibilityHidden(mode != nil)
             .opacity(floated ? 0 : 1)
-            .overlay { if carried { HomeSizeGhost(size: parts.size(id)).transition(.opacity) } }
-            .animation(HomeMotion.fade, value: carried)
+            .animation(HomeMotion.fade, value: floated)
             // In edit mode the block itself is what the pointer finds: a drag on it, from the page (HomeNowPage), carries it.
             .overlay { if mode != nil { Color.clear.contentShape(.rect) } }
-            .modifier(HomeWiggle(id: id, on: mode != nil && !carried && parts.onScreen && !reduceMotion))
-            .scaleEffect(mode == nil ? 1 : HomeMotion.enterScale(reduce: reduceMotion))
+            .modifier(HomeWiggle(id: id, on: mode != nil && held == nil && parts.onScreen && !reduceMotion))
+            .scaleEffect(mode == nil || held != nil ? 1 : HomeMotion.enterScale(reduce: reduceMotion))
             // Reduce Motion's dashed outline, and the keyboard's ring once a key is pressed.
             .overlay {
                 let ring = mode.map { $0.keyed && $0.focus == id } ?? false
-                if mode != nil, !carried, reduceMotion || ring { HomeEditOutline(focused: ring).transition(.opacity) }
+                if mode != nil, !floated, reduceMotion || ring { HomeEditOutline(focused: ring).transition(.opacity) }
             }
-            .overlay(alignment: tab ? .topLeading : .top) {
-                if let mode, !carried {
+            .overlay { if let mode, !floated { HomeHandles(id: id, mode: mode, on: held != nil).transition(.opacity) } }
+            .overlay(alignment: wide ? .top : .topTrailing) {
+                if let mode, !floated {
                     Group {
-                        if tab { tabChrome(mode) } else { HomeSizeChips(id: id, parts: parts, mode: mode).offset(y: -12) }
+                        if wide { HomeLayoutChip(id: id, parts: parts, mode: mode, drawn: drawn).offset(y: -12) }
+                        else { HomeHideButton(id: id, parts: parts, mode: mode).offset(x: 7, y: -7) }
                     }
                     .transition(.opacity)
                 }
             }
-            .onHover { over = $0 }
-            .task(id: over || overChips) {
-                let want = over || overChips
-                guard want != chips else { return }
-                if !want, (try? await Task.sleep(for: .milliseconds(150))) == nil { return }
-                withAnimation(HomeMotion.fade) { chips = want }
-            }
-            .zIndex(chips ? 1 : 0)
             .onContinuousHover { phase in
                 if case .active(let at) = phase { pointer.y = at.y } else { pointer.y = nil }
             }
@@ -808,110 +819,78 @@ struct HomeEditBlock: ViewModifier {
             .focusable(mode != nil)
             .focused($focused)
             .focusEffectDisabled()
-            .onKeyPress(phases: .down) { press($0) }
+            .onKeyPress(phases: [.down, .repeat]) { press($0) }
             .onChange(of: mode?.focus == id, initial: true) { _, on in if on != focused { focused = on } }
             .onChange(of: focused) { _, on in if on, let mode, mode.focus != id { mode.focus = id } }
-            // VoiceOver (check 12): the block, its size, and its moves, sizes and Hide.
+            // VoiceOver (check 12): the block, its cells and class, and its moves, sizes, Layouts and Hide.
             .accessibilityElement(children: .contain)
             .accessibilityLabel(parts.title(id))
-            .accessibilityValue(mode == nil ? "" : parts.size(id).title)
+            .accessibilityValue(mode == nil ? "" : words(id))
             .accessibilityActions {
+                // For VoiceOver, Voice Control and Switch Control; worked out once a draft (HomeEditMode.actions(for:)).
                 if let mode {
-                    let across = mode.frames?.drawn?.shape.across ?? 2
-                    ForEach(Array(mode.actions(for: id, blocks: parts.blocks, across: across).enumerated()), id: \.offset) { _, action in
+                    ForEach(Array(mode.actions(for: id).enumerated()), id: \.offset) { _, action in
                         Button(action.name) {
                             withAnimation(mode.settle) { mode.perform(action.edit, on: id) }
-                            announce(after: action.edit, mode)
+                            announce(mode)
                         }
                     }
                 }
             }
-            // No transition of its own: a copy leaving one lane for another would go on measuring where it was (HomeSlots).
     }
 
-    /// A key press as edit mode reads it: Tab and Shift-Tab, the arrows, Space, ⌫ and 1 to 4 with no modifier (⌘1 to ⌘4
-    /// stay the window's); nil for the rest.
+    /// A key press as edit mode reads it: Tab and Shift-Tab, the arrows (with Shift, a resize), ⌫, 1 to 4 and 0 with no
+    /// modifier (⌘1 to ⌘4 stay the window's); nil for the rest.
     static func key(_ press: KeyPress) -> HomeEditMode.Key? {
         let mods = press.modifiers.subtracting([.numericPad, .function, .capsLock])
         if press.key == .tab, mods.isSubset(of: .shift) { return mods.contains(.shift) ? .backTab : .tab }
+        let arrows: [KeyEquivalent: (Int, Int)] = [.leftArrow: (-1, 0), .rightArrow: (1, 0), .upArrow: (0, -1), .downArrow: (0, 1)]
+        if let (dx, dy) = arrows[press.key], mods.isSubset(of: .shift) {
+            return mods.contains(.shift) ? .resize(dw: dx, dh: dy) : .move(dx: dx, dy: dy)
+        }
         guard mods.isEmpty else { return nil }
         switch press.key {
-        case .upArrow, .leftArrow: return .earlier
-        case .downArrow, .rightArrow: return .later
-        case .space: return .space
         case .delete, .deleteForward: return .hide
         default:
-            guard press.characters.count == 1, let n = press.characters.first?.wholeNumberValue, (1...4).contains(n) else { return nil }
-            return .size(HomeLayout.Size.allCases[n - 1])
+            guard press.characters.count == 1, let n = press.characters.first?.wholeNumberValue, (0...4).contains(n) else { return nil }
+            return .layout(n == 0 ? nil : Widget.SizeClass.allCases[n - 1])
         }
     }
 
-    /// A key on this block in edit mode, handed to the mode, and said aloud for VoiceOver when it moves or changes a block.
-    /// Escape and Return do what the edit bar's Cancel and Done do: a focused block takes the key before the bar does.
+    /// A key on this block in edit mode, handed to the mode, and said aloud for VoiceOver when it changes a block. Escape
+    /// and Return do what the edit bar's Cancel and Done do: a focused block takes the key before the bar does.
     private func press(_ press: KeyPress) -> KeyPress.Result {
         guard parts.editMode != nil else { return .ignored }
         let plain = press.modifiers.subtracting([.numericPad, .function, .capsLock]).isEmpty
         if press.key == .escape, plain { parts.escapeEdit(); return .handled }
         if press.key == .return, plain, !parts.searching { parts.endEdit(save: true); return .handled }
         guard let key = HomeEditBlock.key(press), let mode = parts.editMode else { return .ignored }
-        let carried = mode.keyCarried
         var taken = false
-        withAnimation(HomeMotion.keyed(reduce: reduceMotion)) {
-            taken = mode.press(key, blocks: parts.blocks, across: mode.frames?.drawn?.shape.across ?? 2)
-        }
+        withAnimation(HomeMotion.keyed(reduce: reduceMotion)) { taken = mode.press(key, blocks: parts.blocks) }
         guard taken else { return .ignored }
-        let name = parts.title(carried ?? id)
         switch key {
-        case .space where carried == nil && mode.keyCarried != nil:
-            post("Picked up \(name). Arrows move it, Space drops it, Escape puts it back.")
-        case .space: post("\(name): \(mode.session.draft.size(of: carried ?? id).title)")
-        case .earlier where carried != nil, .later where carried != nil: mode.session.target.map { post(words($0, size: mode.session.preview.size(of: carried ?? id))) }
-        case .size(let size): post("\(name): \(size.title)")
-        case .hide: post("\(name) hidden")
-        default: break
+        case .edit(.hide): post("\(parts.title(id)) hidden")
+        case .edit: announce(mode)
+        case .tab, .backTab: break
         }
         return .handled
     }
 
-    /// Where a carried block would land, as VoiceOver says it.
-    private func words(_ place: HomeEditSession.Place, size: HomeLayout.Size) -> String {
-        let at: String = switch place {
-        case .icons(let before): before.map { "in the icon row, before \(parts.title($0))" } ?? "at the icon row's end"
-        case .column(let before): before.map { "in the column, before \(parts.title($0))" } ?? "at the column's end"
-        case .board(let before): before.map { "on the board, before \(parts.title($0))" } ?? "at the board's end"
-        case .beside(let other, _): "beside \(parts.title(other))"
-        }
-        return "\(size.title), \(at)"
+    /// Where a block is and its Layout, as VoiceOver says it: "column 6, row 1, 14 by 9 cells, Auto"; from the cells the
+    /// page drew, so a redraw packs nothing.
+    private func words(_ id: String) -> String {
+        guard let cell = parts.cells[id] else { return "" }
+        return "column \(cell.x + 1), row \(cell.y + 1), \(cell.w) by \(cell.h) cells, \(parts.pin(id)?.title ?? "Auto")"
     }
 
-    private func announce(after edit: HomeEditMode.Edit, _ mode: HomeEditMode) {
-        let name = parts.title(id)
-        switch edit {
-        case .hide: post("\(name) hidden")
-        case .move, .size: post("\(name): \(mode.session.draft.size(of: id).title)")
-        }
+    /// Said after a key or VoiceOver edit, from the draft just made (the page has not drawn it yet).
+    private func announce(_ mode: HomeEditMode) {
+        let draft = mode.session.draft
+        guard let cell = mode.session.cells(draft)[id] else { return post("\(parts.title(id)) hidden") }
+        post("\(parts.title(id)): column \(cell.x + 1), row \(cell.y + 1), \(cell.w) by \(cell.h) cells, \(draft.layout(of: id)?.title ?? "Auto")")
     }
 
     private func post(_ words: String) { AccessibilityNotification.Announcement(words).post() }
-
-    /// An icon tab's ✕ at its corner, and its size chips over it while the pointer is on it.
-    @ViewBuilder private func tabChrome(_ mode: HomeEditMode) -> some View {
-        let name = parts.title(id)
-        ZStack(alignment: .topLeading) {
-            Button {
-                withAnimation(mode.settle) { mode.session.hide(id) }
-            } label: {
-                HomeHideBadge()
-            }
-            .buttonStyle(.kitPress)
-            .help("Hide \(name); it waits in the tray")
-            .accessibilityLabel("Hide \(name)")
-            .offset(x: -7, y: -7)
-            if chips {
-                HomeSizeChips(id: id, parts: parts, mode: mode).onHover { overChips = $0 }.offset(y: -32).transition(.opacity)
-            }
-        }
-    }
 
     @ViewBuilder private func menu(_ mode: HomeEditMode?) -> some View {
         let name = parts.title(id)
@@ -922,11 +901,8 @@ struct HomeEditBlock: ViewModifier {
             Divider()
         }
         if mode == nil { Button("Edit Home") { parts.beginEdit() } }
-        Menu("Size") {
-            Picker("Size", selection: Binding(get: { parts.size(id) }, set: { size in parts.change { $0.size(id, size) } })) {
-                ForEach(HomeLayout.Size.allCases, id: \.self) { Text("\($0.title) · \($0.place)").tag($0) }
-            }
-            .pickerStyle(.inline).labelsHidden().menuRows()
+        Menu("Layout") {
+            HomeLayoutPicker(selection: Binding(get: { parts.pin(id) }, set: { layout in parts.change { $0.layout(id, layout) } })).menuRows()
         }
         Button("Hide \(name)") { parts.change { $0.hide(id) } }
     }
@@ -937,7 +913,7 @@ private final class HomePointer {
     var y: CGFloat?
 }
 
-/// An icon tab's ✕ badge.
+/// A ✕ badge: a narrow block's, at its corner.
 private struct HomeHideBadge: View {
     @Environment(\.ink) private var ink
 
@@ -996,60 +972,6 @@ struct HomeWiggle: ViewModifier {
     }
 }
 
-/// Where a block would draw at another size (the size chip under the pointer), from the lanes Home drew and the frames it
-/// measured: in its new lane where the block it now goes in front of is (on the board, where its new row is now), at the
-/// new size's width; its own height in the same lane, else a well's. A guide drawn dashed; the size change's spring settles the true frame.
-enum HomeEditPreview {
-    static func frame(of id: String, at size: HomeLayout.Size, blocks: [String], sizes: (String) -> HomeLayout.Size,
-                      drawn: HomeFrames.Drawn, rects: [HomeFrames.Key: CGRect]) -> CGRect? {
-        let shape = drawn.shape, gap = shape.gap
-        let lanes = HomeLayout.lanes(blocks, size: { $0 == id ? size : sizes($0) }, across: shape.across)
-        func rect(_ id: String) -> CGRect? { rects[.block(id)] }
-        let height = sizes(id).lane == size.lane ? rect(id)?.height ?? HomeNow.well : HomeNow.well
-        if let k = lanes.icons.firstIndex(of: id) {
-            let side = HomeLayout.Size.tab, others = drawn.lanes.icons.filter { $0 != id }
-            if k < others.count, let at = rect(others[k]) { return CGRect(x: at.minX, y: at.minY, width: side, height: side) }
-            if let last = others.last.flatMap(rect) { return CGRect(x: last.maxX + 10, y: last.minY, width: side, height: side) }
-            return rects[.well(.icons)].map { CGRect(x: $0.minX, y: $0.minY, width: side, height: side) }
-        }
-        if let k = lanes.column.firstIndex(of: id) {
-            let others = drawn.lanes.column.filter { $0 != id }
-            if k < others.count, let at = rect(others[k]) { return CGRect(x: at.minX, y: at.minY, width: at.width, height: height) }
-            if let last = others.last.flatMap(rect) {
-                return CGRect(x: rects[.lane(.column)]?.minX ?? last.minX, y: last.maxY + gap, width: last.width, height: height)
-            }
-            return rects[.well(.column)]
-        }
-        guard let r = lanes.board.firstIndex(where: { $0.contains(id) }), let board = rects[.lane(.board)] else { return nil }
-        // Two to a row, or in edit mode a lone medium, take half the board.
-        let row = lanes.board[r]
-        let half = row.count > 1 || (shape.across == 2 && (row[0] == id ? size : sizes(row[0])) == .medium)
-        let each = half ? (board.width - gap) / 2 : board.width
-        // The board's rows as drawn: the new size's row r lies where row r is now, or past the last.
-        let rows = drawn.lanes.board.compactMap { ids -> CGRect? in
-            let frames = ids.compactMap(rect)
-            return frames.first.map { frames.dropFirst().reduce($0) { $0.union($1) } }
-        }
-        let y = r < rows.count ? rows[r].minY : rows.last.map { $0.maxY + gap } ?? rects[.well(.board)]?.minY ?? board.minY
-        return CGRect(x: row.first == id ? board.minX : board.maxX - each, y: y, width: each, height: height)
-    }
-}
-
-/// The block whose size chip is under the pointer, dashed at the frame the new size gives it, over Home's page.
-struct HomeSizeGhostLayer: View {
-    let mode: HomeEditMode
-    let frames: HomeFrames
-    let parts: HomeParts
-
-    var body: some View {
-        if let hover = mode.hover, let drawn = frames.drawn,
-           let rect = HomeEditPreview.frame(of: hover.id, at: hover.size, blocks: parts.blocks, sizes: parts.size, drawn: drawn, rects: frames.rects) {
-            HomeSizeGhost(size: hover.size).frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
-                .transition(.opacity)
-        }
-    }
-}
-
 /// The carried block, over Home's page and its edit bar (HomeNowPage's overlay, in the window's space): lifted to 1.03
 /// under a deeper shadow, it follows the pointer 1:1, held where it was picked up; let go, it flies to where it landed
 /// and fades as the block shows there.
@@ -1095,43 +1017,81 @@ private struct HomeLifted<Block: View>: View {
     }
 }
 
-/// The dashed frame a size chip under the pointer previews, with the size it gives.
-struct HomeSizeGhost: View {
+/// Where a held block lands, over Home's grid: its cells outlined in the accent (dashed while it is carried whole), with
+/// the size readout, "14 × 9 · 908 × 568 · Large".
+struct HomeSnapLayer: View {
     @Environment(\.ink) private var ink
-    let size: HomeLayout.Size
+    let mode: HomeEditMode
+    let parts: HomeParts
+    /// The grid's width.
+    let inner: CGFloat
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: ink.radius(12), style: .continuous)
-        shape.fill(ink.accent.opacity(0.06))
-            .overlay { shape.strokeBorder(ink.accent, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])) }
-            .overlay(alignment: .topLeading) {
-                // Whole even on a tab's 52 pt.
-                Text(size.title).font(ink.ui(11, .semibold)).foregroundStyle(ink.onAccent).fixedSize()
-                    .padding(.horizontal, 6).frame(height: 18)
-                    .background(ink.accent, in: .capsule)
-                    .padding(size == .icon ? 5 : 8)
+        if let held = mode.carrying, let cell = parts.cells[held.id] {
+            let rect = HomeGrid.rect(cell, inner: inner)
+            let drawn = HomeGrid.sizeClass(cell, inner: inner, pin: parts.pin(held.id))
+            let shape = RoundedRectangle(cornerRadius: ink.radius(12), style: .continuous)
+            shape.fill(ink.accent.opacity(held.resizing ? 0 : 0.06))
+                .overlay { shape.strokeBorder(ink.accent, style: held.resizing ? StrokeStyle(lineWidth: 1.5) : StrokeStyle(lineWidth: 1.5, dash: [6, 4])) }
+                .overlay(alignment: .bottomTrailing) {
+                    Text("\(cell.w) × \(cell.h) · \(Int(rect.width.rounded())) × \(Int(rect.height.rounded())) · \(drawn.title)")
+                        .font(ink.mono(11, weight: .semibold)).foregroundStyle(ink.onAccent).fixedSize()
+                        .padding(.horizontal, 7).frame(height: 20)
+                        .background(ink.accent, in: .capsule)
+                        .offset(y: 28)
+                }
+                .frame(width: rect.width, height: rect.height)
+                .offset(x: rect.minX, y: rect.minY)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .transition(.opacity)
+        }
+    }
+}
+
+/// The cells, as faint dots, while Home is in edit mode: one in the middle of each, `rows` deep.
+struct HomeCellDots: View {
+    @Environment(\.ink) private var ink
+    let inner: CGFloat
+    let rows: Int
+
+    var body: some View {
+        Canvas { context, _ in
+            var dots = Path()
+            for row in 0..<rows {
+                for column in 0..<HomeGrid.columns {
+                    let middle = HomeGrid.rect(HomeCell(x: column, y: row, w: 1, h: 1), inner: inner)
+                    dots.addEllipse(in: CGRect(x: middle.midX - 1.5, y: middle.midY - 1.5, width: 3, height: 3))
+                }
             }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+            context.fill(dots, with: .color(ink.text.opacity(0.14)))
+        }
+        .frame(width: inner, height: CGFloat(rows) * HomeGrid.pitch)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
 /// An installed extension's page as a Home block: its blocks, asked as its page asks (on its pace, only while the window
 /// shows), on a tile in the style; Open goes to its page, as a push to one of its views does. Its model is Home's, kept
-/// by extension id, so the block keeps its last answer when it moves to another row. Small, in the column: its first
-/// figure, then its first list folded to the card (`rows` fixed, else fitted), "N more" opening its page; a page with no
-/// list keeps its medium blocks.
+/// by extension id, so the block keeps its last answer when it moves. Wide: its first figure, then its first list folded
+/// to the block, "N more" opening its page, or with no list its first figures and three rows (HomeVariant.medium); Large:
+/// the whole page, or on a block narrower than the page's own width its Wide form. Never more than its block holds: its
+/// blocks from the first, then the first one's own parts.
 struct HomeExtensionBlock: View {
     @Environment(\.ink) private var ink
     let id: String
     let parts: HomeParts
+    /// Wide or Large: the class it draws.
+    var drawn: Widget.SizeClass = .large
+    /// Its block's width: the whole page needs `wholePage`.
+    var width: CGFloat = .infinity
     var rows: Int? = nil
-    /// Takes the height its row or column gives it.
+    /// Takes the height its cells give it.
     var fill = true
 
     var body: some View {
         let link = parts.pages.first { $0.id == id }
-        let size = parts.size(HomeLayout.extensionRow(id))
         let model = parts.pageModel(id)
         // Its emoji leads its title.
         Tile(title: link?.label ?? id, fill: fill) {
@@ -1140,14 +1100,18 @@ struct HomeExtensionBlock: View {
             VStack(alignment: .leading, spacing: 10) {
                 if let problem = model.problem { FinePrint(text: problem, color: ink.warnText) }
                 if let page = model.blocks {
-                    if size.lane == .column, let list = HomeVariant.list(page) {
+                    let whole = drawn == .large && width >= Self.wholePage
+                    if !whole, let list = HomeVariant.list(page) {
                         small(page, list: list, title: link?.title ?? id)
                     } else {
-                        // Medium keeps its first figures and three rows (HomeVariant.medium); large is the whole page.
-                        let blocks = size == .large ? page : HomeVariant.medium(page)
+                        let blocks = whole ? page : HomeVariant.medium(page)
                         if blocks.isEmpty { FinePrint(text: "Nothing to show.") }
-                        ExtensionBlocksView(blocks: blocks) { action in
-                            model.run(action, act: { ExtensionActions.run($0, in: $1, inputs: $2) }) { _, _ in parts.openExtension(id) }
+                        ViewThatFits(in: .vertical) {
+                            ForEach(Array(Self.fitting(blocks).enumerated()), id: \.offset) { _, part in
+                                ExtensionBlocksView(blocks: part) { action in
+                                    model.run(action, act: { ExtensionActions.run($0, in: $1, inputs: $2) }) { _, _ in parts.openExtension(id) }
+                                }
+                            }
                         }
                     }
                 } else if model.problem == nil {
@@ -1157,6 +1121,17 @@ struct HomeExtensionBlock: View {
         }
         // Asked only while the window shows (ADR 0010); its last answer stays while it is hidden.
         .asksPage(model, onScreen: parts.onScreen)
+    }
+
+    /// The least width a whole page draws in: its figures three across.
+    static let wholePage: CGFloat = 420
+
+    /// What a block can show of `blocks`, most first: all of them, one fewer down to the first, then the first's own
+    /// parts (a section's meters) one fewer down to one.
+    static func fitting(_ blocks: [Extension.Block]) -> [[Extension.Block]] {
+        let firsts = (1..<max(1, blocks.count)).reversed().map { Array(blocks.prefix($0)) }
+        let parts = HomeVariant.flattened(Array(blocks.prefix(1)))
+        return [blocks] + firsts + (parts.count > 1 ? (1..<parts.count).reversed().map { Array(parts.prefix($0)) } : [])
     }
 
     /// The first figure on a line, then the list's rows folded; a row opens the page.

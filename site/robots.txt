@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pilot-mac.vercel.app/sitemap.xml

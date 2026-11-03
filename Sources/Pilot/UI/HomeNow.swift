@@ -3,42 +3,36 @@ import Clipboard
 import PilotCore
 import SwiftUI
 
-// Home, direction 2 "Now beside the board" (Sven's pick, 2026-10-12): a column of what is happening (the greeting, the
-// icon tabs, then every small block as a card of rows) beside the board (medium blocks two to a row, large ones across
-// it). Both styles draw this page; each hands it its own board blocks. Under the board's least width the column goes over
-// the board and each list shows five rows.
+// Home on its grid (P91, model A, Sven Q746/Q747): every block on whole cells of 23 columns, drawn in the class its points
+// pick (Widget.SizeClass, the desktop widgets' rule) or its Layout keeps. Both styles draw this page; each hands it its
+// own forms for the blocks it draws its own way (today's Large: the keyboard, This Mac, the workspace map…).
 
-/// The page: what needs you across the top, the column and the board side by side while both fit, else one over the
-/// other; Edit Home at the foot, and in edit mode its bar pinned to the window's foot instead. At its least height the
-/// page fills the window and the lists fold to it; taller, it scrolls. A 0.5 s hold on empty page enters edit mode; in
-/// edit mode a drag on a block carries it (HomeEditMode), the page making room where it would land, and a carried block
-/// held near the page's top or bottom edge scrolls it.
-struct HomeNowPage<Notices: View, Board: View>: View {
-    @Environment(\.style) private var style
+/// The page: what needs you across the top, then the grid; Edit Home at the foot, and in edit mode its bar pinned to the
+/// window's foot instead and the cells dotted. The page is at least the window's height; taller, it scrolls. A 0.5 s hold
+/// on empty page enters edit mode; in edit mode a drag on a block carries it, a drag on its corner brackets or edge grips
+/// resizes it, the others making room, and a block held near the page's top or bottom edge scrolls it.
+struct HomeNowPage<Notices: View, Own: View>: View {
     @Environment(\.homeEdit) private var edit
+    @Environment(\.style) private var style
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let parts: HomeParts
-    /// The page's margin and the room between blocks.
+    /// The page's margin.
     var side: CGFloat = 28
-    var gap: CGFloat = 16
     @ViewBuilder let notices: Notices
-    /// A board block in the style at its width, `fill` when its row takes a share of the window's height.
-    @ViewBuilder let board: (String, Bool, CGFloat) -> Board
+    /// A block in the style's own form at its size (its Large, and Toybox's Pilot card).
+    @ViewBuilder let own: (String, CGSize) -> Own
     /// The page fits the window whole, measured.
     @State private var fits = true
-    /// Where the page has scrolled to: a carried block near an edge moves it.
+    /// Where the page has scrolled to: a held block near an edge moves it.
     @State private var scroll = ScrollPosition(edge: .top)
-
-    private static var column: CGFloat { HomeNow.column }
 
     var body: some View {
         GeometryReader { window in
             let inner = max(0, window.size.width - 2 * side)
-            let wide = HomeNow.sideBySide(inner: inner, gap: gap)
             // In edit mode the bar takes the window's foot, and the page fits or scrolls above it.
             let height = window.size.height - (parts.editMode == nil ? 0 : HomeEditBar.room)
             ScrollView {
-                HomeFill(height: height, fill: wide) { page(inner: inner) }
+                HomeFill(height: height) { page(inner: inner, height: height) }
                     .frame(width: window.size.width)
                     .onGeometryChange(for: Bool.self) { $0.size.height <= height + 0.5 } action: { fits = $0 }
             }
@@ -63,7 +57,7 @@ struct HomeNowPage<Notices: View, Board: View>: View {
         .background(Theme.windowFill(style.color(\.canvas)))
     }
 
-    /// While a carried block is held near an edge, the page scrolls that way at the speed the mode asks, within its ends.
+    /// While a held block is near an edge, the page scrolls that way at the speed the mode asks, within its ends.
     private func autoScroll() async {
         guard let mode = parts.editMode, mode.scrolling != 0, let frames = edit?.frames else { return }
         var last = ContinuousClock.now
@@ -83,60 +77,38 @@ struct HomeNowPage<Notices: View, Board: View>: View {
     @ViewBuilder private func lifted(_ lift: HomeEditMode.Lift, _ mode: HomeEditMode) -> some View {
         if lift.fromTray {
             Chip(text: parts.title(lift.id), symbol: "plus")
-        } else {
-            switch mode.session.draft.size(of: lift.id) {
-            case .icon: HomeIconTab(id: lift.id, parts: parts) { EmptyView() }
-            case .small: small(lift.id, rows: nil, last: true)
-            case .medium, .large: board(lift.id, true, lift.frame.width)
-            }
+        } else if !lift.resizing, let inner = edit?.frames.inner {
+            block(lift.id, HomeGrid.sizeClass(lift.start, inner: inner, pin: parts.pin(lift.id)), lift.frame.size)
         }
     }
 
-    private func page(inner: CGFloat) -> some View {
-        // The shape taken at pick-up holds while a block is carried.
-        let (shape, lanes) = HomeNow.arrange(parts.blocks, size: parts.size, inner: inner, gap: gap, held: edit?.held ?? parts.editMode?.lift?.shape)
-        let wide = shape.wide
-        let boardWidth = wide ? inner - Self.column - gap : inner
-        return VStack(alignment: .leading, spacing: gap) {
+    private func page(inner: CGFloat, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
             notices
-            if wide {
-                HStack(alignment: .top, spacing: gap) {
-                    column(lanes, rows: nil).frame(width: Self.column).frame(maxHeight: .infinity, alignment: .top)
-                        .homeFrame(.lane(.column), edit)
-                        // An icon tab's size chips may reach over the board.
-                        .zIndex(1)
-                    boardLane(lanes.board, width: boardWidth, fill: true, across: shape.across).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
-            } else {
-                stacked(lanes, inner: inner).homeFrame(.lane(.column), edit)
-                boardLane(lanes.board, width: boardWidth, fill: false, across: shape.across)
-            }
+            grid(inner: inner, height: height)
             if parts.editMode == nil { HomeEditFoot(parts: parts) }
         }
         .padding(.horizontal, side).padding(.vertical, 22)
-        .frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil, alignment: .topLeading)
-        // The size chip under the pointer: the block's new frame, dashed.
-        .overlay(alignment: .topLeading) { if let mode = parts.editMode, let edit { HomeSizeGhostLayer(mode: mode, frames: edit.frames, parts: parts) } }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // A hold on empty page (a block's own hold looks at where it is held) enters edit mode.
         .contentShape(.rect)
         .gesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 4).onEnded { _ in parts.beginEdit(byHold: true) },
                  including: parts.editMode == nil ? .all : .subviews)
-        // In edit mode a drag that starts on a block carries it; its chips and ✕ keep their clicks.
+        // In edit mode a drag that starts on a block carries it; its handles, chip and ✕ keep their own.
         .gesture(DragGesture(minimumDistance: 4, coordinateSpace: .global)
             .onChanged { parts.editMode?.drag(from: $0.startLocation, to: $0.location) }
             .onEnded { _ in parts.editMode?.release() },
                  including: parts.editMode == nil ? .subviews : .all)
         .coordinateSpace(.named(HomeFrames.space))
-        // Where the page lies on screen, again as it scrolls under a carried block, which then finds the slot now under it.
+        // Where the page lies on screen, again as it scrolls under a held block, which then finds the cells now under it.
         .onGeometryChange(for: CGPoint?.self) { edit == nil ? nil : $0.frame(in: .global).origin } action: { origin in
             guard let origin else { return }
             edit?.frames.origin = origin
             parts.editMode?.aim()
         }
-        .onChange(of: edit.map { _ in HomeFrames.Drawn(shape: shape, lanes: lanes) }, initial: true) { _, drawn in
-            if let drawn {
-                edit?.frames.drawn = drawn
+        .onChange(of: edit.map { _ in parts.cells }, initial: true) { _, cells in
+            if let cells {
+                edit?.frames.cells = cells
                 parts.editMode?.frames = edit?.frames
             }
         }
@@ -144,90 +116,60 @@ struct HomeNowPage<Notices: View, Board: View>: View {
         .onChange(of: EditStart(mode: parts.editMode.map(ObjectIdentifier.init), reduce: reduceMotion), initial: true) {
             guard let mode = parts.editMode else { return }
             mode.reduceMotion = reduceMotion
-            if mode.focus == nil { mode.focus = HomeEditMode.order(parts.blocks, size: parts.size, across: shape.across).first }
+            if mode.focus == nil { mode.focus = HomeLayout.reading(parts.cells).first }
         }
     }
 
-    /// The column: the greeting, the icon tabs, then the small cards, the last taking what height is left so the column
-    /// ends level with the board.
-    private func column(_ lanes: HomeLayout.Lanes, rows: Int?) -> some View {
-        HomeColumn(spacing: gap) {
-            HomeGreetingCard(parts: parts)
-            icons(lanes.icons)
-            ForEach(Array(lanes.column.enumerated()), id: \.element) { i, id in
-                small(id, rows: rows, last: i == lanes.column.count - 1).homeFrame(.block(id), edit).homeEditable(id, parts)
-            }
-            if lanes.column.isEmpty { well(.column, height: HomeNow.well, fill: true) }
-        }
-    }
-
-    /// Under the board's width, or with an empty board: the greeting and the tabs across, then the small cards as many
-    /// to a row as keep 280 pt each (HomeNow.across), five rows a list.
-    private func stacked(_ lanes: HomeLayout.Lanes, inner: CGFloat) -> some View {
-        let across = HomeNow.across(inner: inner, gap: gap)
-        return VStack(alignment: .leading, spacing: gap) {
-            HomeGreetingCard(parts: parts)
-            icons(lanes.icons)
-            ForEach(Array(stride(from: 0, to: lanes.column.count, by: across)), id: \.self) { start in
-                let row = lanes.column[start..<min(start + across, lanes.column.count)]
-                HStack(alignment: .top, spacing: gap) {
-                    ForEach(row, id: \.self) {
-                        small($0, rows: HomeFold.stacked, last: false).frame(maxWidth: .infinity).homeFrame(.block($0), edit).homeEditable($0, parts)
-                    }
-                    ForEach(0..<(across - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            if lanes.column.isEmpty { well(.column, height: HomeNow.well) }
-        }
-    }
-
-    @ViewBuilder private func icons(_ ids: [String]) -> some View {
-        if !ids.isEmpty {
-            Flow(spacing: 10) {
-                ForEach(ids, id: \.self) { id in
-                    HomeIconTab(id: id, parts: parts) { small(id, rows: HomeFold.stacked, last: false).frame(width: Self.column) }
-                        .homeFrame(.block(id), edit).homeEditable(id, parts, tab: true)
+    /// The blocks on their cells, in reading order; in edit mode the cells dotted under them, a few rows past the last,
+    /// and where a held block lands outlined over them.
+    private func grid(inner: CGFloat, height: CGFloat) -> some View {
+        let cells = parts.cells
+        return HomeGridLayout {
+            ForEach(HomeLayout.reading(cells), id: \.self) { id in
+                if let cell = cells[id] {
+                    let rect = HomeGrid.rect(cell, inner: inner)
+                    let drawn = HomeGrid.sizeClass(cell, inner: inner, pin: parts.pin(id))
+                    block(id, drawn, rect.size)
+                        .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+                        // A block never draws outside its cells, but for the solid foot under a Toybox card.
+                        .clipShape(HomeCellClip(foot: style.kind == .toybox ? HomeCellClip.toyFoot : 0))
+                        .homeFrame(.block(id), edit)
+                        .homeEditable(id, parts, drawn: drawn, wide: rect.width > 170)
+                        .homeCell(cell)
                 }
             }
+        }
+        .frame(width: inner, alignment: .topLeading)
+        .background(alignment: .topLeading) {
+            if edit != nil { HomeCellDots(inner: inner, rows: (cells.values.map(\.maxY).max() ?? 0) + 4) }
+        }
+        .overlay(alignment: .topLeading) { if let mode = parts.editMode { HomeSnapLayer(mode: mode, parts: parts, inner: inner) } }
+        .homeFrame(.grid, edit)
+        // The edit chrome on a block's top edge may reach over the one above.
+        .zIndex(1)
+    }
+
+    /// A block in the class it draws: a Strip its one line and a Square its figure (every block alike, the keyboard's
+    /// Square its small board); Wide the lists folded to the block (today's Small) and an extension's first figures; Large
+    /// the style's own form (today's Large) and an extension's whole page. A widget's tile picks its own class by its size;
+    /// the greeting is its card at every size but a Strip.
+    @ViewBuilder private func block(_ id: String, _ drawn: Widget.SizeClass, _ size: CGSize) -> some View {
+        let builtIn = HomeLayout.Block(rawValue: id)
+        if let widget = parts.widget(id) {
+            HomeWidgetBlock(widget: widget, parts: parts)
+        } else if drawn == .strip {
+            HomeStripBlock(id: id, parts: parts)
+        } else if builtIn == .greeting {
+            HomeGreetingCard(parts: parts, rows: Int(((size.height + HomeGrid.gap) / HomeGrid.pitch).rounded()))
+        } else if drawn == .square {
+            if builtIn == .keyboard { HomeMiniBoard(parts: parts) } else { HomeSquareBlock(id: id, parts: parts) }
+        } else if let ext = HomeLayout.extensionID(id) {
+            HomeExtensionBlock(id: ext, parts: parts, drawn: drawn, width: size.width)
+        } else if drawn == .wide, builtIn != .pilot, let card = HomeSmallBlock(id: id, parts: parts) {
+            card
         } else {
-            well(.icons, height: HomeLayout.Size.tab)
+            own(id, size)
         }
-    }
-
-    /// An empty lane's well, in edit mode only, `fill` taking the height left.
-    @ViewBuilder private func well(_ lane: HomeSlots.Lane, height: CGFloat, fill: Bool = false) -> some View {
-        if edit != nil {
-            HomeWell(lane: lane, tall: height > HomeLayout.Size.tab).frame(minHeight: height, maxHeight: fill ? .infinity : height).homeFrame(.well(lane), edit)
-        }
-    }
-
-    /// A small block: the column's own card for it, else the style's (the Pilot block).
-    @ViewBuilder private func small(_ id: String, rows: Int?, last: Bool) -> some View {
-        if let card = HomeSmallBlock(id: id, parts: parts, rows: rows, stretch: last) { card } else { board(id, false, Self.column) }
-    }
-
-    /// The board's rows: a large block across, two medium ones side by side ending level. At rest a lone medium spans the
-    /// board; in edit mode it takes its half and the other half is a well a medium pairs with it in (Sven, Q55): its right,
-    /// or its left while its pair there is carried (HomeSlots gives that half the slot).
-    private func boardLane(_ rows: [[String]], width: CGFloat, fill: Bool, across: Int) -> some View {
-        VStack(alignment: .leading, spacing: gap) {
-            ForEach(rows, id: \.self) { row in
-                let lone = edit != nil && across == 2 && row.count == 1 && parts.size(row[0]) == .medium
-                let left = lone && parts.editMode?.lift?.slots.slots.contains { $0.place == .beside(row[0], trailing: false) } == true
-                let each = row.count > 1 || lone ? (width - gap) / 2 : width
-                HStack(alignment: .top, spacing: gap) {
-                    ForEach(row, id: \.self) { board($0, fill, each).frame(width: each).homeFrame(.block($0), edit).homeEditable($0, parts) }
-                }
-                .frame(maxWidth: .infinity, alignment: left ? .trailing : .leading)
-                .background(alignment: left ? .leading : .trailing) {
-                    if lone { HomeWell(lane: .board, says: "A medium dropped here pairs with \(parts.title(row[0]))").frame(width: each) }
-                }
-                .fixedSize(horizontal: false, vertical: !fill)
-            }
-            if rows.isEmpty { well(.board, height: HomeNow.well, fill: fill) }
-        }
-        .homeFrame(.lane(.board), edit)
     }
 }
 
@@ -237,135 +179,23 @@ private struct EditStart: Equatable {
     let reduce: Bool
 }
 
-/// Direction 2's widths.
-enum HomeNow {
-    /// The column's width, and the board's least: under it the keyboard's names crowd its keys.
-    static let column: CGFloat = 300, boardLeast: CGFloat = 760
-    /// The keyboard keeps its 75 % board whole from this width; narrower, it splits as Binds' does.
-    static let wholeBoard: CGFloat = 860
+/// A block's clip: its cells' frame, and `foot` points below it for the solid foot a Toybox card draws under itself.
+struct HomeCellClip: Shape {
+    var foot: CGFloat = 0
+    /// Toybox's card foot, within the 8 pt between rows.
+    static let toyFoot: CGFloat = 6
 
-    /// An empty lane's well in edit mode, the column's or the board's; the icon row's is a tab high.
-    static let well: CGFloat = 120
-
-    /// Small cards to a row when the column lies across the page: as many as keep 280 pt each, one to four.
-    static func across(inner: CGFloat, gap: CGFloat) -> Int { max(1, min(4, Int((inner + gap) / (280 + gap)))) }
-
-    /// The column beside the board while the page's inner width holds both.
-    static func sideBySide(inner: CGFloat, gap: CGFloat) -> Bool { inner >= column + gap + boardLeast }
-
-    /// The page's shape: the column beside the board (`wide`) or over it, the board one block across or two, and the gap
-    /// between blocks.
-    struct Shape: Equatable {
-        let wide: Bool
-        let across: Int
-        let gap: CGFloat
-    }
-
-    /// The shape and lanes the page draws its blocks in. With nothing on the board, the column's cards spread across the
-    /// page; with nothing in the column, the board takes the page under the greeting; unless a shape is `held` from pick-up
-    /// (spec home-edit: the page never restructures under a carried block), where the width allows it.
-    static func arrange(_ blocks: [String], size: (String) -> HomeLayout.Size, inner: CGFloat, gap: CGFloat, held: Shape?) -> (Shape, HomeLayout.Lanes) {
-        let side = sideBySide(inner: inner, gap: gap)
-        let across = (side ? inner - column - gap : inner) >= 2 * column + gap ? 2 : 1
-        let lanes = HomeLayout.lanes(blocks, size: size, across: across)
-        let wide = side && (held?.wide ?? (!lanes.board.isEmpty && !(lanes.column.isEmpty && lanes.icons.isEmpty)))
-        return (Shape(wide: wide, across: across, gap: gap), lanes)
-    }
+    func path(in rect: CGRect) -> Path { Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height + foot)) }
 }
 
-/// An empty lane in edit mode, where a block can go: dashed, saying which size puts one there.
-struct HomeWell: View {
-    @Environment(\.ink) private var ink
-    let lane: HomeSlots.Lane
-    /// Room for its words; the icon row's well is a tab high.
-    var tall = true
-    /// Its own words, else its lane's.
-    var says: String? = nil
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: ink.radius(12), style: .continuous)
-        shape.fill(ink.text.opacity(0.025))
-            .overlay { shape.strokeBorder(ink.line2, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])) }
-            .overlay {
-                Text(says ?? words).font(ink.ui(tall ? 12 : 11.5)).foregroundStyle(ink.muted).multilineTextAlignment(.center)
-                    .lineLimit(tall ? 2 : 1).padding(.horizontal, 12)
-            }
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-    }
-
-    private var words: String {
-        switch lane {
-        case .icons: "Icon puts a block here as a tab"
-        case .column: "Small puts a block here as a card"
-        case .board: "Medium or Large puts a block on the board"
-        }
-    }
-}
-
-/// The column's cards stacked in its height: each at its least first, then the height left shared evenly up to each
-/// one's whole list, the last taking what remains, so every list shows as many rows as the column holds.
-struct HomeColumn: Layout {
-    let spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? HomeNow.column
-        let least = subviews.reduce(0) { $0 + $1.sizeThatFits(ProposedViewSize(width: width, height: 0)).height } + gaps(subviews)
-        guard let height = proposal.height else {
-            return CGSize(width: width, height: subviews.reduce(0) { $0 + $1.sizeThatFits(ProposedViewSize(width: width, height: nil)).height } + gaps(subviews))
-        }
-        return CGSize(width: width, height: max(least, height))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let width = bounds.width
-        let least = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: 0)).height }
-        var most = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: .infinity)).height }
-        if !most.isEmpty { most[most.count - 1] = .infinity }
-        let heights = Self.share(bounds.height - gaps(subviews), least: least, most: most)
-        var y = bounds.minY
-        for (view, height) in zip(subviews, heights) {
-            view.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: width, height: height))
-            y += height + spacing
-        }
-    }
-
-    private func gaps(_ subviews: Subviews) -> CGFloat { spacing * CGFloat(max(0, subviews.count - 1)) }
-
-    /// `height` shared out: each its least; then a list that the height left holds whole is shown whole, smallest first;
-    /// the rest goes in even shares, none past its most.
-    static func share(_ height: CGFloat, least: [CGFloat], most: [CGFloat]) -> [CGFloat] {
-        var sizes = least
-        var left = height - least.reduce(0, +)
-        while left > 0.5 {
-            let open = sizes.indices.filter { sizes[$0] < most[$0] }.sorted { most[$0] - sizes[$0] < most[$1] - sizes[$1] }
-            guard let first = open.first else { break }
-            let even = left / CGFloat(open.count), need = most[first] - sizes[first]
-            if need > even && need <= left {
-                sizes[first] = most[first]
-                left -= need
-                continue
-            }
-            for i in open {
-                let add = min(even, most[i] - sizes[i])
-                sizes[i] += add
-                left -= add
-            }
-        }
-        return sizes
-    }
-}
-
-/// The page at least the window's height: while `fill`, at its least height when that is taller (every list at its
-/// fewest rows), so the lists fold into the window; else at its own height.
+/// The page at least the window's height, taller when its blocks need it.
 struct HomeFill: Layout {
     let height: CGFloat
-    let fill: Bool
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let page = subviews.first else { return .zero }
-        let own = page.sizeThatFits(ProposedViewSize(width: proposal.width, height: fill ? 0 : nil))
-        return CGSize(width: proposal.width ?? own.width, height: fill ? max(own.height, height) : own.height)
+        let own = page.sizeThatFits(ProposedViewSize(width: proposal.width, height: 0))
+        return CGSize(width: proposal.width ?? own.width, height: max(own.height, height))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -375,18 +205,30 @@ struct HomeFill: Layout {
 
 // MARK: - The greeting
 
-/// The column's head: the date, the greeting by the hour and what Hyper and the tiler are doing, or what needs you.
+/// The greeting block: the date, the greeting by the hour and what Hyper and the tiler are doing, or what needs you, as
+/// much of it as its cells hold.
 struct HomeGreetingCard: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
     @Environment(\.ink) private var ink
     let parts: HomeParts
+    /// The rows of cells it takes.
+    var rows = 3
 
     var body: some View {
+        // As much as its cells hold: two rows the line, three the binds too, one just the date and the greeting.
+        content(line: rows >= 2, binds: rows >= 3)
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .styleSurface(\.card)
+            .accessibilityElement(children: .combine)
+    }
+
+    private func content(line showLine: Bool, binds showBinds: Bool) -> some View {
         let tiler = engine.observers.tiler
         let line = HomeGreeting.line(hyperOn: engine.hyperSwitch.isOn, problems: parts.problems, layerKey: engine.settings.layerKeys.label,
                                      workspace: tiler.focused, tiler: tiler.tilerName)
-        HStack(alignment: .top, spacing: 14) {
+        return HStack(alignment: .top, spacing: 14) {
             if style.kind == .toybox { PilotMark(size: 46) }
             VStack(alignment: .leading, spacing: 4) {
                 TimelineView(.everyMinute) { context in
@@ -394,73 +236,70 @@ struct HomeGreetingCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                             .font(ink.ui(11.5, .medium)).foregroundStyle(ink.muted)
-                        Text("\(ToyHome.greeting(Calendar.current.component(.hour, from: date))), \(HomeGreeting.firstName).")
+                        Text(HomeGreeting.hello(at: date))
                             .font(ink.display(style.kind == .toybox ? 24 : 21)).foregroundStyle(ink.text)
                             .lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
                     }
                 }
-                Text(line).font(ink.ui(12.5)).foregroundStyle(parts.problems.isEmpty ? ink.text2 : ink.warnText)
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                let binds = engine.binds.store.binds.count
-                Text("\(binds) \(ToyHome.bindsLine(binds: binds, clashes: parts.clashes))").font(ink.ui(11.5))
-                    .foregroundStyle(parts.clashes > 0 ? ink.warnText : ink.muted).lineLimit(1)
+                if showLine {
+                    // Two rows hold one line of it, three or more three lines.
+                    Text(line).font(ink.ui(12.5)).foregroundStyle(parts.problems.isEmpty ? ink.text2 : ink.warnText)
+                        .lineLimit(rows >= 3 ? 3 : 1).truncationMode(.tail)
+                }
+                if showBinds {
+                    let binds = engine.binds.store.binds.count
+                    Text("\(binds) \(ToyHome.bindsLine(binds: binds, clashes: parts.clashes))").font(ink.ui(11.5))
+                        .foregroundStyle(parts.clashes > 0 ? ink.warnText : ink.muted).lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .styleSurface(\.card)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .combine)
     }
 }
 
 extension HomeGreeting {
     /// The person's first name, as the greeting says it.
     static let firstName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
+
+    /// "Morning, Sven.": the greeting by the hour of `date`.
+    static func hello(at date: Date) -> String { "\(ToyHome.greeting(Calendar.current.component(.hour, from: date))), \(firstName)." }
 }
 
 // MARK: - Small blocks
 
-/// A block's small card in the column, the same in every style; nil leaves it to the style (the Pilot block).
+/// A block's Wide card (today's Small: its list folded to the block), the same in every style; nil leaves it to the style
+/// (the Pilot block).
 struct HomeSmallBlock: View {
     private enum Form { case workspaces, keyboard, mostUsed, clipboard, thisMac, page(String), widget(HomeWidget) }
     private let form: Form
     private let parts: HomeParts
-    /// Rows a list shows; nil fits them to the card's height.
-    private let rows: Int?
-    /// Takes what height the column has left.
-    private let stretch: Bool
 
-    init?(id: String, parts: HomeParts, rows: Int?, stretch: Bool = false) {
+    init?(id: String, parts: HomeParts) {
         switch HomeLayout.Block(rawValue: id) {
         case .workspaces?: form = .workspaces
         case .keyboard?: form = .keyboard
         case .mostUsed?: form = .mostUsed
         case .clipboard?: form = .clipboard
         case .thisMac?: form = .thisMac
-        case .pilot?, .quickActions?: return nil
+        case .greeting?, .pilot?, .quickActions?: return nil
         case nil:
             if let ext = HomeLayout.extensionID(id) { form = .page(ext) }
             else if let widget = parts.widget(id) { form = .widget(widget) }
             else { return nil }
         }
         self.parts = parts
-        self.rows = rows
-        self.stretch = stretch
     }
 
     var body: some View {
         Group {
-            // Only the column's last card takes the height left over; the others end at their rows.
-            let fill = stretch && rows == nil
+            // Each fills its cells, its list folded to them.
             switch form {
-            case .workspaces: HomeWorkspaceRows(parts: parts, rows: rows, fill: fill)
+            case .workspaces: HomeWorkspaceRows(parts: parts, rows: nil, fill: true)
             case .keyboard: HomeMiniBoard(parts: parts)
-            case .mostUsed: HomeMostUsedRows(parts: parts, rows: rows, fill: fill)
-            case .clipboard: HomeClipRows(parts: parts, rows: rows, fill: fill)
-            case .thisMac: HomeMacRows(fill: fill)
-            case .page(let ext): HomeExtensionBlock(id: ext, parts: parts, rows: rows, fill: fill)
+            case .mostUsed: HomeMostUsedRows(parts: parts, rows: nil, fill: true)
+            case .clipboard: HomeClipRows(parts: parts, rows: nil, fill: true)
+            case .thisMac: HomeMacRows(fill: true)
+            case .page(let ext): HomeExtensionBlock(id: ext, parts: parts, drawn: .wide)
             case .widget(let widget): HomeWidgetBlock(widget: widget, parts: parts)
             }
         }
@@ -480,8 +319,8 @@ struct HomeMore {
     let open: () -> Void
 }
 
-/// A list in its card: as many rows as the card holds (`rows` fixed, else fitted to the height it is given, three at
-/// least), the last that fits "N more" when some are left (HomeFold); none, its empty line.
+/// A list in its card: as many rows as the card holds (`rows` fixed, else fitted to the height it is given, none when
+/// not even one fits), the last that fits "N more" when some are left (HomeFold); none, its empty line.
 struct HomeFoldList<Row: View>: View {
     @Environment(\.style) private var style
     @Environment(\.ink) private var ink
@@ -499,7 +338,8 @@ struct HomeFoldList<Row: View>: View {
         // The most lines it can draw: every row, or as many as are read.
         let cap = min(total, available ?? total)
         let lines = min(cap, rows ?? cap)
-        let fold = HomeFold.rows(total: total, fits: min(rows ?? fits, max(1, cap)))
+        // Fitted to a block too short for a row, it draws none and goes on measuring.
+        let fold = rows == nil && fits == 0 ? (shown: 0, more: 0) : HomeFold.rows(total: total, fits: min(rows ?? fits, max(1, cap)))
         if total == 0 {
             Text(empty).font(ink.ui(12)).foregroundStyle(ink.muted).frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
         } else {
@@ -508,9 +348,9 @@ struct HomeFoldList<Row: View>: View {
                 if fold.more > 0 { line(first: fold.shown == 0) { HomeMoreRow(count: fold.more, more: more) } }
             }
             .frame(maxWidth: .infinity, alignment: .top)
-            .frame(minHeight: CGFloat(rows == nil ? min(3, cap) : lines) * height, idealHeight: CGFloat(lines) * height,
+            .frame(minHeight: rows == nil ? 0 : CGFloat(lines) * height, idealHeight: CGFloat(lines) * height,
                    maxHeight: CGFloat(lines) * height, alignment: .top)
-            .onGeometryChange(for: Int.self, of: { HomeFold.fits(height: $0.size.height, row: height, least: 1) }) { fits = $0 }
+            .onGeometryChange(for: Int.self, of: { HomeFold.fits(height: $0.size.height, row: height, least: 0) }) { fits = $0 }
             .clipped()
         }
     }
@@ -671,10 +511,12 @@ struct HomeClipRows: View {
     }
 }
 
-/// This Mac's four readings as rows: CPU, memory, free disk and the temperature.
+/// This Mac's four readings as rows: CPU, memory, free disk and the temperature, as many as its block holds.
 struct HomeMacRows: View {
     @Environment(\.ink) private var ink
     var fill = false
+    @State private var fits = 4
+    private var shown: Int { fill ? min(4, fits) : 4 }
 
     var body: some View {
         let system = SystemSampler.shared
@@ -690,7 +532,7 @@ struct HomeMacRows: View {
             if let chip = raw?.slow.machine?.chip { Text(chip).font(ink.ui(11.5)).foregroundStyle(ink.muted).lineLimit(1) }
         } content: {
             VStack(spacing: 0) {
-                ForEach(Array(readings.enumerated()), id: \.offset) { i, reading in
+                ForEach(Array(readings.prefix(shown).enumerated()), id: \.offset) { i, reading in
                     HStack(spacing: 9) {
                         HomeLine(title: reading.1, trailing: reading.2) {
                             Image(systemName: reading.0).font(ink.system(10)).foregroundStyle(ink.muted)
@@ -701,6 +543,11 @@ struct HomeMacRows: View {
                     .accessibilityElement(children: .combine)
                 }
             }
+            // As many readings as its block holds, CPU first: the frame gives way to one row, so it measures the height the
+            // block has left.
+            .frame(maxWidth: .infinity, minHeight: fill ? HomeRow.height(ink.style.kind) : nil, maxHeight: fill ? .infinity : nil, alignment: .top)
+            .clipped()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fits = HomeFold.fits(height: $0, row: HomeRow.height(ink.style.kind), least: 1) }
         }
     }
 }

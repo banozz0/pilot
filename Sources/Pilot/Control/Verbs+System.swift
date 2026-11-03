@@ -24,6 +24,8 @@ final class ControlSystem {
         return Look.shared.layoutError
     }
     var dark: @MainActor () -> Bool = { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
+    /// Whether Finder draws the desktop's icons (its CreateDesktop), only read here.
+    var desktopIcons: @MainActor () -> Bool = { FinderDesktopIcons.shown }
     /// System › Mouse's pointer speed, only read here.
     var pointer: @MainActor () -> PointerSpeed = { .shared }
 }
@@ -38,7 +40,7 @@ extension ControlVerbs {
         ("awake", "system awake [on|off] [--for 1h|4h|until-off]",
          "keep awake: on or off, until when, and its length; --for sets the length the switch turns it on for, and while on counts from now, as the page's For picker does"),
         ("layout", "system layout [<layout>]", "the keyboard layouts macOS has enabled, the one in use marked; a layout (its id or name) selects it, as Setup › Keyboard layout does"),
-        ("appearance", "system appearance", "dark mode on or off; pilot run system.darkMode flips it"),
+        ("appearance", "system appearance", "dark mode on or off, and whether Finder shows the desktop icons; pilot run system.darkMode and system.desktopIcons flip them"),
         ("mouse", "system mouse", "the pointer speed macOS moves the mice at (0-3, System Settings' Tracking speed), the saved Slow, Normal and Fast with the one picked, and the mice connected; pilot run system.pointerSpeedCycle steps it"),
     ]
 
@@ -65,7 +67,7 @@ extension ControlVerbs {
                 try Self.only([], args, "pilot system")
                 return .object(["sound": Self.soundRead(system.audio()), "displays": await Self.displaysRead(system),
                                 "awake": Self.awakeRead(system.awake()), "layouts": Self.layoutsRead(system.layouts()),
-                                "dark": .bool(system.dark()), "mouse": Self.mouseRead(system.pointer())])
+                                "dark": .bool(system.dark()), "desktopIcons": .bool(system.desktopIcons()), "mouse": Self.mouseRead(system.pointer())])
             }
             switch part {
             case "sound": return try Self.sound(args, system)
@@ -77,7 +79,7 @@ extension ControlVerbs {
             case "layout": return try Self.layout(args, system)
             case "appearance":
                 try Self.only([], args, "pilot system appearance")
-                return .object(["dark": .bool(system.dark())])
+                return .object(["dark": .bool(system.dark()), "desktopIcons": .bool(system.desktopIcons())])
             case "mouse":
                 try Self.only([], args, "pilot system mouse")
                 return Self.mouseRead(system.pointer())

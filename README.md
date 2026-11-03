@@ -28,6 +28,7 @@ under it runs whatever you set.
 |---|---|---|---|
 | ⌨️ | [Keys and binds](https://pilot-mac.vercel.app/keys.html) | Every key under Hyper does what you set, from one picture of your keyboard. Hold Hyper to see what each key does. | Hyper |
 | 🪟 | [Windows and workspaces](https://pilot-mac.vercel.app/windows.html) | Pilot's own tiler arranges every window across nine workspaces, without turning off System Integrity Protection. Columns, rows, grid or scrolling. | `Hyper+1…9` |
+| 🖼️ | [Desktop and widgets](https://pilot-mac.vercel.app/desktop.html) | Widgets on the desktop and on Home, one menu on Hyper + right-click, and any folder as a gallery: pick a wallpaper by looking. | |
 | 🔎 | [Launcher](https://pilot-mac.vercel.app/launcher.html) | One search box for apps, windows, files, actions, settings and answers: maths, units, money, time zones, emoji. | `Hyper+Space` |
 | 📋 | [Clipboard and notes](https://pilot-mac.vercel.app/clipboard.html) | Everything you copy, kept on your Mac, plus quick notes and snippets that type themselves. | |
 | 📸 | [Captures](https://pilot-mac.vercel.app/captures.html) | Screenshots, scrolling captures, screen recordings and text from the screen, with an image and video editor. | |
@@ -39,7 +40,7 @@ under it runs whatever you set.
 
 No key listed? Type the feature's name in Hyper+Space, or give it one on the Binds page. Also in the box: file search
 and convert, Mac controls and stats, app install, update and clean, and the `pilot` command.
-[All 179 features](https://pilot-mac.vercel.app/#features).
+[All 198 features](https://pilot-mac.vercel.app/#features).
 
 No analytics and no crash reporting. File search, dictation, read aloud and translate run on your Mac; AI goes only to
 the provider you pick.

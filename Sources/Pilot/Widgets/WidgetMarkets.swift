@@ -41,6 +41,14 @@ enum WidgetMarkets {
         }
 
         var context: JSONValue { .object(["kind": .string(kind), "symbol": .string(symbol), "listing": .string(listing)]) }
+
+        /// Its TradingView page, `https://www.tradingview.com/symbols/BITSTAMP-BTCUSD/`: what a click on it opens.
+        var page: URL? {
+            let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~!"))
+            guard let exchange = exchange.addingPercentEncoding(withAllowedCharacters: safe),
+                  let symbol = symbol.addingPercentEncoding(withAllowedCharacters: safe) else { return nil }
+            return URL(string: "https://www.tradingview.com/symbols/\(exchange)-\(symbol)/")
+        }
     }
 
     /// One symbol's price as the extension read it: the day's, and each longer range's change, high and low.

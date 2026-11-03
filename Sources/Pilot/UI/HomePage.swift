@@ -3,10 +3,10 @@ import Clipboard
 import PilotCore
 import SwiftUI
 
-/// Home, direction 2 "Now beside the board" (HomeNowPage, Sven's pick 2026-10-12), its blocks the person's own (story
-/// 167): HomeLayout's shown blocks in their order and sizes, by default Workspaces, Clipboard and Most used in the column
-/// and the Hyper keyboard and This Mac on the board; edit mode, on Home itself (spec home-edit), sizes and hides them and
-/// adds an installed extension's page back from its tray. Instrument and Toybox each hand the page their own board
+/// Home, on its grid (HomeNowPage; P91, model A), its blocks the person's own (story 167): HomeLayout's shown blocks on
+/// their cells, by default the greeting, Workspaces, Clipboard and Most used down the left and the Hyper keyboard and This
+/// Mac beside them; edit mode, on Home itself (spec home-edit), moves, sizes and hides them and adds an installed
+/// extension's page back from its tray. Instrument and Toybox each hand the page their own board
 /// blocks. Pilot is the whole app, so Home has no Pilot switch; its switch is the Hyper key's (engine.hyperSwitch, Sven 2026-10-07). Every block reads
 /// what it shows itself, so a press or a reading redraws only that block.
 struct HomePage: View {
@@ -40,7 +40,7 @@ struct HomePage: View {
     @State private var picked: Int64?
     /// Edit mode, while it is on: the page draws its draft; Done saves it, Escape, Cancel and leaving Home throw it away.
     @State private var editing: HomeEditMode?
-    /// Where the page measures itself in edit mode (HomeSlots).
+    /// Where the page measures itself in edit mode (HomeFrames).
     @State private var frames = HomeFrames()
     @State private var pageModels = HomePageModels()
     /// Edit mode on appear (a render's start).
@@ -66,6 +66,17 @@ struct HomePage: View {
     /// How often the window list is read again while Home shows, so titles stay fresh.
     static let windowsEvery = Duration.seconds(15)
 
+    /// The cells Home draws `blocks` at. Toybox's Pilot block, drawn only while something needs you, takes the top of the
+    /// board when it has no cells of its own, the others moving down.
+    static func cells(_ home: HomeLayout, blocks: [String], shown: [String]) -> [String: HomeCell] {
+        let pilot = HomeLayout.Block.pilot.rawValue
+        guard blocks.contains(pilot), !shown.contains(pilot), home.cell(of: pilot) == nil else { return home.cells(blocks) }
+        var layout = home
+        let size = HomeLayout.size(of: pilot)
+        layout.set(pilot, cell: HomeCell(x: 5, y: 0, w: size.w, h: size.h))
+        return layout.cells(blocks, subject: pilot)
+    }
+
     var body: some View {
         let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
                                          tilerRunning: engine.observers.tiler.isAnswering,
@@ -76,12 +87,14 @@ struct HomePage: View {
         let home = editing?.session.preview ?? sources.layout().layout
         let beyond = HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id))
         let shown = home.shown(extensions: beyond)
+        let blocks = HomeLayout.drawn(shown, style: style.kind, needsYou: !problems.isEmpty)
         let parts = HomeParts(problems: problems, held: held, picked: $picked, copy: copy, binds: binds ?? HomeBinds(engine: engine),
-                              blocks: HomeLayout.drawn(shown, style: style.kind, needsYou: !problems.isEmpty),
+                              blocks: blocks,
                               pages: pages, pageModel: { [pageModels, sources] in pageModels.model($0, make: sources.page) }, onScreen: onScreen,
                               editing: $editing, searching: searching,
                               go: go, editBind: editBind, openExtension: openExtension, sources: sources, restartTiler: { [engine] in engine.startTiler() },
-                              size: home.size(of:), clashes: clashes, widgets: widgets)
+                              cells: Self.cells(home, blocks: blocks, shown: shown), pin: home.layout(of:),
+                              style: style.kind, clashes: clashes, widgets: widgets)
         Group {
             if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentHome(parts: parts) }
         }
@@ -93,7 +106,7 @@ struct HomePage: View {
             if let code = givenStart?.picked { picked = code }
             let start = givenStart ?? start
             guard start.editing, editing == nil else { return }
-            editing = HomeEditMode(session: HomeEditSession(layout: sources.layout().layout, extensions: beyond))
+            editing = HomeEditMode(session: parts.newSession())
         }
         // Leaving Home throws an edit away (Sven, 2026-10-12: only Done saves).
         .onDisappear { editing = nil }
@@ -134,6 +147,9 @@ struct HomeCopy: Equatable, Sendable {
 /// What Home reads beyond the engine and the sampler, a seam the renders fill: the clipboard's newest copy and the
 /// installed extensions' pages, each asked as its own page asks.
 struct HomeSources: Sendable {
+    /// The time Home's page bar reads, given the clock's: the clock's own in the app; a render pins it so Home agrees
+    /// with the top bar drawn beside it (P89's film).
+    var now: @MainActor @Sendable (Date) -> Date = { $0 }
     var lastCopied: @MainActor @Sendable () -> HomeCopy? = {
         ClipboardHistory.shared.newest().map { HomeCopy(text: $0.clip.title, at: $0.clip.copiedAt, count: $0.count) }
     }
@@ -230,8 +246,12 @@ struct HomeParts {
 
     /// Restarts Pilot's tiler.
     let restartTiler: @MainActor () -> Void
-    /// A block's size: the one picked, else its default (HomeLayout.size(of:)).
-    var size: (String) -> HomeLayout.Size = HomeLayout.Size.standard
+    /// Each drawn block's cells on Home's grid (HomeLayout.cells).
+    var cells: [String: HomeCell] = [:]
+    /// The class a block's Layout keeps, nil for Auto.
+    var pin: (String) -> Widget.SizeClass? = { _ in nil }
+    /// The style Home draws in: edit mode packs only the blocks it draws.
+    var style: PilotStyle? = nil
     /// Binds' clashes, as the window counts them: the greeting says them.
     var clashes = 0
     /// The widgets placed on Home (HomeWidgetBlock draws each).

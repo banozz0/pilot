@@ -75,19 +75,23 @@ enum WidgetFolder {
     }
 
     /// The file actions on top of a desktop placement's right-click menu: the item under the pointer, else the one last
-    /// clicked; none when neither.
+    /// clicked; then the shown folder's Open as gallery (P90).
     static func sections(_ placement: String) -> [(title: String, items: [(title: String, run: () -> Void)])] {
-        guard let model = shown[placement], let item = model.target else { return [] }
-        return [(item.name, actions(item).map { action in (action.title, action.run) })]
+        guard let model = shown[placement] else { return [] }
+        let folder = model.folder
+        let item = model.target.map { [($0.name, actions($0))] } ?? []
+        return item + [(model.title, [("Open as gallery", { GalleryWindow.shared.open(folder) })])]
     }
 
-    /// Open, Open with, Show in Finder, Copy path, Quick Look: a row's menu on Home and the desktop's.
+    /// Open, Open with, Show in Finder, Copy path, Quick Look, and Open as gallery for a folder: a row's menu on Home and
+    /// the desktop's, and the gallery's cards'.
     static func actions(_ item: FolderItem) -> [(title: String, run: () -> Void)] {
         let url = item.url
-        return [("Open", { open(url) }), ("Open with…", { FileActions.openWith([url]) }),
-                ("Show in Finder", { NSWorkspace.shared.activateFileViewerSelecting([url]) }),
-                ("Copy path", { SystemModule.copy(url.path(percentEncoded: false), tip: "Copied the path") }),
-                ("Quick Look", { FileActions.preview(url.path(percentEncoded: false)) })]
+        let gallery: [(title: String, run: () -> Void)] = item.isFolder ? [("Open as gallery", { GalleryWindow.shared.open(url) })] : []
+        return [("Open", { open(url) }), ("Open with…", { FileActions.openWith([url]) })] + gallery
+            + [("Show in Finder", { NSWorkspace.shared.activateFileViewerSelecting([url]) }),
+               ("Copy path", { SystemModule.copy(url.path(percentEncoded: false), tip: "Copied the path") }),
+               ("Quick Look", { FileActions.preview(url.path(percentEncoded: false)) })]
     }
 
     static func open(_ url: URL) { NSWorkspace.shared.open(url) }
@@ -180,15 +184,20 @@ final class WidgetFolderModel {
         move(to: url)
     }
 
+    /// Why a folder did not read, as the widget and the gallery say it.
+    static func problem(_ error: any Error) -> String {
+        let code = (error as NSError).code
+        return code == NSFileReadNoPermissionError || code == NSFileReadUnknownError
+            ? "Pilot may not read this folder: give it Full Disk Access in System Settings › Privacy & Security."
+            : code == NSFileReadNoSuchFileError ? "This folder is gone." : error.localizedDescription
+    }
+
     func take(_ read: Result<FolderListing.Listing, any Error>) {
         switch read {
         case .success(let listing): (self.listing, problem) = (listing, nil)
         case .failure(let error):
             listing = nil
-            let code = (error as NSError).code
-            problem = code == NSFileReadNoPermissionError || code == NSFileReadUnknownError
-                ? "Pilot may not read this folder: give it Full Disk Access in System Settings › Privacy & Security."
-                : code == NSFileReadNoSuchFileError ? "This folder is gone." : error.localizedDescription
+            problem = Self.problem(error)
         }
         if let selected, listing?.items.contains(where: { $0.id == selected }) != true { self.selected = nil }
     }
