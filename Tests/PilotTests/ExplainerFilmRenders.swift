@@ -20,7 +20,8 @@ import WebApps
 /// with /extension, and the video editor on a made-up recording (PILOT_FILM_RECORDING); and cut 5's, all in Dusk: Weather's item
 /// in the top bar, Activity, the views earlier cuts borrowed from other render tests, Keys › Mouse, Snippets, AI › Setup and
 /// Apps › Open with; and cut 6's: a tea timer in the bar, the one Extensions list, Summarise in the selection pill, Capture text's
-/// tip, and Weather's popover on Glass; and for the 1.0.3 film (P89), dictation's take in the top bar.
+/// tip, and Weather's popover on Glass; and for the 1.0.3 film (P89), dictation's take in the top bar; and film v4's (P89): Tiling's
+/// gaps dragged and the Menu bar page as its items change, each with the film's own bar.
 /// Instrument in the film's theme (`theme`), Solid (glass draws nothing offscreen), with made-up notes, files, copies and
 /// windows, never this Mac's. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter ExplainerFilmRenders`
@@ -319,6 +320,15 @@ struct ExplainerFilmRenders {
                                                     take: DictationOverlayRenders.barTake(.centre, words: Self.dictated.last))
                             .frame(width: 1920, height: 32),
                         to: dir.appendingPathComponent("bar-w12-dictation-words.png"), wait: 0.8)
+        // Film v4 (P89): Hyper+R recording, the bar's control counting its first seconds.
+        let recorder = Recorder()
+        sources.extensionBar = weather.bar
+        for second in 0...4 {
+            recorder.pose(.recording, elapsed: Double(second) + 0.2)
+            try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: Look.shared, trailing: AnyView(RecordingControl(recorder: recorder)))
+                                .frame(width: 1920, height: 32),
+                            to: dir.appendingPathComponent("bar-w12-rec-\(second).png"), wait: 0.3)
+        }
     }
 
     /// The film's tiling gaps, in points (Sven's cut 6 note: wider, so more wallpaper shows); gen.py's GO and GI match.
@@ -505,9 +515,8 @@ struct ExplainerFilmRenders {
         @Environment(\.ink) private var ink
         static let lines: [[(String, BarDropRenders.Tint)]] = {
             let prompt: [(String, BarDropRenders.Tint)] = [("~/code/site", .path), (" main", .dim), (" ❯ ", .path)]
-            return [prompt + [("git pull", .plain)], [("Already up to date.", .plain)], prompt + [("npm run build", .plain)], [],
-                    [("> site@1.0.0 build", .dim)], [("> astro build", .dim)], [], [("✓", .good), (" 12 pages built in 1.84s", .plain)], [],
-                    prompt]
+            // Simple, as Sven wants terminals in the film (v4): one command and its one line.
+            return [prompt + [("npm run build", .plain)], [("✓", .good), (" 12 pages built in 1.84s", .plain)], prompt]
         }()
 
         var body: some View {
@@ -897,6 +906,196 @@ struct ExplainerFilmRenders {
         for (place, name) in [(AppPlace(.workspaces), "workspaces"), (AppPlace(.stats), "stats"),
                               (AppPlace(.upkeep), "upkeep"), (AppPlace(.reports), "reports"), (AppPlace(.activity), "activity")] {
             try shoot(place, name)
+        }
+    }
+
+    /// Film v4 (P89, Sven's script, 2026-11-03), chapters 2 and 3 at the film's window size: Tiling's Gaps block as the
+    /// Outer slider is dragged from 32 to 64 and then Inner from 20 to 8, a still per step (each step a fresh engine that
+    /// reads its gaps as a first launch does, from a carried config in the moved home, its saved block cleared: an edit goes to the tiler, which a
+    /// render never runs); and the Menu bar page with the top bar's strip and tray, as Volume moves to the left side, then
+    /// Keep awake is added, then Wi-Fi taken off, with the film's 1920 top bar for each. The 1920 bar reads fakes; the page's strip
+    /// reads the engine's own readers for the items it draws (this Mac's volume and Wi-Fi signal, never a network's name), and its
+    /// clock this Mac's time. Nothing reaches the tiler.
+    @Test("Film v4: Tiling's gaps dragged, and the Menu bar page as an item moves sides, one is added and one taken off",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func filmV4() async throws {
+        let dir = try Self.prepare("v4")
+        StatsRenders.seed(SystemSampler.shared)
+        let carried = URL(fileURLWithPath: PilotBlockStore.path)
+        try #require(carried.path.hasPrefix(NSHomeDirectory()), "the carried config would land outside the moved home")
+        try FileManager.default.createDirectory(at: carried.deletingLastPathComponent(), withIntermediateDirectories: true)
+        func engine(inner i: Int, outer o: Int) throws -> Engine {
+            // A saved block wins over the carried file: each step starts from none, as a first launch.
+            UserDefaults.pilot().removeObject(forKey: "pilotBlock")  // PilotBlockStore.key, private
+            try "[gaps]\ninner.horizontal = \(i)\ninner.vertical = \(i)\nouter.left = \(o)\nouter.bottom = \(o)\nouter.top = \(o)\nouter.right = \(o)\n"
+                .write(to: carried, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: carried) }
+            let engine = try HomeRenders.engine()
+            try #require(engine.pilotBlock.block.gaps == PilotBlock.Gaps(inner: i, outer: o), "gaps \(engine.pilotBlock.block.gaps)")
+            return engine
+        }
+        func shoot(_ engine: Engine, _ place: AppPlace, _ name: String) throws {
+            let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
+            let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+            defer { window.close() }
+            let frame = try #require(window.contentView?.superview)
+            AppWindowController.applyLook(Look.shared, to: window)
+            window.setContentSize(NSSize(width: 1200, height: 780))
+            model.go(place)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.9))
+            frame.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
+        }
+        let steps = [32, 40, 48, 56, 64].map { (inner: Self.gaps.inner, outer: $0) } + [16, 12, 8].map { (inner: $0, outer: 64) }
+        for (n, g) in steps.enumerated() {
+            try shoot(try engine(inner: g.inner, outer: g.outer), AppPlace(.tiling), String(format: "tiling-%02d", n))
+        }
+
+        // The Menu bar page on the top bar holding the film's bar items (bars()), then the three edits a person makes by
+        // dragging: Volume to the left side, Keep awake added, Wi-Fi taken off; the film's 1920 bar for each, as bars() draws it.
+        let store = BarItemsStore.shared
+        let before = (store.settings, store.pagePlacement)
+        defer { (store.settings, store.pagePlacement) = before }
+        var s = BarSettings.defaults
+        for (kind, style) in [(BarKind.cpu, BarStyle.text), (.memory, .text), (.network, .text), (.volume, .iconPercent), (.wifi, .icon)] {
+            s.set(kind, on: true)
+            s.set(kind, style: style)
+        }
+        for kind in [BarKind.otherApps, .modes, .capture, .timer] { s.set(kind, on: false) }
+        // As the film's bar has them (bars()): the extensions before Volume, the clock at the right end.
+        s.move(.extensions, to: try #require(s.entries.firstIndex { $0.kind == .volume }))
+        s.set(.clock, side: .right)
+        store.pagePlacement = .topBar
+        // The top bar on, as the film's desktop has it: the controller reads its switch at init and opens its windows
+        // only from Engine.launch, which a render never calls.
+        UserDefaults.pilot().set(try JSONEncoder().encode(TopBarSwitch(isOn: true, savedAutohide: false)), forKey: "topBar.switch")
+        defer { UserDefaults.pilot().removeObject(forKey: "topBar.switch") }
+        let engine = try engine(inner: Self.gaps.inner, outer: Self.gaps.outer)
+        let weather = try await Self.weatherBar()
+        defer { try? FileManager.default.removeItem(at: weather.folder) }
+        let bar = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: Look(inputSources: BarReadingsTests.Sources()),
+                              readBattery: { nil }, readWiFi: { WiFiStatus(on: true, network: nil, signal: -55, rate: 573) }, clock: { ClockRenders.now },
+                              watchStats: { _ in Task {} }, calendar: ClockCalendar { ClockPopoverTests.FakeStore() })
+        let monitors = try AeroMonitorWorkspace.parse(#"[{"monitor-id": 1, "monitor-name": "Studio", "workspace": "1"}]"#)
+        let windows = try AeroWindow.parse(Self.windows(["1", "1", "2"]))
+        let observers = EngineObservers()
+        observers.tiler.seed(focused: "1", occupied: OccupiedWorkspace.list(windows), windows: windows, perMonitor: monitors)
+        // The page's own strip shows the film's workspaces too.
+        engine.observers.tiler.seed(focused: "1", occupied: OccupiedWorkspace.list(windows), windows: windows, perMonitor: monitors)
+        var sources = BarSources(readings: bar, observers: observers, sampler: .shared, keepAwake: KeepAwake(power: SetupKeepAwakeTests.FakePower()),
+                                 timer: ExtensionTimer(), pilotTitle: { "1" })
+        sources.extensionBar = weather.bar
+        var moved = s
+        moved.set(.volume, side: .left)
+        var added = moved
+        added.set(.keepAwake, on: true)
+        var edited = added
+        edited.set(.wifi, on: false)
+        for (name, settings) in [("menubar-a", s), ("menubar-b", moved), ("menubar-b2", added), ("menubar-c", edited)] {
+            store.settings = settings
+            let sides = try #require(settings.preview(.topBar).top)
+            let kinds = Set(sides.values.joined().flatMap(\.kinds))
+            // The page's strip reads the engine's readers, only for the items it draws (bars() holds its fakes the same way).
+            var live: Set<BarKind> = []
+            engine.barSources.readings.hold(kinds, replacing: &live)
+            defer { engine.barSources.readings.hold([], replacing: &live) }
+            try shoot(engine, AppPlace(.menuBar), name)
+            var held: Set<BarKind> = []
+            bar.hold(kinds, replacing: &held)
+            defer { bar.hold([], replacing: &held) }
+            try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: Look.shared).frame(width: 1920, height: 32),
+                            to: dir.appendingPathComponent("bar-\(name).png"), wait: 0.8)
+        }
+    }
+
+    /// Film v4's AI chapter (P89): what the AI can do to Pilot itself. AI › Chat in the film's 1200 by 780 window with Claude
+    /// Code signed in (AIRenders' fakes): a / typed opens the Skills list (PILOT_RESOURCES=Packaging, or it is empty); the
+    /// order typed a word at a time after /layouts; the agent's turn reading the setup with pilot commands, then waiting on
+    /// `pilot plan apply` as its plan card asks; and the turn once Apply was pressed. Fake runner and gate: nothing runs.
+    @Test("Film v4: AI › Chat's Skills, a workspace asked for with /layouts, its plan card and the plan applied",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func filmV4AI() async throws {
+        let dir = try Self.prepare("v4-ai")
+        let engine = try HomeRenders.engine()
+        let talking = try AIRenders.settings(picked: .claudeCode)
+        await talking.refreshCLIs()
+        let typing = AIChatModel()
+        let box = AIRenders.Box(settings: talking, chat: typing)
+        var sources = AIPageSources()
+        sources.send = {}
+        sources.settings = { box.settings }
+        sources.chat = { box.chat }
+        let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model)
+            .environment(engine).environment(\.aiPageSources, sources)))
+        defer { window.close() }
+        let frame = try #require(window.contentView?.superview)
+        AppWindowController.applyLook(Look.shared, to: window)
+        func shot(_ name: String) throws {
+            window.setContentSize(NSSize(width: 1200, height: 780))
+            model.go(AppPlace(.binds))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            model.go(AppPlace(.ai))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.9))
+            frame.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
+        }
+        typing.draft = "/"
+        try shot("skills")
+        let words = Self.layoutOrder.split(separator: " ")
+        for i in 1...words.count {
+            typing.draft = words.prefix(i).joined(separator: " ")
+            try shot(String(format: "o%02d", i))
+        }
+        typing.draft = ""
+
+        let plan = ControlPlan()
+        for (i, draft) in Self.layoutPlan.enumerated() { _ = try plan.add(draft, request: ControlRequest(verb: "set", args: ["row\(i)", "\(i)"])) }
+        let planning = AIChatModel()
+        planning.route = "Claude Code · Sonnet"
+        planning.viewers += 1
+        planning.send(Self.layoutOrder, acting: .success(Self.layoutTurn(applied: false)))
+        await AIChatAgentTests.rowOpen(planning)
+        let ask = plan.ask
+        Task { _ = await planning.decide(ask, program: "pilot, from claude") }
+        try #require(await AIChatAgentTests.asked(planning) != nil)
+        box.chat = planning
+        try shot("plan")
+        let done = AIChatModel()
+        done.route = "Claude Code · Sonnet"
+        done.viewers += 1
+        done.send(Self.layoutOrder, acting: .success(Self.layoutTurn(applied: true)))
+        await AIChatAgentTests.settled(done)
+        box.chat = done
+        try shot("done")
+        for chat in [typing, planning, done] { chat.clear() }
+    }
+
+    static let layoutOrder = "/layouts Ghostty left, Safari right on 3"
+
+    /// The layouts skill's change (Packaging/skills/layouts): workspace 3's preset, its two apps in columns.
+    static let layoutPlan: [ControlPlan.Draft] = [.init("Add to workspace-presets", old: "–", new: "3: Ghostty, Safari · columns")]
+
+    /// The agent's turn on the layouts skill: it reads what is there, plans the preset, then `pilot plan apply` waits on its
+    /// card; `applied`, the same turn once Apply was pressed, with its answer and the reply.
+    nonisolated static func layoutTurn(applied: Bool) -> AIChatModel.Turn {
+        { _, event throws(QuickAI.Failure) in
+            for (i, command) in ["pilot list workspaces", "pilot list apps",
+                                 "pilot add workspace-presets --workspace 3 --apps com.mitchellh.ghostty,com.apple.Safari --layout columns --plan"].enumerated() {
+                event(.toolCall(id: "l\(i)", command: command))
+                event(.toolResult(id: "l\(i)", output: "{}", isError: false))
+            }
+            event(.text("Workspace 3 opens Ghostty on the left and Safari on the right, in columns. Here is the plan."))
+            event(.toolCall(id: "apply", command: "pilot plan apply"))
+            guard applied else {
+                try? await Task.sleep(for: .seconds(60))
+                return AIChat.Reply("")
+            }
+            event(.toolResult(id: "apply", output: #"{"applied":1}"#, isError: false))
+            event(.text("Done. Hyper+3 now opens Ghostty and Safari side by side."))
+            return AIChat.Reply("Done. Hyper+3 now opens Ghostty and Safari side by side.")
         }
     }
 

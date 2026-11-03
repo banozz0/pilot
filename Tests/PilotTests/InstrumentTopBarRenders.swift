@@ -47,9 +47,11 @@ struct InstrumentTopBarRenders {
         var lights = BarDropLights()
         /// A dictation take in the bar, at its position.
         var take: DictationOverlay? = nil
+        /// What the bar adds at its right end, as a recording's control (TopBarView's `trailing`).
+        var trailing: AnyView? = nil
 
         var body: some View {
-            TopBarStrip(sides: sides, live: take.map { AnyView(DictationBarItem(overlay: $0)) }, liveSide: take?.setup.barSide ?? .left) { TopBarSlot(slot: $0, screen: InstrumentTopBarRenders.screen, sources: sources, store: .shared, lights: lights) }
+            TopBarStrip(sides: sides, trailing: trailing, live: take.map { AnyView(DictationBarItem(overlay: $0)) }, liveSide: take?.setup.barSide ?? .left) { TopBarSlot(slot: $0, screen: InstrumentTopBarRenders.screen, sources: sources, store: .shared, lights: lights) }
                 .styled(.topBar, look: look).pilotTheme(look: look)
         }
     }

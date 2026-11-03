@@ -12,7 +12,8 @@ import Testing
 /// the morph's first 50 ms, so the video replays LineMorph's timings between the stills); the clipboard panel that
 /// Return opens, its pick moving down; the first look in five looks (cut 3); cut 4's file search
 /// (a typo, the Files view and its filters), Update and Clean while they read and with their rows, and the extension the chat
-/// made, opened; and the top bar at 1920 wide, the video's screen. Built from LineMenuRenders' rows and windows, never this Mac's. Opt-in, in a moved home:
+/// made, opened; the top bar at 1920 wide, the video's screen; and film v4's (P89): an app's menu items found by typing, and
+/// Cmd+K on an app's row. Built from LineMenuRenders' rows and windows, never this Mac's. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter LauncherFilmRenders`
 extension SharedLook {
 @MainActor
@@ -144,6 +145,62 @@ struct LauncherFilmRenders {
         defer { readings.hold([], replacing: &held) }
         try writeRender(InstrumentTopBarRenders.Bar(sides: sides, sources: sources, look: look).frame(width: 1920, height: 32),
                         to: root.appendingPathComponent("bar-1920.png"), wait: 0.8)
+    }
+
+    /// Film v4 (P89, Sven's script, 2026-11-03): the launcher's depth. "new tab" typed with the browser in front, its own
+    /// menu items listed (a made-up browser's menu bar, never this Mac's), then Cmd+K on Ghostty's row and Down through
+    /// its actions; each still a key, as `render` makes the typed frames.
+    @Test("Film v4: an app's menu items found by typing, and Cmd+K on an app's row walked down", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func filmV4() async throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        testApp()
+        let faces = DisplayFaces.directory
+        DisplayFaces.directory = LookThemeTests.fonts
+        defer { DisplayFaces.directory = faces }
+        let look = Look.shared
+        let (style, theme, glass) = (look.style, look.themeID, look.glass)
+        defer { (look.style, look.themeID, look.glass) = (style, theme, glass) }
+        (look.style, look.themeID, look.glass) = (.instrument, ExplainerFilmRenders.theme, false)
+        let root = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("launcher-film")
+        let built = try LineMenuRenders.built()
+        let windows = try AeroWindow.parse(ExplainerFilmRenders.windows(["1", "1"]))
+        let browser = [
+            MenuItemNode(title: "File", enabled: true, children: [
+                MenuItemNode(title: "New Tab", enabled: true, char: "T", modifiers: 0),
+                MenuItemNode(title: "New Window", enabled: true, char: "N", modifiers: 0),
+                MenuItemNode(title: "New Private Window", enabled: true, char: "N", modifiers: 1),
+                MenuItemNode(title: "Close Tab", enabled: true, char: "W", modifiers: 0),
+            ]),
+            MenuItemNode(title: "View", enabled: true, children: [MenuItemNode(title: "Show All Tabs", enabled: true, char: "\\", modifiers: 1)]),
+            MenuItemNode(title: "History", enabled: true, children: [MenuItemNode(title: "Reopen Closed Tab", enabled: true, char: "T", modifiers: 1)]),
+            MenuItemNode(title: "Window", enabled: true, children: [MenuItemNode(title: "Move Tab to New Window", enabled: true)]),
+        ]
+        let items = MenuItemSearch.entries(browser, bundle: "com.apple.Safari", app: "Safari")
+        func nav(_ query: String) -> MenuNavigator {
+            var nav = MenuNavigator(entries: built)
+            nav.query = query
+            nav.provide(.window, MenuEntries.windows(windows, excluding: nil))
+            nav.provide(.menuItem, items)
+            return nav
+        }
+        for (name, query) in [("menuitems", "new tab"), ("appk", "ghostty")] {
+            let dir = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let chars = Array(query)
+            for i in 0...chars.count {
+                try await LineMenuRenders.render(Self.line(nav(String(chars[..<i])), windows: windows), String(format: "k%02d", i), in: dir, wait: 0.3)
+            }
+        }
+        // Cmd+K on Ghostty's row (running, so Quit and Force quit too), then Down through the list.
+        let dir = root.appendingPathComponent("appk")
+        var actions = nav("ghostty")
+        _ = actions.handle(.commandK)
+        try await LineMenuRenders.render(Self.line(actions, windows: windows), "a00", in: dir, wait: 0.5)
+        for step in 1...5 {
+            _ = actions.handle(.down)
+            try await LineMenuRenders.render(Self.line(actions, windows: windows), String(format: "a%02d", step), in: dir, wait: 0.3)
+        }
     }
 
     static func line(_ nav: MenuNavigator, windows: [AeroWindow] = []) -> MenuModel {
