@@ -21,19 +21,29 @@
 .css-fallback canvas.bgfx, .no-fx .bgfx { display: none; }
 .site .top > .still-old { display: none; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--t1) 7%, transparent) 0 5px, transparent 6px) 0 0 / 28px 28px; -webkit-mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); }
 .site .w.wide { width: min(1240px, 100% - 64px); }
-.site .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 56px; align-items: center; padding: 64px 0 104px; }
+.site .hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; padding: 40px 0 96px; }
 .site .keyline { margin-top: 26px; font: 600 clamp(20px, 2.2cqi, 26px)/1.3 var(--sans); letter-spacing: -.025em; color: var(--t1); }
 .site .keyline .kc { font-size: 1.9em; vertical-align: -.2em; margin: 0 .06em; }
 .site .keyline .dim { color: var(--t3); }
-.site .strike { font: 600 clamp(26px, 3cqi, 38px)/1.17 var(--sans); letter-spacing: -.04em; }
-.site .strike s { color: var(--struck); text-decoration-thickness: max(2px, .05em); text-decoration-color: currentColor; }
-.site .strike .p { color: var(--t1); white-space: nowrap; }
-.site .strike .p .logo { width: .74em; height: .74em; vertical-align: -.07em; margin-right: .16em; }
-.site .hero .cap { margin-top: 24px; max-width: 520px; font: 400 17px/1.55 var(--sans); color: var(--t2); }
+/* The hero's struck tools (Sven 2026-11-03, Q794, Q795: variant B, its own strike): each tool in t2 at 500 weight with a thin t3
+   line drawn apart from the letters, so the word reads through it; beside it, what Pilot does in its place. */
+.site .hlead { font: 500 16px/1.4 var(--sans); color: var(--t2); }
+.site .hrows { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.site .hrows li { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 16px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.site .hrows s { position: relative; justify-self: start; white-space: nowrap; font: 500 18px/1.3 var(--sans); letter-spacing: -.02em; color: var(--t2); text-decoration: none; }
+.site .hrows s::after { content: ""; position: absolute; left: 0; right: 0; top: 56%; height: 1.5px; background: var(--t3); transform-origin: left center; }
+.site .hrows span { font: 400 14px/1.4 var(--sans); color: var(--t3); text-wrap: pretty; }
+.site .hname { margin-top: 20px; font: 560 clamp(38px, 3.6cqi, 50px)/1 var(--sans); letter-spacing: -.04em; }
+.site .hname .logo { width: .78em; height: .78em; vertical-align: -.08em; margin-right: .16em; }
+.site .hero .cap { margin-top: 14px; max-width: 520px; font: 400 16.5px/1.55 var(--sans); color: var(--t2); }
+.site .hcut { margin: 6px 0 0; display: grid; gap: 12px; position: sticky; top: 92px; }
+.site .hcut figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font: 400 13px/1.4 var(--mono); color: var(--t3); }
+.site .hcut figcaption a { color: var(--t1); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
+.site .filmsec { margin-top: 120px; }
+.site .filmsec .film { max-width: 960px; margin-top: 32px; }
 @media (prefers-reduced-motion: no-preference) {
-  .site .strike s { text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 58% / 0 max(2px, .05em) no-repeat; animation: strike .42s var(--ease) forwards paused; animation-delay: calc(.2s + var(--i) * .12s); }
-  .site .strike .p { opacity: 0; display: inline-block; animation: rise .5s var(--ease) forwards paused; animation-delay: 1.5s; }
-  .site.go .strike s, .site.go .strike .p { animation-play-state: running; }
+  .site .hrows s::after { transform: scaleX(0); animation: strike .42s var(--ease) forwards paused; animation-delay: calc(.25s + var(--i) * .09s); }
+  .site.go .hrows s::after { animation-play-state: running; }
 }
 .site .film { margin: 0; display: grid; gap: 14px; }
 .site .film .box { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; border: 1px solid #1C1C1C; background: #080808; overflow: hidden; }
@@ -420,11 +430,14 @@
   .site .w { width: calc(100% - 32px); }
   .site .nav .links { display: none; }
   .site .nav .btn { margin-left: auto; }
-  .site .hero { grid-template-columns: 1fr; gap: 36px; padding: 40px 0 64px; }
-  .site .strike { font-size: 29px; line-height: 1.24; letter-spacing: -.035em; }
-  .site .strike .mx { display: none; }
-  .site .strike .p { display: block; margin-top: 10px; font-size: 46px; line-height: 1; }
-  .site .hero .cap { margin-top: 18px; font-size: 16px; }
+  .site .hero { grid-template-columns: 1fr; gap: 32px; padding: 28px 0 56px; }
+  .site .hrows li { grid-template-columns: 1fr; gap: 1px; padding: 7px 0; }
+  .site .hrows s { font-size: 18px; }
+  .site .hrows span { font-size: 13.5px; line-height: 1.4; }
+  .site .hname { margin-top: 18px; font-size: 38px; }
+  .site .hero .cap { margin-top: 12px; font-size: 15.5px; }
+  .site .hcut { position: static; }
+  .site .filmsec { margin-top: 80px; }
   .site .film .box { border-radius: 12px; }
   .site .film .play { left: 12px; bottom: 12px; height: 40px; font-size: 13px; }
   .site .feat { padding-top: 24px; }
@@ -500,7 +513,7 @@
 @keyframes bounce { 0% { transform: translateY(0); } 30% { transform: translateY(-14px); } 55% { transform: translateY(0); } 72% { transform: translateY(-5px); } 100% { transform: translateY(0); } }
 @keyframes bar { 0%, 100% { height: 22%; } 50% { height: var(--h, 80%); } }
 @keyframes blink { 50% { opacity: 0; } }
-@keyframes strike { to { background-size: 100% max(2px, .05em); } }
+@keyframes strike { to { transform: none; } }
 @keyframes rise { from { opacity: 0; transform: translateY(.12em); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition: none !important; } }
 
@@ -938,7 +951,6 @@
 .hbadge b { height: 22px; padding: 0 9px; border-radius: 999px; display: inline-grid; place-items: center; background: var(--lime); color: var(--on-lime); font: 600 11.5px/1 var(--mono); }
 .hbadge span { color: var(--t3); transition: transform .15s var(--ease); }
 @media (hover: hover) { .hbadge:hover span { transform: translateX(2px); color: var(--t1); } }
-.site .strike { font-weight: 480; }
 .site .hero .ctas .btn { height: 46px; padding: 0 22px; border-radius: 999px; font-size: 14.5px; }
 .tryth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; font: 400 13px/1 var(--sans); color: var(--t3); }
 .tryth span { margin-right: 4px; }
@@ -1295,6 +1307,7 @@
 .sbox video.on { opacity: 1; }
 .spp { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; right: 10px; bottom: 10px; width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; background: rgba(10, 10, 10, .55); color: #fff; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: transform .15s ease-out; }
 .spp svg { width: 14px; height: 14px; fill: currentColor; }
+.spp[hidden] { display: none; }   /* all: unset and display: grid above would show it before its clip plays, or under reduced motion */
 .spp:active { transform: scale(.96); }
 .spp:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .smore { margin-top: 80px; }
