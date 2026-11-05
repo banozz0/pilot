@@ -11,7 +11,7 @@ final class AppRolePicks {
     static let shared = AppRolePicks()
 
     /// The roles with a pick, in the block's order.
-    static let roles: [AppRole] = [.terminal, .agent, .browser, .messages, .ai, .mail, .notes, .music, .passwords]
+    static let roles: [AppRole] = [.terminal, .agent, .browser, .files, .messages, .ai, .mail, .notes, .music, .passwords]
 
     /// Each role's known apps (Agent: commands), offered in the picker when installed; "Other app…" picks any.
     static func candidates(_ role: AppRole) -> [String] {
@@ -43,17 +43,19 @@ final class AppRolePicks {
         (.mail, "https://mail.google.com", "Gmail web"),
     ]
 
-    /// A pick as the picker names it: Pilot's notes, a known site or agent, else the app's name, else the value.
-    static func name(_ value: String, appName: (String) -> String?) -> String {
-        if value == pilot { return "Pilot quick notes" }
+    /// A pick as the picker names it: Pilot's own (Files' window or Notes' quick notes, by `role`), a known site or
+    /// agent, else the app's name, else the value.
+    static func name(_ value: String, role: AppRole? = nil, appName: (String) -> String?) -> String {
+        if value == pilot { return role == .files ? "Pilot Files" : "Pilot quick notes" }
         if let known = sites.first(where: { $0.url == value })?.name ?? agents[value] { return known }
         return appName(value) ?? URL(string: value)?.host ?? value
     }
 
     private static let agents = ["claude": "Claude Code", "codex": "Codex", "gemini": "Gemini CLI", "opencode": "opencode"]
 
-    /// Pilot itself, the Notes key's choice of quick notes (Sven 2026-10-11): always offered, as it needs no install,
-    /// and the key toggles the quick notes panel (AppsModule).
+    /// Pilot itself, the Notes key's choice of quick notes (Sven 2026-10-11) and the Files key's choice of the Pilot Files
+    /// window (Q800): always offered, as it needs no install; the Notes key toggles the quick notes panel, the Files key
+    /// brings Pilot Files forward (AppsModule).
     static let pilot = "dev.banozz.pilot"
 
     private(set) var picks: [AppRole: String]
@@ -86,10 +88,11 @@ final class AppRolePicks {
         defaults.set(bundle, forKey: Self.key(role))
     }
 
-    /// The picker's choices: Pilot for Notes, the role's known apps that are installed, its websites, and the pick, each once.
+    /// The picker's choices: Pilot for Notes and Files, the role's known apps that are installed, its websites, and the
+    /// pick, each once.
     func choices(_ role: AppRole) -> [String] {
         var seen = Set<String>()
-        let pilot = role == .notes ? [Self.pilot] : []
+        let pilot = role == .notes || role == .files ? [Self.pilot] : []
         let known = Self.candidates(role).filter { has(role, $0) }
         return (pilot + known + Self.websites(role) + [picks[role]].compactMap { $0 }).filter { seen.insert($0).inserted }
     }

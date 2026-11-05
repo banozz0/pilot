@@ -131,13 +131,18 @@ extension ControlGate.Ask {
         ("drive.shortcut:", "Run shortcut"), ("drive.key:", "Send keystroke"), (ScriptCommand.prefix, "Run script"),
     ]
 
-    /// Registered actions that act outside Pilot without a page's confirm: typing into the front app, ending the session,
-    /// taking the keyboard.
-    private static let askingActions: [String: String] = [
-        "apps.pastePlain": "Type the clipboard into the front app", "system.shutDown": "Shut down the Mac",
-        "system.restart": "Restart the Mac", "system.logOut": "Log out",
-        "system.lockKeyboard": "Lock the keyboard",
+    /// The actions that cut the network, a radio, the power or the session, or take the keyboard (T52, Sven Q837): from
+    /// the socket they ask Allow, a pilot:// link needs the token (LinkToken.allows), and an extension row never runs them
+    /// (ExtensionList.allowsPilot). The tap, Pilot's own buttons and the menu run them as ever. Keep awake, lock when idle
+    /// and eject all stay off it: none of them cuts the network, a radio, the power or the session.
+    public static let cutting: [String: String] = [
+        "system.wifi": "Turn Wi-Fi on or off", "system.bluetooth": "Turn Bluetooth on or off",
+        "system.shutDown": "Shut down the Mac", "system.restart": "Restart the Mac", "system.sleep": "Put the Mac to sleep",
+        "system.logOut": "Log out", "system.lock": "Lock the screen", "system.lockKeyboard": "Lock the keyboard",
     ]
+
+    /// Registered actions that act outside Pilot without a page's confirm: typing into the front app, and `cutting`.
+    private static let askingActions = cutting.merging(["apps.pastePlain": "Type the clipboard into the front app"]) { a, _ in a }
 
     /// The question running action `id` asks, nil when it runs without one. A quicklink asks with its URL and an
     /// extension command with its extension, title and program, looked up in `quicklinks` and `extensions`; one not found

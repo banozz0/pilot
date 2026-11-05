@@ -5,9 +5,10 @@ import PilotCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The video editor (P71, after Snapzy's Studio, BSD-3): a recording on a timeline with thumbnails and a playhead, trim,
-/// crop, speed, zooms that follow the pointer and its clicks (made from the recording's clicks, each one moved, stretched
-/// and set on the timeline), P70's backdrop panel round it, and export to MP4 (H.264 or HEVC) or GIF beside it. It opens
+/// The video editor (P71, after Snapzy's Studio, BSD-3; laid out as A, Sven, Q806): a recording on a timeline with
+/// thumbnails and a playhead, trim, crop, speed, zooms that follow the pointer and its clicks (made from the recording's
+/// clicks, each one moved, stretched and set on the timeline), P70's backdrop panel round it, undo and redo, and export
+/// to MP4 (H.264 or HEVC) or GIF beside it. It opens
 /// from the recording's thumbnail, after a recording when Captures › After capture says Editor, from Edit video… (the
 /// Captures menu's, a bind) and from any place that hands it a file. One editor a recording; closing it lets everything go.
 @MainActor
@@ -30,9 +31,12 @@ enum VideoEditor {
         switch CaptureSettingsStore.shared.settings.afterCapture {
         case .editor: open(url)
         case .copy:
-            capture.pasteboard.clearContents()
-            capture.pasteboard.writeObjects([url as NSURL])
-            capture.tell("Recording copied", HUD.TipAction(title: "Edit video") { open(url) })
+            // With its pointer drawn in when the recording kept it out (Q821).
+            RecordingHandout.handOut([url]) { files in
+                capture.pasteboard.clearContents()
+                capture.pasteboard.writeObjects(files as [NSURL])
+                capture.tell("Recording copied", HUD.TipAction(title: "Edit video") { open(url) })
+            }
         case .thumbnail:
             Task { @MainActor in
                 // No frame to show: a tip instead, so a recording never ends in silence.
@@ -42,12 +46,15 @@ enum VideoEditor {
         }
     }
 
+    /// Where in a recording its thumbnail's frame is, seconds.
+    nonisolated static let posterTime = 0.2
+
     /// A frame of the recording for its thumbnail, read off the main thread at a thumbnail's size.
     static func poster(_ url: URL) async -> CGImage? {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         generator.maximumSize = CGSize(width: 960, height: 960)
         generator.appliesPreferredTrackTransform = true
-        return try? await generator.image(at: CMTime(seconds: 0.2, preferredTimescale: 600)).image
+        return try? await generator.image(at: CMTime(seconds: posterTime, preferredTimescale: 600)).image
     }
 
     /// Edit video…: a pick of a recording in the recordings folder, then the editor on it.
@@ -73,9 +80,9 @@ enum VideoEditor {
             if onScreen { panel.makeKeyAndOrderFront(nil); panel.raised() }
             return
         }
-        let look = Look.shared, tokens = look.chromeTokens(.hud), library = BackdropLibrary.shared
-        let model = VideoEditorModel(url: url, panelOpen: library.panelOpen)
-        model.panelChanged = { library.panelOpen = $0 }
+        let look = Look.shared, tokens = look.chromeTokens(.hud)
+        // Opens on Clip: the inspector's Backdrop tab is its own, never the capture editor's panel (BackdropLibrary.panelOpen).
+        let model = VideoEditorModel(url: url)
         model.tell = { text, file in
             HUD.tip(text, seconds: 6, action: file.map { file in HUD.TipAction(title: "Show") { NSWorkspace.shared.activateFileViewerSelecting([file]) } })
         }
@@ -148,6 +155,7 @@ final class VideoEditorPanel: NSPanel, BorderedWindow {
         if event.type == .leftMouseDown { raised() }
     }
 
+    /// A key's meaning to the editor, Shift with it (⇧⌘Z redoes; the model takes no other shifted key).
     static func key(_ event: NSEvent) -> VideoEditorModel.Key? {
         switch Int64(event.keyCode) {
         case KeyCode.escape: return .escape
@@ -157,8 +165,8 @@ final class VideoEditorPanel: NSPanel, BorderedWindow {
         default:
             guard let c = event.charactersIgnoringModifiers, !c.isEmpty else { return nil }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags.isDisjoint(with: [.control, .option, .shift]) else { return nil }
-            return .char(c, command: flags.contains(.command))
+            guard flags.isDisjoint(with: [.control, .option]) else { return nil }
+            return .char(c, command: flags.contains(.command), shift: flags.contains(.shift))
         }
     }
 }

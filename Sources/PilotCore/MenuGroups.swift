@@ -74,9 +74,11 @@ public enum MenuGroups {
         guard rows[..<i].allSatisfy({ (FuzzyRanker.score(query, in: $0.searchText) ?? 0) <= best
                                       && FuzzyRanker.strength(query, of: $0.title) <= strength }) else { return rows }
         let app = rows[i], prefix = app.title.lowercased() + ": "
-        // An app command Pilot's own action does (Music's Play or pause, P38) is the app's by `app`, not by its title.
+        // An app command Pilot's own action does (Music's Play or pause, P38) is the app's by `app`, not by its title; so are
+        // its menu items, live or saved, and Pilot's own actions for it (Bitwarden's Generate a password, T41).
         func owned(_ row: MenuEntry) -> Bool {
-            row.kind.tab == .action && (row.title.lowercased().hasPrefix(prefix) || row.app.map(MenuEntry.Target.app) == app.target)
+            if case .app(let bundle) = app.target, MenuNavigator.belongs(row, to: bundle) { return true }
+            return row.kind.tab == .action && row.title.lowercased().hasPrefix(prefix)
         }
         return [app] + rows.filter(owned) + rows.filter { $0.id != app.id && !owned($0) }
     }
@@ -105,11 +107,13 @@ public enum MenuGroups {
             return out
         }
         guard searching else { return [:] }
-        // The best match's own commands, which appFirst put under it, head with its name (P38, frame 2).
+        // The best match's own actions, which the root lists right under it (P38, frame 2; Q831), head with its name: its
+        // commands, menu items and Pilot's own actions for it.
         let lead: String? = if case .app(let bundle)? = rows.first?.target { bundle } else { nil }
         for (i, row) in rows.enumerated() {
             let group = i == 0 && group(of: row) != .askOrSearch ? .bestMatch : group(of: row)
-            head(i, group == .commands && lead != nil && row.app == lead ? .section("\(rows[0].title) commands") : group)
+            let own = i > 0 && !row.isOffer && lead.map { MenuNavigator.belongs(row, to: $0) } == true
+            head(i, own ? .section("\(rows[0].title) commands") : group)
         }
         return out
     }

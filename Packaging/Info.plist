@@ -17,6 +17,21 @@
     <key>CFBundleURLName</key><string>dev.banozz.pilot</string>
     <key>CFBundleURLSchemes</key><array><string>pilot</string></array>
   </dict></array>
+  <!-- Pilot opens .txt and .md files (T49, Q834): an Alternate editor, so it is listed in Finder's Open With and Default
+       apps' pickers and never takes over a type by itself; Sven picks it. AppDelegate routes the files to TextWindows. -->
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Markdown</string>
+    <key>CFBundleTypeRole</key><string>Editor</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>net.daringfireball.markdown</string></array>
+    <key>NSDocumentClass</key><string>PilotTextDocument</string>
+  </dict><dict>
+    <key>CFBundleTypeName</key><string>Plain text</string>
+    <key>CFBundleTypeRole</key><string>Editor</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>public.plain-text</string></array>
+    <key>NSDocumentClass</key><string>PilotTextDocument</string>
+  </dict></array>
   <key>LSMinimumSystemVersion</key><string>27.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -36,6 +51,7 @@
   <key>NSLocationWhenInUseUsageDescription</key><string>macOS shows Wi-Fi network names only to apps with Location access. Pilot uses it to show and join Wi-Fi networks in Setup and for nothing else. It asks only when you press Show networks there.</string>
   <key>NSMicrophoneUsageDescription</key><string>Pilot listens while you dictate with Pilot (Voice › Dictation) and writes it down on this Mac, and records your microphone into a screen recording when you pick Microphone as its sound on Captures.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Pilot marks the days with events and lists your next events in the clock's calendar. It asks only when you turn on Show events there.</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>Pilot marks the days with reminders due and lists them with your events in the clock's calendar. It asks only when you turn on Show events there.</string>
   <key>NSServices</key><array><dict>
     <key>NSMenuItem</key><dict><key>default</key><string>Convert with Pilot…</string></dict>
     <key>NSMessage</key><string>convertFiles</string>

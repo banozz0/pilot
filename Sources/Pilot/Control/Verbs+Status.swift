@@ -217,7 +217,7 @@ final class ControlStatus {
         return sampler.latest.map { ($0, sampler.latestValues) }
     }
 
-    /// Onboarding's System Events probe (OnboardingView.mayControlSystemEvents, private there): TCC asked without a prompt.
+    /// The System Events probe onboarding's Permissions step ran before 1.1 (T54): TCC asked without a prompt.
     nonisolated static func mayControlSystemEvents() -> Int32 {
         var target = AEAddressDesc()
         let id = "com.apple.systemevents"

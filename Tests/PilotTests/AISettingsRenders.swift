@@ -11,7 +11,8 @@ import Testing
 /// Instrument and Toybox on Lagoon, and Instrument on Porcelain, in each state: the subscription signed in, signed out and
 /// missing, the Anthropic key missing, saved and tested, and rejected, OpenAI with no key, Ollama with a listed model
 /// that is not running, an endpoint set up, and the ChatGPT and Google subscriptions connected, not connected and
-/// missing; Claude Code's picker named by the versions its aliases run (Sven 2026-10-31, build 3). Fake Keychain, network
+/// missing; Claude Code's picker named by the versions its aliases run (Sven 2026-10-31, build 3); the key field with the
+/// keyboard and its secure-input line (T48). Fake Keychain, network
 /// and CLIs; nothing is read, run or sent.
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter AISettingsRenders`
 extension SharedLook {
@@ -86,6 +87,11 @@ struct AISettingsRenders {
                 let page = Ground { block.frame(width: 760, height: 2000, alignment: .top) }.styled(.page(.ai)).pilotTheme(look: look)
                 try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("\(name)-\(theme)-\(state).png"))
             }
+            // The key field with the keyboard: the line under it says why Hyper waits (T48).
+            let noKey = try block(.anthropicAPI)
+            let typing = Ground { noKey.frame(width: 760, height: 2000, alignment: .top) }
+                .environment(\.showsSecureFieldTip, true).styled(.page(.ai)).pilotTheme(look: look)
+            try RestyledRenders.writeTrimmed(rendered(typing), from: 0, to: dir.appendingPathComponent("\(name)-\(theme)-4b-api-key-typing.png"))
         }
     }
 

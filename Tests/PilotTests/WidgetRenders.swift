@@ -112,6 +112,7 @@ struct WidgetRenders {
         case .notes: return WidgetNotes.blocks(notes, picked: note).blocks
         case .repos: return WidgetRepos.blocks(repos)
         case .none, .github, .markets: return []
+        case .ci: return WidgetCI.preview()
         case .reading(let readings):
             let data: JSONValue = readings.count == 1 ? Self.readings[readings[0].rawValue]!
                 : .object(Dictionary(uniqueKeysWithValues: readings.map { ($0.rawValue, Self.readings[$0.rawValue]!) }))
@@ -141,7 +142,7 @@ struct WidgetRenders {
         defer { (look.themeID, look.style, look.glass) = saved }
         look.themeID = "lagoon"
         #expect(ReadyWidgets.inCode.map(\.id) == [ReadyWidgets.thisMac, ReadyWidgets.clock, ReadyWidgets.note, ReadyWidgets.upkeep,
-                                                  ReadyWidgets.launcher, ReadyWidgets.notes, ReadyWidgets.repos, ReadyWidgets.github, ReadyWidgets.nowPlaying, ReadyWidgets.folder, ReadyWidgets.markets])
+                                                  ReadyWidgets.launcher, ReadyWidgets.notes, ReadyWidgets.repos, ReadyWidgets.github, ReadyWidgets.ci, ReadyWidgets.nowPlaying, ReadyWidgets.folder, ReadyWidgets.markets])
         #expect(Widget.menuPicks(ReadyWidgets.widget(ReadyWidgets.launcher)?.menuField?.initial) == Self.picked.map { "action:\($0.action)" })
         // A Launcher placed before 1.0.2 kept bare action ids: they read as their rows.
         #expect(Widget.menuPicks(.array([.string("apps.clean"), .string("app:com.apple.Safari"), .string("apps.open:x"), .string("action:apps.clean")]))

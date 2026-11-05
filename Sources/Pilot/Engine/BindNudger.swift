@@ -41,7 +41,7 @@ final class BindNudger {
 
     private func show(_ name: String, key: String, from: String) {
         guard let text = limits.hint(for: name, key: key, at: .now) else { return }
-        nlog.notice("hint after a \(from, privacy: .public): \(text, privacy: .public)")
+        nlog.notice("hint after a \(from, privacy: .public): \(text, privacy: .private)")
         HUD.tip(text)
     }
 

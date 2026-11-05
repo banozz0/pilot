@@ -168,6 +168,7 @@ extension MenuEntry {
         "system.darkMode": ("circle.lefthalf.filled", .second), "system.keepAwake": ("cup.and.saucer", .amber),
         "system.nightShift": ("sun.min", .amber), "system.desktopIcons": ("rectangle.grid.3x2", .neutral), "system.idleLock": ("hourglass", .neutral),
         "system.wifi": ("wifi", .accent), "system.bluetoothSettings": ("dot.radiowaves.left.and.right", .accent),
+        "system.bluetooth": ("antenna.radiowaves.left.and.right", .accent),
         "system.displaySettings": ("display", .third), "system.rotateDisplay": ("rotate.right", .third), "system.focusSettings": ("moon.stars", .second),
         "workspaces.rescue": ("lifepreserver", .good), "system.killProcess": ("xmark.circle", .problem),
         "system.speedTest": ("gauge.with.dots.needle.67percent", .third),
@@ -344,7 +345,7 @@ extension RowAction {
     var group: Int {
         switch self {
         case .open, .openWith, .convert, .run, .focus, .install, .showInFinder, .searchInside, .setBind, .changeLanguages, .openApp: 0
-        case .copyPath, .copyBundleID, .copyTitle, .copyID: 1
+        case .copyPath, .copyBundleID, .copyTitle, .copyID, .copyEmoji: 1
         case .favourite, .unfavourite, .resetRanking, .setAlias: 2
         case .quit, .forceQuit, .uninstall, .trash: 3
         }
@@ -361,7 +362,7 @@ extension RowAction {
         case .install: "arrow.down.circle"
         case .showInFinder: "folder"
         case .setBind: "command"
-        case .copyPath, .copyBundleID, .copyTitle, .copyID: "doc.on.doc"
+        case .copyPath, .copyBundleID, .copyTitle, .copyID, .copyEmoji: "doc.on.doc"
         case .favourite: "star"
         case .unfavourite: "star.slash"
         case .resetRanking: "arrow.counterclockwise"

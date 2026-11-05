@@ -7,9 +7,11 @@ import Testing
 @testable import Pilot
 
 /// Pilot's folder designs (P54) as Pilot loads them, through `FolderDesigns.art` into NSImage: each at 16, 32, 128 and
-/// 512 px on Finder's light and dark grounds, one sheet of all thirteen (the twelve and plain) per ground, two folders in
-/// the moved home dressed and their icons read back as Finder reads them, plain with a picture in its front, and Files ›
-/// Folders' Design grid in Lagoon (dark) and Porcelain (light). Opt-in like the other renders:
+/// 512 px on Finder's light and dark grounds, sheets of all of them (the twelve, plain and the kinds' 54, T61) twelve to a
+/// sheet per ground, two folders in the moved home dressed and their icons read back as Finder reads them, plain with a
+/// picture in its front, and Files › Folders' Design list in Lagoon (dark) and Porcelain (light) with the moved home's
+/// Downloads ticked, so its kind's designs come first. On the way it checks the picker lists a Downloads folder's designs
+/// first and that pictures waiting in To add join Your designs once. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> PILOT_RESOURCES=Packaging swift test --filter FolderDesignsRenders`
 extension SharedLook {
 @MainActor
@@ -43,7 +45,7 @@ struct FolderDesignsRenders {
 
     @Test("Each folder design at 16, 32, 128 and 512 px on light and dark, and the Design grid",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RESOURCES"] != nil))
-    func render() throws {
+    func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath() == URL(fileURLWithPath: home).resolvingSymlinksInPath(), "the home directory did not move; refusing to touch Sven's files")
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("folder-designs")
@@ -56,11 +58,14 @@ struct FolderDesignsRenders {
                 let rep = try Self.strip(Self.sizes.map { (image, $0) }, ground: colour)
                 try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(id)-\(ground).png"))
             }
-            // All thirteen at 128 over their 16 and 32: the set as a whole, and how it reads small.
-            let big = try Self.strip(art.map { ($0.1, 128) }, ground: colour)
-            let small = try Self.strip(art.flatMap { [($0.1, 16), ($0.1, 32)] }, ground: colour, gap: 20)
-            for (name, rep) in [("sheet-\(ground)-128", big), ("sheet-\(ground)-small", small)] {
-                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
+            // Twelve at a time at 128 over their 16 and 32: the set as a whole, and how it reads small.
+            for (n, start) in stride(from: 0, to: art.count, by: 12).enumerated() {
+                let some = art[start..<min(start + 12, art.count)]
+                let big = try Self.strip(some.map { ($0.1, 128) }, ground: colour)
+                let small = try Self.strip(some.flatMap { [($0.1, 16), ($0.1, 32)] }, ground: colour, gap: 20)
+                for (name, rep) in [("sheet-\(ground)-128-\(n + 1)", big), ("sheet-\(ground)-small-\(n + 1)", small)] {
+                    try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
+                }
             }
         }
 
@@ -80,13 +85,35 @@ struct FolderDesignsRenders {
         }
 
         // Plain with a picture of your own (any picture that is not cut out) fitted into its front, as `icon` fits it.
-        let photo = try #require(FolderDesigns.picture(dir.appendingPathComponent("sheet-light-128.png")))
+        let photo = try #require(FolderDesigns.picture(dir.appendingPathComponent("sheet-light-128-1.png")))
         for (ground, colour) in Self.grounds {
             let rep = try Self.strip([(photo, 128), (photo, 512)], ground: colour)
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("plain-picture-\(ground).png"))
         }
 
-        // Files › Folders with no folders added: the Design grid as the page shows it.
+        // A known folder offers its kind's designs first (T61): the moved home's Downloads in the picker and on the page.
+        let downloads = URL(fileURLWithPath: home).appending(path: "Downloads", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let none = YourFolderDesigns(folder: URL(fileURLWithPath: home).appending(path: "No designs", directoryHint: .isDirectory))
+        let picker = FolderDesignSource([downloads], inGit: [], yours: none)
+        let first = picker.rows().prefix(3).map(\.section)
+        #expect(picker.suggested.map(\.id) == ["downloads"] && first == ["For Downloads", "For Downloads", "For Downloads"],
+                "Downloads suggests \(picker.suggested.map(\.id)); the picker's first sections \(first)")
+        #expect(FolderDesigns.kind(of: URL(filePath: "/Applications")) == nil, "/Applications is never suggested a design")
+
+        // Pictures waiting in To add join Your designs once, the folder emptied; a second pass adds nothing.
+        let store = YourFolderDesigns(folder: URL(fileURLWithPath: home).appending(path: "Your folder designs", directoryHint: .isDirectory))
+        let waiting = store.folder.appending(path: YourFolderDesigns.waiting, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: waiting, withIntermediateDirectories: true)
+        for id in ["lagoon", "downloads-pour"] {
+            try FileManager.default.copyItem(at: try #require(BundledJSON.url(id, "heic", in: "folder-designs")), to: waiting.appending(path: "\(id) text-free.heic"))
+        }
+        let added = store.addWaiting().map(\.design.title)
+        #expect(added == ["downloads-pour text-free", "lagoon text-free"] && store.list().count == 2 && !FileManager.default.fileExists(atPath: waiting.path),
+                "added \(added), listed \(store.list().count)")
+        #expect(store.addWaiting().isEmpty)
+
+        // Files › Folders with Downloads ticked: the Design list by kind as the page shows it.
         testApp()
         DisplayFaces.directory = LookThemeTests.fonts
         DisplayFaces.register()
@@ -96,7 +123,9 @@ struct FolderDesignsRenders {
         look.style = .instrument
         for theme in ["lagoon", "porcelain"] where PilotTheme.named(theme) != nil {
             look.themeID = theme
-            let view = FolderDesignsView().frame(width: 900, height: 760).background(Theme.background).styled(.page(.files)).pilotTheme(look: look)
+            let model = FolderDesignsModel(yours: none)
+            await model.add([downloads])
+            let view = FolderDesignsView(model: model).frame(width: 900, height: 2060).background(Theme.background).styled(.page(.files)).pilotTheme(look: look)
             try writeRender(view, to: dir.appendingPathComponent("grid-\(theme).png"))
         }
     }

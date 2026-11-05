@@ -223,6 +223,8 @@ struct SettingsSchemaPart2Tests {
         "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
         "look.windowBorderColour", "look.defocusStrength", "look.defocusDim", "look.defocusShake", "look.defocusShakeSwings",
         "look.defocusShakeWithin", "look.appsShowAs", "look.windowLayout", "look.strength", "look.material",
+        "look.cursor", "look.cursorColours", "look.cursorFill", "look.cursorOutline", "look.cursorEffectColour", "look.cursorApplied", "look.cursorTrail", "look.cursorRing", "look.cursorRipple",
+        "look.cursorSpotlight",
         "clipboard.keepCount", "clipboard.keepDays", "clipboard.saveImages", "clipboard.returnAction", "clipboard.sort",
         "clipboard.sortReversed", "clipboard.ignoredApps",
         "files.showHidden", "files.excluded", "passwords.length", "passwords.symbols", "passwords.clearAfter",
@@ -256,7 +258,7 @@ struct SettingsSchemaPart2Tests {
     static let internalState: Set = ["ai.models.*", "workspaces.atLoginSession", "pilotBlock.yabaiFloatsCarried", "pilotBlock.floatNamesMoved",
                                      "topBar.strips", "wallpaper.seed", "wallpaper.workspaceImages", "appWindow.page", "menu.giphyKind", "notes.last", "notes.frameMargins", "notes.welcomed",
                                      "setup.wifi.shown", "setup.bluetooth.shown", "pilot.notifications.decision",
-                                     "pilot.notifications.macOSOffSaid"]
+                                     "pilot.notifications.macOSOffSaid", "look.cursorApplied"]
     /// Read once to carry a setting over, never written.
     static let carriedOver: Set = ["look.strength", "look.material", "menuBar.stats", "topBar.settings", "pomodoro.countdown"]
     /// macOS's own, read only.

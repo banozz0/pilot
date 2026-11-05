@@ -131,6 +131,52 @@
       "actions": [
         { "label": "New Card", "route": "drive.menu:com.apple.AddressBook:File > New Card", "symbol": "person.crop.circle.badge.plus", "opens": true }
       ]
+    },
+    {
+      "name": "Visual Studio Code",
+      "bundle": "com.microsoft.VSCode",
+      "doc": "https://github.com/microsoft/vscode/blob/main/src/vs/workbench/browser/parts/titlebar/menubarControl.ts",
+      "checked": "2026-11-04",
+      "actions": [
+        { "label": "New Window", "route": "drive.menu:com.microsoft.VSCode:File > New Window", "symbol": "macwindow.badge.plus", "opens": true },
+        { "label": "New Text File", "route": "drive.menu:com.microsoft.VSCode:File > New Text File", "symbol": "doc.badge.plus", "opens": true },
+        { "label": "Command Palette", "route": "drive.menu:com.microsoft.VSCode:View > Command Palette...", "symbol": "command", "opens": true },
+        { "label": "Go to File", "route": "drive.menu:com.microsoft.VSCode:Go > Go to File...", "symbol": "magnifyingglass", "opens": true },
+        { "label": "New Terminal", "route": "drive.menu:com.microsoft.VSCode:Terminal > New Terminal", "symbol": "apple.terminal", "opens": true }
+      ]
+    },
+    {
+      "name": "System Settings",
+      "bundle": "com.apple.systempreferences",
+      "doc": "https://support.apple.com/guide/mac-help/change-system-settings-mh15217/mac",
+      "checked": "2026-11-04",
+      "actions": [
+        { "label": "Software Update", "route": "drive.url:x-apple.systempreferences:com.apple.Software-Update-Settings.extension", "symbol": "arrow.triangle.2.circlepath", "opens": true },
+        { "label": "Privacy & Security", "route": "drive.url:x-apple.systempreferences:com.apple.preference.security", "symbol": "hand.raised", "opens": true },
+        { "label": "Notifications", "route": "drive.url:x-apple.systempreferences:com.apple.Notifications-Settings.extension", "symbol": "bell.badge", "opens": true },
+        { "label": "Keyboard", "route": "drive.url:x-apple.systempreferences:com.apple.Keyboard-Settings.extension", "symbol": "keyboard", "opens": true },
+        { "label": "Storage", "route": "drive.url:x-apple.systempreferences:com.apple.settings.Storage", "symbol": "internaldrive", "opens": true }
+      ]
+    },
+    {
+      "name": "Ghostex",
+      "bundle": "com.madda.ghostex.gpui",
+      "doc": "https://github.com/maddada/Ghostex/blob/main/apps/desktop/src/app/helpers/os_cli/main_menus.rs",
+      "checked": "2026-11-04",
+      "actions": [
+        { "label": "New Window", "route": "drive.menu:com.madda.ghostex.gpui:File > New Window", "symbol": "macwindow.badge.plus", "opens": true },
+        { "label": "Settings", "route": "drive.menu:com.madda.ghostex.gpui:Ghostex > Settings…", "symbol": "gearshape", "opens": true }
+      ]
+    },
+    {
+      "name": "Vesktop",
+      "bundle": "dev.vencord.vesktop",
+      "doc": "https://github.com/Vencord/Vesktop/blob/main/src/main/mainWindow.ts",
+      "checked": "2026-11-04",
+      "actions": [
+        { "label": "Settings", "route": "drive.menu:dev.vencord.vesktop:Vesktop > Settings", "symbol": "gearshape", "opens": true },
+        { "label": "Relaunch", "route": "drive.menu:dev.vencord.vesktop:Vesktop > Relaunch", "symbol": "arrow.clockwise", "opens": true }
+      ]
     }
   ]
 }

@@ -92,6 +92,25 @@ struct CaptureRedactTests {
         #expect(model.hint == "No text in that area")
     }
 
+    @Test("A read that fails says so: Redact and a Text only drag never claim there was nothing to cover; the next press reads again")
+    func failedRead() async throws {
+        let model = Self.model(try #require(CaptureFixture.image()))
+        var reads = 0
+        model.readCapture = { reads += 1; return nil }
+        model.redactSensitive()
+        await Self.settle(model)
+        #expect(model.hint == "Couldn't read the text")
+        #expect(Self.boxes(model).isEmpty)
+        model.pick(.blur)
+        model.setTextOnly(true)
+        let card = CaptureFixture.planCard
+        model.begin(CGPoint(x: card.minX, y: card.minY)); model.end(CGPoint(x: card.maxX, y: card.maxY))
+        await Self.settle(model)
+        #expect(model.document.marks.isEmpty)
+        #expect(model.hint == "Couldn't read the text")
+        #expect(reads >= 2, "a failed read is not kept")
+    }
+
     @Test("The editor with auto-redact's covers and a Text only blur renders in Instrument and Toybox",
           .enabled(if: CaptureEditorRenders.env["PILOT_RENDER_DIR"] != nil && CaptureEditorRenders.env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {

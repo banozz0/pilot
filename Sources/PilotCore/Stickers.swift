@@ -42,6 +42,10 @@ public struct StickerFile: Sendable, Equatable {
 /// (Giphy, story 164); emoji live in Trigger › Emoji's grid since P39 (Q290). A pick goes on the pasteboard for one
 /// paste, marked transient so no clipboard history keeps it.
 public enum Stickers {
+    /// The word that opens this branch from the root on GIPHY's GIFs, searching what follows it ("gif funny", T39), as
+    /// the branch's own alias does too.
+    public static let gifWord = "gif"
+    public static let branchKey = "branch:\(MenuBranch.stickers.rawValue)"
     /// The GIFs folder: the one picked on Defaults › Folders (story 160), else Pilot's own.
     public static var folder: URL { pickedLock.withLock { _picked } ?? standardFolder }
     public static var standardFolder: URL {

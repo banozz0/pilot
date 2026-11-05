@@ -116,9 +116,10 @@ struct NotesNote: View {
         GeometryReader { g in
             let edge = NotesMeasure.side(width: g.size.width - beside, measure: measure, least: markdown.inset.width)
             let width = min(measure, g.size.width - beside - 2 * markdown.inset.width)
+            // The open note, not the list's preview or the Trash question.
+            let shown = preview == nil && !confirming
             ZStack(alignment: .topLeading) {
                 // Kept under the preview and the question, so the caret, the scroll and Undo are where they were after.
-                let shown = preview == nil && !confirming
                 NotesEditor(text: $model.text, style: markdown, editable: !confirming, focused: !model.listFocused && !confirming,
                             folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil) {
                     // A click in the note, or the window handing it the keyboard, takes it from the list.
@@ -144,6 +145,36 @@ struct NotesNote: View {
             .overlay(alignment: .top) {
                 if let problem = model.problem { NotesProblem(text: problem).padding(.horizontal, edge + beside).padding(.top, 4) }
             }
+            .overlay(alignment: .bottomLeading) {
+                // The saved text, so a keystroke reads no date.
+                if shown, let note = model.note { NotesReminders(text: note.text).padding(.leading, edge + beside).padding(.bottom, 12) }
+            }
+        }
+    }
+}
+
+/// The open note's dated lines still ahead, at the foot of its words (P66): each line's time, up to three.
+struct NotesReminders: View {
+    @Environment(\.style) private var style
+    let text: String
+
+    var body: some View {
+        let ahead = NoteReminders.shared.upcoming(in: text)
+        if !ahead.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(ahead.prefix(3).enumerated()), id: \.offset) { _, reminder in
+                    HStack(spacing: 6) {
+                        Image(systemName: "bell").font(.system(size: 9, weight: .semibold)).foregroundStyle(style.color(\.accent))
+                        Text(NotesText.reminder(reminder.at)).monospacedDigit().foregroundStyle(style.color(\.text2)).fixedSize()
+                        Text(Notes.title(of: reminder.line)).foregroundStyle(style.color(\.text3)).lineLimit(1).truncationMode(.tail)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .font(style.font(\.caption))
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(style.color(\.panel), in: RoundedRectangle(cornerRadius: 6))
+            .help("Pilot reminds you at these times, with Done and Snooze")
         }
     }
 }
@@ -555,6 +586,11 @@ enum NotesText {
         let calendar = Calendar.current
         let day = calendar.isDateInToday(date) ? "today" : calendar.isDateInYesterday(date) ? "yesterday" : "on \(self.day.string(from: date))"
         return "\(day) at \(clock.string(from: date))"
+    }
+
+    /// A reminder's time: "today at 18:00", "tomorrow at 18:00", "on 6 Nov at 09:30".
+    static func reminder(_ date: Date) -> String {
+        Calendar.current.isDateInTomorrow(date) ? "tomorrow at \(clock.string(from: date))" : when(date)
     }
 
     /// Empty Scratch's keys, the drawer's, and the Trash question's (direction B: no foot, each where it applies).

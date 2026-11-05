@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Pilot's own captures (spec `capture.html`, Sven's yes Q156): what a capture or recording file is called and where it
@@ -92,6 +93,39 @@ public enum CaptureFiles {
     }
 }
 
+/// The screen an area capture was cut from (P77): the display's still at its own pixels and where the capture sits in
+/// it, so the editor can uncrop past the capture's edge, up to that display and no other. Kept in memory only, never in
+/// a file (Sven, Q814), while the capture's thumbnail or editor is up (CaptureHistoryStore).
+public struct CaptureGrab: @unchecked Sendable {
+    /// The display's still.
+    public let image: CGImage
+    /// The capture's pixels in the still, from its top left: exactly the ones the capture was cut from.
+    public let taken: CGRect
+    public let scale: CGFloat
+    /// The windows on the display as it was taken, in its points from its top left: the crop snaps to their edges (C3).
+    public let windows: [CGRect]
+
+    public init(image: CGImage, taken: CGRect, scale: CGFloat, windows: [CGRect] = []) {
+        self.image = image
+        self.taken = taken.integral
+        self.scale = scale
+        self.windows = windows
+    }
+
+    /// The capture's place in the still, in points.
+    public var takenPoints: CGRect { CGRect(x: taken.minX / scale, y: taken.minY / scale, width: taken.width / scale, height: taken.height / scale) }
+
+    /// The still's size in points.
+    public var size: CGSize { CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale) }
+
+    /// Whether it is the screen of a capture `width` × `height` pixels at `scale`: a capture written over since (Done with
+    /// a crop or a backdrop) or another file under the name is not, and gets no uncrop.
+    public func fits(width: Int, height: Int, scale: CGFloat) -> Bool {
+        Int(taken.width) == width && Int(taken.height) == height && abs(self.scale - scale) < 0.01
+            && CGRect(x: 0, y: 0, width: image.width, height: image.height).contains(taken) && taken.size != CGSize(width: image.width, height: image.height)
+    }
+}
+
 /// The last area captured, on its display (CP10): Hyper+Alt+S takes it again without the overlay.
 public struct LastArea: Codable, Equatable, Sendable {
     public let display: UInt32
@@ -173,11 +207,14 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var recordFPS: Int
     /// Desktop icons are left out of captures and recordings (DesktopIcons); off, they are in them as on screen.
     public var hideDesktopIcons: Bool
+    /// Every capture's copy framed in this look (C11, Xnapper's): a BackdropPreset's id, Pilot's own look or a saved one;
+    /// nil, the copy is the capture as taken. The saved file stays as taken, so its editor and uncrop start from it.
+    public var everyCaptureLook: String?
 
     public init(capturesFolder: String? = nil, recordingsFolder: String? = nil, audio: Audio = .none,
                 countdown: Int = 3, showClicks: Bool = false, afterCapture: AfterCapture = .thumbnail, delay: Int = 3, autoScroll: Bool = true,
                 recordQuality: RecordQuality = .high, recordResolution: RecordResolution = .native, recordFPS: Int = 60,
-                hideDesktopIcons: Bool = false, thumbnailPlace: ThumbnailPlace = .bottomRight) {
+                hideDesktopIcons: Bool = false, thumbnailPlace: ThumbnailPlace = .bottomRight, everyCaptureLook: String? = nil) {
         self.capturesFolder = capturesFolder
         self.recordingsFolder = recordingsFolder
         self.audio = audio
@@ -191,11 +228,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         self.recordFPS = recordFPS
         self.hideDesktopIcons = hideDesktopIcons
         self.thumbnailPlace = thumbnailPlace
+        self.everyCaptureLook = everyCaptureLook
     }
 
     private enum CodingKeys: String, CodingKey {
         case capturesFolder, recordingsFolder, audio, countdown, showClicks, afterCapture, delay, autoScroll, recordQuality,
-             recordResolution, recordFPS, hideDesktopIcons, thumbnailPlace, openEditor
+             recordResolution, recordFPS, hideDesktopIcons, thumbnailPlace, everyCaptureLook, openEditor
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -213,6 +251,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         try c.encode(recordFPS, forKey: .recordFPS)
         try c.encode(hideDesktopIcons, forKey: .hideDesktopIcons)
         try c.encode(thumbnailPlace, forKey: .thumbnailPlace)
+        try c.encodeIfPresent(everyCaptureLook, forKey: .everyCaptureLook)
     }
 
     /// Settings saved before a key existed read that key as its default, never as no settings at all.
@@ -234,6 +273,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         recordFPS = try c.decodeIfPresent(Int.self, forKey: .recordFPS) ?? d.recordFPS
         hideDesktopIcons = try c.decodeIfPresent(Bool.self, forKey: .hideDesktopIcons) ?? d.hideDesktopIcons
         thumbnailPlace = try c.decodeIfPresent(ThumbnailPlace.self, forKey: .thumbnailPlace) ?? d.thumbnailPlace
+        everyCaptureLook = try c.decodeIfPresent(String.self, forKey: .everyCaptureLook)
     }
 
     public static let `default` = CaptureSettings()

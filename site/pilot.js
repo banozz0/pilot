@@ -24,7 +24,7 @@
   const wireSeg = (el, name, fn) => $$(`[data-sg="${name}"] button`, el).forEach(b => b.addEventListener('click', () => { $$(`[data-sg="${name}"] button`, el).forEach(x => x.setAttribute('aria-pressed', x === b)); fn(+b.dataset.v); }));
   const menuShell = (mode, q, ph, filters, foot, split) => `<div class="p-menu"><div class="mnu pn"><label class="q">${mode ? `<span class="md">${mode}</span>` : ''}<span class="pr">❱</span><input type="text" value="${esc(q)}" placeholder="${ph}" autocomplete="off" spellcheck="false" aria-label="Search, as in Pilot's menu"></label>${filters || ''}<div class="bd${split ? ' split' : ''}"><div class="res" role="listbox" aria-label="Results"></div>${split ? '<div class="pvw"></div>' : ''}</div><div class="ft">${foot}</div></div></div>`;
 
-  /* ------------------------------------------------ the seventeen previews */
+  /* ------------------------------------------------ the previews, one per area */
   const P = {};
 
   /* ---------------------------------------------------------------- Windows: Pilot's tiler with real app windows */
@@ -33,7 +33,7 @@
     mail: ['Mail', 'at', 'Inbox — 3 unread'], notes: ['Notes', 'note', 'Launch week'], music: ['Music', 'music', 'Now playing'],
   };
   const winBody = (k) => ({
-    ghostty: `<div class="wc term2"><p><b>❯</b> pilot status</p><p class="d">Pilot 1.0 · tiling on · 51 binds on Hyper</p><p><b>❯</b> git log --oneline -3</p><p class="d">c90eae8 site: pill nav with GitHub</p><p class="d">64fc573 site: area lists show keys</p><p class="d">6a79521 site: one mini Pilot desktop</p><p><b>❯</b> <i class="cur"></i></p></div>`,
+    ghostty: `<div class="wc term2"><p><b>❯</b> pilot status</p><p class="d">Pilot ${D.version || "1.0"} · tiling on · 51 binds on Hyper</p><p><b>❯</b> git log --oneline -3</p><p class="d">c90eae8 site: pill nav with GitHub</p><p class="d">64fc573 site: area lists show keys</p><p class="d">6a79521 site: one mini Pilot desktop</p><p><b>❯</b> <i class="cur"></i></p></div>`,
     zed: `<div class="wc code2">${[['1', '<k>const</k> show = (s) => {'], ['2', '  <k>if</k> (!P[s]) <k>return</k>;'], ['3', '  cur = s;'], ['4', '  fill(s);'], ['5', '};'], ['6', ''], ['7', '<k>export</k> <k>function</k> <f>tile</f>(ws) {'], ['8', '  <k>return</k> ws.<f>layout</f>(<s>"tiles"</s>);'], ['9', '}']].map(([n, l]) => `<p><i>${n}</i>${l}</p>`).join('')}</div>`,
     safari: `<div class="wc web2"><div class="url">${IC('lock')}${esc(D.host || '')}</div><div class="hero3"><b>Window manager. Launcher. Pilot.</b><span></span><span class="s"></span></div><div class="cards3"><i></i><i></i><i></i></div></div>`,
     mail: `<div class="wc mail2">${[['Maya Lind', 'Design review moved to Thursday', '09:41', 1], ['GitHub', '[pilot] CI passed on main', '09:12', 1], ['Shippers Club', 'Demo night: who is in?', 'Yesterday', 0], ['Stripe', 'Your receipt from Vercel', 'Tue', 0]].map(([f, s, t, u]) => `<p class="${u ? 'u' : ''}"><b>${f}</b><span>${s}</span><small>${t}</small></p>`).join('')}</div>`,
@@ -229,11 +229,12 @@
   } };
 
   /* ---------------------------------------------------------------- Look: style, the menu's look, window layout, Pilot's themes, glass */
-  P.look = { app: 'Pilot', try: 'Click a <b>theme</b>: the whole desktop takes it, top bar included; try <b>Toybox</b> and the menu looks', render(el) {
+  P.look = { app: 'Pilot', try: 'Pick a <b>cursor</b> set, a <b>trail</b>, then move and click on this desktop; hold <b>Spotlight</b>; or click a <b>theme</b>', render(el) {
     const mini = (t) => `<span class="tmini" style="background:${t[4]};border-color:${t[9]}"><span class="td">${[t[13], t[11], t[12]].map(c => `<i style="background:${c}"></i>`).join('')}</span><span class="tl3"><i style="background:${t[6]};border-color:${t[8]}"></i><i style="background:${t[7]}"></i></span><span class="tln">${[70, 50, 84].map(w => `<i style="width:${w}%;background:${t[12]}"></i>`).join('')}</span><span class="tbars">${[40, 70, 55, 90, 62].map((h, k) => `<i style="height:${h}%;background:${k % 2 ? t[13] : t[11]}"></i>`).join('')}</span></span>`;
     const menuLook = (k) => `<span class="mlook ${k}"><span class="q"></span>${k === 'rail' ? '<span class="rl"><i></i><i></i><i></i></span>' : ''}<span class="rs">${[1, 1, 1, 1].map((_, j) => `<i class="${j === 0 ? 'on' : ''}"></i>`).join('')}</span></span>`;
     const body = `<div class="ph">Style</div><div class="stl">${[['Instrument', 'Hairlines, mono numbers, one signal colour'], ['Toybox', 'Chunky keycaps, candy colours']].map(([n, d], i) => `<button type="button" data-st="${i}" aria-pressed="${i === 0}"><b>${n}</b><small>${d}</small><span class="kp"><span class="k2 s">Hyper</span><span class="k2 s">Space</span></span></button>`).join('')}</div><div class="ph">Hyper+Space menu</div><div class="mlooks">${[['line', 'Line', 'Default. Classic’s list; the first key grows into a wide search.'], ['classic', 'Classic', 'A terminal pane, bigger mono, keys on the left.'], ['rail', 'Rail', 'The kinds down the left, each with its count.']].map(([k, n, d], i) => `<button type="button" data-ml="${k}" aria-pressed="${i === 0}">${menuLook(k)}<b>${n}</b><small>${d}</small></button>`).join('')}</div><div class="ph">Theme</div><div class="thm2">${D.themes.map((t, i) => `<button type="button" data-t="${i}" aria-pressed="false">${mini(t)}<b>${t[1]}</b><small>${t[2]}</small></button>`).join('')}</div><div class="glr"><span>Glass</span>${seg('gl', ['Glass', 'Solid'], 0)}<small>The window, the menu, clipboard history, notes and Quick AI on the top bar’s Liquid Glass.</small></div>`;
-    el.innerHTML = win('Desktop', [['Tiling', 'Running'], ['Menu bar', 'Top bar on'], ['Look', 'Instrument · Void']], 2, 'Look', '', body);
+    el.innerHTML = win('Desktop', [['Tiling', 'Running'], ['Menu bar', 'Top bar on'], ['Look', 'Instrument · Void']], 2, 'Look', '', cursorBlock() + body);
+    wireCursor(el);
     const desk = $('#desk');
     $$('[data-t]', el).forEach(b => b.addEventListener('click', () => {
       const t = D.themes[+b.dataset.t]; $$('[data-t]', el).forEach(x => x.setAttribute('aria-pressed', x === b));
@@ -429,6 +430,21 @@
   const hl = (name, q) => { if (!q) return esc(name); const i = name.toLowerCase().indexOf(q.toLowerCase()); return i < 0 ? esc(name) : esc(name.slice(0, i)) + '<u>' + esc(name.slice(i, i + q.length)) + '</u>' + esc(name.slice(i + q.length)); };
   const row = (o) => ({ hint: '', hk: false, arrow: false, icon: 'list', name: '', kind: '', right: '', ...o });
   const updState = { done: false, running: false };
+  // 1.1: words after an alias (T37, T39, T40) and every app's actions (T41), as LineMenuRenders' L29 to L32 show them.
+  const TR = { hello: 'hola', 'thank you': 'gracias', 'good morning': 'buenos días', 'see you tomorrow': 'hasta mañana', cheers: 'salud' };
+  const EMO = { funny: [['😂', 'face with tears of joy'], ['🤣', 'rolling on the floor laughing'], ['😆', 'grinning squinting face'], ['😹', 'cat with tears of joy'], ['🤪', 'zany face']],
+                love: [['❤️', 'red heart'], ['😍', 'smiling face with heart-eyes'], ['🥰', 'smiling face with hearts']], cat: [['🐱', 'cat face'], ['😺', 'grinning cat'], ['😹', 'cat with tears of joy']],
+                party: [['🎉', 'party popper'], ['🥳', 'partying face'], ['🎊', 'confetti ball']], fire: [['🔥', 'fire'], ['🚀', 'rocket']] };
+  const APP_ACTS = { Music: ['Play', 'Next track', 'Shuffle'], Safari: ['New window', 'New private window', 'Reopen closed tab'], Mail: ['New message', 'Check for new mail'],
+                     Notes: ['New note', 'Search notes'], Calendar: ['New event', 'Go to today'], Ghostty: ['New window', 'New tab', 'Split right'], Finder: ['New Finder window', 'Go to folder'] };
+  const aliasView = (a, w) => {
+    const wl = w.toLowerCase().trim(); let sec;
+    if (a === 'tr') sec = [['translation', [row({ big: true, icon: 'globe2', name: TR[wl] || `${w} → in Spanish`, hint: 'english → spanish', act: () => toast('Copied ' + (TR[wl] || w)) })]], ['', [row({ icon: 'link', name: `Search Translate for “${w}”`, hint: 'web', act: () => toast('Opening Translate') })]]];
+    else if (a === 'em') { const m = Object.entries(EMO).filter(([k]) => k.startsWith(wl) || wl.startsWith(k)).flatMap(([, v]) => v); sec = [['emoji', (m.length ? m : EMO.funny).map(([e, n]) => row({ icon: 'smile', name: `${e}  ${n}`, hint: 'emoji', act: () => toast(`${e} typed where you were`) }))]]; }
+    else if (a === 'gif') sec = [[`gifs for “${w}” · powered by giphy`, [`${w[0].toUpperCase()}${w.slice(1)} Typing GIF`, `Yawning ${w} GIF`, `Peeking ${w} GIF`].map(n => row({ icon: 'image', name: n, hint: 'GIPHY', act: () => toast('Pasted as a picture where you were') }))]];
+    else { const all = ['Generate password', 'Search vault', 'Lock all vaults', 'New item'], acts = all.filter(n => wl.split(/\s+/).some(x => x && n.toLowerCase().includes(x))); sec = [['bitwarden’s actions', (acts.length ? acts : all).map(n => row({ icon: 'key2', name: n, kind: 'Bitwarden', hint: 'menu item', act: () => toast(`Bitwarden: ${n}`) }))]]; }
+    return { mode: a, ph: 'Search…', crumb: `pilot › ${a} · the words after an alias`, hints: '↵ pick&nbsp;&nbsp;esc back', sections: sec };
+  };
   const VIEWS = {
     go: () => ({ mode: 'go', ph: 'Go…', crumb: 'pilot', hints: '↵ open&nbsp;&nbsp;⌘K actions&nbsp;&nbsp;esc close', sections: [['go to', [['apps', 'Apps', 'apps'], ['book', 'Learn', 'learn'], ['bolt', 'Trigger', 'trigger'], ['download', 'Install', 'install'], ['trash', 'Remove', 'remove'], ['refresh', 'Update', 'update'], ['spark', 'Clean', 'clean'], ['puzzle', 'Extensions', 'exts'], ['info', 'About', 'about'], ['power', 'System', 'system']].map(([i, n, go]) => row({ icon: i, name: n, go }))]] }),
     apps: () => ({ mode: 'apps', ph: 'Filter…', crumb: 'pilot › apps', hints: '↵ open&nbsp;&nbsp;esc back', filter: true, sections: [['apps', APPS.map(([n, i]) => row({ icon: i, name: n, kind: 'app', act: () => toast(`Opening ${n}`) }))]] }),
@@ -437,7 +453,7 @@
     install: () => ({ mode: 'install', ph: 'Search apps and Homebrew…', crumb: 'pilot › install', hints: '↵ install, asks first&nbsp;&nbsp;esc back', filter: true, sections: [['catalogue', [['globe', 'Browsers', 12], ['code', 'Editors', 14], ['term', 'Terminals', 7], ['spark', 'AI', 11], ['text', 'Fonts', 30]].map(([i, n, c]) => row({ icon: i, name: n, hint: `${c} apps`, right: '›' }))], ['homebrew', [row({ icon: 'store', name: 'Every formula and cask in Homebrew', hint: 'brew' })]]] }),
     remove: () => ({ mode: 'remove', ph: 'Filter…', crumb: 'pilot › remove', hints: '↵ shows what goes, asks first&nbsp;&nbsp;esc back', filter: true, sections: [['least used first', [['Calendar', 'cal', 'opened 41 days ago'], ['Messages', 'bubble', 'opened 12 days ago'], ['Zed', 'code', 'opened yesterday']].map(([n, i, h]) => row({ icon: i, name: n, hint: h, right: '›' }))]] }),
     exts: () => ({ mode: 'extensions', ph: 'Filter…', crumb: 'pilot › extensions', hints: '↵ open&nbsp;&nbsp;esc back', filter: true, sections: [['installed', D.exts.slice(0, 2).map(e => row({ icon: 'puzzle', name: e[2], kind: 'extension' }))], ['catalogue', D.exts.slice(2).map(e => row({ icon: 'puzzle', name: e[2], hint: 'add', right: '›' }))]] }),
-    about: () => ({ mode: 'about', ph: '', crumb: 'pilot › about', hints: 'esc back', sections: [['pilot', [row({ icon: 'info', name: 'Pilot 1.0', hint: 'version' }), row({ icon: 'code', name: 'Free and open source, MIT', hint: 'licence' }), row({ icon: 'shield', name: 'No analytics, no crash reports', hint: 'privacy' })]]] }),
+    about: () => ({ mode: 'about', ph: '', crumb: 'pilot › about', hints: 'esc back', sections: [['pilot', [row({ icon: 'info', name: 'Pilot ' + (D.version || '1.0'), hint: 'version' }), row({ icon: 'code', name: 'Free and open source, MIT', hint: 'licence' }), row({ icon: 'shield', name: 'No analytics, no crash reports', hint: 'privacy' })]]] }),
     system: () => ({ mode: 'system', ph: 'Filter…', crumb: 'pilot › system', hints: '↵ switch&nbsp;&nbsp;esc back', filter: true, sections: [['switches', [['moon', 'Dark mode', 'dark'], ['coffee', 'Keep awake', 'awake'], ['sun', 'Night Shift', 'night'], ['bell', 'Do not disturb', 'dnd']].map(([i, n, k]) => row({ icon: i, name: n, sw: k, right: `<i class="tgl${sysSw[k] ? ' on' : ''}"></i>`, act: () => { sysSw[k] = !sysSw[k]; } }))], ['power', [['lock', 'Lock screen'], ['moon', 'Sleep'], ['refresh', 'Restart'], ['power', 'Shut down'], ['user', 'Log out']].map(([i, n]) => row({ icon: i, name: n, hint: n === 'Shut down' || n === 'Restart' ? 'asks first' : '', act: () => toast(n + (n === 'Shut down' || n === 'Restart' ? ' asks first' : '')) }))]] }),
     update: () => ({ mode: 'update', ph: 'Filter…', crumb: 'pilot › update', hints: '↵ update, asks first&nbsp;&nbsp;esc back', filter: true, sections: [['', [row({ icon: 'download', name: updState.done ? 'Everything is up to date' : (updState.running ? 'Updating…' : 'Update all'), hint: 'package', act: () => runUpdate() }), row({ icon: 'apps', name: 'Apps', hint: 'Zed, Xcode', right: updState.done ? '<span class="ok">✓</span>' : '›' }), row({ icon: 'term', name: 'Command-line tools', hint: 'ripgrep, ruff', right: updState.done ? '<span class="ok">✓</span>' : '›' }), row({ icon: 'laptop', name: 'macOS', hint: 'macOS 27.0.2', right: updState.done ? '<span class="ok">✓</span>' : '›' }), row({ icon: 'refresh', name: 'Apps that update themselves: Off', hint: 'package' }), row({ icon: 'doc', name: 'Reports', hint: 'package', right: '›' })]]] }),
     clean: () => ({ mode: 'clean', ph: 'Filter…', crumb: 'pilot › clean', hints: '↵ on clean asks first&nbsp;&nbsp;esc back', cleanView: true, sections: [] }),
@@ -452,6 +468,7 @@
     const stack = [start]; let rows = [], sel = 0, kind = 'all';
     q.value = firstQuery;
     const searchView = (t) => {
+      const al = t.match(/^(tr|em|gif|bw)\s+(.+)$/i); if (al) return aliasView(al[1].toLowerCase(), al[2]);
       const tl = t.toLowerCase(), A = answer(t), S = [];
       const apps = APPS.filter(a => a[0].toLowerCase().includes(tl)).map(([n, i]) => row({ icon: i, name: n, kind: 'app', k: 'apps', act: () => toast(`Opening ${n}`) }));
       const acts = D.feats.filter(f => f[0].toLowerCase().includes(tl)).slice(0, 5).map(f => row({ hint: f[3] ? f[3].replace('Hyper+', 'HYPER + ').toUpperCase() : 'action', hk: !!f[3], arrow: !!f[3], icon: f[1], name: f[0], k: 'actions' }));
@@ -460,6 +477,7 @@
       const pkgs = PKGS.filter(p => p[0].toLowerCase().includes(tl)).map(([n, v]) => row({ hint: v, icon: 'store', name: n, k: 'packages' }));
       const best = A ? row({ hint: A.k, icon: A.i || 'pipette', sw: A.sw, name: A.v, big: true, act: () => toast('Copied ' + A.v) }) : (apps[0] ? { ...apps[0], hint: 'best', right: '<span class="dotr"></span>' } : (acts[0] || wins[0] || files[0]));
       if (best) S.push(['best match', [best]]);
+      const aa = apps[0] && APP_ACTS[apps[0].name]; if (aa && kind === 'all') S.push([`${apps[0].name}’s actions`, aa.map(n => row({ icon: 'bolt', name: n, kind: apps[0].name, hint: 'action', act: () => toast(`${apps[0].name}: ${n}`) }))]);
       S.push(['ask or search', [row({ hint: 'ai', icon: 'spark', name: 'Ask AI', kind: `“${t}”`, right: '›', act: () => show('ai') }), row({ hint: 'web', icon: 'globe', name: 'Search the web', kind: `“${t}”`, right: '›', act: () => toast('Searching the web') }), row({ hint: 'files', icon: 'search', name: `Search files for "${t}"`, right: '›', act: () => show('files') })]]);
       const pools = { apps, windows: wins, files, actions: acts, packages: pkgs };
       const counts = Object.fromEntries(Object.entries(pools).map(([k, v]) => [k, v.length]));
@@ -523,7 +541,7 @@
     render();
     return { focus: () => q.focus() };
   }
-  P.launcher = { app: 'Pilot', try: 'Type <b>ghost</b>, <b>12*7</b>, <b>5 km in mi</b> or <b>#C6F432</b>; press ⇥ for kinds, open <b>Update</b> or <b>System</b>', render(el) { lmenu(el, 'go'); } };
+  P.launcher = { app: 'Pilot', try: 'Type <b>tr hello</b>, <b>em funny</b>, <b>gif cat</b>, <b>bw generate password</b>, <b>music</b> for its actions, or <b>12*7</b>; ⇥ for kinds', render(el) { lmenu(el, 'go'); } };
   P.files = { app: 'Pilot', try: 'Type with a typo: <b>invoce</b>; or words inside a picture: <b>delivery</b>', render(el) { lmenu(el, 'files', 'invoce'); } };
   P.update = { app: 'Pilot', try: '<b>Update all</b>, then <b>esc</b> back and open <b>Clean</b>: it previews, then asks first', render(el) { const m = lmenu(el, 'go'); const inp = $('input', el); inp.value = ''; /* start inside Update */ $$('.lr', el).find(r => r.textContent.includes('Update'))?.click(); } };
 
@@ -702,34 +720,236 @@
   } };
 
   /* ---------------------------------------------------------------- Captures: drag an area, then the editor */
-  P.captures = { app: 'Safari', try: '<b>Drag</b> across the page; in the editor pick <b>Arrow</b>, <b>Text</b> or <b>Blur</b> and draw, then <b>Done</b>', render(el) {
+  P.captures = { app: 'Safari', try: '<b>Drag</b> across the page; in the editor try <b>Uncrop</b>, <b>Backdrop</b>, a <b>Box</b> that snaps or the <b>Lens</b>; or click <b>Record</b> for the record editor', render(el) {
     const page = `<div class="page"><div class="side"><b>Northwind</b>${['General', 'Members', 'Billing', 'API keys', 'Integrations', 'Audit log'].map((x, i) => `<span class="${i === 2 ? 'on' : ''}">${x}</span>`).join('')}</div><div class="main"><small>Settings / Billing</small><div class="h5">Billing</div><small>Manage your plan, payment method and invoices.</small><div class="card"><small>PRO PLAN</small><b>$12 / month</b><small>Renews on 1 November 2026 · Visa ending 4242</small><span class="btn3">Update card</span></div><div class="card"><small>Billing email</small><b>maya.lind@northwind.studio</b></div></div></div>`;
     el.innerHTML = `<div class="p-cap">${page}<div class="mq"><b></b></div><div class="tools">${[['crop', 'Area', 1], ['window', 'Window'], ['display', 'Screen'], ['scroll', 'Scrolling'], ['video', 'Record'], ['imagetext', 'Text']].map(([i, l, on]) => `<span class="${on ? 'on' : ''}">${IC(i)}${l}</span>`).join('')}</div></div>`;
     const root = $('.p-cap', el), mq = $('.mq', el), lab = $('.mq b', el); let o = null;
+    const rec = $$('.tools span', el)[4]; rec.dataset.rec = ''; rec.addEventListener('click', () => { if (!$('.ved', root)) recorder(root, page); });
     root.addEventListener('pointerdown', (e) => { if (e.target.closest('.tools, .editor')) return; const r = root.getBoundingClientRect(); o = [e.clientX - r.left, e.clientY - r.top, r]; root.setPointerCapture(e.pointerId); mq.style.display = 'block'; Object.assign(mq.style, { left: o[0] + 'px', top: o[1] + 'px', width: '0px', height: '0px' }); lab.textContent = '0 × 0'; });
     root.addEventListener('pointermove', (e) => { if (!o) return; const x = Math.max(0, Math.min(e.clientX - o[2].left, o[2].width)), y = Math.max(0, Math.min(e.clientY - o[2].top, o[2].height)); const l = Math.min(x, o[0]), t = Math.min(y, o[1]), w = Math.abs(x - o[0]), h = Math.abs(y - o[1]); Object.assign(mq.style, { left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px' }); lab.textContent = `${Math.round(w * 2)} × ${Math.round(h * 2)}`; });
     const end = () => { if (!o) return; const r = o[2]; o = null; const w = parseFloat(mq.style.width), h = parseFloat(mq.style.height); if (w > 16 && h > 16) { const box = { l: parseFloat(mq.style.left), t: parseFloat(mq.style.top), w, h, W: r.width, H: r.height }; setTimeout(() => { mq.style.display = 'none'; editor(box); }, reduced ? 0 : 250); } else mq.style.display = 'none'; };
     root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
     const editor = (b) => {
       const ed = document.createElement('div'); ed.className = 'editor pn';
-      const scale = Math.min(1, 520 / b.w, 300 / b.h);
-      ed.innerHTML = `<div class="etb">${[['cursor', 'Select'], ['arrowmark', 'Arrow', 1], ['squares', 'Box'], ['text', 'Text'], ['highlight', 'Highlight'], ['eyeoff', 'Blur'], ['crop', 'Crop']].map(([i, l, on], k) => `<button type="button" class="et${on ? ' on' : ''}" data-tool="${l}" aria-label="${l}" title="${l}">${IC(i)}</button>`).join('')}<span class="sp"></span><button type="button" class="et" data-undo aria-label="Undo">${IC('arrowcirc')}</button></div><div class="ecv"><div class="eimg" style="width:${b.w * scale}px;height:${b.h * scale}px"><div class="eclip" style="width:${b.W}px;height:${b.H}px;transform:translate(${-b.l * scale}px,${-b.t * scale}px) scale(${scale});transform-origin:0 0">${page}</div><svg class="emarks" width="100%" height="100%"></svg></div></div><div class="ebot"><span>${Math.round(b.w * 2)} × ${Math.round(b.h * 2)}</span><span class="sp"></span><button type="button" class="bt" data-cancel>Cancel</button><button type="button" class="bt ink" data-done>Done</button></div>`;
+      let scale = Math.min(1, 520 / b.w, 300 / b.h);
+      ed.innerHTML = `<div class="etb">${[['cursor', 'Select'], ['arrowmark', 'Arrow', 1], ['squares', 'Box'], ['text', 'Text'], ['highlight', 'Highlight'], ['eyeoff', 'Blur'], ['crop', 'Crop'], ['focus', 'Lens']].map(([i, l, on], k) => `<button type="button" class="et${on ? ' on' : ''}" data-tool="${l}" aria-label="${l}" title="${l}">${IC(i)}</button>`).join('')}<button type="button" class="et" data-uncrop aria-label="Uncrop" title="Uncrop: past the edge brings the screen back">${IC('resize')}</button><button type="button" class="et" data-bd aria-label="Backdrop" title="Backdrop">${IC('looks')}</button><span class="sp"></span><button type="button" class="et" data-undo aria-label="Undo">${IC('arrowcirc')}</button></div><div class="ecv"><div class="ebd"><div class="eimg" style="width:${b.w * scale}px;height:${b.h * scale}px"><div class="eclip" style="width:${b.W}px;height:${b.H}px;transform:translate(${-b.l * scale}px,${-b.t * scale}px) scale(${scale});transform-origin:0 0">${page}</div><svg class="emarks" width="100%" height="100%"></svg></div></div></div><div class="ebot"><span>${Math.round(b.w * 2)} × ${Math.round(b.h * 2)}</span><span class="sp"></span><button type="button" class="bt" data-cancel>Cancel</button><button type="button" class="bt ink" data-done>Done</button></div>`;
       root.appendChild(ed); setApp('Pilot');
       let tool = 'Arrow', d0 = null, cur2 = null; const svg = $('.emarks', ed), marks = [];
       $$('[data-tool]', ed).forEach(t => t.addEventListener('click', () => { tool = t.dataset.tool; $$('[data-tool]', ed).forEach(x => x.classList.toggle('on', x === t)); }));
       const NS = 'http://www.w3.org/2000/svg';
       const pt = (e) => { const r = svg.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
       svg.addEventListener('pointerdown', (e) => { e.stopPropagation(); const [x, y] = pt(e); svg.setPointerCapture(e.pointerId); d0 = [x, y];
+        if (tool === 'Lens') { lens(x, y); d0 = null; return; }
         if (tool === 'Text') { const t = document.createElementNS(NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('class', 'mk-t'); t.textContent = 'Update the card first'; svg.appendChild(t); marks.push(t); d0 = null; return; }
         cur2 = document.createElementNS(NS, tool === 'Arrow' ? 'line' : 'rect'); cur2.setAttribute('class', tool === 'Arrow' ? 'mk-a' : tool === 'Blur' ? 'mk-b' : tool === 'Highlight' ? 'mk-h' : 'mk-r'); svg.appendChild(cur2); marks.push(cur2); });
-      svg.addEventListener('pointermove', (e) => { if (!d0 || !cur2) return; const [x, y] = pt(e); if (cur2.tagName === 'line') { cur2.setAttribute('x1', d0[0]); cur2.setAttribute('y1', d0[1]); cur2.setAttribute('x2', x); cur2.setAttribute('y2', y); } else { cur2.setAttribute('x', Math.min(x, d0[0])); cur2.setAttribute('y', Math.min(y, d0[1])); cur2.setAttribute('width', Math.abs(x - d0[0])); cur2.setAttribute('height', Math.abs(y - d0[1])); } });
+      svg.addEventListener('pointermove', (e) => { if (!d0 || !cur2) return; let [x, y] = pt(e); if (tool === 'Box') [x, y] = snap(x, y); if (cur2.tagName === 'line') { cur2.setAttribute('x1', d0[0]); cur2.setAttribute('y1', d0[1]); cur2.setAttribute('x2', x); cur2.setAttribute('y2', y); } else { cur2.setAttribute('x', Math.min(x, d0[0])); cur2.setAttribute('y', Math.min(y, d0[1])); cur2.setAttribute('width', Math.abs(x - d0[0])); cur2.setAttribute('height', Math.abs(y - d0[1])); } });
       svg.addEventListener('pointerup', () => { d0 = null; cur2 = null; });
       $('[data-undo]', ed).addEventListener('click', () => marks.pop()?.remove());
+      // 1.1: snap a box to the capture's edges and middle, with a guide; a round lens that enlarges what is under it; uncrop
+      // past the edge; a backdrop that takes its own text (T25, T26).
+      const guides = [];
+      const snap = (x, y) => {
+        guides.forEach(g => g.remove()); guides.length = 0; const W = svg.clientWidth, H = svg.clientHeight;
+        const sx = [0, W / 2, W].find(v => Math.abs(v - x) < 10), sy = [0, H / 2, H].find(v => Math.abs(v - y) < 10);
+        const line = (x1, y1, x2, y2) => { const l = document.createElementNS(NS, 'line'); [['x1', x1], ['y1', y1], ['x2', x2], ['y2', y2]].forEach(([k, v]) => l.setAttribute(k, v)); l.setAttribute('class', 'mk-g'); svg.appendChild(l); guides.push(l); };
+        if (sx !== undefined) { line(sx, 0, sx, H); x = sx; } if (sy !== undefined) { line(0, sy, W, sy); y = sy; }
+        return [x, y];
+      };
+      svg.addEventListener('pointerup', () => { guides.forEach(g => g.remove()); guides.length = 0; });
+      const lens = (x, y) => {
+        const R = 44, z = 2, L = document.createElement('div'); L.className = 'elens'; Object.assign(L.style, { left: (x - R) + 'px', top: (y - R) + 'px' });
+        const inner = $('.eclip', ed).cloneNode(true); inner.style.transform = `translate(${R - (x / scale + b.l) * scale * z}px,${R - (y / scale + b.t) * scale * z}px) scale(${scale * z})`;
+        L.appendChild(inner); $('.eimg', ed).appendChild(L); marks.push(L);
+      };
+      $('[data-uncrop]', ed).addEventListener('click', () => {
+        const g = 40, nl = Math.max(0, b.l - g), nt = Math.max(0, b.t - g);
+        b.w = Math.min(b.W, b.l + b.w + g) - nl; b.h = Math.min(b.H, b.t + b.h + g) - nt; b.l = nl; b.t = nt; scale = Math.min(1, 520 / b.w, 300 / b.h);
+        const im = $('.eimg', ed); im.style.width = b.w * scale + 'px'; im.style.height = b.h * scale + 'px';
+        $('.eclip', ed).style.transform = `translate(${-b.l * scale}px,${-b.t * scale}px) scale(${scale})`;
+        $('.ebot span', ed).textContent = `${Math.round(b.w * 2)} × ${Math.round(b.h * 2)}`; toast('Uncropped: past the edge, the screen round it comes back');
+      });
+      $('[data-bd]', ed).addEventListener('click', (e) => { const on = $('.ebd', ed).classList.toggle('on'); e.currentTarget.classList.toggle('on', on); if (on) toast('On a backdrop: pick Text and click the backdrop to write on it'); });
+      $('.ebd', ed).addEventListener('pointerdown', (e) => {
+        if (e.target !== e.currentTarget || tool !== 'Text' || !e.currentTarget.classList.contains('on')) return;
+        const r = e.currentTarget.getBoundingClientRect(), t = document.createElement('div'); t.className = 'ebt'; t.textContent = 'Billing, after the redesign';
+        Object.assign(t.style, { left: (e.clientX - r.left) + 'px', top: (e.clientY - r.top - 9) + 'px' }); e.currentTarget.appendChild(t); marks.push(t);
+      });
       $('[data-cancel]', ed).addEventListener('click', () => { ed.remove(); setApp('Safari'); });
       $('[data-done]', ed).addEventListener('click', () => { ed.remove(); setApp('Safari'); toast('Copied to the clipboard; saved to Desktop'); });
       svg.insertAdjacentHTML('beforeend', '<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="mk-ah"/></marker></defs>');
     };
   } };
+
+  /* ---------------------------------------------------------------- Pilot Files (1.1): its own window in place of Finder, on glass, real
+     icons and a big preview, folder sizes read after the list, Cmd+K on a file, a new file named as it is made, Cmd+X then Cmd+V,
+     a typed path, Cmd+Backspace and Cmd+Z, and Folder design… offering the folder's own kind first (FilesWindowRenders, T51, T55, T61). */
+  const fmtB = (b) => b == null ? '—' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? Math.round(b / 1e3) + ' KB' : b === 0 ? 'Zero KB' : b + ' bytes';
+  const FD = { code: [['code-pour', 'Code Pour'], ['code-emboss', 'Code Emboss']], pictures: [['pictures-smoke', 'Pictures Smoke'], ['pictures-pattern', 'Pictures Pattern']],
+               downloads: [['downloads-pour', 'Downloads Pour'], ['downloads-pattern', 'Downloads Pattern']] };
+  const FD_ALL = [['lagoon', 'Lagoon'], ['graphite', 'Graphite'], ['paper', 'Paper'], ['kraft', 'Kraft']];
+  const kindOf = (n) => ['pilot', 'site', 'code'].includes(n) ? 'code' : n === 'Pictures' ? 'pictures' : n === 'Downloads' ? 'downloads' : null;
+  P.pilotfiles = { app: 'Pilot Files', try: '<b>⌘K</b> on a file or folder (try <b>Folder design…</b> on pilot), <b>New file</b>, <b>⌘X</b> then open film and <b>⌘V</b>, <b>⌘⌫</b> then <b>⌘Z</b>; click the title to type a path', render(el) {
+    const T = {
+      Projects: [['film', 'folder', 6.2e6], ['pilot', 'folder', 3.4e6], ['site', 'folder', 1.15e6], ['budget.numbers', 'doc', 96e3], ['invoice-oct-2026.pdf', 'pdf', 13e3], ['cover.png', 'image', 2e3], ['launch-notes.md', 'text', 129]],
+      film: [['data.bin', 'doc', 6.2e6]], pilot: [['README.md', 'text', 4800], ['Package.swift', 'text', 2100]], site: [['index.html', 'text', 18e3]],
+      Pictures: [['dunes-at-night.jpg', 'image', 299e3], ['glass-waves.jpg', 'image', 412e3], ['milo-at-work.png', 'image', 1.2e6], ['peekaboo.png', 'image', 980e3], ['silver-folds.jpg', 'image', 350e3], ['yawn.png', 'image', 1.1e6]],
+    };
+    const F = Object.fromEntries(Object.entries(T).map(([k, v]) => [k, v.map(([n, kd, s], i) => ({ n, kd, s, ago: i + 1, design: null }))]));
+    let at = 'Projects', sel = 4, mode = 0, cutItem = null, undo = [], sized = false, renaming = null, pathing = false;
+    el.innerHTML = `<div class="pf" tabindex="0" aria-label="Pilot Files"><div class="pfside"><span class="dots"><i></i><i></i><i></i></span><p>Places</p>${[['home', 'Home'], ['display', 'Desktop'], ['download', 'Downloads'], ['doc', 'Documents'], ['image', 'Pictures'], ['film', 'Movies']].map(([i, n]) => `<button type="button" data-go="${n}">${IC(i)}${n}</button>`).join('')}<p>Favourites</p><button type="button" data-go="Projects">${IC('folder')}Projects</button><p>Devices</p><div class="pfdev">${IC('chip')}<span><b>Macintosh HD</b><i><em style="width:58%"></em></i><small>62.5 GB available</small></span></div></div>
+      <div class="pfmain"><div class="pftb"><button type="button" class="pfnav" data-back aria-label="Back">‹</button><span class="pfttl" data-path></span><span class="sp"></span>${seg('pfm', ['List', 'Grid'], 0)}<button type="button" class="bt" data-new>${IC('file')}New file</button><button type="button" class="bt" data-k>⌘K</button></div>
+      <div class="pfhd"><span>Name</span><span>Size</span><span>Modified</span></div><div class="pfl" role="listbox" aria-label="Files"></div><div class="pfnote" hidden></div></div>
+      <div class="pfins"></div></div>`;
+    const root = $('.pf', el), list = $('.pfl', el), note = $('.pfnote', el), ins = $('.pfins', el), ttl = $('[data-path]', el), hd = $('.pfhd', el);
+    const items = () => F[at] || [];
+    const icon = (it, big) => it.kd === 'folder' ? (it.design ? `<img class="pfart${big ? ' big' : ''}" src="studio/fd-${it.design}.png" alt="">` : `<span class="pfi folder${big ? ' big' : ''}"></span>`)
+      : `<span class="pfi ${it.kd}${big ? ' big' : ''}">${it.kd === 'image' ? `<i style="background:${['linear-gradient(160deg,#3a4b5e,#c9a27a)', 'linear-gradient(160deg,#0e3a4f,#36b3d1)', 'linear-gradient(160deg,#c77a2e,#f2c77c)', 'linear-gradient(160deg,#222,#bbb)', 'linear-gradient(160deg,#2c5d3a,#a6d46f)', 'linear-gradient(160deg,#666,#ddd)'][it.ago % 6]}"></i>` : ''}</span>`;
+    const say = (text, undoable) => { note.hidden = false; note.innerHTML = `${IC('ok')}<span>${esc(text)}</span>${undoable ? '<button type="button" class="bt sm" data-z>Undo ⌘Z</button>' : ''}<button type="button" class="pfx" data-dn aria-label="Dismiss">×</button>`; };
+    const draw = () => {
+      const its = items();
+      ttl.innerHTML = pathing ? `<span class="pfpath"><input type="text" value="~/${at === 'Projects' || at === 'Pictures' ? at : 'Projects/' + at}/" spellcheck="false" aria-label="Type a path"><span class="pfcomp"></span></span>`
+        : `<b>${esc(at)}</b><small>${its.length} items · 62.5 GB available</small>`;
+      hd.hidden = mode === 1; list.classList.toggle('grid', mode === 1);
+      list.innerHTML = its.map((it, i) => `<div class="pfr${i === sel ? ' sel' : ''}${it === cutItem ? ' cut' : ''}" role="option" data-i="${i}">${icon(it)}<span class="nm">${renaming === it ? `<input type="text" value="${esc(it.n)}" aria-label="Name">` : esc(it.n)}</span>${mode === 0 ? `<span class="sz">${it.kd === 'folder' ? (sized ? fmtB(it.s) : '—') : fmtB(it.s)}</span><span class="md">2026-11-0${Math.max(1, 6 - it.ago)} 1${it.ago % 10}:4${it.ago % 6}</span>` : ''}</div>`).join('');
+      const it = its[sel];
+      ins.innerHTML = it ? `<div class="pfpv ${it.kd}">${it.kd === 'pdf' ? '<div class="pg2"><b>Invoice</b><i></i><i></i><i style="width:60%"></i><i style="width:40%"></i></div>' : it.kd === 'text' ? `<pre>${esc(it.n.endsWith('.md') ? '# Launch notes\n\n- Record the 1.1 clip\n- Write the post\n- Ship on Tuesday' : '')}</pre>` : icon(it, true)}</div><b>${esc(it.n)}</b><small>${{ folder: 'Folder', image: 'Image', pdf: 'PDF document', text: 'Text', doc: 'Document' }[it.kd]} · ${it.kd === 'folder' ? (sized ? fmtB(it.s) : 'sizing…') : fmtB(it.s)}</small><dl><dt>Where</dt><dd>~/${esc(at)}</dd><dt>Modified</dt><dd>2026-11-0${Math.max(1, 6 - it.ago)}</dd></dl><div class="pfbtn"><button type="button" class="bt sm">Open</button><button type="button" class="bt sm">Quick Look</button></div>`
+        : `<div class="pfpv folder"><span class="pfi folder big"></span></div><b>${esc(at)}</b><small>Folder</small>`;
+      if (pathing) { const inp = $('input', ttl); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); comp(inp.value); inp.addEventListener('input', () => comp(inp.value)); inp.addEventListener('keydown', pathKey); }
+      if (renaming) { const inp = $('.pfr input', list); inp.focus(); inp.setSelectionRange(0, inp.value.lastIndexOf('.') > 0 ? inp.value.lastIndexOf('.') : inp.value.length); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); renaming.n = inp.value || renaming.n; renaming = null; draw(); root.focus(); } if (e.key === 'Escape') { renaming = null; draw(); root.focus(); } }); }
+    };
+    const comp = (v) => { const c = $('.pfcomp', ttl); if (!c) return; const opts = ['~/Pictures/', '~/Projects/', '~/Projects/film/', '~/Projects/pilot/', '~/Projects/site/'].filter(p => p.startsWith(v) && p !== v); c.innerHTML = opts.slice(0, 3).map(p => `<button type="button" data-cp="${p}">${p}</button>`).join(''); };
+    const pathKey = (e) => {
+      const inp = e.target;
+      if (e.key === 'Tab') { e.preventDefault(); const f = $('.pfcomp [data-cp]', ttl); if (f) { inp.value = f.dataset.cp; comp(inp.value); } }
+      else if (e.key === 'Enter') { e.preventDefault(); const name = inp.value.replace(/\/$/, '').split('/').pop(); pathing = false; if (F[name]) go(name); else { draw(); say(`Nothing at ${inp.value}`, false); } root.focus(); }
+      else if (e.key === 'Escape') { pathing = false; draw(); root.focus(); }
+    };
+    const go = (name) => { if (!F[name]) { toast(`${name}: Pilot Files opens any folder`); return; } at = name; sel = 0; sized = false; draw(); setTimeout(() => { sized = true; if (at === name) draw(); }, reduced ? 0 : 450); };
+    const pick = (i) => { sel = i; draw(); };
+    const trash = () => { const its = items(), it = its[sel]; if (!it) return; its.splice(sel, 1); const where = at, idx = sel; undo.push(() => { F[where].splice(idx, 0, it); if (at === where) sel = idx; }); sel = Math.min(sel, its.length - 1); draw(); say(`Moved ${it.n} to the Trash. ⌘Z puts it back.`, true); };
+    const doUndo = () => { const f = undo.pop(); if (!f) { toast('Nothing to undo'); return; } f(); draw(); say('Put back as it was.', false); };
+    const newFile = () => { const its = items(), it = { n: its.some(x => x.n === 'untitled.md') ? 'untitled 2.md' : 'untitled.md', kd: 'text', s: 0, ago: 1 }; its.push(it); sel = its.length - 1; renaming = it; const where = at; undo.push(() => { const a = F[where], j = a.indexOf(it); if (j >= 0) a.splice(j, 1); }); draw(); say(`New file ${it.n}. ⌘Z undoes it.`, true); };
+    const cut = () => { const it = items()[sel]; if (!it) return; cutItem = it; cutItem._from = at; draw(); say(`Cut ${it.n}. ⌘V moves it into the folder shown; Esc keeps it where it is.`, false); };
+    const paste = () => { if (!cutItem) { toast('Nothing cut: ⌘X a file first'); return; } const it = cutItem, from = it._from; if (from === at) { toast('It is already here'); return; } const a = F[from]; a.splice(a.indexOf(it), 1); items().push(it); cutItem = null; const to = at; undo.push(() => { const b = F[to]; b.splice(b.indexOf(it), 1); F[from].push(it); }); sel = items().length - 1; draw(); say(`Moved ${it.n} into ${at}. ⌘Z puts it back.`, true); };
+    const designs = (it) => {
+      closeK(); const k = kindOf(it.n); const m = document.createElement('div'); m.className = 'cmenu2 pn pfk';
+      m.innerHTML = `<div class="mh2">${LOGO_MINI}<b>Folder design</b><span>${esc(it.n)}</span></div>${k ? `<p class="pfks">For ${k}</p>${FD[k].map(([id, n]) => `<button type="button" class="mi" data-fd="${id}"><img src="studio/fd-${id}.png" alt=""><span>${n}</span></button>`).join('')}` : ''}<p class="pfks">Designs</p>${FD_ALL.map(([id, n]) => `<button type="button" class="mi" data-fd="${id}"><img src="studio/fd-${id}.png" alt=""><span>${n}</span></button>`).join('')}`;
+      root.appendChild(m); m.addEventListener('click', (e) => { const b = e.target.closest('[data-fd]'); if (!b) return; const old = it.design; it.design = b.dataset.fd; undo.push(() => { it.design = old; }); m.remove(); draw(); say(`${it.n} wears ${$('span', b).textContent}. ⌘Z undoes it.`, true); });
+    };
+    const closeK = () => $$('.pfk', root).forEach(m => m.remove());
+    const kmenu = () => {
+      closeK(); const it = items()[sel]; if (!it) return; const m = document.createElement('div'); m.className = 'cmenu2 pn pfk';
+      const acts = [['looks', 'Quick Look', 'Space', 'look'], ['link', 'Copy path', '', 'path'], ['edit', 'Rename', '↵', 'ren'], ...(it.kd === 'folder' ? [['palette', 'Folder design…', '', 'fd']] : [['combine', 'Convert to…', '', 'conv']]), ['clip', 'Cut', '⌘X', 'cut'], ['trash', 'Move to Trash', '⌘⌫', 'trash']];
+      m.innerHTML = `<div class="mh2">${LOGO_MINI}<b>Actions</b><span>${esc(it.n)}</span></div>${acts.map(([i, n, k, a]) => `<button type="button" class="mi" data-a="${a}">${IC(i)}<span>${n}</span><kbd>${k}</kbd></button>`).join('')}`;
+      root.appendChild(m);
+      m.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a; m.remove();
+        if (a === 'trash') trash(); else if (a === 'cut') cut(); else if (a === 'fd') designs(it); else if (a === 'ren') { renaming = it; draw(); }
+        else toast({ look: `Quick Look: ${it.n}`, path: `~/${at}/${it.n} copied; Copy path also gives it for a shell`, conv: 'Convert to PNG, JPG, PDF and more' }[a]); });
+    };
+    root.addEventListener('keydown', (e) => {
+      if (e.target.closest('input')) return;
+      const m = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+      if (m && k === 'k') { e.preventDefault(); kmenu(); } else if (m && k === 'x') { e.preventDefault(); cut(); } else if (m && k === 'v') { e.preventDefault(); paste(); }
+      else if (m && k === 'z') { e.preventDefault(); doUndo(); } else if (m && k === 'backspace') { e.preventDefault(); trash(); } else if (m && k === 'l') { e.preventDefault(); pathing = true; draw(); }
+      else if (m && e.altKey && k === 'n') { e.preventDefault(); newFile(); }
+      else if (k === 'arrowdown' || k === 'arrowup') { e.preventDefault(); pick(Math.max(0, Math.min(items().length - 1, sel + (k === 'arrowdown' ? 1 : -1)))); }
+      else if (k === 'enter') { const it = items()[sel]; if (it && it.kd === 'folder') go(it.n); }
+      else if (k === 'escape') { closeK(); if (cutItem) { cutItem = null; draw(); note.hidden = true; } }
+    });
+    list.addEventListener('click', (e) => { const r = e.target.closest('.pfr'); if (r && !e.target.closest('input')) { closeK(); pick(+r.dataset.i); root.focus(); } });
+    list.addEventListener('dblclick', (e) => { const r = e.target.closest('.pfr'); if (!r) return; const it = items()[+r.dataset.i]; if (it.kd === 'folder') go(it.n); else toast(`Opening ${it.n}`); });
+    root.addEventListener('click', (e) => {
+      const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+      if (e.target.closest('[data-back]')) { go('Projects'); return; }
+      if (e.target.closest('[data-new]')) { newFile(); return; }
+      if (e.target.closest('[data-k]')) { kmenu(); return; }
+      if (e.target.closest('[data-z]')) { doUndo(); return; }
+      if (e.target.closest('[data-dn]')) { note.hidden = true; return; }
+      const cp = e.target.closest('[data-cp]'); if (cp) { const inp = $('input', ttl); inp.value = cp.dataset.cp; inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return; }
+      if (e.target.closest('[data-path]') && !pathing) { pathing = true; draw(); return; }
+      if (!e.target.closest('.pfk')) closeK();
+    });
+    wireSeg(el, 'pfm', (i) => { mode = i; if (i === 1 && at === 'Projects') go('Pictures'); else draw(); });
+    draw(); setTimeout(() => { sized = true; draw(); }, reduced ? 0 : 600);
+  } };
+
+  /* ---------------------------------------------------------------- Look › Cursor (1.1): the sets drawn as the pointer on this desktop, your own
+     two colours, a trail (Thread, Comet, Dots), the Ring, Ripple on a click, and Spotlight while a key is held (CursorEffectPainter's shapes). */
+  const CUR = { set: 0, colours: 0, trail: 2, ring: true, ripple: true, spot: false, fill: '#C6F432' };
+  const CUR_SETS = ['macOS', 'Quiet', 'Toybox', 'Duo', 'Classic'];
+  const deskCursor = () => {
+    const dk = $('#desk'); if (!dk) return;
+    const n = ['', 'quiet', 'toybox', 'duo', 'classic'][CUR.set], art = CUR.colours === 2 && n ? 'custom' : n;
+    dk.style.cursor = n ? `image-set(url("studio/cursor-${art}.png") 2x) 8 5, auto` : '';
+  };
+  const fxLayer = () => {
+    const dk = $('#desk'); if (!dk || $('.cfx', dk)) return;
+    const cv = document.createElement('canvas'); cv.className = 'cfx'; cv.setAttribute('aria-hidden', 'true'); dk.appendChild(cv);
+    const ctx = cv.getContext('2d'); let pts = [], ripples = [], squeeze = 0, ptr = null, raf = 0;
+    const colour = () => CUR.colours === 2 ? CUR.fill : getComputedStyle(dk).getPropertyValue('--lime').trim() || '#C6F432';
+    const fit = () => { const r = dk.getBoundingClientRect(), s = devicePixelRatio || 1; cv.width = r.width * s; cv.height = r.height * s; ctx.setTransform(s, 0, 0, s, 0, 0); };
+    const frame = () => {
+      raf = 0; if (cur !== 'look' || !dk.isConnected) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
+      const now = performance.now(), r = dk.getBoundingClientRect(); if (cv.width !== Math.round(r.width * (devicePixelRatio || 1))) fit();
+      ctx.clearRect(0, 0, r.width, r.height); const c = colour();
+      const life = [0, 420, 220, 520][CUR.trail]; pts = pts.filter(p => now - p.t < life);
+      if (CUR.trail === 3) pts.forEach(p => { const k = 1 - (now - p.t) / life; ctx.fillStyle = c; ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, 7); ctx.fill(); });
+      else if (CUR.trail && pts.length > 1) for (let i = 1; i < pts.length; i++) { const k = 1 - (now - pts[i].t) / life; ctx.strokeStyle = c; ctx.globalAlpha = k; ctx.lineCap = 'round'; ctx.lineWidth = CUR.trail === 2 ? 1 + 4 * k : 1.4; ctx.beginPath(); ctx.moveTo(pts[i - 1].x, pts[i - 1].y); ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      if (CUR.spot && ptr) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.rect(0, 0, r.width, r.height); ctx.arc(ptr.x, ptr.y, 60, 0, 7, true); ctx.fill('evenodd'); }
+      if (CUR.ring && ptr) { const sq = Math.max(0, 1 - (now - squeeze) / 220); ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ptr.x, ptr.y, 15 * (1 - .11 * Math.sin(sq * Math.PI)), 0, 7); ctx.stroke(); }
+      ripples = ripples.filter(p => now - p.t < 460); ripples.forEach(p => { const k = (now - p.t) / 460; ctx.strokeStyle = p.right ? '#9B8CFF' : c; ctx.globalAlpha = 1 - k; ctx.lineWidth = 2.5 * (1 - k) + .5; ctx.beginPath(); ctx.arc(p.x, p.y, 6 + 26 * k, 0, 7); ctx.stroke(); }); ctx.globalAlpha = 1;
+      if (pts.length || ripples.length || now - squeeze < 220 || CUR.ring || CUR.spot) raf = requestAnimationFrame(frame);
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    const at = (e) => { const r = dk.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, t: performance.now() }; };
+    dk.addEventListener('pointermove', (e) => { if (cur !== 'look') return; ptr = at(e); if (CUR.trail) pts.push(ptr); kick(); });
+    dk.addEventListener('pointerleave', () => { ptr = null; kick(); });
+    dk.addEventListener('pointerdown', (e) => { if (cur !== 'look') return; ptr = at(e); squeeze = ptr.t; if (CUR.ripple) ripples.push({ ...ptr, right: e.button === 2 }); kick(); });
+    P.look.kick = kick;
+  };
+  const cursorBlock = () => `<div class="ph">Cursor</div><div class="curs">${CUR_SETS.map((n, i) => `<button type="button" data-cs="${i}" aria-pressed="${i === CUR.set}"><img src="studio/cursor-${['macos', 'quiet', 'toybox', 'duo', 'classic'][i]}.png" alt=""><b>${n}</b></button>`).join('')}</div>
+    <div class="crow"><span>Colours</span>${seg('cc', ['Theme', 'Design’s own', 'Custom'], CUR.colours)}</div><div class="crow cwell" ${CUR.colours === 2 ? '' : 'hidden'}><span>Fill</span>${['#C6F432', '#FF5C8A', '#2BC4F0', '#FFC933'].map(c => `<button type="button" class="cw" data-cw="${c}" style="background:${c}" aria-label="Fill ${c}" aria-pressed="${c === CUR.fill}"></button>`).join('')}</div>
+    <div class="crow"><span>Trail</span>${seg('ct', ['Off', 'Thread', 'Comet', 'Dots'], CUR.trail)}</div>
+    <div class="crow"><span>Ring</span>${seg('cr', ['Off', 'On'], +CUR.ring)}<span>Ripple</span>${seg('cp', ['Off', 'On'], +CUR.ripple)}</div>
+    <div class="crow"><span>Spotlight</span><button type="button" class="bt sm" data-spot>Hold for Spotlight</button><small>Move the pointer over this desktop; click for the ripple</small></div>`;
+  const wireCursor = (el) => {
+    fxLayer(); deskCursor();
+    $$('[data-cs]', el).forEach(b => b.addEventListener('click', () => { CUR.set = +b.dataset.cs; $$('[data-cs]', el).forEach(x => x.setAttribute('aria-pressed', x === b)); deskCursor(); toast(CUR.set ? `${CUR_SETS[CUR.set]}: every pointer in macOS, Restore puts it back` : 'macOS’s own cursors'); }));
+    wireSeg(el, 'cc', (i) => { CUR.colours = i; $('.cwell', el).hidden = i !== 2; deskCursor(); P.look.kick?.(); });
+    $$('[data-cw]', el).forEach(b => b.addEventListener('click', () => { CUR.fill = b.dataset.cw; $$('[data-cw]', el).forEach(x => x.setAttribute('aria-pressed', x === b)); P.look.kick?.(); }));
+    wireSeg(el, 'ct', (i) => { CUR.trail = i; }); wireSeg(el, 'cr', (i) => { CUR.ring = !!i; P.look.kick?.(); }); wireSeg(el, 'cp', (i) => { CUR.ripple = !!i; });
+    holdable($('[data-spot]', el), () => { CUR.spot = true; P.look.kick?.(); }, () => { CUR.spot = false; P.look.kick?.(); });
+  };
+
+  /* ---------------------------------------------------------------- The record editor (1.1): split, cut and speed a part, the pointer Pilot
+     draws (smooth, bigger, a click ring), and the shape: as recorded, vertical or square (VideoEditorRenders, T28 to T30). */
+  const recorder = (root, page) => {
+    const ve = document.createElement('div'); ve.className = 'editor pn ved';
+    let parts = [{ a: 0, b: 12, cut: false, sp: 1 }], ph = 3.4, pick = 0, shape = 0, ptrL = { smooth: true, big: false, ring: true };
+    ve.innerHTML = `<div class="etb"><b class="vt">Recording 22.40.mov</b><span class="sp"></span><button type="button" class="bt sm" data-split>${IC('split')}Split S</button><button type="button" class="bt sm" data-cut>Cut X</button>${seg('vs', ['½×', '1×', '2×', '4×'], 1)}</div>
+      <div class="vbody"><div class="vstage"><div class="vpv"><div class="vclip">${page}</div><span class="vptr"></span></div></div><div class="vside"><p>Pointer</p><div class="crow"><span>Smooth</span>${seg('vsm', ['Off', 'On'], 1)}</div><div class="crow"><span>Size</span>${seg('vsz', ['1×', '2×'], 0)}</div><div class="crow"><span>Click ring</span>${seg('vrg', ['Off', 'On'], 1)}</div><p>Shape</p>${seg('vsh', ['Recorded', 'Vertical', 'Square'], 0)}</div></div>
+      <div class="vtl"><div class="vparts"></div><span class="vph"></span></div><div class="ebot"><span class="vkept"></span><span class="sp"></span><button type="button" class="bt" data-vclose>Close</button><button type="button" class="bt ink" data-vexp>Export</button></div>`;
+    root.appendChild(ve); setApp('Pilot');
+    const tl = $('.vparts', ve), phEl = $('.vph', ve), pv = $('.vpv', ve), ptr = $('.vptr', ve);
+    const draw = () => {
+      tl.innerHTML = parts.map((p, i) => `<button type="button" class="vpart${p.cut ? ' cut' : ''}${i === pick ? ' on' : ''}" data-p="${i}" style="flex:${p.b - p.a}">${p.cut ? 'cut' : p.sp !== 1 ? p.sp + '×' : ''}</button>`).join('');
+      phEl.style.left = (ph / 12 * 100) + '%';
+      const kept = parts.reduce((s, p) => s + (p.cut ? 0 : (p.b - p.a) / p.sp), 0); $('.vkept', ve).textContent = `0:${String(kept.toFixed(1)).padStart(4, '0')} kept · ${['1840 × 1160', '1080 × 1920', '1080 × 1080'][shape]}`;
+      pv.dataset.shape = shape; ptr.classList.toggle('big', ptrL.big); ptr.classList.toggle('ring', ptrL.ring); ptr.classList.toggle('shaky', !ptrL.smooth);
+    };
+    tl.addEventListener('click', (e) => { const r = tl.getBoundingClientRect(); ph = Math.max(0, Math.min(12, (e.clientX - r.left) / r.width * 12)); const b = e.target.closest('[data-p]'); if (b) pick = +b.dataset.p; draw(); });
+    const split = () => { const i = parts.findIndex(p => ph > p.a + .2 && ph < p.b - .2); if (i < 0) return; const p = parts[i]; parts.splice(i, 1, { ...p, b: ph }, { ...p, a: ph }); pick = i + 1; draw(); toast('Split at the playhead'); };
+    $('[data-split]', ve).addEventListener('click', split);
+    $('[data-cut]', ve).addEventListener('click', () => { const p = parts[pick]; if (!p) return; p.cut = !p.cut; draw(); toast(p.cut ? 'Cut: the export skips this part' : 'Kept'); });
+    wireSeg(ve, 'vs', (i) => { const p = parts[pick]; if (p) { p.sp = [.5, 1, 2, 4][i]; p.cut = false; draw(); } });
+    wireSeg(ve, 'vsm', (i) => { ptrL.smooth = !!i; draw(); }); wireSeg(ve, 'vsz', (i) => { ptrL.big = !!i; draw(); }); wireSeg(ve, 'vrg', (i) => { ptrL.ring = !!i; draw(); });
+    wireSeg(ve, 'vsh', (i) => { shape = i; draw(); });
+    ve.addEventListener('keydown', (e) => { if (e.key === 's') split(); if (e.key === 'x') $('[data-cut]', ve).click(); });
+    $('[data-vclose]', ve).addEventListener('click', () => { ve.remove(); setApp('Safari'); });
+    $('[data-vexp]', ve).addEventListener('click', () => { ve.remove(); setApp('Safari'); toast(`Exported ${['MP4', 'a vertical MP4, the pointer kept in frame', 'a square MP4'][shape]}`); });
+    draw();
+  };
 
   /* ------------------------------------------------ the studio: the areas as a sidebar beside one Pilot desktop they drive */
   const A = Object.fromEntries(D.areas.map(a => [a[0], a]));
@@ -785,7 +1005,29 @@
       await d.erase('.lm input'); await d.type('.lm input', '12*7'); await d.wait(1300);
       await d.erase('.lm input'); await d.type('.lm input', '5 km in mi'); await d.wait(1400);
       await d.erase('.lm input'); await d.type('.lm input', '#C6F432'); await d.wait(1400);
+      await d.erase('.lm input'); await d.type('.lm input', 'tr hello'); await d.wait(1300);
+      await d.erase('.lm input'); await d.type('.lm input', 'em funny'); await d.wait(1300);
+      await d.erase('.lm input'); await d.type('.lm input', 'music'); await d.wait(1300);
       await d.erase('.lm input');
+    },
+    pilotfiles: async (d) => {
+      await d.wait(900); await d.click('.pfr[data-i="4"]', { dwell: 600 }); await d.key('.pf', 'k', { meta: true, dwell: 1300 }); await d.key('.pf', 'Escape');
+      await d.click('.pfr[data-i="1"]'); await d.key('.pf', 'k', { meta: true, dwell: 700 }); await d.click('.pfk [data-a="fd"]', { dwell: 900 }); await d.click('.pfk [data-fd="code-pour"]', { dwell: 1300 });
+      await d.click('[data-new]', { dwell: 900 }); await d.key('.pfr input', 'Enter');
+      await d.click('.pfr[data-i="6"]'); await d.key('.pf', 'x', { meta: true, dwell: 900 });
+      await d.click('.pfr[data-i="0"]'); await d.key('.pf', 'Enter', { dwell: 700 }); await d.key('.pf', 'v', { meta: true, dwell: 1200 });
+      await d.key('.pf', 'z', { meta: true, dwell: 900 }); await d.click('[data-go="Projects"]', { dwell: 700 });
+      await d.click('.pfr[data-i="5"]'); await d.key('.pf', 'Backspace', { meta: true, dwell: 1100 }); await d.key('.pf', 'z', { meta: true, dwell: 1200 });
+    },
+    look: async (d) => {
+      await d.click('[data-cs="1"]', { dwell: 700 }); await d.click('[data-cs="2"]', { dwell: 700 });
+      await d.click('[data-sg="ct"] button[data-v="2"]', { dwell: 500 });
+      await d.drag(['#desk', .2, .75], ['#desk', .8, .55], { dwell: 700 });
+      await d.click('[data-sg="ct"] button[data-v="3"]', { dwell: 500 });
+      await d.drag(['#desk', .8, .7], ['#desk', .25, .5], { dwell: 700 });
+      await d.click('[data-sg="cc"] button[data-v="2"]', { dwell: 600 }); await d.click('[data-cw="#FF5C8A"]', { dwell: 600 });
+      await d.drag(['#desk', .25, .8], ['#desk', .75, .7], { dwell: 800 });
+      await d.hold('[data-spot]', 1600);
     },
     files: async (d) => {
       await d.wait(700); await d.erase('.lm input'); await d.type('.lm input', 'delivery'); await d.wait(900);
@@ -857,7 +1099,7 @@
       await d.click('#desk [data-tb="pilot"]', { dwell: 1600 }); await d.click('#desk [data-tb="pilot"]');
     },
   };
-  const TOUR = ['launcher', 'windows', 'desktop', 'dictation', 'captures', 'ai', 'clipboard', 'keys', 'files', 'convert', 'menubar'];
+  const TOUR = ['launcher', 'pilotfiles', 'look', 'windows', 'desktop', 'dictation', 'captures', 'ai', 'clipboard', 'keys', 'files', 'convert', 'menubar'];
   const layer = studio || (areaEl && stage.isConnected ? stage : null), deskEl = $('#desk');
   if (layer && deskEl && !reduced && (studio || DEMO[cur])) {
     layer.classList.add('dlayer');
@@ -940,8 +1182,8 @@
         },
         key: async (spec, key, o = {}) => {
           const el = typeof spec === 'string' ? $(spec, layer) : spec; if (!el) return;
-          caps([...(o.hyper ? ['Hyper'] : []), ...(o.shift ? ['Shift'] : []), key], 900); await sleep(t, 160);
-          const init = { key, bubbles: true, cancelable: true, shiftKey: !!o.shift };
+          caps([...(o.hyper ? ['Hyper'] : []), ...(o.meta ? ['⌘'] : []), ...(o.alt ? ['⌥'] : []), ...(o.shift ? ['Shift'] : []), key.length === 1 ? key.toUpperCase() : key], 900); await sleep(t, 160);
+          const init = { key, bubbles: true, cancelable: true, shiftKey: !!o.shift, metaKey: !!o.meta, altKey: !!o.alt };
           el.dispatchEvent(new KeyboardEvent('keydown', init)); await sleep(t, 110); el.dispatchEvent(new KeyboardEvent('keyup', init));
           await sleep(t, o.dwell ?? rnd(520, 700));
         },

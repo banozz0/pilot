@@ -8,7 +8,7 @@ import Testing
 @MainActor
 @Suite("Binds keyboard page")
 struct BindsKeyboardPageTests {
-    @Test("While the Binds board picks, a Hyper press picks its key and runs nothing, bound or free, with its sublayer; plain combos still run; done picking, the bind runs again (card agent-bo-95422993, G5)")
+    @Test("While the Binds board picks, a Hyper press picks its key with its sublayer; a bound one runs too, so binds work with Pilot in front (T48), a free one only picks; plain combos still run (card agent-bo-95422993, G5)")
     func hyperPressPicks() {
         let tap = HyperTap(layer: HyperLayer(layerKey: .capsLock))
         let b = KeyNames.code(for: "B")!
@@ -27,10 +27,11 @@ struct BindsKeyboardPageTests {
         press(b, flags: KeyEvent.shiftMask)
         press(KeyNames.code(for: "W")!, flags: KeyEvent.cmdMask, hyper: false)
         #expect(picked == [Key("k"), Key("b", .shift)])
-        #expect(ran == [Key("w", .cmd, hyper: false)] && unbound.isEmpty)
+        // T48: the bound Hyper+K ran as well as picking; the free Hyper+Shift+B only picked.
+        #expect(ran == [Key("k"), Key("w", .cmd, hyper: false)] && unbound.isEmpty)
         tap.picking = nil
         press(KeyCode.k)
-        #expect(ran.last == Key("k") && picked.count == 2)
+        #expect(ran.last == Key("k") && ran.count == 3 && picked.count == 2)
     }
 
     @Test("Return and Delete act on the picked key's row: Return rebinds its bind or binds the free key, Delete clears the picked bind and leaves a free key alone (card agent-bo-95422993, G4)")

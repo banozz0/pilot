@@ -140,7 +140,7 @@ final class PilotMenu {
             self.show(MenuNavigator(list: rows, title: title, back: back), pick: then, at: at)
             self.onCancel = cancelled
             self.logPicks = logTitles
-            mlog.notice("menu: picker \(title ?? "", privacy: .public) shown, \(rows.count) rows")
+            mlog.notice("menu: picker \(title ?? "", privacy: .private) shown, \(rows.count) rows")
         }
     }
 
@@ -242,6 +242,8 @@ final class PilotMenu {
             self?.provideEmojiGrid($0)
             self?.model?.nav.provideSettings($0, developer: DeveloperPages.on)
             self?.searchStickers($0)
+            self?.openGifs($0)
+            self?.openAliasedBranch($0)
             self?.searchGiphy($0)
             self?.answer($0)
             self?.searchInstall($0)
@@ -298,6 +300,7 @@ final class PilotMenu {
         let p = Self.makePanel(model)
         panel = p
         caretPending = false
+        model.room = Self.room(for: p)
         sizer = MenuSizer(panel: p, model: model)
         if let at { place(at: at) }
         resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: p, queue: .main) { [weak self] _ in
@@ -328,12 +331,25 @@ final class PilotMenu {
         return URL(filePath: path)
     }
 
-    /// The panel resized round a face of `face`, its top edge and centre put.
+    /// The face height `panel`'s screen holds: its visible height less the shadow's margins and a 24 pt gap at each end
+    /// (T36). The screen holding the focused window, as HUD.centre places the panel.
+    static func room(for panel: NSPanel) -> CGFloat? {
+        guard let f = Screens.focusedScreen?.visibleFrame else { return nil }
+        let margins = (panel as? KeyPanel)?.margins ?? NSEdgeInsetsZero
+        return room(visible: f.height, margins: margins)
+    }
+
+    static func room(visible: CGFloat, margins: NSEdgeInsets) -> CGFloat { (visible - margins.top - margins.bottom - 48).rounded(.down) }
+
+    /// The panel resized round a face of `face`, its top edge and centre put; moved up as far as its foot needs to stay
+    /// on its screen, as the root grows to that screen's height (T36).
     static func fit(_ panel: NSPanel, face: CGSize) {
         let size = PopSurface.window(face, (panel as? KeyPanel)?.margins ?? NSEdgeInsetsZero)
         let f = panel.frame
         guard f.size != size else { return }
-        panel.setFrame(CGRect(x: f.midX - size.width / 2, y: f.maxY - size.height, width: size.width, height: size.height), display: true)
+        var y = f.maxY - size.height
+        if let visible = panel.screen?.visibleFrame, y < visible.minY { y = min(visible.minY, visible.maxY - size.height) }
+        panel.setFrame(CGRect(x: f.midX - size.width / 2, y: y, width: size.width, height: size.height), display: true)
     }
 
     /// The menu's panel takes the keyboard without activating Pilot, as the clipboard panel does: it is key at once and
@@ -388,19 +404,48 @@ final class PilotMenu {
         readAppMenu(app)
     }
 
-    /// The menu items of the running app a root search's best match is, once typing pauses for 0.3 s, so typing any
-    /// running app's name lists its actions, not only the front app's (Sven, 1.0.1: "ghostex" listed one); each app's
-    /// menu bar read once a menu.
+    /// The menu items of the running app a root search's best match is, or an app alias names ("gx new terminal", T40),
+    /// once typing pauses for 0.3 s, so typing any running app's name lists its actions, not only the front app's (Sven,
+    /// 1.0.1: "ghostex" listed one); each app's menu bar read once a menu. A closed app's come from its saved menu bar
+    /// (MenuCache, T41), Return launching it first.
     private func provideAppMenu() {
         appMenuRead?.cancel()
-        guard let model, model.nav.branch == nil, let best = model.nav.rows.first, best.running, case .app(let bundle) = best.target,
-              appMenus[bundle] == nil else { return }
+        guard let model, model.nav.branch == nil, let bundle = Self.menuApp(of: model.nav), appMenus[bundle] == nil else { return }
         appMenuRead = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, let self, self.model === model,
-                  let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else { return }
-            self.readAppMenu(app)
+            guard !Task.isCancelled, let self, self.model === model else { return }
+            if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) { self.readAppMenu(app) }
+            else { self.readSavedMenu(bundle) }
         }
+    }
+
+    /// The app whose menu bar the root wants read: an app alias's, else the best match's while it runs or has a saved one.
+    private static func menuApp(of nav: MenuNavigator) -> String? {
+        if let app = nav.scopedApp { return app }
+        guard let best = nav.rows.first, case .app(let bundle) = best.target, best.running || MenuCache.shared.saved.contains(bundle) else { return nil }
+        return bundle
+    }
+
+    /// A closed app's saved menu bar (T41), its rows listed beside those read before; nothing when it has none.
+    private func readSavedMenu(_ bundle: String) {
+        guard let model, appMenus[bundle] == nil else { return }
+        appMenus[bundle] = []
+        let bound = boundMenuRoutes, name = AppsModule.displayName(bundle)
+        Task { [weak self] in
+            guard let menu = await MenuCache.shared.menu(of: bundle) else { return }
+            let rows = await Task.detached(priority: .userInitiated) {
+                MenuItemSearch.entries(menu.items, bundle: bundle, app: name, except: bound)
+            }.value
+            guard let self, self.model === model else { return }
+            self.list(rows, of: bundle, in: model)
+            mlog.notice("menu: \(rows.count) saved menu items for \(bundle, privacy: .public)")
+        }
+    }
+
+    /// One app's menu items listed beside those of the apps read before.
+    private func list(_ rows: [MenuEntry], of bundle: String, in model: MenuModel) {
+        appMenus[bundle] = rows
+        model.nav.provide(.menuItem, appMenus.keys.sorted().flatMap { appMenus[$0] ?? [] })
     }
 
     /// One app's menu bar read off the main thread (AXMenuItems.read's bound), its rows listed beside those read before.
@@ -413,8 +458,7 @@ final class PilotMenu {
                 MenuItemSearch.entries(AXMenuItems.read(pid: pid), bundle: bundle, app: name, except: bound)
             }.value
             guard let self, self.model === model else { return }
-            self.appMenus[bundle] = rows
-            model.nav.provide(.menuItem, self.appMenus.keys.sorted().flatMap { self.appMenus[$0] ?? [] })
+            self.list(rows, of: bundle, in: model)
             mlog.notice("menu: \(rows.count) menu items for \(bundle, privacy: .public) in \(Int(-started.timeIntervalSinceNow * 1000)) ms")
         }
     }
@@ -451,10 +495,11 @@ final class PilotMenu {
         }
     }
 
-    /// Emoji whose name or a keyword starts with each typed word, at the root only (EmojiSearch, card agent-bo-95422931).
+    /// Emoji whose name or a keyword starts with each typed word, at the root only (EmojiSearch, card agent-bo-95422931);
+    /// after the picker's alias ("em funny", T37) the words after it.
     private func searchEmoji(_ query: String) {
         guard let model else { return }
-        model.nav.provide(.emoji, model.nav.branch == nil ? EmojiSearch.entries(for: query, in: Self.emoji) : [])
+        model.nav.provide(.emoji, model.nav.branch == nil ? EmojiSearch.entries(for: model.nav.emojiWords ?? query, in: Self.emoji) : [])
     }
     /// Trigger › Emoji's grid (P39): the most used (P52), then gemoji's categories, or what the words find; only the category
     /// ⌘P picked.
@@ -532,6 +577,38 @@ final class PilotMenu {
         guard giphyFound?.query != typed || giphyFound?.kind != kind else { return }
         giphyPage?.cancel()
         giphySearch = fetchGiphy(typed, kind: kind, offset: 0)
+    }
+
+    /// `gif ` and words at the root (T39, Sven 2026-11-04: "gif funny"), or Stickers and GIFs' own alias: the branch opens
+    /// on GIPHY's GIFs searching the words, Escape going back to the root; the search waits for the pause as typed there.
+    private func openGifs(_ query: String) {
+        guard let words = model?.nav.gifWords else { return }
+        go(soon: MenuNavigator.Spot(branch: .stickers, query: words, rooted: .stickers), from: query) { $0.giphyKind = .gifs }
+    }
+
+    /// The menu at `spot` once onQuery is done, not from inside it, where the other providers still read this query at
+    /// the root; nothing when Sven typed on or left the root meanwhile. `first` readies the model before it moves.
+    private func go(soon spot: MenuNavigator.Spot, from query: String, first: @escaping (MenuModel) -> Void = { _ in }) {
+        DispatchQueue.main.async { [weak model] in
+            guard let model, model.nav.branch == nil, model.nav.query == query else { return }
+            first(model)
+            model.nav.go(to: spot)
+        }
+    }
+
+    /// A branch's alias and words at the root ("sys wifi", T40; "kill chrome" opens Activity, T42) open that branch
+    /// searching the words, Escape going back to the root, as `def` and `gif` do; Finder's or Pilot Files' alias opens the
+    /// Files view searching them (T42).
+    private func openAliasedBranch(_ query: String) {
+        guard let nav = model?.nav else { return }
+        if let spot = nav.scopedBranch { go(soon: spot, from: query) }
+        if let words = nav.scopedFiles {
+            DispatchQueue.main.async { [weak model] in
+                guard let model, model.nav.branch == nil, model.nav.query == query else { return }
+                model.nav.show(.file)
+                model.nav.query = words
+            }
+        }
     }
 
     /// GIPHY's next page once the list is scrolled to within `Giphy.pageAhead` rows of its end (row `index` shown), up
@@ -1331,7 +1408,12 @@ final class PilotMenu {
     /// A Cmd+K action the navigator leaves to the panel (card agent-bo-95422968). Uninstall and opening never get here:
     /// the navigator searches Remove for the first and picks the row for the second.
     private func perform(_ action: RowAction, on entry: MenuEntry) {
-        mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .public)")
+        // A menu item's key names its title path (T41 review): private.
+        if entry.kind == .menuItem {
+            mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .private)")
+        } else {
+            mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .public)")
+        }
         switch (action, entry.target) {
         case (.showInFinder, _): reveal(entry)
         case (.copyPath, .app(let bundle)): copy(AppsModule.url(forBundle: bundle)?.path)
@@ -1354,6 +1436,9 @@ final class PilotMenu {
             AppsModule.open(bundle: bundle)
         case (.copyID, .action(let id)): copy(id)
         case (.copyTitle, _): copy(entry.title)
+        case (.copyEmoji, .emoji(let glyph)):
+            if let model { record(entry, from: model.nav) }
+            copy(glyph)
         case (.quit, .app(let bundle)), (.forceQuit, .app(let bundle)):
             close(restoreFocus: previousApp?.bundleIdentifier != bundle)
             for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundle) {
@@ -1421,6 +1506,11 @@ final class PilotMenu {
             close(restoreFocus: false)
             mlog.notice("menu: \(bundle, privacy: .public)'s menu item, the app brought forward")
             DriveModule.open(bundle, then: route)
+        // Clipboard history's alias and words ("cb invoice", T42): the history opens searching them.
+        case .action(let id) where id == ClipboardHistory.actionID && model?.nav.clipboardWords != nil:
+            let words = model?.nav.clipboardWords
+            close(restoreFocus: true)
+            runWhenFrontmost(previous, id) { ClipboardHistory.shared.toggle(searching: words) }
         case .action(let id):
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { Engine.shared?.action(id)?.run() }
@@ -1511,12 +1601,18 @@ final class PilotMenu {
     /// The wait is a task, so `origin` carries through it.
     private func runWhenFrontmost(_ app: NSRunningApplication?, _ id: String, tries: Int = 20, _ body: @escaping () -> Void) {
         let front = NSWorkspace.shared.frontmostApplication
+        // A menu item's route names its title path (T41 review): private.
+        let menuItem = id.hasPrefix("drive.menu:")
         guard let app, front?.processIdentifier != app.processIdentifier else {
-            mlog.notice("menu: run \(LinkToken.redact(id), privacy: .public) in \(front?.bundleIdentifier ?? "?", privacy: .public)")
+            if menuItem { mlog.notice("menu: run \(LinkToken.redact(id), privacy: .private) in \(front?.bundleIdentifier ?? "?", privacy: .public)") }
+            else { mlog.notice("menu: run \(LinkToken.redact(id), privacy: .public) in \(front?.bundleIdentifier ?? "?", privacy: .public)") }
             body()
             return
         }
         guard tries > 0 else {
+            if menuItem {
+                return mlog.error("menu: \(LinkToken.redact(id), privacy: .private) not run, \(app.bundleIdentifier ?? "?", privacy: .public) did not come back to the front")
+            }
             return mlog.error("menu: \(LinkToken.redact(id), privacy: .public) not run, \(app.bundleIdentifier ?? "?", privacy: .public) did not come back to the front")
         }
         Task {
@@ -1542,6 +1638,10 @@ final class PilotMenu {
         guard let picks = frecency else { return }
         saveFrecency(picks)
         let top = nav.rows.prefix(3).map(\.title).joined(separator: ", ")
+        // An app's menu item names what the app holds now and then (T41 review): its titles stay out of the public log.
+        guard entry.kind != .menuItem, !nav.rows.prefix(3).contains(where: { $0.kind == .menuItem }) else {
+            return mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .private) from \(top, privacy: .private), frecency \(picks.score(key, now: .now))")
+        }
         mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .public) for \"\(nav.query, privacy: .public)\" from \(top, privacy: .public), frecency \(picks.score(key, now: .now))")
     }
 
@@ -1794,6 +1894,10 @@ final class MenuModel {
     /// About's height for the displays this Mac has now.
     var aboutHeight: CGFloat { MenuAboutScreen.height(displays: NSScreen.screens.count) }
 
+    /// The face's height the menu's screen holds, which the root may grow to so every Go to row shows (T36); nil keeps
+    /// the 650 cap (MenuPanelSize.goToTallest). PilotMenu sets it as the panel opens.
+    var room: CGFloat?
+
     /// Toybox's panel size for where Sven is (MenuPanelSize, card agent-bo-95422981).
     var toyboxSize: CGSize {
         let size = MenuPanelSize.toybox(shape, rows: nav.rows.count)
@@ -1809,17 +1913,17 @@ final class MenuModel {
         if layout == .classic { return classicSize }
         if layout == .line { return lineSize }
         let band = railBand
-        if showsStats { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
-        if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight) }
-        if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height) }
+        if showsStats { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: MenuStatsScreen.height, room: room) }
+        if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight, room: room) }
+        if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height, room: room) }
         if scan != nil {
-            return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: waitHeight)
+            return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: waitHeight, room: room)
         }
         // The Rail's root lists its rows in the rail, beside the recents, so its rail sets the height.
         let listed = band == .root
         return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: listed ? 0 : nav.rows.count, headings: listed ? 0 : headings.count,
                                   extra: noMatch ? Self.noMatchRoom : 0, bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0,
-                                  full: nav.actions != nil || nav.shownDetail != nil)
+                                  full: nav.actions != nil || nav.shownDetail != nil, room: room)
     }
 
     /// Classic's (ClassicMenu): as tall as its rows, the root's under their rule heading, and
@@ -1834,14 +1938,14 @@ final class MenuModel {
         return MenuPanelSize.classic(shape, rows: nav.rows.count, headings: atRoot ? 0 : headings.count, root: atRoot,
                                      card: card,
                                      extra: noMatch ? Self.noMatchRoom : 0, bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0,
-                                     full: nav.actions != nil || nav.shownDetail != nil || previewsFile)
+                                     full: nav.actions != nil || nav.shownDetail != nil || previewsFile, room: room)
     }
 
     /// Line's (LineMenu): Classic's root at 431 wide, else a 750 list as tall as its rows, headings and an answer's card.
     private var lineSize: CGSize {
         if scan != nil { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: waitHeight) }
         if let speedTest { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: SpeedTestView.height(speedTest)) }
-        if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count) }
+        if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count, room: room) }
         if showsStats { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: aboutHeight) }
         if showsDefine { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: DefinePane.height) }
@@ -2073,10 +2177,13 @@ extension MenuModel {
         return baseFooter
     }
 
-    /// Words in the foot that are no key: GIPHY's attribution (story 164), shown wherever its GIFs are listed.
-    var footerNote: String? {
-        if nav.branch == .activity, !nav.isList { return activityNote }
-        return nav.branch == .stickers && nav.rows.contains { if case .sticker(.giphy) = $0.target { true } else { false } } ? Giphy.attribution : nil
+    /// Words in the foot that are no key: Activity's note.
+    var footerNote: String? { nav.branch == .activity && !nav.isList ? activityNote : nil }
+
+    /// GIPHY's attribution, its logo beside "Powered by GIPHY" at the GIFs | Stickers bar's right (story 164, T39):
+    /// shown wherever its GIFs are listed.
+    var showsGiphyAttribution: Bool {
+        showsGiphyBar && nav.rows.contains { if case .sticker(.giphy) = $0.target { true } else { false } }
     }
 
     /// The root's way out, against the foot's right edge (mockup A).

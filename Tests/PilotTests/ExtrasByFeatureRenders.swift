@@ -6,10 +6,9 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Extras by feature (Sven, 2026-10-29, Q555 to Q557, after his 1.0 stranger run skipped the helpers): Onboarding's
-/// Extras step on a fresh Mac (nothing on it, the real ticks) in Toybox and Instrument, as it opens and with Homebrew
-/// unticked; then where Update and Clean offer the install later: the menu's Update without Homebrew, Clean without
-/// Homebrew and Mole, and Mac › Update & Clean without either.
+/// Extras by feature (Sven, 2026-10-29, Q555 to Q557, after his 1.0 stranger run skipped the helpers): where Update and
+/// Clean offer the install later: the menu's Update without Homebrew, Clean without Homebrew and Mole, and Mac › Update &
+/// Clean without either. Onboarding's Set up, which replaced the Extras step, renders in OnboardingRenders (T54).
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter ExtrasByFeatureRenders`
 extension SharedLook {
 @MainActor
@@ -17,7 +16,7 @@ extension SharedLook {
 struct ExtrasByFeatureRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Extras grouped by feature, and Update and Clean's install offers", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Update and Clean's install offers", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -30,31 +29,6 @@ struct ExtrasByFeatureRenders {
         let look = Look.shared
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "lagoon"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
-
-        for style in [PilotStyle.toybox, .instrument] {
-            look.style = style
-            for unticked in [false, true] {
-                let model = OnboardingModel()
-                model.step = .extras
-                model.extras.seededOnMac = []
-                let host = NSHostingView(rootView: OnboardingView(model: model).environment(engine))
-                host.frame.size = host.fittingSize
-                let w = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-                w.title = "Welcome to Pilot"
-                w.isReleasedWhenClosed = false
-                w.contentView = host
-                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-                if unticked {
-                    model.extras.set(.homebrew, false)
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                }
-                let chrome = try #require(w.contentView?.superview)
-                chrome.layoutSubtreeIfNeeded()
-                try #require(snapshot(chrome, scale: 2)?.representation(using: .png, properties: [:]))
-                    .write(to: dir.appendingPathComponent("extras-\(unticked ? "homebrew-unticked" : "fresh-mac")-\(style.rawValue).png"))
-                w.close()
-            }
-        }
 
         look.style = .toybox
         var update = MenuNavigator(entries: [], branch: .update)

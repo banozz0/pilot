@@ -119,13 +119,13 @@ public enum FuzzyRanker {
     /// rankings, as a navigator ranks every row again per keystroke.
     public static func rank<T>(_ items: [T], query: String, title: (T) -> String, name: (T) -> String = { _ in "" },
                                boost: (T) -> Double = { _ in 0 }, weight: (T) -> Double = { _ in 1 },
-                               prefer: (T) -> Int = { _ in 0 }, memo: Memo? = nil) -> [T] {
+                               prefer: (T) -> Int = { _ in 0 }, memo: Memo? = nil, typos: Bool = false) -> [T] {
         let q = Query(query)
         let rows = items.enumerated().map { i, item in (item: item, title: title(item), index: i) }
         guard !q.words.isEmpty else {
             return rows.map { ($0.item, boost($0.item), $0.index) }.sorted { ($1.1, $0.2) < ($0.1, $1.2) }.map(\.0)
         }
-        return hits(q, titles: rows.map(\.title), names: rows.map { name($0.item) }, memo: memo)
+        return hits(q, titles: rows.map(\.title), names: rows.map { name($0.item) }, memo: memo, typos: typos)
             .map { hit -> (item: T, strength: Int, rank: Double, prefer: Int, length: Int, index: Int) in
                 let row = rows[hit.row]
                 return (row.item, hit.strength, Double(hit.score) * weight(row.item) * (1 + boost(row.item)), prefer(row.item),
@@ -136,22 +136,24 @@ public enum FuzzyRanker {
     }
 
     /// `hits` with `memo`'s cache, or one that keeps no scores.
-    private static func hits(_ q: Query, titles: [String], names: [String], memo: Memo?) -> [(row: Int, score: Int, strength: Int)] {
+    private static func hits(_ q: Query, titles: [String], names: [String], memo: Memo?, typos: Bool) -> [(row: Int, score: Int, strength: Int)] {
         guard let memo else {
             var once = Cache(keeps: false)
-            return hits(q, titles: titles, names: names, cache: &once)
+            return hits(q, titles: titles, names: names, cache: &once, typos: typos)
         }
-        return memo.cache.withLock { hits(q, titles: titles, names: names, cache: &$0) }
+        return memo.cache.withLock { hits(q, titles: titles, names: names, cache: &$0, typos: typos) }
     }
 
-    /// The rows matching `q`, by index, with their score and strength (see `rank`).
-    private static func hits(_ q: Query, titles: [String], names: [String], cache: inout Cache) -> [(row: Int, score: Int, strength: Int)] {
+    /// The rows matching `q`, by index, with their score and strength (see `rank`). Typos count only while no row spells
+    /// the query surely, unless `typos` asks for them always (an alias's few rows, T42: "generate password" finds
+    /// Password generator beside Generate a password).
+    private static func hits(_ q: Query, titles: [String], names: [String], cache: inout Cache, typos: Bool) -> [(row: Int, score: Int, strength: Int)] {
         cache.query = q.typed
         func scored(typos: Bool) -> [(row: Int, score: Int, strength: Int)] {
             titles.indices.compactMap { r in cache.score(q, titles[r], typos: typos).map { (r, $0, cache.strength(q.typed, of: names[r])) } }
         }
-        var hits = scored(typos: false)
-        if !hits.contains(where: { $0.score >= sure }), q.typos { hits = scored(typos: true) }
+        var hits = scored(typos: typos && q.typos)
+        if !typos, !hits.contains(where: { $0.score >= sure }), q.typos { hits = scored(typos: true) }
         // No row is named by what was typed: one named by a typo of it is, so Mail leads "mial" over Sound, whose
         // keywords spell it as initials (microphone, alert).
         if q.letters.count >= typoLetters, !hits.contains(where: { $0.strength > 0 }) {
@@ -973,12 +975,13 @@ public struct MenuNavigator: Sendable {
         }
         // Nothing new (no rows before or after, or the same ones again): no rank, which runs on every keystroke.
         guard entries.filter(theirs) != rows else { return }
-        let untouched = selection == 0, answer = rows.contains(where: \.isAnswer)
+        // Under an app's alias the best of its actions stays selected as its menu items arrive (T40).
+        let untouched = selection == 0, answer = rows.contains(where: \.isAnswer), scoped = scopedApp != nil
         // An offer (Ask AI, Search the web, Search files) or Install's Searching row, selected only because nothing else
         // was listed yet, gives way to the first row that arrives: the Searching row shares the web row's target, so
         // keeping it carried the selection to that last row (Sven 2026-10-12).
         let placeholder = selected.map { $0.isOffer || MenuEntries.isSearching($0) } ?? false
-        let keep = untouched && (answer || placeholder) ? nil : selected?.id
+        let keep = untouched && (answer || placeholder || scoped) ? nil : selected?.id
         entries = entries.filter { !theirs($0) } + rows
         rerank(keeping: keep)
     }
@@ -995,11 +998,14 @@ public struct MenuNavigator: Sendable {
     /// Ranks again after the entries, picks or favourites changed, keeping `id` selected while it is listed.
     private mutating func rerank(keeping id: MenuEntry.Target?) {
         boost = frecency.boosts(for: entries.compactMap(\.target.key), now: now)
-        refresh()
+        refresh(keeping: id)
         select(id)
     }
 
-    private mutating func refresh() {
+    /// `kept` is the row a rerank keeps selected, which a list that would drop it (an inline answer's) still holds.
+    private mutating func refresh(keeping kept: MenuEntry.Target? = nil) {
+        // The rows before this refresh, for the kept row: Sven arrowed onto it, so it stays listed.
+        let held = kept.flatMap { id in rows.first { $0.id == id && !$0.isAnswer } }
         selection = 0
         kindCounts = [:]
         guard let branch else {
@@ -1009,6 +1015,35 @@ public struct MenuNavigator: Sendable {
             guard !query.isEmpty else {
                 rows = only.map(rootKind) ?? rootRows
                 kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { Self.listedUntyped($0) && $0.kind.tab == k }) })
+                return
+            }
+            // The emoji picker's alias and words ("em funny", T37): the emoji they find as EmojiSearch ordered them, best first.
+            if only == nil, emojiWords != nil { rows = entries.filter { $0.kind == .emoji && $0.home == nil }; return }
+            // An app's alias and words ("bw generate password", T40): that app's actions the words find, best first; none
+            // found is today's search, so an alias that is also a word ("am") still searches.
+            switch aliasRoute {
+            case let (.app(app), words)?:
+                let found = rank(entries.filter { $0.inSearch && Self.belongs($0, to: app) }, text: words)
+                if !found.isEmpty { rows = found; return }
+            // Ask AI's or AI chat's alias and words ("chat what's up", T42): the question alone, an answer as `ask …`
+            // gives (QuickAI), Return sending it.
+            case let (.ask, words)?:
+                rows = [MenuEntry(title: "Ask AI", target: .ask(words), detail: "Return asks your AI", isAnswer: true, subtitle: words)]
+                return
+            // Clipboard history's alias and words ("cb invoice", T42): its row alone, Return opening it searching them.
+            case let (.clipboard, words)?:
+                guard let key = aliasScope?.key, var row = entries.first(where: { $0.frecencyKey == key }) else { break }
+                row.subtitle = "“\(words)”"
+                row.detail = "Return searches clipboard history"
+                row.detailIsKey = false
+                rows = [row]
+                return
+            default: break
+            }
+            // An inline answer's word ("tr hello", "calc 12*7", T40): its answers alone, the translation first; a row Sven
+            // had arrowed onto before they arrived stays under them, still selected (TranslateTests' rootAnswer).
+            if only == nil, RootAnswers.asksInline(query), case let answers = entries.filter(\.isAnswer), !answers.isEmpty {
+                rows = answers.filter { $0.home == .translate } + answers.filter { $0.home != .translate } + (held.map { [$0] } ?? [])
                 return
             }
             // Under All, files wait for the Search files row (card agent-bo-95422968).
@@ -1022,6 +1057,15 @@ public struct MenuNavigator: Sendable {
             }
             let searchFiles = only == nil ? FileSearch.query(for: query).map { MenuEntry(title: "Search files for \"\($0)\"", target: .searchFiles) } : nil
             rows = aliasFirst(MenuGroups.grouped(only == nil ? MenuGroups.appFirst(listed, query: query) : listed), of: searched)
+            // An app in the lead, typed or by its alias: every action of its listed right under it, above the offers, those
+            // the words matched first (Sven, Q831).
+            var owned = 0
+            if only == nil, case .app(let bundle)? = rows.first?.target {
+                let matched = rows.dropFirst().filter { Self.belongs($0, to: bundle) }, ids = Set(matched.map(\.id))
+                let own = matched + searched.filter { !ids.contains($0.id) && Self.belongs($0, to: bundle) }
+                rows = [rows[0]] + own + rows.dropFirst().filter { !Self.belongs($0, to: bundle) }
+                owned = own.count
+            }
             let files = searchFiles.map { [$0] } ?? []
             // Under All, Ask AI and Search the web for what was typed always, Search files with them: after the best match's
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
@@ -1038,7 +1082,7 @@ public struct MenuNavigator: Sendable {
                 // Something matched, but not an app on this Mac (an emoji for "videorc", Sven 1.0.1): an app's name is still
                 // offered to install.
                 let installs = only == nil && rows.first?.kind != .app && Self.looksLikeApp(query)
-                let end = Self.bestMatchEnd(rows), offers = fallbacks + files + (installs ? install : [])
+                let end = owned > 0 ? 1 + owned : Self.bestMatchEnd(rows), offers = fallbacks + files + (installs ? install : [])
                 rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end)
             }
             return
@@ -1086,17 +1130,77 @@ public struct MenuNavigator: Sendable {
         return [row] + rows.filter { $0.id != row.id }
     }
 
+    /// The words after the emoji picker's alias at the root ("em funny" gives "funny", T37), which the emoji are searched
+    /// for; nil for any other query. Read under a kind tab too, as before the routes (T42).
+    public var emojiWords: String? { routed(branch == nil ? aliases.scope(of: query) : nil, .emoji) }
+
+    /// The words after `gif`, or after Stickers and GIFs' own alias, at the root ("gif funny" gives "funny", T39), which
+    /// that branch opens searching GIPHY's GIFs for; nil for any other query.
+    public var gifWords: String? {
+        guard branch == nil else { return nil }
+        return Aliases.words(after: Stickers.gifWord, in: query) ?? routed(aliases.scope(of: query), .gifs)
+    }
+
+    /// The row the query's first word is the alias of, and the words after it, at the root (T40); nil while a kind tab
+    /// shows, for a query starting with no alias, or for an alias alone (aliasFirst lists its row first).
+    public var aliasScope: (key: String, words: String)? { branch == nil && !isList && only == nil ? aliases.scope(of: query) : nil }
+
+    /// What the query's alias does with its words (AliasRoute, T42), and the words; nil as for aliasScope, or when the
+    /// alias's row has no route, so the whole query is searched as today.
+    public var aliasRoute: (route: AliasRoute, words: String)? { aliasScope.flatMap { s in AliasRoute(key: s.key).map { ($0, s.words) } } }
+
+    /// The words of `scope` when its alias routes to `route`.
+    private func routed(_ scope: (key: String, words: String)?, _ route: AliasRoute) -> String? {
+        scope.flatMap { AliasRoute(key: $0.key) == route ? $0.words : nil }
+    }
+
+    /// The bundle id of the app the query's alias names, with words after it ("gx new terminal", T40), whose actions the
+    /// root then lists alone and whose menu bar the panel reads; nil for any other query.
+    public var scopedApp: String? {
+        guard case .app(let bundle)? = aliasRoute?.route else { return nil }
+        return bundle
+    }
+
+    /// The branch the query's alias opens, with words after it ("sys wifi", T40; "kill chrome" opens Activity, T42), which
+    /// the panel opens searching those words, as `def` and `gif` do; nil for any other query and for Stickers and GIFs,
+    /// whose words search GIPHY (gifWords).
+    public var scopedBranch: Spot? {
+        guard let (route, words) = aliasRoute, case .branch(let b) = route else { return nil }
+        return Spot(branch: b, query: words, rooted: b)
+    }
+
+    /// The words Finder's or Pilot Files' alias is typed with ("files invoice", T42), which the panel searches in the
+    /// Files view; nil for any other query.
+    public var scopedFiles: String? { aliasRoute.flatMap { $0.route == .files ? $0.words : nil } }
+
+    /// The words clipboard history's alias is typed with ("cb invoice", T42): its row alone is listed, and Return opens
+    /// the history searching them; nil for any other query.
+    public var clipboardWords: String? { aliasRoute.flatMap { $0.route == .clipboard ? $0.words : nil } }
+
+    /// An action of `bundle`'s app (T40): every row whose `app` it is (its menu items, its catalogue commands, Pilot's own
+    /// actions titled "App: verb", which MenuEntries.build gives it), and Pilot's abilities that need it (Bitwarden's
+    /// Generate a password, Abilities.app). A source that lists more of an app's actions (saved menu bars, T41) gives each
+    /// row `app: bundle` and nothing here changes.
+    public static func belongs(_ row: MenuEntry, to bundle: String) -> Bool {
+        guard row.kind.tab == .action, !row.isAnswer else { return false }
+        if row.app == bundle { return true }
+        guard case .action(let id) = row.target else { return false }
+        return Abilities.app(of: id) == bundle
+    }
+
     /// The alias the row's chip shows; nil when it has none.
     public func alias(of row: MenuEntry) -> String? { aliases.isEmpty ? nil : row.frecencyKey.flatMap(aliases.alias(for:)) }
 
     /// Answers first as they came, then the rest by match; in the Files view by the words alone, since the index
     /// already applied the typed filters (`kind:pdf`, `from:whatsapp`) the rows do not spell.
     /// An image found by its words alone matches no name: it follows the name hits, as the text index ranked it.
-    private func rank(_ rows: [MenuEntry]) -> [MenuEntry] {
-        let ranked = FuzzyRanker.rank(rows.filter { !$0.isAnswer }, query: inFiles ? fileWords.text : query, title: \.searchText,
+    /// `text` ranks by other words than the query: an alias's (T40), without the memo, whose scores are the query's and
+    /// would all be dropped for these words and scored again for the query's rank; its few rows count typos always (T42).
+    private func rank(_ rows: [MenuEntry], text: String? = nil) -> [MenuEntry] {
+        let ranked = FuzzyRanker.rank(rows.filter { !$0.isAnswer }, query: text ?? (inFiles ? fileWords.text : query), title: \.searchText,
                                       name: \.title, boost: { $0.target.key.map { (boost[$0] ?? 0) + (favourites.contains($0) ? 2 : 0) } ?? 0 },
                                       weight: { $0.kind.searchWeight },
-                                      prefer: { $0.kind == .app ? 1 : 0 }, memo: memo)
+                                      prefer: { $0.kind == .app ? 1 : 0 }, memo: text == nil ? memo : nil, typos: text != nil)
         guard inFiles else { return rows.filter(\.isAnswer) + ranked }
         let listed = Set(ranked.map(\.id))
         return rows.filter(\.isAnswer) + ranked + rows.filter { $0.matchedWords != nil && !listed.contains($0.id) }
@@ -1367,11 +1471,18 @@ public enum MenuEntries {
         // An action titled "App: verb" belongs to that app (card agent-bo-95422981).
         let bundles = Dictionary(apps.map { ($0.name, $0.bundle) }, uniquingKeysWith: { first, _ in first })
         let keywords = Dictionary(actions.compactMap { a in a.keywords.map { (a.id, $0) } }, uniquingKeysWith: { first, _ in first })
+        // Pilot's own action for one app (Bitwarden's Generate a password, T41) is found by that app's name, so typing it
+        // lists the action under the app (MenuGroups.appFirst); one titled "App: verb" already holds it.
+        let names = Dictionary(apps.map { ($0.bundle, $0.name) }, uniquingKeysWith: { first, _ in first })
+        func words(_ id: String, owned: Bool) -> String? {
+            let linked = owned ? nil : Abilities.app(of: id).flatMap { names[$0] }
+            return linked == nil ? keywords[id] : [keywords[id], linked].compactMap(\.self).joined(separator: " ")
+        }
         func action(_ title: String, _ id: String, home: MenuBranch?, detail: String? = nil, inSearch: Bool = true,
                     icon: MenuIcon? = nil) -> MenuEntry {
             let owner = title.firstRange(of: ": ").map { String(title[..<$0.lowerBound]) }.flatMap { bundles[$0] == nil ? nil : $0 }
             return MenuEntry(title: title, target: .action(id), home: home, detail: detail, detailIsKey: true, inSearch: inSearch,
-                             keywords: keywords[id], app: owner.flatMap { bundles[$0] }, subtitle: owner, isOn: switches[id], icon: icon,
+                             keywords: words(id, owned: owner != nil), app: owner.flatMap { bundles[$0] }, subtitle: owner, isOn: switches[id], icon: icon,
                              fills: fills[id])
         }
         let appRows = apps.map { app in
@@ -1468,7 +1579,7 @@ public enum MenuLayout {
         Section(title: "Power", symbol: "power", ids: ["system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut",
                                                        "system.keepAwake", "system.idleLock"]),
         Section(title: "Sound", symbol: "speaker.wave.2", ids: ["system.soundSettings"]),
-        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetoothSettings", "system.speedTest"]),
+        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetooth", "system.bluetoothSettings", "system.speedTest"]),
         Section(title: "Display", symbol: "display", ids: ["system.darkMode", "system.nightShift", "system.desktopIcons", "system.displaySettings", "system.rotateDisplay", "system.nextWallpaper",
                                                            "system.previousWallpaper", "system.nextWallpaperAll", "system.previousWallpaperAll"]),
         Section(title: "Focus", symbol: "moon.stars", ids: ["system.focusSettings"]),

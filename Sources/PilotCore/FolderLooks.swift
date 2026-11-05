@@ -11,11 +11,48 @@ public struct FolderDesign: Hashable, Sendable, Identifiable {
     public let title: String
 
     /// The twelve, in the design page's order (launcher-ideas 2026-10-18, P43).
-    public static let all: [FolderDesign] = [
+    public static let classic: [FolderDesign] = [
         ("lagoon", "Lagoon"), ("graphite", "Graphite"), ("paper", "Paper"), ("blueprint", "Blueprint"), ("kraft", "Kraft"),
         ("terminal", "Terminal"), ("code", "Code"), ("sunset", "Sunset"), ("mint", "Mint"), ("music", "Music"),
         ("archive", "Archive"), ("candy", "Candy"),
     ].map { FolderDesign(id: $0, title: $1) }
+
+    /// Every design Pilot draws: the twelve first, then each kind's.
+    public static let all: [FolderDesign] = classic + kinds.flatMap(\.designs)
+
+    /// One kind of folder (T61) and the designs drawn for it, `<kind>-<treatment>`, in Sven's picks' order
+    /// (Scripts/folder-designs.py PICKS, Q858-Q862).
+    public struct Kind: Hashable, Sendable, Identifiable {
+        public let id: String, title: String
+        public let designs: [FolderDesign]
+
+        init(_ id: String, _ title: String, _ treatments: [String]) {
+            self.id = id
+            self.title = title
+            designs = treatments.map { FolderDesign(id: "\(id)-\($0)", title: "\(title) \($0.capitalized)") }
+        }
+    }
+
+    public static let kinds: [Kind] = [
+        Kind("applications", "Applications", ["pour", "smoke", "emboss"]),
+        Kind("desktop", "Desktop", ["pour", "pattern", "emboss"]),
+        Kind("documents", "Documents", ["pour", "smoke", "pattern", "emboss", "bold"]),
+        Kind("downloads", "Downloads", ["pour", "pattern", "emboss"]),
+        Kind("pictures", "Pictures", ["smoke", "pattern", "emboss", "bold"]),
+        Kind("screenshots", "Screenshots", ["pour", "smoke", "pattern", "emboss"]),
+        Kind("movies", "Movies", ["pour", "pattern", "emboss"]),
+        Kind("music", "Music", ["pour", "smoke", "pattern", "bold"]),
+        Kind("public", "Public", ["pour", "smoke", "pattern", "emboss"]),
+        Kind("icloud", "iCloud Drive", ["pour", "smoke", "pattern", "emboss"]),
+        Kind("code", "Code", ["pour", "emboss"]),
+        Kind("notes", "Notes", ["smoke", "pattern", "emboss"]),
+        Kind("design", "Design", ["pour", "pattern", "bold"]),
+        Kind("archive", "Archive", ["pour", "smoke", "emboss", "bold"]),
+        Kind("work", "Work", ["pour", "smoke", "pattern"]),
+        Kind("data", "Data and models", ["emboss", "bold"]),
+    ]
+
+    public static func kind(_ id: String) -> Kind? { kinds.first { $0.id == id } }
 
     /// A picture of your own (PNG or SVG), recorded under this id.
     public static let own = FolderDesign(id: "own", title: "Your own")
@@ -78,6 +115,25 @@ public struct YourFolderDesigns: Sendable {
         }
         guard !added.isEmpty, (try? index.save(kept)) != nil else { return [] }
         return added.map(design)
+    }
+
+    /// The folder inside Pilot's whose pictures join Your designs at launch (T61: Sven's 20 drawn again without text).
+    public static let waiting = "To add"
+
+    /// Adds the pictures waiting in `To add` as Your designs, as `add` does (the designs already there untouched), then
+    /// takes each one now in out of `To add`, and the folder once empty, so a design removed later never comes back.
+    /// A picture that does not read stays. Returns those added.
+    @discardableResult public func addWaiting() -> [(design: FolderDesign, file: URL)] {
+        let waiting = folder.appending(path: Self.waiting, directoryHint: .isDirectory), fm = FileManager.default
+        guard fm.fileExists(atPath: waiting.path) else { return [] }
+        let pictures = Self.pictures(in: [waiting]), added = add(pictures)
+        let kept = Set(((try? index.load(or: [])) ?? []).map(\.id))
+        for url in pictures {
+            guard let data = try? Data(contentsOf: url), kept.contains(Self.prefix + FolderLooks.hash(data).prefix(16)) else { continue }
+            try? fm.removeItem(at: url)
+        }
+        if (try? fm.contentsOfDirectory(atPath: waiting.path))?.allSatisfy({ $0.hasPrefix(".") }) == true { try? fm.removeItem(at: waiting) }
+        return added
     }
 
     /// Deletes Pilot's copy of the design; the folders dressed in it are left as they are.

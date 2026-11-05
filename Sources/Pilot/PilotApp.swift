@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // brightness, followed live (card agent-bo-95422890).
         DisplayFaces.registerInBackground()
         Look.shared.followSystem()
+        CursorSets.shared.start()  // the saved cursor set, re-applied at login, wake and display changes (P84)
+        CursorEffects.shared.start()  // the saved trail and halos; with none on, nothing is made (P84)
         Engine.shared?.launch()
         // Sparkle's daily check, in a release bundle only (SH6); it asks the user first, on the second launch.
         PilotUpdates.shared.start()
@@ -71,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WallpaperSettings.shared.schedule()
         // Defaults › Folders' GIFs folder, handed to Stickers before the menu first lists it.
         _ = PilotFolders.shared
+        // Pictures waiting in Your folder designs' To add join Your designs, off the main thread (T61).
+        Task.detached(priority: .utility) { YourFolderDesigns.standard.addWaiting() }
         // Stats' 1 hour and Today (card agent-bo-95422992): a reading a minute all day, paused with the rest while locked.
         SystemSampler.shared.loadMinutes()
         // Each screen's brightness route and level, read off the main thread (story 144).
@@ -84,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await SystemSampler.shared.watch(every: SystemSampler.historyInterval, needs: .history) }
         // Low-battery alerts (Q394): the Bluetooth batteries with the slow readings while the setting is on.
         LowBatteryAlerts.shared.follow()
+        // Reminders from dated note lines (P66): Done and Snooze answered, the folder's reminders scheduled.
+        NoteReminders.shared.start()
         // A kill or a logout sends SIGTERM; route it through terminate so the Caps Lock remap is undone.
         signal(SIGTERM, SIG_IGN)
         sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
@@ -100,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// pilot://press?layer=capslock|lctl|rctl|lopt|ropt|lcmd|rcmd|chord|plain&key=k[&tap=1][&shift=1][&ctrl=1][&alt=1|left|right][&cmd=…][&app=Finder]&token=… posts the keys itself (the manual test
     /// protocol; with app, only once that app is frontmost; the token always, LinkToken); pilot://run?action=windows.close[&app=Finder] runs an action by id
-    /// (a command, keystroke or non-web URL with the link token, LinkToken);
+    /// (a command, keystroke, non-web URL, Wi-Fi, Bluetooth, power, session or lock action with the link token, LinkToken);
     /// pilot://observers prints the observers to the log; pilot://reload-binds reads the bind store's file again;
     /// pilot://bind?action=…&key=…[&shift=1][&ctrl=1][&alt=1] or &unbind=1 or &reset=1 changes one bind (Engine.bind);
     /// pilot://alert?text=… shows a tip, the alert Hammerspoon's hammerspoon://fence showed for scripts;
@@ -110,8 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pilot://import?pack=…|file=… opens Export and import with that file's binds to preview (story 58);
     /// pilot://bar?move=cpu&side=left&index=2, ?add=… or ?remove=… edits the top bar as the Menu bar page's strip does,
     /// ?edit=1 opens that page; no link token needed: it only changes bar.items (BarRoute, card agent-bo-95423017).
+    /// A .txt or .md file (Finder's Open With, a default Sven picked, a drop on the Dock icon) opens in its own window
+    /// (TextWindows, T49).
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
+            if url.isFileURL {
+                if TextWindows.open(url) == nil { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
+                continue
+            }
             switch url.host {
             // `&tab=page` with `extension=<id>` opens that extension's page (story 161).
             case "open" where url.queryValue("tab") == "page" && url.queryValue("extension") != nil:
@@ -143,6 +155,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// moment its first panel went, about 150 ms after launch (lane 1's P1 after card agent-bo-95422912).
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// Pilot edits text files (Info.plist's document types) but never opens an empty one by itself: not at a login
+    /// launch, not on a Dock click.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { false }
+
     /// Opening Pilot.app while it runs (a double-click, Spotlight, `open -a Pilot`) opens its window; while Welcome is
     /// open it brings Welcome forward instead, as the app window waits until onboarding is done (first run, 2026-10-28).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -151,6 +167,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// Text files with unsaved edits were asked about already: NSApplication's terminate reviews the open documents
+    /// (TextWindows, T49) before it asks here.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // A recording running or closing is finished first, so quitting never loses it (story 192); at most 10 s.
         let recorder = Recorder.shared

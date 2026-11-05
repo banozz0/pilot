@@ -4,14 +4,13 @@ import ImageScale
 import PilotCore
 import SwiftUI
 
-// The capture editor's chrome in direction A, Panel (Sven, Q169; the designer's mock, Tests/PilotTests/
-// CaptureEditorRenders.swift's first round): one solid panel, hairline-ruled bars, the picked tool's options always in
-// the footer, nothing over the capture. Drawn from StyleTokens, Instrument's and Toybox's own parts. The designer's
-// notes: Copy is a plain cap and Done the one primary; the selection is a fixed blue, so the theme's colour means only
-// the picked tool; ⌘S says "Saved a copy".
+// The capture editor's chrome in B (Sven, Q805; editors-round-2's mocks and parity table): every control on a floating
+// pill over the sunken ground, nothing over the capture. Drawn from StyleTokens, Instrument's and Toybox's own parts; on
+// Glass the pills stand on the window's glass. The designer's notes kept from A: Copy is a plain cap and Done the one
+// primary; the selection is a fixed blue, so the theme's colour means only the picked tool; ⌘S says "Saved a copy".
 
-/// The top bar: the ten numbered tool caps and the colour picker, then undo and delete, then save and copy; the bar's
-/// empty room drags the window.
+/// The top row: History (undo, redo, delete) at the left; at the right the actions, backdrop, read text, redact, ask AI
+/// and upscale, then pin, drag, save a copy and copy, then Cancel and Done. The row's empty room drags the window.
 struct EditorTopBar: View {
     @Environment(\.style) private var style
     let model: EditorModel
@@ -20,6 +19,8 @@ struct EditorTopBar: View {
     var copy: () -> Void = {}
     var pin: () -> Void = {}
     var ask: () -> Void = {}
+    var cancel: () -> Void = {}
+    var done: () -> Void = {}
     /// What a drag from the Drag cap carries: the export, backdrop and all, as a PNG file; nil hides the cap.
     var drag: (() -> NSItemProvider)?
 
@@ -27,18 +28,29 @@ struct EditorTopBar: View {
     static func gap(_ s: StyleTokens) -> CGFloat { s.kind == .toybox ? 6 : 4 }
 
     var body: some View {
-        HStack(spacing: Self.gap(style)) {
-            ForEach(MarkTool.bar, id: \.self) { t in
-                Button { model.pick(t) } label: { ToolCap(tool: t, picked: model.tool == t) }
-                    .buttonStyle(.plain).help("\(t.name)  \(t.key)")
-            }
+        HStack(spacing: 0) {
+            history
             WindowDragArea().frame(minWidth: 16, maxWidth: .infinity, maxHeight: .infinity)
+            actions
+        }
+        .padding(.horizontal, 12)
+    }
+
+    private var history: some View {
+        HStack(spacing: Self.gap(style)) {
             Button(action: model.undo) { ActionCap(symbol: "arrow.uturn.backward", label: "Undo") }
                 .buttonStyle(.plain).help("Undo  ⌘Z").disabled(!model.document.canUndo)
+            Button(action: model.redo) { ActionCap(symbol: "arrow.uturn.forward", label: "Redo") }
+                .buttonStyle(.plain).help("Redo  ⇧⌘Z").disabled(!model.document.canRedo)
             Button(action: model.deleteSelected) { ActionCap(symbol: "trash", label: "Delete") }
                 .buttonStyle(.plain).help("Delete the selected marks  ⌫").disabled(model.selected == nil)
-            style.color(\.line2).frame(width: 1, height: 16).padding(.horizontal, 4)
-            Button { model.panelOpen.toggle() } label: { ActionCap(symbol: "photo.artframe", label: "Backdrop", lit: model.panelOpen) }
+        }
+        .padding(4).editorPill()
+    }
+
+    private var actions: some View {
+        HStack(spacing: Self.gap(style)) {
+            Button { model.panelOpen.toggle() } label: { ActionCap(symbol: "photo.artframe", label: "Backdrop", lit: model.panelOpen, key: "B") }
                 .buttonStyle(.plain).help("Backdrop: gradients, wallpapers, padding, shadow, corners and ratio  B")
             Button(action: model.startReading) { ActionCap(symbol: "text.viewfinder", label: "Read text", lit: model.reading != nil) }
                 .buttonStyle(.plain).help("Read the text and QR codes, and copy them")
@@ -52,16 +64,41 @@ struct EditorTopBar: View {
             } label: { ActionCap(symbol: "arrow.up.left.and.arrow.down.right", label: "Upscale", lit: model.upscale.busy) }
                 .buttonStyle(.plain).help("Upscale the capture, as marked up, 2x to 4x beside it")
                 .popover(isPresented: $upscaling, arrowEdge: .bottom) { UpscalePopover(model: model) { upscaling = false } }
+            rule
             Button(action: pin) { ActionCap(symbol: "pin", label: "Pin") }.buttonStyle(.plain).help("Pin it over your windows, and close the editor")
-            Button(action: save) { ActionCap(symbol: "square.and.arrow.down", label: "Save a copy") }.buttonStyle(.plain).help("Save a copy  ⌘S")
-            Button(action: copy) { ActionCap(symbol: "doc.on.doc", label: "Copy") }.buttonStyle(.plain).help("Copy  ⌘C")
             if let drag {
                 ActionCap(symbol: "hand.point.up.left", label: "Drag into an app")
                     .onDrag(drag)
                     .help("Drag the capture, as marked up, into any app")
             }
+            Button(action: save) { ActionCap(symbol: "square.and.arrow.down", label: "Save a copy") }.buttonStyle(.plain).help("Save a copy  ⌘S")
+            Button(action: copy) { ActionCap(symbol: "doc.on.doc", label: "Copy") }.buttonStyle(.plain).help("Copy  ⌘C")
+            rule
+            ToolButtons(primary: "Done", run: done, cancel: cancel).help("Done copies it and saves over the capture  ↩ · Cancel  Esc")
         }
-        .padding(.leading, 12).padding(.trailing, 10)
+        .padding(4).editorPill()
+    }
+
+    private var rule: some View { EditorRule().padding(.horizontal, 4) }
+}
+
+/// B's tool rail: all fourteen tools down the room's left, in the keys' order (1 to 0, C, F, R, I); one column fits the
+/// smallest window (EditorLayout.least) in either style.
+struct ToolRail: View {
+    @Environment(\.style) private var style
+    let model: EditorModel
+
+    /// A rail cap: the top bar's, a little shorter in Toybox so fourteen fit the smallest window.
+    static func cap(_ s: StyleTokens) -> CGSize { s.kind == .toybox ? CGSize(width: 36, height: 32) : EditorTopBar.cap(s) }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(MarkTool.allCases, id: \.self) { t in
+                Button { model.pick(t) } label: { ToolCap(tool: t, picked: model.tool == t) }
+                    .buttonStyle(.plain).help("\(t.name)  \(t.key)")
+            }
+        }
+        .padding(4).editorPill()
     }
 }
 
@@ -92,14 +129,13 @@ struct ToolCap: View {
     }
 
     var body: some View {
-        let size = EditorTopBar.cap(style)
+        let size = ToolRail.cap(style)
         if style.kind == .toybox {
             ZStack(alignment: .bottomTrailing) {
                 Image(systemName: Self.symbol(tool)).font(.system(size: 14, weight: .bold))
                     .foregroundStyle(picked ? style.color(\.onHyper) : style.color(\.text))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text(tool.key).font(style.toyMono(8.5, bold: true))
-                    .foregroundStyle(picked ? style.color(\.onHyper).opacity(0.7) : style.color(\.text3)).padding(.trailing, 4).padding(.bottom, 1)
+                CapKey(key: tool.key, lit: picked)
             }
             .padding(EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2))
             .frame(width: size.width, height: size.height)
@@ -112,8 +148,7 @@ struct ToolCap: View {
                 Image(systemName: Self.symbol(tool)).font(.system(size: 13, weight: .regular))
                     .foregroundStyle(picked ? style.color(\.accentText) : style.color(\.text2))
                     .frame(maxWidth: .infinity, maxHeight: .infinity).offset(x: -1, y: -1)
-                Text(tool.key).font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 9)))
-                    .foregroundStyle(picked ? style.color(\.accentText).opacity(0.75) : style.color(\.text3)).padding(.trailing, 3).padding(.bottom, 1)
+                CapKey(key: tool.key, lit: picked)
             }
             .frame(width: size.width, height: size.height)
             .background { shape.fill(picked ? style.color(\.accentSoft) : style.color(\.raised)) }
@@ -131,6 +166,8 @@ struct ActionCap: View {
     let label: String
     /// Lit while its result shows (Read text), in the picked tool's colours.
     var lit = false
+    /// Its key, at the bottom right as on a tool cap (the backdrop's B).
+    var key: String?
 
     var body: some View {
         let size = EditorTopBar.cap(style)
@@ -148,35 +185,54 @@ struct ActionCap: View {
                     .overlay { if lit { shape.strokeBorder(style.color(\.accentLine)) } }
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            // Toybox's cap keeps its 4-point edge under the key, as the tool cap's padding does.
+            if let key { CapKey(key: key, lit: lit).padding(.bottom, style.kind == .toybox ? 4 : 0) }
+        }
         .opacity(enabled ? 1 : 0.4)
         .contentShape(Rectangle())
         .accessibilityLabel(label)
     }
 }
 
-/// The footer: the picked tool's options at the left, the zoom and the export's size, then Cancel and Done.
+/// The bottom row: the options strip centred under the capture, the View pill (zoom and the export's size) at the right.
 struct EditorFooter: View {
     @Environment(\.style) private var style
     let model: EditorModel
-    var cancel: () -> Void = {}
-    var done: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 14) {
-            options
-            Spacer(minLength: 8)
+        HStack(spacing: 12) {
+            Spacer(minLength: 0)
+            EditorStrip(model: model)
+            Spacer(minLength: 0)
             HStack(spacing: 6) {
-                ZoomControl(model: model, font: Font(mono(10.5)))
-                ImageSizeChip(model: model, font: Font(mono(10.5)))
+                ZoomControl(model: model, font: Font(Self.mono(style, 10.5)))
+                ImageSizeChip(model: model, font: Font(Self.mono(style, 10.5)))
             }
-            // While cropping, Done and Cancel are the crop's; the editor's come back after.
-            if model.tool == .crop { ToolButtons(primary: "Done", run: model.applyCrop, cancel: model.cancelCrop) }
-            else { ToolButtons(primary: "Done", run: done, cancel: cancel) }
+            .padding(4).editorPill()
         }
     }
 
-    @ViewBuilder private var options: some View {
-        if let reading = model.reading { ReadTip(reading: reading) } else { toolOptions }
+    static func mono(_ style: StyleTokens, _ size: CGFloat) -> NSFont {
+        style.kind == .toybox ? DisplayFaces.font(StyleTokens.jetBrainsMono(500), size: size) : DisplayFaces.font(StyleTokens.geistMono(400), size: size)
+    }
+}
+
+/// The options strip (B): always the one place for the picked tool's or the picked mark's options, Read text's result,
+/// or, while cropping, the crop's own strip.
+struct EditorStrip: View {
+    @Environment(\.style) private var style
+    let model: EditorModel
+
+    var body: some View {
+        Group {
+            if model.tool == .crop { CropStrip(model: model) }
+            else if let reading = model.reading { ReadTip(reading: reading, copy: model.copyRead) }
+            else { toolOptions }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        // Offered the row's room, so Text's options and a picked mark's still fold when it is short.
+        .editorPill(fixed: false)
     }
 
     @ViewBuilder private var toolOptions: some View {
@@ -201,12 +257,6 @@ struct EditorFooter: View {
                     Text(ColourAnswer.hex(rgb)).font(Font(mono(11.5))).foregroundStyle(style.color(\.text)).monospacedDigit().fixedSize()
                 }
                 Text("Click a pixel: it becomes the colour, its hex is copied").styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize()
-            }
-        case .crop:
-            HStack(spacing: 10) {
-                Text(model.cropEdit == nil ? "Drag the part to keep" : "Drag the handles, or drag a new area").styleText(\.caption)
-                    .foregroundStyle(style.color(\.text3)).fixedSize()
-                if model.cropEdit != nil || model.document.crop != nil { Button("Whole capture", action: model.clearCrop).buttonStyle(.pilot) }
             }
         case .text:
             TextOptions(model: model)
@@ -240,7 +290,7 @@ struct EditorFooter: View {
         }
     }
 
-    private var rule: some View { style.color(\.line2).frame(width: 1, height: 16) }
+    private var rule: some View { EditorRule() }
 
     /// The one picked mark's options (the designer's mock): its size and colour, set on it; the hint goes first when
     /// there is no room.
@@ -263,8 +313,74 @@ struct EditorFooter: View {
         }
     }
 
-    private func mono(_ size: CGFloat) -> NSFont {
-        style.kind == .toybox ? DisplayFaces.font(StyleTokens.jetBrainsMono(500), size: size) : DisplayFaces.font(StyleTokens.geistMono(400), size: size)
+    private func mono(_ size: CGFloat) -> NSFont { EditorFooter.mono(style, size) }
+}
+
+/// The bars' and strips' upright hairline between groups.
+struct EditorRule: View {
+    @Environment(\.style) private var style
+    var body: some View { style.color(\.line2).frame(width: 1, height: 16) }
+}
+
+/// A cap's key at its bottom right (a tool's 1 to I, the backdrop's B); in the lit cap's colours when it is lit.
+struct CapKey: View {
+    @Environment(\.style) private var style
+    let key: String
+    let lit: Bool
+
+    var body: some View {
+        if style.kind == .toybox {
+            Text(key).font(style.toyMono(8.5, bold: true))
+                .foregroundStyle(lit ? style.color(\.onHyper).opacity(0.7) : style.color(\.text3)).padding(.trailing, 4).padding(.bottom, 1)
+        } else {
+            Text(key).font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 9)))
+                .foregroundStyle(lit ? style.color(\.accentText).opacity(0.75) : style.color(\.text3)).padding(.trailing, 3).padding(.bottom, 1)
+        }
+    }
+}
+
+/// The crop's strip (B): what a drag does, Whole capture, As taken once the capture kept its screen and the crop left its
+/// area (P77), then Cancel and Crop (Esc and Return).
+struct CropStrip: View {
+    @Environment(\.style) private var style
+    let model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(hint).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize()
+            if model.cropEdit != nil || model.document.crop != nil { Button("Whole capture", action: model.clearCrop).buttonStyle(.pilot) }
+            if model.showsAsTaken { Button("As taken", action: model.cropAsTaken).buttonStyle(.pilot) }
+            EditorRule()
+            ToolButtons(primary: "Crop", run: model.applyCrop, cancel: model.cancelCrop).help("Crop  ↩ · Cancel  Esc")
+        }
+    }
+
+    private var hint: String {
+        // As long as the plain hint, so the strip still fits the smallest window with As taken in it.
+        if model.screen != nil { return "Past the edge brings the screen back" }
+        return model.cropEdit == nil ? "Drag the part to keep" : "Drag the handles, or drag a new area"
+    }
+}
+
+extension View {
+    /// B's floating pills and cards: the panel's fill in the style's card recipe (Toybox's ink outline and solid edge,
+    /// Instrument's hairline ring), no soft shadow, the content clipped to it. A pill keeps its natural size, so a row's
+    /// drag room gives way and never a button; `fixed: false` lets a card (the backdrop panel's) fill its column.
+    func editorPill(radius: KeyPath<StyleRadii, Double> = \.card, fixed: Bool = true) -> some View {
+        modifier(EditorPill(radius: radius, fixed: fixed))
+    }
+}
+
+private struct EditorPill: ViewModifier {
+    @Environment(\.style) private var style
+    let radius: KeyPath<StyleRadii, Double>
+    let fixed: Bool
+
+    func body(content: Content) -> some View {
+        let r = style.radii[keyPath: radius], d = style.depth.card
+        let pill = content.clipShape(.rect(cornerRadius: max(r - d.outline, 0), style: .continuous))
+            .styleSurface(\.card, fill: \.panel, radius: radius, shadows: false)
+        if fixed { pill.fixedSize() } else { pill }
     }
 }
 
@@ -395,11 +511,12 @@ struct WindowDragArea: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Read text's result in the footer (direction A): what went on the pasteboard and its first line, and Show text for
-/// every line.
+/// Read text's result in the strip (B): how many lines were read (they are on the pasteboard already), Copy text to copy
+/// them again, and Show text for every line.
 struct ReadTip: View {
     @Environment(\.style) private var style
     let reading: EditorModel.Reading
+    var copy: () -> Void = {}
     @State private var showing = false
 
     var body: some View {
@@ -413,6 +530,11 @@ struct ReadTip: View {
                     .foregroundStyle(style.color(\.accentText)).frame(width: 20, height: 20).background(style.color(\.accentSoft), in: Circle())
                 Text(CaptureText.said(lines)).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
                 if !lines.isEmpty {
+                    Group {
+                        if style.kind == .toybox { Button("Copy text", action: copy).buttonStyle(ToyFaceStyle(ghost: true)) }
+                        else { Button("Copy text", action: copy).buttonStyle(InstrumentButtonStyle(kind: .ghost)) }
+                    }
+                    .help("Copy every line it read")
                     Group {
                         if style.kind == .toybox { Button("Show text") { showing = true }.buttonStyle(ToyFaceStyle()) }
                         else { Button("Show text") { showing = true }.buttonStyle(InstrumentButtonStyle(kind: .raised)) }
@@ -450,12 +572,10 @@ struct ImageSizeChip: View {
     let model: EditorModel
     let font: Font
     @State private var open = false
-    @State private var target = ResizeTarget(width: 1, height: 1)
 
     var body: some View {
-        let size = model.exportSize, resized = model.resized != nil || (model.tool == .crop && model.cropEdit != nil)
+        let size = model.exportSize, resized = ImageSizePanel.resized(model)
         Button {
-            target = model.resizeTarget
             open = true
         } label: {
             Text(verbatim: "\(Int(size.width)) × \(Int(size.height))").font(font).foregroundStyle(style.color(resized ? \.accentText : \.text3)).monospacedDigit()
@@ -466,16 +586,29 @@ struct ImageSizeChip: View {
         }
         .buttonStyle(.plain).help("Image size: click to resize")
         .accessibilityLabel("Image size \(Int(size.width)) by \(Int(size.height)), resize")
-        .popover(isPresented: $open, arrowEdge: .top) {
-            ToolPanel(title: "Image size") {
-                ResizeOptions(target: $target)
-            } buttons: {
-                if resized { Button("Original size") { model.resize(to: nil); open = false }.buttonStyle(.pilot) }
-                Spacer()
-                ToolButtons(primary: "Apply", run: { model.resize(to: target); open = false }, cancel: { open = false })
-            }
-            .background(style.color(\.panel))
+        .popover(isPresented: $open, arrowEdge: .top) { ImageSizePanel(model: model, target: model.resizeTarget) { open = false } }
+    }
+}
+
+/// The size chip's popover: a size typed or picked, Apply; Original size takes a resize back.
+struct ImageSizePanel: View {
+    @Environment(\.style) private var style
+    let model: EditorModel
+    @State var target: ResizeTarget
+    var close: () -> Void = {}
+
+    /// The export is resized, or a crop is being dragged: the chip is lit and Original size shows.
+    static func resized(_ model: EditorModel) -> Bool { model.resized != nil || (model.tool == .crop && model.cropEdit != nil) }
+
+    var body: some View {
+        ToolPanel(title: "Image size") {
+            ResizeOptions(target: $target)
+        } buttons: {
+            if Self.resized(model) { Button("Original size") { model.resize(to: nil); close() }.buttonStyle(.pilot) }
+            Spacer()
+            ToolButtons(primary: "Apply", run: { model.resize(to: target); close() }, cancel: close)
         }
+        .background(style.color(\.panel))
     }
 }
 
@@ -580,7 +713,7 @@ struct TextOptions: View {
         }
     }
 
-    private var rule: some View { style.color(\.line2).frame(width: 1, height: 16) }
+    private var rule: some View { EditorRule() }
 
     private func fontMenu(_ face: TextFace) -> some View {
         Menu {
@@ -641,7 +774,5 @@ struct TextOptions: View {
         .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().help("Colour")
     }
 
-    private var mono: NSFont {
-        style.kind == .toybox ? DisplayFaces.font(StyleTokens.jetBrainsMono(500), size: 10.5) : DisplayFaces.font(StyleTokens.geistMono(400), size: 10.5)
-    }
+    private var mono: NSFont { EditorFooter.mono(style, 10.5) }
 }

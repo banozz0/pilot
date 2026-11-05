@@ -78,6 +78,8 @@ public struct BarInputs: Sendable {
     /// The whole Mac's draw in watts, on a Mac with no battery (BarReadings).
     public var watts: Int?
     public var bluetooth: [SystemStats.BluetoothDevice] = []
+    /// Bluetooth's radio, read for its item's menu alone; nil hides the switch (Pilot cannot switch it, or not allowed yet).
+    public var bluetoothOn: Bool?
     public var keepAwake = false
     /// What is left of Keep awake; nil while off or on until turned off.
     public var keepAwakeLeft: TimeInterval?
@@ -226,9 +228,11 @@ public enum BarParts {
             let ring = BarPart.ring(((i.timerLeft ?? 0) * 60).rounded() / 60)
             return style == .ring ? [ring] : [ring, .value(countdown, widest: countdown.count > 5 ? "8:88:88" : "88:88")]
         case .extensions:
-            // Each extension's item its own target, apart by the top bar's insets. Nothing to show hides it.
-            guard !i.extensionBars.isEmpty else { return nil }
-            return i.extensionBars.map(BarPart.extensionItem)
+            // An extension's own slot draws its own item (spec pilot-1.1 T50); the old Extensions slot, every one, each its
+            // own target, apart by the top bar's insets. Nothing to show hides it.
+            let faces = entry.extensionID.map { id in i.extensionBars.filter { $0.id == id } } ?? i.extensionBars
+            guard !faces.isEmpty else { return nil }
+            return faces.map(BarPart.extensionItem)
         // The top bar draws the dots itself (TopBarStatusLights); elsewhere (the drag's chip), the item's symbol.
         case .modes: return [.symbol(statusSymbol)]
         case .capture: return capture(i.recording, style: style)

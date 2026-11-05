@@ -194,6 +194,7 @@ extension ControlVerbs {
         ("open", "ext open <id> [--card]", "Opens its own page in Pilot's window, or its card on the Extensions page."),
         ("run", "ext run <action> [--query <text>] [--input <text>]", "Runs a command once after Allow and answers what it printed (none of its actions performed); nothing is read back while a password preference is set."),
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page and Home block show them; nothing is read back while a password preference is set."),
+        ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
     ] + (CataloguePublish.available ? [
@@ -201,15 +202,17 @@ extension ControlVerbs {
     ] : [])
 
     /// `pilot ext …`: make an extension from a template, check and run it, install it from a folder or Pilot's catalogue or
-    /// take it out, read its card, set its preferences (the ext-prefs collection) and read what its commands answer. Install,
-    /// remove, a test's runs, a run and a page wait on Allow.
+    /// take it out, read its card, set its preferences (the ext-prefs collection), read what its commands answer and press its
+    /// page's actions. Install, remove, a test's runs, a run, a page and an act wait on Allow.
     func registerExtensions(_ tools: ExtensionTools) {
         let modes = ExtensionTemplate.allCases.map(\.rawValue), subcommands = Self.extSubcommands.map(\.name)
-        register(ControlVerb("ext", help: "Makes, tests, installs (from a folder or the catalogue), shows, runs and removes extensions; what runs or installs asks first. Preferences: pilot list ext-prefs.",
+        register(ControlVerb("ext", help: "Makes, tests, installs (from a folder or the catalogue), shows, runs and removes extensions, and presses their pages' actions; what runs or installs asks first. Preferences: pilot list ext-prefs.",
                              usage: "pilot " + Self.extSubcommands.map(\.usage).joined(separator: " | "),
                              flags: [.init("mode", help: "ext new: \(modes.joined(separator: ", "))"), .init("title", help: "ext new: its title"),
                                      .init("dir", help: "ext new: the folder to make it in"), .init("check", help: "ext test: only check, run nothing", takesValue: false),
-                                     .init("query", help: "ext run: a list's search"), .init("input", help: "ext run: the text handed to the command"),
+                                     .init("query", help: "ext run: a list's search"), .init("input", help: "ext run: the text handed to the command; ext act: an input box's text"),
+                                     .init("answer", help: "ext act: the answer to what the action asks (text, a choice, or yes)"),
+                                     .init("alt", help: "ext act: an input box's Option+Return action", takesValue: false),
                                      .init("card", help: "ext open: its card, not its page", takesValue: false),
                                      .init("refresh", help: "ext catalogue: read the catalogue again", takesValue: false)],
                              schema: { .object(["modes": .array(modes.map(JSONValue.string)), "subcommands": .array(Self.extSubcommands.map { .object(["name": .string($0.name), "usage": .string("pilot " + $0.usage), "help": .string($0.help)]) }),
@@ -227,6 +230,7 @@ extension ControlVerbs {
             case "open": return try await Self.openExtension(args, tools)
             case "run": return try await Self.runExtension(args, tools, peer: call.peer)
             case "page": return try await Self.pageExtension(args, tools, peer: call.peer)
+            case "act": return try await Self.actExtension(args, tools, peer: call.peer)
             case "catalogue": return try await Self.catalogue(args, tools)
             case "get": return try await Self.getExtension(args, tools, peer: call.peer)
             case "publish" where CataloguePublish.available:

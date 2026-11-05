@@ -64,6 +64,10 @@ final class PilotCapture {
     /// The delayed capture counting down, which its key again cancels.
     private(set) var counting: Task<Void, Never>?
     private static let lastAreaKey = "capture.lastArea"
+    /// The screen the area just delivered was cut from (P77), for the save to hand to the history, which keeps it for
+    /// uncrop while the capture's thumbnail or editor is up. Matched by the capture's picture itself (an id could be
+    /// reused by a later picture), taken by its own save only: another capture saved meanwhile leaves it be.
+    private var pendingScreen: (image: CGImage, grab: CaptureGrab)?
 
     /// The last area captured, on its display, kept across launches: Hyper+Alt+S takes it again.
     var lastArea: LastArea? {
@@ -241,7 +245,8 @@ final class PilotCapture {
                     self.tell("Nothing to record: the area had no width or no height.", nil)
                 }
             } else {
-                self.finish(outcome)
+                // The windows go with an area's screen, so its crop snaps to their edges (C3).
+                self.finish(outcome, windows: windows)
             }
         }
         self.overlay = overlay
@@ -291,6 +296,13 @@ final class PilotCapture {
         }
     }
 
+    /// `image` framed in Every capture's `look` (C11) and encoded as PNG, off the main thread: a blurred look over a 5K
+    /// capture takes a while.
+    static func framedPNG(_ image: CGImage, scale: CGFloat, look: Backdrop) -> Task<Data?, Never> {
+        let still = Unchecked(image)
+        return Task.detached(priority: .userInitiated) { MarkupRenderer.framed(still.value, look, scale: scale).flatMap { png($0, scale: scale) } }
+    }
+
     /// `image` encoded as PNG off the main thread, holding it only until it is encoded.
     static func encoding(_ image: CGImage, scale: CGFloat) -> Task<Data?, Never> {
         let still = Unchecked(image)
@@ -335,7 +347,7 @@ final class PilotCapture {
     }
 
     /// The overlay is done: it has closed itself; take what it picked.
-    private func finish(_ outcome: CaptureOverlay.Result) {
+    private func finish(_ outcome: CaptureOverlay.Result, windows: [CaptureSelection.Window] = []) {
         overlay = nil
         switch outcome {
         case .cancelled: break
@@ -344,6 +356,9 @@ final class PilotCapture {
                 return tell("Nothing captured: the area had no width or no height.", nil)
             }
             lastArea = LastArea(display: grab.id, rect: rect)
+            pendingScreen = Self.screen(of: image, cutFrom: grab, rect, keep: store.settings.afterCapture != .copy,
+                                        windows: CaptureSelection.windows(windows, on: grab.frame).map(\.frame))
+                .map { (image, $0) }
             deliver(image, grab.scale)
         case .window(let id, _, let grab):
             Task { @MainActor in
@@ -370,11 +385,24 @@ final class PilotCapture {
 
     // MARK: Output
 
+    /// The screen an area capture was cut from, as uncrop needs it: none for the whole display (there is nothing round
+    /// it), or when nothing follows the capture (After capture: Copy) to show it in.
+    static func screen(of image: CGImage, cutFrom grab: DisplayGrab, _ rect: CGRect, keep: Bool, windows: [CGRect] = []) -> CaptureGrab? {
+        let size = CGSize(width: grab.image.width, height: grab.image.height)
+        let pixels = CaptureSelection.pixels(rect, scale: grab.scale, within: size)
+        guard keep, pixels.size != size, Int(pixels.width) == image.width, Int(pixels.height) == image.height else { return nil }
+        return CaptureGrab(image: grab.image, taken: pixels, scale: grab.scale, windows: windows)
+    }
+
     /// Every capture: copied and saved, then what Captures › After capture says (build 54): a thumbnail in the corner,
-    /// the editor at once, or the copy alone with its tip.
+    /// the editor at once, or the copy alone with its tip. An area's screen is kept beside it for uncrop (P77). With a look
+    /// on every capture (C11) the copy is framed in it; the file stays the capture as taken.
     func saveAndEdit(_ image: CGImage, scale: CGFloat) async {
         let after = store.settings.afterCapture
-        let file = await save(image, scale: scale, tip: after == .copy)
+        var screen: CaptureGrab?
+        if let pending = pendingScreen, pending.image === image { screen = pending.grab; pendingScreen = nil }
+        let file = await save(image, scale: scale, tip: after == .copy, frame: BackdropLibrary.shared.everyCapture?.backdrop)
+        if let screen, let file { CaptureHistoryStore.shared.keepGrab(screen, for: file) }
         let still = Unchecked(image)
         let follow: @MainActor () -> Void = { [afterCapture] in afterCapture(still.value, scale, file, after) }
         if let holdAfter { holdAfter(follow) } else { follow() }
@@ -386,23 +414,29 @@ final class PilotCapture {
 
     /// What follows a saved capture; a test's records it.
     var afterCapture: @MainActor (CGImage, CGFloat, URL?, CaptureSettings.AfterCapture) -> Void = { image, scale, file, after in
+        let look = BackdropLibrary.shared.everyCapture?.backdrop
         switch after {
-        case .thumbnail: CaptureThumbnails.show(image, scale: scale, file: file, capture: .shared)
-        case .editor: CaptureEditor.show(image, scale: scale, file: file, capture: .shared)
+        case .thumbnail: CaptureThumbnails.show(image, scale: scale, file: file, capture: .shared, look: look)
+        case .editor: CaptureEditor.show(image, scale: scale, file: file, capture: .shared, backdrop: look)
         case .copy: break
         }
     }
 
+
     /// Copies the capture and saves it as PNG in the captures folder, its DPI set from its scale so it opens at its size;
     /// the file, or nil when it was not saved. The encoding and the write run off the main thread, where the Hyper tap's
-    /// run loop source is; the pasteboard and the tip come back to it. No tip when the editor opens instead.
+    /// run loop source is; the pasteboard and the tip come back to it. No tip when the editor opens instead. `frame` is
+    /// Every capture's look (C11): the copy is framed in it, the file is not.
     @discardableResult
-    func save(_ image: CGImage, scale: CGFloat, tip: Bool = true) async -> URL? {
+    func save(_ image: CGImage, scale: CGFloat, tip: Bool = true, frame: Backdrop? = nil) async -> URL? {
         let folder = store.folder(.capture), still = Unchecked(image)
+        // The framed copy draws while the file is written.
+        let framing = frame.map { Self.framedPNG(image, scale: scale, look: $0) }
         let saved = await Task.detached(priority: .userInitiated) { Self.encodeAndWrite(still.value, scale: scale, in: folder) }.value
         guard let png = saved.png else { tell("The capture could not be encoded.", nil); return nil }
+        let copy = await framing?.value
         pasteboard.clearContents()
-        pasteboard.setData(png, forType: .png)
+        pasteboard.setData(copy ?? png, forType: .png)
         switch saved.file {
         case .success(let url):
             Self.log.notice("capture saved: \(url.lastPathComponent, privacy: .public), \(image.width)×\(image.height)")

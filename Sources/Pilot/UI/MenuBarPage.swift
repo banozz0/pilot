@@ -33,10 +33,13 @@ struct MenuBarPage: View {
     /// Clear all or Restore defaults, asked before it goes through.
     @State private var asking: BarReset?
     var nicknames: DisplayNicknames = .shared
+    /// The extensions' bar items the page lists and places: the app's, or a render's.
+    var extensionBar: ExtensionBar = .shared
 
-    init(onScreen: Bool, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared) {
+    init(onScreen: Bool, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared, extensionBar: ExtensionBar = .shared) {
         self.onScreen = onScreen
         self.nicknames = nicknames
+        self.extensionBar = extensionBar
         _placement = State(initialValue: placement ?? BarItemsStore.shared.pagePlacement)
     }
 
@@ -62,7 +65,7 @@ struct MenuBarPage: View {
             Tile {
                 VStack(alignment: .leading, spacing: 14) {
                     preview(store)
-                    BarTray(store: store, placement: placement, extensions: ExtensionBar.shared.items, dragged: $dragged)
+                    BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
                 }
             }
             barColour(store)
@@ -246,7 +249,7 @@ struct MenuBarPage: View {
         .frame(height: 30)
         .background { if background == .glass { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
-        .overlay { if let overTop { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged?.kind)) } }
+        .overlay { if let overTop { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
         .padding(.top, Self.room)
         // The whole strip takes the drop, its clear gaps too (a Glass bar draws no ground of its own).
         .contentShape(Rectangle())
@@ -259,7 +262,7 @@ struct MenuBarPage: View {
     static func topDrop(_ drop: BarDrop, store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, room: CGFloat = 0,
                         animation: Animation?, over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            drop.target(x: at.x, y: at.y - room, dragging: item.kind).map { BarStripDrop.top($0.side, index: $0.index) }
+            drop.target(x: at.x, y: at.y - room, dragging: item).map { BarStripDrop.top($0.side, index: $0.index) }
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -267,7 +270,7 @@ struct MenuBarPage: View {
     static func menuDrop(_ slots: [BarDrop.Slot], store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, animation: Animation?,
                          over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            item.kind?.topBarOnly == true ? nil : .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item.kind).index)
+            item.kind?.topBarOnly == true ? nil : .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -276,7 +279,7 @@ struct MenuBarPage: View {
         let sides = TopBarSide.allCases.map { side in
             (side, (top[side] ?? []).enumerated().map { i, slot in
                 let rect = topFrames[side]?[i].flatMap { $0.width > 0 && $0.maxX > 0 ? $0 : nil } ?? .zero
-                return BarDrop.Slot(kind: slot.kind, minX: rect.minX, maxX: rect.maxX)
+                return BarDrop.Slot(item: slot.item, minX: rect.minX, maxX: rect.maxX)
             })
         }
         return BarDrop(sides: Dictionary(uniqueKeysWithValues: sides), width: topSize.width, height: topSize.height)
@@ -286,7 +289,7 @@ struct MenuBarPage: View {
     /// room (at 760), Finder goes first (the items are what this page drags), then the leftmost items whole, as on Stats'
     /// strip and a crowded menu bar; the strip is never wider than the page. Extensions' own items sit before Pilot's.
     private func menuStrip(_ menu: [BarSlot], store: BarItemsStore) -> some View {
-        let extensions = ExtensionBar.shared.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
+        let extensions = extensionBar.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
         let slots = menuSlots(menu)
         return HStack(spacing: 13) {
             Image(systemName: "apple.logo")
@@ -317,7 +320,7 @@ struct MenuBarPage: View {
         .coordinateSpace(.named(Self.menuSpace))
         .overlay {
             if let overMenu {
-                GeometryReader { BarCaret(x: BarDrop.menuTarget(x: overMenu, slots: slots, dragging: dragged?.kind).caret, height: $0.size.height) }
+                GeometryReader { BarCaret(x: BarDrop.menuTarget(x: overMenu, slots: slots, dragging: dragged).caret, height: $0.size.height) }
             }
         }
         .padding(.top, Self.room)
@@ -330,7 +333,7 @@ struct MenuBarPage: View {
     private func menuSlots(_ menu: [BarSlot]) -> [BarDrop.Slot] {
         menu.enumerated().map { i, slot in
             let rect = menuFrames[i].flatMap { $0.width > 0 && $0.minX >= menuRow.minX - 1 ? $0 : nil } ?? .zero
-            return BarDrop.Slot(kind: slot.kind, minX: rect.minX, maxX: rect.maxX)
+            return BarDrop.Slot(item: slot.item, minX: rect.minX, maxX: rect.maxX)
         }
     }
 
@@ -338,17 +341,13 @@ struct MenuBarPage: View {
     static func showsMacClock(_ slots: [BarSlot]) -> Bool { !slots.contains { $0.kinds.contains(.clock) } }
 
     /// One slot of a strip, piece by piece (Sven on build 54: one by one, not by sections): an item is one piece; the
-    /// Group's readings are a piece each inside its outline, the outline itself dragging the whole Group; the top bar's
-    /// Extensions slot is a piece per extension's item placed there.
+    /// Group's readings are a piece each inside its outline, the outline itself dragging the whole Group; an extension's
+    /// item placed in the top bar is a slot and a piece of its own (spec pilot-1.1 T50), drawn while it is installed.
     @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool) -> some View {
         if slot.isGroup {
             groupSlot(slot, store, inTopBar: inTopBar)
-        } else if slot.kind == .extensions {
-            HStack(spacing: 10) {
-                ForEach(ExtensionBar.shared.items.filter { store.settings.shows(extension: $0.id, in: .topBar, topBarOn: true) }) {
-                    extensionPiece($0, store: store, inTopBar: true)
-                }
-            }
+        } else if case .extension(let id) = slot.item {
+            if let item = extensionBar.items.first(where: { $0.id == id }) { extensionPiece(item, store: store, inTopBar: true) }
         } else {
             piece(.item(slot.entries[0]), store, inTopBar: inTopBar)
         }
@@ -394,7 +393,9 @@ struct MenuBarPage: View {
     /// An extension's own item, its emoji and its answer, a piece of its own in either strip.
     private func extensionPiece(_ item: ExtensionBar.Item, store: BarItemsStore, inTopBar: Bool) -> some View {
         let tray = BarTrayItem.extension(item.id)
-        return StripPiece(item: tray, title: item.title, pinned: false, dragged: $dragged, remove: takeOff(tray, store), step: nil) {
+        // Move left and right along the top bar, as a built-in item's; the macOS menu bar orders its own items.
+        return StripPiece(item: tray, title: item.title, pinned: false, dragged: $dragged, remove: takeOff(tray, store),
+                          step: inTopBar ? step(tray, store, inTopBar: true) : nil) {
             BarDragChip(kind: .extensions, slot: nil, screen: "", sources: engine.barSources, store: store, extensionItem: (item.icon ?? "🧩", item.title))
         } content: {
             ExtensionStripFace(item: item).fixedSize().padding(.horizontal, inTopBar ? 4 : 0)
@@ -406,9 +407,11 @@ struct MenuBarPage: View {
         { [placement, reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { _ = store.settings.takeOff(item, placement: placement) } }
     }
 
-    private func step(_ kind: BarKind, _ store: BarItemsStore, inTopBar: Bool) -> (Int) -> Void {
+    private func step(_ kind: BarKind, _ store: BarItemsStore, inTopBar: Bool) -> (Int) -> Void { step(.kind(kind), store, inTopBar: inTopBar) }
+
+    private func step(_ item: BarTrayItem, _ store: BarItemsStore, inTopBar: Bool) -> (Int) -> Void {
         { [placement, reduceMotion] by in
-            withAnimation(reduceMotion ? nil : Kit.change) { store.settings.step(kind, by: by, inTopBar: inTopBar, topBarOn: placement == .both) }
+            withAnimation(reduceMotion ? nil : Kit.change) { store.settings.step(item, by: by, inTopBar: inTopBar, topBarOn: placement == .both) }
         }
     }
 
@@ -427,7 +430,7 @@ struct MenuBarPage: View {
                     if kind == .bluetoothBatteries { lowBatteryRow }
                     // Each extension's own item under the Extensions item (Surfaces v2), placed as any item is.
                     if kind == .extensions {
-                        ForEach(ExtensionBar.shared.items) { item in
+                        ForEach(extensionBar.items) { item in
                             ink.line.opacity(0.7).frame(height: 1)
                             extensionRow(item, store: store)
                         }
@@ -529,7 +532,7 @@ struct MenuBarPage: View {
         let on = store.settings.isOn(extension: item.id, in: placement)
         let toggle = {
             store.settings.toggle(extension: item.id, in: placement)
-            ExtensionBar.shared.nudge()
+            extensionBar.nudge()
         }
         return HStack(spacing: 10) {
             Text(item.icon ?? "🧩").font(ink.ui(13)).frame(width: 28)
@@ -566,7 +569,7 @@ struct MenuBarPage: View {
     /// the page shows (Menu bar, Top bar or Both): Clear all takes every item off it, the extensions' too; Restore
     /// defaults is its way back.
     private func resets(_ store: BarItemsStore) -> some View {
-        let ids = ExtensionBar.shared.items.map(\.id)
+        let ids = extensionBar.items.map(\.id)
         // Beside the bar switch, where Sven looks for it (2026-10-22), its ⓘ saying what each does.
         // The ⓘ leads, as the placement switch's does, so the two never sit side by side.
         return HStack(spacing: 8) {
@@ -584,7 +587,7 @@ struct MenuBarPage: View {
                     case .restore: store.settings.restoreDefaultItems(in: placement)
                     }
                 }
-                ExtensionBar.shared.nudge()
+                extensionBar.nudge()
             }
         } message: { Text($0.message(placement)) }
     }

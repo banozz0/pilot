@@ -9,7 +9,7 @@ import Testing
 extension SharedLook {
 /// The Menu bar page's strip and bar tray (Sven, Q185): the page's top for each placement in Instrument at 1000, Top bar
 /// at 760, and the top bar strip mid-drag (CPU held just right of the focused app: the zones, the LEFT label and
-/// the caret, BarDropMarks). Liquid Glass draws nothing offscreen, so the bar is on Solid here. Opt-in like the other
+/// the caret, BarDropMarks), and three extensions' items apart on the Top bar strip (spec pilot-1.1 T50). Liquid Glass draws nothing offscreen, so the bar is on Solid here. Opt-in like the other
 /// renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-tray PILOT_RENDER_DIR=/tmp/pilot-renders-tray swift test --filter BarTrayRenders`
 @MainActor
@@ -24,7 +24,7 @@ struct BarTrayRenders {
 
     @Test("The page's strip and tray for Menu bar, Top bar and Both in each style, and the strip mid-drag",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func render() throws {
+    func render() async throws {
         let dir = try ClockRenders.dir("bar-tray")
         testApp()
         DisplayFaces.directory = LookThemeTests.fonts
@@ -65,6 +65,21 @@ struct BarTrayRenders {
         let grouped = ScrollView { MenuBarPage(onScreen: false, placement: .topBar).environment(engine) }
             .frame(width: 1000, height: 560).background(Theme.background).pilotTheme()
         _ = try ClockRenders.write(grouped, size: NSSize(width: 1000, height: 560), settle: 0.8, to: dir.appendingPathComponent("page-topBar-group-1000.png"))
+        store.settings = kept
+        // Each extension's item its own piece in the order (spec pilot-1.1 T50): Ghostex after the workspaces, Weather
+        // before the clock, To-do last on the right; the tray keeps Stocks, never placed.
+        let (folder, exts, storage) = try SurfacesV2Tests.fixtureFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let faces = ["ghostex": ("Ghostex", "👻 5"), "todo": ("To-do", "☑️ 3"), "weather": ("Weather", "🌤 18°"), "stocks": ("Stocks", "▲ 1.2%")]
+        for (id, face) in faces { try ExtensionSurfaceTests.write(id, title: face.0, in: exts) }
+        let bar = ExtensionBar(folder: exts, storage: storage, run: { surface, _ in .bar(Extension.BarAnswer(text: faces[surface.command.id.extension]?.1 ?? "")) })
+        await bar.round()
+        for id in ["ghostex", "todo", "weather"] { store.settings.toggle(extension: id, in: .topBar) }
+        _ = store.settings.drop(.extension("ghostex"), on: .top(.left, index: 2), placement: .topBar)
+        _ = store.settings.drop(.extension("weather"), on: .top(.centre, index: 3), placement: .topBar)
+        let apart = ScrollView { MenuBarPage(onScreen: false, placement: .topBar, extensionBar: bar).environment(engine) }
+            .frame(width: 1000, height: 820).background(Theme.background).pilotTheme()
+        _ = try ClockRenders.write(apart, size: NSSize(width: 1000, height: 820), settle: 0.8, to: dir.appendingPathComponent("page-topBar-extensions-1000.png"))
         store.settings = kept
         for style in [PilotStyle.instrument, .toybox] {
             look.style = style

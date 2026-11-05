@@ -15,6 +15,12 @@ public final class ClipboardWatcher {
     public var capture: ClipboardCapture
     /// After each copy stored: the app has ClipboardOCR read any new image (card agent-bo-95423070).
     public var onStore: (() -> Void)?
+    /// After a copied secret's timer ran out and it left the history (P65): an open panel lists the rest.
+    public var onExpire: (() -> Void)?
+    /// After a prune that failed, no other try before this: a broken database is not retried and logged twice a second.
+    private var expiryRetry: Date?
+    /// How long that wait is.
+    static let expiryBackoff: TimeInterval = 60
     private let sourceApp: @MainActor () -> String?
     private var timer: Timer?
     private var changeCount = 0
@@ -37,6 +43,21 @@ public final class ClipboardWatcher {
         stop()
         changeCount = pasteboard.changeCount
         schedule()
+    }
+
+    /// A secret whose time has come is deleted, with every other one due. The store keeps the soonest deadline in memory
+    /// (every write that times a row lowers it), so a poll reads SQLite only once it passes.
+    private func expire(now: Date = Date()) {
+        guard let due = store.soonestExpiry, due <= now, expiryRetry.map({ $0 <= now }) ?? true else { return }
+        do {
+            try store.prune(now: now)
+            expiryRetry = nil
+            clipLog.info("clipboard secret expired")
+            onExpire?()
+        } catch {
+            expiryRetry = now.addingTimeInterval(Self.expiryBackoff)
+            clipLog.error("clipboard expiry failed, next try in \(Int(Self.expiryBackoff))s: \(String(describing: error), privacy: .public)")
+        }
     }
 
     public func stop() {
@@ -73,6 +94,7 @@ public final class ClipboardWatcher {
     }
 
     func poll() {
+        expire()
         guard pasteboard.changeCount != changeCount else { return }
         changeCount = pasteboard.changeCount
         guard pasteboard.accessBehavior != .alwaysDeny, let item = capture.capture(pasteboard, sourceApp: sourceApp()) else { return }

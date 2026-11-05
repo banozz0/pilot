@@ -31,12 +31,20 @@ struct DriveRouteTests {
         #expect(DriveRoute(id: "drive.key:") == nil)
     }
 
-    @Test("A route with nothing to run is no route, and other actions are not drive routes")
+    @Test("A route with nothing to run is no route, and other actions are not drive routes; macOS's own menus are never pressed")
     func refused() {
         for id in ["drive.url:", "drive.shell:", "drive.shortcut:", "drive.menu:com.apple.finder", "drive.menu::File > New",
                    "drive.menu:com.apple.finder:File >  ", "drive.copy", "windows.close", "apps.open:com.apple.finder"] {
             #expect(DriveRoute(id: id) == nil, "\(id)")
         }
+        // Control Centre, the menu extras and the login window can switch radios or end the session (T52 review).
+        for bundle in ["com.apple.controlcenter", "com.apple.ControlCenter", "com.apple.systemuiserver", "com.apple.MenuBarAgent", "com.apple.loginwindow",
+                       "com.apple.notificationcenterui", "com.apple.Spotlight", "com.apple.TextInputMenuAgent"] {
+            #expect(!DriveRoute.pressesMenus(of: bundle, regular: true), "\(bundle)")
+        }
+        // Any other com.apple. agent is refused by its activation policy; another maker's accessory app is not.
+        #expect(!DriveRoute.pressesMenus(of: "com.apple.Siri", regular: false) && !DriveRoute.pressesMenus(of: "com.apple.WindowManager", regular: false))
+        #expect(DriveRoute.pressesMenus(of: "com.apple.finder", regular: true) && DriveRoute.pressesMenus(of: "com.mitchellh.ghostty", regular: false))
     }
 
     @Test("Shell commands run in a child login shell, Shortcuts through shortcuts run; the others run no child")

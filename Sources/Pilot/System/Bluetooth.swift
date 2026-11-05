@@ -21,6 +21,16 @@ protocol BluetoothSystem: AnyObject {
     func paired() async -> [BluetoothDevice]
     func connect(_ address: String) async -> Bool
     func disconnect(_ address: String) async -> Bool
+    /// This macOS still has the private call Pilot turns the radio on and off with (BluetoothPower.swift); the switches
+    /// hide when it is gone.
+    var canSetPower: Bool { get }
+    /// The radio's power, nil with no Bluetooth controller. Read only once Bluetooth is allowed: IOBluetooth may raise
+    /// macOS's prompt.
+    func powerOn() -> Bool?
+    /// Turns the radio on or off and answers its power read back after; nil when Pilot cannot switch it.
+    func setPower(_ on: Bool) async -> Bool?
+    /// The keyboards, mice and trackpads connected now, from the IO registry, which asks no permission.
+    func inputs() -> [InputDevice]
 }
 
 /// IOBluetooth's public device calls (Setup › Bluetooth, card agent-bo-95422802), each off the main thread, since a
@@ -67,6 +77,11 @@ final class IOBluetoothSystem: NSObject, BluetoothSystem, CBCentralManagerDelega
 
     func connect(_ address: String) async -> Bool { await Self.run(address) { $0.openConnection() } }
     func disconnect(_ address: String) async -> Bool { await Self.run(address) { $0.closeConnection() } }
+
+    var canSetPower: Bool { BluetoothPower.setCall != nil }
+    func powerOn() -> Bool? { BluetoothPower.power() }
+    func setPower(_ on: Bool) async -> Bool? { await BluetoothPower.set(on) }
+    func inputs() -> [InputDevice] { BluetoothPower.connectedInputs() }
 
     private static func run(_ address: String, _ call: @escaping @Sendable (IOBluetoothDevice) -> IOReturn) async -> Bool {
         await Task.detached(priority: .userInitiated) { IOBluetoothDevice(addressString: address).map(call) == kIOReturnSuccess }.value

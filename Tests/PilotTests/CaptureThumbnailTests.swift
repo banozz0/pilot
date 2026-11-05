@@ -105,16 +105,21 @@ struct CaptureThumbnailTests {
     }
 
     @Test("The last thumbnail closed comes back once with Show the last thumbnail again; before any, nothing")
-    func restore() {
+    func restore() async throws {
         CaptureThumbnails.onScreen = false
         defer { CaptureThumbnails.shown.forEach(CaptureThumbnails.dismiss); CaptureThumbnails.onScreen = true }
         CaptureThumbnails.reset()
         #expect(!CaptureThumbnails.restore(), "nothing closed yet")
-        let file = URL(filePath: "/tmp/caps/Capture r.png")
+        // It comes back from its file (only the file is kept while it is gone, P77).
+        let file = FileManager.default.temporaryDirectory.appending(path: "pilot-restore-\(UUID().uuidString)/Capture r.png")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        try #require(PilotCapture.png(Self.image, scale: 2)).write(to: file)
         let panel = CaptureThumbnails.show(Self.image, scale: 2, file: file, capture: .shared)
         panel.model.close()
         #expect(CaptureThumbnails.shown.isEmpty)
         #expect(CaptureThumbnails.restore())
+        await CaptureGrabTests.settle { !CaptureThumbnails.shown.isEmpty }
         #expect(CaptureThumbnails.shown.count == 1 && CaptureThumbnails.shown[0].model.file == file && CaptureThumbnails.shown[0] !== panel)
         #expect(!CaptureThumbnails.restore(), "once")
     }

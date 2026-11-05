@@ -118,6 +118,7 @@ PLIST=(-c "Add :PilotCommit string $(git -C "$ROOT" rev-parse HEAD)")
 cp "$ROOT/Packaging/drive-catalogue.json" "$APP/Contents/Resources/"  # the drive catalogue (DriveModule.catalogue)
 cp "$ROOT/Packaging/install-catalogue.json" "$APP/Contents/Resources/"  # Install's catalogue (SPEC.md, Install catalogue)
 cp "$ROOT/Packaging/themes.json" "$APP/Contents/Resources/"  # Omarchy's theme palettes (OmarchyThemes)
+cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases and palettes (CursorSets, P84)
 cp "$ROOT/Packaging/Omarchy-LICENSE.txt" "$APP/Contents/Resources/Omarchy-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/emoji.json" "$APP/Contents/Resources/"  # gemoji's emoji names and keywords (EmojiSearch)
 cp "$ROOT/Packaging/gemoji-LICENSE.txt" "$APP/Contents/Resources/gemoji-LICENSE.txt"  # MIT keeps its notice

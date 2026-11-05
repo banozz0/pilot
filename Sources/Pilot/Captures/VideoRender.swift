@@ -7,7 +7,10 @@ import UniformTypeIdentifiers
 // The video editor's one way of drawing a frame (P71), shared by the preview and the export so what plays is what is
 // written: Core Image in a small custom compositor (AVVideoComposition's Core Image handler is deprecated and cannot
 // make the canvas bigger than the recording). The backdrop (fill and shadow) is drawn once per edit; each frame is then
-// the camera's part of the cropped frame, scaled into the backdrop's spot and rounded there.
+// its blurs (R8), then the click rings (R4) and the pointer Pilot draws (T29, R1–R3), then the camera's part of the
+// cropped frame (a shape's window of it, R9), scaled into the backdrop's spot and rounded there, averaged over the
+// shutter while the camera moves (R10). The pointer goes on in the recording's own pixels, so crop, shape, zoom and size
+// treat it as they would a recorded one.
 
 /// One edit's frame recipe at one size. Immutable and Sendable: the composition's handler runs it on AVFoundation's
 /// queues.
@@ -24,20 +27,34 @@ final class VideoPlan: @unchecked Sendable {
     private let mask: CIImage?
     /// The video's place on the canvas, Core Image's bottom-left pixels.
     private let place: CGRect
-    /// The source frame's height, pixels: Core Image counts up from the bottom.
-    private let sourceHeight: CGFloat
+    /// The source frame's size, pixels: Core Image counts up from the bottom.
+    private let source: CGSize
     private let fine: Bool
+    /// The pointer as the frames draw it (T29): a drawn track's places and shapes, or only the clicks for R4; nil when
+    /// nothing is drawn.
+    private let drawn: DrawnPointer?
+    /// Each of the track's shapes, read from its PNG once.
+    private let shapes: [CIImage]
+    /// The recording's pixels a point of the screen it recorded: the pointer's and the ring's size.
+    private let pixelsPerPoint: CGFloat
+    /// The click ring's colours: the theme's halo colours (T4).
+    private let ring: CursorEffectColours
 
     /// `picture` is a picture fill's, made by `backdropPicture` (read and blurred once, never per frame); `fine` scales
     /// with high-quality downsampling (the export's), else plainly (the preview's). `size` draws the canvas exactly that
-    /// big (an export's even size), else `out` times the full one.
-    init(edit: VideoEdit, pointer: CursorTrack?, source: CGSize, out: CGFloat = 1, size: CGSize? = nil, exported: Bool, picture: CGImage?, fine: Bool) {
+    /// big (an export's even size), else `out` times the full one. `ring` is the theme's halo colours, Lagoon's when nil.
+    init(edit: VideoEdit, pointer: CursorTrack?, source: CGSize, out: CGFloat = 1, size: CGSize? = nil, exported: Bool, picture: CGImage?, fine: Bool,
+         ring: CursorEffectColours? = nil) {
         self.edit = edit
         self.pointer = pointer?.path
         self.exported = exported
         self.fine = fine
-        sourceHeight = source.height
-        var layout = VideoLayout(source: source, crop: edit.crop, backdrop: edit.backdrop, out: out)
+        self.source = source
+        drawn = pointer.flatMap { $0.drawn || !$0.clicks.isEmpty ? DrawnPointer($0) : nil }
+        shapes = pointer?.drawn == true ? pointer?.shapes.map { CIImage(data: $0.png) ?? .empty() } ?? [] : []
+        pixelsPerPoint = pointer?.frame.map { source.width / max($0.width, 1) } ?? VideoLayout.pointScale(source)
+        self.ring = ring ?? .of("lagoon")
+        var layout = VideoLayout(source: source, crop: edit.crop, backdrop: edit.backdrop, shape: edit.shape, out: out)
         if let size { layout = layout.fitted(to: size) }
         self.layout = layout
         let canvas = layout.canvas, spot = layout.spot
@@ -64,22 +81,100 @@ final class VideoPlan: @unchecked Sendable {
     func frame(_ image: CIImage, at time: Double) -> CIImage {
         let t = exported ? edit.source(at: time) : time
         let crop = layout.crop, place = self.place
-        let view = edit.camera(at: t, cursor: pointer)
-        // The camera's part of the frame in source pixels, bottom-left.
-        let part = CGRect(x: crop.minX + view.minX * crop.width, y: sourceHeight - (crop.minY + view.maxY * crop.height),
-                          width: view.width * crop.width, height: view.height * crop.height)
-        let move = CGAffineTransform(translationX: -part.minX, y: -part.minY)
-            .concatenating(CGAffineTransform(scaleX: place.width / max(part.width, 1), y: place.height / max(part.height, 1)))
-            .concatenating(CGAffineTransform(translationX: place.minX, y: place.minY))
-        var video = image.clampedToExtent().cropped(to: part)
-        video = fine ? video.transformed(by: move, highQualityDownsample: true) : video.transformed(by: move)
-        video = video.cropped(to: place)
+        let drawn = pointered(blurred(image, at: t), at: t).clampedToExtent()
+        // The camera's part of the frame (source pixels, bottom-left) scaled into the spot.
+        func shot(_ view: CGRect) -> CIImage {
+            let part = CGRect(x: crop.minX + view.minX * crop.width, y: source.height - (crop.minY + view.maxY * crop.height),
+                              width: view.width * crop.width, height: view.height * crop.height)
+            let move = CGAffineTransform(translationX: -part.minX, y: -part.minY)
+                .concatenating(CGAffineTransform(scaleX: place.width / max(part.width, 1), y: place.height / max(part.height, 1)))
+                .concatenating(CGAffineTransform(translationX: place.minX, y: place.minY))
+            let video = drawn.cropped(to: part)
+            return (fine ? video.transformed(by: move, highQualityDownsample: true) : video.transformed(by: move)).cropped(to: place)
+        }
+        // R10: the camera at each of the shutter's times, a shot about every 4 pixels the frame's edge moves; one shot
+        // while it stands still (within a tenth of a pixel).
+        func view(_ at: Double) -> CGRect { edit.camera(at: at, cursor: pointer, window: layout.window) }
+        func moved(_ v: CGRect, from a: CGRect) -> CGFloat {
+            let kx = place.width / max(a.width, 0.0001), ky = place.height / max(a.height, 0.0001)
+            return max(abs(v.minX - a.minX) * kx, abs(v.maxX - a.maxX) * kx, abs(v.minY - a.minY) * ky, abs(v.maxY - a.maxY) * ky)
+        }
+        // The shutter's ends tell how far the camera moves; the preview takes the fewest shots, so it plays smoothly.
+        let ends = edit.shutterTimes(at: t, taps: 2)
+        let move = ends.count < 2 ? 0 : moved(view(ends[1]), from: view(ends[0]))
+        let video: CIImage
+        if move < 0.1 {
+            video = shot(view(t))
+        } else {
+            let taps = fine ? min(VideoEdit.mostShutterTaps, max(VideoEdit.shutterTaps, Int(move / 4))) : VideoEdit.shutterTaps
+            let views = edit.shutterTimes(at: t, taps: taps).map(view)
+            // A running mean: each new shot weighs 1/(n+1) against the ones before.
+            video = views.enumerated().dropFirst().reduce(shot(views[0])) { mean, next in
+                mean.applyingFilter("CIDissolveTransition", parameters: [kCIInputTargetImageKey: shot(next.element), kCIInputTimeKey: 1 / Double(next.offset + 1)])
+            }.cropped(to: place)
+        }
         let all = CGRect(origin: .zero, size: layout.canvas)
         guard let background else { return video.cropped(to: all) }
         if let mask {
             return video.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: background, kCIInputMaskImageKey: mask]).cropped(to: all)
         }
         return background.composited(over: video).cropped(to: all)
+    }
+
+    /// R8: `image` with each area blurred at the recording's `t` blurred, hard enough that a line of text in it can't be
+    /// read: the radius follows the area's shorter side.
+    private func blurred(_ image: CIImage, at t: Double) -> CIImage {
+        var image = image
+        for area in edit.blurred(at: t) {
+            let r = CGRect(x: area.minX * source.width, y: source.height - area.maxY * source.height,
+                           width: area.width * source.width, height: area.height * source.height).integral
+            let radius = min(64, max(12, min(r.width, r.height) * 0.35))
+            image = image.clampedToExtent().applyingGaussianBlur(sigma: radius).cropped(to: r).composited(over: image)
+        }
+        return image
+    }
+
+    /// T29: `image` (the recording's frame) with a ring on each click still playing at `t` (R4), then, on a recording
+    /// that kept the pointer out, the pointer: smoothed (R1), at its size (R2), faded while still (R3).
+    private func pointered(_ image: CIImage, at t: Double) -> CIImage {
+        guard let drawn else { return image }
+        let look = edit.pointer, k = pixelsPerPoint
+        var out = image
+        // A place on the frame (a fraction from its top left) in Core Image's bottom-left pixels.
+        func pixel(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * source.width, y: source.height - p.y * source.height) }
+        if look.clickRing {
+            for click in drawn.rings(at: t) {
+                guard let tile = Self.ringTile(age: click.age, scale: k, colours: ring) else { continue }
+                let at = pixel(click.place), half = tile.extent.width / 2
+                out = tile.transformed(by: CGAffineTransform(translationX: at.x - half, y: at.y - half)).composited(over: out)
+            }
+        }
+        if drawn.track.drawn, let p = drawn.place(at: t, smooth: look.smooth), let i = drawn.shape(at: t), shapes.indices.contains(i) {
+            let alpha = look.hideStill ? drawn.shown(at: t) : 1
+            if alpha > 0.002 {
+                let shape = drawn.track.shapes[i], s = k * look.size, at = pixel(p)
+                // The shape's hot spot (points from its top left) on the pointer's place.
+                var cursor = shapes[i].transformed(by: CGAffineTransform(scaleX: s / shape.scale, y: s / shape.scale)
+                    .concatenating(CGAffineTransform(translationX: at.x - shape.hot.x * s, y: at.y - (shape.size.height - shape.hot.y) * s)))
+                if alpha < 1 { cursor = cursor.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha)]) }
+                out = cursor.composited(over: out)
+            }
+        }
+        return out.cropped(to: image.extent)
+    }
+
+    /// R4: one click's ring `age` seconds in, as T4's ripple draws it, in a square tile `scale` pixels a point.
+    static func ringTile(age: Double, scale: CGFloat, colours: CursorEffectColours) -> CIImage? {
+        let room: CGFloat = 36, side = Int((2 * room * scale).rounded(.up))
+        guard side > 0, let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        var state = CursorEffectState()
+        state.ripple = true
+        state.ripples = [CursorEffectState.Ripple(point: CGPoint(x: room, y: room), time: 0, right: false)]
+        CursorEffectPainter.draw(state, colours, now: age, in: ctx)
+        return ctx.makeImage().map { CIImage(cgImage: $0) }
     }
 
     /// The backdrop's fill and shadow over the canvas, the spot (`spot` bottom-left pixels) left clear: the capture's
@@ -160,7 +255,7 @@ final class PlanCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     }
 }
 
-/// The export (P71): the recording trimmed and sped up in a composition, drawn by the plan, written as MP4 (H.264 or
+/// The export (P71): the recording's kept pieces (trim, cuts, each part's speed) in a composition, drawn by the plan, written as MP4 (H.264 or
 /// HEVC, sound kept, its pitch kept at any speed) or as a GIF at 15 frames a second. Off the main thread; cancelled with
 /// its task, when the half-written file is removed.
 enum VideoExport {
@@ -179,10 +274,13 @@ enum VideoExport {
     static func run(_ asset: AVAsset, edit: VideoEdit, pointer: CursorTrack?, picture: CGImage?, format: VideoFormat, size: VideoSize,
                     to url: URL, progress: @escaping @Sendable (Double) -> Void) async throws {
         do {
+            guard edit.length > 0 else { throw Problem.notWritten("every part is cut") }
             let (composition, source) = try await trimmed(asset, edit: edit)
             let full = VideoLayout(source: source, edit: edit).canvas
-            let plan = VideoPlan(edit: edit, pointer: pointer, source: source, size: size.pixels(full, format: format), exported: true,
-                                 picture: picture, fine: true)
+            // The theme's halo colours, read only when a ring will draw.
+            let ring = edit.pointer.clickRing && pointer?.clicks.isEmpty == false ? await MainActor.run { CursorEffectColours.of(Look.shared.themeID) } : nil
+            let plan = VideoPlan(edit: edit, pointer: pointer, source: source, size: size.pixels(full, format: format, shape: edit.shape), exported: true,
+                                 picture: picture, fine: true, ring: ring)
             let context = VideoPlan.context()
             if format == .gif {
                 try await gif(composition, plan: plan, context: context, length: edit.length, to: url, progress: progress)
@@ -195,20 +293,33 @@ enum VideoExport {
         }
     }
 
-    /// The kept part of every track, from zero, scaled to the speed; and the picture's size in pixels.
+    /// The edit's pieces of every track one after another from zero, each scaled to its speed as it is laid down (so no
+    /// later scale moves an earlier piece); and the picture's size in pixels.
     static func trimmed(_ asset: AVAsset, edit: VideoEdit) async throws -> (AVComposition, CGSize) {
         let composition = AVMutableComposition()
-        let range = CMTimeRange(start: CMTime(seconds: edit.trimIn, preferredTimescale: 600), end: CMTime(seconds: edit.trimOut, preferredTimescale: 600))
         let videos = try await asset.loadTracks(withMediaType: .video)
         guard let video = videos.first else { throw Problem.noVideo }
         let size = try await video.load(.naturalSize)
+        var tracks: [(from: AVAssetTrack, kept: CMTimeRange, into: AVMutableCompositionTrack)] = []
         for track in videos.prefix(1) + (try await asset.loadTracks(withMediaType: .audio)) {
             guard let into = composition.addMutableTrack(withMediaType: track.mediaType, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
-            try into.insertTimeRange(range, of: track, at: .zero)
+            tracks.append((track, try await track.load(.timeRange), into))
         }
-        if edit.speed != 1 {
-            let kept = CMTimeRange(start: .zero, duration: range.duration)
-            composition.scaleTimeRange(kept, toDuration: CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / edit.speed))
+        var cursor = CMTime.zero
+        for piece in edit.pieces {
+            let range = CMTimeRange(start: CMTime(seconds: piece.start, preferredTimescale: 600), end: CMTime(seconds: piece.end, preferredTimescale: 600))
+            for track in tracks {
+                // A track shorter than the piece (sound that ends early) gives what it has, at its place in the piece.
+                let part = range.intersection(track.kept)
+                guard part.duration > .zero else { continue }
+                try track.into.insertTimeRange(part, of: track.from, at: cursor + (part.start - range.start))
+            }
+            var laid = range.duration
+            if piece.rate != 1 {
+                laid = CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / piece.rate)
+                composition.scaleTimeRange(CMTimeRange(start: cursor, duration: range.duration), toDuration: laid)
+            }
+            cursor = cursor + laid
         }
         return (composition, size)
     }

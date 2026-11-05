@@ -280,7 +280,7 @@ final class CollectionsAppsTests {
         #expect(await answer("add", ["roles", "--role", "editor", "--app", "com.microsoft.VSCode"]).ok && stores.editor.pick == "com.microsoft.VSCode")
         #expect(await answer("add", ["roles", "--role", "notes", "--app", AppRolePicks.pilot]).ok, "Pilot's own notes need no install")
         let listed = await rows("roles")
-        #expect(listed.map { $0["role"] } == ["terminal", "agent", "browser", "messages", "ai", "mail", "notes", "music", "passwords", "editor"]
+        #expect(listed.map { $0["role"] } == ["terminal", "agent", "browser", "files", "messages", "ai", "mail", "notes", "music", "passwords", "editor"]
             .map { .string($0) })
         #expect(listed.last?["pick"] == .string("com.microsoft.VSCode") && listed[2]["pick"] == .string("automatic"))
         #expect(await answer("add", ["roles", "--role", "ai", "--app", "https://chatgpt.com"]).ok, "a website needs no install (Q463)")
@@ -290,7 +290,9 @@ final class CollectionsAppsTests {
         #expect(await answer("remove", ["roles", "terminal"]).ok && stores.picks.picks[.terminal] == nil)
         #expect(await answer("remove", ["roles", "editor"]).ok && stores.editor.pick == nil)
         #expect(await answer("add", ["roles", "--role", "terminal", "--app", "com.nope.App"]).error?.message.hasPrefix("--app:") == true)
-        #expect(await answer("add", ["roles", "--role", "files", "--app", "com.mitchellh.ghostty"]).error?.message.hasPrefix("--role:") == true)
+        #expect(await answer("add", ["roles", "--role", "files", "--app", AppRolePicks.pilot]).ok && stores.picks.app(.files) == AppRolePicks.pilot,
+                "the Files key can open Pilot Files, which needs no install (Q800)")
+        #expect(await answer("add", ["roles", "--role", "calendar", "--app", "com.mitchellh.ghostty"]).error?.message.hasPrefix("--role:") == true)
         #expect(stores.picks.picks[.terminal] == nil && asked.isEmpty)
     }
 
@@ -298,9 +300,11 @@ final class CollectionsAppsTests {
     func roleChoices() async {
         let listed = await rows("roles")
         #expect(listed[0]["pick"] == .string("automatic") && listed[0]["automatic"] == .string("com.mitchellh.ghostty") && listed[0]["app"] == nil)
-        #expect(listed[6]["choices"] == .array([.object(["bundle": .string(AppRolePicks.pilot), "name": .string("Pilot quick notes")])]),
+        guard case .array(let files)? = listed[3]["choices"] else { Issue.record("Files has no choices"); return }
+        #expect(files.first == .object(["bundle": .string(AppRolePicks.pilot), "name": .string("Pilot Files")]), "Files offers the Pilot Files window first")
+        #expect(listed[7]["choices"] == .array([.object(["bundle": .string(AppRolePicks.pilot), "name": .string("Pilot quick notes")])]),
                 "Notes offers Pilot's quick notes; no known notes app is installed")
-        #expect(listed[9]["choices"] == .array([.object(["bundle": .string("com.microsoft.VSCode"), "name": .string("Visual Studio Code")]),
+        #expect(listed[10]["choices"] == .array([.object(["bundle": .string("com.microsoft.VSCode"), "name": .string("Visual Studio Code")]),
                                                 .object(["bundle": .string("com.apple.TextEdit"), "name": .string("TextEdit")])]))
         let refused = await answer("add", ["roles", "--role", "editor", "--app", "com.mitchellh.ghostty"])
         #expect(refused.error?.message == "--app: com.mitchellh.ghostty is not an editor choice; there are com.microsoft.VSCode, com.apple.TextEdit")

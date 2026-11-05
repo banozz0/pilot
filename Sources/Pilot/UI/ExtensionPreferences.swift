@@ -115,9 +115,17 @@ private struct TextPreference: View {
     static func text(_ value: JSONValue?) -> String { if case .string(let s)? = value { s } else { "" } }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            input
+            // A secret has the keyboard: why Hyper waits (T48).
+            if secure && typing { SecureFieldTipLine() }
+        }
+    }
+
+    private var input: some View {
         let prompt = Text(field.preference.default.map(Self.text).flatMap { $0.isEmpty ? nil : "Default: \($0)" } ?? (secure ? "Not set" : "Type it"))
             .foregroundStyle(ink.muted)
-        Group {
+        return Group {
             if secure { SecureField("", text: $draft, prompt: prompt) } else { TextField("", text: $draft, prompt: prompt) }
         }
         .frame(minHeight: 24)

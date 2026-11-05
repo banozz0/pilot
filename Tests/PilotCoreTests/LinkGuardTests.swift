@@ -31,7 +31,7 @@ struct LinkTokenTests {
         #expect(!t.allows("drive.shell:true", token: ""))
     }
 
-    @Test("A link runs or binds a shell, picker, Shortcuts, drive URL, keystroke or non-web app link only with the token")
+    @Test("A link runs or binds a shell, picker, Shortcuts, drive URL, keystroke, non-web app link, radio, power or session action only with the token")
     func risky() throws {
         let t = Self.token()
         let pick = DriveRoute.picker(title: nil, list: "ls", run: "open $1").id
@@ -39,7 +39,10 @@ struct LinkTokenTests {
         for id in ["drive.shell:touch /tmp/pilot-link-probe", "drive.url:shottr://grab/area", "drive.shortcut:Morning", pick,
                    "apps.web:pilot://run?action=drive.shell%3Atouch%20/tmp/x", "apps.url:app.zen-browser.zen:shortcuts://x",
                    // A keystroke goes into whichever app the link names (&app=Terminal), so links could type a command key by key.
-                   "drive.key:cmd+T", "drive.key:return"] {
+                   "drive.key:cmd+T", "drive.key:return",
+                   // Any web page could cut the network, a radio, the power or the session (T52).
+                   "system.wifi", "system.bluetooth", "system.shutDown", "system.restart", "system.sleep", "system.logOut",
+                   "system.lock", "system.lockKeyboard"] {
             #expect(!t.allows(id, token: nil), "\(id)")
             #expect(!t.allows(id, token: "wrong"), "\(id)")
             #expect(!t.allows(id, token: String(token.dropLast())), "\(id)")

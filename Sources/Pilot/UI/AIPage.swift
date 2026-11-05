@@ -425,7 +425,7 @@ struct AIProviderSetup: View {
                 Text(optional ? "API key, if it needs one" : "API key")
                 InfoMark(text: keyInfo)
                 SecureField("API key", text: $draft, prompt: Text(verbatim: "Paste your key").foregroundStyle(ink.muted))
-                    .labelsHidden().pilotField().onSubmit { save(draft) }
+                    .labelsHidden().pilotField().secureFieldTip().onSubmit { save(draft) }
                 Button("Save") { save(draft) }.buttonStyle(.pilotPrimary)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if replacing { Button("Cancel") { replacing = false; draft = "" }.buttonStyle(.pilot) }

@@ -17,7 +17,7 @@ private final class MemoryKeyStore: StoredKey, @unchecked Sendable {
 }
 
 /// Web GIF search in Stickers and GIFs (story 164), drawn offscreen in Instrument and Toybox: GIPHY's rows beside
-/// the folder's with their animated previews, "Powered by GIPHY" at the foot, the row that asks for a key, and the key's
+/// the folder's with their animated previews, GIPHY's logo and "Powered by GIPHY" on the bar (T39), the row that asks for a key, and the key's
 /// rows under Stickers and GIFs on Launcher › Abilities. Nothing reaches the network. PILOT_RENDER_DIR keeps the PNGs.
 extension SharedLook {
 @MainActor
@@ -70,9 +70,9 @@ struct GiphyRenders {
         return try #require(snapshot(content, scale: 2))
     }
 
-    @Test("The foot says Powered by GIPHY only while GIPHY's rows are listed")
+    @Test("The bar shows GIPHY's logo and Powered by GIPHY only while GIPHY's rows are listed, and the foot never repeats it")
     func footer() throws {
-        func names(_ model: MenuModel) -> Bool { model.footerNote == "Powered by GIPHY" }
+        func names(_ model: MenuModel) -> Bool { model.showsGiphyAttribution && model.footerNote == nil && GiphyAttribution.mark != nil }
         #expect(names(try Self.model(web: true)))
         #expect(!names(try Self.model(web: false)))
         #expect(!names(try Self.model(web: false, key: false)))

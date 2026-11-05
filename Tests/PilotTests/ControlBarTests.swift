@@ -158,16 +158,23 @@ struct ControlBarTests {
     func extensions() async throws {
         let rig = Rig()
         let row = await rig.rows("bar-extensions").first
-        #expect(row == .object(["id": .string("todo"), "title": .string("To-do"), "on": .bool(true), "placement": .string("menuBar")]))
-        _ = await rig.ok("add", "bar-extensions", "--id", "todo", "--placement", "topBar")
-        #expect(rig.bar.settings.extensionEntry("todo").placement == .both && rig.entry(.extensions).on && rig.nudges == 1)
+        #expect(row == .object(["id": .string("todo"), "title": .string("To-do"), "on": .bool(true), "placement": .string("menuBar"),
+                                "side": .null, "index": .null]))
+        // Into the top bar it is its own item, last on the right; --side and --index move it, and pilot bar reads the order.
+        let added = await rig.ok("add", "bar-extensions", "--id", "todo", "--placement", "topBar")
+        #expect(rig.bar.settings.extensionEntry("todo").placement == .both && rig.nudges == 1)
+        #expect(Self.field(added, "side") == .string("right") && Self.field(added, "index") == .number(3))
+        let moved = await rig.ok("add", "bar-extensions", "--id", "todo", "--side", "left", "--index", "1")
+        #expect(Self.field(moved, "side") == .string("left") && Self.field(moved, "index") == .number(1) && rig.nudges == 2)
+        #expect(Self.field(Self.field(await rig.ok("bar"), "topBar"), "left") == .array([.string("pilot"), .string("extension:todo"), .string("workspaces")]))
+        #expect(await rig.ask("add", "bar-extensions", "--id", "todo", "--placement", "menuBar", "--side", "left").error?.code == .badValue)
         _ = await rig.ok("remove", "bar-extensions", "todo", "--placement", "menuBar")
         #expect(rig.bar.settings.extensionEntry("todo").placement == .topBar)
         _ = await rig.ok("remove", "bar-extensions", "todo")
-        #expect(!rig.bar.settings.extensionEntry("todo").on && rig.nudges == 3)
+        #expect(!rig.bar.settings.extensionEntry("todo").on && rig.nudges == 4)
         // Already off: nothing written, nothing asked.
         _ = await rig.ok("remove", "bar-extensions", "todo")
-        #expect(rig.nudges == 3)
+        #expect(rig.nudges == 4)
         #expect(await rig.ask("add", "bar-extensions", "--id", "weather").error?.code == .badValue)
     }
 

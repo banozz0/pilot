@@ -384,9 +384,11 @@ final class AppWindowController: NSObject {
     var autosaveName: String? = "PilotAppWindow"
 }
 
-/// Cmd+W closes the window and Cmd+Q quits Pilot, whatever the main menu holds (Sven, 2026-10-04).
+/// Cmd+W closes the window and Cmd+Q quits Pilot, whatever the main menu holds (Sven, 2026-10-04); Cmd+S saves where a
+/// window saves (a text file's, T49).
 final class PilotWindow: NSWindow {
     var onQuit: () -> Void = {}
+    var onSave: (() -> Void)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
@@ -394,6 +396,7 @@ final class PilotWindow: NSWindow {
             switch event.charactersIgnoringModifiers {
             case "w": performClose(nil); return true
             case "q": onQuit(); return true
+            case "s" where onSave != nil: onSave?(); return true
             default: break
             }
         }

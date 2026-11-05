@@ -18,7 +18,11 @@ public enum BarAction: Equatable, Sendable {
     /// A page of Pilot's window: Edit bar's the Menu bar page, where the bar is dragged (Q185; the on-bar edit mode is
     /// parked).
     case page(AppPage)
+    /// Wi-Fi's or Bluetooth's radio on or off (T47), from its item's menu.
+    case radio(BarRadio, on: Bool)
 }
+
+public enum BarRadio: Equatable, Sendable { case wifi, bluetooth }
 
 /// The menu's changes to the bar: a style, a side (last on that side), off.
 public enum BarEdit: Equatable, Sendable {
@@ -39,14 +43,16 @@ extension BarEntry {
     /// The right-click menu: its actions, its styles when it has more than one, Move to (the top bar's sides; the macOS
     /// menu bar has none), Remove from bar (neither on Pilot, which is pinned first on the left) and Edit bar, which opens
     /// the Menu bar page.
+    /// An extension's own slot has neither actions nor styles here: its click opens its popover.
     public func menu(_ i: BarInputs, in place: BarPlace) -> [BarMenuRow] {
-        let styles: [BarMenuRow] = kind.styles.count < 2 ? []
+        let styles: [BarMenuRow] = kind.styles.count < 2 || extensionID != nil ? []
             : [.header("Style")] + kind.styles.map { .action($0.menuTitle, .edit(.style($0)), checked: $0 == style) }
         var bar: [BarMenuRow] = []
         if place == .topBar, !kind.pinned { bar.append(.submenu("Move to", TopBarSide.allCases.map { .action($0.rawValue.capitalized, .edit(.move($0)), checked: $0 == side) })) }
         if !kind.pinned { bar.append(.action("Remove from bar", .edit(.remove))) }
         bar.append(.action("Edit bar…", .page(.menuBar)))
-        return Array([kind.actions(i, scrolls: place == .topBar), styles, bar].filter { !$0.isEmpty }.joined(separator: [.separator]))
+        let actions = extensionID == nil ? kind.actions(i, scrolls: place == .topBar) : []
+        return Array([actions, styles, bar].filter { !$0.isEmpty }.joined(separator: [.separator]))
     }
 }
 
@@ -71,8 +77,10 @@ extension BarKind {
         case .keyboardLayout: [.action("Next layout", .click(.cycleLayout)), settings("Keyboard", "com.apple.Keyboard-Settings.extension")]
         // One pane, titled Energy on a Mac with no battery.
         case .battery: [settings(SystemStats.hasBattery ? "Battery" : "Energy", "com.apple.Battery-Settings.extension")]
-        case .bluetoothBatteries: [settings("Bluetooth", "com.apple.BluetoothSettings")]
-        case .wifi: [settings("Wi-Fi", "com.apple.wifi-settings-extension")]
+        // Each radio's switch, checked while on (T47); Bluetooth's only while Pilot can switch it (BarInputs.bluetoothOn).
+        case .bluetoothBatteries:
+            (i.bluetoothOn.map { [.action("Bluetooth", .radio(.bluetooth, on: !$0), checked: $0)] } ?? []) + [settings("Bluetooth", "com.apple.BluetoothSettings")]
+        case .wifi: (i.wifiOn.map { [.action("Wi-Fi", .radio(.wifi, on: !$0), checked: $0)] } ?? []) + [settings("Wi-Fi", "com.apple.wifi-settings-extension")]
         case .displays: [settings("Displays", "com.apple.Displays-Settings.extension")]
         case .clock: [settings("Date & Time", "com.apple.Date-Time-Settings.extension")]
         case .capture: Self.captureMenu(i)
@@ -140,12 +148,26 @@ extension BarSettings {
         }
     }
 
+    /// The same from a slot's menu, an extension's own included (spec pilot-1.1 T50): Move to puts it last on that side,
+    /// Remove from bar takes it out of the top bar alone, as its menu hangs there; it has no style.
+    public mutating func apply(_ edit: BarEdit, on item: BarTrayItem) {
+        switch (item, edit) {
+        case (.kind(let kind), _): apply(edit, on: kind)
+        case (.extension, .style): break
+        case (.extension, .move(let side)): move(item, to: side)
+        case (.extension(let id), .remove): if isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
+        }
+    }
+
     /// Puts the item on `side`, after every other item there.
-    public mutating func move(_ kind: BarKind, to side: TopBarSide) {
-        set(kind, side: side)
-        let others = entries.filter { $0.kind != kind }
+    public mutating func move(_ kind: BarKind, to side: TopBarSide) { move(.kind(kind), to: side) }
+
+    /// The same for an extension's own item, or any item by what a drag moves.
+    public mutating func move(_ item: BarTrayItem, to side: TopBarSide) {
+        set(item, side: side)
+        let others = entries.filter { $0.item != item }
         let last = others.lastIndex { $0.side == side }
-        move(kind, to: last.map { $0 + 1 } ?? others.count)
+        move(item, to: last.map { $0 + 1 } ?? others.count)
     }
 }
 
@@ -153,7 +175,9 @@ extension BarSettings {
 public enum BarTooltip {
     public static func text(_ slot: BarSlot, _ i: BarInputs) -> String {
         switch slot {
-        case .item(let entry): text(entry.kind, i)
+        case .item(let entry):
+            // An extension's own slot names its own answer, not every extension's.
+            if let id = entry.extensionID { i.extensionBars.first { $0.id == id }?.tooltip ?? entry.kind.title } else { text(entry.kind, i) }
         case .group(let entries): entries.map { text($0.kind, i) }.joined(separator: "  ·  ")
         }
     }

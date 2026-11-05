@@ -23,7 +23,8 @@ final class SecureInputMonitor: ScreenPausing {
     private(set) var timer: Timer?
     private var paused = false
     /// Secure input just came on (Sven, 2026-10-08: Bitwarden's unlock field made Pilot seem dead): the tip that says
-    /// so, once an app an hour, never for Pilot's own field or the lock screen.
+    /// so, once an app an hour, never for Pilot's own field (it says so under itself: `secureFieldTip`, T48) or the lock
+    /// screen.
     @ObservationIgnored var onTip: ((String) -> Void)?
     @ObservationIgnored private var tipped: [String: Date] = [:]
     /// Secure input came on or off: the tap is blind while it is on, so a Hyper release may be lost.

@@ -31,6 +31,11 @@ struct ControlGateTests {
         ("system.shutDown", "Shut down the Mac: system.shutDown"),
         ("system.restart", "Restart the Mac: system.restart"),
         ("system.logOut", "Log out: system.logOut"),
+        ("system.wifi", "Turn Wi-Fi on or off: system.wifi"),
+        ("system.bluetooth", "Turn Bluetooth on or off: system.bluetooth"),
+        ("system.sleep", "Put the Mac to sleep: system.sleep"),
+        ("system.lock", "Lock the screen: system.lock"),
+        ("system.lockKeyboard", "Lock the keyboard: system.lockKeyboard"),
     ])
     func gatedActions(_ id: String, _ question: String) {
         #expect(ControlGate.Ask.run(id)?.text == question)
@@ -57,7 +62,7 @@ struct ControlGateTests {
 
     @Test("Plain actions run without asking", arguments: ["windows.snapLeft", "apps.open:com.mitchellh.ghostty",
                                                           "apps.web:https://linear.app", "apps.url:com.apple.Safari:http://x.dev",
-                                                          "apps.private:company.thebrowser.Browser", "system.lock",
+                                                          "apps.private:company.thebrowser.Browser", "system.keepAwake",
                                                           "drive.menu:com.apple.finder:File > New Finder Window"])
     func plainActions(_ id: String) {
         #expect(ControlGate.Ask.run(id) == nil)

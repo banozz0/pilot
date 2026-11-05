@@ -110,18 +110,25 @@ public enum Reminders {
 public enum RootAnswers {
     /// A question for Claude ("ask …"), a line for Scratch ("note …") or an event ("event …") alone; else a quicklink's keyword and words first
     /// (card agent-bo-95423030), then a script's title and arguments (card agent-bo-95423048), then an extension command's
-    /// keyword and words ("todo buy milk"), then a sum, a colour or
+    /// keyword and words ("todo buy milk"), then a sum (after "calc " too, T40), a colour or
     /// CalculatorWorld's answer, else a reminder.
     public static func entries(for query: String, now: Date, links: [Quicklink] = [], scripts: [ScriptCommand] = [],
                                extensions: [Extension] = [], zone: TimeZone = .current,
                                rates: RateState? = nil) -> [MenuEntry] {
         let alone = QuickAI.entries(for: query) + Notes.entries(for: query) + QuickEvent.entries(for: query, timeZone: zone)
         if !alone.isEmpty { return alone }
-        var sums = Calculator.entries(for: query)
+        var sums = Calculator.entries(for: calc(query) ?? query)
         if sums.isEmpty { sums = ColourAnswer.entries(for: query) }
         if sums.isEmpty { sums = CalculatorWorld.entries(for: query, now: now, zone: zone, rates: rates) }
         return Quicklink.answers(for: query, in: links) + ScriptCommand.answers(for: query, in: scripts)
             + Extension.answers(for: query, in: extensions)
             + (sums.isEmpty ? Reminders.entries(for: query, now: now) : sums)
     }
+
+    /// The sum after "calc " ("calc 12*7", T40); nil for any other query, which a bare sum still answers.
+    static func calc(_ query: String) -> String? { Aliases.words(after: "calc", in: String(query.drop(while: \.isWhitespace))) }
+
+    /// A query that asks for an inline answer by its first word, "tr hello" or "calc 12*7" (T40): its answer is the menu's
+    /// whole list, the translation before the rest, with no Ask AI or search rows.
+    public static func asksInline(_ query: String) -> Bool { Translate.text(after: query)?.isEmpty == false || calc(query) != nil }
 }

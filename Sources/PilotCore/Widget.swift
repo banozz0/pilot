@@ -38,6 +38,8 @@ public struct Widget: Equatable, Sendable {
         case github
         /// What the Mac plays, its cover and its controls, drawn by Pilot alone (Q726).
         case nowPlaying
+        /// Each GitHub repo's latest CI run, read by gh, drawn by Pilot alone (P79).
+        case ci
 
         /// "reading cpu", "reading cpu, memory", "command every 60 s", "extension todo's page", "none".
         public var label: String {
@@ -49,6 +51,7 @@ public struct Widget: Equatable, Sendable {
             case .notes: "your notes"
             case .repos: "your repos"
             case .github: "your GitHub contributions"
+            case .ci: "your repos' GitHub Actions runs"
             case .nowPlaying: "what is playing"
             case .markets: "your market symbols"
             case .none: "none"
@@ -164,6 +167,7 @@ public struct Widget: Equatable, Sendable {
         if case .extensionPage = source, draw != .blocks { problems.append("data.extension draws Pilot's blocks: draw must be blocks") }
         if source == .repos, draw != .blocks { problems.append("data.repos draws Pilot's blocks: draw must be blocks") }
         if source == .github, draw != .blocks { problems.append("data.github draws Pilot's blocks: draw must be blocks") }
+        if source == .ci, draw != .blocks { problems.append("data.ci draws Pilot's blocks: draw must be blocks") }
         if source == .nowPlaying, draw != .blocks { problems.append("data.nowPlaying draws Pilot's own tile: draw must be blocks") }
         // It runs the Markets extension unasked: Pilot's own Markets widget's (a reserved id), never a folder's.
         if case .markets(let name) = source, !Self.isReserved(id) || draw != .blocks || !settings.contains(where: { $0.name == name && $0.kind == .text }) {
@@ -410,6 +414,11 @@ public struct Widget: Equatable, Sendable {
             if let named = d["github"] {
                 guard named == .bool(true), d.count == 1 else { problems.append("data.github must be true, alone: the widget shows GitHub contributions"); return .none }
                 return .github
+            }
+            // Each GitHub repo's latest CI run, read by gh (P79): drawn by Pilot alone.
+            if let named = d["ci"] {
+                guard named == .bool(true), d.count == 1 else { problems.append("data.ci must be true, alone: the widget shows your repos' GitHub Actions runs"); return .none }
+                return .ci
             }
             switch (d["reading"], d["command"]) {
             case (let named?, nil):

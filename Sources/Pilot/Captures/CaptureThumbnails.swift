@@ -13,15 +13,17 @@ import UniformTypeIdentifiers
 @MainActor
 enum CaptureThumbnails {
     private(set) static var shown: [ThumbnailPanel] = []
-    /// The last thumbnail that went, however it went, for Show the last thumbnail again.
-    private(set) static var lastClosed: (image: Unchecked<CGImage>, scale: CGFloat, file: URL?)?
+    /// The file of the last thumbnail that went, however it went, for Show the last thumbnail again: its file, never its
+    /// picture, which is cut from the whole display's still and would keep all of it alive while Pilot idles.
+    private(set) static var lastClosed: URL?
     /// The capture a thumbnail's actions act for; the app's own.
     private static var capture: PilotCapture?
     /// False in tests: the panels are made, never ordered onto Sven's screen.
     static var onScreen = true
 
+    /// `look` is Every capture's (C11): Copy frames the capture in it, and the editor opens in it.
     @discardableResult
-    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture) -> ThumbnailPanel {
+    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture, look: Backdrop? = nil) -> ThumbnailPanel {
         self.capture = capture
         let model = ThumbnailModel(image: image, scale: scale, file: file)
         let panel = ThumbnailPanel(model: model)
@@ -29,14 +31,40 @@ enum CaptureThumbnails {
         let video = file.flatMap { VideoEditor.isVideo($0) ? $0 : nil }
         model.open = { [weak panel] in
             guard let panel else { return }
+            // The editor first, so it holds the capture's grab before the thumbnail lets go of it.
+            if let video { VideoEditor.open(video) } else { CaptureEditor.show(image, scale: scale, file: file, capture: capture, backdrop: look) }
             dismiss(panel)
-            if let video { VideoEditor.open(video) } else { CaptureEditor.show(image, scale: scale, file: file, capture: capture) }
         }
-        model.copy = {
+        // A new recording goes with its pointer drawn in (Q821): drawn from the start in the background, its progress on
+        // the card, so Copy and a drag rarely wait (a press that waits raises the export's priority).
+        if let video {
+            Task { @MainActor [weak model] in
+                _ = try? await RecordingHandout.file(for: video, priority: .utility, restart: false) { model?.drawing($0) }
+                model?.drawing(nil)
+            }
+            model.drag = { RecordingHandout.provider(for: video) }
+            model.copySays = true
+        }
+        model.copy = { [weak model] in
+            if let video {
+                Task { @MainActor in
+                    guard let file = try? await RecordingHandout.file(for: video, progress: { model?.drawing($0) }) else { return }
+                    model?.drawing(nil)
+                    capture.pasteboard.clearContents()
+                    capture.pasteboard.writeObjects([file as NSURL])
+                    model?.flash("Copied")
+                }
+                return
+            }
             capture.pasteboard.clearContents()
-            if let video { capture.pasteboard.writeObjects([video as NSURL]); return }
-            guard let png = PilotCapture.png(image, scale: scale) else { return }
-            capture.pasteboard.setData(png, forType: .png)
+            guard let look else {
+                guard let png = PilotCapture.png(image, scale: scale) else { return }
+                capture.pasteboard.setData(png, forType: .png)
+                return
+            }
+            Task { @MainActor in
+                if let png = await PilotCapture.framedPNG(image, scale: scale, look: look).value { capture.pasteboard.setData(png, forType: .png) }
+            }
         }
         model.saveAs = { [weak panel] in
             if let panel { dismiss(panel) }
@@ -45,9 +73,13 @@ enum CaptureThumbnails {
         model.close = { [weak panel] in if let panel { dismiss(panel) } }
         model.askAI = { [weak panel] in
             if let panel { dismiss(panel) }
-            CaptureAskAI.ask(image)
+            // A recording's frame goes with its pointer drawn in, as the recording is handed out (Q821).
+            guard let video else { return CaptureAskAI.ask(image) }
+            Task { @MainActor in CaptureAskAI.ask(await RecordingHandout.frame(image, of: video)) }
         }
         shown.append(panel)
+        // Its screen, kept for uncrop (P77), stays while the thumbnail does, and while the editor it opens does.
+        if video == nil { CaptureHistoryStore.shared.holdGrab(file) }
         while shown.count > ThumbnailStack.most { dismiss(shown[0]) }
         layout()
         if onScreen { panel.orderFrontRegardless() }
@@ -57,11 +89,18 @@ enum CaptureThumbnails {
 
     static func dismiss(_ panel: ThumbnailPanel) {
         guard shown.contains(where: { $0 === panel }) else { return }
-        lastClosed = (Unchecked(panel.model.image), panel.model.scale, panel.model.file)
+        // An unsaved capture's thumbnail cannot come back: the one before it still can.
+        if let file = panel.model.file { lastClosed = file }
         panel.model.stopClock()
         panel.orderOut(nil)
         shown.removeAll { $0 === panel }
+        if let file = panel.model.file, !VideoEditor.isVideo(file) { CaptureHistoryStore.shared.releaseGrab(file) }
         layout()
+    }
+
+    /// Every thumbnail of the capture at `file` gone: the file was written over, so their pictures are out of date.
+    static func dismiss(showing file: URL) {
+        shown.filter { $0.model.file?.standardizedFileURL == file.standardizedFileURL }.forEach(dismiss)
     }
 
     #if DEBUG
@@ -79,12 +118,20 @@ enum CaptureThumbnails {
         return true
     }
 
-    /// The last thumbnail that went, shown again; false when none has gone yet.
+    /// The last thumbnail that went, shown again once its file is read off the main thread (a recording's frame, a
+    /// capture's picture); false when none has gone yet. A file gone meanwhile says so. It comes back without the screen
+    /// it was cut from (let go with the thumbnail, P77), so its editor has no uncrop.
     @discardableResult
     static func restore() -> Bool {
-        guard let last = lastClosed else { return false }
+        guard let file = lastClosed else { return false }
         lastClosed = nil
-        show(last.image.value, scale: last.scale, file: last.file, capture: capture ?? .shared)
+        let capture = capture ?? .shared
+        Task { @MainActor in
+            let read = VideoEditor.isVideo(file) ? await VideoEditor.poster(file).map { Unchecked(($0, CGFloat(2))) }
+                : await Task.detached { Pins.load(file).map(Unchecked.init) }.value
+            guard let (image, scale) = read?.value else { return HUD.tip("That capture is gone.") }
+            show(image, scale: scale, file: file, capture: capture)
+        }
         return true
     }
 
@@ -105,9 +152,18 @@ enum CaptureThumbnails {
         NSApp.activate()
         panel.begin { response in
             guard response == .OK, let url = panel.url, url != video else { return }
-            Task.detached(priority: .userInitiated) {
-                try? FileManager.default.removeItem(at: url)
-                try? FileManager.default.copyItem(at: video, to: url)
+            // The copy has the pointer drawn in when the recording kept it out (Q821).
+            RecordingHandout.handOut([video]) { files in
+                guard let file = files.first else { return }
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        try? FileManager.default.removeItem(at: url)
+                        try FileManager.default.copyItem(at: file, to: url)
+                    } catch {
+                        RecordingHandout.log.error("save as: \(url.lastPathComponent, privacy: .public) not saved: \(String(describing: error), privacy: .public)")
+                        await MainActor.run { HUD.tip("\(url.lastPathComponent) was not saved: \(error.localizedDescription)") }
+                    }
+                }
             }
         }
     }
@@ -145,6 +201,10 @@ final class ThumbnailModel {
     @ObservationIgnored var saveAs: () -> Void = {}
     @ObservationIgnored var close: () -> Void = {}
     @ObservationIgnored var askAI: () -> Void = {}
+    /// A recording's drag: its file with the pointer drawn in (Q821); nil drags the file or the picture.
+    @ObservationIgnored var drag: (() -> NSItemProvider)?
+    /// Whether Copy says "Copied" itself, once the file is on the pasteboard: a recording's, which may wait on its pointer.
+    @ObservationIgnored var copySays = false
     /// Six seconds up, three more after the pointer leaves; a test's are short.
     @ObservationIgnored var stay: Duration = .seconds(6)
     @ObservationIgnored var leave: Duration = .seconds(3)
@@ -185,6 +245,21 @@ final class ThumbnailModel {
             if !Task.isCancelled { self?.said = nil }
         }
     }
+
+    /// ⌘C and the Copy chip: copy, and "Copied" over the thumbnail unless the copy says it itself.
+    func copyAndSay() {
+        copy()
+        if !copySays { flash("Copied") }
+    }
+
+    /// A recording's pointer being drawn in (Q821): its progress over the thumbnail, or nil once it is done.
+    func drawing(_ fraction: Double?) {
+        guard let fraction else { if drawn { said = nil; drawn = false }; return }
+        saying?.cancel()
+        drawn = true
+        said = "Drawing the pointer · \(Int((fraction * 100).rounded())) %"
+    }
+    @ObservationIgnored private var drawn = false
 }
 
 /// The thumbnail's borderless panel: it floats over windows and never takes the keys or the front app's place.
@@ -237,7 +312,7 @@ final class ThumbnailPanel: NSPanel {
         guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else { return false }
         switch event.charactersIgnoringModifiers?.lowercased() {
         case "e": model.open()
-        case "c": model.copy(); model.flash("Copied")
+        case "c": model.copyAndSay()
         case "s": model.saveAs()
         case "w": model.close()
         default: return false
@@ -304,7 +379,7 @@ struct ThumbnailView: View {
                 .buttonStyle(.plain).help("Edit  ⌘E").accessibilityLabel("Edit")
                 Spacer(minLength: 4)
                 HStack(spacing: 6) {
-                    chip("doc.on.doc", "Copy  ⌘C", action: { model.copy(); model.flash("Copied") })
+                    chip("doc.on.doc", "Copy  ⌘C", action: model.copyAndSay)
                     chip("square.and.arrow.down", "Save As…  ⌘S", action: model.saveAs)
                     chip("sparkles", "Ask AI", action: model.askAI)
                 }
@@ -325,6 +400,7 @@ struct ThumbnailView: View {
 
     /// The file when the capture was saved, else the picture itself.
     private func provider() -> NSItemProvider {
+        if let drag = model.drag { return drag() }
         if let file = model.file, let provider = NSItemProvider(contentsOf: file) { return provider }
         let provider = NSItemProvider()
         if let png = PilotCapture.png(model.image, scale: model.scale) {

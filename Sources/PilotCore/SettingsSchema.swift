@@ -235,9 +235,11 @@ extension SettingKey {
     }
 
     /// "theme" or "#RRGGBB".
-    public static func colour(_ key: String, _ label: String, page: String, read: @escaping @Sendable @MainActor () -> ColourChoice,
+    public static func colour(_ key: String, _ label: String, page: String, confirms: Bool = false,
+                              read: @escaping @Sendable @MainActor () -> ColourChoice,
                               write: @escaping @Sendable @MainActor (ColourChoice) async throws(ControlError) -> Void) -> SettingKey {
-        SettingKey(key, label, page: page, kind: .colour(plain: false), standard: .string(ColourChoice.theme.rawValue), read: { .string(read().rawValue) },
+        SettingKey(key, label, page: page, kind: .colour(plain: false), standard: .string(ColourChoice.theme.rawValue), confirms: confirms,
+                   read: { .string(read().rawValue) },
                    write: { value throws(ControlError) in
                        if case .string(let s) = value, let colour = ColourChoice(rawValue: s) { try await write(colour) }
                    })

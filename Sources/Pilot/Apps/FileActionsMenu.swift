@@ -34,11 +34,17 @@ enum FileActionsMenu {
         }
     }
 
-    static func show(_ urls: [URL], at anchor: CGPoint) {
+    /// The picker for `urls` with its top left at `anchor`. `own` runs an action itself and says so (Pilot Files' Cmd+K:
+    /// Move to Trash through FileOps, so Cmd+Z puts it back, and Open on a folder in the window); any other is `run`'s.
+    /// `except` leaves those rows out.
+    static func show(_ urls: [URL], at anchor: CGPoint, except: Set<FileAction> = [],
+                     own: @escaping @MainActor (FileAction) -> Bool = { _ in false }) {
         Task {
             // Off the main thread: a folder's icon is hashed to tell whether Pilot dressed it.
-            let actions = await Task.detached(priority: .userInitiated) { FileAction.list(for: urls.map(kind), customIcon: customIcon(urls)) }.value
-            pick(urls, actions, at: anchor)
+            let actions = await Task.detached(priority: .userInitiated) {
+                FileAction.list(for: urls.map(kind), customIcon: customIcon(urls)).filter { !except.contains($0) }
+            }.value
+            pick(urls, actions, at: anchor, own: own)
         }
     }
 
@@ -51,14 +57,14 @@ enum FileActionsMenu {
         return false
     }
 
-    private static func pick(_ urls: [URL], _ actions: [FileAction], at anchor: CGPoint) {
+    private static func pick(_ urls: [URL], _ actions: [FileAction], at anchor: CGPoint, own: @escaping @MainActor (FileAction) -> Bool) {
         let rows = rows(actions)
         flog.notice("file menu: \(urls.count) files, \(rows.count) actions")
         PilotMenu.$anchor.withValue(anchor) {
             PilotMenu.shared.pick(rows, title: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items") { row in
                 guard case .action(let id) = row.target, let action = FileAction(rawValue: String(id.dropFirst(prefix.count))) else { return }
                 // A picker the action opens (Convert to…, Open With…, Folder design…) opens at the pointer too.
-                PilotMenu.$anchor.withValue(anchor) { run(action, on: urls) }
+                PilotMenu.$anchor.withValue(anchor) { if !own(action) { run(action, on: urls) } }
             }
         }
     }
@@ -90,9 +96,12 @@ enum FileActionsMenu {
         case .resetIcon: resetIcon(first)
         case .copyPath: SystemModule.copy(urls.map(\.path).joined(separator: "\n"), tip: urls.count == 1 ? "Copied the path" : "Copied \(urls.count) paths")
         case .copyFile:
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects(urls as [NSURL])
-            HUD.tip(urls.count == 1 ? "Copied \(first.lastPathComponent)" : "Copied \(urls.count) files")
+            // A Pilot recording goes with its pointer drawn in when it kept it out (Q821); any other file as it is.
+            RecordingHandout.handOut(urls) { files in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects(files as [NSURL])
+                HUD.tip(files.count == 1 ? "Copied \(first.lastPathComponent)" : "Copied \(files.count) files")
+            }
         case .reveal: NSWorkspace.shared.activateFileViewerSelecting(urls)
         case .trash: FileActions.trash(first.path)
         }

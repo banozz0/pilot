@@ -133,7 +133,7 @@ enum DriveModule {
     }
 
     /// The app comes forward, launched when it was not running, then the route runs; a menu item is waited for up to 3 s
-    /// while a launching app builds its menus.
+    /// while a launching app builds its menus (press: its menu bar first, up to 10 s).
     static func open(_ bundle: String, then route: DriveRoute) {
         let name = AppsModule.displayName(bundle)
         guard let url = AppsModule.url(forBundle: bundle) else { return HUD.tip("\(name) is not on this Mac.") }
@@ -261,7 +261,7 @@ enum DriveModule {
     static func pressMenu(_ bundle: String, _ path: [String], quietWhenNotRunning: Bool = false) {
         let title = DriveRoute.title(path)
         guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else {
-            dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .public): not running")
+            dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .private): not running")
             if !quietWhenNotRunning { HUD.tip("\(AppsModule.appName(bundle) ?? bundle) is not running.") }
             return
         }
@@ -269,21 +269,35 @@ enum DriveModule {
     }
 
     /// Presses the item at `path` off the main thread, the walk at most a second, so the tap never waits on it; `wait`
-    /// gives a launching app that long to build its menus. A found item is pressed once and counts as pressed: one that
-    /// opens a dialog (Empty Bin…) answers AX with a timeout.
+    /// gives a launching app that long to build its menus once its menu bar answers, and with any wait the menu bar itself
+    /// gets up to 10 s (a closed app's saved menu item, T41, launches it cold). A found item is pressed once and counts as
+    /// pressed: one that opens a dialog (Empty Bin…) answers AX with a timeout. A menu bar that never answered says so.
+    /// macOS's own menu bar apps are refused here, so every way in (pressMenu, open(_:then:)) meets it (DriveRoute.pressesMenus).
     private static func press(_ path: [String], pid: pid_t, bundle: String, name: String, wait: TimeInterval = 0) {
         let title = DriveRoute.title(path)
+        guard DriveRoute.pressesMenus(of: bundle, regular: NSRunningApplication(processIdentifier: pid)?.activationPolicy == .regular) else {
+            dlog.error("menu \(bundle, privacy: .public) \(title, privacy: .private): refused, macOS's own menus")
+            HUD.tip("Pilot doesn't press macOS's own menus.")
+            return
+        }
+        enum Outcome: String { case pressed, missing = "no such enabled item", slow = "no menu bar in time" }
         Task {
-            let pressed = await Task.detached(priority: .userInitiated) { () -> Bool in
-                let deadline = Date.now + wait
+            let outcome = await Task.detached(priority: .userInitiated) { () -> Outcome in
+                let start = Date.now
+                var answered: Date?
                 while true {
-                    if let item = AXMenu.item(pid: pid, path: path) { _ = AXMenu.press(item); return true }
-                    guard Date.now < deadline else { return false }
+                    if let item = AXMenu.item(pid: pid, path: path) { _ = AXMenu.press(item); return .pressed }
+                    if answered == nil, AXMenu.hasMenuBar(pid: pid) { answered = .now }
+                    guard Date.now < answered.map({ $0 + wait }) ?? start + (wait > 0 ? 10 : 0) else { return answered == nil ? .slow : .missing }
                     try? await Task.sleep(for: .milliseconds(150))
                 }
             }.value
-            dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .public): \(pressed ? "pressed" : "no such enabled item", privacy: .public)")
-            if !pressed { HUD.tip("\(name) has no enabled \(title).") }
+            dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .private): \(outcome.rawValue, privacy: .public)")
+            switch outcome {
+            case .pressed: break
+            case .missing: HUD.tip("\(name) has no enabled \(title).")
+            case .slow: HUD.tip("\(name)'s menus didn't answer in time.")
+            }
         }
     }
 }

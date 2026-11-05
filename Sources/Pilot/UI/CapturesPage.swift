@@ -31,7 +31,7 @@ struct CapturesPage: View {
         static let quality = "How sharp a recording is. Higher keeps more detail and makes a bigger file."
         static let resolution = "Retina pixels records every pixel of a Retina screen; 1x records at half that, a smaller file."
         static let frameRate = "Frames a second: 60 is smoother, 30 makes a smaller file."
-        static let showClicks = "Marks each click in the recording, so a viewer sees where you clicked."
+        static let showClicks = "Rings each click of a new recording in the video you share or export, so a viewer sees where you clicked. Click ring in the video editor turns it on or off for one recording."
         static let capturesFolder = "Where captures are saved. Show opens it, Change picks another, Default goes back to ~/Pictures/Pilot."
         static let recordingsFolder = "Where recordings are saved. Show opens it, Change picks another, Default goes back to ~/Movies/Pilot."
         static let recent = "The newest captures and recordings in Pilot's folders. A click opens one; right-click shows it in Finder."

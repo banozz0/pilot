@@ -37,6 +37,8 @@ enum SystemModule {
         // Hammerspoon's system chooser rows (card agent-bo-95422700). Wi-Fi and the sound output are real switches;
         // displays open Setup (card agent-bo-95422804); Focus has no public switch, so it opens its pane.
         add(&registry, "wifi", "Wi-Fi on or off", nil, .system) { toggleWiFi() }
+        // Bluetooth's radio through a private call (T47, Sven Q833): it says why when Pilot cannot switch it.
+        add(&registry, "bluetooth", "Bluetooth on or off", nil, .system) { toggleBluetooth() }
         add(&registry, "displaySettings", "Displays in Pilot", nil, .system) { AppWindowController.shared.open(.system, setup: .displays) }
         // Rotate a screen (Sven 2026-10-22): a picker of each screen's rotations, never a blind turn on a key; the pick
         // asks Keep and goes back by itself after 15 s.
@@ -136,12 +138,14 @@ enum SystemModule {
     }
 
     /// System's switches as the menu opens, by action id (card agent-bo-95422981): each read is quick and asks for no
-    /// permission; Night Shift and Wi-Fi are left out when this Mac cannot say.
+    /// permission; Night Shift, Wi-Fi and Bluetooth are left out when this Mac cannot say, Bluetooth also until it is
+    /// allowed or when Pilot cannot switch it.
     static func switchStates() -> [String: Bool] {
         var on = ["system.darkMode": UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark",
                   "system.keepAwake": KeepAwake.shared.isOn, "system.idleLock": !KeepAwake.shared.isOn]
         on["system.nightShift"] = nightShift.isOn()
         on["system.wifi"] = wifi.isOn()
+        on["system.bluetooth"] = BluetoothPower.state(bluetooth)
         return on
     }
 
@@ -149,6 +153,7 @@ enum SystemModule {
     private static let audio = CoreAudioSystem()
     private static let nightShift = CoreBrightnessNightShift()
     private static let wifi = CoreWLANSystem()
+    static let bluetooth = IOBluetoothSystem()
     private static func playThrough(_ name: String) -> String { "Play through \(name)" }
 
     /// `system.output:<device UID>`, or an older bind's `<CoreAudio device id>`: switches the sound output to the device
@@ -278,6 +283,48 @@ enum SystemModule {
                 slog.error("wi-fi: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    /// Flips Bluetooth's radio (BluetoothPower).
+    static func toggleBluetooth() {
+        guard let on = BluetoothPower.state(bluetooth) else { return cannotSwitchBluetooth() }
+        setBluetooth(!on)
+    }
+
+    /// Turns Bluetooth on, or off once Pilot's menu has asked, when Bluetooth keyboards and mice are the only input.
+    static func setBluetooth(_ on: Bool) {
+        guard BluetoothPower.state(bluetooth) != nil else { return cannotSwitchBluetooth() }
+        guard !on, let warning = BluetoothPower.warning(bluetooth.inputs()) else { return powerBluetooth(on) }
+        let off = MenuEntry(title: "Turn Bluetooth off", target: .action("bluetooth.off"), detail: "disconnects them")
+        slog.notice("bluetooth off: asking, only Bluetooth input")
+        PilotMenu.shared.pick([MenuEntry(title: "Cancel", target: .action("bluetooth.cancel")), off], title: warning) { row in
+            guard row == off else { return slog.notice("bluetooth off: cancelled") }
+            powerBluetooth(false)
+        }
+    }
+
+    private static func powerBluetooth(_ on: Bool) {
+        guard BluetoothPower.begin() else {
+            slog.notice("bluetooth: a switch is under way, press ignored")
+            return HUD.tip("Bluetooth is still switching", seconds: 2)
+        }
+        Task {
+            defer { BluetoothPower.end() }
+            let after = await bluetooth.setPower(on)
+            NotificationCenter.default.post(name: BluetoothPower.changed, object: nil)
+            slog.notice("bluetooth \(on ? "on" : "off", privacy: .public): \(after == on ? "done" : "failed", privacy: .public)")
+            HUD.tip(after == on ? "Bluetooth \(on ? "on" : "off")" : "macOS did not turn Bluetooth \(on ? "on" : "off")", seconds: 2)
+        }
+    }
+
+    /// Why there is no switch: the private call is gone, Bluetooth is not allowed yet (System › Bluetooth asks), or no radio.
+    private static func cannotSwitchBluetooth() {
+        guard bluetooth.canSetPower else { return HUD.tip("This macOS no longer lets Pilot switch Bluetooth; use Control Centre", seconds: 3) }
+        guard bluetooth.authorization() == .allowed else {
+            AppWindowController.shared.open(.system, setup: .bluetooth)
+            return HUD.tip("Allow Bluetooth first: Show paired devices", seconds: 3)
+        }
+        HUD.tip("This Mac has no Bluetooth", seconds: 2)
     }
 
     /// Text on the pasteboard, said in Pilot's alert.

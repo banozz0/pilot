@@ -226,6 +226,38 @@ extension View {
     fileprivate func currentPilotField() -> some View { modifier(CurrentPilotField()) }
 }
 
+extension View {
+    /// Under a password field of Pilot's own, while it has the keyboard: the one line that says why Hyper waits (T48,
+    /// Sven Q836). Goes after the field's own look, so the line sits under the well, never in it.
+    func secureFieldTip() -> some View { modifier(SecureFieldTip()) }
+}
+
+extension EnvironmentValues {
+    /// Draws the tip as if the field had the keyboard: a render's, as an offscreen window never takes focus.
+    @Entry var showsSecureFieldTip = false
+}
+
+/// macOS turns secure input on while a password field has the keyboard, and the tap is blind until it goes off
+/// (SecureInputMonitor): the field says so itself, as the monitor's HUD tip skips Pilot's own fields.
+private struct SecureFieldTip: ViewModifier {
+    @Environment(\.showsSecureFieldTip) private var forced
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            content.focused($focused)
+            if focused || forced { SecureFieldTipLine() }
+        }
+    }
+}
+
+/// The tip's line, for a field that already tracks its own focus (an extension's secret setting).
+struct SecureFieldTipLine: View {
+    var body: some View {
+        FinePrint(text: "macOS turns key taps off while a password field has the keyboard, so Hyper waits until you leave the field.")
+    }
+}
+
 private struct CurrentPilotField: ViewModifier {
     @Environment(\.ink) private var ink
     func body(content: Content) -> some View {

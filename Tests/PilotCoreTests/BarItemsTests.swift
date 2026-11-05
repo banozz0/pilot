@@ -73,7 +73,8 @@ struct BarItemsTests {
         #expect(s.slots(in: .menuBar, topBarOn: true) == [.item(s.entry(.pilot)), .item(s.entry(.capture))])
         #expect(s.slots(in: .topBar, topBarOn: true, side: .left).map(\.kinds) == [[.pilot], [.workspaces]])
         #expect(s.slots(in: .topBar, topBarOn: true, side: .centre).map(\.kinds) == [[.terminal], [.askAI], [.modes], [.clock]])
-        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).map(\.kinds) == [[.otherApps], [.cpu, .memory, .network], [.timer], [.extensions]])
+        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).map(\.kinds) == [[.otherApps], [.cpu, .memory, .network], [.timer]],
+                "the old Extensions slot draws nowhere: each extension's item is its own slot (spec pilot-1.1 T50)")
         // The top bar off shows nothing in it.
         #expect(s.slots(in: .topBar, topBarOn: false, side: .left).isEmpty)
         // A menu-bar-only item stays in the menu bar with the top bar on; other apps never reach the menu bar.

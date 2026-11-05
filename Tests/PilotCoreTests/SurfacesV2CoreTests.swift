@@ -40,7 +40,7 @@ struct SurfacesV2CoreTests {
                 == .blocks([.meter(.init(label: "Week", percent: 25, note: "Thu"))]))
     }
 
-    @Test("An extension's item is on in the macOS menu bar until placed; the top bar draws it only where its Extensions item shows")
+    @Test("An extension's item is on in the macOS menu bar until placed; in the top bar it is its own slot, put last on the right when it first joins")
     func placement() throws {
         var s = BarSettings.defaults
         #expect(s.extensionEntry("ai") == ExtensionBarEntry(id: "ai", on: true, placement: .menuBar))
@@ -51,14 +51,23 @@ struct SurfacesV2CoreTests {
                 "both leaves the macOS menu bar while the top bar is on, as a built-in item does")
         s.toggle(extension: "ai", in: .menuBar)
         #expect(s.extensionEntry("ai").placement == .topBar && s.shows(extension: "ai", in: .topBar, topBarOn: true))
+        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).last?.item == .extension("ai"), "a new one lands last (spec pilot-1.1 T50)")
         s.set(.extensions, on: false)
-        #expect(!s.shows(extension: "ai", in: .topBar, topBarOn: true), "the top bar draws them where its Extensions item is")
+        #expect(s.shows(extension: "ai", in: .topBar, topBarOn: true), "the old Extensions item no longer gates them")
         s.toggle(extension: "ai", in: .topBar)
         #expect(!s.extensionEntry("ai").on && !s.shows(extension: "ai", in: .menuBar, topBarOn: false))
+        #expect(!s.slots(in: .topBar, topBarOn: true).contains { $0.item == .extension("ai") })
+        s.place(.kind(.timer), on: .left, at: 1)
         s.toggle(extension: "ai", in: .topBar)
-        #expect(s.entry(.extensions).on, "joining the top bar turns its Extensions item on")
+        s.toggle(extension: "bi", in: .topBar)
+        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).suffix(2).map(\.item) == [.extension("ai"), .extension("bi")],
+                "one back keeps its place; the next new one lands after it")
         let read = try JSONDecoder().decode(BarSettings.self, from: JSONEncoder().encode(s))
-        #expect(read == s && read.extensionItems == [ExtensionBarEntry(id: "ai", on: true, placement: .topBar)])
+        #expect(read == s && read.extensionItems.map(\.id) == ["ai", "bi"] && read.extensionEntry("ai").placement == .topBar)
+        // A Pilot from before T50 skips the extensions' own entries, never drawing its Extensions slot twice.
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as! [String: Any]
+        let kinds = (saved["entries"] as! [[String: Any]]).compactMap { $0["kind"] as? String }
+        #expect(kinds.filter { $0 == "extensions" }.count == 1 && kinds.filter { $0 == "extension" }.count == 2)
     }
 
     @Test("A layout saved before Surfaces v2 reads with no extension placed; a broken entry is skipped")
@@ -69,6 +78,30 @@ struct SurfacesV2CoreTests {
         old["extensionItems"] = [["id": "ok", "on": false, "placement": "both"], ["id": "bad", "placement": "moon"]]
         let read = try JSONDecoder().decode(BarSettings.self, from: JSONSerialization.data(withJSONObject: old))
         #expect(read.extensionItems == [ExtensionBarEntry(id: "ok", on: false, placement: .both)])
+
+        // Saved before T50: the top bar drew every extension's item in one Extensions slot, by title. Each gets its own
+        // slot where that slot was, in that order, not the order they were placed in; one in the menu bar alone gets none.
+        var grouped = BarSettings.defaults
+        grouped.move(.extensions, to: grouped.entries.firstIndex { $0.kind == .timer }!)
+        var before = try JSONSerialization.jsonObject(with: JSONEncoder().encode(grouped)) as! [String: Any]
+        before["extensionItems"] = [["id": "zed", "on": true, "placement": "topBar"], ["id": "menu", "on": true, "placement": "menuBar"],
+                                    ["id": "apple", "on": true, "placement": "both"]]
+        let data = try JSONSerialization.data(withJSONObject: before)
+        let decoder = JSONDecoder()
+        decoder.userInfo[BarSettings.extensionOrder] = { @Sendable in ["apple", "menu", "zed"] }
+        let split = try decoder.decode(BarSettings.self, from: data)
+        #expect(split.slots(in: .topBar, topBarOn: true, side: .right).map(\.item)
+                == [.kind(.otherApps), .kind(.group), .extension("apple"), .extension("zed"), .kind(.timer)])
+        #expect(try JSONDecoder().decode(BarSettings.self, from: JSONEncoder().encode(split)) == split, "read again, nothing moves")
+        #expect(try JSONDecoder().decode(BarSettings.self, from: data).slots(in: .topBar, topBarOn: true, side: .right).map(\.item)
+                .filter { $0.kind == nil } == [.extension("zed"), .extension("apple")], "with no titles, the order they were placed in")
+        // Its Extensions slot off, they drew nowhere: they leave the top bar, the menu bar keeps the one there too.
+        var entries = before["entries"] as! [[String: Any]]
+        entries[entries.firstIndex { $0["kind"] as? String == "extensions" }!]["on"] = false
+        before["entries"] = entries
+        let hidden = try decoder.decode(BarSettings.self, from: JSONSerialization.data(withJSONObject: before))
+        #expect(!hidden.slots(in: .topBar, topBarOn: true).contains { $0.item.kind == nil })
+        #expect(hidden.extensionEntry("apple") == ExtensionBarEntry(id: "apple", on: true, placement: .menuBar) && !hidden.extensionEntry("zed").on)
     }
 
     @Test("Each extension in the top bar is its own target with its own click, and says its gauges in the tooltip")

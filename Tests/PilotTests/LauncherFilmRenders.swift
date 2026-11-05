@@ -53,7 +53,7 @@ struct LauncherFilmRenders {
         // The film's browser and Ghostty, open before Notes is.
         let windows = try AeroWindow.parse(ExplainerFilmRenders.windows(["1", "1"]))
         let day = Date(timeIntervalSince1970: 1_791_028_800)
-        // Cut 4: an app's name lists its own commands under the offers (L19's catalogue); the extension the chat made is
+        // Cut 4: an app's name lists its own commands right under it, above the offers (L19's catalogue, Q831); the extension the chat made is
         // installed by the time "open ports" is typed; the stats cards read a seeded sampler, never this Mac.
         let commands = try LineMenuRenders.withCommands(built)
         let ports = MenuEntry(title: "Open ports", target: .action("ext.open-ports.list"), home: nil, detail: "Open ports",

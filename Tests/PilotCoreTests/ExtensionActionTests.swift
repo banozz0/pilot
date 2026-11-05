@@ -25,12 +25,13 @@ struct ExtensionActionTests {
         #expect(row.dropped == 2, "the paste without text and the unknown type, counted for the log")
     }
 
-    @Test("A Pilot action runs only a registered action; a shell, script, quicklink, app link or extension id is refused")
+    @Test("A Pilot action runs only a registered action; a shell, script, quicklink, app link, extension id, radio, power or session action is refused")
     func pilotAllowed() {
         let registered: Set = ["windows.close", "extensions.openFolder", "drive.shell:ls"]
         #expect(ExtensionList.allowsPilot("windows.close", isRegistered: registered.contains))
         #expect(!ExtensionList.allowsPilot("workspaces.go1", isRegistered: registered.contains), "not registered")
-        for id in ["drive.shell:ls", "scripts.run:x.sh", "links.open:abc", "apps.open:com.apple.Terminal", "ext.demo.go"] {
+        for id in ["drive.shell:ls", "scripts.run:x.sh", "links.open:abc", "apps.open:com.apple.Terminal", "ext.demo.go"]
+            + ControlGate.Ask.cutting.keys.sorted() {
             #expect(!ExtensionList.allowsPilot(id, isRegistered: registered.union([id]).contains), "\(id)")
         }
     }

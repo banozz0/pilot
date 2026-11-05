@@ -16,11 +16,18 @@ public struct ClipboardSettings: Equatable, Sendable {
     public var returnAction: ReturnAction
     /// The panel's sort, as Cmd+S and Cmd+Shift+S left it (card agent-bo-95422783).
     public var order: ClipOrder
+    /// A copied card number or key leaves the history after `secretMinutes` (P65); a pinned one stays.
+    public var expireSecrets: Bool
+    public var secretMinutes: Int
+
+    /// What `secretMinutes` may be: a minute to a day.
+    public static let secretMinuteRange = 1...1440
 
     init(keepCount: Int, keepDays: Int?, saveImages: Bool, ignoredApps: [String], returnAction: ReturnAction,
-         order: ClipOrder = ClipOrder()) {
+         order: ClipOrder = ClipOrder(), expireSecrets: Bool = true, secretMinutes: Int = 5) {
         self.keepCount = keepCount; self.keepDays = keepDays; self.saveImages = saveImages
         self.ignoredApps = ignoredApps; self.returnAction = returnAction; self.order = order
+        self.expireSecrets = expireSecrets; self.secretMinutes = secretMinutes
     }
 
     /// ClipBook Rust's settings on Sven's Mac, read 2026-10-04 (card agent-bo-95422733): retention_days null for
@@ -34,6 +41,7 @@ public struct ClipboardSettings: Equatable, Sendable {
         static let keepCount = "clipboard.keepCount", keepDays = "clipboard.keepDays", saveImages = "clipboard.saveImages"
         static let ignoredApps = "clipboard.ignoredApps", returnAction = "clipboard.returnAction"
         static let sort = "clipboard.sort", sortReversed = "clipboard.sortReversed"
+        static let expireSecrets = "clipboard.expireSecrets", secretMinutes = "clipboard.secretMinutes"
     }
 
     /// An unset row reads as its default; keep-days 0 is stored for "forever", so it is never mistaken for unset.
@@ -47,6 +55,9 @@ public struct ClipboardSettings: Equatable, Sendable {
         returnAction = defaults.string(forKey: Keys.returnAction).flatMap(ReturnAction.init(rawValue:)) ?? d.returnAction
         order = ClipOrder(sort: defaults.string(forKey: Keys.sort).flatMap(ClipSort.init(rawValue:)) ?? d.order.sort,
                           reversed: defaults.object(forKey: Keys.sortReversed) as? Bool ?? d.order.reversed)
+        expireSecrets = defaults.object(forKey: Keys.expireSecrets) as? Bool ?? d.expireSecrets
+        let minutes = defaults.object(forKey: Keys.secretMinutes) as? Int ?? d.secretMinutes
+        secretMinutes = min(max(minutes, Self.secretMinuteRange.lowerBound), Self.secretMinuteRange.upperBound)
     }
 
     public func save(to defaults: UserDefaults) {
@@ -57,9 +68,14 @@ public struct ClipboardSettings: Equatable, Sendable {
         defaults.set(returnAction.rawValue, forKey: Keys.returnAction)
         defaults.set(order.sort.rawValue, forKey: Keys.sort)
         defaults.set(order.reversed, forKey: Keys.sortReversed)
+        defaults.set(expireSecrets, forKey: Keys.expireSecrets)
+        defaults.set(secretMinutes, forKey: Keys.secretMinutes)
     }
 
     public var maxAge: TimeInterval? { keepDays.map { TimeInterval($0) * 86_400 } }
+
+    /// Seconds a copied secret is kept; nil while the switch is off.
+    public var secretLifetime: TimeInterval? { expireSecrets ? TimeInterval(secretMinutes) * 60 : nil }
 
     public var capture: ClipboardCapture {
         var capture = ClipboardCapture()

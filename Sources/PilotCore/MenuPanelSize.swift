@@ -56,6 +56,9 @@ public enum MenuPanelSize {
     /// The whole rail reaches 650 pt, at the root (Q81) and beside a search, since Go to lists the root's branches and
     /// Clipboard: it never scrolls (coordinator, build mode).
     public static let railTallest: CGFloat = 650
+    /// How tall a menu that lists Go to may grow: `room`, the face's height the screen holds (MenuModel.room), so every Go
+    /// to row shows on Sven's screen and the menu still fits a small one (T36); 650 where no screen is known.
+    public static func goToTallest(_ room: CGFloat?) -> CGFloat { room ?? railTallest }
     /// The search line and the foot round the rail.
     public static let railChrome: CGFloat = 58 + s(42)
 
@@ -69,13 +72,13 @@ public enum MenuPanelSize {
     }
 
     /// The Rail's panel: the menu's 750 width; as tall as Instrument's list would be
-    /// or as the rail, whichever is taller, up to 650 wherever the whole rail shows and the shape's tallest beside the slim
-    /// strip. The top edge stays put as it changes (MenuSizer).
+    /// or as the rail, whichever is taller, up to `room` (goToTallest) wherever the whole rail shows and the shape's tallest
+    /// beside the slim strip. The top edge stays put as it changes (MenuSizer).
     public static func rail(_ shape: Shape, band: RailBand, railItems: Int, rows: Int, headings: Int, extra: CGFloat = 0, bar: CGFloat = 0,
-                            full: Bool = false) -> CGSize {
+                            full: Bool = false, room: CGFloat? = nil) -> CGSize {
         let list = instrument(shape, rows: rows, headings: headings, extra: extra, bar: bar, full: full)
         guard band != .none else { return list }
-        let tallest = band == .slim ? instrument(shape, rows: 0, headings: 0, full: true).height : railTallest
+        let tallest = band == .slim ? instrument(shape, rows: 0, headings: 0, full: true).height : goToTallest(room)
         let rail = railHeight(band, items: railItems) + railChrome
         return CGSize(width: list.width, height: full ? tallest : min(max(list.height, rail), tallest))
     }
@@ -92,12 +95,12 @@ public enum MenuPanelSize {
     public static let classicTallest: CGFloat = 650
 
     /// Classic's panel: the menu's 750 width, Classic's chrome and rows, the root's rows under their rule heading
-    /// (`root`), and `card` more where an answer's card stands in for its row. Narrow it reaches 650, wide
-    /// 582 as Instrument's; `full` takes the shape's tallest (Cmd+K, a detail).
+    /// (`root`), and `card` more where an answer's card stands in for its row. The root reaches `room` (goToTallest),
+    /// narrow 650, wide 582 as Instrument's; `full` takes the shape's tallest (Cmd+K, a detail).
     public static func classic(_ shape: Shape, rows: Int, headings: Int, root: Bool = false, card: CGFloat = 0,
-                               extra: CGFloat = 0, bar: CGFloat = 0, full: Bool = false) -> CGSize {
+                               extra: CGFloat = 0, bar: CGFloat = 0, full: Bool = false, room: CGFloat? = nil) -> CGSize {
         let today = instrument(shape, rows: 0, headings: 0, full: true)
-        let tallest = shape == .narrow ? classicTallest : today.height
+        let tallest = root && !full ? goToTallest(room) : shape == .narrow ? classicTallest : today.height
         let row = shape == .wide ? classicWideRow : classicRow
         let listed = CGFloat(extra > 0 || root ? rows : max(rows, 2)) * row + CGFloat(headings) * instrumentHeading
         let height = classicChrome + listed + (root ? classicRootHeading : 0) + card + extra + bar
@@ -115,10 +118,10 @@ public enum MenuPanelSize {
     public static let lineChrome: CGFloat = lineSearch + 2 + 12 + s(42)
 
     /// Line's root: Classic's root (its rows under their rule heading, no recents since Sven 2026-10-20) at Line's 36 pt
-    /// rows, inside Classic's 650 cap.
-    public static func lineRoot(rows: Int) -> CGSize {
+    /// rows, up to `room` (goToTallest), so every Go to row shows (T36).
+    public static func lineRoot(rows: Int, room: CGFloat? = nil) -> CGSize {
         let listed = CGFloat(rows) * lineRow + classicRootHeading
-        return CGSize(width: lineRootWidth, height: min(lineChrome + listed, classicTallest))
+        return CGSize(width: lineRootWidth, height: min(lineChrome + listed, goToTallest(room)))
     }
 
     /// Line's list: 750 wide, as tall as its rows and headings plus `card` more where an answer's card stands in for its

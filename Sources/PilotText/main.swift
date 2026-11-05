@@ -4,7 +4,8 @@
 //   pilot-text text             the image's lines
 //   pilot-text boxes <word>…    where the words are written, a box a line: x y width height, 0 to 1, origin top left
 //   pilot-text codes            the QR codes' payloads, a JSON string a line (the clipboard preview's Open link, Q398)
-//   pilot-text lines            every line and code with its box, a JSON line each (ReadLines; the capture's OCR)
+//   pilot-text lines            every line and code with its box, a JSON line each (ReadLines; the capture's OCR); none
+//                               when there is no text; exits 1 with Vision's error when it could not read the image
 //   pilot-text subject          the picture's subjects as PNG, the background transparent (Capture subject, P72); exits 1 with none
 //   pilot-text batch            the text index's images (Homy-style Files): a JSON string path a line on stdin, a JSON
 //                               line out per image as it is read, {"path", "text"}, at background priority
@@ -22,7 +23,11 @@ case "codes":
     let codes = await VisionText().codes(in: FileHandle.standardInput.readDataToEndOfFile())
     print(codes.compactMap { try? String(decoding: JSONEncoder().encode($0), as: UTF8.self) }.map { $0 + "\n" }.joined(), terminator: "")
 case "lines":
-    print(ReadLines.json(await VisionText().lines(in: FileHandle.standardInput.readDataToEndOfFile())), terminator: "")
+    do { print(ReadLines.json(try await VisionText().read(FileHandle.standardInput.readDataToEndOfFile())), terminator: "") } catch {
+        // A failed read says so, so the editor never calls it "Nothing sensitive found" (T35).
+        FileHandle.standardError.write(Data("\(error)\n".utf8))
+        exit(1)
+    }
 case "subject":
     guard let png = await VisionSubject().subject(in: FileHandle.standardInput.readDataToEndOfFile()) else {
         FileHandle.standardError.write(Data("no subject\n".utf8))

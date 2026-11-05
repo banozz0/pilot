@@ -5,7 +5,8 @@ extension ControlVerbs {
     /// The question a confirmed setting asks: the prompt, a plan's row and the plan's cover all build it here, so they match.
     /// Live window pictures ask with their warning, as the Window shelf block shows it before Live turns on (Q662).
     static func settingAsk(_ key: String, _ shown: String) -> ControlGate.Ask {
-        .init("Set \(key)", key == ShelfPictures.key && shown == ShelfPictureMode.live.rawValue ? "live. \(ShelfPictures.liveWarning)" : shown)
+        if let detail = aiSettingAsk(key, shown) { return .init("Set \(key)", detail) }
+        return .init("Set \(key)", key == ShelfPictures.key && shown == ShelfPictureMode.live.rawValue ? "live. \(ShelfPictures.liveWarning)" : shown)
     }
 
 }

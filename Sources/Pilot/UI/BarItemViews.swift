@@ -222,9 +222,10 @@ struct TopBarSlotView: View {
     /// The right-click menu, or `rows` in its place (Capture's click menu).
     private func showMenu(_ rows: [BarMenuRow]? = nil) {
         guard let view = anchor.view else { return }
-        let kind = slot.kind
-        BarMenu.show(rows ?? sources.menu(kind, in: .topBar, store: store), under: view) { [sources, store] action in
-            sources.perform(action, on: kind, store: store) { perform(.popover) }
+        // Keyed by what the slot is, so an extension's own item moves and goes on its own (spec pilot-1.1 T50).
+        let item = slot.item
+        BarMenu.show(rows ?? sources.menu(item, in: .topBar, store: store), under: view) { [sources, store] action in
+            sources.perform(action, on: item, store: store) { perform(.popover) }
         }
     }
 }
@@ -642,7 +643,7 @@ struct PowerPopover: View {
     }
 }
 
-/// Wi-Fi's state and link, never the network's name, which needs Location access Pilot never asks.
+/// Wi-Fi's switch and link, never the network's name, which needs Location access Pilot never asks.
 struct WiFiPopover: View {
     @Environment(\.style) private var style
     let readings: BarReadings
@@ -653,7 +654,12 @@ struct WiFiPopover: View {
             HStack {
                 Text("Wi-Fi").font(ink.title)
                 Spacer()
-                Text(wifi?.on == true ? "On" : "Off").foregroundStyle(ink.muted)
+                // The radio's switch (T47), read back as soon as macOS has switched it.
+                if let on = wifi?.on {
+                    Toggle("Wi-Fi", isOn: Binding(get: { on }, set: { new in Task { await readings.setWiFi(new) } })).toggleStyle(.pilotSwitch)
+                } else {
+                    Text("No Wi-Fi").foregroundStyle(ink.muted)
+                }
             }
             if let signal = wifi?.signal {
                 LabeledContent("Signal", value: "\(signal) dBm · \(BarParts.wifiBars(signal)) of 4")

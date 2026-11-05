@@ -7,6 +7,7 @@ extension SettingsSchema {
     /// say page tiling, named as before. A theme Ghostty did not take answers bad-value with the line the page shows (the
     /// theme itself changed).
     func registerLook(_ look: Look) {
+        let cursors = CursorSets.of(look), effects = CursorEffects.of(look)
         register([
             .choice("look.style", "Style", page: "look", PilotStyle.allCases, standard: .instrument,
                     read: { look.style }, write: { look.style = $0 }),
@@ -42,6 +43,28 @@ extension SettingsSchema {
                     read: { look.windowShape }, write: { look.windowShape = $0 }),
             .choice("look.menuLayout", "Hyper+Space menu", page: "look", MenuLayoutStyle.allCases, standard: .line,
                     read: { look.menuLayout }, write: { look.menuLayout = $0 }),
+            // A set, its colours or its custom fill and outline change the system cursor everywhere, so `pilot set` waits on Allow (P84). The page's offer to turn
+            // Accessibility's pointer colours off first is the page's alone.
+            .choice("look.cursor", "Cursor set; macOS is the system's own. Set here, it skips the page's check of Accessibility's pointer colours",
+                    page: "look", CursorSetID.allCases, standard: .macOS,
+                    confirms: true, read: { cursors.set }, write: { cursors.set = $0 }),
+            .choice("look.cursorColours", "Cursor colours: the theme's, the set's own, or custom's fill and outline", page: "look",
+                    CursorColours.allCases, standard: .theme, confirms: true, read: { cursors.colours }, write: { cursors.colours = $0 }),
+            // theme = the theme's own fill or outline for the set, until a colour is picked.
+            .colour("look.cursorFill", "Cursor fill, while colours are custom", page: "look", confirms: true,
+                    read: { cursors.fill }, write: { cursors.fill = $0 }),
+            .colour("look.cursorOutline", "Cursor outline, while colours are custom", page: "look", confirms: true,
+                    read: { cursors.outline }, write: { cursors.outline = $0 }),
+            .choice("look.cursorTrail", "Cursor trail", page: "look", CursorTrail.allCases, standard: .off,
+                    read: { effects.trail }, write: { effects.trail = $0 }),
+            .bool("look.cursorRing", "Cursor halo: a ring on the pointer, hidden after 3 s still", page: "look", standard: false,
+                  read: { effects.ring }, write: { effects.ring = $0 }),
+            .bool("look.cursorRipple", "Cursor halo: a ripple on each click", page: "look", standard: false,
+                  read: { effects.ripple }, write: { effects.ripple = $0 }),
+            .colour("look.cursorEffectColour", "Cursor trail, ring and ripple colour; the right-click ripple keeps the theme's second", page: "look",
+                    read: { effects.colour }, write: { effects.colour = $0 }),
+            .bool("look.cursorSpotlight", "Cursor halo: Spotlight, shown while cursor.spotlight's key is held", page: "look", standard: false,
+                  read: { effects.spotlight }, write: { effects.spotlight = $0 }),
         ])
     }
 }

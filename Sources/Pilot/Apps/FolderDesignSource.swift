@@ -3,7 +3,8 @@ import PilotCore
 
 /// Pick a design (P43, frame 3): the menu's picker over the folders selected in Finder, titled with their count. Each
 /// design is a row wearing its art; Return applies it to the folders it dresses, ⌘O asks for a picture of your own
-/// instead. Your designs (P55) follow Pilot's, then Your own. A folder in a git repository is left out (Q294's recommendation) and a row under the designs says why;
+/// instead. The kinds the folders are (T61: Downloads, Code…) come first, each its own section, then Pilot's twelve, then
+/// every other kind; Your designs (P55) follow Pilot's, then Your own. A folder in a git repository is left out (Q294's recommendation) and a row under the designs says why;
 /// ⌘I (or Return on that row) includes it, and again leaves it out.
 @MainActor
 final class FolderDesignSource: MenuSource {
@@ -14,10 +15,13 @@ final class FolderDesignSource: MenuSource {
     private(set) var included: Set<URL> = []
     /// Your designs, each with Pilot's copy, read as the picker opens.
     let yours: [(design: FolderDesign, file: URL)]
+    /// The kinds the folders are, whose designs list first.
+    let suggested: [FolderDesign.Kind]
 
     /// `inGit` as read already (a render names its own); else each folder's parents are checked.
-    init(_ folders: [URL], inGit: [URL]? = nil, yours: YourFolderDesigns = .standard) {
+    init(_ folders: [URL], inGit: [URL]? = nil, yours: YourFolderDesigns = .standard, suggested: [FolderDesign.Kind]? = nil) {
         self.folders = folders
+        self.suggested = suggested ?? FolderDesigns.kinds(of: folders)
         self.inGit = inGit ?? folders.filter { FolderLooks.gitRepository($0) != nil }
         self.yours = yours.list()
     }
@@ -59,7 +63,12 @@ final class FolderDesignSource: MenuSource {
             row.section = "Git repositories"
             return row
         }
-        return FolderDesign.all.map { design($0, icon: MenuIcon(symbol: "folder", tint: .accent, bundled: "folder-designs/\($0.id)"), section: "Designs") }
+        func pilot(_ designs: [FolderDesign], _ section: String) -> [MenuEntry] {
+            designs.map { design($0, icon: MenuIcon(symbol: "folder", tint: .accent, bundled: "folder-designs/\($0.id)"), section: section) }
+        }
+        let others = FolderDesign.kinds.filter { !suggested.contains($0) }
+        return suggested.flatMap { pilot($0.designs, "For \($0.title)") } + pilot(FolderDesign.classic, "Designs")
+            + others.flatMap { pilot($0.designs, $0.title) }
             + yours.map { design($0.design, icon: MenuIcon(symbol: "folder", tint: .accent, picture: $0.file.path), section: "Your designs") }
             + [mine] + warnings
     }

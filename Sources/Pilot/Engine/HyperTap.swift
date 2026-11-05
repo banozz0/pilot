@@ -28,8 +28,9 @@ final class HyperTap {
     /// The capture takes Hyper keys alone: a Cmd, Ctrl or Alt combo and every plain key go on as if none waited, so typing
     /// in the front app goes on under the bind hint's wait (story 122).
     var captureOnlyHyper = false
-    /// While set, every Hyper key, bound or free, comes here instead of running: the Binds board picks it (card
-    /// agent-bo-95422993, G5). Plain combos still run, so the window's own Cmd keys keep working.
+    /// While set, every Hyper key comes here too: the Binds board picks it (card agent-bo-95422993, G5). A bound one
+    /// still runs, so every bind works with the board in front (T48, Sven 2026-11-04); a free one only picks. Plain
+    /// combos run as ever, so the window's own Cmd keys keep working.
     var picking: ((Key) -> Void)?
     var onTapDisabled: (String) -> Void = { _ in }
     /// A Cmd+V going past, Sven's or one Pilot posted: a paste in sequence moves on (card agent-bo-95423071). Watched,
@@ -575,7 +576,9 @@ final class HyperTap {
         case .run(let key, let autorepeat):
             onKey()
             if let capture = captureNext, key.hyper || !captureOnlyHyper { captureNext = nil; capture(key) }
-            else if !pick(key, autorepeat) {
+            else {
+                // The board shows the key, then the bind runs: a pick never eats a bound key (T48).
+                _ = pick(key, autorepeat)
                 if !autorepeat { down[e.keyCode] = key }
                 onRun(key, autorepeat)
             }
@@ -598,7 +601,8 @@ final class HyperTap {
         onKey()
     }
 
-    /// A Hyper key to the Binds board while it picks, once per press; false when it is not picking.
+    /// A Hyper key to the Binds board while it picks, once per press; false when it is not picking. A free key stops
+    /// here; a bound one runs after it (route).
     private func pick(_ key: Key, _ autorepeat: Bool) -> Bool {
         guard let picking, key.hyper else { return false }
         if !autorepeat { picking(key) }

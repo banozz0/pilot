@@ -100,12 +100,15 @@ final class ExtensionBar {
         task = nil
     }
 
+    /// The installed extensions that declare a bar item, by title: the order the items are listed and drew in.
+    nonisolated static func withBar(in folder: URL) -> [Extension] { Extension.find(in: folder).extensions.filter { $0.bar != nil } }
+
     /// Asks every bar item that is due, one at a time, and says how long until the next is; the folder is read off the
     /// main thread, and the items change once, only when an answer did.
     @discardableResult
     func round() async -> Int {
         let folder = folder
-        let extensions = await Task.detached { Extension.find(in: folder).extensions.filter { $0.bar != nil } }.value
+        let extensions = await Task.detached { Self.withBar(in: folder) }.value
         // Every one is listed; every one placed is asked.
         let shown = Set(extensions.map(\.id).filter { shows($0, .menuBar) || shows($0, .topBar) })
         var next = extensions.map { ext in

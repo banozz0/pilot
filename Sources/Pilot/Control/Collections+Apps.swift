@@ -132,7 +132,7 @@ extension ControlVerbs {
                 guard choices.contains(where: { $0.bundle == app }) else {
                     throw ControlError(.badValue, "--app: \(app) is not an editor choice; there are \(choices.map(\.bundle).joined(separator: ", "))")
                 }
-            } else if !s.picks.has(role, app) || (app == AppRolePicks.pilot && role != .notes) {
+            } else if !s.picks.has(role, app) || (app == AppRolePicks.pilot && role != .notes && role != .files) {
                 let (what, give) = role == .agent ? ("command", "a coding agent's command") : ("app", "an installed app's bundle id or a https:// site")
                 throw ControlError(.badValue, "--app: no \(what) \(app) is installed; give \(give)")
             }
@@ -200,7 +200,7 @@ extension ControlVerbs {
     /// installed), the app Automatic gives, and the picker's apps as the page lists them.
     private static func row(_ role: AppRole, _ s: AppCollectionStores) -> [String: JSONValue] {
         let (pick, app) = role == .editor ? (s.editor.pick, s.editor.app) : (s.picks.picks[role], s.picks.app(role))
-        let name = { AppRolePicks.name($0, appName: s.appName) }
+        let name = { AppRolePicks.name($0, role: role, appName: s.appName) }
         let choices = role == .editor ? s.editorChoices() : s.picks.choices(role).map { (name: name($0), bundle: $0) }
         var row: [String: JSONValue] = ["role": .string(role.rawValue), "pick": .string(pick ?? "automatic"),
                                         "automatic": .string(role == .editor ? s.editor.automatic : s.automatic(role)),

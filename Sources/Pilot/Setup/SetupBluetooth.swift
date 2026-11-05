@@ -17,6 +17,13 @@ final class SetupBluetooth {
     private(set) var failures: [String: String] = [:]
     /// The list has been read since the page showed; until then the section shows no "No paired devices".
     private(set) var read = false
+    /// The radio (T47): nil hides the switch, when Pilot cannot switch it or Bluetooth is not allowed yet.
+    private(set) var power: Bool?
+    /// Turning Bluetooth off waits on this while Bluetooth keyboards and mice are the Mac's only input.
+    private(set) var offWarning: String?
+    private(set) var powerProblem: String?
+    /// This page's switch is under way, its toggle greyed; BluetoothPower.begin holds the guard every switch shares.
+    private(set) var switching = false
     /// Ask again could not clear Pilot's answer: what to do instead.
     private(set) var resetFailure: String?
     /// Show paired devices was pressed once. Saved as it changes.
@@ -76,8 +83,45 @@ final class SetupBluetooth {
         }
     }
 
+    /// The switch: on at once; off at once too, unless Bluetooth keyboards and mice are the only input, when it waits
+    /// for Turn off under the warning.
+    func setPower(_ on: Bool) async {
+        if !on, let warning = BluetoothPower.warning(bluetooth.inputs()) {
+            offWarning = warning
+            return slog.notice("bluetooth off: asking, only Bluetooth input")
+        }
+        await switchPower(on)
+    }
+
+    func confirmOff() async {
+        offWarning = nil
+        await switchPower(false)
+    }
+
+    func cancelOff() { offWarning = nil }
+
+    /// The switch read again, once shown: the bar's or the action's switch changed the radio (BluetoothPower.changed).
+    func refreshPower() {
+        guard shown, read else { return }
+        power = BluetoothPower.state(bluetooth)
+    }
+
+    private func switchPower(_ on: Bool) async {
+        guard BluetoothPower.begin() else { return }
+        switching = true
+        defer {
+            switching = false
+            BluetoothPower.end()
+        }
+        let after = await bluetooth.setPower(on)
+        slog.notice("bluetooth \(on ? "on" : "off", privacy: .public): \(after == on ? "done" : "failed", privacy: .public)")
+        powerProblem = after == on ? nil : "macOS did not turn Bluetooth \(on ? "on" : "off")"
+        await list()
+    }
+
     private func list() async {
         devices = access == .allowed ? await bluetooth.paired() : []
+        power = BluetoothPower.state(bluetooth)
         read = true
     }
 }

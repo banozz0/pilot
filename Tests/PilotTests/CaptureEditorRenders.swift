@@ -2,14 +2,16 @@
 import AppKit
 import Clipboard
 import Foundation
+import ImageScale
 import PilotCore
 import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The capture editor in direction A (spec capture.html CP6, CP7; Sven Q169; the designer's round 1 grown into the real
-/// suite): the real CaptureEditorView over the designer's made-up billing page, in ten states (the last zoomed in), in
-/// Instrument (Lagoon, Workshop) and Toybox (toybox-night, toybox). The window keeps one size whatever the state.
+/// The capture editor in B (Sven, Q805; editors-round-2's 21 parity rows): the real CaptureEditorView over the designer's
+/// made-up billing page, in every state Sven leaves it in, plus the smallest window and the two popovers' panels (a
+/// popover is a window of its own, which a snapshot never draws), in Instrument (Lagoon, Workshop) and Toybox
+/// (toybox-night, toybox). The window keeps one size whatever the state, the backdrop panel's column aside.
 /// Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureEditorRenders`
 extension SharedLook {
@@ -117,13 +119,39 @@ struct CaptureEditorRenders {
             resize.begin(right); resize.drag(CGPoint(x: right.x + 94, y: right.y))
         }
 
+        // History with both steps (B's redo): two marks, the second undone.
+        let history = model()
+        history.pick(.arrow)
+        history.begin(CGPoint(x: 600, y: 76)); history.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
+        history.pick(.rect)
+        history.begin(CGPoint(x: card.minX, y: card.minY)); history.end(CGPoint(x: card.maxX, y: card.maxY))
+        history.undo()
+
+        // The backdrop panel open at the right, a gradient picked and an arrow on the capture (B's first mock).
+        let panel = model()
+        panel.pick(.arrow)
+        panel.begin(CGPoint(x: 600, y: 76)); panel.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
+        panel.setBackdrop(Backdrop(fill: .gradient([0xF7B267, 0xF25F5C, 0x8E44AD])))
+        panel.panelOpen = true
+
+        // Image size applied: the View pill's size chip lit at 2x.
+        let sized = model()
+        sized.resize(to: ResizeTarget(width: Int(sized.flatSize.width) * 2, height: Int(sized.flatSize.height) * 2))
+
         return [("1-empty", empty), ("2-marks", marks), ("3-selected", selected), ("4-steps", steps), ("5-crop", crop), ("6-read", read),
-                ("7-ruler", ruler), ("8-backdrop", backdrop), ("9-eyedropper", picker), ("10-zoom", zoomed), ("11-text", text), ("12-resize", resize)]
+                ("7-ruler", ruler), ("8-backdrop", backdrop), ("9-eyedropper", picker), ("10-zoom", zoomed), ("11-text", text), ("12-resize", resize),
+                ("13-history", history), ("14-panel", panel), ("15-image-size", sized)]
     }
 
     @Test("The editor renders in Instrument and Toybox, dark and light, every state, at one size",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
+        try Self.rendering { look, out in try Self.renderStates(look: look, out: out) }
+    }
+
+    /// The render runs' common setup: the moved home checked, the bundled faces, Glass off, the output folder; the look
+    /// put back after.
+    static func rendering(_ body: (Look, URL) throws -> Void) throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
         testApp()
@@ -136,21 +164,137 @@ struct CaptureEditorRenders {
         defer { (look.style, look.themeID, look.glass) = saved }
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("capture-editor")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        try body(look, out)
+    }
 
+    static func renderStates(look: Look, out: URL) throws {
         let capture = try #require(CaptureFixture.image())
         var sizes: [String: Set<String>] = [:]
         for pass in Self.passes {
             look.style = pass.style
             look.themeID = pass.theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)
-            for (name, model) in Self.states(capture, tokens: tokens) {
-                let size = EditorLayout.window(model.size, fit: 1, tokens: tokens)
-                let rep = try Self.draw(CaptureEditorView(model: model), tokens: tokens, size: size, scale: 2)
-                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("A-\(name)-\(pass.tag).png"))
-                sizes[pass.tag, default: []].insert("\(rep.pixelsWide)x\(rep.pixelsHigh)")
+            func write(_ rep: NSBitmapImageRep, _ name: String) throws {
+                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-\(name)-\(pass.tag).png"))
             }
+            let states = Self.states(capture, tokens: tokens)
+            for (name, model) in states {
+                let size = EditorLayout.window(model.size, fit: 1, tokens: tokens, panel: model.panelOpen)
+                // The Drag cap shows only with something to drag.
+                let rep = try Self.draw(CaptureEditorView(model: model, drag: { NSItemProvider() }), tokens: tokens, size: size, scale: 2)
+                try write(rep, name)
+                sizes["\(pass.tag) panel \(model.panelOpen)", default: []].insert("\(rep.pixelsWide)x\(rep.pixelsHigh)")
+            }
+            // The smallest window (EditorLayout.least): the capture fitted, the fourteen tools still in the rail.
+            let small = states[1].1
+            try write(Self.draw(CaptureEditorView(model: small, drag: { NSItemProvider() }), tokens: tokens,
+                                size: EditorLayout.least(panel: false), scale: 2), "16-smallest")
+            // Text's options, the widest strip, with a picked colour's seventh swatch, at the smallest window.
+            let narrow = states[10].1
+            narrow.takeColour(0x7A5CFA)
+            narrow.pick(.text)
+            try write(Self.draw(CaptureEditorView(model: narrow, drag: { NSItemProvider() }), tokens: tokens,
+                                size: EditorLayout.least(panel: false), scale: 2), "16-smallest-text")
+            // The View pill's Image size and the actions' Upscale, as their popovers draw them.
+            let popovers = states[0].1
+            let target = ResizeTarget(width: Int(popovers.flatSize.width), height: Int(popovers.flatSize.height))
+            try write(Self.draw(ImageSizePanel(model: popovers, target: target), tokens: tokens, size: CGSize(width: 340, height: 230), scale: 2), "17-image-size-panel")
+            popovers.upscale.size(width: target.width, height: target.height)
+            try write(Self.draw(UpscalePopover(model: popovers) {}, tokens: tokens, size: CGSize(width: 340, height: 330), scale: 2),
+                      "18-upscale-panel")
         }
         for (key, set) in sizes { #expect(set.count == 1, "\(key): the window's size changed with its state: \(set.sorted())") }
+    }
+
+    /// Uncrop and backdrop marks (P77, round 2's capture-2 and capture-3): the billing page cut from a desktop of other
+    /// windows, that desktop read back as its screen. Crop pulled past two edges mid-drag, the uncrop kept, a title on
+    /// the backdrop over a capture mark, and the same grown by an uncrop with the title staying put.
+    @Test("Uncrop and backdrop marks render in Instrument and Toybox, dark and light",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderUncrop() throws {
+        try Self.rendering { look, out in try Self.renderUncrop(look: look, out: out) }
+    }
+
+    static func renderUncrop(look: Look, out: URL) throws {
+        let capture = try #require(CaptureFixture.image())
+        let (screen, taken) = try #require(Self.desktop(around: capture))
+        for pass in Self.passes {
+            look.style = pass.style
+            look.themeID = pass.theme
+            let tokens = StyleTokens.of(look.style, theme: look.theme)
+            func model() -> EditorModel {
+                let m = EditorModel(image: capture, scale: 2, accent: tokens.colors.accent.rgb, dark: tokens.dark,
+                                    screen: CaptureGrab(image: screen, taken: taken, scale: 2))
+                m.pick(.select)
+                return m
+            }
+            let t = model().taken
+            /// Crop's left edge pulled 120 points out, past the capture's.
+            func uncropLeft(_ m: EditorModel) {
+                m.pick(.crop)
+                m.begin(CGPoint(x: t.minX, y: t.midY)); m.end(CGPoint(x: t.minX - 120, y: t.midY))
+            }
+            // Crop's left edge pulled 120 points out and its top 60, still being dragged.
+            let pulling = model()
+            uncropLeft(pulling)
+            // The top edge's handle, in the middle of the crop as the first pull left it.
+            pulling.begin(CGPoint(x: t.midX - 60, y: t.minY)); pulling.drag(CGPoint(x: t.midX - 60, y: t.minY - 60))
+            let kept = model()
+            uncropLeft(kept)
+            kept.applyCrop()
+            func titled() -> EditorModel {
+                let m = model()
+                m.setBackdrop(Backdrop(fill: .gradient([0x1FB5A8, 0x1D5D8C]), pad: 72))
+                m.pick(.text)
+                m.setFace { $0.points = 30 }
+                m.setColour(5)
+                m.begin(CGPoint(x: t.minX - 50, y: t.minY - 24)); m.typed = "Billing, after the redesign"; m.commitText()
+                m.pick(.arrow)
+                let update = CaptureFixture.updateButton.offsetBy(dx: t.minX, dy: t.minY)
+                m.begin(CGPoint(x: update.minX - 150, y: update.minY - 30)); m.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
+                m.pick(.select)
+                return m
+            }
+            let marked = titled()
+            let grown = titled()
+            uncropLeft(grown)
+            grown.applyCrop()
+            let size = EditorLayout.window(CaptureFixture.size, fit: 1, tokens: tokens)
+            for (name, m) in [("19-uncrop-pulling", pulling), ("20-uncropped", kept), ("21-backdrop-mark", marked), ("22-backdrop-mark-grown", grown)] {
+                let rep = try Self.draw(CaptureEditorView(model: m, drag: { NSItemProvider() }), tokens: tokens, size: size, scale: 2)
+                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-\(name)-\(pass.tag).png"))
+            }
+            // The crop strip at its widest (the uncrop hint, Whole capture, As taken) in the smallest window.
+            let rep = try Self.draw(CaptureEditorView(model: pulling, drag: { NSItemProvider() }), tokens: tokens, size: EditorLayout.least(panel: false), scale: 2)
+            try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-23-uncrop-smallest-\(pass.tag).png"))
+        }
+    }
+
+    /// A 1280 × 800 point desktop at 2x with `capture` on it at (180, 110): a menu bar, a notes window at its left, a
+    /// terminal at its right, all of which an uncrop brings back. The still and the capture's pixels in it.
+    static func desktop(around capture: CGImage) -> (CGImage, CGRect)? {
+        let w = 2560, h = 1600
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
+        func c(_ rgb: UInt32, _ a: CGFloat = 1) -> CGColor {
+            CGColor(srgbRed: CGFloat(rgb >> 16 & 0xFF) / 255, green: CGFloat(rgb >> 8 & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: a)
+        }
+        /// A rect in points from the top left, as the context's pixels.
+        func px(_ x: CGFloat, _ y: CGFloat, _ rw: CGFloat, _ rh: CGFloat) -> CGRect { CGRect(x: x * 2, y: CGFloat(h) - (y + rh) * 2, width: rw * 2, height: rh * 2) }
+        let sky = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [c(0x2B3A67), c(0x0F1424)] as CFArray, locations: nil)!
+        ctx.drawLinearGradient(sky, start: CGPoint(x: 0, y: CGFloat(h)), end: CGPoint(x: CGFloat(w), y: 0), options: [])
+        ctx.setFillColor(c(0x000000, 0.35)); ctx.fill(px(0, 0, 1280, 24))
+        ctx.setFillColor(c(0xECECEE)); ctx.fill(px(30, 190, 240, 330))
+        ctx.setFillColor(c(0xD6D6DA)); ctx.fill(px(30, 190, 240, 26))
+        ctx.setFillColor(c(0x9A9CA3))
+        for i in 0..<6 { ctx.fill(px(46, 236 + CGFloat(i) * 22, 150 - CGFloat(i % 3) * 30, 9)) }
+        ctx.setFillColor(c(0x15171C)); ctx.fill(px(1060, 250, 200, 360))
+        ctx.setFillColor(c(0x3FD18A))
+        for i in 0..<8 { ctx.fill(px(1150, 272 + CGFloat(i) * 20, 70 - CGFloat(i % 4) * 12, 8)) }
+        let at = CGPoint(x: 180, y: 110), size = CaptureFixture.size
+        ctx.draw(capture, in: px(at.x, at.y, size.width, size.height))
+        guard let image = ctx.makeImage() else { return nil }
+        return (image, CGRect(x: at.x * 2, y: at.y * 2, width: CGFloat(capture.width), height: CGFloat(capture.height)))
     }
 
     /// `view` at a fixed size in a borderless window that is never shown, in `tokens`.

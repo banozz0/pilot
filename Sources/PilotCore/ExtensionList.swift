@@ -427,9 +427,11 @@ public enum ExtensionList {
     }
 
     /// Whether a Pilot action may run `id`: only a registered action, never a shell or other drive route, a script, a
-    /// quicklink, an app link or another extension's command, which carry more power than an extension row should.
+    /// quicklink, an app link or another extension's command, which carry more power than an extension row should, nor
+    /// Wi-Fi, Bluetooth, power, the session or the locks (ControlGate.Ask.cutting, T52).
     public static func allowsPilot(_ id: String, isRegistered: (String) -> Bool) -> Bool {
-        isRegistered(id) && !["drive.", "scripts.run:", "links.open:", "apps.", Extension.prefix].contains { id.hasPrefix($0) }
+        isRegistered(id) && ControlGate.Ask.cutting[id] == nil
+            && !["drive.", "scripts.run:", "links.open:", "apps.", Extension.prefix].contains { id.hasPrefix($0) }
     }
 
     /// What an open action opens: a URL with a scheme, or a path from / or ~; nil for anything else.

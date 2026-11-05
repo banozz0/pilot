@@ -130,7 +130,7 @@ struct WidgetEditSheet: View {
             Picker("", selection: text) { ForEach(field.choices, id: \.self) { Text($0).tag($0) } }.labelsHidden()
         case .password:
             SecureField("Saved in the Keychain; type to replace", text: Binding(get: { passwords[field.name] ?? "" }, set: { passwords[field.name] = $0 }))
-                .pilotField()
+                .pilotField().secureFieldTip()
             Text("Shared by every copy of this widget.").font(ink.ui(11)).foregroundStyle(ink.muted)
         case .note:
             // A note gone since keeps its place in the list, by its id, so saving never picks another.

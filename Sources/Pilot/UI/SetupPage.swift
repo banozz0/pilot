@@ -84,6 +84,7 @@ struct SetupPage: View {
             }
         }
         .onChange(of: onScreen, initial: true) { onScreen ? start() : sound.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: BluetoothPower.changed)) { _ in bluetooth.refreshPower() }
         .onDisappear { sound.stop() }
     }
 
@@ -101,7 +102,7 @@ struct SetupPage: View {
         (.sound, "system.soundSettings", "Sound in Pilot"), (.sound, "media.volumeUp", "Volume up"),
         (.sound, "media.volumeDown", "Volume down"), (.sound, "media.mute", "Mute"),
         (.wifi, "system.wifiSettings", "Wi-Fi in Pilot"), (.wifi, "system.wifi", "Wi-Fi on or off"),
-        (.bluetooth, "system.bluetoothSettings", "Bluetooth in Pilot"), (.displays, "system.displaySettings", "Displays in Pilot"),
+        (.bluetooth, "system.bluetoothSettings", "Bluetooth in Pilot"), (.bluetooth, "system.bluetooth", "Bluetooth on or off"), (.displays, "system.displaySettings", "Displays in Pilot"),
         (.keepAwake, "system.keepAwake", "Keep awake on or off"),
     ]
 
@@ -183,6 +184,7 @@ struct SetupPage: View {
         case .bluetooth:
             if bluetooth.offersShow { Text("Not shown yet") }
             else if bluetooth.access == .denied { Text("Not allowed") }
+            else if bluetooth.power == false { Text("Off") }
             else {
                 let connected = bluetooth.devices.filter(\.connected).count
                 Text(bluetooth.devices.isEmpty ? "No paired devices" : "\(connected) connected")
@@ -204,7 +206,7 @@ struct SetupPage: View {
         switch part {
         case .sound: nil
         case .wifi: "Pilot never logs or keeps a network's password. Turning Wi-Fi on or off may need an administrator if macOS's Wi-Fi settings ask for one."
-        case .bluetooth: "Pairing a new device, forgetting one and turning Bluetooth on or off stay in Control Centre and System Settings: macOS gives apps no public way to do them."
+        case .bluetooth: "Pairing a new device and forgetting one stay in Control Centre and System Settings: macOS gives apps no public way to do them. The Bluetooth switch uses a private macOS call, and hides if an update removes it."
         case .displays: "A new resolution goes back by itself in 15 s unless you keep it; a rotation stays unless you press Revert. Click a screen in the picture and an arrow to move it beside another, with Undo in the tip; the main display and mirroring stay with macOS."
         case .keepAwake: "Stops the display and the Mac sleeping while it is on; quitting Pilot ends it."
         case .keyboard: "Pilot switches between the layouts macOS has enabled and never adds or removes one; add more in System Settings › Keyboard › Text Input."
@@ -451,7 +453,7 @@ struct SetupPage: View {
 
     private func passwordRow(_ network: WiFiNetwork) -> some View {
         BlockRow {
-            SecureField("Password, or empty if this Mac knows \(network.name)", text: $password).pilotField()
+            SecureField("Password, or empty if this Mac knows \(network.name)", text: $password).pilotField().secureFieldTip()
                 .onSubmit { joinTyped(network) }
             InfoMark(text: "Pilot hands the password to macOS once and keeps no copy; empty uses the one this Mac saved.")
             Button("Cancel") { (joining, password) = (nil, "") }.buttonStyle(.pilot)
@@ -514,17 +516,39 @@ struct SetupPage: View {
             problemLine(SetupBluetooth.deniedLine)
             if let failure = bluetooth.resetFailure { problemLine(failure) }
         } else {
+            if let on = bluetooth.power { bluetoothSwitch(on) }
             if bluetooth.read, bluetooth.devices.isEmpty {
-                BlockRow(first: true) { Text("No paired devices").foregroundStyle(ink.muted) }
+                BlockRow(first: bluetooth.power == nil) { Text("No paired devices").foregroundStyle(ink.muted) }
             }
             deviceRows
+        }
+    }
+
+    /// The radio's switch (T47), and under it the warning that holds a turn off while Bluetooth keyboards and mice are the
+    /// Mac's only input.
+    @ViewBuilder private func bluetoothSwitch(_ on: Bool) -> some View {
+        BlockRow(first: true) {
+            TitledText(title: "Bluetooth", detail: bluetooth.powerProblem ?? (on ? "On" : "Off")).padding(.vertical, 4)
+            InfoMark(text: "Turns this Mac's Bluetooth on or off. Off disconnects every Bluetooth device.")
+            Spacer()
+            Toggle("Bluetooth", isOn: Binding(get: { on }, set: { new in Task { await bluetooth.setPower(new) } }))
+                .toggleStyle(.pilotSwitch).disabled(bluetooth.switching)
+        }
+        if let warning = bluetooth.offWarning {
+            BlockRow {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(ink.warnText).accessibilityHidden(true)
+                Text(warning).fixedSize(horizontal: false, vertical: true).padding(.vertical, 6)
+                Spacer()
+                Button("Cancel") { bluetooth.cancelOff() }.buttonStyle(.pilot)
+                Button("Turn off") { Task { await bluetooth.confirmOff() } }.buttonStyle(.pilotPrimary)
+            }
         }
     }
 
     @ViewBuilder private var deviceRows: some View {
         HidingList(list: .bluetooth, items: bluetooth.devices, id: { $0.address }, name: \.name, inUse: \.connected, slot: true) { device, first in
             let busy = bluetooth.busy.contains(device.address)
-            BlockRow(first: first) {
+            BlockRow(first: first && bluetooth.power == nil) {
                 Image(systemName: SetupGlyph.device(device.name)).font(ink.ui(14))
                     .foregroundStyle(device.connected ? ink.green : ink.muted).frame(width: 22).accessibilityHidden(true)
                 TitledText(title: device.name, detail: bluetooth.failures[device.address] ?? (device.connected ? "Connected" : "Not connected"))

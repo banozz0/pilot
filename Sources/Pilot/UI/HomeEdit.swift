@@ -1076,8 +1076,9 @@ struct HomeCellDots: View {
 /// shows), on a tile in the style; Open goes to its page, as a push to one of its views does. Its model is Home's, kept
 /// by extension id, so the block keeps its last answer when it moves. Wide: its first figure, then its first list folded
 /// to the block, "N more" opening its page, or with no list its first figures and three rows (HomeVariant.medium); Large:
-/// the whole page, or on a block narrower than the page's own width its Wide form. Never more than its block holds: its
-/// blocks from the first, then the first one's own parts.
+/// the whole page, or on a block narrower than the page's own width its Wide form. A page of usage cards (AI usage) shows
+/// just their meters at both, the cards side by side (T34). Never more than its block holds: its blocks from the first,
+/// then the first one's own parts.
 struct HomeExtensionBlock: View {
     @Environment(\.ink) private var ink
     let id: String
@@ -1101,7 +1102,10 @@ struct HomeExtensionBlock: View {
                 if let problem = model.problem { FinePrint(text: problem, color: ink.warnText) }
                 if let page = model.blocks {
                     let whole = drawn == .large && width >= Self.wholePage
-                    if !whole, let list = HomeVariant.list(page) {
+                    let cards = HomeVariant.usage(page)
+                    if !cards.isEmpty {
+                        usage(cards)
+                    } else if !whole, let list = HomeVariant.list(page) {
                         small(page, list: list, title: link?.title ?? id)
                     } else {
                         let blocks = whole ? page : HomeVariant.medium(page)
@@ -1132,6 +1136,26 @@ struct HomeExtensionBlock: View {
         let firsts = (1..<max(1, blocks.count)).reversed().map { Array(blocks.prefix($0)) }
         let parts = HomeVariant.flattened(Array(blocks.prefix(1)))
         return [blocks] + firsts + (parts.count > 1 ? (1..<parts.count).reversed().map { Array(parts.prefix($0)) } : [])
+    }
+
+    /// A page of usage cards (AI usage) at any size: the cards side by side, as many across as the block is wide, each
+    /// shrunk before a provider is left out (HomeVariant.usageFits).
+    @ViewBuilder private func usage(_ cards: [Extension.Block]) -> some View {
+        ViewThatFits(in: .vertical) {
+            ForEach(Array(HomeVariant.usageFits(cards).enumerated()), id: \.offset) { _, fit in
+                let across = HomeVariant.across(fit.cards.count, width: width, compact: fit.compact)
+                Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 12) {
+                    ForEach(Array(stride(from: 0, to: fit.cards.count, by: across)), id: \.self) { start in
+                        GridRow {
+                            ForEach(start..<min(start + across, fit.cards.count), id: \.self) { i in
+                                ExtensionBlocksView(blocks: [fit.cards[i]], compact: fit.compact) { _ in }
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// The first figure on a line, then the list's rows folded; a row opens the page.

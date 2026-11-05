@@ -61,7 +61,7 @@ enum WidgetRunner {
 
 /// A reading feeds a widget the way a command does, as data, and Pilot draws a blocks widget from it itself, so a
 /// locked blocks widget fed by readings renders (Q680). This Mac's readings hold the sampler's watch only while a widget
-/// that shows them does; the calendar reads EventKit only when access was already given, never asking.
+/// that shows them does; the calendar reads EventKit's events and reminders only when access was already given, never asking.
 @MainActor
 enum WidgetReadings {
     /// Holds what every reading of a widget needs read until the calling task is cancelled.
@@ -118,7 +118,10 @@ enum WidgetReadings {
         case .calendar:
             guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return .object(["access": .bool(false), "events": .array([])]) }
             let start = Calendar.current.startOfDay(for: now), end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? now
-            let events = EventKitCalendar().events(in: DateInterval(start: start, end: end)).prefix(8).map { event -> JSONValue in
+            // Today's reminders with a due day join the events once Reminders access was given (T65); none asks.
+            let store = EventKitCalendar(), today = DateInterval(start: start, end: end)
+            let shown = (store.events(in: today) + (await store.reminders(in: today))).sorted { ($0.allDay ? 0 : 1, $0.start) < ($1.allDay ? 0 : 1, $1.start) }
+            let events = shown.prefix(8).map { event -> JSONValue in
                 .object(["title": .string(event.title), "allDay": .bool(event.allDay),
                          "start": .string(event.start.formatted(date: .omitted, time: .shortened))])
             }

@@ -53,12 +53,22 @@ public enum CaptureHistory {
         }
     }
 
+    /// The hidden folder beside a recording that holds its copy with the pointer drawn in (RecordingHandout, Q821).
+    public static let drawnFolder = ".Pilot pointer"
+
+    /// Where the copy of `recording` with the pointer drawn in is kept: under its own name in `drawnFolder` beside it.
+    public static func drawnCopy(of recording: URL) -> URL {
+        recording.deletingLastPathComponent().appending(path: drawnFolder, directoryHint: .isDirectory)
+            .appending(path: recording.lastPathComponent, directoryHint: .notDirectory)
+    }
+
     static let pictures: Set<String> = ["png", "jpg", "jpeg", "heic"]
     static let movies: Set<String> = ["mp4", "mov"]
 
     /// Every capture and recording, newest first: the files in the two folders, pictures as captures and movies as
     /// recordings, then any noted file outside them that is still there. Hidden files, folders and symbolic links are left
-    /// out, so the size cap never follows a link. Off the main thread: it reads every file's size.
+    /// out, so the size cap never follows a link; a recording's bytes count its copy with the pointer drawn in (in
+    /// `drawnFolder` beside it), so the cap sees it. Off the main thread: it reads every file's size.
     public static func entries(records: [Record], captures: URL, recordings: URL, fileManager: FileManager = .default) -> [Entry] {
         let apps = Dictionary(records.map { ($0.path, $0.app) }, uniquingKeysWith: { _, last in last })
         let keys: [URLResourceKey] = [.creationDateKey, .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]
@@ -69,8 +79,9 @@ public enum CaptureHistory {
                   values.isSymbolicLink != true else { return nil }
             seen.insert(path)
             let noted = apps.index(forKey: path) != nil
+            let drawn = kind == .recording ? (try? drawnCopy(of: url).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 : 0
             return Entry(url: url.standardizedFileURL, kind: kind, date: date(url.lastPathComponent) ?? values.creationDate ?? .distantPast,
-                         bytes: values.fileSize ?? 0, app: apps[path] ?? nil, pilotMade: noted || isPilotName(url.lastPathComponent))
+                         bytes: (values.fileSize ?? 0) + drawn, app: apps[path] ?? nil, pilotMade: noted || isPilotName(url.lastPathComponent))
         }
         func scan(_ folder: URL) -> [Entry] {
             let urls = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])) ?? []

@@ -443,7 +443,8 @@ final class WidgetDesk: ScreenPausing {
             let values = widget.settings.isEmpty ? [:] : store.values(of: widget, placement: placement)
             model.show(widget, values: values)
             model.layout = widget.layout(of: placement)
-            model.presses = WidgetAsks.acts(widget)
+            // GitHub checks' list scrolls, so its tile takes the mouse too: a panel that ignores it sends the wheel to the desktop.
+            model.presses = WidgetAsks.acts(widget) || widget.data == .ci
             model.press = { [weak self] action in self?.press(action, on: widget, placement: id) }
             model.launch = { [weak self] key in self?.launch(key, on: widget, placement: id) }
             // The page or the card first; a locked widget gets the card and its feed waits idle.
@@ -544,6 +545,16 @@ final class WidgetDesk: ScreenPausing {
                     self?.repoOpens[id] = Set(repos.filter { !$0.clean }.map(\.name))
                     self?.lastAnswers[id] = (.now, "repos", nil)
                     try? await Task.sleep(for: WidgetRepos.wait())
+                }
+            case .ci:
+                // Each repo's latest CI run, read as it shows (the last read, if under 5 minutes old) and every 5 minutes
+                // while it does (WidgetCI).
+                while !Task.isCancelled {
+                    let runs = await WidgetCI.read()
+                    if Task.isCancelled { return }
+                    (model.blocks, model.message) = (WidgetCI.blocks(runs), nil)
+                    self?.lastAnswers[id] = (.now, "ci", nil)
+                    try? await Task.sleep(for: WidgetCI.wait())
                 }
             case .github: await WidgetGitHub.feed(model, user: WidgetGitHub.user(values[WidgetGitHub.userName])) { self?.lastAnswers[id] = (.now, "github", $0) }
             case .nowPlaying:

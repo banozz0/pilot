@@ -27,8 +27,10 @@ final class ClipboardHistory: ScreenPausing {
     @ObservationIgnored private var menuBack: MenuNavigator.Spot?
     /// The dropdown's Clipboard switch (SessionSwitch.clipboard, card agent-bo-95422912): paused, nothing copied is kept;
     /// resumed, recording starts from what is on the pasteboard then, never what was copied meanwhile.
+    /// Paused, the secrets already due leave the disk now, not when recording resumes; the rest stay hidden once due (P65).
     func setRecording(_ on: Bool) {
         on ? watcher?.start() : watcher?.stop()
+        if !on { do { try store?.prune() } catch { cliplog.error("clipboard prune: \(String(describing: error), privacy: .public)") } }
         cliplog.notice("clipboard recording \(on ? "on" : "paused", privacy: .public)")
     }
 
@@ -60,6 +62,7 @@ final class ClipboardHistory: ScreenPausing {
             watcher = ClipboardWatcher(store: store)
             // A copy stored or an image's text read while the panel is open shows at once, not at the next keystroke.
             watcher?.onStore = { [weak self] in ocr.catchUp(); self?.model?.refresh() }
+            watcher?.onExpire = { [weak self] in self?.model?.refresh() }
             ocr.onRead = { [weak self] in self?.model?.refresh() }
             configure(prune: true)
             watcher?.start()
@@ -72,6 +75,7 @@ final class ClipboardHistory: ScreenPausing {
 
     func apply(_ settings: ClipboardSettings) {
         let limitsChanged = settings.keepCount != self.settings.keepCount || settings.keepDays != self.settings.keepDays
+            || settings.secretLifetime != self.settings.secretLifetime
         self.settings = settings
         settings.save(to: defaults)
         configure(prune: limitsChanged)
@@ -85,7 +89,10 @@ final class ClipboardHistory: ScreenPausing {
         store.cap = settings.keepCount
         store.maxAge = settings.maxAge
         guard prune else { return }
-        do { try store.prune() } catch { cliplog.error("clipboard prune: \(String(describing: error), privacy: .public)") }
+        do {
+            try store.setSecretLifetime(settings.secretLifetime)
+            try store.prune()
+        } catch { cliplog.error("clipboard prune: \(String(describing: error), privacy: .public)") }
     }
 
     /// Clear history: every unpinned item goes.
@@ -128,17 +135,22 @@ final class ClipboardHistory: ScreenPausing {
         do { try store?.deleteTag(id) } catch { cliplog.error("clipboard tag delete: \(String(describing: error), privacy: .public)") }
     }
 
-    /// Runs after the tap callback returns: building the rows reads the store, too slow for the tap.
-    func toggle() {
+    /// Its action's id, whose alias with words opens it searching them (T42).
+    static let actionID = "apps.clipboard"
+
+    /// Runs after the tap callback returns: building the rows reads the store, too slow for the tap. `words` open it
+    /// searching them ("cb invoice", T42).
+    func toggle(searching words: String? = nil) {
         let back = PilotMenu.origin
-        DispatchQueue.main.async { self.toggleNow(back: back) }
+        DispatchQueue.main.async { self.toggleNow(back: back, searching: words) }
     }
 
-    private func toggleNow(back: MenuNavigator.Spot?) {
+    private func toggleNow(back: MenuNavigator.Spot?, searching words: String?) {
         if panel != nil { close(); return }
         menuBack = back
         guard let store else { HUD.tip("Clipboard history is not running."); return }
         let model = PanelModel(store: store, order: settings.order)
+        if let words { model.query = words }
         self.model = model
         model.run = { [weak self, weak model] in if let self, let model { self.perform($0, model) } }
         let p = Self.makePanel(model, returnCopies: settings.returnAction == .copy)
@@ -791,9 +803,12 @@ struct ClipboardPanelView: View {
     /// The app it was copied in, by name.
     func source(_ clip: StoredClip) -> String? { clip.sourceApp.flatMap(AppsModule.appName) }
 
-    /// Today's time, else the day.
+    /// Today's time, else the day; a copied secret's says when it goes instead (P65).
     func time(_ clip: StoredClip) -> String {
-        Calendar.current.isDateInToday(clip.copiedAt) ? clip.copiedAt.formatted(date: .omitted, time: .shortened)
+        if let ends = clip.expiresAt {
+            return "gone at \(ends.formatted(date: Calendar.current.isDateInToday(ends) ? .omitted : .abbreviated, time: .shortened))"
+        }
+        return Calendar.current.isDateInToday(clip.copiedAt) ? clip.copiedAt.formatted(date: .omitted, time: .shortened)
             : clip.copiedAt.formatted(date: .abbreviated, time: .omitted)
     }
 }

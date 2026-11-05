@@ -28,12 +28,18 @@ struct ControlNetworkTests {
         let bluetooth = SetupBluetoothTests.FakeBluetooth()
         let verbs = ControlVerbs()
         var fake: SetupWiFiTests.FakeWiFi { wifi.fake }
+        /// Every Allow the verbs asked, in words, answered `allows`: never Pilot's prompt (T52).
+        var asked: [String] = [], allows = true
 
         init(location: PrivacyAccess = .allowed) {
             let tools = NetworkTools()
             tools.wifi = wifi
             tools.bluetooth = bluetooth
             wifi.fake.location = location
+            tools.gate = ControlGate { [weak self] ask, _ in
+                self?.asked.append(ask.text)
+                return self?.allows ?? false
+            }
             verbs.registerNetwork(tools)
         }
 
@@ -68,12 +74,17 @@ struct ControlNetworkTests {
         #expect(rig.fake.asked == 0)
     }
 
-    @Test("wifi off and on call setPower once each and answer the status after; macOS's refusal is the page's line")
+    @Test("wifi off and on ask Allow, call setPower once each and answer the status after; a deny runs nothing; macOS's refusal is the page's line")
     func power() async {
         let rig = Rig()
         let off = await rig.ask("wifi", "off")
         #expect(rig.fake.powerCalls == [false] && Self.field(off, "on") == .bool(false) && Self.field(off, "signal") == nil)
         #expect(Self.field(await rig.ask("wifi", "on"), "on") == .bool(true) && rig.fake.powerCalls == [false, true])
+        #expect(rig.asked == ["Turn Wi-Fi off: pilot wifi off", "Turn Wi-Fi on: pilot wifi on"])
+
+        rig.allows = false
+        #expect(await rig.ask("wifi", "off").error?.code == .denied && rig.fake.powerCalls == [false, true])
+        rig.allows = true
 
         rig.wifi.refuses = true
         let refused = await rig.ask("wifi", "off")
@@ -112,6 +123,10 @@ struct ControlNetworkTests {
         let joined = await rig.ask("wifi", "join", "Cafe")
         #expect(rig.fake.joins.map(\.name) == ["Cafe"] && rig.fake.joins.allSatisfy { $0.password == nil })
         #expect(Self.field(joined, "network") == .string("Cafe") && rig.fake.scans == [false])
+        #expect(rig.asked == ["Join Wi-Fi network: Cafe, an open network"])
+        rig.allows = false
+        #expect(await rig.ask("wifi", "join", "Home").error?.code == .denied && rig.fake.joins.map(\.name) == ["Cafe"])
+        rig.allows = true
 
         rig.wifi.refuses = true
         let unknown = await rig.ask("wifi", "join", "Neighbour")
@@ -125,13 +140,17 @@ struct ControlNetworkTests {
     func devices() async {
         let rig = Rig()
         rig.bluetooth.access = .notAsked
-        #expect(await rig.ask("bluetooth").result == .object(["access": .string("notAsked")]))
+        #expect(await rig.ask("bluetooth").result == .object(["access": .string("notAsked"), "canSwitch": .bool(true)]))
         #expect(rig.bluetooth.listed == 0 && rig.bluetooth.asked == 0)
 
         rig.bluetooth.access = .allowed
         let rows = Self.rows(Self.field(await rig.ask("bluetooth", "devices"), "devices"))
         #expect(rows.map { $0["address"] } == [.string("aa-01"), .string("aa-02"), .string("aa-03")])
         #expect(rows[0]["name"] == .string("AirPods Pro") && rows[0]["connected"] == .bool(true))
+        // The radio's power reads back once allowed (T47).
+        #expect(Self.field(await rig.ask("bluetooth"), "power") == .bool(true))
+        rig.bluetooth.power = false
+        #expect(Self.field(await rig.ask("bluetooth"), "power") == .bool(false))
     }
 
     @Test("connect and disconnect by address or name answer the row read again; one already so is not touched; a miss is the page's line")
@@ -141,6 +160,11 @@ struct ControlNetworkTests {
         #expect(rig.bluetooth.connects == ["aa-02"] && Self.field(mouse, "connected") == .bool(true))
         #expect(Self.field(await rig.ask("bluetooth", "connect", "AA-01"), "connected") == .bool(true) && rig.bluetooth.connects == ["aa-02"])
         #expect(Self.field(await rig.ask("bluetooth", "disconnect", "aa-01"), "connected") == .bool(false) && rig.bluetooth.disconnects == ["aa-01"])
+        // The one already connected was not asked about.
+        #expect(rig.asked == ["Connect Bluetooth device: MX Master 3S (aa-02)", "Disconnect Bluetooth device: AirPods Pro (aa-01)"])
+        rig.allows = false
+        #expect(await rig.ask("bluetooth", "disconnect", "aa-02").error?.code == .denied && rig.bluetooth.disconnects == ["aa-01"])
+        rig.allows = true
 
         let away = await rig.ask("bluetooth", "connect", "Keychron K2")
         #expect(away.error?.code == .badValue && away.error?.message.hasPrefix("Did not connect") == true)
@@ -164,7 +188,8 @@ struct ControlNetworkTests {
     func contract() async throws {
         let rig = Rig()
         #expect(try rig.verbs.verb("wifi").detail?("join")?.contains("never sent through the command") == true)
-        #expect(try rig.verbs.verb("bluetooth").detail?("disconnect")?.contains("connects or disconnects") == true)
+        #expect(try rig.verbs.verb("bluetooth").detail?("disconnect")?.contains("asks Allow, then connects or disconnects") == true)
+        #expect(try rig.verbs.verb("wifi").detail?("off")?.contains("asks Allow") == true)
         guard case .object(let wifi)? = try rig.verbs.verb("wifi").schema?(), case .object(let bt)? = try rig.verbs.verb("bluetooth").schema?() else {
             Issue.record("no schema"); return
         }

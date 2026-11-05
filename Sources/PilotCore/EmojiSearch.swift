@@ -25,6 +25,8 @@ public struct Emoji: Decodable, Sendable, Equatable {
 /// the name or of a keyword, from the second character, at most `limit` rows, the menu's frecency ranking them after.
 public enum EmojiSearch {
     public static let limit = 30
+    /// The emoji picker's row: its alias and words ("em funny") list only the emoji they find, best first (T37).
+    public static let pickerKey = "action:apps.emoji"
 
     public static func parse(_ data: Data) throws -> [Emoji] { try JSONDecoder().decode([Emoji].self, from: data) }
 
@@ -40,12 +42,28 @@ public enum EmojiSearch {
         guard query.trimmingCharacters(in: .whitespaces).count >= MenuNavigator.minimumQuery, !typed.isEmpty else { return [] }
         func tiered(_ tier: (Emoji) -> Int?) -> [Emoji] { FuzzyRanker.Filter.closest(list, tier) }
         let spelled = tiered { e in e.nameWords == typed ? 0 : covers(typed, e.nameWords) ? 1 : covers(typed, e.allWords) ? 2 : nil }
+        // A mood word gemoji never tags ("funny", T37) finds the emoji its words do, in their order.
+        if spelled.isEmpty, typed.count == 1, let felt = moods[typed[0]] {
+            return tiered { e in felt.firstIndex { e.allWords.contains($0) } }
+        }
         guard spelled.isEmpty, typed.contains(where: { $0.count >= FuzzyRanker.typoLetters }) else { return spelled }
         let letters = typed.map { (word: $0, letters: Array($0)) }
         func near(_ own: [String]) -> Bool { letters.allSatisfy { t in own.contains { nearly(t.word, t.letters, $0) } } }
         // Tiered as the spelled ones are: a name of as many words as typed, then a name, then a keyword.
         return tiered { e in near(e.nameWords) ? (e.nameWords.count == typed.count ? 0 : 1) : near(e.allWords) ? 2 : nil }
     }
+
+    /// Words people type for a feeling that no gemoji name or tag holds, each with the gemoji words that find its emoji,
+    /// best first (T37: Sven typed "em funny").
+    static let moods: [String: [String]] = {
+        let funny = ["laughing", "rofl", "joy", "haha", "silly", "goofy", "zany"], cute = ["pleading", "blush", "hearts"]
+        let gross = ["nauseated", "vomiting"], crazy = ["zany", "goofy", "woozy"], congrats = ["tada", "partying", "confetti", "clap"]
+        return ["funny": funny, "hilarious": funny, "lmao": funny, "cute": cute, "adorable": cute, "gross": gross, "disgusting": gross,
+                "scary": ["fearful", "scream", "ghost"], "yummy": ["yum", "drooling"], "awkward": ["grimacing", "sweat"],
+                "excited": ["partying", "struck", "tada"], "omg": ["scream", "exploding", "flushed"],
+                "embarrassed": ["flushed", "blush", "grimacing"], "crazy": crazy, "weird": ["confused", "woozy", "zany"],
+                "bored": ["unamused", "yawning", "sleepy"], "congrats": congrats, "congratulations": congrats]
+    }()
 
     /// Whether `own` starts with the typed word, or, from four letters, starts within a typo of it: one edit, two from
     /// eight letters (FuzzyRanker.edits). The first letter, or a swap of the first two, is taken as typed.

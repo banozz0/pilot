@@ -196,10 +196,13 @@ struct CaptureHistoryPage: View {
         if e.kind == .capture { CapturesModule.edit(e.url.path(percentEncoded: false)) } else { VideoEditor.open(e.url) }
     }
 
+    /// A recording goes with its pointer drawn in when it kept it out (Q821), under a progress tip while that is made.
     private func copy(_ e: CaptureHistory.Entry) {
-        Task { @MainActor in
-            await CaptureHistoryStore.copy(e)
-            HUD.tip("Copied \(e.kind == .capture ? "the capture" : "the recording").")
+        RecordingHandout.handOut([e.url]) { files in
+            Task { @MainActor in
+                await CaptureHistoryStore.copy(e, file: files.first ?? e.url)
+                HUD.tip("Copied \(e.kind == .capture ? "the capture" : "the recording").")
+            }
         }
     }
 

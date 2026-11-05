@@ -305,7 +305,7 @@ private struct FolderItemPress: ViewModifier {
                 content.onTapGesture { WidgetFolder.open(item.url) }
             }
         }
-        .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
+        .onDrag { RecordingHandout.provider(for: item.url) }  // a recording with its pointer drawn in (Q821)
         .onHover { over in
             if over { model.hovered = item } else if model.hovered == item { model.hovered = nil }
         }

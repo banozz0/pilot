@@ -38,18 +38,18 @@ struct ClassicMenuRenders {
         #expect(trigger.shape == .narrow && trigger.instrumentSize.width == MenuPanelSize.width)
     }
 
-    @Test("An answer draws its card in Classic too, with room for it unscrolled; the Ask row stays a row")
+    @Test("An answer draws its card in Classic too, with room for it unscrolled; the Ask row stays a row (none under tr's, T40)")
     func cards() throws {
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
         for name in ["D4-calculator", "D5-translate", "D6-colour"] {
             let model = try #require(states[name])
-            let rows = model.nav.rows
-            try #require(rows.count >= 2, "\(name): \(rows.map(\.title))")
+            let rows = model.nav.rows, alone = name == "D5-translate"
+            try #require(rows.count >= (alone ? 1 : 2), "\(name): \(rows.map(\.title))")
             #expect(model.answerCard(rows[0], at: 0) != nil, "\(name)")
-            #expect(model.answerCard(rows[1], at: 1) == nil && rows[1].title == "Ask AI", "\(name)")
+            #expect(alone ? rows.allSatisfy(\.isAnswer) : model.answerCard(rows[1], at: 1) == nil && rows[1].title == "Ask AI", "\(name)")
             let card: CGFloat = name == "D6-colour" ? 118 + 8 + 16 + 24 : 158
             let chrome = MenuPanelSize.classicChrome - 12
-            #expect(chrome + MenuPanelSize.instrumentHeading + card + 10 + MenuPanelSize.classicWideRow + 12 <= model.instrumentSize.height, "\(name)")
+            #expect(chrome + MenuPanelSize.instrumentHeading + card + 10 + (alone ? 0 : MenuPanelSize.classicWideRow) + 12 <= model.instrumentSize.height, "\(name)")
         }
     }
 

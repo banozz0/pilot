@@ -140,14 +140,21 @@ public enum ExtensionsPage {
         }
     }
 
-    /// `permissions` in plain words, a line per kind it declares; "Touches nothing it names" when none.
+    /// `permissions` in plain words, a line per kind it declares; "Touches nothing it names" when none. `label` is the
+    /// registry's: an action it names no label for is not on this Mac. The actions an extension row is never let run
+    /// (ExtensionList.allowsPilot against that registry: one Pilot lacks, Wi-Fi, power, a shell, …) get a line of their
+    /// own, so the page never says it runs one (T52 review).
     public static func permissions(_ permissions: Extension.Permissions, label: (String) -> String? = { _ in nil }) -> [Permission] {
         var lines: [Permission] = []
         if !permissions.network.isEmpty { lines.append(Permission(.network, "Connects to \(spokenList(permissions.network))")) }
         if permissions.clipboard { lines.append(Permission(.clipboard, "Reads and writes the clipboard")) }
         if !permissions.files.isEmpty { lines.append(Permission(.files, "Reads and writes \(spokenList(permissions.files))")) }
-        if !permissions.actions.isEmpty {
-            lines.append(Permission(.actions, "Runs Pilot actions: \(spokenList(permissions.actions.map { label($0) ?? $0 }))"))
+        let (runs, refused) = permissions.actions.reduce(into: ([String](), [String]())) { split, id in
+            if ExtensionList.allowsPilot(id, isRegistered: { label($0) != nil }) { split.0.append(id) } else { split.1.append(id) }
+        }
+        if !runs.isEmpty { lines.append(Permission(.actions, "Runs Pilot actions: \(spokenList(runs.map { label($0) ?? $0 }))")) }
+        if !refused.isEmpty {
+            lines.append(Permission(.actions, "Asks for Pilot actions it may not run: \(spokenList(refused.map { label($0) ?? $0 }))"))
         }
         return lines.isEmpty ? [Permission(.nothing, "Touches nothing it names")] : lines
     }

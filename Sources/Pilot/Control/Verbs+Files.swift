@@ -16,6 +16,10 @@ final class ControlFiles {
     /// Text in images and its reader's counts; reached on the first request, so a test sets its own before then.
     lazy var imageText = ImageTextSettings.shared
     lazy var imageTextCounts: () -> (read: Int, waiting: Int) = { (ImageTextReader.shared.read, ImageTextReader.shared.waiting) }
+    /// Pilot Files' writer and its undo journal, the one the window's Cmd+Z takes from too.
+    var ops = FileOps.shared
+    /// Every writing subcommand asks here first.
+    var gate = AllowPrompt.gate
 }
 
 extension SettingsSchema {
@@ -91,17 +95,34 @@ extension ControlVerbs {
         let filters = ["kind": "folders, documents, images, video, audio, code, archives, apps, or an extension (pdf)",
                        "in": "desktop, documents, downloads, icloud, or a folder (~/code)", "when": "today, week, month",
                        "from": "a word in where the file came from: the site (github.com), else the app that saved it (whatsapp)"]
-        register(ControlVerb("files", help: "Finds files by name as the menu's Files view does, best first (at most 20); with no words, the index's state.",
-                             usage: "pilot files <words…> [--kind <kind>] [--in <place>] [--when <when>] [--from <source>] [--hidden] | files",
+        register(ControlVerb("files", help: "Finds files by name as the menu's Files view does, best first (at most 20); with no words, the index's state. "
+                             + "copy, move, rename, trash and new-folder change files after Allow, and undo puts back the last of them (Pilot Files); "
+                             + "each is refused, changing nothing, when one item's undo would be too long to ask.",
+                             usage: "pilot files <words…> [--kind <kind>] [--in <place>] [--when <when>] [--from <source>] [--hidden] | files"
+                                 + " | files copy|move <item…> <folder> [--keep-both|--replace] | files rename <item> <name> | files trash <item…>"
+                                 + " | files new-folder <folder> [<name>] | files undo   (files -- <words…> searches for those words)",
                              flags: [.init("kind", help: filters["kind"]!), .init("in", help: filters["in"]!), .init("when", help: filters["when"]!),
                                      .init("from", help: filters["from"]!),
-                                     .init("hidden", help: "dot names and bundle insides too, as Show hidden and system files", takesValue: false)],
-                             schema: { .object(["filters": .object(filters.mapValues(JSONValue.string))]) },
-                             index: { .object(["filters": .array(filters.keys.sorted().map(JSONValue.string))]) },
+                                     .init("hidden", help: "dot names and bundle insides too, as Show hidden and system files", takesValue: false),
+                                     .init("keep-both", help: "copy, move: a name already in the folder gets a number added", takesValue: false),
+                                     .init("replace", help: "copy, move: the item already in the folder goes to the Trash first (undo brings it back)",
+                                           takesValue: false)],
+                             schema: { .object(["filters": .object(filters.mapValues(JSONValue.string)),
+                                                "operations": .object(Self.fileOperations.mapValues(JSONValue.string))]) },
+                             index: { .object(["filters": .array(filters.keys.sorted().map(JSONValue.string)),
+                                               "operations": .array(Self.fileOperations.keys.sorted().map(JSONValue.string))]) },
                              detail: { word in
                                  filters[word].map { "--\(word) (or \(word):<value> among the words): \($0)" }
+                                     ?? Self.fileOperations[word].map { "files \(word): \($0)" }
                              }) { call throws(ControlError) in
+            // An operation is the first word as typed; after -- it is a search word.
+            if let first = call.words.first, Self.fileOperations[first] != nil {
+                return try await Self.operate(first, call, files)
+            }
             let args = call.arguments()
+            if let refusal = ControlVerb.unknownFlag(args.flags, known: ["kind", "in", "when", "from", "hidden"], in: "pilot files <words…>") {
+                throw refusal
+            }
             guard !args.positional.isEmpty else { return await Self.indexState(files) }
             // The flags go through the words' own prefixes, as typing kind:pdf in the menu does.
             var typed = FileFilters.typed(args.positional.joined(separator: " "), home: files.home)
@@ -127,6 +148,81 @@ extension ControlVerbs {
                          "edited": file.edited.map { .string($0.ISO8601Format()) } ?? .null, "from": file.from.map(JSONValue.string) ?? .null])
             })])
         })
+    }
+
+    /// The subcommands that write (Pilot Files' FileOps, spec pilot-1.1 T6), each with what it does.
+    static let fileOperations: [String: String] = [
+        "copy": "pilot files copy <item…> <folder>: copies each item into the folder; a name already there is refused, "
+            + "and --keep-both or --replace answers it; refused, changing nothing, onto a volume with no Trash (its undo could never run)",
+        "move": "pilot files move <item…> <folder>: moves each item into the folder, a name already there as copy; across volumes "
+            + "it copies, checks the copy matches, then sends the original to the Trash, and is refused onto a volume with no Trash",
+        "rename": "pilot files rename <item> <name>: renames it in its folder; a name already taken is refused",
+        "trash": "pilot files trash <item…>: sends each item to the Trash; refused, changing nothing, when an item's undo would be "
+            + "too long to ask (a very deep path or long name), since Pilot runs only what it can undo",
+        "new-folder": "pilot files new-folder <folder> [<name>]: makes a folder in it, untitled folder when no name is given",
+        "undo": "pilot files undo: puts back the last copy, move, rename, trash or new folder, newest first; when its Allow "
+            + "would be too long to show whole, it puts back the newest steps that fit and the next undo does the rest. A step "
+            + "that can't run for now (its drive not mounted, a folder read-only) stays to try again; one whose item is gone or "
+            + "whose place is taken is dropped, and older undos go on",
+    ]
+
+    /// One writing subcommand: its words planned as FileOps plans them (paths resolved, items pinned), then Allow on that
+    /// exact plan, then FileOps runs it only while it still matches. The answer says where each item is now, where any
+    /// trashed one went, and what the next undo puts back.
+    private static func operate(_ name: String, _ call: ControlCall, _ files: ControlFiles) async throws(ControlError) -> JSONValue {
+        let args = ControlArguments(Array(call.words.dropFirst()), switches: call.switches)
+        let place = "pilot files \(name)", words = args.positional
+        let clashing = name == "copy" || name == "move"
+        if let refusal = ControlVerb.unknownFlag(args.flags, known: clashing ? ["keep-both", "replace"] : [], in: place) { throw refusal }
+        if args.has("keep-both"), args.has("replace") { throw ControlError(.badRequest, "\(place) takes --keep-both or --replace, not both") }
+        let clash: FileOps.Clash = args.has("keep-both") ? .keepBoth : args.has("replace") ? .replace : .ask
+        let cwd = call.cwd.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let url = { (path: String) in
+            URL(fileURLWithPath: (path as NSString).expandingTildeInPath, relativeTo: cwd).absoluteURL.standardizedFileURL
+        }
+        let usage = ControlError(.badRequest, "usage: \(fileOperations[name]!.prefix { $0 != ":" })")
+        let request: FileOps.Request
+        switch name {
+        case "copy", "move":
+            guard words.count >= 2 else { throw usage }
+            let sources = words.dropLast().map(url), folder = url(words.last!)
+            request = name == "move" ? .move(sources, into: folder, clash) : .copy(sources, into: folder, clash)
+        case "rename":
+            guard words.count == 2 else { throw usage }
+            request = .rename(url(words[0]), to: words[1])
+        case "trash":
+            guard !words.isEmpty else { throw usage }
+            request = .trash(words.map(url))
+        case "new-folder":
+            guard (1...2).contains(words.count) else { throw usage }
+            request = .newFolder(in: url(words[0]), named: words.count == 2 ? words[1] : nil)
+        default:
+            guard words.isEmpty else { throw usage }
+            request = .undo
+        }
+        let ops = files.ops
+        let plan = try await faulted { try await ops.plan(request) }
+        let done = try await files.gate.allow(plan.ask, peer: call.peer) { () throws(ControlError) in
+            try await faulted { try await ops.perform(plan) }
+        }
+        let shown = { (url: URL) in JSONValue.string(url.path(percentEncoded: false)) }
+        return .object(["done": .string(done.title), "items": .array(done.items.map(shown)), "trashed": .array(done.trashed.map(shown)),
+                        "nextUndo": await ops.nextUndo.map(JSONValue.string) ?? .null])
+    }
+
+    /// FileOps' refusal as the command's error: a clash is taken, a plan changed while Allow was up denied (as the gate's
+    /// own re-check words it), a cause for now (a drive not mounted, a read-only folder) not ready, the rest a bad value;
+    /// its words as they are.
+    private static func faulted<T>(_ body: () async throws -> T) async throws(ControlError) -> T {
+        do { return try await body() } catch let failure as FileOps.Failure {
+            let code: ControlError.Code = switch failure.kind {
+            case .clash: .taken
+            case .changed: .denied
+            case .unavailable: .notReady
+            default: .badValue
+            }
+            throw ControlError(code, failure.message)
+        } catch { throw ControlError(.badValue, error.localizedDescription) }
     }
 
     private static func indexState(_ files: ControlFiles) async -> JSONValue {

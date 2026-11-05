@@ -74,7 +74,7 @@ struct FoldersBlock: View {
             BlockRow {
                 label
                 SecureField("GIPHY key", text: $draft, prompt: Text(verbatim: "Paste your key").foregroundStyle(ink.muted))
-                    .labelsHidden().pilotField().onSubmit { save(draft) }
+                    .labelsHidden().pilotField().secureFieldTip().onSubmit { save(draft) }
                 Button("Save") { save(draft) }.buttonStyle(.pilotPrimary)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if replacing { Button("Cancel") { replacing = false; draft = "" }.buttonStyle(.pilot) }

@@ -40,12 +40,19 @@ public enum MenuItemSearch {
         }
     }
 
-    /// The menu bar's items four levels deep, less the Apple menu and macOS's Services submenu. An element that does not
-    /// answer is left out; the walk ends after `cap` items or once `expired`, keeping what it read, so a hung or huge app
-    /// costs the menu a bounded wait.
-    public static func walk<Element>(_ bar: [Element], read: (Element) -> Raw<Element>?, cap: Int = 1500,
+    /// What a walk leaves out, unread: an item by its title, whether it holds a submenu, its level (1, a menu bar item) and
+    /// whether it has a shortcut.
+    public typealias Skip = @Sendable (_ title: String, _ isMenu: Bool, _ level: Int, _ hasKey: Bool) -> Bool
+
+    /// macOS's Services submenu, left out of every walk.
+    public static let services: Skip = { title, isMenu, _, _ in isMenu && title == "Services" }
+
+    /// The menu bar's items four levels deep, less the Apple menu and what `skip` names (macOS's Services submenu). An
+    /// element that does not answer is left out; the walk ends after `cap` items or once `expired`, keeping what it read,
+    /// so a hung or huge app costs the menu a bounded wait.
+    public static func walk<Element>(_ bar: [Element], read: (Element) -> Raw<Element>?, cap: Int = 1500, skip: Skip = services,
                                      expired: () -> Bool) -> [MenuItemNode] {
-        walk(items: Array(bar.dropFirst()), level: 1, read: read, cap: cap, expired: expired)
+        walk(items: Array(bar.dropFirst()), level: 1, read: read, cap: cap, skip: skip, expired: expired)
     }
 
     /// One menu's items (File's: New, Open…), three levels deep as the bar's walk reads them; the top bar's App menus
@@ -55,7 +62,7 @@ public enum MenuItemSearch {
         walk(items: items, level: 2, read: read, cap: cap, expired: expired)
     }
 
-    private static func walk<Element>(items: [Element], level: Int, read: (Element) -> Raw<Element>?, cap: Int,
+    private static func walk<Element>(items: [Element], level: Int, read: (Element) -> Raw<Element>?, cap: Int, skip: Skip = services,
                                       expired: () -> Bool) -> [MenuItemNode] {
         let depth = 4
         var count = 0
@@ -66,8 +73,11 @@ public enum MenuItemSearch {
                 guard let raw = read(element) else { continue }
                 count += 1
                 let title = raw.title ?? ""
-                if title == "Services", !raw.children.isEmpty { continue }
-                out.append(MenuItemNode(title: title, enabled: raw.enabled, children: level < depth ? nodes(raw.children, level + 1) : [],
+                if skip(title, !raw.children.isEmpty, level, key(char: raw.char, modifiers: raw.modifiers, virtualKey: raw.virtualKey) != nil) { continue }
+                let children = level < depth ? nodes(raw.children, level + 1) : []
+                // A submenu whose every item was skipped or unread is no item to press.
+                if level < depth, !raw.children.isEmpty, children.isEmpty { continue }
+                out.append(MenuItemNode(title: title, enabled: raw.enabled, children: children,
                                         char: raw.char, modifiers: raw.modifiers, virtualKey: raw.virtualKey, mark: raw.mark))
             }
             return out

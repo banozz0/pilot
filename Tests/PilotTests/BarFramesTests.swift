@@ -52,7 +52,8 @@ struct BarFramesTests {
         let ids = (1...30).map { "ext-\($0)" }
         for id in ids { store.settings.set(extension: id, on: true, placement: .topBar) }
         let slots = store.settings.slots(in: .topBar, topBarOn: true)
-        #expect(slots.count == BarKind.allCases.count - 1, "every item but the Group, each its own slot")
+        #expect(slots.count == BarKind.allCases.count - 2 + ids.count, "every item but the Group and the old Extensions slot, each its own slot, each extension's too")
+        #expect(slots.suffix(ids.count).map(\.item) == ids.map(BarTrayItem.extension), "each new one last, in the order they joined")
 
         let read = BarItemsStore(defaults: defaults) { [:] }
         #expect(read.settings == store.settings)

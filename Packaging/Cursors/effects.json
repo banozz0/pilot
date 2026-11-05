@@ -1,0 +1,119 @@
+{
+ "version": 1,
+ "units": "points and milliseconds",
+ "edge": {
+  "extraWidth": 1.5,
+  "alpha": 0.35,
+  "note": "drawn under every stroke and dot, alpha times the stroke's own fade"
+ },
+ "trail": {
+  "default": "thread",
+  "thread": {
+   "lengthMs": 200,
+   "width": 1.5,
+   "alpha": 0.9
+  },
+  "comet": {
+   "lengthMs": 110,
+   "tailWidth": 0.8,
+   "headWidth": 6.8,
+   "alpha": 0.85
+  },
+  "dots": {
+   "spacing": 13,
+   "lifeMs": 300,
+   "radiusStart": 3.8,
+   "radiusEnd": 0.8,
+   "alpha": 0.75
+  },
+  "minSpan": 4
+ },
+ "ring": {
+  "radius": 17,
+  "stroke": 2,
+  "strokeAlpha": 0.9,
+  "fillAlpha": 0.14,
+  "clickSqueeze": 4,
+  "clickMs": 220,
+  "hideAfterStillMs": 3000,
+  "fadeMs": 150
+ },
+ "ripple": {
+  "radiusStart": 4,
+  "radiusEnd": 32,
+  "durationMs": 460,
+  "strokeStart": 2.5,
+  "strokeEnd": 1,
+  "alpha": 0.9,
+  "maxAlive": 6,
+  "reduceMotion": {
+   "radius": 18,
+   "alpha": 0.6,
+   "showMs": 200
+  }
+ },
+ "spotlight": {
+  "radius": 140,
+  "clearTo": 0.66,
+  "dim": "#000000",
+  "dimAlpha": 0.55,
+  "fadeMs": 150,
+  "action": "cursor.spotlight"
+ },
+ "busyFrames": {
+  "frames": 12,
+  "frameSeconds": 0.06
+ },
+ "themes": {
+  "orchid": {
+   "effect": "#A77BFF",
+   "rightClick": "#FF4F8B",
+   "edge": "#FFFFFF"
+  },
+  "lagoon": {
+   "effect": "#2BC4F0",
+   "rightClick": "#22C7A9",
+   "edge": "#000000"
+  },
+  "void": {
+   "effect": "#E8E8E8",
+   "rightClick": "#8D8D8D",
+   "edge": "#000000"
+  },
+  "phosphor": {
+   "effect": "#3BEA5C",
+   "rightClick": "#E0A46E",
+   "edge": "#000000"
+  },
+  "garnet": {
+   "effect": "#FF4775",
+   "rightClick": "#B58CFF",
+   "edge": "#FFFFFF"
+  },
+  "dusk": {
+   "effect": "#E3A48F",
+   "rightClick": "#9FB4C8",
+   "edge": "#FFFFFF"
+  },
+  "porcelain": {
+   "effect": "#1E5EF5",
+   "rightClick": "#8839EF",
+   "edge": "#FFFFFF"
+  },
+  "workshop": {
+   "effect": "#E04E0C",
+   "rightClick": "#3A6FD8",
+   "edge": "#FFFFFF"
+  },
+  "toybox-night": {
+   "effect": "#FFC933",
+   "rightClick": "#A98BFF",
+   "edge": "#000000"
+  },
+  "toybox": {
+   "effect": "#FFC933",
+   "rightClick": "#A98BFF",
+   "edge": "#000000"
+  }
+ }
+}

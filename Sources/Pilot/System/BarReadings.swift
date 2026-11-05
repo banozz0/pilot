@@ -38,6 +38,7 @@ final class BarReadings: ScreenPausing {
     @ObservationIgnored private let readBattery: () -> SystemStats.Battery?
     @ObservationIgnored private let readWatts: () -> Double?
     @ObservationIgnored private let readWiFi: () -> WiFiStatus?
+    @ObservationIgnored private let wifiPower: (Bool) async throws -> Void
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private var wifiTimer: Timer?
     @ObservationIgnored private var clockTimer: Timer?
@@ -53,7 +54,8 @@ final class BarReadings: ScreenPausing {
 
     init(sound: SetupSound, look: Look = .shared, menuApps: MenuApps = MenuApps(), appMenus: AppMenus = AppMenus(),
          readBattery: @escaping () -> SystemStats.Battery? = SystemReader.battery, readWatts: @escaping () -> Double? = { SMC.shared.power() },
-         readWiFi: @escaping () -> WiFiStatus? = { BarReadings.coreWLAN.status() }, clock: @escaping () -> Date = Date.init,
+         readWiFi: @escaping () -> WiFiStatus? = { BarReadings.coreWLAN.status() },
+         wifiPower: @escaping (Bool) async throws -> Void = { try await BarReadings.coreWLAN.setPower($0) }, clock: @escaping () -> Date = Date.init,
          watchStats: @escaping @MainActor (Set<MenuBarStats.Stat>) -> Task<Void, Never> = BarReadings.sampleStats,
          calendar: ClockCalendar = ClockCalendar(), extensionBar: ExtensionBar = .shared, statusLights: StatusLights = .shared,
          recorder: Recorder = .shared) {
@@ -68,12 +70,28 @@ final class BarReadings: ScreenPausing {
         self.readBattery = readBattery
         self.readWatts = readWatts
         self.readWiFi = readWiFi
+        self.wifiPower = wifiPower
         self.clock = clock
         self.watchStats = watchStats
         now = clock()
     }
 
     static let coreWLAN = CoreWLANSystem()
+
+    /// Wi-Fi read now, not at the next 30 s read: its item's menu shows the switch as it is.
+    func refreshWiFi() { wifi = readWiFi() }
+
+    /// Wi-Fi on or off from its item's menu or popover (T47), read back at once.
+    func setWiFi(_ on: Bool) async {
+        do {
+            try await wifiPower(on)
+            slog.notice("wi-fi \(on ? "on" : "off", privacy: .public), from the bar")
+        } catch {
+            slog.error("wi-fi: \(error.localizedDescription, privacy: .public)")
+            HUD.tip("macOS did not turn Wi-Fi \(on ? "on" : "off")", seconds: 2)
+        }
+        refreshWiFi()
+    }
 
     /// The bars' own pace: every 5 s, not Stats' 1 s (Sven, 2026-10-09). Each change redraws the item once per menu
     /// bar, and at 1 s those redraws were nearly all of Pilot's idle CPU. Home, Stats and a popover keep their own.

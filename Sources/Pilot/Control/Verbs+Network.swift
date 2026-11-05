@@ -2,11 +2,15 @@ import PilotCore
 
 /// What `pilot wifi` and `pilot bluetooth` reach (CLI W8): the Mac's Wi-Fi and paired Bluetooth devices, through the same
 /// calls as System › Wi-Fi and Bluetooth. Made on first use and kept, so a join finds the networks the last list scanned.
-/// The tests hand in the Setup fakes, so nothing turns Wi-Fi off, scans, joins, connects or raises a macOS prompt.
+/// The tests hand in the Setup fakes and their own gate, so nothing turns Wi-Fi off, scans, joins, connects or raises a
+/// macOS prompt or Pilot's Allow.
 @MainActor
 final class NetworkTools {
     lazy var wifi: WiFiSystem = CoreWLANSystem()
     lazy var bluetooth: BluetoothSystem = IOBluetoothSystem()
+    /// Every change the verbs make asks Allow first (T52): any program running as Sven reaches the socket, and Wi-Fi off,
+    /// a join or a dropped Bluetooth keyboard cuts him off. The reads never ask.
+    var gate = AllowPrompt.gate
 
     /// allowed, notAsked or denied.
     static func access(_ access: PrivacyAccess) -> JSONValue { .string("\(access)") }
@@ -27,15 +31,15 @@ extension ControlVerbs {
         let wifiIndex = JSONValue.array(wifiWords.map(JSONValue.string)), bluetoothIndex = JSONValue.array(bluetoothWords.map(JSONValue.string))
         let wifiDetail: [String: String] = [
             "status": "pilot wifi: on, the joined network, signal (dBm), rate (Mbit/s) and Location access; macOS hides the network's name without Location. present false: this Mac has no Wi-Fi.",
-            "on": "pilot wifi on|off: turns Wi-Fi on or off, as the page's switch, and answers the status after.",
+            "on": "pilot wifi on|off: asks Allow, then turns Wi-Fi on or off, as the page's switch, and answers the status after.",
             "networks": "pilot wifi networks [--fresh]: the networks nearby, strongest first, each name once: name, signal, secured, joined. --fresh scans the radio (Scan again); otherwise macOS's last results. Needs Wi-Fi on and Location access.",
-            "join": "pilot wifi join <name>: joins an open network, or a secured one this Mac knows (macOS uses its saved password), and answers the status after. A password is typed on the page, never sent through the command.",
+            "join": "pilot wifi join <name>: asks Allow, then joins an open network, or a secured one this Mac knows (macOS uses its saved password), and answers the status after. A password is typed on the page, never sent through the command.",
         ]
         let bluetoothDetail: [String: String] = [
-            "devices": "pilot bluetooth: Bluetooth access and, once allowed, the paired devices: address, name, connected.",
-            "connect": "pilot bluetooth connect|disconnect <address|name>: connects or disconnects a paired device, as its row's button, and answers its row after.",
+            "devices": "pilot bluetooth: Bluetooth access, whether Pilot can switch the radio, and, once allowed, the radio's power and the paired devices: address, name, connected.",
+            "connect": "pilot bluetooth connect|disconnect <address|name>: asks Allow, then connects or disconnects a paired device, as its row's button, and answers its row after.",
         ]
-        register(ControlVerb("wifi", help: "Wi-Fi's status, on or off, the networks nearby, and joining an open or known one.",
+        register(ControlVerb("wifi", help: "Wi-Fi's status, on or off, the networks nearby, and joining an open or known one; on, off and join ask Allow.",
                              usage: "pilot wifi [status | on | off | networks [--fresh] | join <name>]",
                              flags: [.init("fresh", help: "networks only: scan the radio instead of macOS's last results", takesValue: false)],
                              schema: {
@@ -53,17 +57,19 @@ extension ControlVerbs {
             if word != "networks", let refusal = ControlVerb.unknownFlag(args.flags, known: [], in: "pilot wifi \(word)") { throw refusal }
             switch word {
             case "status": return Self.wifiStatus(tools.wifi)
-            case "on", "off": return try await Self.wifiPower(word == "on", tools.wifi)
+            case "on", "off": return try await Self.wifiPower(word == "on", tools, peer: call.peer)
             case "networks": return try await Self.networks(tools.wifi, fresh: args.has("fresh"))
-            case "join": return try await Self.join(try args.word(1, "network name"), tools.wifi)
+            case "join": return try await Self.join(try args.word(1, "network name"), tools, peer: call.peer)
             case let other: throw ControlError(.badValue, "no wifi \(other); subcommands: \(wifiWords.joined(separator: ", "))")
             }
         })
-        register(ControlVerb("bluetooth", help: "Bluetooth access, the paired devices, and connecting or disconnecting one.",
+        register(ControlVerb("bluetooth", help: "Bluetooth access, the paired devices, and connecting or disconnecting one, which asks Allow.",
                              usage: "pilot bluetooth [devices | connect <address|name> | disconnect <address|name>]", flags: [],
                              schema: {
                                  .object(["subcommands": bluetoothIndex, "rowKey": .string("address"),
                                           "access": .string("allowed, notAsked or denied; devices are listed only once allowed"),
+                                          "canSwitch": .string("this macOS has the private call the System page's and the bar's Bluetooth switches use"),
+                                          "power": .string("the radio on, read only once allowed; absent with no Bluetooth controller"),
                                           "rows": .object(["address": .string("the device's Bluetooth address"), "name": .string("its name"),
                                                            "connected": .string("connected now")])])
                              },
@@ -73,7 +79,7 @@ extension ControlVerbs {
             switch args.positional.first ?? "devices" {
             case "devices": return await Self.bluetoothDevices(tools.bluetooth)
             case let word where word == "connect" || word == "disconnect":
-                return try await Self.connect(word == "connect", try args.word(1, "device address or name"), tools.bluetooth)
+                return try await Self.connect(word == "connect", try args.word(1, "device address or name"), tools, peer: call.peer)
             case let other: throw ControlError(.badValue, "no bluetooth \(other); subcommands: \(bluetoothWords.joined(separator: ", "))")
             }
         })
@@ -94,13 +100,16 @@ extension ControlVerbs {
         return status
     }
 
-    private static func wifiPower(_ on: Bool, _ wifi: WiFiSystem) async throws(ControlError) -> JSONValue {
+    private static func wifiPower(_ on: Bool, _ tools: NetworkTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let wifi = tools.wifi
         _ = try present(wifi)
-        do { try await wifi.setPower(on) } catch {
-            throw ControlError(.badValue, "macOS did not turn Wi-Fi \(on ? "on" : "off"): \(error.localizedDescription)")
+        return try await tools.gate.allow(ControlGate.Ask("Turn Wi-Fi \(on ? "on" : "off")", "pilot wifi \(on ? "on" : "off")"), peer: peer) { () throws(ControlError) in
+            do { try await wifi.setPower(on) } catch {
+                throw ControlError(.badValue, "macOS did not turn Wi-Fi \(on ? "on" : "off"): \(error.localizedDescription)")
+            }
+            slog.notice("wi-fi \(on ? "on" : "off", privacy: .public), from the pilot command")
+            return wifiStatus(wifi)
         }
-        slog.notice("wi-fi \(on ? "on" : "off", privacy: .public), from the pilot command")
-        return wifiStatus(wifi)
     }
 
     /// What the page's list and join need: Wi-Fi on and Location access. The status, or not-ready saying which is missing.
@@ -129,22 +138,31 @@ extension ControlVerbs {
 
     /// Joins `name` with no password: an open network, or a secured one macOS has saved. macOS's last scan is read first,
     /// as the page's list is; a name it lacks is scanned for by the join itself.
-    private static func join(_ name: String, _ wifi: WiFiSystem) async throws(ControlError) -> JSONValue {
+    private static func join(_ name: String, _ tools: NetworkTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let wifi = tools.wifi
         _ = try listable(wifi)
         let open = try await scan(wifi, fresh: false).first { $0.name == name }.map { !$0.secured } ?? false
-        do { try await wifi.join(name, password: nil) } catch {
-            let password = open ? "" : "; a secured network this Mac does not know needs its password on the page. \(NetworkTools.next(.wifi))"
-            throw ControlError(.badValue, "Did not join: \(error.localizedDescription)\(password)")
+        // An open network another program names could be anyone's, so the question says whether it is open.
+        let ask = ControlGate.Ask("Join Wi-Fi network", ControlGate.Ask.visible(name) + (open ? ", an open network" : ""))
+        return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+            do { try await wifi.join(name, password: nil) } catch {
+                let password = open ? "" : "; a secured network this Mac does not know needs its password on the page. \(NetworkTools.next(.wifi))"
+                throw ControlError(.badValue, "Did not join: \(error.localizedDescription)\(password)")
+            }
+            slog.notice("wi-fi join done, from the pilot command")
+            return wifiStatus(wifi)
         }
-        slog.notice("wi-fi join done, from the pilot command")
-        return wifiStatus(wifi)
     }
 
     private static func bluetoothDevices(_ bluetooth: BluetoothSystem) async -> JSONValue {
         let access = bluetooth.authorization()
-        var answer: [String: JSONValue] = ["access": NetworkTools.access(access)]
-        // Listing before access is given would raise macOS's prompt, so it waits for the page's Show paired devices.
-        if access == .allowed { answer["devices"] = .array(await bluetooth.paired().map(row)) }
+        var answer: [String: JSONValue] = ["access": NetworkTools.access(access), "canSwitch": .bool(bluetooth.canSetPower)]
+        // Listing or reading the power before access is given would raise macOS's prompt, so both wait for the page's Show
+        // paired devices.
+        if access == .allowed {
+            answer["devices"] = .array(await bluetooth.paired().map(row))
+            answer["power"] = bluetooth.powerOn().map(JSONValue.bool)
+        }
         return .object(answer)
     }
 
@@ -154,7 +172,8 @@ extension ControlVerbs {
 
     /// Connects or disconnects the paired device `target` names, by address or by a name only one has; one already so is
     /// answered as it is. Its row is read again after.
-    private static func connect(_ connecting: Bool, _ target: String, _ bluetooth: BluetoothSystem) async throws(ControlError) -> JSONValue {
+    private static func connect(_ connecting: Bool, _ target: String, _ tools: NetworkTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let bluetooth = tools.bluetooth
         let access = bluetooth.authorization()
         guard access == .allowed else {
             throw NetworkTools.blocked(access, notAsked: "Pilot has not asked for Bluetooth yet; Show paired devices on the page asks.",
@@ -162,12 +181,15 @@ extension ControlVerbs {
         }
         let device = try pick(target, await bluetooth.paired())
         guard device.connected != connecting else { return row(device) }
-        let ok = connecting ? await bluetooth.connect(device.address) : await bluetooth.disconnect(device.address)
-        slog.notice("bluetooth \(connecting ? "connect" : "disconnect", privacy: .public) \(ok ? "done" : "failed", privacy: .public), from the pilot command")
-        guard ok else {
-            throw ControlError(.badValue, connecting ? "Did not connect: it may be off, asleep or out of range" : "macOS did not disconnect it")
+        let ask = ControlGate.Ask("\(connecting ? "Connect" : "Disconnect") Bluetooth device", "\(ControlGate.Ask.visible(device.name)) (\(device.address))")
+        return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+            let ok = connecting ? await bluetooth.connect(device.address) : await bluetooth.disconnect(device.address)
+            slog.notice("bluetooth \(connecting ? "connect" : "disconnect", privacy: .public) \(ok ? "done" : "failed", privacy: .public), from the pilot command")
+            guard ok else {
+                throw ControlError(.badValue, connecting ? "Did not connect: it may be off, asleep or out of range" : "macOS did not disconnect it")
+            }
+            return row(await bluetooth.paired().first { $0.address == device.address } ?? device)
         }
-        return row(await bluetooth.paired().first { $0.address == device.address } ?? device)
     }
 
     private static func pick(_ target: String, _ devices: [BluetoothDevice]) throws(ControlError) -> BluetoothDevice {

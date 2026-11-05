@@ -170,7 +170,7 @@ final class CollectionsAITests {
         #expect(works["ok"] == .bool(true) && works["problem"] == nil && asked.isEmpty)
         #expect(server.last?.url?.host == "api.openai.com")
         #expect(await answer("ai", ["test", "--refresh"]).error?.code == .unknownFlag)
-        #expect(await answer("ai", ["ask"]).error?.code == .badValue)
+        #expect(await answer("ai", ["nosuch"]).error?.code == .badValue)
         #expect(await answer("ai", []).error?.code == .badRequest)
     }
 }

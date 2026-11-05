@@ -49,6 +49,8 @@ struct ClipboardSettingsView: View {
         .onChange(of: history.settings.order) { settings.order = history.settings.order }
         .onChange(of: settings) {
             if settings.keepCount < 1 { settings.keepCount = 1; return }
+            let minutes = ClipboardSettings.secretMinuteRange
+            if !minutes.contains(settings.secretMinutes) { settings.secretMinutes = min(max(settings.secretMinutes, minutes.lowerBound), minutes.upperBound); return }
             history.apply(settings)
         }
         .confirmationDialog("Clear clipboard history?", isPresented: $confirmingClear) {
@@ -86,6 +88,20 @@ struct ClipboardSettingsView: View {
             .labelsHidden().fixedSize()
         }
         BlockRow { Toggle("Save images", isOn: $settings.saveImages).toggleStyle(.pilotSwitchRow(info: "Off, a copied picture is left out of the history; text and files are still kept.")) }
+        // P65: a copied card number or key leaves the history on its own.
+        BlockRow {
+            Toggle("Expire card numbers and keys", isOn: $settings.expireSecrets)
+                .toggleStyle(.pilotSwitchRow(info: "A copied card number or API key leaves the history after the minutes below; a pinned one stays. Off, they are kept like any other copy."))
+        }
+        if settings.expireSecrets {
+            BlockRow {
+                Text("Expire them after")
+                Spacer()
+                TextField("Minutes", value: $settings.secretMinutes, format: .number).labelsHidden()
+                    .multilineTextAlignment(.trailing).font(ink.mono(12)).pilotField().frame(width: 50)
+                Text("minutes").foregroundStyle(ink.muted)
+            }
+        }
         // SPEC.md: a password manager's copies are never kept, so this is no switch.
         BlockRow {
             Text("Skip passwords")

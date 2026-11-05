@@ -460,7 +460,7 @@ private struct GalleryCard: View {
         .contentShape(.rect)
         .onHover { hovered = $0 }
         .onTapGesture { model.press(item) }
-        .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
+        .onDrag { RecordingHandout.provider(for: item.url) }  // a recording with its pointer drawn in (Q821)
         .contextMenu { ForEach(model.actions(item), id: \.title) { action in Button(action.title, action: action.run) } }
         .help(item.name)
         .accessibilityElement(children: .ignore)

@@ -34,6 +34,7 @@ final class CaptureMarkup {
         let s = grab.scale
         self.area = CGRect(x: pixels.minX / s, y: pixels.minY / s, width: pixels.width / s, height: pixels.height / s)
         model = EditorModel(image: cut, scale: s, accent: accent, dark: true)
+        model.snaps = true
     }
 
     private func local(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x - area.minX, y: p.y - area.minY) }
@@ -91,6 +92,14 @@ final class CaptureMarkup {
         ctx.clip(to: area)
         ctx.translateBy(x: area.minX, y: area.minY)
         MarkupRenderer.draw(shown(), in: ctx, image: model.image, scale: model.scale, size: model.size)
+        // The lines a drag snapped to (C7), across the area.
+        ctx.setStrokeColor(NSColor(Color(hex: EditorModel.guide)).cgColor)
+        ctx.setLineWidth(1)
+        for guide in model.guides {
+            let (a, b) = guide.segment(across: CGRect(origin: .zero, size: area.size))
+            ctx.move(to: a); ctx.addLine(to: b)
+        }
+        ctx.strokePath()
         ctx.restoreGState()
         accent.setStroke()
         let ring = NSBezierPath(rect: area.insetBy(dx: -0.5, dy: -0.5))

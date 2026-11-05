@@ -714,6 +714,7 @@ final class Engine {
         SelectionTools.register(into: &registry)
         AIChatPanel.register(into: &registry)
         TerminalDrop.register(into: &registry)
+        CursorEffects.register(into: &registry)
     }
 
     /// Posts a layer key plus one key into the HID stream, as a keyboard would, and lets the tap handle it.
@@ -773,8 +774,9 @@ final class Engine {
 
     /// pilot://run?action=windows.close[&app=Finder] runs one action by id, bypassing the tap. Picker actions work
     /// unbound: action=apps.open:com.apple.Notes, action=apps.web:https://chatgpt.com or a drive route,
-    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke or a non-web URL
-    /// also needs the link token (LinkToken), so a link on a web page cannot run one.
+    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke, a non-web URL, or
+    /// Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock (ControlGate.Ask.cutting) also needs the link token
+    /// (LinkToken), so a link on a web page cannot run one.
     func runAction(_ url: URL) {
         let value = url.queryValue
         guard let id = value("action"), let action = action(id) else { log.error("run: unknown action"); return }
@@ -810,14 +812,16 @@ final class Engine {
         tap.captureOnlyHyper = done != nil && onlyHyper
     }
 
-    /// The Binds board while its window is in front: every Hyper key comes to `pick` instead of running; nil stops.
+    /// The Binds board while its window is in front: every Hyper key comes to `pick`, a bound one running too (T48);
+    /// nil stops.
     func pickKeys(_ pick: ((Key) -> Void)?) { tap.picking = pick }
 
     /// pilot://bind?action=windows.close&key=x[&shift=1][&ctrl=1][&alt=1][&cmd=1] binds an action under Hyper, or with
     /// &plain=1 as a plain combo (alt=left, alt=right or alt=1 for either side, the same for the others), refused with a log line when
     /// another holds the key; &unbind=1 leaves it with no key, &reset=1 puts its default back, action=all&reset=1 resets
     /// every bind; pilot://bind?preset=pilot (or myBinds, or a preset's id) switches the preset. The Binds screen's changes, without hands.
-    /// Binding a command, a keystroke or a non-web URL to a key also needs the link token (LinkToken).
+    /// Binding a command, a keystroke, a non-web URL, or Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock
+    /// (ControlGate.Ask.cutting) to a key also needs the link token (LinkToken).
     func bind(_ url: URL) {
         let value = url.queryValue
         if let name = value("preset") {

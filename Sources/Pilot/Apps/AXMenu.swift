@@ -66,16 +66,20 @@ enum AXMenu {
     /// the path's first title (another app's status item in the top bar's Other apps).
     static func press(_ path: [String], under root: AXUIElement) -> Bool { item(path, under: root).map(press) ?? false }
 
-    /// The enabled item at a title path, nil until it is there; `pid`'s menu bar.
-    static func item(pid: pid_t, path: [String]) -> AXUIElement? { menuBar(pid).flatMap { item(path, under: $0) } }
+    /// The enabled item at a title path, nil until it is there; `pid`'s menu bar less its first item, the Apple menu, as
+    /// MenuItemSearch.walk leaves it out: its Sleep, Restart, Shut Down, Lock Screen and Log Out are in every app's bar, and
+    /// a drive.menu route from any link or program must never press them (T52 review).
+    static func item(pid: pid_t, path: [String]) -> AXUIElement? { menuBar(pid).flatMap { item(path, under: $0, skippingFirst: true) } }
 
     /// A path's title matches case aside, and may list the spellings the app's languages give it, "Empty Bin… | Empty
     /// Trash…" (P38: Sven's Apple apps run in English (UK), whose Finder says Bin and whose Chrome says "New tab").
-    static func item(_ path: [String], under root: AXUIElement) -> AXUIElement? {
+    /// `skippingFirst` leaves the root's first item out of the path's first step.
+    static func item(_ path: [String], under root: AXUIElement, skippingFirst: Bool = false) -> AXUIElement? {
         var element = root
-        for title in path {
+        for (step, title) in path.enumerated() {
             // A menu bar item and a submenu item hold their items inside one AXMenu child.
-            let items = children(of: element).flatMap { string($0, kAXRoleAttribute) == kAXMenuRole ? children(of: $0) : [$0] }
+            let level = children(of: element).dropFirst(skippingFirst && step == 0 ? 1 : 0)
+            let items = level.flatMap { string($0, kAXRoleAttribute) == kAXMenuRole ? children(of: $0) : [$0] }
             let spellings = title.components(separatedBy: " | ")
             guard let item = items.first(where: { e in
                 string(e, kAXTitleAttribute).map { shown in spellings.contains { $0.caseInsensitiveCompare(shown) == .orderedSame } } == true
@@ -84,6 +88,9 @@ enum AXMenu {
         }
         return bool(element, kAXEnabledAttribute) ? element : nil
     }
+
+    /// Whether the app's menu bar answers: a launching app has none yet.
+    static func hasMenuBar(pid: pid_t) -> Bool { menuBar(pid) != nil }
 
     /// A hung app answers no faster than this, so a press never waits AX's default 6 s. Never Pilot's own: Accessibility
     /// into its own process runs AppKit's NSMenu on the asking thread, off the main one, and crashed Pilot (build 23).
@@ -96,9 +103,10 @@ enum AXMenu {
         return (bar as! AXUIElement)
     }
 
+    /// From the menu bar (depth 0) the walk leaves out the Apple menu, as item(pid:path:) does.
     private static func find(in element: AXUIElement, depth: Int = 0, until deadline: Date, where match: (AXUIElement) -> Bool) -> AXUIElement? {
         guard depth < 5 else { return nil }
-        for child in children(of: element) {
+        for child in children(of: element).dropFirst(depth == 0 ? 1 : 0) {
             guard Date.now < deadline else { return nil }
             if match(child) { return child }
             if let found = find(in: child, depth: depth + 1, until: deadline, where: match) { return found }
@@ -140,14 +148,41 @@ enum AXMenuItems {
          kAXMenuItemCmdVirtualKeyAttribute, kAXMenuItemMarkCharAttribute] as CFArray
     }
 
-    static func read(pid: pid_t, budget: TimeInterval = 1.5) -> [MenuItemNode] {
+    static func read(pid: pid_t, budget: TimeInterval = 1.5, skip: MenuItemSearch.Skip = MenuItemSearch.services) -> [MenuItemNode] {
         // Never Pilot's own, as AXMenu.menuBar.
         guard pid != getpid() else { return [] }
         let app = AXUIElementCreateApplication(pid), deadline = Date(timeIntervalSinceNow: budget)
         AXUIElementSetMessagingTimeout(app, 0.5)
         var bar: AnyObject?
         guard AXUIElementCopyAttributeValue(app, kAXMenuBarAttribute as CFString, &bar) == .success, let bar else { return [] }
-        return MenuItemSearch.walk(children(bar as! AXUIElement), read: raw, expired: { Date() > deadline })
+        return MenuItemSearch.walk(children(bar as! AXUIElement), read: raw, skip: skip, expired: { Date() > deadline })
+    }
+
+    /// The titles of an app's menu bar items, the Apple menu's included: one ask per item, each waiting at most 0.5 s.
+    static func menuTitles(pid: pid_t) -> [String] {
+        guard pid != getpid() else { return [] }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.5)
+        var bar: AnyObject?
+        guard AXUIElementCopyAttributeValue(app, kAXMenuBarAttribute as CFString, &bar) == .success, let bar else { return [] }
+        return children(bar as! AXUIElement).compactMap { item in
+            var title: AnyObject?
+            return AXUIElementCopyAttributeValue(item, kAXTitleAttribute as CFString, &title) == .success ? title as? String : nil
+        }
+    }
+
+    /// The titles of an app's windows, for a saved menu bar to leave out the items naming them (SavedMenu.skip); none for
+    /// Pilot's own.
+    static func windowTitles(pid: pid_t) -> [String] {
+        guard pid != getpid() else { return [] }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.5)
+        var windows: AnyObject?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windows) == .success else { return [] }
+        return ((windows as? [AXUIElement]) ?? []).compactMap { window in
+            var title: AnyObject?
+            return AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) == .success ? title as? String : nil
+        }
     }
 
     /// One menu bar item's menu (the top bar's App menus), read off the main thread within `budget`.

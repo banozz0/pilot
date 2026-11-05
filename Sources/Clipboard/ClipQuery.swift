@@ -87,9 +87,15 @@ public struct ClipOrder: Equatable, Sendable {
 /// What the panel's search means. Words match the text (a file copy's text is its paths, an image's the text read from it) in any order, ignoring
 /// case; `type:<kind>` (all, text, image, file, link, colour or color, email, pinned), `app:<part of the app's name or bundle id>`,
 /// `#<tag>` and `is:pinned` filter, `type:snippet` lists the snippets instead. An unknown token is searched as a word.
+/// Plain words that describe a copy are hints (P64): "link from monday", "hex from figma". A copy passes a hint when it
+/// fits it or holds its words as text, as before, and copies that fit more hints list first.
 public struct ClipQuery: Equatable, Sendable {
-    /// The words searched as text, which the preview lights.
+    /// The words searched as text, which the preview lights: a hint's words too, which a copy that does not fit it
+    /// must hold.
     public private(set) var words: [String] = []
+    /// The words every copy must hold as text: `words` without the hints'.
+    private var textWords: [String] = []
+    private(set) var hints: [Hint] = []
     /// The Snippets tab, or type:snippet typed: the panel lists the saved snippets, which `matches` searches.
     public private(set) var snippets = false
     var kinds: Set<ClipKind>?
@@ -102,7 +108,7 @@ public struct ClipQuery: Equatable, Sendable {
 
     var order: ClipOrder
 
-    public init(_ typed: String, filter: ClipFilter = .all, order: ClipOrder = ClipOrder()) {
+    public init(_ typed: String, filter: ClipFilter = .all, order: ClipOrder = ClipOrder(), now: Date = Date()) {
         self.order = order
         narrow(by: filter)
         for word in typed.split(whereSeparator: \.isWhitespace).map(String.init) {
@@ -120,6 +126,7 @@ public struct ClipQuery: Equatable, Sendable {
                 words.append(word)
             }
         }
+        (hints, textWords) = Self.read(words, now: now)
     }
 
     /// A kind tab, or its name after type:, narrows to its kinds; Pinned to the pins; All not at all.
@@ -142,10 +149,10 @@ public struct ClipQuery: Equatable, Sendable {
     var condition: (sql: String, values: [String]) {
         // A word matches the text, the name the copy was given (card agent-bo-95422784) or an image's text (card
         // agent-bo-95423070), searched as one string split by new lines, which no typed word holds.
-        var parts = words.map { _ in
+        var parts = textWords.map { _ in
             "instr(lower(text || char(10) || coalesce(title, '') || char(10) || coalesce(recognised, '')), lower(?)) > 0"
         }
-        var values = words
+        var values = textWords
         if pinnedOnly { parts.append("pinned = 1") }
         // #name is a tag when one has that name, else the text it is, so a copied #7aa2f7 is still found.
         for tag in tagNames {
@@ -162,8 +169,93 @@ public struct ClipQuery: Equatable, Sendable {
     func admits(_ clip: StoredClip, appName: (String) -> String?) -> Bool {
         guard kinds?.contains(clip.kind) ?? true else { return false }
         guard let app else { return true }
+        return Self.copied(clip, from: app, appName: appName)
+    }
+
+    private static func copied(_ clip: StoredClip, from app: String, appName: (String) -> String?) -> Bool {
         guard let id = clip.sourceApp else { return false }
         return id.localizedCaseInsensitiveContains(app) || appName(id)?.localizedCaseInsensitiveContains(app) == true
+    }
+
+    /// The copies the store found that `admits` passes and that pass every hint, those fitting more hints first, each
+    /// group in the store's order.
+    func ranked(_ clips: [StoredClip], appName: (String) -> String?) -> [StoredClip] {
+        guard !hints.isEmpty else { return clips.filter { admits($0, appName: appName) } }
+        // One list per number of hints missed, each in the store's order.
+        var byMisses = Array(repeating: [StoredClip](), count: hints.count + 1)
+        rows: for clip in clips where admits(clip, appName: appName) {
+            var misses = 0, searched: String?
+            for hint in hints where !hint.fits(clip, appName: appName) {
+                // As `condition` searches: the text, the name and an image's text; lowered once, only on a miss.
+                searched = searched ?? [clip.text, clip.customTitle ?? "", clip.recognised ?? ""].joined(separator: "\n").lowercased()
+                guard hint.words.allSatisfy(searched!.contains) else { continue rows }
+                misses += 1
+            }
+            byMisses[misses].append(clip)
+        }
+        return byMisses.flatMap { $0 }
+    }
+
+    /// A kind, a day or an app read from plain words, and the words it was read from.
+    struct Hint: Equatable, Sendable {
+        enum Fit: Equatable, Sendable { case kind(ClipKind), day(DateInterval), app(String) }
+        var fit: Fit
+        /// Lowered, as a copy's text is when it is checked.
+        var words: [String]
+
+        func fits(_ clip: StoredClip, appName: (String) -> String?) -> Bool {
+            switch fit {
+            case .kind(let kind): clip.kind == kind
+            case .day(let day): day.start <= clip.copiedAt && clip.copiedAt < day.end
+            case .app(let app): ClipQuery.copied(clip, from: app, appName: appName)
+            }
+        }
+    }
+
+    private static let kindWords: [String: ClipKind] = {
+        let names: [ClipKind: [String]] = [.link: ["link", "links", "url", "urls"], .colour: ["hex", "colour", "colours", "color", "colors"],
+                                           .image: ["image", "images"],
+                                           .file: ["file", "files"], .email: ["email", "emails"]]
+        return Dictionary(uniqueKeysWithValues: names.flatMap { kind, words in words.map { ($0, kind) } })
+    }()
+
+    // Made once: the panel reads the query again on every keystroke. Dates are read on the Mac, no network.
+    nonisolated(unsafe) private static let dates = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
+
+    /// The hints in the plain words, and the words left to match as text. A day is the first date phrase with a letter
+    /// in it ("monday", "from yesterday"; a searched "10:30" stays text), the whole calendar day, a day still ahead
+    /// stepped back a week at a time, as a clipboard holds only the past. Then "from <word>" is an app, and a kind word
+    /// ("link", "hex") a kind.
+    static func read(_ words: [String], now: Date, calendar: Calendar = .current) -> (hints: [Hint], text: [String]) {
+        guard !words.isEmpty else { return ([], []) }
+        var hints: [Hint] = [], used = Set<Int>()
+        let phrase = words.joined(separator: " ") as NSString
+        if let match = dates?.firstMatch(in: phrase as String, range: NSRange(location: 0, length: phrase.length)), let date = match.date,
+           phrase.substring(with: match.range).contains(where: \.isLetter) {
+            var start = 0, inside: [Int] = []
+            for (index, word) in words.enumerated() {
+                let range = NSRange(location: start, length: (word as NSString).length)
+                if NSIntersectionRange(range, match.range).length > 0 { inside.append(index) }
+                start += range.length + 1
+            }
+            var day = calendar.startOfDay(for: date)
+            while day > now, let earlier = calendar.date(byAdding: .day, value: -7, to: day) { day = earlier }
+            if let interval = calendar.dateInterval(of: .day, for: day) {
+                hints.append(Hint(fit: .day(interval), words: inside.map { words[$0].lowercased() }))
+                used.formUnion(inside)
+            }
+        }
+        for (index, word) in words.enumerated() where !used.contains(index) {
+            let lowered = word.lowercased()
+            if lowered == "from", words.indices.contains(index + 1), !used.contains(index + 1) {
+                hints.append(Hint(fit: .app(words[index + 1]), words: [lowered, words[index + 1].lowercased()]))
+                used.formUnion([index, index + 1])
+            } else if let kind = kindWords[lowered] {
+                hints.append(Hint(fit: .kind(kind), words: [lowered]))
+                used.insert(index)
+            }
+        }
+        return (hints, words.indices.filter { !used.contains($0) }.map { words[$0] })
     }
 
     /// The name an installed app shows in Finder, from its bundle id; nil when it is not installed.

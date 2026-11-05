@@ -8,6 +8,11 @@ import PilotCore
 final class ControlAI {
     var gate = AllowPrompt.gate
     lazy var settings = AISettings.shared
+    /// The AI chat `ai ask` sends to (P30), never shown by it.
+    lazy var chat = AIChatPanel.shared
+    /// The chat turn `ai ask` sent, by its index in the chat's turns and its text, while the command waits on its answer:
+    /// the one turn `ai ask --stop` may stop.
+    var asking: (turn: Int, text: String)?
     /// The visible terminal Claude Code's `auth login` runs in, as the page's Sign in runs it.
     var run: InstallModule.Run = InstallModule.visibleRun
 }

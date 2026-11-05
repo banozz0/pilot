@@ -18,7 +18,7 @@ extension SharedLook {
 struct LineMenuRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Line's root is Classic's at 431 wide inside 650; a search, a branch and a list are 750 and fit their rows")
+    @Test("Line's root is Classic's at 431 wide, as tall as its screen holds; a search, a branch and a list are 750 and fit their rows")
     func sizes() async throws {
         let states = try await Dictionary(uniqueKeysWithValues: Self.states() + Self.speedStates())
         let root = try #require(states["L1-root"])
@@ -28,6 +28,18 @@ struct LineMenuRenders {
         // Classic's root at Line's 36 pt rows: the branches under their rule heading, no recents (Sven 2026-10-20).
         let drawn = MenuPanelSize.lineChrome + CGFloat(root.nav.rows.count) * MenuPanelSize.lineRow + MenuPanelSize.classicRootHeading
         #expect(drawn <= root.instrumentSize.height + 0.5, "\(drawn) > \(root.instrumentSize.height)")
+        // Every Go to row shows on Sven's screen (T36); an 800 pt screen caps the root at its room, the rest scrolls.
+        let roomy = try #require(states["L1d-root-1440"]), small = try #require(states["L1e-root-800"])
+        #expect(roomy.nav.rows.count == 17, "\(roomy.nav.rows.map(\.title))")
+        let all = MenuPanelSize.lineChrome + 17 * MenuPanelSize.lineRow + MenuPanelSize.classicRootHeading
+        #expect(roomy.instrumentSize.height == all && all > MenuPanelSize.classicTallest, "\(roomy.instrumentSize.height) vs \(all)")
+        let smallRoom = try #require(small.room)
+        #expect(small.instrumentSize.height == smallRoom && smallRoom < all && smallRoom < 800 - 33, "\(small.instrumentSize.height)")
+        // Typing shrinks it back to the search's rows.
+        let typed = MenuModel(nav: { var nav = roomy.nav; nav.query = "qr"; return nav }())
+        typed.layout = .line
+        typed.room = roomy.room
+        #expect(!typed.atRoot && typed.instrumentSize.height < all, "\(typed.instrumentSize.height)")
         for (name, model) in states where !model.atRoot {
             #expect(model.instrumentSize.width == MenuPanelSize.width, "\(name)")
             #expect(model.instrumentSize.height <= MenuPanelSize.classicTallest, "\(name)")
@@ -53,6 +65,15 @@ struct LineMenuRenders {
         let activity = try #require(states["L27-activity"])
         #expect(activity.nav.rows.map(\.section) == ["Apps", "Apps", "Apps", "Background", "Background", "Background"])
         #expect(activity.nav.rows.first?.title == "Google Chrome" && activity.headings.count == 2)
+        // T42: "generate password" finds Password generator too, a typo away, beside Generate a password; cb's row alone
+        // searching the words, chat's question alone, kill's words searching Activity.
+        let bw = try #require(states["L31-bw-generate-password"]).nav.rows.map(\.title)
+        #expect(bw.contains("Generate a password") && bw.contains("Password generator"), "\(bw)")
+        let cb = try #require(states["L33-cb-invoice"]).nav.rows
+        #expect(cb.count == 1 && cb[0].target == .action("apps.clipboard") && cb[0].subtitle == "“invoice”", "\(cb.map(\.title))")
+        #expect(try #require(states["L34-chat-whats-up"]).nav.rows.map(\.target) == [.ask("what's up")])
+        let kill = try #require(states["L35-kill-chrome"]).nav
+        #expect(kill.branch == .activity && kill.query == "chrome" && kill.rows.first?.title == "Google Chrome", "\(kill.rows.map(\.title))")
         // The speed test takes the list's place at its own height, whatever the branch lists (P41).
         for name in ["L20-speed-running", "L21-speed-result", "L22-speed-failed", "L23-speed-root"] {
             let model = try #require(states[name])
@@ -61,17 +82,18 @@ struct LineMenuRenders {
         }
     }
 
-    @Test("An answer is a card in the list's top slot with room for it, its Ask row under it; Cmd+K lists the row's actions")
+    @Test("An answer is a card in the list's top slot with room for it, its Ask row under it (tr's alone, T40); Cmd+K lists the row's actions")
     func cards() throws {
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
         for name in ["L3-calculator", "L4-colour", "L5-translate"] {
             let model = try #require(states[name])
-            let rows = model.nav.rows
-            try #require(rows.count >= 2, "\(name): \(rows.map(\.title))")
+            let rows = model.nav.rows, alone = name == "L5-translate"
+            try #require(rows.count >= (alone ? 1 : 2), "\(name): \(rows.map(\.title))")
             #expect(model.answerCard(rows[0], at: 0) != nil, "\(name)")
-            #expect(rows[1].title == "Ask AI", "\(name)")
+            // tr's answer is the whole list, no Ask or search rows (T40).
+            #expect(alone ? rows.allSatisfy(\.isAnswer) : rows[1].title == "Ask AI", "\(name): \(rows.map(\.title))")
             let card: CGFloat = name == "L4-colour" ? 118 + 8 + 16 + 24 : 158
-            #expect(MenuPanelSize.lineChrome + MenuPanelSize.instrumentHeading + card + 10 + MenuPanelSize.lineRow <= model.instrumentSize.height, "\(name)")
+            #expect(MenuPanelSize.lineChrome + MenuPanelSize.instrumentHeading + card + 10 + (alone ? 0 : MenuPanelSize.lineRow) <= model.instrumentSize.height, "\(name)")
         }
         let actions = try #require(states["L6-actions"])
         #expect(actions.nav.actions?.visible.first?.title == "Open")
@@ -87,7 +109,7 @@ struct LineMenuRenders {
         #expect(line.type.row == tokens.type.row && line.type.caption == tokens.type.caption)
     }
 
-    @Test("Line renders in Lagoon and Porcelain, frames L1–L28, and Stats' screen in Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Line renders in Lagoon and Porcelain, frames L1–L35, and Stats' screen in Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -184,6 +206,16 @@ struct LineMenuRenders {
         var extras = MenuRoot(extras: ["files", "notes", "stats"])
         if let files = extras.rows().first(where: { $0.extra?.id == "files" }) { extras.move(files, to: 0) }
         states.append(("L1c-root-extras", model(MenuNavigator(entries: built, root: extras))))
+        // Sven's 17 Go to rows (T36, 2026-11-04): the root grows to show them all on his 1440 pt screen, and scrolls past
+        // an 800 pt one's height. Each screen's visible height is less its menu bar (33 pt).
+        let tall = MenuRoot(extras: ["files", "notes", "activity", "stats", "qr", "reminders", "translate"])
+        for (name, visible) in [("L1d-root-1440", 1440.0 - 33), ("L1e-root-800", 800.0 - 33)] {
+            let m = model(MenuNavigator(entries: built, root: tall))
+            let panel = PilotMenu.makePanel(m)
+            m.room = PilotMenu.room(visible: visible, margins: (panel as? KeyPanel)?.margins ?? NSEdgeInsetsZero)
+            panel.close()
+            states.append((name, m))
+        }
 
         var notes = MenuNavigator(entries: built)
         notes.query = "notes"
@@ -251,6 +283,35 @@ struct LineMenuRenders {
         var categories = ChipMenu.emojiCategories(EmojiGrid.categories(in: emoji), mostUsed: 20, picked: nil)
         categories.select(4)
         states.append(("L14-emoji-categories", grid("", chip: categories)))
+        // T37: the emoji picker's alias and a word at the root lists the emoji it finds, best first.
+        var em = MenuNavigator(entries: built, aliases: Aliases(Alias.starters))
+        em.query = "em funny"
+        em.provide(.emoji, EmojiSearch.entries(for: try #require(em.emojiWords), in: emoji))
+        states.append(("L29-em-funny", model(em)))
+        // T40: an inline answer's word, its answers alone, the translation first though the quicklink's answer came first.
+        var tr = MenuNavigator(entries: built + MenuEntries.quicklinks(Quicklink.shipped))
+        tr.query = "tr hello"
+        tr.provide(.answer, RootAnswers.entries(for: tr.query, now: .now, links: Quicklink.shipped))
+        tr.provide(.answer, home: .translate, [MenuEntry(title: "hola", target: .copy("hola"), home: .translate,
+                                                         detail: "English → Spanish · Return copies", isAnswer: true)])
+        states.append(("L30-tr-hello", model(tr)))
+        // T40: an app's alias and words, that app's actions alone, best first; its menu bar read once the words are typed.
+        func node(_ menu: String, _ items: [String]) -> MenuItemNode {
+            MenuItemNode(title: menu, enabled: true, children: items.map { MenuItemNode(title: $0, enabled: true) })
+        }
+        let aliased = Aliases(Alias.starters + [Alias(key: "app:com.bitwarden.desktop", alias: "bw", title: "Bitwarden"),
+                                                Alias(key: "app:com.madda.ghostex.host", alias: "gx", title: "Ghostex")])
+        for (name, query, bundle, app, bar) in [
+            ("L31-bw-generate-password", "bw generate password", "com.bitwarden.desktop", "Bitwarden",
+             [node("File", ["New item", "New folder"]), node("View", ["Search vault", "Password generator"]), node("Account", ["Lock all vaults"])]),
+            ("L32-gx-new-terminal", "gx new terminal", "com.madda.ghostex.host", "Ghostex",
+             [node("Shell", ["New Terminal Session", "New Terminal Tab", "Split Right", "Close Terminal"]), node("Window", ["New Window", "Minimize"])]),
+        ] {
+            var nav = MenuNavigator(entries: built, aliases: aliased)
+            nav.query = query
+            nav.provide(.menuItem, MenuItemSearch.entries(bar, bundle: bundle, app: app))
+            states.append((name, model(nav)))
+        }
 
         // P40: Translate's line, its panes before text and with a translation, and Tab to To with its list filtered.
         func translating(_ text: String?, chip: ChipMenu? = nil) -> MenuModel {
@@ -273,11 +334,15 @@ struct LineMenuRenders {
         languages.query = "ja"
         states.append(("L17-translate-to", translating("¿Podemos mover la revisión de diseño al jueves a las 3?", chip: languages)))
 
-        // P38: a command's words list the apps' commands; an app's name lists its own under it.
+        // P38: a command's words list the apps' commands; an app's name lists its own right under it, above Ask AI (Q831).
         let commands = try Self.withCommands(built)
         for (name, query) in [("L18-commands", "today"), ("L19-app-commands", "music")] {
             var nav = MenuNavigator(entries: commands)
             nav.query = query
+            if name == "L19-app-commands" {
+                let titles = nav.rows.map(\.title), ask = titles.firstIndex(of: "Ask AI") ?? titles.count
+                #expect(titles.first == "Music" && titles[1..<ask].contains("Music: Favourite This Song"), "\(titles)")
+            }
             states.append((name, model(nav)))
         }
 
@@ -324,6 +389,21 @@ struct LineMenuRenders {
         activityModel.activityRead = true
         states.append(("L27-activity", activityModel))
         states.append(("L28-stats", model(MenuNavigator(entries: built, branch: .stats))))
+        // T42: an action's alias and words acts on them: clipboard history's row searching them, the question alone, and
+        // Kill a process's alias opening Activity searching them, as the panel moves it there.
+        let actioned = Aliases(Alias.starters + [Alias(key: "action:system.killProcess", alias: "kill", title: "Kill a process"),
+                                                 Alias(key: "action:ai.chat", alias: "chat", title: "AI chat")])
+        for (name, query) in [("L33-cb-invoice", "cb invoice"), ("L34-chat-whats-up", "chat what's up"), ("L35-kill-chrome", "kill chrome")] {
+            var nav = MenuNavigator(entries: built, aliases: actioned)
+            nav.query = query
+            if let spot = nav.scopedBranch {
+                nav.go(to: spot)
+                nav.provide(.action, home: .activity, Activity.screenEntries(snapshot))
+            }
+            let shown = model(nav)
+            shown.activityRead = true
+            states.append((name, shown))
+        }
         return states
     }
 

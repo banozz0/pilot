@@ -23,7 +23,11 @@ final class NotesModel {
     @ObservationIgnored var pasteboard = NSPasteboard.general
     @ObservationIgnored var tip: @MainActor (String) -> Void = { HUD.tip($0) }
 
-    private(set) var notes: [Note] = []
+    private(set) var notes: [Note] = [] {
+        didSet { onNotes?(notes) }
+    }
+    /// Told every change to `notes`: the shared model's reminders follow its saves (NoteReminders, P66).
+    @ObservationIgnored var onNotes: (@MainActor ([Note]) -> Void)?
     /// Kept in the defaults, so the Notes page opens on it after Pilot quits and starts again (the panel opens on Scratch).
     private(set) var current = NoteStore.scratch {
         didSet { defaults.set(current, forKey: Self.lastKey) }
@@ -513,6 +517,7 @@ final class NotesPanel {
         model?.flush()
         welcomeOnce()
         let model = NotesModel(store: NoteStore(folder: folder))
+        model.onNotes = { NoteReminders.shared.sync($0) }
         self.model = model
         dropPanel()
         return model

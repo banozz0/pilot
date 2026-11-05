@@ -91,7 +91,7 @@ struct ExtensionsPageViewTests {
         let kinds = settings.rows.flatMap(\.fields).map { "\($0.preference.kind)".prefix { $0 != "(" } }
         #expect(Set(kinds) == ["text", "password", "checkbox", "dropdown", "app", "file", "folder"])
         #expect(settings.rows.flatMap(\.fields).filter(\.isMissing).map(\.id) == ["vault"])
-        #expect(settings.rows[0].permissions.map(\.text) == ["Reads and writes ~/Notes", "Runs Pilot actions: Lock screen"])
+        #expect(settings.rows[0].permissions.map(\.text) == ["Reads and writes ~/Notes", "Asks for Pilot actions it may not run: Lock screen"])
     }
 
     @Test("Uninstall moves the extension's folder to the Trash, keeps its settings, reads the folder again and says so (story 158)")

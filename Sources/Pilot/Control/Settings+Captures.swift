@@ -44,6 +44,14 @@ extension SettingsSchema {
             .choice("capture.thumbnailPlace", "Where the thumbnail shows", page: "captures", CaptureSettings.ThumbnailPlace.allCases,
                     standard: CaptureSettings.default.thumbnailPlace,
                     read: { store.settings.thumbnailPlace }, write: { store.settings.thumbnailPlace = $0 }),
+            .text("capture.everyCaptureLook", "Every capture's copy framed in this look (empty for none)", page: "captures", standard: "",
+                  read: { BackdropLibrary.shared.everyCapture?.name ?? "" }, write: { name throws(ControlError) in
+                      if name.trimmingCharacters(in: .whitespaces).isEmpty { return BackdropLibrary.shared.setEveryCapture(nil) }
+                      guard let look = BackdropPreset.find(name, in: BackdropLibrary.shared.presets) else {
+                          throw ControlError(.badValue, "no look is called \(name): " + BackdropLibrary.shared.looks.map(\.name).joined(separator: ", "))
+                      }
+                      BackdropLibrary.shared.setEveryCapture(look)
+                  }),
             .choice("capture.historyCap", "History size cap, in GB (0 keeps everything)", page: "captures", CaptureHistory.caps.map(String.init),
                     standard: "0", read: { String(CaptureHistoryStore.shared.capGB) },
                     write: { CaptureHistoryStore.shared.capGB = Int($0) ?? CaptureHistoryStore.shared.capGB }),

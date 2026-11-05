@@ -25,9 +25,9 @@ enum HomeVariant {
     }
 
     /// The page's usage cards, cut to their meters: each top-level section holding a meter and no list (AI usage's
-    /// Claude and Codex), so Home shows just the usage lines, each under its card's head; the status rows, links and
-    /// buttons stay on the page (Sven on 1.0.2: "ai usage should show just usage lines"). A section with a list (Now
-    /// playing's track) is no usage card.
+    /// Claude and Codex), so Home shows just the usage lines, each under its card's head, at every size; the status rows,
+    /// links and buttons stay on the page (Sven on 1.0.2: "ai usage should show just usage lines"). A section with a list
+    /// (Now playing's track) is no usage card.
     static func usage(_ blocks: [Extension.Block]) -> [Extension.Block] {
         blocks.compactMap { block in
             guard case .section(let title, let subtitle, let aside, let asideNote, let inner, let icon, let help) = block,
@@ -56,6 +56,42 @@ enum HomeVariant {
         guard usage(blocks).isEmpty else { return nil }
         for block in flattened(blocks) { if case .list(_, let items, _) = block { return items } }
         return nil
+    }
+
+    /// What a block of usage cards can show, most first (T34, Sven 2026-11-04: "ai usage in home shows alot of free space
+    /// rather then more usage bars"): every card in full, then every card small (the bar popover's rows), then small
+    /// without notes, then each card's first meters down to one; only then fewer cards. Every provider stays as long as
+    /// one meter each fits. A small card needs less width, so a block sets more of them across.
+    static func usageFits(_ cards: [Extension.Block]) -> [(cards: [Extension.Block], compact: Bool)] {
+        let most = cards.map { meters(of: $0).count }.max() ?? 0
+        var fits: [(cards: [Extension.Block], compact: Bool)] = [(cards, false), (cards, true)]
+        for keep in stride(from: most, through: 1, by: -1) { fits.append((cards.map { cut($0, to: keep) }, true)) }
+        let ones = cards.map { cut($0, to: 1) }
+        for count in stride(from: ones.count - 1, through: 1, by: -1) { fits.append((Array(ones.prefix(count)), true)) }
+        return fits
+    }
+
+    /// How many usage cards a block `width` wide sets side by side: one per 240 pt of its content (170 pt small), at
+    /// most one per card.
+    static func across(_ count: Int, width: CGFloat, compact: Bool) -> Int {
+        guard width.isFinite else { return 1 }
+        return max(1, min(count, Int((width - 32) / (compact ? 170 : 240))))
+    }
+
+    private static func meters(of card: Extension.Block) -> [Extension.Block] {
+        guard case .section(_, _, _, _, let inner, _, _) = card else { return [] }
+        return inner.filter { if case .meter = $0 { true } else { false } }
+    }
+
+    /// A usage card with its first `keep` meters, their notes left out.
+    private static func cut(_ card: Extension.Block, to keep: Int) -> Extension.Block {
+        guard case .section(let title, let subtitle, let aside, let asideNote, _, let icon, let help) = card else { return card }
+        let kept = meters(of: card).prefix(keep).map { block -> Extension.Block in
+            guard case .meter(let m) = block else { return block }
+            return .meter(.init(label: m.label, percent: m.percent, tone: m.tone, resetsAt: m.resetsAt, mark: m.mark, value: m.value,
+                                markTone: m.markTone, help: m.help ?? m.note))
+        }
+        return .section(title: title, subtitle: subtitle, aside: aside, asideNote: asideNote, blocks: kept, icon: icon, help: help)
     }
 
     /// The blocks with each section's own in its place.

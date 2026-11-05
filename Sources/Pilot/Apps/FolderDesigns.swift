@@ -25,6 +25,52 @@ enum FolderDesigns {
         var isOwn: Bool { design == .own }
     }
 
+    // MARK: The kind of a folder (T61)
+
+    /// Home folders by their path under home, then any folder by its name (lowercased), each to its kind's id
+    /// (folder-designs-variants.build.md). /Applications is never matched: Pilot never dresses it.
+    static let homeKinds = ["Applications": "applications", "Desktop": "desktop", "Documents": "documents", "Downloads": "downloads",
+                            "Pictures": "pictures", "Pictures/Screenshots": "screenshots", "Movies": "movies", "Music": "music",
+                            "Public": "public", "Public/Drop Box": "public", "Library/Mobile Documents/com~apple~CloudDocs": "icloud"]
+    static let nameKinds: [String: String] = [
+        "applications": "applications", "apps": "applications",
+        "screenshots": "screenshots", "screen records": "screenshots", "screen recordings": "screenshots",
+        "pictures": "pictures", "photos": "pictures", "pfp": "pictures",
+        "movies": "movies", "videos": "movies", "music": "music", "drop box": "public",
+        "dropbox": "icloud", "google drive": "icloud", "icloud drive": "icloud",
+        "code": "code", "go": "code", "ghostex": "code", "developer": "code", "projects": "code",
+        "hermes-vault": "notes", "pilot notes": "notes", "notes": "notes",
+        "wallpapers": "design", "wallpaper": "design", "pages": "design", "assets": "design", "design": "design",
+        "archive": "archive", "archives": "archive", "backups": "archive", "backup": "archive",
+        "work": "work", "clients": "work", "invoices": "work", "taxes": "work",
+        "models": "data", "data": "data",
+    ]
+
+    /// The kind `folder` is, for the designs it suggests first: a home folder by its place, any other by its name, then a
+    /// folder in iCloud Drive or a synced cloud, an Obsidian vault, a git repository, or a folder holding apps (its first
+    /// 200 entries). Reads the disk, so off the main thread where it can be.
+    nonisolated static func kind(of folder: URL, home: URL = URL(filePath: NSHomeDirectory())) -> FolderDesign.Kind? {
+        let path = folder.standardizedFileURL.path, homePath = home.standardizedFileURL.path
+        guard path != "/Applications" else { return nil }
+        let under = path.hasPrefix(homePath + "/") ? String(path.dropFirst(homePath.count + 1)) : nil
+        let fm = FileManager.default
+        func has(_ name: String) -> Bool { fm.fileExists(atPath: folder.appending(path: name).path) }
+        let id = under.flatMap { homeKinds[$0] } ?? nameKinds[folder.lastPathComponent.lowercased()]
+            ?? (under.map { $0.hasPrefix("Library/Mobile Documents/") || $0.hasPrefix("Library/CloudStorage/") } == true ? "icloud" : nil)
+            ?? (has(".obsidian") ? "notes" : has(".git") ? "code" : nil)
+            ?? (fm.enumerator(at: folder, includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants, .skipsPackageDescendants])?
+                .prefix(200).contains { ($0 as? URL)?.pathExtension == "app" } == true ? "applications" : nil)
+        return id.flatMap(FolderDesign.kind)
+    }
+
+    /// The kinds `folders` are, each once, in their order: the designs offered first.
+    nonisolated static func kinds(of folders: [URL]) -> [FolderDesign.Kind] { distinct(folders.map { kind(of: $0) }) }
+
+    /// `kinds` each once, in their order.
+    nonisolated static func distinct(_ kinds: [FolderDesign.Kind?]) -> [FolderDesign.Kind] {
+        kinds.compactMap(\.self).reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+    }
+
     /// A design's art from the app's Resources, as a folder is dressed in it: the 1024 px cut-out (HEIC), and beside it the
     /// simpler 64 px drawing NSImage picks at 32 px and under, so a Finder list or sidebar shows the mark, not the papers
     /// (Scripts/folder-designs.py, P54). Read when used, never kept: the grid and menu draw the 256 px `<id>.png`.
@@ -220,16 +266,25 @@ enum FolderDesigns {
         return Action(id: id, label: id == dressID ? "Dress selected folders" : "Reset folder icons", module: .apps) {
             Task {
                 let drawn = Set(rowIcons.keys)
-                let (folders, pictures) = await Task.detached { (finderSelection(), id == dressID ? rowPictures(besides: drawn) : []) }.value
+                let (folders, pictures, kinds) = await Task.detached {
+                    let folders = finderSelection(), dress = id == dressID
+                    return (folders, dress ? rowPictures(besides: drawn) : [], dress ? kinds(of: folders) : [])
+                }.value
                 for (path, picture) in pictures { rowIcons[path] = AppsModule.small(picture) }
-                if id == dressID { pick(folders) } else { HUD.tip(await reset(folders).line("Reset")) }
+                if id == dressID { pick(folders, suggested: kinds) } else { HUD.tip(await reset(folders).line("Reset")) }
             }
         }
     }
 
-    /// Pick a design for `folders` in the menu (frame 3).
-    @MainActor static func pick(_ folders: [URL]) {
+    /// Pick a design for `folders` in the menu (frame 3), the designs of the kinds they are first: read off the main
+    /// thread when not handed in, since an unnamed folder's kind lists its entries.
+    @MainActor static func pick(_ folders: [URL], suggested: [FolderDesign.Kind]? = nil) {
         guard !folders.isEmpty else { return HUD.tip("Select folders in Finder first") }
-        PilotMenu.shared.pick(live: ExtensionsPageView.plural(folders.count, "folder"), source: FolderDesignSource(folders))
+        guard let suggested else {
+            Task { pick(folders, suggested: await Task.detached { kinds(of: folders) }.value) }
+            return
+        }
+        PilotMenu.shared.pick(live: ExtensionsPageView.plural(folders.count, "folder"),
+                              source: FolderDesignSource(folders, suggested: suggested))
     }
 }

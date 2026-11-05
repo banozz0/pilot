@@ -239,6 +239,13 @@ struct GeneralPage: View {
             } else if LoginItem.shared.status == .requiresApproval {
                 BlockRow { Text("Waiting for your OK in System Settings › General › Login Items.").font(ink.ui(12)).foregroundStyle(ink.muted) }
             }
+            // Q847: onboarding again from its first screen; nothing set up is undone, a run in progress resumes.
+            BlockRow {
+                Text("Setup")
+                InfoMark(text: "Opens Welcome from the start: the Hyper key, Accessibility, then Set up for what is not on this Mac yet. Nothing already set up is undone; a run still going picks up where it is.")
+                Spacer()
+                Button("Run setup again") { OnboardingWindow.again(engine: engine) }.buttonStyle(.pilot)
+            }
             BlockRow {
                 Text("Accessibility")
                 InfoMark(text: Self.accessibilityInfo)

@@ -148,16 +148,25 @@ public struct ReadLine: Codable, Equatable, Sendable {
 /// Reads an image's lines with their boxes, and its codes: Vision in pilot-text, Vision here, a fake in tests.
 public protocol LineReading: Sendable {
     func lines(in image: Data) async -> [ReadLine]
+    /// The same read, throwing when the image could not be read at all, so a caller can tell a failed read from no text.
+    func read(_ image: Data) async throws -> [ReadLine]
+}
+
+extension LineReading {
+    public func read(_ image: Data) async throws -> [ReadLine] { await lines(in: image) }
 }
 
 extension VisionText: LineReading {
     /// Every line, top to bottom, then every code; none when the image cannot be read.
-    public func lines(in image: Data) async -> [ReadLine] {
+    public func lines(in image: Data) async -> [ReadLine] { (try? await read(image)) ?? [] }
+
+    /// Every line, then every code; throws when Vision cannot read the image, so a failure is not "no text".
+    public func read(_ image: Data) async throws -> [ReadLine] {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         request.automaticallyDetectsLanguage = true
-        let text = ((try? await request.perform(on: image)) ?? []).compactMap { observation -> ReadLine? in
+        let text = try await request.perform(on: image).compactMap { observation -> ReadLine? in
             guard let best = observation.topCandidates(1).first else { return nil }
             // Each word's own box, or none when Vision cannot place one: the boxes must line up with the words.
             var words: [CGRect]? = []
@@ -167,7 +176,7 @@ extension VisionText: LineReading {
             }
             return ReadLine(text: best.string, box: Self.rect(observation.boundingBox.verticallyFlipped()), words: words)
         }
-        let codes = ((try? await DetectBarcodesRequest().perform(on: image)) ?? []).compactMap { code -> ReadLine? in
+        let codes = try await DetectBarcodesRequest().perform(on: image).compactMap { code -> ReadLine? in
             guard let payload = code.payloadString, !payload.isEmpty else { return nil }
             return ReadLine(text: payload, box: Self.rect(code.boundingBox.verticallyFlipped()), code: true)
         }

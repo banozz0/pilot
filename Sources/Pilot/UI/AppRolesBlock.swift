@@ -28,7 +28,7 @@ struct AppRolesBlock: View {
 
     private func row(_ role: AppRole) -> some View {
         let auto = automatic(role), pick = picks.app(role), shown = pick ?? auto
-        let name = { AppRolePicks.name($0, appName: AppsModule.appName) }
+        let name = { AppRolePicks.name($0, role: role, appName: AppsModule.appName) }
         // A website or a command has no app icon: a globe or a terminal glyph stands in.
         let app = { (value: String) -> String? in if case .app = role.target(value) { value } else { nil } }
         let symbol = switch role.target(shown) { case .web: "globe"; case .command: "terminal"; case .app: "questionmark" }
@@ -61,6 +61,7 @@ struct AppRolesBlock: View {
         case .ai: "Automatic takes the Claude app, then ChatGPT's, then claude.ai in your browser."
         case .mail: "Automatic follows macOS's default mail app; Gmail opens in your browser."
         case .notes: "Pilot quick notes makes the key open Pilot's own notes panel instead of an app."
+        case .files: "Pilot Files makes the key open Pilot's own file window instead of an app. Automatic takes macOS's Finder."
         case .passwords: "Automatic takes 1Password, then Bitwarden, then macOS's Passwords."
         case .music: "Automatic is macOS's Music; pick Spotify, its website or YouTube Music's here."
         default: "Automatic takes macOS's own app for it."

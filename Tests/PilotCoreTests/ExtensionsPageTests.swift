@@ -49,6 +49,12 @@ struct ExtensionsPageTests {
         #expect(gh.permissions == [.init(.network, "Connects to api.github.com and github.com"), .init(.clipboard, "Reads and writes the clipboard"),
                                    .init(.files, "Reads and writes ~/code"), .init(.actions, "Runs Pilot actions: Close window")])
         #expect(rows[0].permissions == [.init(.nothing, "Touches nothing it names")])
+        // What an extension row is never let run, by the registry `label` reads, is its own line, never "Runs" (T52 review):
+        // Wi-Fi, a shell, and an action this Mac's Pilot lacks.
+        let registry = ["windows.close": "Close window", "system.wifi": "Wi-Fi on or off", "drive.shell:ls": "ls"]
+        #expect(ExtensionsPage.permissions(.init(actions: ["windows.close", "system.wifi", "drive.shell:ls", "windows.gone"]), label: { registry[$0] })
+                == [.init(.actions, "Runs Pilot actions: Close window"),
+                    .init(.actions, "Asks for Pilot actions it may not run: Wi-Fi on or off, ls and windows.gone")])
         #expect(gh.fields.map(\.preference.kind) == [.text, .password, .checkbox, .dropdown([.init(title: "Stars", value: "stars")]), .app, .file, .folder])
         #expect(gh.fields.map(\.value) == [.string("sven"), nil, .bool(false), .string("stars"), nil, nil, nil])
         #expect(gh.fields.map(\.isMissing) == [false, true, false, false, false, false, false], "the unset required PIN")

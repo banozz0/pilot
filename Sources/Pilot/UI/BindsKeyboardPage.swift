@@ -164,8 +164,8 @@ struct BindsKeyboardPage: View {
     }
 }
 
-/// The board picks Hyper presses while it shows in the window in front; its own modifier, so the window's focus changing
-/// redraws only this, never the board.
+/// The board picks Hyper presses while it shows in the window in front, a bound one still running (T48); its own
+/// modifier, so the window's focus changing redraws only this, never the board.
 private struct PicksKeys: ViewModifier {
     @Environment(\.controlActiveState) private var active
     let when: Bool

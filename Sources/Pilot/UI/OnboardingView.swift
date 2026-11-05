@@ -3,10 +3,10 @@ import Carbon.HIToolbox
 import PilotCore
 import SwiftUI
 
-/// First-run onboarding (stories 1, 2, 40, 94, 103 and 104; wireframe zu046xD_ceo; Permissions and Extras, Sven
-/// 2026-10-28): Welcome picks the Hyper key, Permissions' rows tick themselves once a second (PilotCore's Onboarding),
-/// Extras picks what to download, and Try it ticks on a hold and on Hyper+Space. Opens by itself while Accessibility is
-/// missing or a run is unfinished (OnboardingWindow).
+/// First-run onboarding (stories 1, 2, 40, 94, 103 and 104; Onboarding 1.1, variant C, Sven 2026-11-04, Q841-Q843): four
+/// screens under one step rail. Hyper picks the key, Access waits for Accessibility alone, Set up runs everything or what
+/// is picked by hand with progress and undo (OnboardingSetup), and Try it ticks on a hold, Hyper+F and Hyper+Space. Opens
+/// by itself while Accessibility is missing or a run is unfinished (OnboardingWindow).
 struct OnboardingView: View {
     @Environment(Engine.self) private var engine
     @Environment(\.dismissWindow) private var dismiss
@@ -14,7 +14,7 @@ struct OnboardingView: View {
     @State private var confirming: LayerKeyChange?
 
     private let look: Look
-    /// Permissions' and Extras' list scrolls inside this height, so the window fits a 13-inch screen.
+    /// Set up's lists scroll inside this height, so the window fits a 13-inch screen.
     static let scrollHeight: CGFloat = 470
 
     /// `model` is the renders' seam, to show a later step; Pilot opens on a fresh one. `look` stands in for the shared
@@ -42,7 +42,7 @@ struct OnboardingView: View {
     private var instrument: some View {
         let tokens = StyleTokens.of(.instrument, theme: look.theme)
         let canvas = Color(tokens.colors.canvas)
-        return InstrumentOnboarding(model: model, confirming: $confirming, finish: { model.finish(); dismiss(id: "onboarding") })
+        return InstrumentOnboarding(model: model, confirming: $confirming, finish: { model.finish(); dismiss(id: "onboarding"); OnboardingWindow.close() })
             .styled(.onboarding, look: look)
             .pilotTheme(look: look)
             .background(canvas)
@@ -51,27 +51,28 @@ struct OnboardingView: View {
     }
 }
 
-/// Onboarding's steps in Toybox, inside its style: they and the window behind them take the style's colours.
+/// Onboarding's steps in Toybox, inside its style: they and the window behind them take the style's colours. The same
+/// rail, screens and parts as Instrument's (Onboarding 1.1), in Toybox's look.
 private struct OnboardingSteps: View {
     @Environment(\.ink) private var ink
     @Environment(Engine.self) private var engine
     @Environment(\.dismissWindow) private var dismiss
-    let model: OnboardingModel
+    @Bindable var model: OnboardingModel
     @State private var confirming: LayerKeyChange?
-    /// Permissions' folded group, open.
-    @State private var showAll = false
+    @State private var more = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            OnboardingRail(step: model.step)
             switch model.step {
             case .welcome: welcome
-            case .permissions: permissions
-            case .extras: extras
+            case .permissions: access
+            case .extras: setUp
             case .tryIt: tryIt
             }
         }
         .padding(24)
-        .frame(width: 520)
+        .frame(width: 560)
         // The app window's look (card agent-bo-95422728): the style's, dark or light whatever the Mac's appearance, title
         // bar too.
         .buttonStyle(.pilot)
@@ -82,10 +83,12 @@ private struct OnboardingSteps: View {
         .background { DarkWindow(dark: ink.style.dark) }
     }
 
+    private func title(_ text: String) -> some View { Text(text).font(ink.display(26)) }
+
     private var welcome: some View {
         @Bindable var settings = engine.settings
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Welcome to Pilot").font(ink.display(26))
+            title("Welcome to Pilot")
             Text("Pilot makes this Mac work like Omarchy.").font(ink.ui(15, .medium)).foregroundStyle(ink.text2)
             Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
                 .foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
@@ -110,30 +113,30 @@ private struct OnboardingSteps: View {
         }
     }
 
-    private var permissions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            PanelHeading(text: "set up pilot · \(OnboardingModel.Step.permissions.counted) · permissions")
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Onboarding.Need.allCases, id: \.self) { need in
-                        if need == .whenUsed {
-                            Button { showAll.toggle() } label: {
-                                Label("\(need.title) (\(Onboarding.Row.rows(need).count))", systemImage: showAll ? "chevron.down" : "chevron.right")
-                                    .font(ink.ui(12.5, .medium)).foregroundStyle(ink.muted)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        if need != .whenUsed || showAll {
-                            if need != .whenUsed { PanelHeading(text: need.title) }
-                            Card { ForEach(Onboarding.Row.rows(need), id: \.self) { grant($0) } }
-                        }
+    /// Access: Accessibility, the one grant Pilot waits for; the rest are named for later, with no buttons here.
+    private var access: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            title("Allow Accessibility")
+            Text(OnboardingModel.accessAbout).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
+            Card {
+                CardRow {
+                    TitledText(title: "Accessibility", detail: Onboarding.Row.accessibility.detail(model.status))
+                    Spacer()
+                    if model.status.accessibility {
+                        Chip(text: "allowed", color: ink.green)
+                    } else {
+                        Button("Allow") { model.allowAccessibility() }
                     }
                 }
             }
-            .frame(height: OnboardingView.scrollHeight)
-            if let problem = model.problem { FinePrint(text: problem, color: ink.red) }
+            PanelHeading(text: "Later, from Settings · \(OnboardingModel.later.count)")
+            Card {
+                ForEach(OnboardingModel.laterGroups, id: \.title) { group in
+                    CardRow { TitledText(title: group.title, detail: group.names) }
+                }
+            }
             HStack {
-                FinePrint(text: Onboarding.continueNote)
+                FinePrint(text: OnboardingModel.ticksItself)
                 Spacer()
                 Button("Continue") { model.go(.extras) }.keyboardShortcut(.defaultAction).disabled(!Onboarding.canContinue(model.status))
                     .buttonStyle(.pilotPrimary)
@@ -141,149 +144,65 @@ private struct OnboardingSteps: View {
         }
     }
 
-    private func grant(_ row: Onboarding.Row) -> some View {
-        CardRow {
-            TitledText(title: row.title, detail: row.detail(model.status))
-            Spacer()
-            if Onboarding.isDone(row, model.status) {
-                Chip(text: "done", color: ink.green)
-            } else {
-                Button(model.button(row)) { model.act(row) }
-            }
-        }
-    }
-
-    private var extras: some View {
-        let extras = model.extras
-        return VStack(alignment: .leading, spacing: 10) {
-            PanelHeading(text: "set up pilot · \(OnboardingModel.Step.extras.counted) · extras, all optional")
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    // Update and Clean first, each with the helpers it runs (Q555); Homebrew's one Terminal run after Clean.
-                    ForEach(OnboardingExtras.Feature.allCases, id: \.self) { feature in
-                        PanelHeading(text: "\(feature.title) · \(feature.short)")
-                        Card {
-                            if let line = feature.line {
-                                CardRow {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(line).font(ink.ui(12.5)).foregroundStyle(ink.text).fixedSize(horizontal: false, vertical: true)
-                                        if let later = extras.later(feature) { FinePrint(text: later, color: ink.warnText) }
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                            }
-                            ForEach(feature.items, id: \.self) { item($0) }
-                        }
-                        if feature == .clean, let command = extras.brewCommand {
-                            Card {
-                                CardRow {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        FinePrint(text: OnboardingExtras.terminalNote)
-                                        Text(command).font(ink.mono(11)).foregroundStyle(ink.text2).textSelection(.enabled)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                            }
-                        }
-                    }
-                    PanelHeading(text: "Voice")
-                    Card {
-                        if let on = extras.speechOnMac {
-                            CardRow { TitledText(title: "Dictation model", detail: "\(on.name) is on this Mac"); Spacer(); Chip(text: "done", color: ink.green) }
-                        } else {
-                            ForEach(OnboardingExtras.speechChoices, id: \.self) { choice in speech(choice) }
-                        }
-                        item(.voices)
-                    }
-                    PanelHeading(text: "AI and agents")
-                    Card {
-                        CardRow {
-                            VStack(alignment: .leading, spacing: 8) {
-                                TitledText(title: AIProviderPick.title, detail: AIProviderPick.detail)
-                                AIProviderPick()
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        item(.command)
-                    }
-                    PanelHeading(text: "Images")
-                    Card { item(.upscaler) }
-                    PanelHeading(text: "Pilot")
-                    Card {
-                        CardRow {
-                            TitledText(title: "Extensions", detail: OnboardingExtras.extensionsDetail)
-                            Spacer()
-                            Button("Browse…") { OnboardingExtras.browseExtensions() }
-                        }
-                        item(.recommendApps)
-                        item(.launchAtLogin)
-                    }
+    /// Set up: the fork, Pick by hand, or the run in its place.
+    private var setUp: some View {
+        let setup = model.setup
+        return VStack(alignment: .leading, spacing: 12) {
+            switch setup.phase {
+            case .fork:
+                title("How should Pilot set up?")
+                SetupFork(setup: setup)
+                HStack {
+                    FinePrint(text: setup.asksForMacLogin ? OnboardingModel.passwordNote : OnboardingModel.undoAfter)
+                    Spacer()
+                    Button("Skip setup") { model.startTryIt() }
+                }
+            case .pick:
+                title("Pick by hand")
+                ScrollView { SetupPickList(setup: setup) }.frame(height: OnboardingView.scrollHeight)
+                HStack {
+                    FinePrint(text: setup.picked.contains(.homebrew) ? OnboardingModel.passwordNote : OnboardingModel.pickNote)
+                    Spacer()
+                    Button("Back") { setup.phase = .fork }
+                    Button("Set up these") { setup.start(Array(setup.picked)) }.keyboardShortcut(.defaultAction)
+                        .disabled(setup.picked.isEmpty).buttonStyle(.pilotPrimary)
+                }
+            case .run:
+                title(setup.title)
+                ScrollView { SetupRunList(setup: setup) }.frame(maxHeight: OnboardingView.scrollHeight)
+                if let problem = setup.problem { FinePrint(text: problem, color: ink.red) }
+                HStack {
+                    FinePrint(text: OnboardingModel.undoNote)
+                    Spacer()
+                    Button("Continue") { model.startTryIt() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
                 }
             }
-            .frame(height: OnboardingView.scrollHeight)
-            .onAppear { extras.load() }
-            HStack {
-                FinePrint(text: extras.footNote)
-                Spacer()
-                Button("Skip all") { model.startTryIt(extras: false) }
-                Button("Continue") { model.startTryIt() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
-            }
         }
-    }
-
-    /// A dictation model to pick, or Skip.
-    private func speech(_ choice: SpeechChoice?) -> some View {
-        let on = model.extras.speech == choice
-        return Button { model.extras.speech = choice } label: {
-            CardRow {
-                Image(systemName: on ? "largecircle.fill.circle" : "circle").foregroundStyle(on ? ink.accent : ink.muted).accessibilityHidden(true)
-                TitledText(title: OnboardingExtras.speechTitle(choice), detail: OnboardingExtras.speechDetail(choice))
-                Spacer()
-                if choice == OnboardingExtras.recommendedSpeech { Chip(text: "recommended", color: ink.accent) }
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    /// An extra: its tick, or that it is on this Mac already.
-    private func item(_ item: OnboardingExtras.Item) -> some View {
-        CardRow {
-            TitledText(title: item.title, detail: item.detail)
-            Spacer()
-            if model.extras.onMac.contains(item) {
-                Chip(text: "on this Mac", color: ink.green)
-            } else {
-                if let chip = item.chip { Chip(text: chip, color: ink.accent) }
-                Toggle(item.title, isOn: model.extras.binding(item))
-                    .toggleStyle(.pilotSwitch)
-            }
-        }
+        .onAppear { if setup.phase != .run { setup.load() } }
     }
 
     private var tryIt: some View {
         let key = engine.settings.layerKeys.label
-        return VStack(alignment: .leading, spacing: 10) {
-            PanelHeading(text: "set up pilot · \(OnboardingModel.Step.tryIt.counted)")
+        return VStack(alignment: .leading, spacing: 12) {
+            title("Try it")
             Card {
-                prompt("Hold \(key) for a moment", "your binds appear while you hold it", done: model.tryIt.held)
-                prompt("Now press \(key) + Space", "opens the Pilot menu: apps, files, windows, install", done: model.tryIt.menuOpened)
-            }
-            let lines = model.extras.progress
-            if !lines.isEmpty {
-                PanelHeading(text: "In the background")
-                Card {
-                    ForEach(lines, id: \.title) { line in
-                        CardRow { Text(line.title); Spacer(); Text(line.state).font(ink.mono(11.5)).foregroundStyle(ink.muted) }
-                    }
+                prompt("Hold \(key)", "your binds appear while you hold it", done: model.tryIt.held)
+                if let files = model.filesKey(engine) {
+                    prompt("Press \(key) + \(files)", "Pilot Files opens: the key you just set", done: model.filesOpened)
                 }
+                prompt("Press \(key) + Space", "the Pilot menu", done: model.tryIt.menuOpened)
             }
+            PanelHeading(text: "The other permissions")
+            Card { CardRow { GrantWalkPanel(walk: model.walk) } }
+            Button { more.toggle() } label: {
+                Label("More, if you want", systemImage: more ? "chevron.down" : "chevron.right").font(ink.ui(12.5, .medium)).foregroundStyle(ink.muted)
+            }
+            .buttonStyle(.plain)
+            if more { Card { OnboardingMore() } }
             HStack {
-                FinePrint(text: "Pilot is in the menu bar, showing the workspace number")
+                FinePrint(text: "Pilot is in the menu bar")
                 Spacer()
-                Button("Finish") { model.finish(); dismiss(id: "onboarding") }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
+                Button("Finish") { model.finish(); dismiss(id: "onboarding"); OnboardingWindow.close() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
             }
         }
     }
@@ -299,8 +218,8 @@ private struct OnboardingSteps: View {
 
 /// The Welcome window while it is open (Sven's first run, 2026-10-28: "only show the welcome landing page, not the actual
 /// Pilot app until onboarding is done"). Opened at launch it comes to the front, and a second launch brings it forward
-/// instead of the app window. A run not finished opens it again at the next launch, at the step it reached: Full Disk
-/// Access's and Screen Recording's Quit & Reopen restart Pilot mid-Permissions.
+/// instead of the app window. A run not finished opens it again at the next launch, at the step it reached, and Set up's
+/// run where it stands (OnboardingSetup's saved ledger).
 @MainActor
 enum OnboardingWindow {
     private static weak var window: NSWindow?
@@ -340,7 +259,36 @@ enum OnboardingWindow {
         DispatchQueue.main.async { bringForward() }
     }
 
-    static func closed() { window = nil }
+    static func closed() { window = nil; hosted = nil }
+
+    /// Run setup again's own window (Q847), held until it closes: the Welcome scene opens only through SwiftUI's
+    /// openWindow, which Settings' AppKit-hosted page cannot reach.
+    private static var hosted: NSWindow?
+
+    /// Settings › General's Run setup again (Sven, 2026-11-04, Q847): onboarding from its first screen, marked unfinished
+    /// so a quit reopens it; Set up's run in progress resumes, else its fork shows afresh. Nothing is undone. An open
+    /// Welcome only comes forward.
+    static func again(engine: Engine, _ defaults: UserDefaults = .pilot()) {
+        // An open Welcome only comes forward: its run and step stay as they are (reviewer, T54).
+        if bringForward() { return }
+        defaults.set(true, forKey: unfinishedKey)
+        defaults.removeObject(forKey: stepKey)
+        OnboardingSetup.shared.again()
+        log.notice("onboarding: run setup again")
+        let host = NSHostingView(rootView: OnboardingView().environment(engine))
+        let w = NSWindow(contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: [.titled, .closable, .miniaturizable],
+                         backing: .buffered, defer: false)
+        w.title = "Welcome to Pilot"
+        w.isReleasedWhenClosed = false
+        w.contentView = host
+        w.center()
+        hosted = w
+        NSApp.activate()
+        w.makeKeyAndOrderFront(nil)
+    }
+
+    /// Finish: closes whichever window holds Welcome, the scene's or Run setup again's.
+    static func close() { window?.close() }
 
     /// Welcome to the front; false when it is not open.
     @discardableResult static func bringForward() -> Bool {
@@ -381,35 +329,68 @@ private struct DarkWindow: NSViewRepresentable {
     func updateNSView(_ view: View, context: Context) { view.dark = dark; view.apply() }
 }
 
-/// What onboarding sees, read once a second while Permissions shows, and what each row's button does. Nothing runs
-/// until its button is pressed: the old tools through the On/off switch, the shortcuts through Shortcut conflicts'
-/// backup, the extras through Continue.
+/// Onboarding's state (Onboarding 1.1, T54): the step, Accessibility read once a second while Access shows, and Try
+/// it's ticks. Set up's run is OnboardingSetup's, which outlives the window. Nothing on Access but Accessibility is read:
+/// the other grants are named for later and asked in Settings › Permissions, at a feature's first use, or by Try it's
+/// Allow the rest (ADR 0012).
 @Observable @MainActor
 final class OnboardingModel {
+    /// The four screens. The raw values are the saved resume points from 1.0 (`onboarding.step`), kept so a run cut off
+    /// mid-way resumes; on screen they read Hyper, Access, Set up, Try it.
     enum Step: String, CaseIterable {
         case welcome, permissions, extras, tryIt
 
         var number: Int { Self.allCases.firstIndex(of: self)! + 1 }
-        /// "step 2 of 4", Toybox's heading.
-        var counted: String { "step \(number) of \(Self.allCases.count)" }
+
+        var title: String {
+            switch self {
+            case .welcome: "Hyper"
+            case .permissions: "Access"
+            case .extras: "Set up"
+            case .tryIt: "Try it"
+            }
+        }
     }
 
     var step = Step.welcome
     private(set) var status = Onboarding.Status()
     var tryIt = Onboarding.TryIt(menuOpens: 0)
-    let extras = OnboardingExtras()
-    private(set) var problem: String?
+    /// Pilot Files came forward since Try it showed.
+    private(set) var filesOpened = false
+    let setup: OnboardingSetup
+    /// Try it's Allow the rest (T58): nothing read until it starts.
+    let walk: GrantWalk
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var opened = Date()
     @ObservationIgnored private weak var engine: Engine?
-    /// One off-main probe at a time: a slow pgrep never piles up.
-    @ObservationIgnored private var probing = false
+
+    static let accessAbout = "The one grant Pilot waits for: it reads the Hyper key and moves windows. System Settings opens beside this window; switch Pilot on there."
+    static let passwordNote = "Homebrew asks your Mac's password once, in Terminal."
+    /// Says what Undo cannot do (reviewer, T54): it puts back what was there before Set up, over any change since, and
+    /// Homebrew keeps what it installed with a helper.
+    static let undoNote = "Undo puts back what was there before Set up, even over a change you made since; removing a helper leaves what Homebrew brought with it, such as ffmpeg's libraries. Open a group to undo one line."
+    static let pickNote = "Each row says what it gives. Nothing changes until you press Set up these."
+    static let undoAfter = "Every change can be undone after."
+    static let ticksItself = "This step ticks itself"
+
+    /// Access's "Later, from Settings": the recommended and optional grants by name. The when-used ones stay with the
+    /// features that ask for them.
+    static let later = Onboarding.Row.rows(.recommended) + Onboarding.Row.rows(.optional)
+    static let laterGroups: [(title: String, names: String)] = [Onboarding.Need.recommended, .optional].map { need in
+        (need.title, Onboarding.Row.rows(need).map(\.short).joined(separator: " · "))
+    }
+
+    /// `setup` and `walk` are the renders' seams; Pilot's are the shared run and the Mac's own grants.
+    init(setup: OnboardingSetup = .shared, walk: GrantWalk = GrantWalk()) {
+        self.setup = setup
+        self.walk = walk
+    }
 
     func start(_ engine: Engine) {
         self.engine = engine
         opened = Date()
         if let resume = OnboardingWindow.takeResume() { step = resume }
-        if step == .tryIt { tryIt = Onboarding.TryIt(menuOpens: PilotMenu.shared.opens) }
+        if step == .tryIt { resetTryIt() }
         log.notice("onboarding: shown at \(self.step.rawValue, privacy: .public)")
         refresh()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
@@ -418,26 +399,44 @@ final class OnboardingModel {
         self.timer = timer
     }
 
-    /// A step's button: the step, kept so a relaunch (Full Disk Access's or Screen Recording's Quit & Reopen) opens there.
+    /// A step's button: the step, kept so a relaunch opens there.
     func go(_ next: Step) {
-        // Moving on closes the helper beside Settings: a grant may show only after Pilot reopens.
+        // Moving on closes the helper beside Settings that Accessibility's Allow shows.
         PermissionDragPanel.close()
         step = next
         OnboardingWindow.reached(next)
     }
 
-    /// Extras' Continue: the picks start, then Try it, which counts only what happens from here: a hold, and the menu
-    /// opening after this moment.
-    func startTryIt(extras run: Bool = true) {
-        if run { extras.start(self) }
-        tryIt = Onboarding.TryIt(menuOpens: PilotMenu.shared.opens)
+    /// Set up's Continue or Skip: Try it, which counts only what happens from here: a hold, the menu opening and Pilot
+    /// Files coming forward after this moment.
+    func startTryIt() {
+        resetTryIt()
         go(.tryIt)
+    }
+
+    private func resetTryIt() {
+        tryIt = Onboarding.TryIt(menuOpens: PilotMenu.shared.opens)
+        filesOpened = false
+        filesAtStart = Self.filesShown()
+    }
+
+    @ObservationIgnored private var filesAtStart = 0
+
+    /// Pilot Files windows on screen: one more than at Try it's start, or one in front, ticks its row.
+    private static func filesShown() -> Int { NSApp.windows.count { $0.title == "Pilot Files" && $0.isVisible } }
+
+    /// Try it's Hyper+F row: the Files key's own key, shown only while it opens Pilot Files; nil otherwise.
+    func filesKey(_ engine: Engine) -> String? {
+        guard setup.system.picks.picks[.files] == AppRolePicks.pilot || setup.ledger[.filesKey]?.state == .done,
+              let trigger = engine.binds.store.trigger(for: "apps.files") else { return nil }
+        return HomeKeys.caps(trigger, space: "Space").last
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
-        // Welcome closing takes the helper beside Settings with it.
+        // Welcome closing ends Allow the rest and takes the helper beside Settings with it.
+        walk.stop()
         PermissionDragPanel.close()
     }
 
@@ -448,69 +447,20 @@ final class OnboardingModel {
 
     private func refresh() {
         guard let engine else { return }
-        if step == .tryIt && !tryIt.menuOpened { tryIt.see(menuOpens: PilotMenu.shared.opens) }
+        if step == .tryIt {
+            if !tryIt.menuOpened { tryIt.see(menuOpens: PilotMenu.shared.opens) }
+            if !filesOpened, filesKey(engine) != nil {
+                let shown = Self.filesShown()
+                if shown > filesAtStart || NSApp.keyWindow?.title == "Pilot Files" { filesOpened = true }
+            }
+        }
         guard step == .permissions else { return }
         engine.gate.check()
-        var s = status
-        s.accessibility = engine.gate.isTrusted
-        s.fullDiskAccess = FileIndex.hasFullDiskAccess()   // the index's first walk waits for the menu to open
-        MicrophoneGrant.shared.refresh()
-        s.microphone = MicrophoneGrant.shared.isGranted
-        s.clashes = ShortcutConflicts.shared.clashes(binds: engine.binds.store.binds).count
-        if s != status { status = s }
-        guard !probing else { return }
-        probing = true
-        Task {
-            async let answer = Task.detached { Self.mayControlSystemEvents() }.value
-            let grants = await OnboardingGrants.shared.read(), events = await answer
-            probing = false
-            var s = status
-            s.systemEvents = Onboarding.systemEvents(answer: events, last: s.systemEvents)
-            grants?.apply(to: &s)
-            if s != status { status = s }
-        }
+        if status.accessibility != engine.gate.isTrusted { status.accessibility = engine.gate.isTrusted }
     }
 
-    func button(_ row: Onboarding.Row) -> String { row == .conflicts ? "Turn off" : "Allow" }
-
-    func act(_ row: Onboarding.Row) {
-        guard let engine else { return }
-        problem = nil
-        log.notice("onboarding: \(row.title, privacy: .public)")
-        // Another row's Allow moves on: the helper beside Settings goes, and its own row's Allow shows it again.
-        PermissionDragPanel.close()
-        switch row {
-        case .accessibility: engine.gate.request()
-        case .systemEvents: SystemModule.systemEvents("count processes")   // macOS asks once; the row ticks after
-        case .fullDiskAccess:
-            SystemModule.openFullDiskAccess()
-            PermissionDragPanel.show(.fullDiskAccess)
-        case .microphone: Task { await MicrophoneGrant.shared.ask() }   // macOS asks once; after that, the Privacy pane
-        case .conflicts:
-            do { try ShortcutConflicts.shared.switchOff(binds: engine.binds.store.binds) } catch { problem = error.localizedDescription }
-        case .screenRecording, .inputMonitoring, .notifications, .bluetooth, .location, .calendars: OnboardingGrants.shared.ask(row, engine: engine)
-        }
-    }
-
-    /// Recommend apps (C5), the same switch as Defaults' and Install's.
-    func recommend(_ on: Bool) {
-        Recommendations.shared.show = on
-        log.notice("onboarding: recommend apps \(on ? "on" : "off", privacy: .public)")
-    }
-
-    /// The same setting as Settings › General, so the two never disagree.
-    func launchAtLogin(_ on: Bool) {
-        Engine.shared?.settings.launchAtLogin = on
-        if let failure = LoginItem.shared.problem { problem = "Launch at login: \(failure)" }
-        log.notice("onboarding: launch at login \(LoginItem.shared.status == .enabled ? "on" : "off", privacy: .public)")
-    }
-
-    /// Asks TCC without a prompt; Onboarding.systemEvents reads the answer.
-    nonisolated private static func mayControlSystemEvents() -> Int32 {
-        var target = AEAddressDesc()
-        let id = "com.apple.systemevents"
-        _ = id.withCString { AECreateDesc(typeApplicationBundleID, $0, id.utf8.count, &target) }
-        defer { AEDisposeDesc(&target) }
-        return AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, false)
+    func allowAccessibility() {
+        log.notice("onboarding: allow accessibility")
+        engine?.gate.request()
     }
 }

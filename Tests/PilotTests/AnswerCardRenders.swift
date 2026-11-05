@@ -68,20 +68,20 @@ struct AnswerCardRenders {
         #expect(hex.answerCard(hex.nav.rows[0], at: 0) != nil, "Classic draws the card too (T8)")
     }
 
-    @Test("Each card is the selection Return copies, the Ask row under it, beside the slim rail, and fits unscrolled")
+    @Test("Each card is the selection Return copies, the Ask row under it (none under tr's, T40), beside the slim rail, and fits unscrolled")
     func fits() throws {
         for (name, model) in try Self.states() {
-            let rows = model.nav.rows
-            // Then only the search offers a typed search ends with (Search files for …).
+            let rows = model.nav.rows, alone = name == "B5-translation"
+            // Then only the search offers a typed search ends with (Search files for …); tr's answer stands alone (T40).
             let offers = rows.dropFirst(2).allSatisfy { $0.target.isSearchOffer }
-            #expect(offers, "\(name): \(rows.map(\.title))")
+            #expect(alone ? rows.allSatisfy(\.isAnswer) : offers, "\(name): \(rows.map(\.title))")
             #expect(rows.first?.isAnswer == true && model.nav.selected?.id == rows.first?.id, "\(name)")
-            #expect(rows.dropFirst().first?.title == "Ask AI", "\(name)")
+            #expect(alone || rows.dropFirst().first?.title == "Ask AI", "\(name)")
             #expect(model.railBand == .slim && model.instrumentSize.width == MenuPanelSize.width, "\(name)")
             // The eyebrow, the card (a colour's: 118 swatch, 8, 16 ramp, 24 inset), its insets, the Ask row and the
             // list's own insets, under the search line and over the foot.
             let card: CGFloat = name.contains("colour") ? 118 + 8 + 16 + 24 : 158
-            let list = MenuPanelSize.instrumentHeading + card + 10 + MenuPanelSize.instrumentWideRow + 12
+            let list = MenuPanelSize.instrumentHeading + card + 10 + (alone ? 0 : MenuPanelSize.instrumentWideRow) + 12
             #expect(MenuPanelSize.railChrome + list <= model.instrumentSize.height, "\(name)")
         }
     }

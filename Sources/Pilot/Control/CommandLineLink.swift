@@ -63,6 +63,20 @@ final class CommandLineLink {
         refresh()
     }
 
+    /// Set up's Undo (T54): removes `~/.local/bin/pilot` only while it is this bundle's link; anything else stays.
+    func removeLink() {
+        refresh()
+        guard state == .linked else { return }
+        do {
+            try FileManager.default.removeItem(at: link)
+            problem = nil
+            log.notice("control: unlinked \(self.link.path(percentEncoded: false), privacy: .public)")
+        } catch {
+            problem = "\(link.path(percentEncoded: false)) not unlinked: \(error.localizedDescription)"
+        }
+        refresh()
+    }
+
     /// Reads the login shell's PATH (Pilot runs with launchd's short one), in a child, off the main thread.
     func readPath() async {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"

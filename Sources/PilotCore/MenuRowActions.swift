@@ -2,7 +2,7 @@ import Foundation
 
 /// What Cmd+K offers on a menu row (card agent-bo-95422968), after Vicinae's action panel: each kind of row its own list.
 public enum RowAction: String, Equatable, Sendable {
-    case open, focus, run, install, showInFinder, copyPath, copyBundleID, copyTitle, copyID, quit, forceQuit, uninstall
+    case open, focus, run, install, showInFinder, copyPath, copyBundleID, copyTitle, copyID, copyEmoji, quit, forceQuit, uninstall
     case openWith, convert, trash, searchInside
     /// An app command's app, brought forward (P38).
     case openApp
@@ -21,6 +21,7 @@ public enum RowAction: String, Equatable, Sendable {
         case .copyBundleID: "Copy bundle id"
         case .copyTitle: "Copy title"
         case .copyID: "Copy action id"
+        case .copyEmoji: "Copy"
         case .quit: "Quit"
         case .forceQuit: "Force quit"
         case .uninstall: "Uninstall…"
@@ -59,7 +60,9 @@ public enum RowAction: String, Equatable, Sendable {
         // A quick note (notes round 2): Move to Trash on every note but Scratch, wherever its row is listed.
         case .note(.open(let id)): return [.open, .showInFinder] + (id == NoteStore.scratch ? [] : [.trash])
         case .copy where row.isAnswer && row.home == .translate: return [.changeLanguages]
-        case .remove, .update, .clean, .copy, .emoji, .sticker, .snippet, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: return []
+        // Return types the emoji; Copy leaves it on the clipboard (T37).
+        case .emoji: return [.copyEmoji]
+        case .remove, .update, .clean, .copy, .sticker, .snippet, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: return []
         }
     }
 

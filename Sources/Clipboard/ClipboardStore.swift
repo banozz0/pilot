@@ -22,6 +22,9 @@ public struct StoredClip: Equatable, Sendable {
     /// The text read from an image (card agent-bo-95423070): nil until it is read, empty when it holds none.
     public var recognised: String?
 
+    /// When a copied card number or key leaves the history (P65); nil for every other copy and for a pinned one.
+    public var expiresAt: Date?
+
     /// What the panel shows for it: its name, else the text, or "Image" for a copy with none.
     public var title: String { customTitle ?? (text.isEmpty ? "Image" : text) }
 
@@ -52,13 +55,20 @@ public enum ClipboardStoreError: Error {
 }
 
 /// Clipboard history in SQLite: newest first, the same contents kept once, unpinned items capped
-/// (500 by default) and dropped past `maxAge` (none by default), pinned ones exempt, so a full history is `cap`
-/// rows plus the pins (SPEC.md, the Clipboard history line; Settings › Clipboard sets both limits).
+/// (500 by default) and dropped past `maxAge` (none by default) or, a copied card number or key, past its timer (P65),
+/// pinned ones exempt, so a full history is `cap` rows plus the pins (SPEC.md, the Clipboard history line; Settings ›
+/// Clipboard sets the limits and the timer).
 public final class ClipboardStore {
     /// Unpinned rows kept; a change takes effect on the next copy or `prune`.
     public var cap: Int
     /// Seconds an unpinned row is kept; nil keeps it until the cap pushes it out.
     public var maxAge: TimeInterval?
+    /// Seconds a copied card number or key is kept (P65); nil, they are kept as any other copy. `setSecretLifetime` sets it.
+    public private(set) var secretLifetime: TimeInterval?
+    /// The soonest a copied secret goes, kept in memory so the watcher's poll reads SQLite only once it passes: every
+    /// write that times a row lowers it, so an edit, a format, a split or a merge needs no call to rearm; prune reads it again.
+    /// Early is harmless (that prune finds nothing due), late would keep a secret past its time.
+    public private(set) var soonestExpiry: Date?
     private var db: OpaquePointer?
 
     public init(path: URL, cap: Int = ClipboardSettings.default.keepCount) throws {
@@ -67,6 +77,7 @@ public final class ClipboardStore {
         guard sqlite3_open(path.path, &db) == SQLITE_OK else { throw error() }
         try exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
         try migrate()
+        try readSoonestExpiry()
     }
 
     static let migrations: [@Sendable (ClipboardStore) throws -> Void] = [
@@ -109,6 +120,8 @@ public final class ClipboardStore {
             """) },
         // 6: the text read from an image (card agent-bo-95423070); NULL until ClipboardOCR reads it, every old image too.
         { try $0.addColumn("recognised", "TEXT") },
+        // 7: when a copied card number or key goes (P65); NULL for every row from before, so none of them expires.
+        { try $0.addColumn("expires_at", "REAL") },
     ]
 
     /// Each step brings the file from the version before it, so Sven's history from any earlier build opens with
@@ -146,14 +159,18 @@ public final class ClipboardStore {
 
     /// A copy already in the history moves to `date` and counts once more; a new one goes in with its contents.
     private func upsert(_ item: ClipItem, at date: Date) throws -> Int64 {
+        let ends = expiry(item, at: date)
+        lowerSoonestExpiry(ends)
+        let expires = ends.map { Value.real($0.timeIntervalSince1970) } ?? .text(nil)
         if let id = try query("SELECT id FROM clips WHERE hash = ?", [.text(item.contentHash)], { $0.int64(0) }).first {
-            try run("UPDATE clips SET copied_at = ?, source_app = ?, copy_count = copy_count + 1 WHERE id = ?",
-                    [.real(date.timeIntervalSince1970), .text(item.sourceApp), .int(id)])
+            // Copied again, its timer starts again; a pinned one has none.
+            try run("UPDATE clips SET copied_at = ?, source_app = ?, copy_count = copy_count + 1, expires_at = CASE WHEN pinned = 0 THEN ? END WHERE id = ?",
+                    [.real(date.timeIntervalSince1970), .text(item.sourceApp), expires, .int(id)])
             return id
         }
-        try run("INSERT INTO clips (kind, text, source_app, copied_at, first_copied_at, hash) VALUES (?, ?, ?, ?, ?, ?)",
+        try run("INSERT INTO clips (kind, text, source_app, copied_at, first_copied_at, hash, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [.text(item.kind.rawValue), .text(item.text), .text(item.sourceApp), .real(date.timeIntervalSince1970),
-                 .real(date.timeIntervalSince1970), .text(item.contentHash)])
+                 .real(date.timeIntervalSince1970), .text(item.contentHash), expires])
         let id = sqlite3_last_insert_rowid(db)
         try writeContents(id, item)
         return id
@@ -183,12 +200,104 @@ public final class ClipboardStore {
         }
     }
 
-    /// Drops the unpinned rows past the cap or older than `maxAge`; walks only the rows past the cap.
+    /// Drops the unpinned rows past the cap, older than `maxAge` or past their expiry; walks only the rows past the cap.
     public func prune(now: Date = Date()) throws {
         try run("""
-            DELETE FROM clips WHERE pinned = 0 AND (copied_at < ? OR id IN
+            DELETE FROM clips WHERE pinned = 0 AND (copied_at < ? OR expires_at <= ? OR id IN
                 (SELECT id FROM clips WHERE pinned = 0 ORDER BY copied_at DESC, id DESC LIMIT -1 OFFSET ?))
-            """, [.real(maxAge.map { now.timeIntervalSince1970 - $0 } ?? 0), .int(Int64(cap))])
+            """, [.real(maxAge.map { now.timeIntervalSince1970 - $0 } ?? 0), .real(now.timeIntervalSince1970), .int(Int64(cap))])
+        if soonestExpiry != nil { try readSoonestExpiry() }
+    }
+
+    // MARK: Secrets expire (P65)
+
+    /// Longer copies are not read for secrets: the watcher stores on the main thread, which the tap shares, and a long
+    /// log through Sensitive's patterns would stall typing.
+    static let secretScanLimit = 10_000
+
+    /// A text copy holding a card number or key Sensitive finds (AutoRedact.swift); email, IP addresses and phone numbers
+    /// don't count. Each key is judged on its own: a hex id is no key wherever it sits (a commit link, a path, a `git log`
+    /// line, JSON's id, `invoice-<uuid>.pdf`, `request_id=<uuid>`), since Sensitive's random-run rule reads it as one and
+    /// expiring it would delete a plain copy. A hex value after a label (`token: …`, `"secret": "…"`) or `Bearer` still
+    /// counts, and so do a JWT (`eyJ…` is not hex) and a key word's tail (`sk_…`, `api-…`, `key-…`).
+    public static func holdsSecret(_ item: ClipItem) -> Bool {
+        guard item.kind == .text || item.kind == .richText, item.text.utf16.count <= secretScanLimit else { return false }
+        let text = item.text
+        return Sensitive.find(in: text).contains { found in
+            switch found.kind {
+            case .card: true
+            case .key: !isHexID(text, found.range)
+            case .email, .address, .phone: false
+            }
+        }
+    }
+
+    /// A key match that is a hex id, with no label or `Bearer` right before it. Split on `-`, `_`, `=` and `+`, empty parts
+    /// skipped: every part is all hex or letters only and not a key word, and at least one is hex (`<uuid>`,
+    /// `invoice-<uuid>`, `report-<uuid>-final`, `author_id=<uuid>`, `--fixup=<sha>`). A key word part (`key-…`, `sk_…`,
+    /// `api-…`, `client_secret` before `=`, `nw_live_…`) or a mixed one (`md5=…`, `v2_…`) keeps it a key.
+    private static func isHexID(_ text: String, _ range: Range<String.Index>) -> Bool {
+        let parts = text[range].split { "-_=+".contains($0) }
+        guard parts.contains(where: { $0.allSatisfy(\.isHexDigit) }),
+              parts.allSatisfy({ $0.allSatisfy(\.isHexDigit) || ($0.allSatisfy(\.isLetter) && !isKeyWord($0.lowercased())) })
+        else { return false }
+        let start = text.index(range.lowerBound, offsetBy: -48, limitedBy: text.startIndex) ?? text.startIndex
+        let before = String(text[start..<range.lowerBound])
+        return labelBefore.firstMatch(in: before, range: NSRange(before.startIndex..., in: before)) == nil
+    }
+
+    /// A part that heads a key: a key word, or a label glued to its name (`clientsecret`, `apitoken`, `refreshtoken`).
+    /// No ends-in-`key` or ends-in-`pass` test: `monkey`, `hockey`, `compass` are plain words.
+    private static func isKeyWord(_ word: String) -> Bool {
+        keyWords.contains(word) || ["token", "secret", "password", "passwd", "pwd", "apikey"].contains { word.hasSuffix($0) }
+    }
+
+    /// Words that head a key rather than a file or field name, matched as a whole part, never inside one (`author`,
+    /// `passport`, `keyboard` are plain words): labels and their fused forms, key prefixes, and Shopify's `shpat_`,
+    /// `shpca_`, `shppa_`, `shpss_` and Postman's `PMAK-` (gitleaks' default rules).
+    private static let keyWords: Set<String> = [
+        "key", "token", "secret", "api", "auth", "pass", "pwd", "apikey", "accesskey", "secretkey", "authtoken",
+        "accesstoken", "password", "passwd", "sk", "pk", "rk", "live", "shpat", "shpca", "shppa", "shpss", "pmak",
+        "privatekey", "signingkey", "masterkey", "appkey", "clientkey", "sessionkey", "encryptionkey", "consumerkey",
+        "deploykey", "webhookkey",
+    ]
+
+    /// Sensitive's `labelled` and `bearer` shapes, read backwards from a value: also inside a longer name
+    /// (`client_secret` then `=`) or JSON quotes (`"token": "`), so a labelled hex value is never let off.
+    private static let labelBefore = try! NSRegularExpression(
+        pattern: #"(?i)(?:(?:api[ _-]?key|secret|passw(?:or)?d|pwd|token)["']?\s*[:=]|bearer)\s*["']?$"#)
+
+    /// When a copy made at `date` goes: only a secret's, and only while the setting is on.
+    private func expiry(_ item: ClipItem, at date: Date) -> Date? {
+        guard let secretLifetime, Self.holdsSecret(item) else { return nil }
+        return date.addingTimeInterval(secretLifetime)
+    }
+
+    /// A new lifetime moves every deadline still waiting by the difference, so each timer keeps its start (a copy, or an
+    /// edit); nil (the setting off) keeps them all for good, and turning it on again times only the copies made after.
+    /// The first call, as the store opens, keeps the deadlines it finds: they were set with this lifetime. One already
+    /// past its time goes first: a longer timer, or the switch off, never brings back a secret the history had stopped showing.
+    public func setSecretLifetime(_ lifetime: TimeInterval?, now: Date = Date()) throws {
+        try run("DELETE FROM clips WHERE pinned = 0 AND expires_at <= ?", [.real(now.timeIntervalSince1970)])
+        let old = secretLifetime
+        secretLifetime = lifetime
+        if lifetime == nil {
+            try run("UPDATE clips SET expires_at = NULL WHERE expires_at IS NOT NULL", [])
+        } else if let lifetime, let old, lifetime != old {
+            try run("UPDATE clips SET expires_at = expires_at + ? WHERE expires_at IS NOT NULL", [.real(lifetime - old)])
+        }
+        try readSoonestExpiry()
+    }
+
+    private func readSoonestExpiry() throws {
+        soonestExpiry = try query("SELECT min(expires_at) FROM clips WHERE expires_at IS NOT NULL", []) {
+            $0.optionalDouble(0).map(Date.init(timeIntervalSince1970:))
+        }.first ?? nil
+    }
+
+    private func lowerSoonestExpiry(_ date: Date?) {
+        guard let date else { return }
+        soonestExpiry = min(soonestExpiry ?? date, date)
     }
 
     /// Clear history: every unpinned row goes, the pins stay.
@@ -211,7 +320,7 @@ public final class ClipboardStore {
             names[id] = found
             return found
         }
-        return try clips(where: condition.sql, condition.values.map { .text($0) }, order: query.order).filter { query.admits($0, appName: name) }
+        return query.ranked(try clips(where: condition.sql, condition.values.map { .text($0) }, order: query.order), appName: name)
     }
 
     /// The rows with these ids, in the order given, each once; an id not in the history is left out (the pilot
@@ -225,7 +334,7 @@ public final class ClipboardStore {
 
     /// How many items the history holds, and how many of them are pinned, counted without reading them.
     public func counts() throws -> (all: Int, pinned: Int) {
-        try query("SELECT COUNT(*), coalesce(sum(pinned), 0) FROM clips", []) { (Int($0.int64(0)), Int($0.int64(1))) }.first ?? (0, 0)
+        try query("SELECT COUNT(*), coalesce(sum(pinned), 0) FROM clips WHERE \(Self.unexpired)", [.real(Date().timeIntervalSince1970)]) { (Int($0.int64(0)), Int($0.int64(1))) }.first ?? (0, 0)
     }
 
     /// The copy's pasteboard items, one dictionary of type → data each, in their original order.
@@ -241,9 +350,11 @@ public final class ClipboardStore {
         try setPinned([id], pinned)
     }
 
-    /// Several rows in one statement: Cmd+A then Cmd+P is one write, not 500 commits.
+    /// Several rows in one statement: Cmd+A then Cmd+P is one write, not 500 commits. A pinned secret is kept for good:
+    /// its timer goes, and unpinning it later does not bring the timer back.
     public func setPinned(_ ids: [Int64], _ pinned: Bool) throws {
-        try run("UPDATE clips SET pinned = ? WHERE id IN (SELECT value FROM json_each(?))", [.int(pinned ? 1 : 0), .text(Self.json(ids))])
+        try run("UPDATE clips SET pinned = ?, expires_at = CASE WHEN ? THEN NULL ELSE expires_at END WHERE id IN (SELECT value FROM json_each(?))",
+                [.int(pinned ? 1 : 0), .int(pinned ? 1 : 0), .text(Self.json(ids))])
     }
 
     public func delete(_ id: Int64) throws {
@@ -287,7 +398,12 @@ public final class ClipboardStore {
                 try run("INSERT OR IGNORE INTO clip_tags (clip_id, tag_id) SELECT ?, tag_id FROM clip_tags WHERE clip_id = ?", [.int(id), .int(other)])
                 try run("DELETE FROM clips WHERE id = ?", [.int(other)])
             }
-            try run("UPDATE clips SET kind = 'text', text = ?, hash = ? WHERE id = ?", [.text(text), .text(item.contentHash), .int(id)])
+            // The new text decides its timer: a running one keeps its deadline, and one that had none starts at this edit,
+            // so an old copy edited or formatted into a key shows its badge first rather than going at once.
+            let ends = expiry(item, at: Date())
+            lowerSoonestExpiry(ends)
+            try run("UPDATE clips SET kind = 'text', text = ?, hash = ?, expires_at = CASE WHEN ? AND pinned = 0 THEN coalesce(expires_at, ?) END WHERE id = ?",
+                    [.text(text), .text(item.contentHash), .int(ends == nil ? 0 : 1), .real(ends?.timeIntervalSince1970 ?? 0), .int(id)])
             try writeContents(id, item)
         }
     }
@@ -393,7 +509,12 @@ public final class ClipboardStore {
 
     // MARK: SQLite
 
+    /// A secret past its expiry is never read, even before the next prune deletes it; binds the time now.
+    private static let unexpired = "(expires_at IS NULL OR expires_at > ?)"
+
     private func clips(where condition: String, _ values: [Value], order: ClipOrder = ClipOrder()) throws -> [StoredClip] {
+        let condition = "\(Self.unexpired) AND (\(condition))"
+        let values = [Value.real(Date().timeIntervalSince1970)] + values
         var tagsByClip: [Int64: [ClipTag]] = [:]
         // Only the listed rows' tags: the same condition picks them.
         for (clip, tag) in try query("""
@@ -403,14 +524,15 @@ public final class ClipboardStore {
             tagsByClip[clip, default: []].append(tag)
         }
         return try query("""
-            SELECT id, kind, text, source_app, pinned, copied_at, first_copied_at, copy_count, size, title, recognised FROM clips WHERE \(condition)
+            SELECT id, kind, text, source_app, pinned, copied_at, first_copied_at, copy_count, size, title, recognised, expires_at FROM clips WHERE \(condition)
             ORDER BY \(order.sql)
             """, values) { row in
             let text = row.text(2) ?? ""
             return StoredClip(id: row.int64(0), kind: ClipboardCapture.kind(reading: ClipKind(rawValue: row.text(1) ?? "") ?? .text, text),
                               text: text, sourceApp: row.text(3), copiedAt: Date(timeIntervalSince1970: row.double(5)), pinned: row.int64(4) != 0,
                               tags: tagsByClip[row.int64(0)] ?? [], firstCopiedAt: Date(timeIntervalSince1970: row.double(6)),
-                              copyCount: Int(row.int64(7)), size: Int(row.int64(8)), customTitle: row.text(9), recognised: row.text(10))
+                              copyCount: Int(row.int64(7)), size: Int(row.int64(8)), customTitle: row.text(9), recognised: row.text(10),
+                              expiresAt: row.optionalDouble(11).map(Date.init(timeIntervalSince1970:)))
         }
     }
 
@@ -422,6 +544,7 @@ public final class ClipboardStore {
         let statement: OpaquePointer
         func int64(_ column: Int32) -> Int64 { sqlite3_column_int64(statement, column) }
         func double(_ column: Int32) -> Double { sqlite3_column_double(statement, column) }
+        func optionalDouble(_ column: Int32) -> Double? { sqlite3_column_type(statement, column) == SQLITE_NULL ? nil : double(column) }
         func text(_ column: Int32) -> String? { sqlite3_column_text(statement, column).map { String(cString: $0) } }
         func blob(_ column: Int32) -> Data {
             guard let bytes = sqlite3_column_blob(statement, column) else { return Data() }

@@ -30,8 +30,11 @@ final class RecordingWriter: @unchecked Sendable {
     /// first and the second, so a narrated still screen keeps its last words.
     private(set) var lastFrame: Double = 0
     private(set) var soundEnd: Double = 0
-    /// The pointer's places and clicks on the file's timeline (P71), for the video editor's zoom.
+    /// The pointer's places and clicks on the file's timeline (P71), for the video editor's zoom; and, on a recording
+    /// that keeps the pointer out (T29), its shapes, for the export to draw it.
     private(set) var pointer = CursorTrack()
+    /// The shape the pointer has now, an index into the track's shapes; noted at the next place kept.
+    private var shapeNow: Int?
 
     /// `size` in pixels, even both ways (H.264's need); `system` and `mic` add a sound track each.
     /// `quality` is VideoToolbox's 0 to 1 (CaptureSettings.RecordQuality.level).
@@ -100,6 +103,27 @@ final class RecordingWriter: @unchecked Sendable {
         guard started, let at = clock.place(time, track: click ? Self.clickTrack : Self.moveTrack, starts: false) else { return }
         let p = CursorTrack.Point(t: at, x: place.x, y: place.y)
         if click { pointer.clicks.append(p) } else { pointer.moves.append(p) }
+        if let shapeNow, shapeNow != pointer.shapeChanges.last?.shape, at > pointer.shapeChanges.last?.t ?? -1 {
+            pointer.shapeChanges.append(CursorTrack.ShapeChange(t: at, shape: shapeNow))
+        }
+    }
+
+    /// T29: the file has no pointer in its pixels; the track says so, with the recorded frame's size in points and the
+    /// recording's own pointer settings.
+    func drawsPointer(frame: CGSize, look: PointerLook) {
+        pointer.drawn = true
+        pointer.frame = frame
+        pointer.look = look
+    }
+
+    /// The pointer's shape from now on: kept once, and noted on the track with the next place kept.
+    func shape(_ shape: CursorTrack.Shape) {
+        if let i = pointer.shapes.firstIndex(of: shape) {
+            shapeNow = i
+        } else {
+            pointer.shapes.append(shape)
+            shapeNow = pointer.shapes.count - 1
+        }
     }
 
     /// The clock's own tracks for the pointer, after the media's.

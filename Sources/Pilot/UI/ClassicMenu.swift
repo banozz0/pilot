@@ -5,7 +5,7 @@ import SwiftUI
 /// The Hyper+Space menu as Classic draws it (menu Rail and Classic T8, frames D1–D8; look.menuLayout = classic), as Classic
 /// Shell since Q139: Omarchy's menu drawn as a terminal pane. JetBrains Mono in every role on every theme, inside a 2 pt
 /// frame in the theme's accent line, 750 wide as Raycast's (Q130); the default layout from Q134 until Line (Q165), whose
-/// root it draws. A prompt line (❯ in the accent, a branch before it as a path); the root (up to 650 tall) lists the
+/// root it draws. A prompt line (❯ in the accent, a branch before it as a path); the root (as tall as its screen holds, T36) lists the
 /// root's rows under `── go to`, 38 pt each, no recents (Sven 2026-10-20). A list is a ledger, 42 pt rows:
 /// a 150 pt column with the key in capitals in the accent (HYPER + N, then →) or the place in a quiet colour (2 d ago,
 /// ws 2, branch), the icon, the title and what it belongs to, under rule headings. The current row is a cursorline: a flat
@@ -449,7 +449,7 @@ private struct ClassicRow: View {
 /// The status line at the foot, 32 pt on the sunken colour, as a terminal editor's (Classic Shell, Q139): the mode in a
 /// solid accent block (GO, SEARCH, WINDOWS, CALCULATOR, INSTALL, PICK); then at a root search the kinds Tab steps with
 /// their counts, the shown one in the accent, bold and underlined, a kind at zero quieter, a click showing a kind as Tab
-/// would; elsewhere where Sven is (`pilot › install`). At its right GIPHY's attribution where its GIFs are listed, then
+/// would; elsewhere where Sven is (`pilot › install`). At its right Activity's note when it has one, then
 /// the menu's keys as a terminal prints them, `↵ open`, as many as fit after the kinds. It replaces Classic's kinds line and foot.
 struct ClassicStatus: View {
     @Environment(\.style) private var style
@@ -466,7 +466,7 @@ struct ClassicStatus: View {
             }
             .padding(.leading, 14).fixedSize().layoutPriority(1)
             Spacer(minLength: 12)
-            // Words that are no key, never given way: GIPHY's attribution (story 164).
+            // Words that are no key, never given way: Activity's note (GIPHY's attribution is on its bar, T39).
             if let note = model.footerNote { Text(note).foregroundStyle(style.color(quiet)).fixedSize().padding(.trailing, 14) }
             ViewThatFits(in: .horizontal) {
                 hintLine(hints, quiet)

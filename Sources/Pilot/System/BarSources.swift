@@ -36,6 +36,9 @@ struct BarSources {
     var captureLabels: @MainActor () -> [String: String] = {
         Engine.shared?.registry.actions.values.filter { $0.module == .captures }.reduce(into: [:]) { $0[$1.id] = $1.label } ?? [:]
     }
+    /// Bluetooth's switch as its item's menu opens, nil to hide it, and the switch itself (T47); fakes in tests.
+    var bluetoothOn: @MainActor () -> Bool? = { BluetoothPower.state(SystemModule.bluetooth) }
+    var setBluetooth: @MainActor (Bool) -> Void = { SystemModule.setBluetooth($0) }
     /// Runs a registered action by its id, as the menu's rows do; a fake in tests.
     var runAction: @MainActor (String) -> Void = { Engine.shared?.action($0)?.run() }
 
@@ -117,8 +120,11 @@ struct BarSources {
     }
 
     /// An item's right-click menu in `place` (card agent-bo-95423010), from its readings and, for Volume, the outputs.
-    func menu(_ kind: BarKind, in place: BarPlace, store: BarItemsStore) -> [BarMenuRow] {
-        let entry = store.settings.entry(kind)
+    func menu(_ kind: BarKind, in place: BarPlace, store: BarItemsStore) -> [BarMenuRow] { menu(.kind(kind), in: place, store: store) }
+
+    /// The same for any slot's item, an extension's own in the top bar included (spec pilot-1.1 T50).
+    func menu(_ item: BarTrayItem, in place: BarPlace, store: BarItemsStore) -> [BarMenuRow] {
+        guard let entry = store.settings.entries.first(where: { $0.item == item }) else { return [] }
         return entry.menu(menuInputs(entry), in: place)
     }
 
@@ -127,9 +133,12 @@ struct BarSources {
         kind.actions(menuInputs(store.settings.entry(kind)), scrolls: false)
     }
 
-    /// An item's readings, and what only its menu reads: Volume's outputs, the actions Capture's rows run.
+    /// An item's readings, and what only its menu reads: Volume's outputs, the actions Capture's rows run, Wi-Fi read
+    /// now and Bluetooth's switch.
     private func menuInputs(_ entry: BarEntry) -> BarInputs {
+        if entry.kind == .wifi { readings.refreshWiFi() }
         var i = inputs(for: [entry])
+        if entry.kind == .bluetoothBatteries { i.bluetoothOn = bluetoothOn() }
         if entry.kind == .volume { i.outputs = readings.sound.side(.output).devices.map(\.name) }
         if entry.kind == .capture {
             i.actionLabels = captureLabels()
@@ -142,6 +151,10 @@ struct BarSources {
     /// A pick from an item's right-click menu: the bar's own changes go to `store`, the rest run here; `popover` shows
     /// the item's popover from the bar it hangs from.
     func perform(_ action: BarAction, on kind: BarKind, store: BarItemsStore, popover: () -> Void) {
+        perform(action, on: .kind(kind), store: store, popover: popover)
+    }
+
+    func perform(_ action: BarAction, on item: BarTrayItem, store: BarItemsStore, popover: () -> Void) {
         switch action {
         case .click(.popover): popover()
         case .click(let click): perform(click)
@@ -151,10 +164,12 @@ struct BarSources {
         case .settings(let pane): SystemModule.pane(pane)
         case .activityMonitor: AppsModule.open(bundle: AppsModule.resolved(.activityMonitor))
         // The Menu bar page, where the bar is dragged (Q185).
-        case .edit(let edit): store.settings.apply(edit, on: kind)
+        case .edit(let edit): store.settings.apply(edit, on: item)
         case .run(let id): runAction(id)
         // Edit bar's the Menu bar page, where the bar is dragged (Q185).
         case .page(let page): AppWindowController.shared.open(page)
+        case .radio(.wifi, let on): Task { await readings.setWiFi(on) }
+        case .radio(.bluetooth, let on): setBluetooth(on)
         }
     }
 }

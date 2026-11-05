@@ -5,11 +5,12 @@ extension ControlVerbs {
     /// `bind`, `unbind`, `import` and `export`: the Binds page's changes on the store pilot://bind and Export and import
     /// change, answered with the bind as stored or the reason it was refused. What the page confirms asks Allow first.
     func registerBinds(_ app: ControlActions) {
-        register(ControlVerb("bind", help: "Binds an action to a key under Hyper (--plain: a plain combo); --replace takes a taken key; --on turns on a switched-off bind; --reset puts its default back; --preset switches the preset. A mouse button binds as \"Mouse 4\" (Hyper + it; --plain: the plain press), the wheel as \"Mouse Scroll Up\" or \"Mouse Scroll Down\", under Hyper only; pilot export lists them under mouse. pilot help bind routes names the web page, menu, keystroke and shell ids.",
-                             usage: "pilot bind <action> <key> [--mods shift,ctrl,alt,cmd] [--plain] [--replace] | pilot bind <action> --on | pilot bind <action|all> --reset | pilot bind --preset <preset>",
+        register(ControlVerb("bind", help: "Binds an action to a key under Hyper (--plain: a plain combo); --replace takes a taken key; --on turns on a switched-off bind; --reset puts its default back; --preset switches the preset. A mouse button binds as \"Mouse 4\" or --mouse 4 (Hyper + it; --plain: the plain press), the wheel as \"Mouse Scroll Up\" or \"Mouse Scroll Down\" (--mouse scrollUp), under Hyper only; pilot list mouse lists them and pilot remove mouse <trigger> frees one. pilot help bind routes names the web page, menu, keystroke and shell ids.",
+                             usage: "pilot bind <action> <key> [--mods shift,ctrl,alt,cmd] [--plain] [--replace] | pilot bind <action> --mouse <button> [--plain] [--replace] | pilot bind <action> --on | pilot bind <action|all> --reset | pilot bind --preset <preset>",
                              flags: [.init("mods", help: "shift, ctrl, alt, cmd, or one side: leftAlt, rightCmd, …"),
                                      .init("plain", help: "a plain combo, outside Hyper, which needs cmd, ctrl or alt; for a mouse button, its plain press", takesValue: false),
                                      .init("replace", help: "take the key from the action holding it, which is left with none", takesValue: false),
+                                     .init("mouse", help: "a mouse button in place of the key: its number (4), its hold (4hold), or the wheel (scrollUp, scrollDown)"),
                                      .init("on", help: "turn on a bind an import switched off; asks Allow as running it does", takesValue: false),
                                      .init("reset", help: "put the default key back; all: every bind, after Allow", takesValue: false),
                                      .init("preset", help: "switch to this preset, after Allow; pilot list presets names them")],
@@ -196,7 +197,20 @@ extension ControlVerbs {
     /// `bind`'s key when it names a mouse button, its hold or the wheel (P51): under Hyper, --plain for a button's plain press. A media
     /// key or a key the mouse sends is caught in Binds › Mouse, which records the mouse it came from; nil for a keyboard key.
     static func mouseKey(_ args: ControlArguments) throws(ControlError) -> Key? {
-        guard let code = KeyNames.code(for: try args.word(1, "key")), MouseKeys.isMouse(code) else { return nil }
+        let code: Int64
+        if let button = args.value("mouse") {
+            // --mouse <button> (P30): the button's number, its hold or the wheel, named as the key word names them.
+            guard args.positional.count < 2 else { throw ControlError(.badRequest, "say the key or --mouse <button>, not both") }
+            guard let named = mouseCode(button) else {
+                throw ControlError(.badValue, "no mouse button \(button); say its number (4), its hold (4hold), scrollUp or scrollDown")
+            }
+            code = named
+        } else {
+            guard let named = KeyNames.code(for: try args.word(1, "key")), MouseKeys.isMouse(named) else { return nil }
+            code = named
+        }
+        // A mouse trigger is Hyper or plain alone: modifiers would be dropped unsaid.
+        guard args.value("mods") == nil else { throw ControlError(.badRequest, "a mouse button takes no --mods: it binds under Hyper, or alone with --plain") }
         // A hold ("Mouse 4 Hold", P74) is never under Hyper.
         let key = Key(keyCode: code, hyper: !args.has("plain") && !MouseKeys.isHold(code))
         guard !MouseKeys.isSent(MouseKeys.plain(key).keyCode) else { throw ControlError(.badValue, "\(key.label) is caught in Binds › Mouse, which records the mouse that sends it") }
@@ -205,6 +219,20 @@ extension ControlVerbs {
         }
         guard MouseKeys.isTrigger(key) else { throw ControlError(.badValue, "the wheel binds under Hyper only; drop --plain") }
         return key
+    }
+
+    /// `--mouse`'s word as a mouse key code: "4" or "Mouse 4", "4hold" or "Mouse 4 Hold", "scrollUp" or "Mouse Scroll Up".
+    private static func mouseCode(_ word: String) -> Int64? {
+        var name = word.trimmingCharacters(in: .whitespaces)
+        if name.lowercased().hasPrefix("mouse") { name = String(name.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        let lower = name.lowercased().replacingOccurrences(of: " ", with: "")
+        let spelled = switch lower {
+        case "scrollup": "Mouse Scroll Up"
+        case "scrolldown": "Mouse Scroll Down"
+        case let hold where hold.hasSuffix("hold"): "Mouse \(hold.dropLast(4)) Hold"
+        default: "Mouse \(name)"
+        }
+        return MouseKeys.code(for: spelled)
     }
 
     /// The other action holding a mouse trigger: refused unless `replace`, as a taken key is.

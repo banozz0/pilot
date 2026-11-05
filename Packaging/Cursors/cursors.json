@@ -1,0 +1,2777 @@
+{
+ "version": 1,
+ "canvasPoints": 32,
+ "scales": [
+  1,
+  2,
+  5
+ ],
+ "frameSeconds": 0.06,
+ "defaultSet": "quiet",
+ "layout": "<set>@<n>x.png is 8-bit grey, cells of 32n x 32n px. A cursor takes `frames` rows from row `row` (frame 0 first) and one column per layer, paint order left first. Grey is the layer's coverage: fill each layer's role colour from the palette through it, in order.",
+ "sets": {
+  "quiet": {
+   "name": "Quiet",
+   "idea": "Black body, white rim, soft shadow. Sits beside macOS's own.",
+   "rows": 52,
+   "cursors": {
+    "arrow": {
+     "label": "Arrow",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 0,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "ibeam": {
+     "label": "Text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 1,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "ibeam-vertical": {
+     "label": "Vertical text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 2,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "pointing-hand": {
+     "label": "Link",
+     "hotspot": [
+      12,
+      3
+     ],
+     "row": 3,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "hand",
+      "crease"
+     ]
+    },
+    "open-hand": {
+     "label": "Open hand",
+     "hotspot": [
+      16,
+      17
+     ],
+     "row": 4,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "hand"
+     ]
+    },
+    "closed-hand": {
+     "label": "Closed hand",
+     "hotspot": [
+      17,
+      19
+     ],
+     "row": 5,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "hand",
+      "crease"
+     ]
+    },
+    "crosshair": {
+     "label": "Crosshair",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 6,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "body"
+     ]
+    },
+    "cell": {
+     "label": "Cell",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 7,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "cellfill"
+     ]
+    },
+    "move": {
+     "label": "Move",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 8,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "busy": {
+     "label": "Busy",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 9,
+     "frames": 12,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim"
+     ]
+    },
+    "working": {
+     "label": "Working",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 21,
+     "frames": 12,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_work",
+      "b_ink"
+     ]
+    },
+    "not-allowed": {
+     "label": "Not allowed",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 33,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_no",
+      "b_no_ink"
+     ]
+    },
+    "context-menu": {
+     "label": "Context menu",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 34,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_ctx",
+      "b_ink"
+     ]
+    },
+    "copy": {
+     "label": "Copy",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 35,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_copy",
+      "b_copy_ink"
+     ]
+    },
+    "alias": {
+     "label": "Alias",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 36,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_alias",
+      "b_alias_ink"
+     ]
+    },
+    "help": {
+     "label": "Help",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 37,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "rim",
+      "b_help",
+      "b_help_ink"
+     ]
+    },
+    "zoom-in": {
+     "label": "Zoom in",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 38,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "zoomfill",
+      "glass",
+      "lens"
+     ]
+    },
+    "zoom-out": {
+     "label": "Zoom out",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 39,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "zoomfill",
+      "glass",
+      "lens"
+     ]
+    },
+    "poof": {
+     "label": "Poof",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 40,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "body",
+      "poof",
+      "body",
+      "poof"
+     ]
+    },
+    "camera": {
+     "label": "Camera",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 41,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body",
+      "glass",
+      "lens"
+     ]
+    },
+    "resize-ew": {
+     "label": "Resize ↔",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 42,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-ns": {
+     "label": "Resize ↕",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 43,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-nwse": {
+     "label": "Resize ⤡",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 44,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-nesw": {
+     "label": "Resize ⤢",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 45,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-col": {
+     "label": "Column",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 46,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-row": {
+     "label": "Row",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 47,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-e": {
+     "label": "Resize →",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 48,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-w": {
+     "label": "Resize ←",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 49,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-n": {
+     "label": "Resize ↑",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 50,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    },
+    "resize-s": {
+     "label": "Resize ↓",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 51,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "rim",
+      "body"
+     ]
+    }
+   },
+   "palettes": {
+    "own": {
+     "body": "#111214",
+     "rim": "#FFFFFF",
+     "hand": "#111214",
+     "crease": "#FFFFFF",
+     "cellfill": "#111214",
+     "zoomfill": "#111214",
+     "glass": "#FFFFFF",
+     "lens": "#111214",
+     "poof": "#FFFFFF",
+     "accent": "#FFFFFF",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#2DA44E",
+     "b_no": "#E5484D",
+     "b_help": "#3478F6",
+     "b_alias": "#111214",
+     "b_ctx": "#111214",
+     "b_work": "#111214",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "orchid": {
+     "body": "#09070F",
+     "rim": "#EDE9F5",
+     "hand": "#09070F",
+     "crease": "#EDE9F5",
+     "cellfill": "#09070F",
+     "zoomfill": "#09070F",
+     "glass": "#EDE9F5",
+     "lens": "#09070F",
+     "poof": "#EDE9F5",
+     "accent": "#EDE9F5",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#7BE0A8",
+     "b_no": "#FF5C7A",
+     "b_help": "#A77BFF",
+     "b_alias": "#09070F",
+     "b_ctx": "#09070F",
+     "b_work": "#09070F",
+     "b_copy_ink": "#09070F",
+     "b_no_ink": "#09070F",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "lagoon": {
+     "body": "#050B13",
+     "rim": "#E4EEF5",
+     "hand": "#050B13",
+     "crease": "#E4EEF5",
+     "cellfill": "#050B13",
+     "zoomfill": "#050B13",
+     "glass": "#E4EEF5",
+     "lens": "#050B13",
+     "poof": "#E4EEF5",
+     "accent": "#E4EEF5",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#22C7A9",
+     "b_no": "#FF7A85",
+     "b_help": "#2BC4F0",
+     "b_alias": "#050B13",
+     "b_ctx": "#050B13",
+     "b_work": "#050B13",
+     "b_copy_ink": "#050B13",
+     "b_no_ink": "#050B13",
+     "b_help_ink": "#050B13",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "void": {
+     "body": "#050505",
+     "rim": "#F2F2F2",
+     "hand": "#050505",
+     "crease": "#F2F2F2",
+     "cellfill": "#050505",
+     "zoomfill": "#050505",
+     "glass": "#F2F2F2",
+     "lens": "#050505",
+     "poof": "#F2F2F2",
+     "accent": "#F2F2F2",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#9BE3B4",
+     "b_no": "#FF6B6B",
+     "b_help": "#E8E8E8",
+     "b_alias": "#050505",
+     "b_ctx": "#050505",
+     "b_work": "#050505",
+     "b_copy_ink": "#050505",
+     "b_no_ink": "#050505",
+     "b_help_ink": "#050505",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "phosphor": {
+     "body": "#040605",
+     "rim": "#E6F0E8",
+     "hand": "#040605",
+     "crease": "#E6F0E8",
+     "cellfill": "#040605",
+     "zoomfill": "#040605",
+     "glass": "#E6F0E8",
+     "lens": "#040605",
+     "poof": "#E6F0E8",
+     "accent": "#E6F0E8",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#7FE3A0",
+     "b_no": "#FF6B6B",
+     "b_help": "#3BEA5C",
+     "b_alias": "#040605",
+     "b_ctx": "#040605",
+     "b_work": "#040605",
+     "b_copy_ink": "#040605",
+     "b_no_ink": "#040605",
+     "b_help_ink": "#040605",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "garnet": {
+     "body": "#0B070A",
+     "rim": "#F4E9EE",
+     "hand": "#0B070A",
+     "crease": "#F4E9EE",
+     "cellfill": "#0B070A",
+     "zoomfill": "#0B070A",
+     "glass": "#F4E9EE",
+     "lens": "#0B070A",
+     "poof": "#F4E9EE",
+     "accent": "#F4E9EE",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#86D9A8",
+     "b_no": "#FF6B5E",
+     "b_help": "#FF4775",
+     "b_alias": "#0B070A",
+     "b_ctx": "#0B070A",
+     "b_work": "#0B070A",
+     "b_copy_ink": "#0B070A",
+     "b_no_ink": "#0B070A",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "dusk": {
+     "body": "#0A0809",
+     "rim": "#EFE6E2",
+     "hand": "#0A0809",
+     "crease": "#EFE6E2",
+     "cellfill": "#0A0809",
+     "zoomfill": "#0A0809",
+     "glass": "#EFE6E2",
+     "lens": "#0A0809",
+     "poof": "#EFE6E2",
+     "accent": "#EFE6E2",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#A7C4A0",
+     "b_no": "#E07A6F",
+     "b_help": "#E3A48F",
+     "b_alias": "#0A0809",
+     "b_ctx": "#0A0809",
+     "b_work": "#0A0809",
+     "b_copy_ink": "#0A0809",
+     "b_no_ink": "#0A0809",
+     "b_help_ink": "#0A0809",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "porcelain": {
+     "body": "#161A22",
+     "rim": "#FFFFFF",
+     "hand": "#161A22",
+     "crease": "#FFFFFF",
+     "cellfill": "#161A22",
+     "zoomfill": "#161A22",
+     "glass": "#FFFFFF",
+     "lens": "#161A22",
+     "poof": "#FFFFFF",
+     "accent": "#FFFFFF",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#2F9E44",
+     "b_no": "#D20F39",
+     "b_help": "#1E5EF5",
+     "b_alias": "#161A22",
+     "b_ctx": "#161A22",
+     "b_work": "#161A22",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "workshop": {
+     "body": "#141415",
+     "rim": "#FFFFFF",
+     "hand": "#141415",
+     "crease": "#FFFFFF",
+     "cellfill": "#141415",
+     "zoomfill": "#141415",
+     "glass": "#FFFFFF",
+     "lens": "#141415",
+     "poof": "#FFFFFF",
+     "accent": "#FFFFFF",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#2E9E5B",
+     "b_no": "#D83A2E",
+     "b_help": "#E04E0C",
+     "b_alias": "#141415",
+     "b_ctx": "#141415",
+     "b_work": "#141415",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "toybox-night": {
+     "body": "#1A1834",
+     "rim": "#FFF4E2",
+     "hand": "#1A1834",
+     "crease": "#FFF4E2",
+     "cellfill": "#1A1834",
+     "zoomfill": "#1A1834",
+     "glass": "#FFF4E2",
+     "lens": "#1A1834",
+     "poof": "#FFF4E2",
+     "accent": "#FFF4E2",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#46E0A6",
+     "b_no": "#FF7F6E",
+     "b_help": "#FFC933",
+     "b_alias": "#1A1834",
+     "b_ctx": "#1A1834",
+     "b_work": "#1A1834",
+     "b_copy_ink": "#1A1834",
+     "b_no_ink": "#1A1834",
+     "b_help_ink": "#1A1834",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    },
+    "toybox": {
+     "body": "#221E35",
+     "rim": "#FFFFFF",
+     "hand": "#221E35",
+     "crease": "#FFFFFF",
+     "cellfill": "#221E35",
+     "zoomfill": "#221E35",
+     "glass": "#FFFFFF",
+     "lens": "#221E35",
+     "poof": "#FFFFFF",
+     "accent": "#FFFFFF",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#1FAF7A",
+     "b_no": "#FF7F6E",
+     "b_help": "#FFC933",
+     "b_alias": "#221E35",
+     "b_ctx": "#221E35",
+     "b_work": "#221E35",
+     "b_copy_ink": "#221E35",
+     "b_no_ink": "#221E35",
+     "b_help_ink": "#221E35",
+     "b_alias_ink": "#FFFFFF",
+     "shadow": "#000000"
+    }
+   }
+  },
+  "toybox": {
+   "name": "Toybox",
+   "idea": "Chunky candy keycaps: ink outline, a pressed-key depth.",
+   "rows": 52,
+   "cursors": {
+    "arrow": {
+     "label": "Arrow",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 0,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine"
+     ]
+    },
+    "ibeam": {
+     "label": "Text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 1,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "lilac"
+     ]
+    },
+    "ibeam-vertical": {
+     "label": "Vertical text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 2,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "lilac"
+     ]
+    },
+    "pointing-hand": {
+     "label": "Link",
+     "hotspot": [
+      12,
+      3
+     ],
+     "row": 3,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "hand",
+      "crease"
+     ]
+    },
+    "open-hand": {
+     "label": "Open hand",
+     "hotspot": [
+      16,
+      17
+     ],
+     "row": 4,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "hand"
+     ]
+    },
+    "closed-hand": {
+     "label": "Closed hand",
+     "hotspot": [
+      17,
+      19
+     ],
+     "row": 5,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "hand",
+      "crease"
+     ]
+    },
+    "crosshair": {
+     "label": "Crosshair",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 6,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "sky",
+      "rim",
+      "sun"
+     ]
+    },
+    "cell": {
+     "label": "Cell",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 7,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "cellfill"
+     ]
+    },
+    "move": {
+     "label": "Move",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 8,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "busy": {
+     "label": "Busy",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 9,
+     "frames": 12,
+     "layers": [
+      "ink",
+      "sun",
+      "lilac",
+      "mint",
+      "coral",
+      "ink"
+     ]
+    },
+    "working": {
+     "label": "Working",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 21,
+     "frames": 12,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_work",
+      "b_ink"
+     ]
+    },
+    "not-allowed": {
+     "label": "Not allowed",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 33,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_no",
+      "b_no_ink"
+     ]
+    },
+    "context-menu": {
+     "label": "Context menu",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 34,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_ctx",
+      "b_ink"
+     ]
+    },
+    "copy": {
+     "label": "Copy",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 35,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_copy",
+      "b_copy_ink"
+     ]
+    },
+    "alias": {
+     "label": "Alias",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 36,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_alias",
+      "b_alias_ink"
+     ]
+    },
+    "help": {
+     "label": "Help",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 37,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "body",
+      "shine",
+      "rim",
+      "b_help",
+      "b_help_ink"
+     ]
+    },
+    "zoom-in": {
+     "label": "Zoom in",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 38,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "zoomfill",
+      "glass",
+      "lens"
+     ]
+    },
+    "zoom-out": {
+     "label": "Zoom out",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 39,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "zoomfill",
+      "glass",
+      "lens"
+     ]
+    },
+    "poof": {
+     "label": "Poof",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 40,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "poof",
+      "rim",
+      "poof"
+     ]
+    },
+    "camera": {
+     "label": "Camera",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 41,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "sky",
+      "glass",
+      "lens"
+     ]
+    },
+    "resize-ew": {
+     "label": "Resize ↔",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 42,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-ns": {
+     "label": "Resize ↕",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 43,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-nwse": {
+     "label": "Resize ⤡",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 44,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-nesw": {
+     "label": "Resize ⤢",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 45,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-col": {
+     "label": "Column",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 46,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-row": {
+     "label": "Row",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 47,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-e": {
+     "label": "Resize →",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 48,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-w": {
+     "label": "Resize ←",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 49,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-n": {
+     "label": "Resize ↑",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 50,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    },
+    "resize-s": {
+     "label": "Resize ↓",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 51,
+     "frames": 1,
+     "layers": [
+      "ink",
+      "mint"
+     ]
+    }
+   },
+   "palettes": {
+    "own": {
+     "body": "#FFC933",
+     "rim": "#221E35",
+     "ink": "#221E35",
+     "hand": "#FFC933",
+     "crease": "#221E35",
+     "cellfill": "#5BC0FF",
+     "zoomfill": "#5BC0FF",
+     "glass": "#FFF7EA",
+     "lens": "#221E35",
+     "poof": "#FFF7EA",
+     "accent": "#FFC933",
+     "shine": "#FFFFFF",
+     "sun": "#FFC933",
+     "lilac": "#A98BFF",
+     "mint": "#3FD7A0",
+     "coral": "#FF7F6E",
+     "sky": "#5BC0FF",
+     "b_ink": "#221E35",
+     "b_copy": "#3FD7A0",
+     "b_no": "#FF7F6E",
+     "b_help": "#5BC0FF",
+     "b_alias": "#A98BFF",
+     "b_ctx": "#FFC933",
+     "b_work": "#FFC933",
+     "shadow": "#221E35",
+     "b_copy_ink": "#221E35",
+     "b_no_ink": "#221E35",
+     "b_help_ink": "#221E35",
+     "b_alias_ink": "#221E35"
+    },
+    "orchid": {
+     "body": "#A77BFF",
+     "rim": "#09070F",
+     "ink": "#09070F",
+     "hand": "#A77BFF",
+     "crease": "#09070F",
+     "cellfill": "#7BE0A8",
+     "zoomfill": "#7BE0A8",
+     "glass": "#15111F",
+     "lens": "#09070F",
+     "poof": "#15111F",
+     "accent": "#A77BFF",
+     "shine": "#FFFFFF",
+     "sun": "#A77BFF",
+     "lilac": "#FF4F8B",
+     "mint": "#FF9CC0",
+     "coral": "#FF5C7A",
+     "sky": "#7BE0A8",
+     "b_ink": "#09070F",
+     "b_copy": "#FF9CC0",
+     "b_no": "#FF5C7A",
+     "b_help": "#7BE0A8",
+     "b_alias": "#FF4F8B",
+     "b_ctx": "#A77BFF",
+     "b_work": "#A77BFF",
+     "shadow": "#09070F",
+     "b_copy_ink": "#09070F",
+     "b_no_ink": "#09070F",
+     "b_help_ink": "#09070F",
+     "b_alias_ink": "#09070F"
+    },
+    "lagoon": {
+     "body": "#2BC4F0",
+     "rim": "#050B13",
+     "ink": "#050B13",
+     "hand": "#2BC4F0",
+     "crease": "#050B13",
+     "cellfill": "#22C7A9",
+     "zoomfill": "#22C7A9",
+     "glass": "#0C1724",
+     "lens": "#050B13",
+     "poof": "#0C1724",
+     "accent": "#2BC4F0",
+     "shine": "#FFFFFF",
+     "sun": "#2BC4F0",
+     "lilac": "#22C7A9",
+     "mint": "#F59BBB",
+     "coral": "#FF7A85",
+     "sky": "#22C7A9",
+     "b_ink": "#050B13",
+     "b_copy": "#F59BBB",
+     "b_no": "#FF7A85",
+     "b_help": "#22C7A9",
+     "b_alias": "#22C7A9",
+     "b_ctx": "#2BC4F0",
+     "b_work": "#2BC4F0",
+     "shadow": "#050B13",
+     "b_copy_ink": "#050B13",
+     "b_no_ink": "#050B13",
+     "b_help_ink": "#050B13",
+     "b_alias_ink": "#050B13"
+    },
+    "void": {
+     "body": "#E8E8E8",
+     "rim": "#050505",
+     "ink": "#050505",
+     "hand": "#E8E8E8",
+     "crease": "#050505",
+     "cellfill": "#9BE3B4",
+     "zoomfill": "#9BE3B4",
+     "glass": "#0C0C0C",
+     "lens": "#050505",
+     "poof": "#0C0C0C",
+     "accent": "#E8E8E8",
+     "shine": "#FFFFFF",
+     "sun": "#E8E8E8",
+     "lilac": "#8D8D8D",
+     "mint": "#BDBDBD",
+     "coral": "#FF6B6B",
+     "sky": "#9BE3B4",
+     "b_ink": "#050505",
+     "b_copy": "#BDBDBD",
+     "b_no": "#FF6B6B",
+     "b_help": "#9BE3B4",
+     "b_alias": "#8D8D8D",
+     "b_ctx": "#E8E8E8",
+     "b_work": "#E8E8E8",
+     "shadow": "#050505",
+     "b_copy_ink": "#050505",
+     "b_no_ink": "#050505",
+     "b_help_ink": "#050505",
+     "b_alias_ink": "#050505"
+    },
+    "phosphor": {
+     "body": "#3BEA5C",
+     "rim": "#040605",
+     "ink": "#040605",
+     "hand": "#3BEA5C",
+     "crease": "#040605",
+     "cellfill": "#7FE3A0",
+     "zoomfill": "#7FE3A0",
+     "glass": "#0D120F",
+     "lens": "#040605",
+     "poof": "#0D120F",
+     "accent": "#3BEA5C",
+     "shine": "#FFFFFF",
+     "sun": "#3BEA5C",
+     "lilac": "#E0A46E",
+     "mint": "#6FC3FF",
+     "coral": "#FF6B6B",
+     "sky": "#7FE3A0",
+     "b_ink": "#040605",
+     "b_copy": "#6FC3FF",
+     "b_no": "#FF6B6B",
+     "b_help": "#7FE3A0",
+     "b_alias": "#E0A46E",
+     "b_ctx": "#3BEA5C",
+     "b_work": "#3BEA5C",
+     "shadow": "#040605",
+     "b_copy_ink": "#040605",
+     "b_no_ink": "#040605",
+     "b_help_ink": "#040605",
+     "b_alias_ink": "#040605"
+    },
+    "garnet": {
+     "body": "#FF4775",
+     "rim": "#0B070A",
+     "ink": "#0B070A",
+     "hand": "#FF4775",
+     "crease": "#0B070A",
+     "cellfill": "#86D9A8",
+     "zoomfill": "#86D9A8",
+     "glass": "#181015",
+     "lens": "#0B070A",
+     "poof": "#181015",
+     "accent": "#FF4775",
+     "shine": "#FFFFFF",
+     "sun": "#FF4775",
+     "lilac": "#B58CFF",
+     "mint": "#FFB3C6",
+     "coral": "#FF6B5E",
+     "sky": "#86D9A8",
+     "b_ink": "#0B070A",
+     "b_copy": "#FFB3C6",
+     "b_no": "#FF6B5E",
+     "b_help": "#86D9A8",
+     "b_alias": "#B58CFF",
+     "b_ctx": "#FF4775",
+     "b_work": "#FF4775",
+     "shadow": "#0B070A",
+     "b_copy_ink": "#0B070A",
+     "b_no_ink": "#0B070A",
+     "b_help_ink": "#0B070A",
+     "b_alias_ink": "#0B070A"
+    },
+    "dusk": {
+     "body": "#E3A48F",
+     "rim": "#0A0809",
+     "ink": "#0A0809",
+     "hand": "#E3A48F",
+     "crease": "#0A0809",
+     "cellfill": "#A7C4A0",
+     "zoomfill": "#A7C4A0",
+     "glass": "#161314",
+     "lens": "#0A0809",
+     "poof": "#161314",
+     "accent": "#E3A48F",
+     "shine": "#FFFFFF",
+     "sun": "#E3A48F",
+     "lilac": "#9FB4C8",
+     "mint": "#A7C4A0",
+     "coral": "#E07A6F",
+     "sky": "#A7C4A0",
+     "b_ink": "#0A0809",
+     "b_copy": "#A7C4A0",
+     "b_no": "#E07A6F",
+     "b_help": "#A7C4A0",
+     "b_alias": "#9FB4C8",
+     "b_ctx": "#E3A48F",
+     "b_work": "#E3A48F",
+     "shadow": "#0A0809",
+     "b_copy_ink": "#0A0809",
+     "b_no_ink": "#0A0809",
+     "b_help_ink": "#0A0809",
+     "b_alias_ink": "#0A0809"
+    },
+    "porcelain": {
+     "body": "#4B7EF7",
+     "rim": "#161A22",
+     "ink": "#161A22",
+     "hand": "#4B7EF7",
+     "crease": "#161A22",
+     "cellfill": "#2F9E44",
+     "zoomfill": "#2F9E44",
+     "glass": "#FFFFFF",
+     "lens": "#161A22",
+     "poof": "#FFFFFF",
+     "accent": "#4B7EF7",
+     "shine": "#FFFFFF",
+     "sun": "#4B7EF7",
+     "lilac": "#A061F2",
+     "mint": "#0B8FA6",
+     "coral": "#E05774",
+     "sky": "#2F9E44",
+     "b_ink": "#161A22",
+     "b_copy": "#0B8FA6",
+     "b_no": "#E05774",
+     "b_help": "#2F9E44",
+     "b_alias": "#A061F2",
+     "b_ctx": "#4B7EF7",
+     "b_work": "#4B7EF7",
+     "shadow": "#161A22",
+     "b_copy_ink": "#161A22",
+     "b_no_ink": "#161A22",
+     "b_help_ink": "#161A22",
+     "b_alias_ink": "#161A22"
+    },
+    "workshop": {
+     "body": "#E04E0C",
+     "rim": "#141415",
+     "ink": "#141415",
+     "hand": "#E04E0C",
+     "crease": "#141415",
+     "cellfill": "#2E9E5B",
+     "zoomfill": "#2E9E5B",
+     "glass": "#FFFFFF",
+     "lens": "#141415",
+     "poof": "#FFFFFF",
+     "accent": "#E04E0C",
+     "shine": "#FFFFFF",
+     "sun": "#E04E0C",
+     "lilac": "#4E7DDC",
+     "mint": "#818186",
+     "coral": "#DC4E43",
+     "sky": "#2E9E5B",
+     "b_ink": "#141415",
+     "b_copy": "#818186",
+     "b_no": "#DC4E43",
+     "b_help": "#2E9E5B",
+     "b_alias": "#4E7DDC",
+     "b_ctx": "#E04E0C",
+     "b_work": "#E04E0C",
+     "shadow": "#141415",
+     "b_copy_ink": "#141415",
+     "b_no_ink": "#141415",
+     "b_help_ink": "#141415",
+     "b_alias_ink": "#141415"
+    },
+    "toybox-night": {
+     "body": "#FFC933",
+     "rim": "#221E35",
+     "ink": "#221E35",
+     "hand": "#FFC933",
+     "crease": "#221E35",
+     "cellfill": "#5BC0FF",
+     "zoomfill": "#5BC0FF",
+     "glass": "#FFF7EA",
+     "lens": "#221E35",
+     "poof": "#FFF7EA",
+     "accent": "#FFC933",
+     "shine": "#FFFFFF",
+     "sun": "#FFC933",
+     "lilac": "#A98BFF",
+     "mint": "#3FD7A0",
+     "coral": "#FF7F6E",
+     "sky": "#5BC0FF",
+     "b_ink": "#221E35",
+     "b_copy": "#3FD7A0",
+     "b_no": "#FF7F6E",
+     "b_help": "#5BC0FF",
+     "b_alias": "#A98BFF",
+     "b_ctx": "#FFC933",
+     "b_work": "#FFC933",
+     "shadow": "#221E35",
+     "b_copy_ink": "#221E35",
+     "b_no_ink": "#221E35",
+     "b_help_ink": "#221E35",
+     "b_alias_ink": "#221E35"
+    },
+    "toybox": {
+     "body": "#FFC933",
+     "rim": "#221E35",
+     "ink": "#221E35",
+     "hand": "#FFC933",
+     "crease": "#221E35",
+     "cellfill": "#5BC0FF",
+     "zoomfill": "#5BC0FF",
+     "glass": "#FFF7EA",
+     "lens": "#221E35",
+     "poof": "#FFF7EA",
+     "accent": "#FFC933",
+     "shine": "#FFFFFF",
+     "sun": "#FFC933",
+     "lilac": "#A98BFF",
+     "mint": "#3FD7A0",
+     "coral": "#FF7F6E",
+     "sky": "#5BC0FF",
+     "b_ink": "#221E35",
+     "b_copy": "#3FD7A0",
+     "b_no": "#FF7F6E",
+     "b_help": "#5BC0FF",
+     "b_alias": "#A98BFF",
+     "b_ctx": "#FFC933",
+     "b_work": "#FFC933",
+     "shadow": "#221E35",
+     "b_copy_ink": "#221E35",
+     "b_no_ink": "#221E35",
+     "b_help_ink": "#221E35",
+     "b_alias_ink": "#221E35"
+    }
+   }
+  },
+  "duo": {
+   "name": "Duo",
+   "idea": "Folded paper: two tones of the accent, lit from the left.",
+   "rows": 52,
+   "cursors": {
+    "arrow": {
+     "label": "Arrow",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 0,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "ibeam": {
+     "label": "Text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 1,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "ibeam-vertical": {
+     "label": "Vertical text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 2,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "pointing-hand": {
+     "label": "Link",
+     "hotspot": [
+      12,
+      3
+     ],
+     "row": 3,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "hand",
+      "shade",
+      "crease"
+     ]
+    },
+    "open-hand": {
+     "label": "Open hand",
+     "hotspot": [
+      16,
+      17
+     ],
+     "row": 4,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "hand",
+      "shade"
+     ]
+    },
+    "closed-hand": {
+     "label": "Closed hand",
+     "hotspot": [
+      17,
+      19
+     ],
+     "row": 5,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "hand",
+      "shade",
+      "crease"
+     ]
+    },
+    "crosshair": {
+     "label": "Crosshair",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 6,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "cell": {
+     "label": "Cell",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 7,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "cellfill",
+      "shade"
+     ]
+    },
+    "move": {
+     "label": "Move",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 8,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "busy": {
+     "label": "Busy",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 9,
+     "frames": 12,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "working": {
+     "label": "Working",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 21,
+     "frames": 12,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_work",
+      "b_ink"
+     ]
+    },
+    "not-allowed": {
+     "label": "Not allowed",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 33,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_no",
+      "b_no_ink"
+     ]
+    },
+    "context-menu": {
+     "label": "Context menu",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 34,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_ctx",
+      "b_ink"
+     ]
+    },
+    "copy": {
+     "label": "Copy",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 35,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_copy",
+      "b_copy_ink"
+     ]
+    },
+    "alias": {
+     "label": "Alias",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 36,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_alias",
+      "b_alias_ink"
+     ]
+    },
+    "help": {
+     "label": "Help",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 37,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "edge",
+      "rim",
+      "b_help",
+      "b_help_ink"
+     ]
+    },
+    "zoom-in": {
+     "label": "Zoom in",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 38,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "zoomfill",
+      "shade",
+      "glass",
+      "lens"
+     ]
+    },
+    "zoom-out": {
+     "label": "Zoom out",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 39,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "zoomfill",
+      "shade",
+      "glass",
+      "lens"
+     ]
+    },
+    "poof": {
+     "label": "Poof",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 40,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "poof",
+      "shade",
+      "edge",
+      "rim",
+      "poof",
+      "shade"
+     ]
+    },
+    "camera": {
+     "label": "Camera",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 41,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade",
+      "glass",
+      "lens"
+     ]
+    },
+    "resize-ew": {
+     "label": "Resize ↔",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 42,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-ns": {
+     "label": "Resize ↕",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 43,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-nwse": {
+     "label": "Resize ⤡",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 44,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-nesw": {
+     "label": "Resize ⤢",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 45,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-col": {
+     "label": "Column",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 46,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-row": {
+     "label": "Row",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 47,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-e": {
+     "label": "Resize →",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 48,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-w": {
+     "label": "Resize ←",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 49,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-n": {
+     "label": "Resize ↑",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 50,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    },
+    "resize-s": {
+     "label": "Resize ↓",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 51,
+     "frames": 1,
+     "layers": [
+      "shadow",
+      "edge",
+      "rim",
+      "body",
+      "shade"
+     ]
+    }
+   },
+   "palettes": {
+    "own": {
+     "body": "#2BC4F0",
+     "shade": "#1B7A95",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#2BC4F0",
+     "crease": "#FFFFFF",
+     "cellfill": "#2BC4F0",
+     "zoomfill": "#2BC4F0",
+     "glass": "#FFFFFF",
+     "lens": "#1B7A95",
+     "poof": "#2BC4F0",
+     "accent": "#2BC4F0",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#1B7A95",
+     "b_no": "#1B7A95",
+     "b_help": "#1B7A95",
+     "b_alias": "#1B7A95",
+     "b_ctx": "#1B7A95",
+     "b_work": "#1B7A95",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "orchid": {
+     "body": "#A77BFF",
+     "shade": "#684C9E",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#A77BFF",
+     "crease": "#FFFFFF",
+     "cellfill": "#A77BFF",
+     "zoomfill": "#A77BFF",
+     "glass": "#FFFFFF",
+     "lens": "#684C9E",
+     "poof": "#A77BFF",
+     "accent": "#A77BFF",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#684C9E",
+     "b_no": "#684C9E",
+     "b_help": "#684C9E",
+     "b_alias": "#684C9E",
+     "b_ctx": "#684C9E",
+     "b_work": "#684C9E",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "lagoon": {
+     "body": "#2BC4F0",
+     "shade": "#1B7A95",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#2BC4F0",
+     "crease": "#FFFFFF",
+     "cellfill": "#2BC4F0",
+     "zoomfill": "#2BC4F0",
+     "glass": "#FFFFFF",
+     "lens": "#1B7A95",
+     "poof": "#2BC4F0",
+     "accent": "#2BC4F0",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#1B7A95",
+     "b_no": "#1B7A95",
+     "b_help": "#1B7A95",
+     "b_alias": "#1B7A95",
+     "b_ctx": "#1B7A95",
+     "b_work": "#1B7A95",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "void": {
+     "body": "#E8E8E8",
+     "shade": "#909090",
+     "rim": "#0B0E12",
+     "edge": "#FFFFFF",
+     "hand": "#E8E8E8",
+     "crease": "#FFFFFF",
+     "cellfill": "#E8E8E8",
+     "zoomfill": "#E8E8E8",
+     "glass": "#FFFFFF",
+     "lens": "#909090",
+     "poof": "#E8E8E8",
+     "accent": "#E8E8E8",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#909090",
+     "b_no": "#909090",
+     "b_help": "#909090",
+     "b_alias": "#909090",
+     "b_ctx": "#909090",
+     "b_work": "#909090",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "phosphor": {
+     "body": "#3BEA5C",
+     "shade": "#259139",
+     "rim": "#0B0E12",
+     "edge": "#FFFFFF",
+     "hand": "#3BEA5C",
+     "crease": "#FFFFFF",
+     "cellfill": "#3BEA5C",
+     "zoomfill": "#3BEA5C",
+     "glass": "#FFFFFF",
+     "lens": "#259139",
+     "poof": "#3BEA5C",
+     "accent": "#3BEA5C",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#259139",
+     "b_no": "#259139",
+     "b_help": "#259139",
+     "b_alias": "#259139",
+     "b_ctx": "#259139",
+     "b_work": "#259139",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "garnet": {
+     "body": "#FF4775",
+     "shade": "#9E2C49",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#FF4775",
+     "crease": "#FFFFFF",
+     "cellfill": "#FF4775",
+     "zoomfill": "#FF4775",
+     "glass": "#FFFFFF",
+     "lens": "#9E2C49",
+     "poof": "#FF4775",
+     "accent": "#FF4775",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#9E2C49",
+     "b_no": "#9E2C49",
+     "b_help": "#9E2C49",
+     "b_alias": "#9E2C49",
+     "b_ctx": "#9E2C49",
+     "b_work": "#9E2C49",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "dusk": {
+     "body": "#E3A48F",
+     "shade": "#8D6659",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#E3A48F",
+     "crease": "#FFFFFF",
+     "cellfill": "#E3A48F",
+     "zoomfill": "#E3A48F",
+     "glass": "#FFFFFF",
+     "lens": "#8D6659",
+     "poof": "#E3A48F",
+     "accent": "#E3A48F",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#8D6659",
+     "b_no": "#8D6659",
+     "b_help": "#8D6659",
+     "b_alias": "#8D6659",
+     "b_ctx": "#8D6659",
+     "b_work": "#8D6659",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "porcelain": {
+     "body": "#1E5EF5",
+     "shade": "#133A98",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#1E5EF5",
+     "crease": "#FFFFFF",
+     "cellfill": "#1E5EF5",
+     "zoomfill": "#1E5EF5",
+     "glass": "#FFFFFF",
+     "lens": "#133A98",
+     "poof": "#1E5EF5",
+     "accent": "#1E5EF5",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#133A98",
+     "b_no": "#133A98",
+     "b_help": "#133A98",
+     "b_alias": "#133A98",
+     "b_ctx": "#133A98",
+     "b_work": "#133A98",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "workshop": {
+     "body": "#E04E0C",
+     "shade": "#8B3007",
+     "rim": "#FFFFFF",
+     "edge": "#000000",
+     "hand": "#E04E0C",
+     "crease": "#FFFFFF",
+     "cellfill": "#E04E0C",
+     "zoomfill": "#E04E0C",
+     "glass": "#FFFFFF",
+     "lens": "#8B3007",
+     "poof": "#E04E0C",
+     "accent": "#E04E0C",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#8B3007",
+     "b_no": "#8B3007",
+     "b_help": "#8B3007",
+     "b_alias": "#8B3007",
+     "b_ctx": "#8B3007",
+     "b_work": "#8B3007",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "toybox-night": {
+     "body": "#FFC933",
+     "shade": "#9E7D20",
+     "rim": "#0B0E12",
+     "edge": "#FFFFFF",
+     "hand": "#FFC933",
+     "crease": "#FFFFFF",
+     "cellfill": "#FFC933",
+     "zoomfill": "#FFC933",
+     "glass": "#FFFFFF",
+     "lens": "#9E7D20",
+     "poof": "#FFC933",
+     "accent": "#FFC933",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#9E7D20",
+     "b_no": "#9E7D20",
+     "b_help": "#9E7D20",
+     "b_alias": "#9E7D20",
+     "b_ctx": "#9E7D20",
+     "b_work": "#9E7D20",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    },
+    "toybox": {
+     "body": "#FFC933",
+     "shade": "#9E7D20",
+     "rim": "#0B0E12",
+     "edge": "#FFFFFF",
+     "hand": "#FFC933",
+     "crease": "#FFFFFF",
+     "cellfill": "#FFC933",
+     "zoomfill": "#FFC933",
+     "glass": "#FFFFFF",
+     "lens": "#9E7D20",
+     "poof": "#FFC933",
+     "accent": "#FFC933",
+     "b_ink": "#FFFFFF",
+     "b_copy": "#9E7D20",
+     "b_no": "#9E7D20",
+     "b_help": "#9E7D20",
+     "b_alias": "#9E7D20",
+     "b_ctx": "#9E7D20",
+     "b_work": "#9E7D20",
+     "shadow": "#000000",
+     "b_copy_ink": "#FFFFFF",
+     "b_no_ink": "#FFFFFF",
+     "b_help_ink": "#FFFFFF",
+     "b_alias_ink": "#FFFFFF"
+    }
+   }
+  },
+  "classic": {
+   "name": "Classic",
+   "idea": "Pixel-true on the 1 pt grid: hard steps and a one-pixel outline, like System 7.",
+   "rows": 52,
+   "cursors": {
+    "arrow": {
+     "label": "Arrow",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 0,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "ibeam": {
+     "label": "Text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 1,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "ibeam-vertical": {
+     "label": "Vertical text",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 2,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "pointing-hand": {
+     "label": "Link",
+     "hotspot": [
+      12,
+      3
+     ],
+     "row": 3,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "open-hand": {
+     "label": "Open hand",
+     "hotspot": [
+      16,
+      17
+     ],
+     "row": 4,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "closed-hand": {
+     "label": "Closed hand",
+     "hotspot": [
+      17,
+      19
+     ],
+     "row": 5,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "crosshair": {
+     "label": "Crosshair",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 6,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "cell": {
+     "label": "Cell",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 7,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "move": {
+     "label": "Move",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 8,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "busy": {
+     "label": "Busy",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 9,
+     "frames": 12,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "working": {
+     "label": "Working",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 21,
+     "frames": 12,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "not-allowed": {
+     "label": "Not allowed",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 33,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "context-menu": {
+     "label": "Context menu",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 34,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "copy": {
+     "label": "Copy",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 35,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "alias": {
+     "label": "Alias",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 36,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "help": {
+     "label": "Help",
+     "hotspot": [
+      8,
+      5
+     ],
+     "row": 37,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "zoom-in": {
+     "label": "Zoom in",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 38,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "zoom-out": {
+     "label": "Zoom out",
+     "hotspot": [
+      13,
+      13
+     ],
+     "row": 39,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "poof": {
+     "label": "Poof",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 40,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "camera": {
+     "label": "Camera",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 41,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-ew": {
+     "label": "Resize ↔",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 42,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-ns": {
+     "label": "Resize ↕",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 43,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-nwse": {
+     "label": "Resize ⤡",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 44,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-nesw": {
+     "label": "Resize ⤢",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 45,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-col": {
+     "label": "Column",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 46,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-row": {
+     "label": "Row",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 47,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-e": {
+     "label": "Resize →",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 48,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-w": {
+     "label": "Resize ←",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 49,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-n": {
+     "label": "Resize ↑",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 50,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    },
+    "resize-s": {
+     "label": "Resize ↓",
+     "hotspot": [
+      16,
+      16
+     ],
+     "row": 51,
+     "frames": 1,
+     "layers": [
+      "outline",
+      "fill"
+     ]
+    }
+   },
+   "palettes": {
+    "own": {
+     "fill": "#111214",
+     "outline": "#FFFFFF"
+    },
+    "orchid": {
+     "fill": "#09070F",
+     "outline": "#EDE9F5"
+    },
+    "lagoon": {
+     "fill": "#050B13",
+     "outline": "#E4EEF5"
+    },
+    "void": {
+     "fill": "#050505",
+     "outline": "#F2F2F2"
+    },
+    "phosphor": {
+     "fill": "#040605",
+     "outline": "#E6F0E8"
+    },
+    "garnet": {
+     "fill": "#0B070A",
+     "outline": "#F4E9EE"
+    },
+    "dusk": {
+     "fill": "#0A0809",
+     "outline": "#EFE6E2"
+    },
+    "porcelain": {
+     "fill": "#161A22",
+     "outline": "#FFFFFF"
+    },
+    "workshop": {
+     "fill": "#141415",
+     "outline": "#FFFFFF"
+    },
+    "toybox-night": {
+     "fill": "#1A1834",
+     "outline": "#FFF4E2"
+    },
+    "toybox": {
+     "fill": "#221E35",
+     "outline": "#FFFFFF"
+    }
+   }
+  }
+ }
+}

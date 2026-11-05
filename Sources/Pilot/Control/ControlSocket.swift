@@ -54,6 +54,8 @@ final class ControlSocket {
         verbs.registerInstall(ControlInstall())
         verbs.registerHomeBlocks(homeBlocks)
         verbs.registerAI(ControlAI())
+        verbs.registerModels(ControlModels())
+        verbs.registerPermits(ControlPermits())
         verbs.registerLight()
         verbs.registerUninstall()
         return verbs

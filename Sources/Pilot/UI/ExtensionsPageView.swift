@@ -505,7 +505,7 @@ private struct CatalogueDetail: View {
                         }
                     }
                 }
-                TitledPanel(title: "It will touch") { PermissionLines(permissions: ExtensionsPage.permissions(entry.permissions)) }
+                TitledPanel(title: "It will touch") { PermissionLines(permissions: ExtensionsPage.permissions(entry.permissions, label: { Engine.shared?.registry.actions[$0]?.label })) }
             }
             .padding(20)
         }

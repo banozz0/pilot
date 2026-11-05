@@ -5,15 +5,20 @@ import Foundation
 /// between their zones in the order they are drawn, and the drop goes before the first slot of that side whose middle is right of it. Pure, so it is
 /// tested without views; the bar hands it the slots as it drew them.
 public struct BarDrop: Sendable {
-    /// A slot as the bar drew it, its kind as BarSlot.kind; one with no width (an item drawing nothing, or one gone for
+    /// A slot as the bar drew it, its item as BarSlot.item; one with no width (an item drawing nothing, or one gone for
     /// room) still counts in its side's order.
     public struct Slot: Sendable {
-        public let kind: BarKind
+        public let item: BarTrayItem
         public let minX: Double, maxX: Double
 
-        public init(kind: BarKind, minX: Double, maxX: Double) {
-            (self.kind, self.minX, self.maxX) = (kind, minX, maxX)
+        public init(item: BarTrayItem, minX: Double, maxX: Double) {
+            (self.item, self.minX, self.maxX) = (item, minX, maxX)
         }
+
+        public init(kind: BarKind, minX: Double, maxX: Double) { self.init(item: .kind(kind), minX: minX, maxX: maxX) }
+
+        /// Its kind as BarSlot.kind: an extension's item is of the Extensions kind.
+        public var kind: BarKind { item.kind ?? .extensions }
 
         var drawn: Bool { maxX > minX }
         var midX: Double { (minX + maxX) / 2 }
@@ -61,12 +66,14 @@ public struct BarDrop: Sendable {
     }
 
     /// Where `dragging` lands for a drop at `x`, `y` down from the bar's top edge; nil off the bar (the caller decides
-    /// what that means). Nil `dragging` is something not on the bar yet (an extension's item, drawn in the Extensions slot). The index counts the side's slots without the dragged one and never goes before Pilot's icon,
-    /// which leads the left side.
-    public func target(x: Double, y: Double, dragging: BarKind?) -> Target? {
+    /// what that means). Nil `dragging` is something not on the bar yet. The index counts the side's slots without the
+    /// dragged one, a built-in item or an extension's, and never goes before Pilot's icon, which leads the left side.
+    public func target(x: Double, y: Double, dragging: BarKind) -> Target? { target(x: x, y: y, dragging: .kind(dragging)) }
+
+    public func target(x: Double, y: Double, dragging: BarTrayItem?) -> Target? {
         guard (0...height + Self.below).contains(y) else { return nil }
         let side = side(at: x)
-        let others = (sides[side] ?? []).filter { $0.kind != dragging }
+        let others = (sides[side] ?? []).filter { $0.item != dragging }
         let lead = others.prefix { $0.kind.pinned }.count
         let next = others.indices.first { $0 >= lead && others[$0].drawn && others[$0].midX > x }
         let index = max(lead, next ?? others.lastIndex(where: \.drawn).map { $0 + 1 } ?? others.count)
@@ -85,15 +92,19 @@ extension BarSettings {
     /// A drop on the top bar: the item goes to `side`, before the slot now at `index` of that side's top bar slots without
     /// it, or last past the end. A reading joins the Group wherever it lands while the Group is shown (slots' rule). Pilot
     /// never moves: its icon leads the left side.
-    public mutating func place(_ kind: BarKind, on side: TopBarSide, at index: Int) {
-        guard !kind.pinned else { return }
-        let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.kind != kind }
+    public mutating func place(_ kind: BarKind, on side: TopBarSide, at index: Int) { place(.kind(kind), on: side, at: index) }
+
+    /// The same for an extension's own item (spec pilot-1.1 T50), placed in the top bar's order like a built-in one;
+    /// one with no place there yet changes nothing.
+    public mutating func place(_ item: BarTrayItem, on side: TopBarSide, at index: Int) {
+        guard item.kind?.pinned != true, self.index(of: item) != nil else { return }
+        let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.item != item }
         // A link can name any index: below 0 is first.
         let index = max(index, 0)
-        guard index < others.count else { return move(kind, to: side) }
-        set(kind, side: side)
-        let target = others[index].kind
-        move(kind, to: entries.filter { $0.kind != kind }.firstIndex { $0.kind == target }!)
+        guard index < others.count else { return move(item, to: side) }
+        set(item, side: side)
+        let target = others[index].entries[0].item
+        move(item, to: entries.filter { $0.item != item }.firstIndex { $0.item == target }!)
     }
 
     /// An item put on the top bar (a pilot://bar add link, pilot bar-items add): the item goes on, joins the top bar (one in the macOS menu bar alone is put in
@@ -124,18 +135,30 @@ extension BarSettings {
         set(kind, on: false)
     }
 
+    /// Where `item`'s slot is in the top bar with the bar on: its side and its place there from 0; nil while it is not
+    /// there. A reading the Group gathers is at the Group's place.
+    public func topBarPlace(_ item: BarTrayItem) -> (side: TopBarSide, index: Int)? {
+        let sides = preview(.topBar).top ?? [:]
+        return TopBarSide.allCases.lazy.compactMap { side in
+            sides[side]?.firstIndex { $0.item == item || $0.isGroup && $0.entries.contains { $0.item == item } }.map { (side, $0) }
+        }.first
+    }
+
     /// Moves `kind`'s slot one place along the top bar, `step` -1 left or 1 right: within its side, and past a side's end
     /// into the next side's near end. Nothing goes before Pilot's icon; a reading the Group gathers has no slot to move.
-    public mutating func nudge(_ kind: BarKind, by step: Int) {
-        guard !kind.pinned else { return }
-        let side = entry(kind).side, all = slots(in: .topBar, topBarOn: true, side: side)
-        guard let at = all.firstIndex(where: { $0.kind == kind }) else { return }
+    public mutating func nudge(_ kind: BarKind, by step: Int) { nudge(.kind(kind), by: step) }
+
+    /// The same for an extension's own item, or any item by what a drag moves.
+    public mutating func nudge(_ item: BarTrayItem, by step: Int) {
+        guard item.kind?.pinned != true, let index = index(of: item) else { return }
+        let side = entries[index].side, all = slots(in: .topBar, topBarOn: true, side: side)
+        guard let at = all.firstIndex(where: { $0.item == item }) else { return }
         // `place` counts the side's slots without the moved one, so one place either way is `at + step` in both.
         let to = at + step, lead = all.prefix { $0.kind.pinned }.count
-        if to >= lead, to < all.count { return place(kind, on: side, at: to) }
+        if to >= lead, to < all.count { return place(item, on: side, at: to) }
         let sides = TopBarSide.allCases, next = sides.firstIndex(of: side)! + step
         guard sides.indices.contains(next) else { return }
-        place(kind, on: sides[next], at: step < 0 ? .max : 0)
+        place(item, on: sides[next], at: step < 0 ? .max : 0)
     }
 }
 

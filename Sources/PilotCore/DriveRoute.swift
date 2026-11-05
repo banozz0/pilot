@@ -20,6 +20,22 @@ public enum DriveRoute: Equatable, Sendable {
     case picker(title: String?, list: String, run: String)
 
     public static let pathSeparator = " > "
+
+    /// macOS's own menu bar apps, named: Control Centre (Wi-Fi, Bluetooth, Focus), the system menu extras, MenuBarAgent
+    /// (which hosts every app's status items on macOS 27.2), Notification Centre, Spotlight, the input menu and the login
+    /// window can switch radios or end the session. Lower case: bundle ids compare case aside.
+    public static let systemMenuApps: Set<String> = ["com.apple.controlcenter", "com.apple.systemuiserver", "com.apple.menubaragent",
+                                                     "com.apple.notificationcenterui", "com.apple.spotlight", "com.apple.textinputmenuagent",
+                                                     "com.apple.loginwindow"]
+
+    /// Whether a menu route may press `bundle`'s menus, from a key, a link or any program (T52 review), by two rules: never
+    /// an app in `systemMenuApps`, and never any other com.apple. app that is not a regular one (`regular`: its activation
+    /// policy is .regular), so Siri, AirPlay's and Stage Manager's agents and the next one macOS adds are refused unnamed.
+    /// Every app's Apple menu is left out by AXMenu itself.
+    public static func pressesMenus(of bundle: String, regular: Bool) -> Bool {
+        let id = bundle.lowercased()
+        return !systemMenuApps.contains(id) && (regular || !id.hasPrefix("com.apple."))
+    }
     /// A menu path as people read it: "File › New Window".
     public static func title(_ path: [String]) -> String { path.joined(separator: " › ") }
 

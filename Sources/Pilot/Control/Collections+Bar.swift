@@ -37,15 +37,13 @@ extension ControlVerbs {
                      .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (the item's own)", required: false),
                      .init("index", help: "before the item now at this place on that side, from 0 (last)", required: false)],
             rowKey: "item",
-            list: { let lacking = reach.lacking(); return .array(bar().settings.entries.filter(\.on).map { Self.row($0, lacking: lacking) }) },
+            list: { let lacking = reach.lacking(); return .array(bar().settings.entries.filter { $0.on && $0.kind != .extensions }.map { Self.row($0, lacking: lacking) }) },
             add: { args throws(ControlError) in
                 let kind = try Self.movable(args.value("item") ?? "")
                 let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
                 let placement = try Self.placement(word, for: kind)
-                if placement == .menuBar, side != nil || index != nil {
-                    throw ControlError(.badValue, "--side and --index place an item on the top bar; --placement menuBar keeps it off it")
-                }
+                try Self.refuseMenuBarPlace(placement, side: side, index: index)
                 return Self.change(kind, in: bar(), reach) { s in
                     s.set(kind, in: placement, on: true)
                     if side != nil || index != nil { s.place(kind, on: side ?? s.entry(kind).side, at: index ?? .max) }
@@ -124,16 +122,24 @@ extension ControlVerbs {
     /// carry no answer text: an extension's output stays in the bar (W6's rule for run).
     private func registerBarExtensions(_ bar: @escaping @Sendable @MainActor () -> BarItemsStore, _ reach: BarReach) {
         register(ControlCollection(
-            "bar-extensions", help: "The extensions' bar items (Menu bar › Extensions): one never placed is on in the macOS menu bar. add puts it in --placement's bar (menuBar unless given) and keeps the other; remove takes it out of --placement's bar alone, or off both.",
+            "bar-extensions", help: "The extensions' bar items (Menu bar › Extensions): one never placed is on in the macOS menu bar. add puts it in --placement's bar (menuBar unless given) and keeps the other; in the top bar each is its own item, first put last on the right, and --side and --index move it as bar-items' do. remove takes it out of --placement's bar alone, or off both. Rows give each one's side and index in the top bar, as pilot bar's topBar lists them.",
             fields: [.init("id", help: "the extension's id, as pilot list bar-extensions names it"),
-                     .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)) (menuBar)", required: false)],
+                     .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)) (menuBar)", required: false),
+                     .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (its own)", required: false),
+                     .init("index", help: "before the item now at this place on that side, from 0 (last)", required: false)],
             rowKey: "id",
             list: { let s = bar().settings; return .array(reach.extensions().map { Self.extensionRow($0, s) }) },
             add: { args throws(ControlError) in
                 let item = try Self.extensionItem(args.value("id"), reach)
-                let placement: BarPlacement = try args.value("placement").map { word throws(ControlError) in try Self.choice(word, "--placement") } ?? .menuBar
+                let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
+                let moves = side != nil || index != nil
+                let placement: BarPlacement = try args.value("placement").map { word throws(ControlError) in try Self.choice(word, "--placement") }
+                    ?? (moves ? .topBar : .menuBar)
+                try Self.refuseMenuBarPlace(placement, side: side, index: index)
                 return Self.placeExtension(item, in: bar(), reach) { s in
                     if !s.isOn(extension: item.id, in: placement) { s.toggle(extension: item.id, in: placement) }
+                    guard moves, let at = s.topBarPlace(.extension(item.id)) else { return }
+                    s.place(.extension(item.id), on: side ?? at.side, at: index ?? .max)
                 }
             },
             remove: { args throws(ControlError) in
@@ -205,6 +211,10 @@ extension ControlVerbs {
                         "lacking": .array(BarSettings.readingKinds.filter(reach.lacking().contains).map { .string($0.rawValue) }),
                         "onlyInTopBar": .array(s.onlyInTopBar.map { .string($0.rawValue) }),
                         "readingsLook": .string(s.readingsLook.rawValue),
+                        // The top bar's order, side by side, as it draws with the bar on: each extension's item its own.
+                        "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar).top ?? [:]).map { side, slots in
+                            (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
+                        })),
                         "exactMenuItems": .bool(s.exactMenuItems),
                         "needsScreenRecording": .bool(reach.lacksScreenRecording())]
         if let placement { answer["placement"] = .string(placement.rawValue) }
@@ -264,14 +274,23 @@ extension ControlVerbs {
     }
 
     private static func extensionRow(_ item: ExtensionBar.Item, _ s: BarSettings) -> JSONValue {
-        let entry = s.extensionEntry(item.id)
-        return .object(["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue)])
+        let entry = s.extensionEntry(item.id), at = s.topBarPlace(.extension(item.id))
+        return .object(["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue),
+                        "side": at.map { .string($0.side.rawValue) } ?? .null, "index": at.map { .number(Double($0.index)) } ?? .null])
+    }
+
+
+    /// --side and --index place an item on the top bar, so --placement menuBar refuses them.
+    private static func refuseMenuBarPlace(_ placement: BarPlacement, side: TopBarSide?, index: Int?) throws(ControlError) {
+        guard placement == .menuBar, side != nil || index != nil else { return }
+        throw ControlError(.badValue, "--side and --index place an item on the top bar; --placement menuBar keeps it off it")
     }
 
     /// A bar item a change may move: Pilot's own icon stays first on the left.
     private static func movable(_ word: String) throws(ControlError) -> BarKind {
         let kind: BarKind = try choice(word, "--item")
         if kind.pinned { throw ControlError(.badValue, "\(kind.rawValue) is pinned: it stays first on the left") }
+        if kind == .extensions { throw ControlError(.badValue, "each extension's item is its own: pilot add bar-extensions --id <id> --side <side>") }
         return kind
     }
 

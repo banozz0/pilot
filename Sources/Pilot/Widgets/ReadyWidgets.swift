@@ -3,7 +3,7 @@ import PilotCore
 
 /// Pilot's ready widgets (Q671), each off until Sven adds it, read-only, and copied out by Duplicate to edit as an ordinary
 /// widget folder made here:
-/// - This Mac, the clock and calendar, a note, Mac upkeep, the Launcher, Notes, Repos, GitHub and Now playing live in
+/// - This Mac, the clock and calendar, a note, Mac upkeep, the Launcher, Notes, Repos, GitHub, GitHub checks and Now playing live in
 ///   code under ids that start `pilot-`, fed by Pilot's readings, settings, notes, repo reads, gh reads and media
 ///   helper alone, so they need no trust and run nothing of their own.
 /// - The desk widgets (Q694) are the designer's HTML folders on the look kit, bundled in Resources/widgets as `desk-*`:
@@ -12,7 +12,7 @@ import PilotCore
 enum ReadyWidgets {
     static let thisMac = "pilot-this-mac", clock = "pilot-clock", note = "pilot-note", upkeep = "pilot-upkeep"
     static let launcher = "pilot-launcher", notes = "pilot-notes", repos = "pilot-repos"
-    static let github = "pilot-github"
+    static let github = "pilot-github", ci = "pilot-ci"
     static let nowPlaying = "pilot-now-playing"
     static let folder = "pilot-folder"
     static let markets = "pilot-markets"
@@ -67,6 +67,12 @@ enum ReadyWidgets {
              "draw": "blocks", "data": {"github": true}, "size": {"width": 540, "height": 190},
              "settings": [{"name": "user", "label": "GitHub user (empty: gh's)", "type": "text", "default": ""}]}
             """,
+        // GitHub checks: each repo's latest Actions run, passing, failing or running (P79, WidgetCI).
+        ci: """
+            {"id": "pilot-ci", "title": "GitHub checks", "icon": "🚦", "version": "1.0",
+             "description": "The latest GitHub Actions run of each repo, passing, failing or running, read by the GitHub CLI (gh) every 5 minutes while it shows: the GitHub extension's owners or repos, else your repos in ~/code. Repos with no Actions runs are left out.",
+             "draw": "blocks", "data": {"ci": true}, "size": {"width": 300, "height": 220}}
+            """,
         // What the Mac plays, its cover and its controls (Q726, Q727; WidgetNowPlaying).
         nowPlaying: """
             {"id": "pilot-now-playing", "title": "Now playing", "icon": "🎵", "version": "1.0",
@@ -92,7 +98,7 @@ enum ReadyWidgets {
             """,
     ]
 
-    static let ids = [thisMac, clock, note, upkeep, launcher, notes, repos, github, nowPlaying, folder, markets]
+    static let ids = [thisMac, clock, note, upkeep, launcher, notes, repos, github, ci, nowPlaying, folder, markets]
 
     /// The desk widgets' folder in the app, `desk-*` folders beside the kit; nil in a test bundle without PILOT_RESOURCES.
     static let deskFolder = BundledJSON.folder("widgets")

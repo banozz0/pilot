@@ -45,13 +45,19 @@ private struct TopBarOverflowList: View {
     let sources: BarSources
     let store: BarItemsStore
 
+    /// The row's name: an extension's own slot is named by its extension (spec pilot-1.1 T50).
+    private func title(_ slot: BarSlot) -> String {
+        guard case .extension(let id) = slot.item else { return slot.kind.title }
+        return sources.extensionBar.items.first { $0.id == id }?.title ?? slot.kind.title
+    }
+
     var body: some View {
         let ink = BarInk(style: style)
         KitPopover(width: 300) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
                     HStack(spacing: 12) {
-                        Text(slot.kind.title).font(ink.detail).foregroundStyle(ink.muted).lineLimit(1)
+                        Text(title(slot)).font(ink.detail).foregroundStyle(ink.muted).lineLimit(1)
                         Spacer(minLength: 8)
                         TopBarSlot(slot: slot, screen: screen, sources: sources, store: store)
                             .environment(\.inTopBar, true)

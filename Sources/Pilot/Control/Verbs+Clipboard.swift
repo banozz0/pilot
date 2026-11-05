@@ -133,6 +133,7 @@ extension ControlVerbs {
                                         "copies": .number(Double(clip.copyCount)), "size": .number(Double(clip.size)), "pinned": .bool(clip.pinned),
                                         "tags": .array(clip.tags.map { .string($0.name) })]
         row["app"] = clip.sourceApp.map(JSONValue.string)
+        row["expires"] = clip.expiresAt.map { .string($0.ISO8601Format()) }
         if clip.isReadingText { row["readingText"] = .bool(true) }
         return row
     }

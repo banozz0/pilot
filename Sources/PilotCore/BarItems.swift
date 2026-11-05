@@ -24,8 +24,10 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     case modes
     /// The extension timer's item (ExtensionTimer); it was the pomodoro's, so saved layouts keep reading its raw value.
     case clock, timer = "pomodoro"
-    /// Where the top bar draws the bar items of installed extensions placed there (story 161, ExtensionBar); in the
-    /// macOS menu bar each is its own item (Surfaces v2, BarSettings.extensionItems).
+    /// The kind of an extension's own bar item (story 161, ExtensionBar): each placed in the top bar is an entry of its
+    /// own in the one order, its `extensionID` naming it (Sven, 2026-11-04, spec pilot-1.1 T50); in the macOS menu bar each
+    /// is its own item (Surfaces v2, BarSettings.extensionItems). The entry with no id is where they all drew as one slot
+    /// before T50: kept so saved layouts read, it draws nothing now.
     case extensions
     case spacer, divider, group
 
@@ -251,6 +253,18 @@ public struct BarEntry: Codable, Equatable, Sendable {
     public internal(set) var side: TopBarSide
     /// The spacer's width in points as stretched in edit mode (BarSpacer); nil draws its style's.
     public internal(set) var width: Double?
+    /// The extension whose bar item this is, its place in the top bar's order (spec pilot-1.1 T50); nil for a built-in
+    /// item. Whether it shows is its ExtensionBarEntry's on and placement; this entry holds only its side and place.
+    public internal(set) var extensionID: String?
+
+    /// What it is in a drag and in the order: a built-in item, or an extension's.
+    public var item: BarTrayItem { extensionID.map(BarTrayItem.extension) ?? .kind(kind) }
+
+    /// An extension's item's place in the top bar, on `side`.
+    init(extension id: String, side: TopBarSide) {
+        self.init(.extensions, on: true, placement: .topBar)
+        (extensionID, self.side) = (id, side)
+    }
 
     init(_ kind: BarKind, on: Bool = false, style: BarStyle? = nil, placement: BarPlacement = .both) {
         self.kind = kind
@@ -280,9 +294,22 @@ public struct BarEntry: Codable, Equatable, Sendable {
 }
 
 extension BarEntry {
+    enum CodingKeys: String, CodingKey {
+        case kind, on, style, placement, side, width
+        case extensionID = "extension"
+    }
+
+    /// An extension's item saves its kind as `extension`, which a Pilot from before T50 lacks, so it skips the entry
+    /// rather than drawing its old Extensions slot once per extension.
+    static let extensionKind = "extension"
+
     /// Saved by another Pilot: a style the item lacks takes its first; an item this Pilot lacks fails, and the list skips it.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let id = try? c.decode(String.self, forKey: .extensionID), try c.decode(String.self, forKey: .kind) == Self.extensionKind {
+            self.init(extension: id, side: (try? c.decode(TopBarSide.self, forKey: .side)) ?? .right)
+            return
+        }
         let kind = try c.decode(BarKind.self, forKey: .kind)
         let style = (try? c.decode(BarStyle.self, forKey: .style)).flatMap { kind.styles.contains($0) ? $0 : nil }
         self.init(kind, on: try c.decode(Bool.self, forKey: .on), style: style,
@@ -290,6 +317,22 @@ extension BarEntry {
         side = (try? c.decode(TopBarSide.self, forKey: .side)) ?? kind.side
         width = kind == .spacer ? (try? c.decodeIfPresent(Double.self, forKey: .width)).flatMap { $0 } : nil
         keepRules()
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if let extensionID {
+            try c.encode(Self.extensionKind, forKey: .kind)
+            try c.encode(extensionID, forKey: .extensionID)
+            try c.encode(side, forKey: .side)
+            return
+        }
+        try c.encode(kind, forKey: .kind)
+        try c.encode(on, forKey: .on)
+        try c.encode(style, forKey: .style)
+        try c.encode(placement, forKey: .placement)
+        try c.encode(side, forKey: .side)
+        try c.encodeIfPresent(width, forKey: .width)
     }
 }
 
@@ -310,6 +353,13 @@ public enum BarSlot: Equatable, Sendable {
     public var click: BarClick { BarClick(kinds, isGroup: isGroup) }
     /// The item its right-click menu is for: the Group for the group.
     public var kind: BarKind { isGroup ? .group : kinds[0] }
+    /// What a drag of it moves: the Group, a built-in item or an extension's own item.
+    public var item: BarTrayItem { isGroup ? .kind(.group) : entries[0].item }
+    /// Its name in `pilot bar` and the observers dump: its items joined by +, an extension's as extension:<id>.
+    public var name: String {
+        if case .extension = item { return item.rawValue }
+        return kinds.map(\.rawValue).joined(separator: "+")
+    }
 }
 
 /// Every item once, in order, plus the clock's pattern and the busiest-by-RAM rule the readings' popovers use. Saved as
@@ -346,7 +396,10 @@ public struct BarSettings: Codable, Equatable, Sendable {
         return BarSettings(entries: entries, clock: .time24, clockZone: nil, combineProcesses: false)
     }()
 
-    public func entry(_ kind: BarKind) -> BarEntry { entries.first { $0.kind == kind }! }
+    public func entry(_ kind: BarKind) -> BarEntry { entries.first { $0.item == .kind(kind) }! }
+
+    /// Where `item` is in the order: a built-in item always is; an extension's once it was put in the top bar.
+    func index(of item: BarTrayItem) -> Int? { entries.firstIndex { $0.item == item } }
 
     public mutating func set(_ kind: BarKind, on: Bool) { edit(kind) { $0.on = on } }
 
@@ -360,7 +413,14 @@ public struct BarSettings: Codable, Equatable, Sendable {
 
     public mutating func set(_ kind: BarKind, placement: BarPlacement) { edit(kind) { $0.placement = placement } }
 
-    public mutating func set(_ kind: BarKind, side: TopBarSide) { edit(kind) { $0.side = side } }
+    public mutating func set(_ kind: BarKind, side: TopBarSide) { set(.kind(kind), side: side) }
+
+    /// The side of the top bar `item` is on; an extension's item with no place yet gets none.
+    mutating func set(_ item: BarTrayItem, side: TopBarSide) {
+        guard let index = index(of: item) else { return }
+        entries[index].side = side
+        entries[index].keepRules()
+    }
 
     /// Restore defaults, beside the Menu bar page's Clear all (Q411), for the placement the page shows: Both puts the
     /// items, their order and places back as `defaults` has them, the extensions' items unplaced; one bar gets back the
@@ -382,23 +442,33 @@ public struct BarSettings: Codable, Equatable, Sendable {
     }
 
     /// Moves the item to `index` in the order.
-    public mutating func move(_ kind: BarKind, to index: Int) {
-        guard let from = entries.firstIndex(where: { $0.kind == kind }) else { return }
+    public mutating func move(_ kind: BarKind, to index: Int) { move(.kind(kind), to: index) }
+
+    /// Moves a built-in item or an extension's to `index` in the order.
+    public mutating func move(_ item: BarTrayItem, to index: Int) {
+        guard let from = self.index(of: item) else { return }
         let entry = entries.remove(at: from)
         entries.insert(entry, at: min(max(index, 0), entries.count))
     }
 
     private mutating func edit(_ kind: BarKind, _ change: (inout BarEntry) -> Void) {
-        guard let index = entries.firstIndex(where: { $0.kind == kind }) else { return }
+        guard let index = index(of: .kind(kind)) else { return }
         change(&entries[index])
         entries[index].keepRules()
     }
 
     /// What `place` draws, in order (one side of the top bar when `side` is given). With the Group shown there, every
-    /// reading shown there joins one slot at the Group's place; without it each reading is its own.
+    /// reading shown there joins one slot at the Group's place; without it each reading is its own. Each extension's item
+    /// placed in the top bar is a slot of its own there, drawn once it has something to show (BarParts); the old
+    /// Extensions slot draws nowhere.
     public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil) -> [BarSlot] {
         // Pilot's icon leads the top bar, in whatever order it was saved.
-        let shown = entries.filter { $0.shows(in: place, topBarOn: topBarOn) && (side == nil || $0.side == side) }
+        let inTopBar = place == .topBar && topBarOn ? Set(extensionItems.filter { $0.on && $0.placement != .menuBar }.map(\.id)) : []
+        let shown = entries.filter { entry in
+            guard side == nil || entry.side == side else { return false }
+            if let id = entry.extensionID { return inTopBar.contains(id) }
+            return entry.kind != .extensions && entry.shows(in: place, topBarOn: topBarOn)
+        }
             .sorted { place == .topBar && $0.kind.pinned && !$1.kind.pinned }
         // The group gathers its readings from the whole bar, wherever their own side is.
         let grouped = entry(.group).shows(in: place, topBarOn: topBarOn)
@@ -513,7 +583,7 @@ extension BarSettings {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         var entries = try c.decode([Lossy<BarEntry>].self, forKey: .entries).compactMap(\.value)
-        for kind in BarKind.allCases where !entries.contains(where: { $0.kind == kind }) {
+        for kind in BarKind.allCases where !entries.contains(where: { $0.item == .kind(kind) }) {
             let clock = kind == .modes || kind.isDrop ? entries.firstIndex { $0.kind == .clock } : nil
             var entry = BarEntry(kind, on: kind.joinsOn)
             if let clock, !kind.isDrop { entry.side = entries[clock].side }
@@ -525,6 +595,28 @@ extension BarSettings {
                   exactMenuItems: (try? c.decode(Bool.self, forKey: .exactMenuItems)) ?? false,
                   combineProcesses: (try? c.decode(Bool.self, forKey: .combineProcesses)) ?? false,
                   extensionItems: (try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems))?.compactMap(\.value) ?? [])
+        placeGroupedExtensions(order: decoder.userInfo[Self.extensionOrder] as? @Sendable () -> [String])
+    }
+
+    /// The decoder's `userInfo` key for the order the extensions' items drew in the old Extensions slot: their ids as
+    /// ExtensionBar lists them, by title. A function, so the folder is read only when a saved bar needs it.
+    public static let extensionOrder = CodingUserInfoKey(rawValue: "pilot.bar.extensionOrder")!
+
+    /// A bar saved before T50 drew every extension's item in the top bar in one Extensions slot: each gets its own
+    /// place where that slot was, on its side, in the order they drew (`order`, else the order they were placed in), so
+    /// the bar looks as it did. While that slot was off they drew nowhere, so they leave the top bar instead. Idempotent:
+    /// an item with its place already keeps it.
+    mutating func placeGroupedExtensions(order: (() -> [String])?) {
+        let unplaced = extensionItems.filter { $0.on && $0.placement != .menuBar && index(of: .extension($0.id)) == nil }.map(\.id)
+        guard !unplaced.isEmpty, let anchor = index(of: .kind(.extensions)) else { return }
+        let order = order?() ?? []
+        let ranked = order.filter(unplaced.contains) + unplaced.filter { !order.contains($0) }
+        let slot = entries[anchor]
+        guard slot.on else {
+            for id in ranked { set(extension: id, on: extensionEntry(id).placement == .both, placement: .menuBar) }
+            return
+        }
+        entries.insert(contentsOf: ranked.map { BarEntry(extension: $0, side: slot.side) }, at: anchor)
     }
 
     /// Whether `kind` shows in `place` now.
@@ -550,14 +642,14 @@ extension BarSettings {
         extensionItems.first { $0.id == id } ?? ExtensionBarEntry(id: id)
     }
 
-    /// Whether `id`'s bar item shows in `place`: its own item in the macOS menu bar as a built-in item would; in the top
-    /// bar only while the Extensions item, where they draw, shows there.
+    /// Whether `id`'s bar item shows in `place`, as a built-in item would: its own item in the macOS menu bar, its own
+    /// slot in the top bar (spec pilot-1.1 T50).
     public func shows(extension id: String, in place: BarPlace, topBarOn: Bool) -> Bool {
         let item = extensionEntry(id)
         guard item.on else { return false }
         switch place {
         case .menuBar: return item.placement == .menuBar || (item.placement == .both && !topBarOn)
-        case .topBar: return item.placement != .menuBar && entry(.extensions).shows(in: .topBar, topBarOn: topBarOn)
+        case .topBar: return topBarOn && item.placement != .menuBar
         }
     }
 
@@ -573,7 +665,7 @@ extension BarSettings {
     }
 
     /// In, the item joins `placement` and keeps the other bar it was in; out, it leaves it and stays in the other, or goes
-    /// off. Joining the top bar turns its Extensions item on, where the extensions draw.
+    /// off. Joining the top bar for the first time puts it last there (set(extension:)).
     public mutating func toggle(extension id: String, in placement: BarPlacement) {
         let item = extensionEntry(id), joining = !isOn(extension: id, in: placement)
         let wasMenu = item.on && item.placement != .topBar, wasTop = item.on && item.placement != .menuBar
@@ -583,12 +675,13 @@ extension BarSettings {
         case .both: (joining, joining)
         }
         set(extension: id, on: menu || top, placement: menu || top ? (menu && top ? .both : menu ? .menuBar : .topBar) : item.placement)
-        if top { set(.extensions, on: true) }
     }
 
-    /// Places `id`'s item: on or off, and where.
+    /// Places `id`'s item: on or off, and where. One put in the top bar for the first time lands last there, at the end
+    /// of its right side (spec pilot-1.1 T50); one that was there before keeps its place.
     public mutating func set(extension id: String, on: Bool, placement: BarPlacement) {
         let item = ExtensionBarEntry(id: id, on: on, placement: placement)
         if let index = extensionItems.firstIndex(where: { $0.id == id }) { extensionItems[index] = item } else { extensionItems.append(item) }
+        if on, placement != .menuBar, index(of: .extension(id)) == nil { entries.append(BarEntry(extension: id, side: .right)) }
     }
 }

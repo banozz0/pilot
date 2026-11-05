@@ -384,11 +384,13 @@ struct InstrumentSpark: View {
 struct InstrumentMeter: View {
     @Environment(\.style) private var style
     let share: Double
+    /// The filled part's colour: the accent while it runs (onboarding's Set up).
+    var fill: KeyPath<StyleColors, Paint> = \.text2
 
     var body: some View {
         Capsule().fill(style.color(\.line))
             .overlay(alignment: .leading) {
-                GeometryReader { g in Capsule().fill(style.color(\.text2)).frame(width: max(3, g.size.width * min(max(share, 0), 1))) }
+                GeometryReader { g in Capsule().fill(style.color(fill)).frame(width: max(3, g.size.width * min(max(share, 0), 1))) }
             }
             .frame(height: 3)
             .accessibilityHidden(true)
@@ -555,7 +557,7 @@ struct InstrumentHint: View {
 struct InstrumentFoot<Place: View>: View {
     @Environment(\.style) private var style
     let hints: [KeyHint]
-    /// Words that are no key, before the keys and never given way: GIPHY's attribution (story 164).
+    /// Words that are no key, before the keys and never given way: Activity's note (GIPHY's attribution is on its bar, T39).
     var note: String?
     @ViewBuilder var place: Place
 

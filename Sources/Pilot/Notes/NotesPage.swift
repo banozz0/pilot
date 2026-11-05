@@ -88,7 +88,8 @@ final class NotesPageKeys {
         stop()
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak model] event in
             let taken = MainActor.assumeIsolated {
-                guard let model, let window = event.window as? PilotWindow, window.isKeyWindow,
+                // The app window's alone: a text file's window (T49) holds a NotesTextView too.
+                guard let model, let window = event.window as? PilotWindow, window === AppWindowController.shared.window, window.isKeyWindow,
                       let key = Self.key(event.keyCode, event.modifierFlags, event.charactersIgnoringModifiers, model: model,
                                          responder: window.firstResponder) else { return false }
                 NotesPage.perform(key, on: model)

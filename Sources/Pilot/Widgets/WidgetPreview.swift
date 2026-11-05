@@ -109,6 +109,7 @@ final class WidgetPreviews {
                 model.blocks = WidgetReadings.blocks(readings, data)
             case .notes(let name): model.blocks = WidgetNotes.blocks(notes, picked: values[name]?.string ?? "").blocks
             case .repos: model.blocks = WidgetRepos.blocks(repos)
+            case .ci: model.blocks = WidgetCI.preview()
             case .github: await WidgetGitHub.preview(model, user: WidgetGitHub.user(values[WidgetGitHub.userName]))
             case .nowPlaying: model.nowPlaying = await NowPlaying.preview()
             case .setting(let name):

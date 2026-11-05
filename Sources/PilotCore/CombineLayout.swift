@@ -39,4 +39,19 @@ public enum CombineLayout {
         }
         return (frames, total)
     }
+
+    /// `images` drawn into one picture by `layout`, gaps clear, in the first one's colour space (as Combine images draws):
+    /// Add a capture's before and after (C8). Nil when none has a size.
+    public static func draw(_ images: [CGImage], direction: Direction, gap: CGFloat) -> CGImage? {
+        let (frames, size) = layout(images.map { CGSize(width: $0.width, height: $0.height) }, direction: direction, gap: gap)
+        let space = images.first?.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard size.width >= 1, size.height >= 1,
+              let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        for (image, frame) in zip(images, frames) where frame != .zero {
+            ctx.draw(image, in: CGRect(x: frame.minX, y: size.height - frame.maxY, width: frame.width, height: frame.height))
+        }
+        return ctx.makeImage()
+    }
 }

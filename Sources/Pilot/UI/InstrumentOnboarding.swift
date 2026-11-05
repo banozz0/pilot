@@ -1,25 +1,26 @@
 import PilotCore
 import SwiftUI
 
-/// Onboarding in Instrument (card agent-bo-95423181, ADR 0008), Home's language in mockup A: the step in mono capitals
-/// over its title, its rows in an InstrumentPanel under a hairline header, each permission's state said in words, the
-/// layer key's chip lit in the signal colour, and one primary button a step, at the foot. The same model, actions, keys
-/// and words as OnboardingView's; only the drawing is Instrument's.
+/// Onboarding in Instrument (card agent-bo-95423181, ADR 0008; Onboarding 1.1, variant C, Q841-Q843): the step rail over
+/// each screen, its title in the display face, rows in InstrumentPanels under a hairline header, every state said in
+/// words, and one primary button a screen, at the foot. The same model, parts and words as Toybox's OnboardingSteps;
+/// only the drawing is Instrument's.
 struct InstrumentOnboarding: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
     @Bindable var model: OnboardingModel
     @Binding var confirming: LayerKeyChange?
     let finish: () -> Void
-    /// Permissions' folded group, open.
-    @State private var showAll = false
+    /// Try it's optional panel, open.
+    @State private var more = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            OnboardingRail(step: model.step)
             switch model.step {
             case .welcome: welcome
-            case .permissions: permissions
-            case .extras: extras
+            case .permissions: access
+            case .extras: setUp
             case .tryIt: tryIt
             }
         }
@@ -28,34 +29,35 @@ struct InstrumentOnboarding: View {
         .foregroundStyle(style.color(\.text))
     }
 
-    /// The step's mono capitals, its title, and what it is about.
-    private func heading(_ step: Int, _ title: String, @ViewBuilder about: () -> some View = { EmptyView() }) -> some View {
+    /// The screen's title and what it is about.
+    private func heading(_ title: String, @ViewBuilder about: () -> some View = { EmptyView() }) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            InstrumentEyebrow(text: "Step \(step) of \(OnboardingModel.Step.allCases.count)")
-            Text(title).styleText(\.display).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader).padding(.top, 10)
+            Text(title).styleText(\.display).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
             about().padding(.top, 10)
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(.bottom, 22)
     }
 
-    /// The foot: what to know in the third text colour, then the step's one primary button with Return's chip.
-    private func foot(_ note: String?, _ title: String, enabled: Bool = true, action: @escaping () -> Void) -> some View {
+    /// The foot: what to know in the third text colour, then the screen's one primary button with Return's chip.
+    private func foot(_ note: String?, _ title: String, enabled: Bool = true, @ViewBuilder extra: () -> some View = { EmptyView() },
+                      action: @escaping () -> Void) -> some View {
         HStack(spacing: 16) {
             if let note { Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true) }
             Spacer(minLength: 0)
+            extra()
             Button(action: action) { InstrumentKeyedLabel(title: title, symbol: nil, trigger: nil) }
                 .keyboardShortcut(.defaultAction).buttonStyle(InstrumentButtonStyle(kind: .primary)).disabled(!enabled)
         }
         .padding(.top, 20)
     }
 
-    // MARK: Welcome
+    // MARK: Hyper
 
     private var welcome: some View {
         @Bindable var settings = engine.settings
         return VStack(alignment: .leading, spacing: 0) {
-            heading(OnboardingModel.Step.welcome.number, "Welcome to Pilot") {
+            heading("Welcome to Pilot") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Pilot makes this Mac work like Omarchy.").styleText(\.strong).foregroundStyle(style.color(\.text))
                     Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
@@ -85,210 +87,107 @@ struct InstrumentOnboarding: View {
         }
     }
 
-    // MARK: Permissions
+    // MARK: Access
 
-    private var permissions: some View {
-        let rows = Onboarding.Row.allCases
-        let done = rows.count { Onboarding.isDone($0, model.status) }
-        return VStack(alignment: .leading, spacing: 0) {
-            heading(OnboardingModel.Step.permissions.number, "Permissions") {
-                Text("\(done) of \(rows.count) done").styleText(\.mono).foregroundStyle(style.color(\.text3))
+    /// Accessibility, the one grant Pilot waits for; the recommended and optional grants named for later, no buttons.
+    private var access: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            heading("Allow Accessibility") {
+                Text(OnboardingModel.accessAbout).styleText(\.body).lineSpacing(3).foregroundStyle(style.color(\.text2))
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(Onboarding.Need.allCases, id: \.self) { need in
-                        let group = Onboarding.Row.rows(need)
-                        InstrumentPanel(title: need.title, note: need == .whenUsed ? "\(group.count)" : nil) {
-                            if need == .whenUsed {
-                                Button(showAll ? "Hide" : "Show") { showAll.toggle() }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                            }
-                        } content: {
-                            if need != .whenUsed || showAll {
-                                ForEach(Array(group.enumerated()), id: \.element) { index, row in
-                                    if index > 0 { InstrumentRule() }
-                                    grant(row)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(height: OnboardingView.scrollHeight)
-            if let problem = model.problem {
-                InstrumentAttention(text: problem).padding(.top, 14)
-            }
-            foot(Onboarding.continueNote, "Continue",
-                 enabled: Onboarding.canContinue(model.status)) { model.go(.extras) }
-        }
-    }
-
-    private func grant(_ row: Onboarding.Row) -> some View {
-        HStack(spacing: 14) {
-            titled(row.title, row.detail(model.status))
-            Spacer(minLength: 8)
-            if Onboarding.isDone(row, model.status) {
-                state(row == .conflicts ? "Done" : "Allowed")
-            } else {
-                Button(model.button(row)) { model.act(row) }.buttonStyle(InstrumentButtonStyle(kind: .raised))
-            }
-        }
-        .padding(.horizontal, 18).padding(.vertical, 12)
-    }
-
-    // MARK: Extras
-
-    private var extras: some View {
-        let extras = model.extras
-        return VStack(alignment: .leading, spacing: 0) {
-            heading(OnboardingModel.Step.extras.number, "Extras") {
-                Text("All optional. The common ones are ticked; nothing starts before Continue.").styleText(\.body).foregroundStyle(style.color(\.text2))
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    // Update and Clean first, each with the helpers it runs (Q555); Homebrew's one Terminal run after Clean.
-                    ForEach(OnboardingExtras.Feature.allCases, id: \.self) { feature in
-                        InstrumentPanel(title: feature.title, note: feature.short) {
-                            if let line = feature.line {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(line).styleText(\.body).foregroundStyle(style.color(\.text))
-                                    if let later = extras.later(feature) { Text(later).styleText(\.caption).foregroundStyle(style.color(\.accent)) }
-                                }
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 18).padding(.vertical, 12)
-                            }
-                            ForEach(Array(feature.items.enumerated()), id: \.element) { index, extra in
-                                if index > 0 || feature.line != nil { InstrumentRule() }
-                                item(extra)
-                            }
-                            if feature == .clean, let command = extras.brewCommand {
-                                InstrumentRule()
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(OnboardingExtras.terminalNote).styleText(\.caption).foregroundStyle(style.color(\.text2))
-                                    Text(command).styleText(\.mono).foregroundStyle(style.color(\.text3)).textSelection(.enabled)
-                                }
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 18).padding(.vertical, 12)
-                            }
-                        }
-                    }
-                    InstrumentPanel(title: "Voice") {
-                        if let on = extras.speechOnMac {
-                            line { titled("Dictation model", "\(on.name) is on this Mac"); Spacer(minLength: 8); state("Done") }
-                        } else {
-                            ForEach(Array(OnboardingExtras.speechChoices.enumerated()), id: \.element) { index, choice in
-                                if index > 0 { InstrumentRule() }
-                                speech(choice)
-                            }
-                        }
-                        InstrumentRule()
-                        item(.voices)
-                    }
-                    InstrumentPanel(title: "AI and agents") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            titled(AIProviderPick.title, AIProviderPick.detail)
-                            AIProviderPick()
-                        }
-                        .padding(.horizontal, 18).padding(.vertical, 12)
-                        InstrumentRule()
-                        item(.command)
-                    }
-                    InstrumentPanel(title: "Images") { item(.upscaler) }
-                    InstrumentPanel(title: "Pilot") {
-                        line {
-                            titled("Extensions", OnboardingExtras.extensionsDetail)
-                            Spacer(minLength: 8)
-                            Button("Browse…") { OnboardingExtras.browseExtensions() }.buttonStyle(InstrumentButtonStyle(kind: .raised))
-                        }
-                        InstrumentRule()
-                        item(.recommendApps)
-                        InstrumentRule()
-                        item(.launchAtLogin)
-                    }
-                }
-            }
-            .frame(height: OnboardingView.scrollHeight)
-            .onAppear { extras.load() }
-            HStack(spacing: 16) {
-                Text(extras.footNote).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Button("Skip all") { model.startTryIt(extras: false) }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                Button { model.startTryIt() } label: { InstrumentKeyedLabel(title: "Continue", symbol: nil, trigger: nil) }
-                    .keyboardShortcut(.defaultAction).buttonStyle(InstrumentButtonStyle(kind: .primary))
-            }
-            .padding(.top, 20)
-        }
-    }
-
-    /// A dictation model to pick, or Skip.
-    private func speech(_ choice: SpeechChoice?) -> some View {
-        let on = model.extras.speech == choice
-        return Button { model.extras.speech = choice } label: {
-            line {
-                InstrumentRadio(on: on)
-                titled(OnboardingExtras.speechTitle(choice), OnboardingExtras.speechDetail(choice))
+            .padding(.bottom, -14)
+            HStack(spacing: 14) {
+                Image(systemName: "accessibility").foregroundStyle(style.color(\.text2)).frame(width: 30, height: 30)
+                    .background(style.color(\.raised), in: RoundedRectangle(cornerRadius: 7, style: .continuous)).accessibilityHidden(true)
+                titled("Accessibility", Onboarding.Row.accessibility.detail(model.status))
                 Spacer(minLength: 8)
-                if choice == OnboardingExtras.recommendedSpeech { tag("Recommended") }
+                if model.status.accessibility {
+                    state("Allowed")
+                } else {
+                    Button("Allow") { model.allowAccessibility() }.buttonStyle(InstrumentButtonStyle(kind: .raised))
+                }
             }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    /// An extra: its switch, or that it is on this Mac already.
-    private func item(_ item: OnboardingExtras.Item) -> some View {
-        line {
-            titled(item.title, item.detail)
-            Spacer(minLength: 8)
-            if model.extras.onMac.contains(item) {
-                state("On this Mac")
-            } else {
-                if let chip = item.chip { tag(chip.capitalized) }
-                Toggle(item.title, isOn: model.extras.binding(item))
-                    .labelsHidden().toggleStyle(InstrumentSwitchStyle(lit: false))
+            .padding(.horizontal, 18).padding(.vertical, 14)
+            .styleSurface(\.card)
+            InstrumentPanel(title: "Later, from Settings", note: "\(OnboardingModel.later.count)") {
+                ForEach(Array(OnboardingModel.laterGroups.enumerated()), id: \.offset) { index, group in
+                    if index > 0 { InstrumentRule() }
+                    line { titled(group.title, group.names); Spacer(minLength: 0) }
+                }
             }
+            foot(OnboardingModel.ticksItself, "Continue", enabled: Onboarding.canContinue(model.status)) { model.go(.extras) }
         }
     }
 
-    private func line(@ViewBuilder _ content: () -> some View) -> some View {
-        HStack(spacing: 14) { content() }.padding(.horizontal, 18).padding(.vertical, 12)
-    }
+    // MARK: Set up
 
-    private func tag(_ text: String) -> some View {
-        Text(text).styleText(\.mono).foregroundStyle(style.color(\.accent)).fixedSize()
+    /// The fork, Pick by hand, or the run in its place.
+    private var setUp: some View {
+        let setup = model.setup
+        return VStack(alignment: .leading, spacing: 0) {
+            switch setup.phase {
+            case .fork:
+                heading("How should Pilot set up?")
+                SetupFork(setup: setup)
+                HStack(spacing: 16) {
+                    Text(setup.asksForMacLogin ? OnboardingModel.passwordNote : OnboardingModel.undoAfter)
+                        .styleText(\.caption).foregroundStyle(style.color(\.text3))
+                    Spacer(minLength: 0)
+                    Button("Skip setup") { model.startTryIt() }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
+                }
+                .padding(.top, 20)
+            case .pick:
+                heading("Pick by hand") {
+                    Text(OnboardingModel.pickNote).styleText(\.body).foregroundStyle(style.color(\.text2))
+                }
+                ScrollView { SetupPickList(setup: setup) }.frame(height: OnboardingView.scrollHeight)
+                foot(setup.picked.contains(.homebrew) ? OnboardingModel.passwordNote : nil, "Set up these", enabled: !setup.picked.isEmpty) {
+                    Button("Back") { setup.phase = .fork }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
+                } action: {
+                    setup.start(Array(setup.picked))
+                }
+            case .run:
+                heading(setup.title)
+                ScrollView { SetupRunList(setup: setup) }.frame(maxHeight: OnboardingView.scrollHeight)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let problem = setup.problem { InstrumentAttention(text: problem).padding(.top, 14) }
+                foot(OnboardingModel.undoNote, "Continue") { model.startTryIt() }
+            }
+        }
+        .onAppear { if setup.phase != .run { setup.load() } }
     }
 
     // MARK: Try it
 
     private var tryIt: some View {
         let key = engine.settings.layerKeys
-        let lines = model.extras.progress
-        return VStack(alignment: .leading, spacing: 0) {
-            heading(OnboardingModel.Step.tryIt.number, "Try it")
+        return VStack(alignment: .leading, spacing: 14) {
+            heading("Try it").padding(.bottom, -14)
             InstrumentPanel(title: "The Hyper key", note: key.label) {
-                prompt("Hold \(key.label) for a moment", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
-                InstrumentRule()
-                prompt("Now press \(key.label) + Space", "opens the Pilot menu: apps, files, windows, install", caps: ["Space"],
-                       done: model.tryIt.menuOpened)
-            }
-            if !lines.isEmpty {
-                InstrumentPanel(title: "In the background") {
-                    ForEach(Array(lines.enumerated()), id: \.element.title) { index, entry in
-                        if index > 0 { InstrumentRule() }
-                        line { Text(entry.title).styleText(\.strong); Spacer(minLength: 8); Text(entry.state).styleText(\.mono).foregroundStyle(style.color(\.text3)) }
-                    }
+                prompt("Hold \(key.label)", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
+                if let files = model.filesKey(engine) {
+                    InstrumentRule()
+                    prompt("Press \(key.label) + \(files)", "Pilot Files opens: the key you just set", caps: [files], done: model.filesOpened)
                 }
-                .padding(.top, 14)
+                InstrumentRule()
+                prompt("Press \(key.label) + Space", "the Pilot menu", caps: ["Space"], done: model.tryIt.menuOpened)
             }
-            foot("Pilot is in the menu bar, showing the workspace number", "Finish", action: finish)
+            InstrumentPanel(title: "The other permissions") {
+                GrantWalkPanel(walk: model.walk).padding(.horizontal, 18).padding(.vertical, 12)
+            }
+            InstrumentPanel(title: "More, if you want") {
+                Button(more ? "Hide" : "Show") { more.toggle() }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
+            } content: {
+                if more { OnboardingMore() }
+            }
+            foot("Pilot is in the menu bar", "Finish", action: finish)
         }
     }
 
     /// A prompt: the layer key's chip lit and the key after it, what to do, and whether Pilot saw it.
     private func prompt(_ title: String, _ detail: String, caps: [String], done: Bool) -> some View {
         HStack(spacing: 14) {
-            // One column for both prompts' keys, so their words line up.
+            // One column for every prompt's keys, so their words line up.
             InstrumentKeys(caps: caps).frame(width: 84, alignment: .leading)
             titled(title, detail)
             Spacer(minLength: 8)
@@ -299,14 +198,11 @@ struct InstrumentOnboarding: View {
 
     // MARK: Parts
 
-    /// A row's title, strong, over its detail in the third text colour, whole.
-    private func titled(_ title: String, _ detail: String?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
-            if let detail { Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
-        }
-        .fixedSize(horizontal: false, vertical: true)
+    private func line(@ViewBuilder _ content: () -> some View) -> some View {
+        HStack(spacing: 14) { content() }.padding(.horizontal, 18).padding(.vertical, 12)
     }
+
+    private func titled(_ title: String, _ detail: String?) -> some View { SetupTitled(title: title, detail: detail) }
 
     /// A state in words, in mono: done with a check in the second text colour; what Pilot waits for after the signal's
     /// dot (the live thing).

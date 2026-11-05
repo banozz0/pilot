@@ -46,6 +46,19 @@ struct SetupBluetoothTests {
             devices[i].connected = false
             return true
         }
+
+        /// The radio's fake power backend (T47): no test calls the private setter or reads the real radio.
+        var power: Bool? = true, canSetPower = true
+        var connectedInputs: [InputDevice] = []
+        var powerSets: [Bool] = []
+        func powerOn() -> Bool? { power }
+        func setPower(_ on: Bool) async -> Bool? {
+            guard canSetPower else { return nil }
+            powerSets.append(on)
+            power = on
+            return power
+        }
+        func inputs() -> [InputDevice] { connectedInputs }
     }
 
     static func defaults(shown: Bool = false) -> UserDefaults { setupDefaults(SetupBluetooth.shownKey, shown: shown) }

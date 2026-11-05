@@ -31,7 +31,7 @@ struct MenuActionsTests {
         }
     }
 
-    @Test("Typing bitwa asks no file index, lists the Bitwarden app first, then Ask AI, Search the web and Search files, then its actions")
+    @Test("Typing bitwa asks no file index, lists the Bitwarden app first, its actions right under it, then Ask AI, Search the web and Search files (Q831)")
     func vicinaeOrder() {
         var nav = Self.navigator()
         let asked = Self.type("bitwa", into: &nav)
@@ -39,9 +39,10 @@ struct MenuActionsTests {
         #expect(nav.rows.first == Self.bitwarden)
         #expect(nav.matched[1...3].map(\.title).allSatisfy { $0.hasPrefix("Bitwarden: ") })
         #expect(nav.matched[1] == Self.search)
-        // Ask AI, Search the web and Search files after the best match's group (Sven Q174, Q182).
-        #expect(nav.rows[1...3].map(\.target) == [.ask("bitwa"), .searchWeb("bitwa"), .searchFiles])
-        #expect(nav.rows[3].title == "Search files for \"bitwa\"")
+        // The app's actions sit right under it (Sven Q831), then Ask AI, Search the web and Search files (Q174, Q182).
+        #expect(nav.rows[1...3].map(\.title).allSatisfy { $0.hasPrefix("Bitwarden: ") })
+        #expect(nav.rows[4...6].map(\.target) == [.ask("bitwa"), .searchWeb("bitwa"), .searchFiles])
+        #expect(nav.rows[6].title == "Search files for \"bitwa\"")
         #expect(nav.rows.contains(Self.window) && nav.rows.contains(Self.cask))
     }
 

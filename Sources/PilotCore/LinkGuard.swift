@@ -24,9 +24,10 @@ public struct LinkToken {
 
     /// Whether a link carrying `token` may run or bind `action`: always for Pilot's own actions, apps, web pages and
     /// menu items; for the rest only with the token. A keystroke goes into whichever app the link brings to the front,
-    /// so links could type a command into a terminal key by key.
+    /// so links could type a command into a terminal key by key; Wi-Fi, Bluetooth, shut down, restart, sleep, log out
+    /// and the locks (ControlGate.Ask.cutting) would let any web page cut the network or end the session (T52).
     public func allows(_ action: String, token: String?) -> Bool {
-        if BindStore.arrivesOff(action) { return matches(token) }
+        if BindStore.arrivesOff(action) || ControlGate.Ask.cutting[action] != nil { return matches(token) }
         if case .keystroke? = DriveRoute(id: action) { return matches(token) }
         return true
     }

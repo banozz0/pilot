@@ -53,7 +53,7 @@ final class Recorder {
     @ObservationIgnored private var capsule: NSPanel?
     @ObservationIgnored private var diskWatch: Timer?
     @ObservationIgnored private var screenWatch: NSObjectProtocol?
-    /// The click watchers while recording (P71): clicks in other apps and in Pilot's own windows.
+    /// The pointer watchers while recording (P71, T29): moves and clicks in other apps and in Pilot's own windows.
     @ObservationIgnored private var clickWatch: [Any] = []
     @ObservationIgnored private var countdown: Task<Void, Never>?
     /// The file being finished after a stop, which quitting waits for.
@@ -128,7 +128,12 @@ final class Recorder {
             phase = .paused
         } else {
             clock.resume(at: now)
-            output.queue.async { output.writer.resume(at: now) }
+            // Where the pointer is now: it may have moved while paused, and a still one sends no moves.
+            let at = CGEvent(source: nil)?.location
+            output.queue.async {
+                output.writer.resume(at: now)
+                if let at { output.move(at, time: now) }
+            }
             phase = .recording
         }
         Self.log.notice("recording \(self.phase == .paused ? "paused" : "resumed", privacy: .public) at \(RecordingClock.label(self.clock.elapsed(at: now)), privacy: .public)")
@@ -217,8 +222,12 @@ final class Recorder {
             config.height = Int(size.height)
             config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
             config.queueDepth = 8
-            config.showsCursor = true
-            config.showMouseClicks = settings.showClicks
+            // T29: the pointer stays out of the pixels; its places, clicks and shapes go on the track and the export draws
+            // it (R1–R4). Clicks are not marked either: Apple's showMouseClicks "will not be affected by showsCursor" and
+            // "currently applies when pixelFormat is set to BGRA" (SCStream.h, SDK 27.2), so on these 420v frames it never
+            // drew; the editor's Click ring (R4) does.
+            config.showsCursor = false
+            config.showMouseClicks = false
             config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             config.capturesAudio = settings.audio.system
             config.excludesCurrentProcessAudio = true
@@ -231,6 +240,10 @@ final class Recorder {
             let writer = try RecordingWriter(url: url, size: size, fps: fps, quality: settings.recordQuality.level,
                                              system: settings.audio.system, mic: settings.audio.mic)
             CaptureHistoryStore.shared.note(url, recording: source)
+            // Captures › Show clicks starts this recording's Click ring on (R4).
+            writer.drawsPointer(frame: frame.size, look: PointerLook(clickRing: settings.showClicks))
+            let shapes = PointerShapes()
+            if let shape = shapes.read(at: Self.now(), force: true) { writer.shape(shape) }
             let output = RecordingOutput(writer: writer, frame: frame) { [weak self] error in
                 Task { @MainActor in self?.finish(reason: nil, error: error) }
             }
@@ -250,7 +263,7 @@ final class Recorder {
             clock = RecordingClock()
             _ = clock.place(Self.now(), track: 0, starts: true)
             phase = .recording
-            watchClicks(output)
+            watchPointer(output, shapes: shapes)
             watchDisk(folder)
             watchDisplay(display.displayID)
             Self.log.notice("recording \(String(describing: source), privacy: .public) at \(Int(size.width))×\(Int(size.height)), sound \(settings.audio.rawValue, privacy: .public), \(fps) fps, quality \(settings.recordQuality.rawValue, privacy: .public)")
@@ -290,8 +303,10 @@ final class Recorder {
                 let url = output.writer.url
                 Self.log.notice("recording saved: \(url.lastPathComponent, privacy: .public), \(RecordingClock.label(seconds), privacy: .public)")
                 let pointer = output.writer.pointer
-                // Written before the editor can open on it, off the main thread.
-                await Task.detached(priority: .userInitiated) { try? pointer.save(for: url, in: VideoEditor.pointerFolder) }.value
+                // Written before the editor can open on it, off the main thread. The prune keeps the track of every
+                // recording still in a folder Pilot saved one to: a drawn track is its only pointer.
+                let folders = CaptureHistoryStore.shared.recordingFolders()
+                await Task.detached(priority: .userInitiated) { try? pointer.save(for: url, in: VideoEditor.pointerFolder, alsoIn: folders) }.value
                 let head = reason.map { "Recording stopped (\($0)) and saved" } ?? (error == nil ? "Recording saved" : "Recording stopped and saved")
                 // The thumbnail, the editor or the copy says it was saved; a recording that stopped on its own says why.
                 if reason != nil || error != nil {
@@ -322,17 +337,25 @@ final class Recorder {
         capsule = nil
     }
 
-    /// Clicks while recording, for the video editor's zoom (P71): watched only while the stream runs, stamped with the
-    /// host clock the frames are, and placed on the writer's queue.
-    private func watchClicks(_ output: RecordingOutput) {
-        let click: (NSEvent) -> Void = { event in
+    /// The pointer while recording (P71, T29): its moves and clicks, for the editor's zoom and for the export to draw it,
+    /// and its shape when it changes. Watched by NSEvent monitors only while the stream runs (never the bind tap, ADR
+    /// 0001), stamped with the host clock the frames are, and placed on the writer's queue. The frames can't carry the
+    /// moves any more: with the pointer out of them, a pointer moving over a still screen makes none.
+    private func watchPointer(_ output: RecordingOutput, shapes: PointerShapes) {
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        let seen: (NSEvent) -> Void = { event in
             guard let at = event.cgEvent?.location else { return }
             let now = Self.now()
-            output.queue.async { output.click(at, time: now) }
+            let click = clicks.contains(NSEvent.EventTypeMask(type: event.type))
+            let shape = shapes.read(at: now, force: click)
+            output.queue.async {
+                if let shape { output.writer.shape(shape) }
+                if click { output.click(at, time: now) } else { output.move(at, time: now) }
+            }
         }
-        let kinds: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        clickWatch = [NSEvent.addGlobalMonitorForEvents(matching: kinds, handler: click),
-                      NSEvent.addLocalMonitorForEvents(matching: kinds) { click($0); return $0 }].compactMap { $0 }
+        let kinds = clicks.union([.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged])
+        clickWatch = [NSEvent.addGlobalMonitorForEvents(matching: kinds, handler: seen),
+                      NSEvent.addLocalMonitorForEvents(matching: kinds) { seen($0); return $0 }].compactMap { $0 }
     }
 
     /// Every 10 s, give or take 2 (story 142: a lean timer wakes with the others).
@@ -391,8 +414,10 @@ final class RecordingOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchec
     /// The recorded frame in global top-left points, which the pointer's places are made fractions of.
     let frame: CGRect
     private let stopped: @Sendable (Error) -> Void
-    /// When the pointer was last read, host seconds: at most 30 times a second, and only with a new frame.
-    private var pointerRead = -Double.infinity
+    /// When a move was last kept, host seconds: at most 120 a second.
+    private var lastMove = -Double.infinity
+    /// Whether the pointer's first place is on the track: read with the first frame, since a still one sends no moves.
+    private var seeded = false
 
     init(writer: RecordingWriter, frame: CGRect, stopped: @escaping @Sendable (Error) -> Void) {
         self.writer = writer
@@ -402,6 +427,14 @@ final class RecordingOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchec
 
     /// A click at `at` (global top-left points) at host `time`; on the queue.
     func click(_ at: CGPoint, time: Double) { writer.point(fraction(at), at: time, click: true) }
+
+    /// The pointer moved to `at` (global top-left points) at host `time`; on the queue. At most 120 a second kept: a
+    /// minute of steady moving is a few hundred kilobytes of track.
+    func move(_ at: CGPoint, time: Double) {
+        guard time - lastMove >= 1.0 / 120 else { return }
+        lastMove = time
+        writer.point(fraction(at), at: time, click: false)
+    }
 
     private func fraction(_ p: CGPoint) -> CGPoint {
         CGPoint(x: (p.x - frame.minX) / max(frame.width, 1), y: (p.y - frame.minY) / max(frame.height, 1))
@@ -414,11 +447,10 @@ final class RecordingOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchec
             guard let info = (CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]])?.first,
                   let raw = info[.status] as? Int, SCFrameStatus(rawValue: raw) == .complete else { return }
             writer.append(sample, .video)
-            // The pointer with the frame: a moving pointer makes new frames, a still one needs no samples (P71).
-            let time = sample.presentationTimeStamp.seconds
-            if time - pointerRead >= 1.0 / 30, let at = CGEvent(source: nil)?.location {
-                pointerRead = time
-                writer.point(fraction(at), at: time, click: false)
+            // The pointer's place with the first frame; the monitors send each move after it (T29).
+            if !seeded, let at = CGEvent(source: nil)?.location {
+                seeded = true
+                move(at, time: sample.presentationTimeStamp.seconds)
             }
         case .audio: writer.append(sample, .system)
         case .microphone: writer.append(sample, .mic)
@@ -439,6 +471,66 @@ final class RecordingOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchec
     func cancel() async {
         let writer = self.writer
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in queue.async { writer.cancel(); done.resume() } }
+    }
+}
+
+/// The system pointer's shape while recording (T29): read at most 5 times a second, and at once on a click; a shape seen
+/// before comes from the cache, so only a new one is drawn into a PNG. macOS 27 still answers `currentSystemCursor`,
+/// which Apple marks deprecated and says will one day be nil (NSCursor.h): then every shape is the arrow.
+@MainActor
+final class PointerShapes {
+    /// Pixels a point the PNG is drawn at: enough for R2's 3× on a Retina recording.
+    static let scale: CGFloat = 6
+    private var cache: [Int: CursorTrack.Shape] = [:]
+    private var lastRead = -Double.infinity
+    private var lastKey: Int?
+    private var warned = false
+
+    /// The pointer's shape when it differs from the last one read; nil when it is the same or it is too soon to look.
+    func read(at now: Double, force: Bool = false) -> CursorTrack.Shape? {
+        guard force || now - lastRead >= 0.2 else { return nil }
+        lastRead = now
+        let system = Self.system()
+        let cursor = system ?? NSCursor.arrow
+        if system == nil, !warned {
+            warned = true
+            Recorder.log.notice("recording: the system pointer's shape is not readable; the export draws the arrow")
+        }
+        let image = cursor.image
+        var hasher = Hasher()
+        hasher.combine(cursor.hotSpot.x)
+        hasher.combine(cursor.hotSpot.y)
+        hasher.combine(image.size.width)
+        hasher.combine(image.size.height)
+        if let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil)?.dataProvider?.data { hasher.combine(pixels as Data) }
+        let key = hasher.finalize()
+        guard key != lastKey else { return nil }
+        lastKey = key
+        if let known = cache[key] { return known }
+        guard let shape = Self.shape(cursor) else { return nil }
+        cache[key] = shape
+        return shape
+    }
+
+    /// `NSCursor.currentSystem`, reached by name: Apple deprecates it with no replacement for another app's pointer.
+    private static func system() -> NSCursor? {
+        NSCursor.perform(NSSelectorFromString("currentSystemCursor"))?.takeUnretainedValue() as? NSCursor
+    }
+
+    /// `cursor` as a track keeps it: a PNG at `scale` pixels a point, its size and hot spot in points.
+    static func shape(_ cursor: NSCursor) -> CursorTrack.Shape? {
+        let size = cursor.image.size
+        guard size.width >= 1, size.height >= 1,
+              let ctx = CGContext(data: nil, width: Int((size.width * scale).rounded(.up)), height: Int((size.height * scale).rounded(.up)),
+                                  bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+        cursor.image.draw(in: CGRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let picture = ctx.makeImage(), let png = NSBitmapImageRep(cgImage: picture).representation(using: .png, properties: [:]) else { return nil }
+        return CursorTrack.Shape(png: png, scale: Double(scale), size: size, hot: cursor.hotSpot)
     }
 }
 

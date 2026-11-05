@@ -98,6 +98,18 @@ public enum Abilities {
         "look.ghosttyApply": .bundle("com.mitchellh.ghostty"), "look.ghosttyRemove": .bundle("com.mitchellh.ghostty"),
     ]
 
+    /// Pilot's own actions that work one app, by its bundle id, so typing the app's name lists them under it (T41): the
+    /// optional ones that need an app (Bitwarden's Generate a password) and these, which are always listed.
+    static let appActions: [String: String] = [
+        "system.newEvent": "com.apple.iCal", "system.openFullDiskAccess": "com.apple.systempreferences",
+    ]
+
+    /// The app one of Pilot's own actions works, nil for an action of no one app.
+    public static func app(of id: String) -> String? {
+        if case .bundle(let bundle)? = optional[id] { return bundle }
+        return appActions[id]
+    }
+
     /// Whether the Binds screen, the menu and Abilities list an action: a shipped one always, an optional one while it
     /// holds a key, or once added with what it needs here.
     public static func isListed(_ id: String, bound: Bool, added: Set<String>, has: (CatalogueEntry.Check) -> Bool) -> Bool {
@@ -140,12 +152,12 @@ public enum Abilities {
     static let noTryPrefixes = ["windows.", "drive.", "workspaces.move:", "workspaces.moveFollow:", "scripts.run:", "ext."]
     static let noTry: Set<String> = [
         "workspaces.saveSnapshot", "workspaces.restoreSnapshot", "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
-        "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.ejectAll",
+        "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.bluetooth", "system.ejectAll",
         "system.clearAllNotifications", "system.clearNotification", "system.idleLock",
         "engine.hyper", "engine.tilingOff", "engine.openWindow", "bar.peekMenuBar",
         "apps.pastePlain", "apps.bitwardenFill", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "ai.selectionTools", "speech.readAloud",
         "look.ghosttyApply", "look.ghosttyRemove",
-        "dictation.toggle", "dictation.hold",
+        "dictation.toggle", "dictation.hold", "cursor.spotlight",
     ]
 
     /// Actions made per app, site, script or setting, by id prefix: % is the rest of the id, @ the action's label.
@@ -223,6 +235,7 @@ public enum Abilities {
         "apps.music": "Opens your music app or site.",
         "apps.notes": "Opens Apple Notes.",
         "apps.passwords": "Opens Passwords.",
+        "apps.pilotFiles": "Opens Pilot Files, a window to browse your folders, find a file by name, and rename, copy, move or trash files, each undone with Cmd+Z.",
         "apps.pastePlain": "Pastes what you copied as plain text, without its formatting.",
         "apps.terminal": "Opens a terminal.",
         "apps.webApp": "Makes a site into a Mac app of its own, in Install › Web apps.",
@@ -280,6 +293,7 @@ public enum Abilities {
         "bar.peekMenuBar": "Shows the macOS menu bar while the key is held.",
         "look.ghosttyApply": "Gives Ghostty Pilot's theme and font.",
         "look.ghosttyRemove": "Takes Pilot's look out of Ghostty's config.",
+        "system.bluetooth": "Turns Bluetooth on or off; asks first when Bluetooth keyboards and mice are the only input.",
         "system.bluetoothSettings": "Opens System on Bluetooth.",
         "system.brightnessDown": "Dims the screen the window in front is on.",
         "system.brightnessDownAll": "Dims every screen.",
@@ -293,6 +307,7 @@ public enum Abilities {
         "system.rotateDisplay": "Turns a screen to 0, 90, 180 or 270 degrees; it stays unless you press Revert within 15 s.",
         "system.focusSettings": "Opens Focus in System Settings.",
         "system.idleLock": "Locks the Mac after it sits idle, or stops it locking.",
+        "cursor.spotlight": "Dims the screen around the pointer while the key is held, with Spotlight on in Look › Cursor.",
         "system.infoHUD": "Flashes the time, the date, the battery and the weather on the screen in front.",
         "system.keepAwake": "Keeps the Mac awake, or lets it sleep again.",
         "system.newEvent": "Opens the menu with event typed: add the words and a day or time, and Return adds it to your calendar.",

@@ -173,8 +173,7 @@ extension BarSettings {
         stripSlots(placement).contains { kind == .group ? $0.isGroup : $0.kinds.contains(kind) }
     }
 
-    /// Whether an extension's item is drawn for `placement`: its own item in the menu bar, or in the top bar's
-    /// Extensions slot.
+    /// Whether an extension's item is drawn for `placement`: its own item in the menu bar or its own slot in the top bar.
     public func onStrip(extension id: String, placement: BarPlacement) -> Bool {
         switch placement {
         case .menuBar: shows(extension: id, in: .menuBar, topBarOn: false)
@@ -193,8 +192,8 @@ extension BarSettings {
 
     /// The tray for `placement`: each group with its items not on the strip, groups with none left out, one item a chip
     /// (Sven on build 54: one by one, not by sections). Pilot is never there (it is pinned); items of the top bar alone
-    /// are not offered for the menu bar. The Extensions item is not either: it is where the top bar draws the extensions'
-    /// own items, which `extensions` (their ids) offer one by one, and it goes on with the first of them.
+    /// are not offered for the menu bar. The old Extensions item is not either: `extensions` (their ids) offer each
+    /// extension's own item, one by one.
     public func tray(_ placement: BarPlacement, extensions: [String] = []) -> [(group: BarGroup, items: [BarTrayItem])] {
         BarGroup.allCases.compactMap { group in
             let kinds = BarKind.allCases.filter {
@@ -241,12 +240,10 @@ extension BarSettings {
         return true
     }
 
-    /// An extension's item dropped on the strip: it joins that bar as the page's switch does. It has no place of its own:
-    /// in the top bar it draws in the Extensions slot, which the first one dropped puts where it drops.
+    /// An extension's item dropped on the strip: it joins that bar as the page's switch does, and in the top bar lands
+    /// where it drops, its own slot in the order as a built-in item's is (spec pilot-1.1 T50). In the macOS menu bar it
+    /// is its own item, beside Pilot's, where macOS puts it.
     private mutating func drop(extension id: String, on drop: BarStripDrop, placement: BarPlacement) -> Bool {
-        // The slot draws something only while another extension's item is placed there.
-        let slotShown = onStrip(.extensions, placement: placement)
-            && extensionItems.contains { $0.id != id && shows(extension: $0.id, in: .topBar, topBarOn: true) }
         switch (drop, placement) {
         case (.top, .topBar): if !shows(extension: id, in: .topBar, topBarOn: true) { set(extension: id, on: true, placement: isOn(extension: id, in: .menuBar) ? .both : .topBar) }
         case (.top, .both): set(extension: id, on: true, placement: .both)
@@ -254,10 +251,7 @@ extension BarSettings {
         case (.menu, .both): set(extension: id, on: true, placement: .menuBar)
         case (.top, .menuBar), (.menu, .topBar): return false
         }
-        if case .top(let side, let index) = drop {
-            set(.extensions, on: true)
-            if !slotShown { place(.extensions, on: side, at: index) }
-        }
+        if case .top(let side, let index) = drop { place(.extension(id), on: side, at: index) }
         return true
     }
 
@@ -284,12 +278,21 @@ extension BarSettings {
     /// as nudge does, into the next side past a side's end; in the menu bar one slot over.
     public mutating func step(_ kind: BarKind, by step: Int, inTopBar: Bool, topBarOn: Bool) {
         guard !kind.pinned else { return }
-        if inTopBar { return nudge(kind, by: step) }
+        if inTopBar { return nudge(.kind(kind), by: step) }
         let slots = slots(in: .menuBar, topBarOn: topBarOn)
         guard let at = slots.firstIndex(where: { $0.kind == kind }) else { return }
         let to = at + step
         guard slots.indices.contains(to) else { return }
         placeInMenuBar(kind, at: to, topBarOn: topBarOn)
+    }
+
+    /// The same for an extension's own item: along the top bar as a built-in item's; in the macOS menu bar it has no
+    /// place in Pilot's order to step.
+    public mutating func step(_ item: BarTrayItem, by step: Int, inTopBar: Bool, topBarOn: Bool) {
+        switch item {
+        case .kind(let kind): self.step(kind, by: step, inTopBar: inTopBar, topBarOn: topBarOn)
+        case .extension: if inTopBar { nudge(item, by: step) }
+        }
     }
 
     /// The menu bar's order: `kind` goes before the slot now at `index` of the menu bar's slots without it, or after the
@@ -331,8 +334,12 @@ extension BarSettings {
 extension BarDrop {
     /// Where a drop at `x` lands in the macOS menu bar's row of Pilot's items (`slots` as drawn, hidden ones with no
     /// width): before the first drawn slot whose middle is right of it, the caret between the two; past them all, last.
-    public static func menuTarget(x: Double, slots: [Slot], dragging: BarKind?) -> (index: Int, caret: Double) {
-        let others = slots.filter { $0.kind != dragging }
+    public static func menuTarget(x: Double, slots: [Slot], dragging: BarKind) -> (index: Int, caret: Double) {
+        menuTarget(x: x, slots: slots, dragging: .kind(dragging))
+    }
+
+    public static func menuTarget(x: Double, slots: [Slot], dragging: BarTrayItem?) -> (index: Int, caret: Double) {
+        let others = slots.filter { $0.item != dragging }
         let index = others.indices.first { others[$0].drawn && others[$0].midX > x } ?? others.count
         let before = others[..<index].last(where: \.drawn), after = others[index...].first(where: \.drawn)
         let caret = switch (before, after) {

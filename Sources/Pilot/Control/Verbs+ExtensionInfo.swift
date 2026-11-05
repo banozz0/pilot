@@ -193,13 +193,21 @@ extension ExtensionTools {
             }
         }
         try await noPassword()
-        let base = ControlGate.Ask.run(command.actionID, extensions: [ext]) ?? ControlGate.Ask("Run extension command", command.actionID)
+        let base = Self.run(command, of: ext)
         let answer = try await gate.allow(ControlGate.Ask(base.title, ([base.detail] + extra).joined(separator: ", ")), peer: peer) { () throws(ControlError) in
             try await noPassword()
             return try await body()
         }
         log.notice("ext: \(command.actionID, privacy: .public) read back, from the pilot command")
         return answer
+    }
+
+    /// The question running `command` of `ext` asks: the run's own (with a keyword's input), else, for a command no
+    /// action id names (a page's, a hidden one), its title and program.
+    static func run(_ command: Extension.Command, of ext: Extension) -> ControlGate.Ask {
+        if Extension.command(inAction: command.actionID, in: [ext]) != nil, let ask = ControlGate.Ask.run(command.actionID, extensions: [ext]) { return ask }
+        return ControlGate.Ask("Run extension command \(ControlGate.Ask.visible(ext.title)) › \(ControlGate.Ask.visible(command.title))",
+                               command.program.path(percentEncoded: false))
     }
 
     /// A run that failed: the extension's own error message as it said it, but a failed exit (whose reason is the program's

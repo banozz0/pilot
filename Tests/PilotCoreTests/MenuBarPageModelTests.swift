@@ -207,14 +207,14 @@ struct MenuBarPageModelTests {
         #expect(s.slots(in: .menuBar, topBarOn: false).first { $0.isGroup }?.kinds == [.cpu, .memory, .network])
     }
 
-    @Test("An extension's item: onto the top bar it draws in the Extensions slot (switched on); onto the menu bar it is its own item; back to the tray it leaves that bar")
+    @Test("An extension's item: onto the top bar it is its own slot where it drops; onto the menu bar it is its own item; back to the tray it leaves that bar")
     func extensionItems() {
         var s = BarSettings.defaults
         s.set(.extensions, on: false)
         #expect(s.tray(.topBar, extensions: ["weather"]).flatMap(\.items).contains(.extension("weather")))
         let landed211 = s.drop(.extension("weather"), on: .top(.right, index: 3), placement: .topBar)
         #expect(landed211)
-        #expect(s.entry(.extensions).on && s.shows(extension: "weather", in: .topBar, topBarOn: true))
+        #expect(s.shows(extension: "weather", in: .topBar, topBarOn: true) && Self.items(s, .right)[3] == .extension("weather"))
         #expect(s.isOn(extension: "weather", in: .menuBar), "it keeps the menu bar it was in")
         let took215 = s.takeOff(.extension("weather"), placement: .menuBar)
         #expect(took215)
@@ -278,12 +278,41 @@ struct MenuBarPageModelTests {
         #expect(!tray.flatMap(\.items).contains(.kind(.extensions)))
     }
 
-    @Test("The first extension's item dropped on the top bar puts the Extensions slot where it drops; the next joins it there")
-    func extensionSlotLands() {
+    @Test("Each extension's item dropped on the top bar lands where it drops, and moves on its own as a built-in item does (Sven, 2026-11-04: they moved as one)")
+    func extensionSlotLands() throws {
         var s = BarSettings.defaults
         let first = s.drop(.extension("weather"), on: .top(.left, index: 1), placement: .topBar)
-        #expect(first && Self.kinds(s, .left)[1] == .extensions)
+        #expect(first && Self.items(s, .left)[1] == .extension("weather"))
         let next = s.drop(.extension("stocks"), on: .top(.right, index: 0), placement: .topBar)
-        #expect(next && Self.kinds(s, .left)[1] == .extensions && !Self.kinds(s, .right).contains(.extensions))
+        #expect(next && Self.items(s, .left)[1] == .extension("weather") && Self.items(s, .right)[0] == .extension("stocks"))
+        // Dragged along its side, past a built-in item, and to another side: only it moves.
+        let along = s.drop(.extension("stocks"), on: .top(.right, index: 2), placement: .topBar)
+        #expect(along && Self.items(s, .right)[2] == .extension("stocks") && Self.items(s, .left)[1] == .extension("weather"))
+        let across = s.drop(.extension("weather"), on: .top(.centre, index: 0), placement: .topBar)
+        #expect(across && Self.items(s, .centre)[0] == .extension("weather") && !Self.items(s, .left).contains(.extension("weather")))
+        // Move left and right step it one place, past a side's end into the next.
+        s.step(.extension("weather"), by: -1, inTopBar: true, topBarOn: true)
+        #expect(Self.items(s, .left).last == .extension("weather"))
+        s.step(.extension("weather"), by: 1, inTopBar: true, topBarOn: true)
+        #expect(Self.items(s, .centre)[0] == .extension("weather"))
+        // A drag's target counts its side without the dragged extension's item, as for a built-in one.
+        let drawn = BarDrop(sides: [.right: Self.items(s, .right).enumerated().map { i, item in BarDrop.Slot(item: item, minX: Double(600 + i * 100), maxX: Double(680 + i * 100)) }],
+                            width: 1000, height: 30)
+        #expect(drawn.target(x: 985, y: 15, dragging: .extension("stocks"))?.index == 3)
+        #expect(s.topBarPlace(.extension("stocks")).map { $0.side == .right && $0.index == 2 } == true && s.topBarPlace(.extension("nope")) == nil)
+        // Its right-click menu on the bar: Move to and Remove from bar act on it alone, no style or Extensions rows.
+        let menu = try #require(s.entries.first { $0.item == .extension("stocks") }).menu(BarInputs(), in: .topBar)
+        #expect(menu.contains { if case .submenu("Move to", _) = $0 { true } else { false } } && menu.contains(.action("Remove from bar", .edit(.remove))))
+        #expect(!menu.contains { if case .header("Style") = $0 { true } else { false } } && !menu.contains { if case .action("Show Extensions", _, _, _) = $0 { true } else { false } })
+        s.apply(.move(.left), on: .extension("stocks"))
+        #expect(Self.items(s, .left).last == .extension("stocks") && !Self.items(s, .right).contains(.extension("stocks")))
+        s.apply(.remove, on: .extension("stocks"))
+        #expect(!s.shows(extension: "stocks", in: .topBar, topBarOn: true) && s.isOn(extension: "stocks", in: .menuBar), "it keeps the macOS menu bar it was in")
+        s.toggle(extension: "stocks", in: .topBar)
+        // Hidden on its own: the other stays where it is.
+        let took = s.takeOff(.extension("stocks"), placement: .topBar)
+        #expect(took && Self.items(s, .centre)[0] == .extension("weather"))
     }
+
+    static func items(_ s: BarSettings, _ side: TopBarSide) -> [BarTrayItem] { s.slots(in: .topBar, topBarOn: true, side: side).map(\.item) }
 }

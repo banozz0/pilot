@@ -29,6 +29,10 @@ extension SettingsSchema {
                     read: { history.settings.order.sort }, write: { sort in change { $0.order.sort = sort } }),
             .bool("clipboard.sortReversed", "Sort reversed", page: "clipboard", standard: standard.order.reversed,
                   read: { history.settings.order.reversed }, write: { on in change { $0.order.reversed = on } }),
+            .bool("clipboard.expireSecrets", "Expire card numbers and keys", page: "clipboard", standard: standard.expireSecrets,
+                  read: { history.settings.expireSecrets }, write: { on in change { $0.expireSecrets = on } }),
+            .int("clipboard.secretMinutes", "Expire them after (minutes)", page: "clipboard", range: ClipboardSettings.secretMinuteRange,
+                 standard: standard.secretMinutes, read: { history.settings.secretMinutes }, write: { n in change { $0.secretMinutes = n } }),
             .bool("clipboard.recording", "Clipboard keeps what is copied (on again at every launch)", page: "clipboard", standard: true,
                   read: { recording.isOn }, write: { recording.set($0) }),
         ])

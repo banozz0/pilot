@@ -43,6 +43,8 @@ final class BarItemsStore {
     static let pagePlacementKey = "bar.pagePlacement"
     /// Set at the first start, or once a saved Pilot item has moved to the mark alone (spec pilot-1-1 T28).
     static let markAloneKey = "bar.pilotMarkAlone"
+    /// Set at the first start, or once a saved bar's extensions' items have their own places (spec pilot-1.1 T50).
+    static let extensionsApartKey = "bar.extensionsApart"
     /// The top bar switched on or off: the page shows the bar the items now sit in, Top bar or Menu bar; a pick by hand
     /// after it stays until the next switch (Sven, 2026-10-11).
     func topBarSwitched(_ on: Bool) { pagePlacement = on ? .topBar : .menuBar }
@@ -70,7 +72,11 @@ final class BarItemsStore {
         background = defaults.string(forKey: Self.backgroundKey).flatMap(TopBarBackground.init(rawValue:)) ?? .solid
         colour = defaults.string(forKey: Self.colourKey).flatMap(ColourChoice.init(rawValue:)) ?? .theme
         itemColours = defaults.object(forKey: Self.itemColoursKey) as? Bool ?? true
-        if let data = defaults.data(forKey: Self.key), var saved = try? JSONDecoder().decode(BarSettings.self, from: data) {
+        // A bar saved before each extension's item had its own place (spec pilot-1.1 T50) gives each one its place in the
+        // order its Extensions slot drew them, by title, as ExtensionBar lists them; the folder is read only then.
+        let decoder = JSONDecoder()
+        decoder.userInfo[BarSettings.extensionOrder] = { @Sendable in ExtensionBar.withBar(in: Extension.folder).map(\.id) }
+        if let data = defaults.data(forKey: Self.key), var saved = try? decoder.decode(BarSettings.self, from: data) {
             // Pilot's mark alone, once (spec pilot-1-1 T28, Sven Q643): a bar saved with the workspace number beside the mark
             // moves to the mark; a style picked after this stays.
             if !defaults.bool(forKey: Self.markAloneKey) {
@@ -79,6 +85,10 @@ final class BarItemsStore {
                     defaults.set(try? JSONEncoder().encode(saved), forKey: Self.key)
                 }
                 defaults.set(true, forKey: Self.markAloneKey)
+            }
+            if !defaults.bool(forKey: Self.extensionsApartKey) {
+                defaults.set(try? JSONEncoder().encode(saved), forKey: Self.key)
+                defaults.set(true, forKey: Self.extensionsApartKey)
             }
             settings = saved
             return
@@ -96,6 +106,7 @@ final class BarItemsStore {
                                         pomodoroCountdown: defaults.object(forKey: "pomodoro.countdown") as? Bool)
         defaults.set(try? JSONEncoder().encode(settings), forKey: Self.key)
         defaults.set(true, forKey: Self.markAloneKey)
+        defaults.set(true, forKey: Self.extensionsApartKey)
         let on = settings.entries.filter(\.on).map { "\($0.kind.rawValue) \($0.placement.rawValue)" }.joined(separator: ", ")
         log.notice("bar items carried over: \(on, privacy: .public)")
     }
@@ -112,7 +123,7 @@ final class BarItemsStore {
 
     /// The observers dump's line, so a live check reads what each bar shows: the menu bar now, the top bar once on.
     var line: String {
-        let names = { (slots: [BarSlot]) in slots.map { $0.kinds.map(\.rawValue).joined(separator: "+") }.joined(separator: ", ") }
+        let names = { (slots: [BarSlot]) in slots.map(\.name).joined(separator: ", ") }
         return "bar items: menu bar " + names(slots(in: .menuBar)) + "; top bar "
             + TopBarSide.allCases.map { "\($0.rawValue) " + names(settings.slots(in: .topBar, topBarOn: true, side: $0)) }.joined(separator: " | ")
     }
