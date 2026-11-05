@@ -233,6 +233,14 @@ private func layoutWorkspaces() async throws {
 private func raiseWithoutFocus(_ windows: [Window]) {
     for case let window as MacWindow in windows {
         let pid = window.app.pid, windowId = window.windowId
+        // Pilot's own (OwnApp) through AppKit: AX into its own process off the main thread deadlocks it (T59).
+        guard pid != myPid else {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                NSApp.windows.first { $0.windowNumber == Int(windowId) }?.orderFrontRegardless()
+            }
+            continue
+        }
         Task.detached {
             try? await Task.sleep(for: .milliseconds(250))
             let app = AXUIElementCreateApplication(pid).withMessagingTimeout()

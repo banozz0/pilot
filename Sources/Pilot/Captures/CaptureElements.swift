@@ -6,6 +6,8 @@ import ApplicationServices
 /// Called off the main thread; a hung app gets half a second per element.
 enum CaptureElements {
     static func frames(at point: CGPoint, pid: pid_t, minimum: CGFloat = 8) -> [CGRect] {
+        // Never Pilot's own: off the main thread, AppKit would answer in-process and deadlock against SwiftUI (T59).
+        guard pid != getpid() else { return [] }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
         var hit: AXUIElement?

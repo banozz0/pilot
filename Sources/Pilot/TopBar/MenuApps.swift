@@ -117,7 +117,8 @@ struct AXMenuExtras: MenuExtrasReading {
         for window in main + windows where buttons.isEmpty {
             buttons = try children(window).flatMap(children).compactMap { item in
                 var pid: pid_t = 0
-                guard AXUIElementGetPid(item, &pid) == .success, pid != agent,
+                // Never Pilot's own button: read off the main thread, it would run AppKit in-process there (T59).
+                guard AXUIElementGetPid(item, &pid) == .success, pid != agent, pid != getpid(),
                       ["AXButton", "AXMenuBarItem"].contains((try? Self.copy(item, kAXRoleAttribute)) as? String) else { return nil }
                 return (pid, item)
             }

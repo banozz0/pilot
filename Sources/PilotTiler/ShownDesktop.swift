@@ -68,9 +68,10 @@ func endShownDesktop() -> Bool {
 /// window focused at the press, which `workspaceShowingDesktop` keeps it for.
 @MainActor
 func endShownDesktopOnDockClick(at point: CGPoint) async {
-    guard let shown = shownDesktop else { return }
+    guard let shown = shownDesktop, !ownWindowAt(point),
+          let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.processIdentifier else { return }
     // Off the main thread: a hung Dock waits out the AX timeout there, not in the key tap.
-    guard let clicked = await Task.detached(operation: { dockAppPath(at: point) }).value,
+    guard let clicked = await Task.detached(operation: { dockAppPath(at: point, dock: dock) }).value,
           shownDesktop?.workspace === shown.workspace else { return }
     let held = Set(shown.workspace.allLeafWindowsRecursive.map(\.app.pid))
     if held.contains(where: { NSRunningApplication(processIdentifier: $0)?.bundleURL?.standardizedFileURL.path == clicked }) {
@@ -78,10 +79,22 @@ func endShownDesktopOnDockClick(at point: CGPoint) async {
     }
 }
 
+/// Whether one of Pilot's windows is in front at `point` (top-left origin, as AX): a click there was on Pilot (the
+/// capture overlay, its toolbar), never on the Dock.
+@MainActor
+private func ownWindowAt(_ point: CGPoint) -> Bool {
+    let top = NSWindow.windowNumber(at: point.withYAxisFlipped, belowWindowWithWindowNumber: 0)
+    return NSApp?.windows.contains { $0.windowNumber == top } == true
+}
+
 /// The bundle path of the app whose Dock icon is at `point`, nil off one (a folder, the Trash, a minimised window).
-nonisolated private func dockAppPath(at point: CGPoint) -> String? {
+/// Asks the Dock itself, never the system-wide element: that hit-tests whatever window is in front, and when it is
+/// Pilot's own, AppKit answers in-process on this thread, holding Accessibility's lock while it waits for SwiftUI's,
+/// which the main thread holds as it asks Accessibility: Pilot froze, and the key tap with it (T59, build 6).
+nonisolated private func dockAppPath(at point: CGPoint, dock: pid_t) -> String? {
     var hit: AXUIElement?
-    guard unsafe AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit) == .success,
+    let app = AXUIElementCreateApplication(dock).withMessagingTimeout()
+    guard unsafe AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &hit) == .success,
           let hit else { return nil }
     var subrole: CFTypeRef?, url: CFTypeRef?
     guard unsafe AXUIElementCopyAttributeValue(hit, kAXSubroleAttribute as CFString, &subrole) == .success,

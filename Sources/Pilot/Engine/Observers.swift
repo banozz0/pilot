@@ -112,10 +112,17 @@ final class EngineObservers {
                 Task { @MainActor in if NSApp.isActive { self?.refreshFocusedWindow() } }
             })
         }
-        // Every Pilot window posts these, the border's own panel each drag frame: only a marked one gets a Task.
+        // Every Pilot window posts these, the border's own panel each drag frame: only a marked one gets a Task, or
+        // Pilot's key window (or the window its sheet or child sits on), or one resigning key, while Pilot is in front,
+        // as Pilot never observes itself through Accessibility (T59).
         for name in Self.borderedWindowNotifications {
             tokens.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
-                guard note.object is BorderedWindow else { return }
+                let window = note.object as? NSWindow
+                let resigned = note.name == NSWindow.didResignKeyNotification
+                guard MainActor.assumeIsolated({
+                    window is BorderedWindow || (NSApp.isActive && window != nil
+                        && (resigned || window === NSApp.keyWindow || window === NSApp.keyWindow?.sheetParent || window === NSApp.keyWindow?.parent))
+                }) else { return }
                 Task { @MainActor in self?.refreshFocusedWindow() }
             })
         }
@@ -253,15 +260,23 @@ final class EngineObservers {
     }
 
     /// Pilot's key window when the border marks it (BorderedWindow): a non-activating panel such as the capture editor
-    /// takes the keys while another app stays in front, so AX would name that app's window (P32).
-    static func ownKeyWindow() -> FocusedWindowRead? {
-        guard let w = NSApp?.keyWindow, w is BorderedWindow, w.isVisible, let id = CGWindowID(exactly: w.windowNumber) else { return nil }
-        return (w.title, WindowBorder.Window(frame: WindowGeometry.flip(w.frame, primaryHeight: Screens.primaryHeight), subrole: "AXStandardWindow",
-                                             fullScreen: false, minimised: w.isMiniaturized, windowID: id), nil)
+    /// takes the keys while another app stays in front, so AX would name that app's window (P32). `marked: false` takes
+    /// any key window, for when Pilot itself is in front, read as AX would: a sheet's or child's window is its parent, and the
+    /// subrole and full screen are the window's own, so a dialog, alert or the launcher is never ringed or blurred.
+    static func ownKeyWindow(marked: Bool = true) -> FocusedWindowRead? {
+        guard let key = NSApp?.keyWindow, !marked || key is BorderedWindow else { return nil }
+        let w = marked ? key : key.sheetParent ?? key.parent ?? key
+        guard w.isVisible, let id = CGWindowID(exactly: w.windowNumber) else { return nil }
+        return (w.title, WindowBorder.Window(frame: WindowGeometry.flip(w.frame, primaryHeight: Screens.primaryHeight),
+                                             subrole: marked ? "AXStandardWindow" : w.accessibilitySubrole()?.rawValue,
+                                             fullScreen: !marked && w.styleMask.contains(.fullScreen), minimised: w.isMiniaturized, windowID: id), nil)
     }
 
-    /// The focused window of app `pid` through Accessibility; nil when it has none.
+    /// The focused window of app `pid` through Accessibility; nil when it has none. Pilot's own is read from AppKit with
+    /// no element, so no Accessibility ask, here or in FrameFollower's reads off the main thread, reaches its own
+    /// process: there AppKit answers on the asking thread and deadlocks against SwiftUI (T59).
     static func axFocusedWindow(_ pid: pid_t) -> FocusedWindowRead? {
+        guard pid != getpid() else { return ownKeyWindow(marked: false) }
         var win: AnyObject?
         guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute as CFString, &win) == .success,
               let win else { return nil }
@@ -281,7 +296,8 @@ final class EngineObservers {
 
     private func watchFocusedApp() {
         let pid = focusedPid
-        guard pid != 0, axObservers[pid] == nil else { return }
+        // Never Pilot's own process (T59): its windows report through AppKit (borderedWindowNotifications).
+        guard pid != 0, pid != getpid(), axObservers[pid] == nil else { return }
         var observer: AXObserver?
         guard AXObserverCreate(pid, axCallback, &observer) == .success, let observer else { return }
         let appEl = AXUIElementCreateApplication(pid)

@@ -317,7 +317,7 @@ final class MouseDragTap {
             target = .own(own)
             NSApp.activate()
             own.makeKeyAndOrderFront(nil)
-        } else if let ax = AXWindow.matching(info) {
+        } else if info.pid != getpid(), let ax = AXWindow.matching(info) {   // never Pilot's own through AX (T59)
             target = .ax(ax.element)
             ax.focus()
         } else {

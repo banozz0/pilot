@@ -41,10 +41,7 @@ struct SelectedText: Equatable, Sendable {
     }
 
     private static func read() -> SelectedText? {
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
-        let element = focused as! AXUIElement
+        guard let element = AXFront.focusedElement() else { return nil }
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &value) == .success,
               let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }

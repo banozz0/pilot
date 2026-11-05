@@ -194,16 +194,10 @@ extension SelectionEdit {
     }
 
     /// The focused element's selection, with its range, bounds and whether it takes a write. Never Pilot's own:
-    /// Accessibility into its own process runs AppKit on the asking thread (AXMenu).
+    /// Accessibility into its own process runs AppKit on the asking thread (AXMenu), so it is never asked (AXFront).
     nonisolated static func readFocused(primaryHeight: CGFloat) -> SelectionTarget? {
-        var focused: CFTypeRef?
-        let system = AXUIElementCreateSystemWide()
-        // A hung app answers no faster than this, never Accessibility's default 6 s a request.
-        AXUIElementSetMessagingTimeout(system, 0.5)
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
-        let element = focused as! AXUIElement
-        AXUIElementSetMessagingTimeout(element, 0.5)
+        // The front app's, with AXTimeout's wait: a hung app answers no faster, never Accessibility's default 6 s.
+        guard let element = AXFront.focusedElement() else { return nil }
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
         guard pid != getpid(), let text = selectedText(element), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -217,12 +211,7 @@ extension SelectionEdit {
 
     /// Whether `element` is the focused element now.
     nonisolated static func isFocused(_ element: AXUIElement?) -> Bool {
-        guard let element else { return false }
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 0.5)
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success, let focused,
-              CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
+        guard let element, let focused = AXFront.focusedElement() else { return false }
         return CFEqual(focused, element)
     }
 
