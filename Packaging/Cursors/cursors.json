@@ -8,7 +8,7 @@
  ],
  "frameSeconds": 0.06,
  "defaultSet": "quiet",
- "layout": "<set>@<n>x.png is 8-bit grey, cells of 32n x 32n px. A cursor takes `frames` rows from row `row` (frame 0 first) and one column per layer, paint order left first. Grey is the layer's coverage: fill each layer's role colour from the palette through it, in order.",
+ "layout": "<set>@<n>x.webp is lossless grey (R = G = B), cells of 32n x 32n px. A cursor takes `frames` rows from row `row` (frame 0 first) and one column per layer, paint order left first. Grey is the layer's coverage: fill each layer's role colour from the palette through it, in order.",
  "sets": {
   "quiet": {
    "name": "Quiet",

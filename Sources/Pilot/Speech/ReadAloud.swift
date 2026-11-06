@@ -216,12 +216,12 @@ final class ReadAloudSettings {
     }
 
     /// The Voice page's Allow: macOS asks once; allowed, the list reads the voices again with it among them.
+    /// The async ask: a completion closure written here would inherit @MainActor, and macOS answers on its own queue.
     func askPersonal() {
-        AVSpeechSynthesizer.requestPersonalVoiceAuthorization { _ in
-            Task { @MainActor [weak self] in
-                self?.listed = nil
-                self?.personal = ReadAloudSettings.personalNow()
-            }
+        Task { [weak self] in
+            _ = await AVSpeechSynthesizer.requestPersonalVoiceAuthorization()
+            self?.listed = nil
+            self?.personal = ReadAloudSettings.personalNow()
         }
     }
 

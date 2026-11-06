@@ -126,6 +126,12 @@ final class KokoroModel {
         })
     }
 
+    /// As SpeechModel's: nothing when the helper already prepared it.
+    func prepareIfStale() async {
+        guard isReady, run == nil, !(await helper.prepared(folder)) else { return }
+        prepareInBackground()
+    }
+
     /// Each voice's ▶ line, one WAV per voice (Speak.samples).
     var samples: URL { folder.appending(path: "samples") }
 

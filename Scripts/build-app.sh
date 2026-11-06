@@ -34,6 +34,12 @@ fi
 SWIFTFLAGS=(); [[ $CONFIG == release ]] && SWIFTFLAGS=(-Xswiftc -Osize -Xlinker -no_exported_symbols)
 # The terminal drop's libghostty, Sentry off (T11): seconds once built for this Mac, about 5 to 10 minutes the first time.
 "$ROOT/Scripts/build-ghosttykit.sh"
+# It ships beside the app, never in it (T76): the signed pack Pilot downloads on the first Hyper+T, and the pin Pilot compiles
+# in (Sources/Pilot/Terminal/TerminalPackPin.swift). An ad-hoc Pilot has no certificate to check a pack against, so loads none.
+PACKCACHE=
+if [[ $ID != - ]]; then
+  PACKCACHE=$(SIGN_ID=$ID "$ROOT/Scripts/build-terminal-pack.sh" | tee /dev/stderr | sed -n 's/^terminal pack cache: //p')
+fi
 swift build -c "$CONFIG" $SWIFTFLAGS
 # The menu's file index (FileIndex), Cardinal's engine on stable Rust; release always, a debug walk is ten times slower.
 cargo build --release --quiet --manifest-path "$ROOT/Helpers/pilot-files/Cargo.toml"
@@ -68,7 +74,8 @@ cp "$ROOT/Packaging/pilot-agent-shell" "$APP/Contents/Helpers/pilot-agent-shell"
 # only, the headers for building. SwiftPM's rpath to its own build folder goes, so the bundle loads the framework beside
 # it, never a build's copy.
 mkdir -p "$APP/Contents/Frameworks"
-ditto "$BINDIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+# Pilot is arm64 only, so the copy keeps only Sparkle's arm64 slices: about 1 MB of x86_64 never runs (T69).
+ditto --arch arm64 "$BINDIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 for part in XPCServices Headers PrivateHeaders Modules; do
   rm -rf "$APP/Contents/Frameworks/Sparkle.framework/$part" "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/$part"
 done
@@ -114,11 +121,22 @@ PLIST=(-c "Add :PilotCommit string $(git -C "$ROOT" rev-parse HEAD)")
 [[ -n ${SPARKLE_FEED:-} ]] && PLIST+=(-c "Set :SUFeedURL $SPARKLE_FEED")
 [[ -n ${SPARKLE_ED_KEY:-} ]] && PLIST+=(-c "Set :SUPublicEDKey $SPARKLE_ED_KEY")
 [[ $CONFIG == debug ]] && PLIST+=(-c "Add :PilotSource string $(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)")")
+# The terminal pack goes in build/ beside the bundle, the release asset release.sh hands on. A build of Sven's own (debug or
+# PILOT_DEV) fetches it from build-terminal-pack.sh's cache in the repo's git common dir, which outlives this checkout and
+# its build folder, since no release page holds it yet; the pin checks those bytes as it checks a download's.
+PACK=(${ROOT}/.build/terminal-pack/PilotTerminal-*.zip(N))
+if [[ $ID != - && -n ${PACK:-} ]]; then
+  cp "$PACK[1]" "$ROOT/build/"
+  if [[ $CONFIG == debug || ${PILOT_DEV:-} == 1 ]]; then
+    [[ -f $PACKCACHE/${PACK[1]:t} ]] || { echo "error: ${PACK[1]:t} is not in build-terminal-pack.sh's cache ($PACKCACHE)" >&2; exit 1; }
+    PLIST+=(-c "Add :PilotTerminalURL string $(python3 -I -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).as_uri())' "$PACKCACHE/${PACK[1]:t}")")
+  fi
+fi
 /usr/libexec/PlistBuddy "${PLIST[@]}" "$APP/Contents/Info.plist"
 cp "$ROOT/Packaging/drive-catalogue.json" "$APP/Contents/Resources/"  # the drive catalogue (DriveModule.catalogue)
 cp "$ROOT/Packaging/install-catalogue.json" "$APP/Contents/Resources/"  # Install's catalogue (SPEC.md, Install catalogue)
 cp "$ROOT/Packaging/themes.json" "$APP/Contents/Resources/"  # Omarchy's theme palettes (OmarchyThemes)
-cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases and palettes (CursorSets, P84)
+cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases (lossless WebP) and palettes (CursorSets, P84)
 cp "$ROOT/Packaging/Omarchy-LICENSE.txt" "$APP/Contents/Resources/Omarchy-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/emoji.json" "$APP/Contents/Resources/"  # gemoji's emoji names and keywords (EmojiSearch)
 cp "$ROOT/Packaging/gemoji-LICENSE.txt" "$APP/Contents/Resources/gemoji-LICENSE.txt"  # MIT keeps its notice
@@ -131,7 +149,8 @@ xcrun coremlcompiler compile "$ROOT/Packaging/Upscale/realesr-general-x4v3.mlpac
 cp "$ROOT/Packaging/Real-ESRGAN-LICENSE.txt" "$APP/Contents/Resources/Real-ESRGAN-LICENSE.txt"  # BSD-3 keeps its notice (pilot-upscale's models)
 cp "$ROOT/Packaging/AeroSpace-LICENSE.txt" "$APP/Contents/Resources/AeroSpace-LICENSE.txt"  # MIT keeps its notice (PilotTiler, the lifted engine)
 cp "$ROOT/Packaging/Snapzy-LICENSE.txt" "$APP/Contents/Resources/Snapzy-LICENSE.txt"  # BSD-3 keeps its notice (the capture backdrop's blurs and ratio math)
-# The terminal drop's Ghostty resources: terminfo for TERM=xterm-ghostty, shell integration and themes. libghostty finds them
+# The terminal drop's Ghostty resources: terminfo for TERM=xterm-ghostty and shell integration, no bundled themes
+# (build-ghosttykit.sh). libghostty finds them
 # from its executable (Contents/Resources/terminfo/78/xterm-ghostty), so Pilot needs no Ghostty.app.
 cp -R "$ROOT/.build/ghosttykit/resources/ghostty" "$ROOT/.build/ghosttykit/resources/terminfo" "$APP/Contents/Resources/"
 cp "$ROOT/.build/ghosttykit/Ghostty-LICENSE.txt" "$APP/Contents/Resources/Ghostty-LICENSE.txt"  # MIT keeps its notice (libghostty)
@@ -139,7 +158,7 @@ cp "$ROOT/Packaging/Ghostty-THIRD-PARTY.txt" "$APP/Contents/Resources/"  # the l
 cp -R "$ROOT/Packaging/Fonts" "$APP/Contents/Resources/Fonts"  # the themes' display faces, OFL, each licence beside it (DisplayFaces)
 cp -R "$ROOT/Packaging/catalogue-icons" "$APP/Contents/Resources/catalogue-icons"  # Install's catalogue pictures, 64 px (CatalogueIcons, Scripts/catalogue-icons.swift)
 cp -R "$ROOT/Packaging/webapp-icons" "$APP/Contents/Resources/webapp-icons"  # the recommended web apps' own icons, 128 px (WebAppIdea, Scripts/webapp-icons.swift)
-cp -R "$ROOT/Packaging/folder-designs" "$APP/Contents/Resources/folder-designs"  # the folder designs Pilot draws: 1024 px HEIC, 256 px and 64 px PNG each (FolderDesigns, P54)
+cp -R "$ROOT/Packaging/folder-designs" "$APP/Contents/Resources/folder-designs"  # the folder designs Pilot draws: 1024 px and 256 px HEIC and a 64 px PNG each (FolderDesigns, P54)
 cp -R "$ROOT/Packaging/ext-template" "$APP/Contents/Resources/ext-template"  # pilot ext new's templates, one folder per mode (ExtensionTemplate)
 cp "$ROOT/Packaging/pilot-agent.md" "$APP/Contents/Resources/"  # the AI helper's system prompt (AIChat.Agent, AISettings.agent)
 cp -R "$ROOT/Packaging/skills" "$APP/Contents/Resources/skills"  # the AI's skills: the Skills list, pilot guide <topic>, /extension's prompt (AISkills)

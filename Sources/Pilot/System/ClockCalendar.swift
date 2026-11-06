@@ -167,11 +167,18 @@ final class ClockCalendar {
     /// Read only; a reminder due on a day with no time is that whole day, else a moment at its due time. A click opens
     /// Calendar, which lists reminders too.
     func reminders(in range: DateInterval) async -> [ClockEvent] {
-        guard EKEventStore.authorizationStatus(for: .reminder) == .fullAccess else { return [] }
+        guard await Self.hasFullAccess(to: .reminder) else { return [] }
         let due = store.predicateForIncompleteReminders(withDueDateStarting: range.start, ending: range.end, calendars: nil)
         return await withCheckedContinuation { done in
             store.fetchReminders(matching: due, completion: Self.reply(done))
         }
+    }
+
+    /// Whether full access to `entity` was given, read off the main thread: `authorizationStatus` is a synchronous call to
+    /// the calendar daemon, and every calendar widget's refresh asks (lean audit 2026-11-05: 15 of the main thread's 44
+    /// busy samples with widgets shown). Never asks.
+    nonisolated static func hasFullAccess(to entity: EKEntityType) async -> Bool {
+        await Task.detached { EKEventStore.authorizationStatus(for: entity) == .fullAccess }.value
     }
 
     /// EventKit calls this on its own reminders queue (com.apple.eventkit.reminders.search), so it is built outside the

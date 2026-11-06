@@ -1,7 +1,8 @@
 // Ghostty's embedder API, MIT (Mitchell Hashimoto, Ghostty contributors): include/ghostty.h at the tag
-// Scripts/build-ghosttykit.sh builds, which puts the matching archive at .build/ghosttykit/libghostty.a.
+// Scripts/build-ghosttykit.sh builds. Types only: Pilot links no libghostty (T76). ghostty-api.h types each call Pilot makes,
+// and GhosttyAPI fills them with dlsym from the downloaded pack (TerminalPack, Scripts/build-terminal-pack.sh).
 module CGhostty {
     header "ghostty.h"
-    link "ghostty"
+    header "ghostty-api.h"
     export *
 }

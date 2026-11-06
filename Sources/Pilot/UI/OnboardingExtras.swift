@@ -4,7 +4,8 @@ import ImageScale
 import PilotCore
 
 /// Try it's optional panel, "More, if you want" (Onboarding 1.1, Q843): the extras that are no part of Set up, each
-/// acting on its own button or switch: the AI provider, Extensions, Recommend apps and the upscaler's Max quality.
+/// acting on its own button or switch: the AI provider, Extensions, Recommend apps, the upscaler's Max quality and the
+/// terminal (T76).
 @MainActor
 enum OnboardingExtras {
     static let extensionsDetail = "Pomodoro and the rest of the catalogue, from GitHub"
@@ -25,6 +26,15 @@ enum OnboardingExtras {
     static var upscalerState: String? {
         if let d = ExtrasDownloads.shared.downloads.first(where: { $0.title == upscalerTitle }) { return d.words }
         return UpscaleModels.compiled(.max) != nil ? "On this Mac" : nil
+    }
+
+    static let terminalTitle = "Terminal"
+    static var terminalDetail: String { "Ghostty for Hyper+T, which otherwise downloads on its first press · \(TerminalPack.pin.megabytes) MB" }
+
+    /// The terminal's line: on this Mac, its download's state, or nil to offer Download.
+    static var terminalState: String? {
+        if let d = ExtrasDownloads.shared.downloads.first(where: { $0.title == terminalTitle }) { return d.words }
+        return TerminalPack.isInstalled() ? "On this Mac" : nil
     }
 
     /// Recommend apps (C5), the same switch as Defaults' and Install's.
@@ -79,12 +89,15 @@ final class ExtrasDownloads {
 
     /// The downloads not yet ended: a speech model's raw value, `voices`, `upscaler`.
     static let key = "extras.downloads"
-    static let voicesName = "voices", upscalerName = "upscaler"
+    static let voicesName = "voices", upscalerName = "upscaler", terminalName = "terminal"
 
     private var speech: SpeechChoice?
     private var voices = false
     /// Max quality's download, nil until it starts.
     private var upscaler: SpeechModel.State?
+    /// The terminal pack's download (T76), nil until it starts.
+    private(set) var terminal: SpeechModel.State?
+    @ObservationIgnored private var terminalTask: Task<Void, Never>?
     @ObservationIgnored private let defaults: UserDefaults
     #if DEBUG
     /// A render's downloads in place of the real ones.
@@ -99,17 +112,40 @@ final class ExtrasDownloads {
     }
 
     /// At launch: the downloads a quit cut off start again, the speech model and voices from the files already there, the
-    /// upscaler from the start. Nothing is read beyond the saved list unless it names something.
+    /// upscaler and the terminal pack from the start. Beyond the saved list only the terminal's folder is listed (T76, Q900):
+    /// an older pack there and none for this Pilot is an update's changed pack, fetched now so the next Hyper+T never waits.
     func resume() {
         let names = defaults.stringArray(forKey: Self.key) ?? []
-        guard !names.isEmpty else { return }
-        log.notice("extras: resuming \(names.joined(separator: ", "), privacy: .public)")
-        begin(speech: names.lazy.compactMap(SpeechChoice.init).first(where: SpeechChoice.offered.contains), voices: names.contains(Self.voicesName),
-              upscaler: names.contains(Self.upscalerName))
+        if !names.isEmpty {
+            log.notice("extras: resuming \(names.joined(separator: ", "), privacy: .public)")
+            begin(speech: names.lazy.compactMap(SpeechChoice.init).first(where: SpeechChoice.offered.contains), voices: names.contains(Self.voicesName),
+                  upscaler: names.contains(Self.upscalerName))
+        }
+        // The folder is read, and an older pack or a quit's staging deleted, off the main thread; the terminal's fetch, a
+        // resumed one or an update's changed pack, starts only after, so the sweep never takes a staging folder in use.
+        Task {
+            let changedPack = await Task.detached(priority: .utility, operation: { TerminalPack.sweep() }).value
+            guard changedPack || names.contains(Self.terminalName) else { return }
+            log.notice("extras: fetching the terminal pack\(changedPack ? ", changed by an update" : "", privacy: .public)")
+            fetchTerminal()
+        }
+    }
+
+    /// The terminal pack, from the first press, Settings or the launch; one fetch at a time.
+    func fetchTerminal() {
+        begin(speech: nil, voices: false, upscaler: false, terminal: true)
+    }
+
+    /// Cancel on the first press's progress, and Remove: the download stops and leaves nothing.
+    func cancelTerminal() {
+        terminalTask?.cancel()
+        terminalTask = nil
+        terminal = nil
+        save()
     }
 
     /// Starts what is not on disk yet, saves which, and watches them until each ends.
-    private func begin(speech: SpeechChoice?, voices: Bool, upscaler: Bool) {
+    private func begin(speech: SpeechChoice?, voices: Bool, upscaler: Bool, terminal: Bool = false) {
         if let speech, !SpeechModels.shared.model(speech).isReady {
             self.speech = speech
             SpeechModels.shared.model(speech).download()
@@ -119,6 +155,7 @@ final class ExtrasDownloads {
             KokoroModel.shared.download()
         }
         if upscaler, UpscaleModels.compiled(.max) == nil { fetchUpscaler() }
+        if terminal, !TerminalPack.isInstalled(), terminalTask == nil { startTerminal() }
         save()
         watch()
     }
@@ -131,6 +168,7 @@ final class ExtrasDownloads {
         if let speech, pending(SpeechModels.shared.model(speech).state) { names.append(speech.rawValue) }
         if voices, pending(KokoroModel.shared.state) { names.append(Self.voicesName) }
         if let upscaler, pending(upscaler) { names.append(Self.upscalerName) }
+        if let terminal, pending(terminal) { names.append(Self.terminalName) }
         if names.isEmpty { defaults.removeObject(forKey: Self.key) } else { defaults.set(names, forKey: Self.key) }
     }
 
@@ -154,6 +192,38 @@ final class ExtrasDownloads {
         }
     }
 
+    /// The pinned pack, checked against the running Pilot's own certificate, then the older packs' folders go.
+    private func startTerminal() {
+        let pin = TerminalPack.pin
+        guard let url = TerminalPack.url(for: pin) else { return failTerminal(TerminalPack.Failure("This Pilot names no release to fetch its terminal from")) }
+        terminal = .downloading(0)
+        terminalTask = Task {
+            do {
+                // Pilot's own signature is read off the main thread, once (TerminalPack caches it).
+                let requirement = try await Task.detached(priority: .utility, operation: { try TerminalPack.pilotRequirement() }).value
+                _ = try await TerminalPack.fetch(pin, from: url, requirement: requirement) { share in
+                    Task { @MainActor in if case .downloading = self.terminal { self.terminal = .downloading(share) } }
+                }
+                // Cancelled while it installed: Cancel already cleared the state, and the pack on disk is a good one.
+                guard !Task.isCancelled else { return }
+                terminalTask = nil
+                terminal = .ready
+                _ = await Task.detached(priority: .utility, operation: { TerminalPack.sweep() }).value
+            } catch is CancellationError {
+            } catch {
+                // Cancel already cleared the state; a failure that lands after it says nothing.
+                guard !Task.isCancelled else { return }
+                terminalTask = nil
+                failTerminal(error as? TerminalPack.Failure ?? TerminalPack.Failure(error.localizedDescription))
+            }
+        }
+    }
+
+    private func failTerminal(_ failure: TerminalPack.Failure) {
+        tblog.error("terminal pack: \(failure.message, privacy: .public)")
+        terminal = .failed(failure.message)
+    }
+
     var downloads: [Download] {
         #if DEBUG
         if let seeded { return seeded }
@@ -162,6 +232,7 @@ final class ExtrasDownloads {
         if let speech { list.append(Download(title: speech.name, megabytes: speech.megabytes, state: SpeechModels.shared.model(speech).state)) }
         if voices { list.append(Download(title: SetupItem.voices.title, megabytes: KokoroModel.megabytes, state: KokoroModel.shared.state)) }
         if let upscaler { list.append(Download(title: OnboardingExtras.upscalerTitle, megabytes: OnboardingExtras.upscalerMegabytes, state: upscaler)) }
+        if let terminal { list.append(Download(title: OnboardingExtras.terminalTitle, megabytes: TerminalPack.pin.megabytes, state: terminal)) }
         return list
     }
 

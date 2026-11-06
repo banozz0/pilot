@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Bar drops T11: libghostty from Ghostty's own source at Sven's tag, Sentry and libintl off, where Package.swift links it.
+# Bar drops T11: libghostty from Ghostty's own source at Sven's tag, Sentry and libintl off, where build-terminal-pack.sh
+# links it into the terminal pack Pilot downloads (T76).
 #   Scripts/build-ghosttykit.sh      ~10 min the first time; afterwards any checkout copies the finished build in seconds
 # Output, gitignored under .build/ghosttykit: libghostty.a (arm64), Ghostty-LICENSE.txt, and resources/{ghostty,terminfo},
 # which build-app.sh copies to Pilot.app's Contents/Resources (libghostty finds them from its executable:
@@ -122,6 +123,9 @@ rm -rf $OUT
 mkdir -p $OUT/resources
 cp -c $BUILT $OUT/libghostty.a  # an APFS clone, not 139 MB of writes
 cp -R $SRC/zig-out/share/ghostty $SRC/zig-out/share/terminfo $OUT/resources/
+# Ghostty's 463 bundled themes stay out: 0.2 MB of text on 1.8 MiB of disk blocks (T69). Pilot's Look writes colours, never
+# `theme =`, and a `theme =` in the user's own config resolves from ~/.config/ghostty/themes first, which still works.
+rm -rf $OUT/resources/ghostty/themes
 cp $SRC/LICENSE $OUT/Ghostty-LICENSE.txt
 ls -l $OUT/libghostty.a
 du -sh $OUT/resources

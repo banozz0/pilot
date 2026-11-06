@@ -12,7 +12,7 @@ REV=${2:-HEAD}
 # and its Xcode MCP bridge (removed 2026-10-30, Q613; kept here so one never ships).
 PRIVATE=(AGENTS.md CLAUDE.md .claude .mcp.json)
 # Lines the grep lets through, path and text: Pilot's Send feedback opens the public repo's issue form, and the site's
-# pages (and pilot.js's demo clipboard) link the repo, its releases and its issues, and Sparkle's feed and release.sh's download links name its releases (Q431); the public repo is banozz0/pilot once today's is renamed (Q324).
+# pages (and pilot.js's demo clipboard) link the repo, its releases and its issues, and Sparkle's feed and release.sh's download links name its releases (Q431), as does the terminal pack's download (T76); the public repo is banozz0/pilot once today's is renamed (Q324).
 # README's Download links name its releases too (Sven, 2026-10-29).
 # They are printed on every run.
 ALLOWED=('Sources/PilotCore/Feedback.swift:.*github.com/banozz0/pilot/issues/new'
@@ -20,6 +20,7 @@ ALLOWED=('Sources/PilotCore/Feedback.swift:.*github.com/banozz0/pilot/issues/new
          'site/[a-z]+\.(html|js):.*github.com/banozz0/pilot'
          'Packaging/Info.plist:.*github.com/banozz0/pilot/releases/'
          'Scripts/release.sh:.*github.com/banozz0/pilot/releases/'
+         'Sources/Pilot/Terminal/TerminalPack.swift:.*github.com/banozz0/pilot/releases/download/'
          'README.md:.*github.com/banozz0/pilot/releases')
 PATTERN='svenmedina|/Users/sven([^[:alnum:]_]|$)|banozz0/pilot([^-[:alnum:]_]|$)'
 

@@ -28,6 +28,8 @@ final class PilotMenu {
     /// that goes on to the field collapses the selection to a caret after the text first (beforeTyping).
     private var caretPending = false
     private var resignObserver: NSObjectProtocol?
+    /// Waits for the panel's first frame after a timed press (timeFirstFrame).
+    private var firstFrame: NSObjectProtocol?
     /// The app Sven was in: an action runs on its windows, so it gets focus back first.
     private var previousApp: NSRunningApplication?
     /// Set while the panel is a picker (`pick`): Return hands the row here instead of running it.
@@ -97,15 +99,20 @@ final class PilotMenu {
     /// The picks so far (story 75), read from disk once; nil when the file does not read, so a pick never overwrites it.
     private(set) lazy var frecency: Frecency? = {
         do { return try frecencyStore.load() } catch {
-            mlog.error("menu: frecency not read, ranking without it: \(error, privacy: .public)")
+            // The path says whose file it is: swift test logs its broken fixtures under this subsystem too (T71).
+            mlog.error("menu: frecency not read at \(self.frecencyStore.url.path, privacy: .public), ranking without it: \(error, privacy: .public)")
             return nil
         }
     }()
 
     /// Runs after the tap callback returns: listing the apps reads every bundle, too slow for the tap. `branch` opens
     /// the menu inside it (Omarchy's apps menu).
-    func toggle(branch: MenuBranch? = nil) {
-        DispatchQueue.main.async { self.toggleNow(branch: branch) }
+    /// `pressedAt`: Hyper+Space's key-down (HyperTap.pressedAt); an open it brings logs its time to the first frame.
+    func toggle(branch: MenuBranch? = nil, pressedAt: TimeInterval? = nil) {
+        DispatchQueue.main.async {
+            self.toggleNow(branch: branch)
+            if let pressedAt, let panel = self.panel { self.timeFirstFrame(of: panel, from: pressedAt) }
+        }
     }
 
     /// Opens the menu inside `branch`, or keeps it there when it already shows it (a widget's Update and Clean, which a
@@ -272,6 +279,28 @@ final class PilotMenu {
         let at = model.map { m in "\(m.nav.branch == nil ? "root" : m.nav.path.map(\.rawValue).joined(separator: "/")) (\(m.nav.rows.count) rows), " } ?? ""
         mlog.notice("menu shown \(at, privacy: .public)\(apps) apps (\(running) running), \(entries.count - apps) actions, over \(self.previousApp?.bundleIdentifier ?? "?", privacy: .public)")
     }
+
+    /// Hyper+Space to the menu on screen, Pilot's moment you feel (spec pilot-1.1 T74; lean-check.py `menu` reads it): one
+    /// line per press, the key-down's own time to the new panel's first occlusion change to visible, the window server's
+    /// word that it is on screen (a CATransaction completion fires at the app's commit, before any frame shows). Nothing
+    /// polls: the observer lives from the show to that change, or to the close.
+    private func timeFirstFrame(of panel: NSPanel, from pressedAt: TimeInterval) {
+        firstFrame = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: panel, queue: .main) { [weak self, weak panel] _ in
+            MainActor.assumeIsolated {
+                guard let self, let panel, panel.occlusionState.contains(.visible) else { return }
+                self.endFirstFrame()
+                let ms = Int(((ProcessInfo.processInfo.systemUptime - pressedAt) * 1000).rounded())
+                mlog.notice("menu open: \(ms, privacy: .public) ms from key down to first frame, build \(Self.build, privacy: .public)")
+            }
+        }
+    }
+
+    private func endFirstFrame() {
+        if let firstFrame { NotificationCenter.default.removeObserver(firstFrame) }
+        firstFrame = nil
+    }
+
+    private static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
 
     /// `at`: the panel's top left (place(at:)) in place of the menu's own spot.
     private func show(_ nav: MenuNavigator, pick: ((MenuEntry) -> Void)? = nil, at: CGPoint? = nil) {
@@ -1084,6 +1113,7 @@ final class PilotMenu {
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         keyMonitor = nil
         resignObserver = nil
+        endFirstFrame()
         sizer = nil
         panel?.orderOut(nil)
         panel = nil

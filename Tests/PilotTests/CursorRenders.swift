@@ -41,7 +41,7 @@ struct CursorRenders {
         let catalogue = try #require(CursorCatalogue.load(Self.packaging))
         for id in ["quiet", "toybox", "duo"] {
             let set = try #require(catalogue.sets[id])
-            let sheet = try #require(CursorArt.sheet(Self.packaging.appending(path: "\(id)@2x.png")))
+            let sheet = try #require(CursorArt.sheet(Self.packaging, set: id, scale: 2))
             let qa = try #require(Self.pixels(Self.qa.appending(path: "\(id)-all-palettes.png")))
             let cursors = set.cursors.values.sorted { $0.row < $1.row }
             #expect(cursors.count == 30)
@@ -106,7 +106,7 @@ struct CursorRenders {
             let roles = try #require(CursorCustom.roles[set])
             let covered = roles.fill.union(roles.outline).union(derived[set] ?? []).union(kept[set] ?? [])
             #expect(Set(cursors.flatMap(\.layers)).filter { !covered.contains($0) && !CursorCustom.isGlyph($0) }.isEmpty, "\(id) roles left over")
-            let sheet = try #require(CursorArt.sheet(Self.packaging.appending(path: "\(id)@2x.png")))
+            let sheet = try #require(CursorArt.sheet(Self.packaging, set: id, scale: 2))
             let rows = Self.pairs.count * Self.grounds.count
             let ours = Bitmap(width: Self.firstX + Self.step * cursors.count, height: Self.rowHeight * rows)
             for (p, pair) in Self.pairs.enumerated() {
@@ -129,11 +129,11 @@ struct CursorRenders {
         // Classic's two masks: hard pixels, outline and fill never on one pixel, and each scale the 1x grid in n x n blocks.
         let classic = try #require(catalogue.sets["classic"])
         #expect(classic.cursors.values.allSatisfy { $0.layers == ["outline", "fill"] })
-        let one = try #require(CursorArt.sheet(Self.packaging.appending(path: "classic@1x.png")))
+        let one = try #require(CursorArt.sheet(Self.packaging, set: "classic", scale: 1))
         #expect(one.grey.allSatisfy { $0 == 0 || $0 == 255 })
         for y in 0..<one.height { for x in 0..<32 { #expect(!(one.grey[y * one.bytesPerRow + x] > 0 && one.grey[y * one.bytesPerRow + 32 + x] > 0)) } }
         for n in [2, 5] {
-            let big = try #require(CursorArt.sheet(Self.packaging.appending(path: "classic@\(n)x.png")))
+            let big = try #require(CursorArt.sheet(Self.packaging, set: "classic", scale: n))
             #expect(big.width == one.width * n && big.height == one.height * n)
             var off = 0
             for y in 0..<big.height { for x in 0..<big.width where big.grey[y * big.bytesPerRow + x] != one.grey[(y / n) * one.bytesPerRow + x / n] { off += 1 } }

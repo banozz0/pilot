@@ -3,7 +3,7 @@ import CGhostty
 import Synchronization
 
 /// The bar drop's terminal (spec Bar drops T6, T11): Ghostty itself, libghostty v1.3.1 built from source with Sentry off
-/// (Scripts/build-ghosttykit.sh), reading Sven's own Ghostty config, so the drop looks and types like his Ghostty. One shell
+/// (Scripts/build-ghosttykit.sh) and downloaded as a signed pack on first use (T76, TerminalPack), reading Sven's own Ghostty config, so the drop looks and types like his Ghostty. One shell
 /// for Pilot's session, never a panel's: the drop's panel comes and goes around this view, the shell keeps running while
 /// hidden, and Pilot quitting ends it (Q108). Started on first open, never at launch.
 ///
@@ -24,6 +24,9 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     private var markedText = ""
     /// The text one keyDown typed, collected from insertText while interpretKeyEvents runs.
     private var keyText: [String]?
+
+    /// libghostty's calls; a surface exists only once GhosttyRuntime has the pack.
+    private var api: GhosttyAPI { GhosttyRuntime.api }
 
     init(command: String? = nil) {
         self.command = command
@@ -77,7 +80,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         let began = ContinuousClock.now
         let firstRuntime = !GhosttyRuntime.isMade
         guard let app = GhosttyRuntime.app else { return false }
-        var config = ghostty_surface_config_new()
+        var config = api.surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         let held = Unmanaged.passRetained(self)
         let me = held.toOpaque()
@@ -89,8 +92,8 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW
         surface = NSHomeDirectory().withCString { home in
             config.working_directory = home
-            guard let command else { return ghostty_surface_new(app, &config) }
-            return command.withCString { config.command = $0; return ghostty_surface_new(app, &config) }
+            guard let command else { return api.surface_new(app, &config) }
+            return command.withCString { config.command = $0; return api.surface_new(app, &config) }
         }
         guard surface != nil else {
             held.release()
@@ -115,7 +118,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
                 key.action = GHOSTTY_ACTION_PRESS
                 key.keycode = 36
                 key.unshifted_codepoint = 13
-                _ = ghostty_surface_key(surface, key)
+                _ = api.surface_key(surface, key)
             }
             if !part.isEmpty { sendText(String(part)) }
         }
@@ -128,22 +131,22 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         let all = ghostty_selection_s(top_left: corner(GHOSTTY_POINT_COORD_TOP_LEFT), bottom_right: corner(GHOSTTY_POINT_COORD_BOTTOM_RIGHT),
                                       rectangle: false)
         var text = ghostty_text_s()
-        guard ghostty_surface_read_text(surface, all, &text) else { return "" }
-        defer { ghostty_surface_free_text(surface, &text) }
+        guard api.surface_read_text(surface, all, &text) else { return "" }
+        defer { api.surface_free_text(surface, &text) }
         return String(cString: text.text)
     }
 
     /// Words to the shell as a paste.
     private func sendText(_ text: String) {
         guard let surface else { return }
-        text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
+        text.withCString { api.surface_text(surface, $0, UInt(text.utf8.count)) }
     }
 
     /// Ends the shell and frees the surface (the shell exited, tests; Pilot quitting ends it anyway).
     func terminate() {
         guard let surface else { return }
         self.surface = nil
-        ghostty_surface_free(surface)
+        api.surface_free(surface)
         held?.release()
         held = nil
         shell = 0
@@ -152,7 +155,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     /// Ghostty closed the surface. A close bind (Cmd+W) with the shell still running only hides the drop: freeing the
     /// surface would hang up the shell and whatever runs in it (a Claude Code session). Freed once the shell has exited.
     fileprivate func closed() {
-        if let surface, ghostty_surface_process_exited(surface) { terminate() }
+        if let surface, api.surface_process_exited(surface) { terminate() }
         onClose?()
     }
 
@@ -164,15 +167,15 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     private func resize() {
         guard let surface else { return }
         layer?.contentsScale = scale
-        ghostty_surface_set_content_scale(surface, scale, scale)
-        ghostty_surface_set_size(surface, UInt32(max(bounds.width, 1) * scale), UInt32(max(bounds.height, 1) * scale))
+        api.surface_set_content_scale(surface, scale, scale)
+        api.surface_set_size(surface, UInt32(max(bounds.width, 1) * scale), UInt32(max(bounds.height, 1) * scale))
     }
 
     /// Drawn and focused while in a window: the panel is rebuilt around the view on every open and lets it go on close.
     private func shown() {
         guard let surface else { return }
-        ghostty_surface_set_occlusion(surface, window != nil)
-        ghostty_surface_set_focus(surface, window != nil && window?.firstResponder === self)
+        api.surface_set_occlusion(surface, window != nil)
+        api.surface_set_focus(surface, window != nil && window?.firstResponder === self)
     }
 
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); resize(); shown() }
@@ -180,18 +183,18 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     override func setFrameSize(_ size: NSSize) {
         super.setFrameSize(size)
         guard let surface else { return }
-        ghostty_surface_set_size(surface, UInt32(max(size.width, 1) * scale), UInt32(max(size.height, 1) * scale))
+        api.surface_set_size(surface, UInt32(max(size.width, 1) * scale), UInt32(max(size.height, 1) * scale))
     }
 
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
-        if let surface { ghostty_surface_set_focus(surface, true) }
+        if let surface { api.surface_set_focus(surface, true) }
         return true
     }
 
     override func resignFirstResponder() -> Bool {
-        if let surface { ghostty_surface_set_focus(surface, false) }
+        if let surface { api.surface_set_focus(surface, false) }
         return true
     }
 
@@ -200,7 +203,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     override func keyDown(with event: NSEvent) {
         guard let surface else { return }
         // Ghostty decides which modifiers make text (macos-option-as-alt); the event is rebuilt with only those.
-        let wanted = Self.flags(ghostty_surface_key_translation_mods(surface, Self.mods(event.modifierFlags)))
+        let wanted = Self.flags(api.surface_key_translation_mods(surface, Self.mods(event.modifierFlags)))
         let translation = event.modifierFlags.subtracting([.shift, .control, .option, .command]).union(wanted)
         let translated = translation == event.modifierFlags ? event : NSEvent.keyEvent(
             with: event.type, location: event.locationInWindow, modifierFlags: translation, timestamp: event.timestamp,
@@ -226,7 +229,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         guard event.type == .keyDown, let surface, window?.firstResponder === self else { return false }
         var key = Self.key(event, GHOSTTY_ACTION_PRESS, event.modifierFlags)
         var flags = ghostty_binding_flags_e(0)
-        let bound = (event.characters ?? "").withCString { key.text = $0; return ghostty_surface_key_is_binding(surface, key, &flags) }
+        let bound = (event.characters ?? "").withCString { key.text = $0; return api.surface_key_is_binding(surface, key, &flags) }
         guard bound else { return false }
         keyDown(with: event)
         return true
@@ -238,8 +241,8 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         var key = Self.key(event, action, translation)
         key.composing = composing
         // Ghostty encodes control characters itself: it is handed text only from a printable first byte on.
-        guard let text, let first = text.utf8.first, first >= 0x20 else { _ = ghostty_surface_key(surface, key); return }
-        _ = text.withCString { key.text = $0; return ghostty_surface_key(surface, key) }
+        guard let text, let first = text.utf8.first, first >= 0x20 else { _ = api.surface_key(surface, key); return }
+        _ = text.withCString { key.text = $0; return api.surface_key(surface, key) }
     }
 
     /// NSEvent+Extension.swift's ghosttyKeyEvent: Control and Command never make text, every other modifier did.
@@ -327,7 +330,7 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         guard let surface, let window else { return .zero }
         var x = 0.0, y = 0.0, width = 0.0, height = 0.0
-        ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+        api.surface_ime_point(surface, &x, &y, &width, &height)
         let rect = NSRect(x: x, y: bounds.height - y, width: width, height: max(height, 1))
         return window.convertToScreen(convert(rect, to: nil))
     }
@@ -335,9 +338,9 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     private func syncPreedit(clear: Bool = true) {
         guard let surface else { return }
         if !markedText.isEmpty {
-            markedText.withCString { ghostty_surface_preedit(surface, $0, UInt(markedText.utf8.count)) }
+            markedText.withCString { api.surface_preedit(surface, $0, UInt(markedText.utf8.count)) }
         } else if clear {
-            ghostty_surface_preedit(surface, nil, 0)
+            api.surface_preedit(surface, nil, 0)
         }
     }
 
@@ -360,13 +363,13 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     private func position(_ event: NSEvent) {
         guard let surface else { return }
         let point = convert(event.locationInWindow, from: nil)
-        ghostty_surface_mouse_pos(surface, point.x, bounds.height - point.y, Self.mods(event.modifierFlags))
+        api.surface_mouse_pos(surface, point.x, bounds.height - point.y, Self.mods(event.modifierFlags))
     }
 
     private func button(_ event: NSEvent, _ state: ghostty_input_mouse_state_e, _ button: ghostty_input_mouse_button_e) {
         guard let surface else { return }
         position(event)
-        _ = ghostty_surface_mouse_button(surface, state, button, Self.mods(event.modifierFlags))
+        _ = api.surface_mouse_button(surface, state, button, Self.mods(event.modifierFlags))
     }
 
     /// As Ghostty: precise (trackpad) deltas doubled; the packed scroll mods carry precision in bit 0, momentum from bit 1.
@@ -383,14 +386,14 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         case .mayBegin: 6
         default: 0
         }
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX * factor, event.scrollingDeltaY * factor, (precise ? 1 : 0) | momentum << 1)
+        api.surface_mouse_scroll(surface, event.scrollingDeltaX * factor, event.scrollingDeltaY * factor, (precise ? 1 : 0) | momentum << 1)
     }
 
     // MARK: Clipboard
 
     fileprivate func readClipboard(_ location: ghostty_clipboard_e, _ state: UnsafeMutableRawPointer?) -> Bool {
         guard let surface, let text = GhosttyRuntime.pasteboard(location)?.string(forType: .string) else { return false }
-        text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, false) }
+        text.withCString { api.surface_complete_clipboard_request(surface, $0, state, false) }
         return true
     }
 
@@ -399,13 +402,13 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
     fileprivate func confirmClipboard(_ text: String, _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e) {
         guard let surface else { return }
         (request == GHOSTTY_CLIPBOARD_REQUEST_PASTE ? text : "").withCString {
-            ghostty_surface_complete_clipboard_request(surface, $0, state, true)
+            api.surface_complete_clipboard_request(surface, $0, state, true)
         }
     }
 }
 
 /// The one libghostty app in Pilot, made on the first terminal: Sven's Ghostty config (with Pilot's look file it includes)
-/// unless a test turns it off. Ghostty's resources (terminfo, shell integration, themes) ship in Pilot.app's Resources
+/// unless a test turns it off. Ghostty's resources (terminfo, shell integration; no bundled themes) ship in Pilot.app's Resources
 /// (build-app.sh), where libghostty finds them from its executable; GHOSTTY_RESOURCES_DIR points elsewhere (tests).
 @MainActor
 enum GhosttyRuntime {
@@ -421,11 +424,25 @@ enum GhosttyRuntime {
 
     static var isMade: Bool { shared != nil }
 
-    /// The app, made on first use; nil when libghostty did not start, tried again on the next use.
+    /// The pack's calls once TerminalPack has checked and loaded it (T76), kept for Pilot's session: dlclose cannot unload
+    /// libghostty's threads and Metal state, so a pack is mapped once and Remove takes effect when Pilot quits.
+    /// With the file it was mapped from: Settings' Remove deletes that, and the next press offers the download again.
+    private(set) static var loaded: (api: GhosttyAPI, dylib: URL)?
+    static func use(_ api: GhosttyAPI, from dylib: URL) { if loaded == nil { loaded = (api, dylib) } }
+    /// A pack is mapped and still on disk: a press opens the shell at once.
+    static var isReady: Bool { loaded.map { FileManager.default.fileExists(atPath: $0.dylib.path(percentEncoded: false)) } ?? false }
+    /// Read only once the app exists, which needs the pack.
+    fileprivate static var api: GhosttyAPI { loaded!.api }
+
+    /// The app, made on first use; nil when the pack is not loaded or libghostty did not start, tried again on the next use.
     static var app: ghostty_app_t? {
         if let shared { return shared }
+        guard loaded != nil else {
+            tblog.error("terminal: the terminal pack is not loaded")
+            return nil
+        }
         if !initialized {
-            guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {
+            guard api.initialize(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {
                 tblog.error("terminal: libghostty did not initialise")
                 return nil
             }
@@ -440,21 +457,21 @@ enum GhosttyRuntime {
             userdata: nil, supports_selection_clipboard: true, wakeup_cb: ghosttyWakeup, action_cb: ghosttyAction,
             read_clipboard_cb: ghosttyReadClipboard, confirm_read_clipboard_cb: ghosttyConfirmClipboard,
             write_clipboard_cb: ghosttyWriteClipboard, close_surface_cb: ghosttyClose)
-        shared = ghostty_app_new(&runtime, config)
-        ghostty_config_free(config)
+        shared = api.app_new(&runtime, config)
+        api.config_free(config)
         if shared == nil { tblog.error("terminal: libghostty made no app") }
         return shared
     }
 
     /// Ghostty's config as the drop reads it, with the problems it reports; the caller frees it.
     private static func loadConfig(user: Bool) -> (ghostty_config_t, [String])? {
-        guard let config = ghostty_config_new() else { return nil }
+        guard let config = api.config_new() else { return nil }
         if user {
-            ghostty_config_load_default_files(config)
-            ghostty_config_load_recursive_files(config)
+            api.config_load_default_files(config)
+            api.config_load_recursive_files(config)
         }
-        ghostty_config_finalize(config)
-        return (config, (0..<ghostty_config_diagnostics_count(config)).map { String(cString: ghostty_config_get_diagnostic(config, $0).message) })
+        api.config_finalize(config)
+        return (config, (0..<api.config_diagnostics_count(config)).map { String(cString: api.config_get_diagnostic(config, $0).message) })
     }
 
     /// From libghostty's threads: one tick on the main run loop for however many wakeups arrive before it runs.
@@ -462,7 +479,7 @@ enum GhosttyRuntime {
         guard tickQueued.compareExchange(expected: false, desired: true, ordering: .acquiringAndReleasing).exchanged else { return }
         later {
             tickQueued.store(false, ordering: .releasing)
-            if let shared { ghostty_app_tick(shared) }
+            if let shared { api.app_tick(shared) }
         }
     }
 
@@ -478,9 +495,9 @@ enum GhosttyRuntime {
     /// Sven's Ghostty config as libghostty reads it: its font size and the problems it reports.
     static func userConfigReport() -> (fontSize: Float, diagnostics: [String]) {
         guard app != nil, let (config, diagnostics) = loadConfig(user: true) else { return (0, []) }
-        defer { ghostty_config_free(config) }
+        defer { api.config_free(config) }
         var size: Float = 0
-        _ = ghostty_config_get(config, &size, "font-size", UInt("font-size".utf8.count))
+        _ = api.config_get(config, &size, "font-size", UInt("font-size".utf8.count))
         return (size, diagnostics)
     }
 }

@@ -1,6 +1,7 @@
 #!/bin/zsh
 # A release a stranger downloads (SH4, notes §9): the signed release build in a DMG, the DMG signed, and its checksum.
-#   Scripts/release.sh <version>     e.g. 0.2.0; writes build/Pilot-<version>.dmg, its .sha256, a copy as build/Pilot.dmg, and build/updates/appcast.xml
+#   Scripts/release.sh <version>     e.g. 0.2.0; writes build/Pilot-<version>.dmg, its .sha256, a copy as build/Pilot.dmg, build/updates/appcast.xml
+#                                    and the terminal pack, build/PilotTerminal-<sha8>.zip (T76)
 # No notarization or staple (Q318): spctl rejects the DMG and the app, and the first launch goes through Open Anyway.
 # It never publishes, uploads or tags anything: putting the files on a release page is Sven's call.
 # Sparkle's public key (SH5, SH6) is Pilot's own, printed by generate_keys on 2026-10-19, kept in Packaging/sparkle-public-key.txt (the
@@ -33,6 +34,20 @@ env -u PILOT_DEV -u SPARKLE_FEED CONFIG=release PILOT_VERSION=$VERSION SIGN_ID=$
 APP=$OUT/Pilot.app
 [[ $(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist") == $VERSION ]] \
   || { echo "error: build-app.sh did not set version $VERSION" >&2; exit 1; }
+
+# The terminal pack (T76), checked before the DMG: each Pilot fetches releases/download/v<its version>/<its pin's file>,
+# never latest, so every release carries the pack its Pilot pins, an unchanged one copied forward with its hash
+# (build-terminal-pack.sh's cache). A pin the build had to rewrite is not in the commit this release names: commit it and
+# release again. Only the pin is checked: the lean ratchet may lower a budget in this same build (Scripts/lean-budgets.json).
+# A release fetches from its release page alone: the build-folder URL a build of Sven's own carries must be absent.
+PIN=$ROOT/Sources/Pilot/Terminal/TerminalPackPin.swift
+git -C "$ROOT" diff --quiet HEAD -- "$PIN" || { echo "error: the build wrote a new terminal pack pin; commit $PIN and release again" >&2; exit 1; }
+PACK=$OUT/$(sed -nE 's/.*file: "([^"]+)".*/\1/p' "$PIN")
+[[ -f $PACK && $(shasum -a 256 "$PACK" | cut -d' ' -f1) == $(sed -nE 's/.* sha256: "([0-9a-f]+)".*/\1/p' "$PIN") ]] \
+  || { echo "error: $PACK is missing or does not match the pin Pilot was built with" >&2; exit 1; }
+if /usr/libexec/PlistBuddy -c "Print :PilotTerminalURL" "$APP/Contents/Info.plist" >/dev/null 2>&1; then
+  echo "error: the bundle names a PilotTerminalURL; a release fetches its terminal from its release page" >&2; exit 1
+fi
 
 # The DMG: the app and a link to Applications to drag it onto, in the install window drawn in Packaging/dmg (SH24).
 # dmgbuild lays that window out without Finder (Scripts/dmg-settings.py) and copies the app with ditto, which keeps the
@@ -75,3 +90,5 @@ cp "$DMG" "$UPDATES/"
 grep -q 'sparkle:edSignature=' "$UPDATES/appcast.xml" \
   || { echo "error: the appcast item is unsigned; the Keychain's Sparkle key does not match SPARKLE_ED_KEY" >&2; exit 1; }
 echo "appcast $UPDATES/appcast.xml (attach it to the v$VERSION release with the DMG)"
+
+echo "terminal pack $PACK (attach it to the v$VERSION release with the DMG)"

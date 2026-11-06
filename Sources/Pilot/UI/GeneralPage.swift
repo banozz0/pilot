@@ -315,6 +315,7 @@ struct GeneralPage: View {
                 Spacer()
                 Button("Uninstall…") { uninstalling = true }.buttonStyle(.pilot)
             }
+            TerminalPackRow()
         }
         .sheet(isPresented: $uninstalling) { UninstallSheet().pilotSheet().floating() }
     }
@@ -340,6 +341,12 @@ struct GeneralPage: View {
                 }
             }
             .task { crash = await Task.detached { CrashReports.newest() }.value }
+            // T76: whether the terminal's pack is on this Mac.
+            BlockRow {
+                TitledText(title: "Terminal", detail: TerminalPack.isInstalled() ? "Ghostty's engine, downloaded to this Mac"
+                    : "Not downloaded: the first Hyper+T asks to download it (\(TerminalPack.pin.megabytes) MB)").padding(.vertical, 4)
+                Spacer()
+            }
             // Q455: one row, closed on every visit, that unfolds the list in place.
             BlockRow {
                 Button { withAnimation(Kit.change) { acknowledgementsOpen.toggle() } } label: {
@@ -389,6 +396,34 @@ struct GeneralPage: View {
     }()
 }
 
+
+/// General › Data's Terminal row (T76): Ghostty's pack on this Mac or not, with the model rows' Download, progress and
+/// Cancel, or Remove.
+struct TerminalPackRow: View {
+    @State private var installed = false
+    @State private var failure: String?
+
+    var body: some View {
+        let downloads = ExtrasDownloads.shared
+        let state = downloads.terminal.flatMap { $0 == .ready ? nil : $0 } ?? (installed ? .ready : .absent)
+        BlockRow {
+            TitledText(title: "Terminal", detail: failure.map { "Not removed: \($0)" }
+                ?? (installed ? "On this Mac; Hyper+T opens it" : "Ghostty for Hyper+T, downloaded on its first press")).padding(.vertical, 4)
+            InfoMark(text: "Remove ends its shell and deletes it; its memory comes back when Pilot quits.")
+            Spacer()
+            ModelStateControls(state: state, name: "the terminal", size: "\(TerminalPack.pin.megabytes) MB",
+                               download: downloads.fetchTerminal, cancel: downloads.cancelTerminal) {
+                Button("Remove") {
+                    do { try TerminalDrop.shared.removePack(); failure = nil } catch { failure = error.localizedDescription }
+                    installed = TerminalPack.isInstalled()
+                }.buttonStyle(.pilot)
+            }
+        }
+        .task { installed = TerminalPack.isInstalled() }
+        .onChange(of: downloads.terminal) { _, now in if now == .ready || now == nil { installed = TerminalPack.isInstalled() } }
+        ModelFailureRow(state: state)
+    }
+}
 
 /// The permissions past Accessibility, Full Disk Access and the microphone, so General lists every one Pilot asks for as
 /// macOS's Privacy & Security does (page map, Sven 2026-10-17): Screen Recording, Input Monitoring and System Events

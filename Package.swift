@@ -1,12 +1,8 @@
 // swift-tools-version:6.2
 import PackageDescription
 
-// The bar drop's terminal (spec Bar drops T6, T11): libghostty, Ghostty v1.3.1 built from source with Sentry off by
-// Scripts/build-ghosttykit.sh into .build/ghosttykit (GHOSTTY_LIB_DIR points elsewhere). A static libghostty autolinks
-// nothing: these are the system libraries and frameworks it calls.
-let ghosttyLibDir = Context.environment["GHOSTTY_LIB_DIR"] ?? "\(Context.packageDirectory)/.build/ghosttykit"
-let ghosttyLinks: [LinkerSetting] = [.unsafeFlags(["-L", ghosttyLibDir]), .linkedLibrary("c++"), .linkedLibrary("z")]
-    + ["Carbon", "Metal", "QuartzCore", "CoreText", "IOSurface", "UniformTypeIdentifiers", "Security", "IOKit"].map { .linkedFramework($0) }
+// The bar drop's terminal (spec Bar drops T6, T11) links no libghostty (T76): Scripts/build-terminal-pack.sh makes it a signed
+// dylib Pilot downloads on first use and loads with dlopen (TerminalPack); CGhostty gives only its types.
 // Sparkle 2 (SH6, pinned exactly): its framework sits in Pilot.app/Contents/Frameworks (Scripts/build-app.sh), so the bundled
 // binary looks there too.
 let sparkleRpath: LinkerSetting = .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
@@ -34,7 +30,7 @@ let package = Package(
         // The menu-bar app: event tap, onboarding, observers, UI. Bundled by Scripts/build-app.sh.
         .executableTarget(name: "Pilot", dependencies: ["PilotCore", "WebApps", "Clipboard", "PilotTiler", "PilotTilerPrivateApi", "CGhostty", "ImageScale",
                                                         .product(name: "Sparkle", package: "Sparkle")],
-                          linkerSettings: ghosttyLinks + [sparkleRpath]),
+                          linkerSettings: [sparkleRpath]),
         // The clipboard's image text in a child of its own, so Vision's memory leaves with it (story 142); Contents/Helpers/pilot-text.
         .executableTarget(name: "PilotText", dependencies: ["Clipboard"]),
         // Resize and upscale's pixels (Q246-Q248): resampling, the upscaler's tiles, the result's file; no Core ML here.
@@ -65,7 +61,7 @@ let package = Package(
         // Pilot's only tiler since 2026-10-10 (ADR 0011), driven through TilerService.
         .target(name: "PilotTilerPrivateApi", exclude: ["LICENSE"]),
         .target(name: "PilotTiler", dependencies: ["PilotTilerPrivateApi", "PilotCore"], exclude: ["LICENSE"], swiftSettings: tilerSettings),
-        // Ghostty's embedder API (Sources/CGhostty/ghostty.h, the tag's); the archive comes from Scripts/build-ghosttykit.sh.
+        // Ghostty's embedder API (Sources/CGhostty/ghostty.h, the tag's) and the table of the calls Pilot makes; types only.
         .systemLibrary(name: "CGhostty", path: "Sources/CGhostty"),
         .testTarget(name: "PilotTilerTests", dependencies: ["PilotTiler", "PilotCore"], resources: [.copy("axDumps")], swiftSettings: tilerSettings),
     ]

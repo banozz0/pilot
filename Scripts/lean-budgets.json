@@ -8,5 +8,6 @@
   "launchBindsSeconds": 2,
   "launchFilesSeconds": 5,
   "widgetsWebIdleMB": 60,
-  "widgetsWebIdleCPUPercent": 1.5
+  "widgetsWebIdleCPUPercent": 1.5,
+  "ratchetMarginPercent": 17
 }

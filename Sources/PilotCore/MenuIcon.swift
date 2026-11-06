@@ -18,7 +18,7 @@ public struct MenuIcon: Hashable, Sendable {
     /// An emoji drawn in the glyph's place, a script command's (card agent-bo-95423029).
     public var emoji: String?
     /// A catalogue entry's own picture shipped in the app (`catalogue-icons/<id>.png`, Scripts/catalogue-icons.swift),
-    /// worn until the app itself is installed (C5); or with its own folder, a folder design's art (`folder-designs/kraft`, P43).
+    /// worn until the app itself is installed (C5); or with its own folder, a folder design's preview (`folder-designs/kraft-preview`, P43).
     public var bundled: String?
     /// A picture on disk by its path, drawn as it dresses a folder: one of Your designs (P55).
     public var picture: String?

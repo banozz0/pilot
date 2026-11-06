@@ -47,9 +47,27 @@ public struct QuickEvent: Hashable, Sendable {
         }
         let said = used.map { text.substring(with: $0.range) }.joined(separator: " ")
         let saidTime = said.contains(timed)
-        // The detector takes "9:30" for the next 9:30, which may be 21:30; after noon words ("dinner 7:30") it stands.
-        if !said.contains(later), let typed = said.firstMatch(of: clock), let hour = Int(typed.1), let minute = Int(typed.2), hour < 24, minute < 60 {
+        // A clock time is read as typed: the detector takes "9:30" for the next 9:30, which may be 21:30. After a noon word
+        // anywhere in the text ("dinner 7:30", which the detector matches as "7:30" alone) 1 to 11 are after noon; at lunch
+        // only 1 to 5 ("lunch 1:30" is 13:30, "lunch 11:30" stays). At night only 6 to 11 are evening; 12 and 1 to 5 are
+        // after midnight, the next day ("tonight 1:30" is 01:30 tomorrow, "tonight 12:30" is 00:30 tomorrow).
+        // "tonight 1am" stands too: the detector reads it as 13:00.
+        let word = (text as String).firstMatch(of: later)?.output.lowercased(), night = word == "tonight" || word == "night"
+        var typedTime: (hour: Int, minute: Int)?
+        if night, let typed = said.firstMatch(of: meridiem), let h = Int(typed.1), (1...12).contains(h) {
+            typedTime = (h % 12 + (typed.3.lowercased().hasPrefix("p") ? 12 : 0), typed.2.flatMap { Int($0) } ?? 0)
+        } else if let typed = said.firstMatch(of: clock), var hour = Int(typed.1), let minute = Int(typed.2), hour < 24, minute < 60 {
+            if night {
+                if (6...11).contains(hour) { hour += 12 } else if hour == 12 { hour = 0 }
+            } else if let word, hour >= 1, hour < (word == "lunch" ? 6 : 12) { hour += 12 }
+            typedTime = (hour, minute)
+        }
+        if let (hour, minute) = typedTime, minute < 60 {
+            // The detector put the night on its evening day, or already past midnight: an hour before 6 is that night's
+            // next day, counted once.
+            let evening = calendar.component(.hour, from: date) >= 6
             date = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: date) ?? date
+            if night, hour < 6, evening { date = calendar.date(byAdding: .day, value: 1, to: date) ?? date }
         }
         if saidTime, !said.contains(dayed), date <= now {
             date = calendar.date(byAdding: .day, value: 1, to: date) ?? date
@@ -111,6 +129,8 @@ public struct QuickEvent: Hashable, Sendable {
     nonisolated(unsafe) private static let year = /\b\d{4}\b|\d\s*\/\s*\d{1,2}\s*\/\s*\d/
     /// A clock time with no am or pm, read as 24-hour.
     nonisolated(unsafe) private static let clock = /\b(\d{1,2})[:.](\d\d)\b(?!\s*(?:am|pm|a\.m\.|p\.m\.))/.ignoresCase()
+    /// A time with am or pm, read as typed after a night word ("tonight 1am").
+    nonisolated(unsafe) private static let meridiem = /\b(\d{1,2})(?:[:.](\d\d))?\s*(am|pm|a\.m\.|p\.m\.)/.ignoresCase()
     /// A part of the day after noon, where "7:30" is the evening's.
     nonisolated(unsafe) private static let later = /\b(?:tonight|afternoon|evening|night|lunch|dinner|supper)\b/.ignoresCase()
     nonisolated(unsafe) private static let midday = /\b(?:noon|midday)\b/.ignoresCase()

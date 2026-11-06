@@ -499,20 +499,20 @@ struct PrintingNotifier: Notifier {
 }
 
 /// One shown while the web app is in front still shows; a click brings it forward and runs the page's onclick.
-extension WebNotifications: @preconcurrency UNUserNotificationCenterDelegate {
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
-                                withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
-        done([.banner, .list, .sound])
+/// macOS calls these on its own queue, so they are nonisolated and hop to the main actor (as NoteReminders does).
+extension WebNotifications: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound]
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-                                withCompletionHandler done: @escaping () -> Void) {
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
-        if let id = response.notification.request.content.userInfo["id"] as? Int {
-            webView?.evaluateJavaScript("window.__pilotNotification.click(\(id))")
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let id = response.notification.request.content.userInfo["id"] as? Int
+        await MainActor.run {
+            NSApp.activate()
+            window?.makeKeyAndOrderFront(nil)
+            if let id { webView?.evaluateJavaScript("window.__pilotNotification.click(\(id))") }
         }
-        done()
     }
 }
 

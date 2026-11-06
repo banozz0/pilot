@@ -93,7 +93,9 @@ open build/Pilot.app
 `build-ghosttykit.sh` finds Zig through `ZIG`, then `zig@0.15` from Homebrew. `build-app.sh` also builds the Rust file
 index helper (`Helpers/pilot-files`), the Swift targets and the dictation helper, and fails a release bundle over the
 size budget in `Scripts/lean-budgets.json`. A release needs `SPARKLE_ED_KEY`, the public key its updates are signed
-with; `PILOT_DEV=1` builds without updates. `swift build` and `swift test` work on their own once libghostty is built.
+with; `PILOT_DEV=1` builds without updates. It also builds the terminal pack (`Scripts/build-terminal-pack.sh`), the
+signed libghostty Pilot downloads on the first Hyper+T, into `build/`. `swift build` works on its own; `swift test`'s
+terminal suites need libghostty built, and build the pack themselves when it is missing.
 
 `SIGN_ID` defaults to the `Pilot Release` certificate and stops when it is not in your keychain. Name your own (a
 self-signed Code Signing certificate from Keychain Access › Certificate Assistant, or an Apple Development identity),

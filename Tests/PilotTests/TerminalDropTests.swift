@@ -28,6 +28,25 @@ extension TerminalSuites {
         static func useBuiltResources() {
             let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../.build/ghosttykit/resources/ghostty")
             setenv("GHOSTTY_RESOURCES_DIR", dir.standardizedFileURL.path, 1)
+            useBuiltPack()
+        }
+
+        /// The terminal pack Scripts/build-terminal-pack.sh leaves in .build/terminal-pack (built first when missing), loaded
+        /// through TerminalPack's checks as Pilot loads a downloaded one (T76), against the committed pin: its SHA-256 and the
+        /// certificate that signed it, since the test host carries none of its own. Any other file is refused, never run.
+        static func useBuiltPack() {
+            guard GhosttyRuntime.loaded == nil else { return }
+            let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../..").standardizedFileURL
+            let dylib = root.appending(path: ".build/terminal-pack/\(TerminalPack.dylibName)")
+            do {
+                if !FileManager.default.fileExists(atPath: dylib.path) {
+                    let build = try Process.run(root.appending(path: "Scripts/build-terminal-pack.sh"), arguments: [])
+                    build.waitUntilExit()
+                }
+                let pin = TerminalPack.pin
+                let api = try TerminalPack.load(dylib, sha256: pin.dylibSHA256, requirement: TerminalPack.requirement(leaf: pin.leaf))
+                GhosttyRuntime.use(api, from: dylib)
+            } catch { Issue.record("the terminal pack did not load: \(error)") }
         }
 
         /// A terminal drop over drops on BarDropPanelTests' made-up screen, not yet open; its tips land in `tips`, never on screen.

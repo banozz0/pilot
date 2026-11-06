@@ -25,7 +25,7 @@ struct UninstallItem: Identifiable, Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         /// A folder in Speech that is neither model Pilot knows: a leftover, trashed with nothing to tell.
         case dictation(SpeechChoice), voice, speech(String)
-        case upscale, giphy, caches, clipboard, fileIndex, extensions, webApps, rest, pilot
+        case upscale, terminal, giphy, caches, clipboard, fileIndex, extensions, webApps, rest, pilot
 
         var id: String {
             switch self {
@@ -38,7 +38,7 @@ struct UninstallItem: Identifiable, Equatable, Sendable {
 
         var group: Group {
             switch self {
-            case .dictation, .voice, .speech, .upscale, .giphy, .caches: .downloads
+            case .dictation, .voice, .speech, .upscale, .terminal, .giphy, .caches: .downloads
             case .clipboard, .fileIndex, .extensions, .webApps, .rest: .data
             case .pilot: .pilot
             }
@@ -108,6 +108,9 @@ enum Uninstall {
         }
         let upscale = inSupport(UpscaleModels.folder), giphy = inSupport(Giphy.cache)
         add(.upscale, "Upscale model", "Max quality", [upscale])
+        // The terminal pack (T76): libghostty, downloaded on the first Hyper+T; the one Pilot has mapped stays until it quits.
+        let terminal = inSupport(TerminalPack.folder)
+        add(.terminal, "Terminal", "Ghostty for Hyper+T, downloaded again on its next press", [terminal])
         add(.giphy, "GIF cache", "GIFs picked from GIPHY", [giphy])
         add(.caches, "Caches", nil, [places.library.appending(path: "Caches/\(id)")])
 
@@ -121,7 +124,7 @@ enum Uninstall {
         add(.webApps, "Web apps", "\(webApps.count) \(webApps.count == 1 ? "app" : "apps") in ~/Applications", webApps)
         // The rest of Pilot's folder: binds, settings, reports, notes, snapshots. The socket stays: the pilot command
         // talks over it until Pilot quits.
-        let claimed = Set(([speech, upscale, giphy, index, support.appending(path: "pilot.sock")] + clipboard + extensions).map(\.lastPathComponent))
+        let claimed = Set(([speech, upscale, terminal, giphy, index, support.appending(path: "pilot.sock")] + clipboard + extensions).map(\.lastPathComponent))
         // Speech's own files beside the models (the words dictation was taught, DictationWords) go with the rest.
         let speechFiles = ((try? fm.contentsOfDirectory(at: speech, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true }

@@ -38,7 +38,7 @@ enum AppsModule {
                 alog.notice("\(role.rawValue, privacy: .public) → \(value, privacy: .public) \(ok ? "opened" : "not installed", privacy: .public)")
             }
         }
-        add(&registry, "launcher", "Pilot menu", Key("space")) { PilotMenu.shared.toggle() }
+        add(&registry, "launcher", "Pilot menu", Key("space")) { PilotMenu.shared.toggle(pressedAt: HyperTap.pressedAt) }
         // Pilot Files (P85, spec pilot-1.1 T10, T11): its own window; no default key, as Hyper+F is the Files role, which can pick it (Q800).
         add(&registry, "pilotFiles", "Pilot Files", nil, keywords: "finder browse folders files window") { FilesWindows.shared.show() }
         add(&registry, "appsMenu", "Apps menu", nil) { PilotMenu.shared.toggle(branch: .apps) }

@@ -32,8 +32,9 @@ public struct ClockEvent: Equatable, Sendable {
             && title.range(of: "holiday|festiv|feriado|feiertag|ferie|feestdag", options: [.regularExpression, .caseInsensitive, .diacriticInsensitive]) != nil
     }
 
-    /// Whether it falls on any part of `day`.
-    public func overlaps(_ day: DateInterval) -> Bool { start < day.end && end > day.start }
+    /// Whether it falls on any part of `day`, or of any span; a moment (a timed reminder, start == end) at the span's
+    /// first instant, 00:00, is on it, one at its end on the next.
+    public func overlaps(_ day: DateInterval) -> Bool { start < day.end && (end > day.start || start == day.start) }
 
     /// Calendar's link to an event, by EventKit's identifier; a repeating event's occurrence carries its start in UTC
     /// before the identifier, else Calendar shows the first one.
@@ -160,7 +161,7 @@ public struct ClockMonth: Equatable, Sendable {
     }
 
     /// A day's events in the order listed: all-day ones first, then by start.
-    static func listed(_ events: [ClockEvent]) -> [ClockEvent] {
+    public static func listed(_ events: [ClockEvent]) -> [ClockEvent] {
         events.sorted { ($0.allDay ? 0 : 1, $0.start, $0.title) < ($1.allDay ? 0 : 1, $1.start, $1.title) }
     }
 

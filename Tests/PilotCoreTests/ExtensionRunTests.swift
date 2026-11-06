@@ -109,6 +109,11 @@ struct ExtensionListTests {
         return (try Extension(folder: dir).commands[0], dir)
     }
 
+    /// The limit for the tests of what an answer holds, not how fast it comes: `errors` and `stopped` hold the 2 s one.
+    /// Under a full suite's load a new program (its first launch can wait on macOS's scan of it) answered after more than
+    /// 2 s (build 10: "no items" at 4.6 s), and a content test then failed on time alone.
+    static let unhurried: Duration = .seconds(30)
+
     private let list = #"""
         {"type": "list", "items": [
           {"id": "pilot", "title": "pilot", "subtitle": "banozz/pilot", "icon": "📦", "keywords": "mac",
@@ -127,7 +132,8 @@ struct ExtensionListTests {
     func items() async throws {
         let (rows, dir) = try command("echo '\(list)'")
         defer { try? FileManager.default.removeItem(at: dir) }
-        guard case .items(let items) = await ExtensionRun.list(rows, query: "", inputs: .sample) else { Issue.record("no items"); return }
+        let outcome = await ExtensionRun.list(rows, query: "", inputs: .sample, timeout: Self.unhurried)
+        guard case .items(let items) = outcome else { Issue.record("no items: \(outcome)"); return }
         #expect(items.map(\.title) == ["pilot", "cockpit"])
         #expect(items[0].subtitle == "banozz/pilot" && items[0].icon == "📦" && items[0].keywords == "mac")
         #expect(items[0].actions == [.open("https://github.com/example/repo"), .copy("example/repo")])
@@ -136,11 +142,12 @@ struct ExtensionListTests {
 
     @Test("The run message carries the search")
     func query() async throws {
-        // The program answers with one item titled after the line it read.
-        let (rows, dir) = try command(#"read -r line; printf '{"type":"list","items":[{"title":%s}]}\n' "$(printf '%s' "$line" | sed 's/"/\\"/g; s/^/"/; s/$/"/')""#)
+        // The program keeps the line it read beside it and answers one item: sh alone, no sed or subshells to start.
+        let (rows, dir) = try command(#"read -r line; printf '%s\n' "$line" > message; echo '{"type":"list","items":[{"title":"read"}]}'"#)
         defer { try? FileManager.default.removeItem(at: dir) }
-        guard case .items(let items) = await ExtensionRun.list(rows, query: "pil ot", inputs: .sample) else { Issue.record("no items"); return }
-        let message = try JSONDecoder().decode([String: JSONValue].self, from: Data(items[0].title.utf8))
+        let outcome = await ExtensionRun.list(rows, query: "pil ot", inputs: .sample, timeout: Self.unhurried)
+        guard case .items = outcome else { Issue.record("no items: \(outcome)"); return }
+        let message = try JSONDecoder().decode([String: JSONValue].self, from: Data(contentsOf: dir.appending(path: "message")))
         #expect(message["query"] == .string("pil ot") && message["command"] == .string("rows"))
     }
 

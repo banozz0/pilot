@@ -73,7 +73,7 @@ enum FolderDesigns {
 
     /// A design's art from the app's Resources, as a folder is dressed in it: the 1024 px cut-out (HEIC), and beside it the
     /// simpler 64 px drawing NSImage picks at 32 px and under, so a Finder list or sidebar shows the mark, not the papers
-    /// (Scripts/folder-designs.py, P54). Read when used, never kept: the grid and menu draw the 256 px `<id>.png`.
+    /// (Scripts/folder-designs.py, P54). Read when used, never kept: the grid and menu draw the 256 px `<id>-preview.heic`.
     static func art(_ id: String) -> NSImage? {
         guard let image = BundledJSON.url(id, "heic", in: "folder-designs").flatMap(NSImage.init(contentsOf:)) else { return nil }
         if let small = BundledJSON.url("\(id)-small", "png", in: "folder-designs").flatMap(NSImageRep.init(contentsOf:)) {

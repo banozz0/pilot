@@ -2,13 +2,16 @@ import AppKit
 import Foundation
 
 /// One of the folder designs Pilot draws itself (P43, redrawn in P54): its art is `folder-designs/<id>.heic` in the app's
-/// Resources, a 1024 px cut-out with a simpler 64 px `<id>-small.png` for 32 px and under, and `<id>.png` at 256 px for
-/// the grid and menu (Scripts/folder-designs.py).
+/// Resources, a 1024 px cut-out with a simpler 64 px `<id>-small.png` for 32 px and under, and `<id>-preview.heic` at
+/// 256 px for the grid and menu (Scripts/folder-designs.py).
 /// Pilot ships only art it may bundle, so no outside collection; a picture of your own and Your designs
 /// (YourFolderDesigns, P55) are the other looks.
 public struct FolderDesign: Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
+
+    /// The 256 px preview the grid and menu rows draw, as CatalogueIcons names a bundled picture.
+    public static func preview(_ id: String) -> String { "folder-designs/\(id)-preview" }
 
     /// The twelve, in the design page's order (launcher-ideas 2026-10-18, P43).
     public static let classic: [FolderDesign] = [
@@ -100,21 +103,27 @@ public struct YourFolderDesigns: Sendable {
     /// (hidden files left out); a file no picture can be read from, or one already in, is skipped. Returns those added,
     /// none when the list does not read, so no add wipes it.
     @discardableResult public func add(_ urls: [URL]) -> [(design: FolderDesign, file: URL)] {
-        guard var kept = try? index.load(or: []) else { return [] }
-        var added: [Entry] = []
+        // Copied before the lock: a copy is named by its bytes' hash, so one written twice is the same file.
+        guard let before = try? index.load(or: []) else { return [] }
+        var copied: [Entry] = []
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for url in Self.pictures(in: urls) {
             guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= Self.largest,
                   let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.size.width > 0, image.size.height > 0 else { continue }
             let hash = String(FolderLooks.hash(data).prefix(16))
             let entry = Entry(id: Self.prefix + hash, title: url.deletingPathExtension().lastPathComponent, file: "\(hash).\(url.pathExtension.lowercased())")
-            guard !kept.contains(where: { $0.id == entry.id }),
+            guard !(before + copied).contains(where: { $0.id == entry.id }),
                   (try? data.write(to: folder.appending(path: entry.file), options: .atomic)) != nil else { continue }
-            kept.append(entry)
-            added.append(entry)
+            copied.append(entry)
         }
-        guard !added.isEmpty, (try? index.save(kept)) != nil else { return [] }
-        return added.map(design)
+        guard !copied.isEmpty else { return [] }
+        return Self.writing.withLock {
+            guard var kept = try? index.load(or: []) else { return [] }
+            let added = copied.filter { entry in !kept.contains { $0.id == entry.id } }
+            kept += added
+            guard !added.isEmpty, (try? index.save(kept)) != nil else { return [] }
+            return added.map(design)
+        }
     }
 
     /// The folder inside Pilot's whose pictures join Your designs at launch (T61: Sven's 20 drawn again without text).
@@ -122,7 +131,7 @@ public struct YourFolderDesigns: Sendable {
 
     /// Adds the pictures waiting in `To add` as Your designs, as `add` does (the designs already there untouched), then
     /// takes each one now in out of `To add`, and the folder once empty, so a design removed later never comes back.
-    /// A picture that does not read stays. Returns those added.
+    /// A picture that does not read stays, and keeps the folder; an emptied subfolder does not. Returns those added.
     @discardableResult public func addWaiting() -> [(design: FolderDesign, file: URL)] {
         let waiting = folder.appending(path: Self.waiting, directoryHint: .isDirectory), fm = FileManager.default
         guard fm.fileExists(atPath: waiting.path) else { return [] }
@@ -132,16 +141,26 @@ public struct YourFolderDesigns: Sendable {
             guard let data = try? Data(contentsOf: url), kept.contains(Self.prefix + FolderLooks.hash(data).prefix(16)) else { continue }
             try? fm.removeItem(at: url)
         }
-        if (try? fm.contentsOfDirectory(atPath: waiting.path))?.allSatisfy({ $0.hasPrefix(".") }) == true { try? fm.removeItem(at: waiting) }
+        // Nothing left but folders and hidden files: a package (an app, a bundle) counts as a file, so it keeps it.
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey]
+        let holdsFile = fm.enumerator(at: waiting, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants])?
+            .contains { (try? ($0 as? URL)?.resourceValues(forKeys: Set(keys))).map { $0.isDirectory != true || $0.isPackage == true } ?? true } ?? true
+        if !holdsFile { try? fm.removeItem(at: waiting) }
         return added
     }
 
     /// Deletes Pilot's copy of the design; the folders dressed in it are left as they are.
     public func remove(_ id: String) {
-        guard let kept = try? index.load(or: []) else { return }
-        for entry in kept where entry.id == id { try? FileManager.default.removeItem(at: folder.appending(path: entry.file)) }
-        try? index.save(kept.filter { $0.id != id })
+        Self.writing.withLock {
+            guard let kept = try? index.load(or: []) else { return }
+            for entry in kept where entry.id == id { try? FileManager.default.removeItem(at: folder.appending(path: entry.file)) }
+            try? index.save(kept.filter { $0.id != id })
+        }
     }
+
+    /// Every read-change-save of `designs.json`, one at a time: `To add` at launch runs beside an add or remove in Pilot.
+    /// Only the list's read and save hold it, never a picture's copy.
+    private static let writing = NSLock()
 
     /// The pictures `urls` name: a file of a design's kind as it is, a folder's walked.
     static func pictures(in urls: [URL]) -> [URL] {

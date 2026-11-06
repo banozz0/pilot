@@ -9,6 +9,14 @@ final class HyperTap {
     static let ownEventMark: Int64 = 0x50494C54  // "PILT"
     /// Log every keyboard event the tap sees (debug level). Set PILOT_TRACE=1 in the environment.
     static let traceEvents = ProcessInfo.processInfo.environment["PILOT_TRACE"] == "1"
+    /// The event `handle` is on, nil outside it: a bind the press runs reads when its key went down (pressedAt).
+    private static var handling: CGEvent?
+    /// When the key-down whose bind runs now went down, from the event's own timestamp in systemUptime's seconds
+    /// (NSEvent's conversion, not the handler's clock); nil outside the tap or for any other event. The menu times
+    /// Hyper+Space to its first frame from it (spec pilot-1.1 T74).
+    static var pressedAt: TimeInterval? {
+        handling.flatMap { $0.type == .keyDown ? NSEvent(cgEvent: $0)?.timestamp : nil }
+    }
 
     private(set) var layer: HyperLayer
     var isBound: (Key) -> Bool = { _ in false }
@@ -303,6 +311,8 @@ final class HyperTap {
 
     func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
+        Self.handling = event
+        defer { Self.handling = nil }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             tapDisabled(type == .tapDisabledByTimeout ? "timeout" : "user input")
             return pass

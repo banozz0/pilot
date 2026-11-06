@@ -274,10 +274,14 @@ struct VideoPointerExport {
         try await Self.recording(b, from: clip, pointers: pointers)
         var cancelledGave = false
         let cancelled = RecordingHandout.handOut([b], pointers: pointers) { _ in cancelledGave = true }
-        final class Heard: @unchecked Sendable { var any = false }
+        final class Heard: @unchecked Sendable { var any = false, ended = false }
         let heard = Heard()
-        let drag = Task { @MainActor in try await RecordingHandout.file(for: b, pointers: pointers) { _ in heard.any = true } }
-        for _ in 0..<500 where !heard.any { try await Task.sleep(for: .milliseconds(10)) }
+        let drag = Task { @MainActor in
+            defer { heard.ended = true }
+            return try await RecordingHandout.file(for: b, pointers: pointers) { _ in heard.any = true }
+        }
+        // Until progress or the drag's end, not a fixed 5 s: a loaded Mac starts the export late.
+        while !heard.any && !heard.ended { try await Task.sleep(for: .milliseconds(10)) }
         #expect(heard.any, "the export never reported progress")
         cancelled.cancel()
         await cancelled.task?.value
@@ -285,19 +289,30 @@ struct VideoPointerExport {
         print("hand-out: after another's Cancel the drag got \(dragged.lastPathComponent), cancelled one gave \(cancelledGave)")
         #expect(!cancelledGave && dragged == RecordingHandout.cached(for: b))
 
-        // Cancel while the second of two recordings is drawn: nothing is handed out.
-        let b2 = folder.appending(path: "Recording 2026-11-04 at 13.01.30.mp4"), b3 = folder.appending(path: "Recording 2026-11-04 at 13.01.40.mp4")
-        try await Self.recording(b2, from: clip, pointers: pointers)
+        // Cancel while the second of two recordings is drawn: nothing is handed out and its export leaves no copy. A
+        // Cancel that waits for its own turn on the main actor lands too late under full-suite load, where every
+        // @MainActor suite shares it: polls woke after the export was done (build 9; two tries in three, T66). So the
+        // second's export waits on the main actor itself: with a click ring its VideoExport.run reads the theme's ring
+        // colours there before it writes a frame (VideoRender.swift, `await MainActor.run`). The test only yields, so it
+        // is always queued on the main actor; the turn that moves the job on to the second starts its export, and the
+        // test's next turn comes before that read. The first is `b`, whose drawn copy is already made, so it is quick.
+        let b3 = folder.appending(path: "Recording 2026-11-04 at 13.01.40.mp4")
         try await Self.recording(b3, from: clip, pointers: pointers)
-        var twoGave = false
-        let two = RecordingHandout.handOut([b2, b3], pointers: pointers) { _ in twoGave = true }
-        for _ in 0..<1000 where !RecordingHandout.drawing(b3) { try await Task.sleep(for: .milliseconds(10)) }
-        let reached = RecordingHandout.drawing(b3)
-        two.cancel()
-        await two.task?.value
-        print("hand-out: two recordings cancelled during the second (reached \(reached)): gave \(twoGave), second copy made \(exists(RecordingHandout.cached(for: b3)))")
-        #expect(reached && !twoGave && !exists(RecordingHandout.cached(for: b3)))
-        try fm.removeItem(at: b2)
+        var ringed = Self.track(drawn: true, shape: Self.shape)
+        ringed.look = PointerLook(clickRing: true)
+        try ringed.save(for: b3, in: pointers)
+        // At the export's priority, so the main actor's order does not rest on priorities.
+        let (twoGave, midway) = await Task(priority: .userInitiated) { @MainActor in
+            var gave = false
+            let two = RecordingHandout.handOut([b, b3], pointers: pointers) { _ in gave = true }
+            while two.current != b3 { await Task.yield() }
+            let midway = !gave && !exists(RecordingHandout.cached(for: b3))
+            two.cancel()
+            await two.task?.value
+            return (gave, midway)
+        }.value
+        print("hand-out: two recordings cancelled during the second (its export running at the Cancel: \(midway)): gave \(twoGave), second copy made \(exists(RecordingHandout.cached(for: b3)))")
+        #expect(midway && !twoGave && !exists(RecordingHandout.cached(for: b3)))
         try fm.removeItem(at: b3)
 
         // Trashed while its export runs: the export's copy is not kept. The trash runs inside the export's own progress

@@ -1,4 +1,3 @@
-import EventKit
 import Foundation
 import OSLog
 import PilotCore
@@ -64,6 +63,9 @@ enum WidgetRunner {
 /// that shows them does; the calendar reads EventKit's events and reminders only when access was already given, never asking.
 @MainActor
 enum WidgetReadings {
+    /// The one EventKit store every calendar reading reads, made at the first.
+    private static let calendar = EventKitCalendar()
+
     /// Holds what every reading of a widget needs read until the calling task is cancelled.
     static func watch(_ readings: [Widget.Reading]) async {
         await withTaskGroup(of: Void.self) { group in
@@ -116,11 +118,12 @@ enum WidgetReadings {
             return .object(["time": .string(now.formatted(date: .omitted, time: .shortened)),
                             "date": .string(now.formatted(.dateTime.weekday(.wide).day().month(.wide))), "iso": .string(now.ISO8601Format())])
         case .calendar:
-            guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return .object(["access": .bool(false), "events": .array([])]) }
+            guard await EventKitCalendar.hasFullAccess(to: .event) else { return .object(["access": .bool(false), "events": .array([])]) }
             let start = Calendar.current.startOfDay(for: now), end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? now
-            // Today's reminders with a due day join the events once Reminders access was given (T65); none asks.
-            let store = EventKitCalendar(), today = DateInterval(start: start, end: end)
-            let shown = (store.events(in: today) + (await store.reminders(in: today))).sorted { ($0.allDay ? 0 : 1, $0.start) < ($1.allDay ? 0 : 1, $1.start) }
+            // Today's reminders with a due day join the events once Reminders access was given (T65); none asks. Only
+            // what is on today as the clock's month has it: a reminder due at 00:00 today is, one at 00:00 tomorrow is not.
+            let today = DateInterval(start: start, end: end)
+            let shown = ClockMonth.listed((calendar.events(in: today) + (await calendar.reminders(in: today))).filter { $0.overlaps(today) })
             let events = shown.prefix(8).map { event -> JSONValue in
                 .object(["title": .string(event.title), "allDay": .bool(event.allDay),
                          "start": .string(event.start.formatted(date: .omitted, time: .shortened))])

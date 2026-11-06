@@ -83,7 +83,7 @@ struct WhatsNewFilmRenders {
             let art = try #require(catalogue.sets[set.rawValue]), arrow = try #require(art.cursors["arrow"])
             let custom = CursorCustom(set: set, fill: .custom(Self.lime), outline: .custom(0x101114))
             let palette = art.palette(colours, theme: ExplainerFilmRenders.theme, custom: custom)
-            let sheet = try #require(CursorArt.sheet(CursorRenders.packaging.appending(path: "\(set.rawValue)@2x.png")))
+            let sheet = try #require(CursorArt.sheet(CursorRenders.packaging, set: set.rawValue, scale: 2))
             let px = catalogue.canvasPoints * 2
             let strip = try #require(CursorCatalogue.strip(sheet, cursor: arrow, palette: palette, px: px))
             try Self.png(try #require(strip.cropping(to: CGRect(x: 0, y: 0, width: px, height: px))), to: dir.appending(path: "arrow-\(name).png"))

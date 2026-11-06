@@ -246,18 +246,29 @@ struct FolderDesignsView: View {
         .contextMenu {
             if case .pilot = row.look { Button("Reset \(name)") { Task { await model.resetNow([row]) } }.disabled(model.working) }
         }
-        .accessibilityLabel("Dress \(name)").accessibilityValue(row.ticked ? "ticked" : "not ticked")
+        .accessibilityLabel("Dress \(name)").accessibilityValue(Self.spoken(row))
+    }
+
+    /// What VoiceOver reads after the chip's name: ticked or not, then the warnings its tooltip and triangle show.
+    static func spoken(_ row: FolderDesignsModel.Row) -> String {
+        ([row.ticked ? "Ticked." : "Not ticked."] + warnings(row)).joined(separator: " ")
     }
 
     /// A folder chip's tooltip: where it is, what it wears, and why a git or synced folder needs care.
     static func detail(_ row: FolderDesignsModel.Row, yours: [FolderDesign]) -> String {
         var lines = [AppConfigs.tilde(row.url.path, home: NSHomeDirectory())]
         if let tag = tag(row, yours: yours) { lines.append(tag) }
+        return (lines + warnings(row)).joined(separator: "\n")
+    }
+
+    /// Why a git or synced folder needs care: the tooltip's last lines, and VoiceOver's after ticked or not.
+    static func warnings(_ row: FolderDesignsModel.Row) -> [String] {
+        var lines: [String] = []
         if row.git {
             lines.append("A git repository, so it is left out until ticked: a custom icon adds a hidden file named Icon to the folder, which git shows as untracked. Pilot never edits .gitignore.")
         }
         if row.synced { lines.append("Some cloud sync services drop custom icons; it may lose its look on another Mac.") }
-        return lines.joined(separator: "\n")
+        return lines
     }
 
     /// What the row's look is.
@@ -433,7 +444,7 @@ struct FolderArtView: View {
     let id: String
 
     var body: some View {
-        if let art = CatalogueIcons.image(id, in: "folder-designs") {
+        if let art = CatalogueIcons.image(FolderDesign.preview(id)) {
             Image(nsImage: art).resizable().interpolation(.high).aspectRatio(contentMode: .fit).accessibilityHidden(true)
         } else {
             Image(systemName: "folder.fill").resizable().aspectRatio(contentMode: .fit).accessibilityHidden(true)

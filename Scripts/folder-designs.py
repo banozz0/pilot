@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Draws Pilot's folder designs (P54) into Packaging/folder-designs: <id>.heic, the 1024 px cut-out a folder is dressed
-in; <id>.png, the same at 256 px for the grid and menu rows; and <id>-small.png, a simpler 64 px drawing for 32 px and
+in; <id>-preview.heic, the same at 256 px for the grid and menu rows; and <id>-small.png, a simpler 64 px drawing for 32 px and
 under, which FolderDesigns.art adds to the 1024 as its small representation.
 
 Each is one SVG built here (a back panel of blurred colour, papers peeking out, a frosted glass front with a bright edge,
@@ -543,9 +543,11 @@ def svg(d, small=False):
 
 
 BUDGET = 4600 * 1024  # what the set may add to the app: the 13 (P54, 1.0 MB) and the kinds' 54 (T61, 3.4 MB; Sven raised it, Q862)
-DISPLAY = 256  # the grid and menu rows draw <id>.png, never above 128 pt at 2x; decoded it is 256 KB, not the 4 MB of 1024
+DISPLAY = 256  # the grid and menu rows draw <id>-preview.heic, never above 128 pt at 2x; decoded it is 256 KB, not the 4 MB of 1024
 # HEIC quality: 60 looks the same as 85 at 512 px and below and is a quarter smaller (T61); today's 13 were written at 85.
 QUALITY = 60
+# The 256 px preview, shown pixel for pixel, at 80: a seventh of its PNG's bytes (2.9 MB to 0.44 MB for the 67, T69).
+PREVIEW_QUALITY = 80
 
 
 def squeeze(path):
@@ -558,17 +560,18 @@ def main(ids):
     for name in ids or DESIGNS:
         art = Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=svg(DESIGNS[name]))))).convert("RGBA")
         small = Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=svg(DESIGNS[name], True))))).convert("RGBA")
-        # The full art, which dresses a folder: HEIC keeps alpha at a tenth of PNG's size (sips, macOS's own encoder).
+        # The full art, which dresses a folder, and the preview: HEIC keeps alpha at a tenth of PNG's size (sips, macOS's
+        # own encoder).
         with tempfile.TemporaryDirectory() as tmp:
             art.save(Path(tmp) / "art.png")
-            subprocess.run(["sips", "-s", "format", "heic", "-s", "formatOptions", str(QUALITY), str(Path(tmp) / "art.png"),
-                            "--out", str(OUT / f"{name}.heic")], check=True, capture_output=True)
-        art.resize((DISPLAY, DISPLAY), Image.LANCZOS).save(OUT / f"{name}.png", optimize=True)
+            art.resize((DISPLAY, DISPLAY), Image.LANCZOS).save(Path(tmp) / "preview.png")
+            for png, out, quality in (("art.png", f"{name}.heic", QUALITY), ("preview.png", f"{name}-preview.heic", PREVIEW_QUALITY)):
+                subprocess.run(["sips", "-s", "format", "heic", "-s", "formatOptions", str(quality), str(Path(tmp) / png),
+                                "--out", str(OUT / out)], check=True, capture_output=True)
         # The 64 px drawing in 256 colours: at 32 px and under a palette is unseen, and it fits one 4 KB disk block.
         small.resize((64, 64), Image.LANCZOS).quantize(256, method=Image.Quantize.FASTOCTREE).save(OUT / f"{name}-small.png", optimize=True)
-        for png in (f"{name}.png", f"{name}-small.png"):
-            squeeze(OUT / png)
-        print(name, sum((OUT / f).stat().st_size for f in (f"{name}.heic", f"{name}.png", f"{name}-small.png")) // 1024, "KB")
+        squeeze(OUT / f"{name}-small.png")
+        print(name, sum((OUT / f).stat().st_size for f in (f"{name}.heic", f"{name}-preview.heic", f"{name}-small.png")) // 1024, "KB")
     total = sum(f.stat().st_size for f in OUT.iterdir())
     print(f"set {total / 1024:.0f} KB of {BUDGET // 1024} KB")
     if total > BUDGET:

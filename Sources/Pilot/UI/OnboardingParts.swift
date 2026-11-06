@@ -314,8 +314,8 @@ struct GrantWalkPanel: View {
     }
 }
 
-/// Try it's "More, if you want", folded: the AI provider, Extensions, Recommend apps, the upscaler's Max quality, and
-/// the other permissions, which live in Settings › Permissions. Never needed for Finish.
+/// Try it's "More, if you want", folded: the AI provider, Extensions, Recommend apps, the upscaler's Max quality, the
+/// terminal's download (T76), and the other permissions, which live in Settings › Permissions. Never needed for Finish.
 struct OnboardingMore: View {
     @Environment(\.style) private var style
     @State private var recommend = Recommendations.shared.show
@@ -349,6 +349,16 @@ struct OnboardingMore: View {
                     Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
                 } else {
                     SetupButton(title: "Download") { OnboardingExtras.fetchUpscaler() }
+                }
+            }
+            InstrumentRule()
+            line {
+                SetupTitled(title: OnboardingExtras.terminalTitle, detail: OnboardingExtras.terminalDetail)
+                Spacer(minLength: 8)
+                if let state = OnboardingExtras.terminalState {
+                    Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
+                } else {
+                    SetupButton(title: "Download") { ExtrasDownloads.shared.fetchTerminal() }
                 }
             }
             InstrumentRule()

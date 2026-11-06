@@ -64,7 +64,7 @@ final class FolderDesignSource: MenuSource {
             return row
         }
         func pilot(_ designs: [FolderDesign], _ section: String) -> [MenuEntry] {
-            designs.map { design($0, icon: MenuIcon(symbol: "folder", tint: .accent, bundled: "folder-designs/\($0.id)"), section: section) }
+            designs.map { design($0, icon: MenuIcon(symbol: "folder", tint: .accent, bundled: FolderDesign.preview($0.id)), section: section) }
         }
         let others = FolderDesign.kinds.filter { !suggested.contains($0) }
         return suggested.flatMap { pilot($0.designs, "For \($0.title)") } + pilot(FolderDesign.classic, "Designs")

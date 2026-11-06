@@ -460,20 +460,26 @@ final class Engine {
         // The bar needs no Accessibility: it comes back at launch if it was left on.
         topBar.start()
         // The speech model in use, compiled for a new pilot-dictate a minute in, so the first dictation after an update
-        // does not wait minutes (SpeechModel.prepareInBackground); with no model, nothing. Then the takes a quit left
-        // while the model loaded, written down into Recent takes.
+        // does not wait minutes (SpeechModel.prepareInBackground); with no model, or one this helper already prepared,
+        // nothing. Then the takes a quit left while the model loaded, written down into Recent takes.
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
-            SpeechModels.shared.prepareInBackground()
-            PilotDictation.shared.collectKept(audio: true)
+            Task {
+                await SpeechModels.shared.prepareIfStale()
+                PilotDictation.shared.collectKept(audio: true)
+            }
         }
         // Read aloud's Kokoro the same way, after it, so the two never load at once.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 120) { KokoroModel.shared.prepareInBackground() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 120) { Task { await KokoroModel.shared.prepareIfStale() } }
     }
 
     /// Once, when Accessibility is granted: the observers and the clipboard run whatever the switch says.
     private func start() {
         guard !started else { return }
         started = true
+        // The key tap before everything else (lean audit: about 0.14 s sooner): a key pressed while the rest starts waits
+        // in the tap for its bind rather than reaching the front app. The tap's callback runs on this main run loop, so
+        // no bind runs before start() returns; the pointer taps wait for the observers and the desktop they act on.
+        let keysArmed = armKeys()
         observers.onFocusedWindow = { [windowBorder] in
             windowBorder.update($0)
             DefocusController.shared.update($0)
@@ -518,17 +524,22 @@ final class Engine {
         pilotBlock.carryYabaiFloats()
         ClipboardHistory.shared.start()
         log.notice("engine started, layer keys \(self.settings.layerKeys.rawValues, privacy: .public)")
-        armBinds()
+        if keysArmed { armPointerTaps() }
     }
     private var started = false
 
     /// The tap and the layer key, only while the on/off switch is on.
     private func armBinds() {
-        guard started, !tap.isRunning else { return }
-        guard pilotSwitch.isOn else { return log.notice("binds not armed: Pilot is switched off") }
+        if armKeys() { armPointerTaps() }
+    }
+
+    /// The key tap and the layer key; false when they were left as they are (not started, already on, or switched off).
+    private func armKeys() -> Bool {
+        guard started, !tap.isRunning else { return false }
+        guard pilotSwitch.isOn else { log.notice("binds not armed: Pilot is switched off"); return false }
         applyLayerKey()
         do { try tap.start(); log.notice("tap installed") } catch { lastError = "Could not install the keyboard tap."; log.error("tap creation failed") }
-        armPointerTaps()
+        return true
     }
 
     /// The mouse tap runs while the binds are armed, on all the time with a drag modifier picked and else only while

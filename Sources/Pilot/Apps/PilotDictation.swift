@@ -53,6 +53,13 @@ protocol DictateHelper {
     /// Nil, logged, when the helper is not in the bundle (swift run, the tests) or does not start. Lines and the exit
     /// reach the main actor in the order the helper printed them.
     func run(_ arguments: [String], heard: @escaping @MainActor (DictateLine) -> Void, ended: @escaping @MainActor (Int32) -> Void) -> DictateRun?
+    /// Whether this helper already prepared the model in `folder` on this macOS, read without starting it.
+    func prepared(_ folder: URL) async -> Bool
+}
+
+extension DictateHelper {
+    /// Cannot tell: the prepare runs and the helper decides.
+    func prepared(_ folder: URL) async -> Bool { false }
 }
 
 /// Contents/Helpers/pilot-dictate, built from Helpers/pilot-dictate by Scripts/build-app.sh.
@@ -79,6 +86,36 @@ struct BundledDictateHelper: DictateHelper {
             whisperLog.error("pilot-dictate: \(String(describing: error), privacy: .public)")
             return nil
         }
+    }
+
+    /// Whether this helper already prepared the model in `folder` on this macOS, read off the main thread without
+    /// starting it, so a launch spawns no prepare that would find nothing to do (lean audit 2026-11-05: two 12.5 MiB
+    /// children a launch). The helper's own rule, Dictate.isPrepared in Helpers/pilot-dictate: the folder's `prepared`
+    /// stamp names this helper's code signature and this macOS build, and every part of that compile is still in Core
+    /// ML's cache. In doubt, false, and the helper decides as before.
+    func prepared(_ folder: URL) async -> Bool {
+        let helper = URL(filePath: Self.path)
+        return await Task.detached(priority: .utility) { Self.stamped(folder, helper: helper) }.value
+    }
+
+    nonisolated private static func stamped(_ folder: URL, helper: URL) -> Bool {
+        var code: SecStaticCode?, info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(helper as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, [], &info) == errSecSuccess,
+              let hash = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data,
+              let os = SystemReader.sysctlString("kern.osversion"),
+              let written = try? String(contentsOf: folder.appending(path: "prepared"), encoding: .utf8) else { return false }
+        let stamp = hash.map { String(format: "%02x", $0) }.joined() + " " + os
+        guard written.hasPrefix(stamp + " "), let parts = Int(written.dropFirst(stamp.count + 1)), parts > 0 else { return false }
+        // Finished bundles in the cache folder for this macOS build; a `.tmp.<pid>` one is a compile cut off.
+        let cache = folder.appending(path: "Library/Caches/pilot-dictate/com.apple.e5rt.e5bundlecache/\(os)")
+        let bundles = FileManager.default.enumerator(atPath: cache.path)
+        var compiled = 0
+        while let item = bundles?.nextObject() as? String {
+            if bundles?.level == 2, item.hasSuffix(".bundle"), !item.contains(".tmp.") { compiled += 1 }
+            if (bundles?.level ?? 0) >= 2 { bundles?.skipDescendants() }
+        }
+        return compiled >= parts
     }
 
     final class Run: DictateRun {
@@ -326,6 +363,13 @@ final class SpeechModel {
 
     static let prepareLimit: TimeInterval = 600
 
+    /// `prepareInBackground` at launch, unless the helper already prepared this model (DictateHelper.prepared): an
+    /// unchanged helper spawns nothing.
+    func prepareIfStale() async {
+        guard isReady, run == nil, !(await helper.prepared(folder)) else { return }
+        prepareInBackground()
+    }
+
     private func heard(_ line: DictateLine) {
         switch line {
         case .progress(let fraction): state = .downloading(fraction)
@@ -401,7 +445,7 @@ final class SpeechModels {
         settle()
     }
 
-    func prepareInBackground() { active?.prepareInBackground() }
+    func prepareIfStale() async { await active?.prepareIfStale() }
 
     /// At launch: each download a quit cut off, from Settings or setup alike, starts again.
     func resume() { all.forEach { $0.resume() } }

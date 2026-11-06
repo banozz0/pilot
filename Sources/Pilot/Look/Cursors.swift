@@ -1,3 +1,4 @@
+import Accelerate
 import AppKit
 import CoreGraphics
 import ImageIO
@@ -110,11 +111,25 @@ struct CursorCustom: Equatable, Sendable {
 enum CursorArt {
     struct Sheet { let grey: [UInt8]; let width: Int; let height: Int; let bytesPerRow: Int }
 
-    /// A set's atlas at one scale (<set>@<n>x.png), raw: no colour management touches the grey values.
-    static func sheet(_ url: URL) -> Sheet? {
+    /// A set's atlas at one scale, `<set>@<n>x.webp` (lossless) in `folder`, raw: no colour management touches the grey
+    /// values. WebP has no grey format, so ImageIO decodes it as RGBX with R = G = B: the grey is channel 0 (T69).
+    static func sheet(_ folder: URL, set: String, scale: Int) -> Sheet? {
+        let url = folder.appending(path: "\(set)@\(scale)x.webp")
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil), let img = CGImageSourceCreateImageAtIndex(src, 0, nil),
-              img.bitsPerPixel == 8, let data = img.dataProvider?.data as Data? else { return nil }
-        return Sheet(grey: [UInt8](data), width: img.width, height: img.height, bytesPerRow: img.bytesPerRow)
+              img.bitsPerComponent == 8, img.bitsPerPixel == 32, img.alphaInfo == .noneSkipLast,
+              img.byteOrderInfo == .orderDefault || img.byteOrderInfo == .order32Big,
+              let data = img.dataProvider?.data as Data?, data.count >= img.bytesPerRow * img.height else { return nil }
+        let (width, height) = (img.width, img.height)
+        var grey = [UInt8](repeating: 0, count: width * height)
+        let error = data.withUnsafeBytes { rgbx in
+            grey.withUnsafeMutableBytes { out in
+                var from = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: rgbx.baseAddress), height: vImagePixelCount(height),
+                                         width: vImagePixelCount(width), rowBytes: img.bytesPerRow)
+                var to = vImage_Buffer(data: out.baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: width)
+                return vImageExtractChannel_ARGB8888(&from, &to, 0, vImage_Flags(kvImageNoFlags))
+            }
+        }
+        return error == kvImageNoError ? Sheet(grey: grey, width: width, height: height, bytesPerRow: width) : nil
     }
 
     /// One frame of a cursor: every layer's colour drawn through its mask, in order. `row` = the cursor's `row` plus
@@ -499,7 +514,7 @@ enum CursorEngine {
         let palette = art.palette(colours, theme: theme, custom: custom)
         let points = CGFloat(catalogue.canvasPoints)
         var sheets = [Int: CursorArt.Sheet]()
-        for scale in catalogue.scales { sheets[scale] = CursorArt.sheet(folder.appending(path: "\(set.rawValue)@\(scale)x.png")) }
+        for scale in catalogue.scales { sheets[scale] = CursorArt.sheet(folder, set: set.rawValue, scale: scale) }
         place.stamp(true)    // before the first register, so even a crash part-way leaves it set
         var names = 0, confirmed = 0, kept = 0, arrow = false
         // The arrow last: a register with `instantly` evidently also makes that cursor the current one of the connection that
@@ -776,7 +791,7 @@ final class CursorSamples {
     private func rows(_ set: CursorSetID) -> (sheet: CursorArt.Sheet, row: [String: Int])? {
         if let kept = rows[set] { return kept }
         guard let folder, let catalogue, let art = catalogue.sets[set.rawValue],
-              let full = CursorArt.sheet(folder.appending(path: "\(set.rawValue)@2x.png")) else { return nil }
+              let full = CursorArt.sheet(folder, set: set.rawValue, scale: 2) else { return nil }
         let px = catalogue.canvasPoints * 2
         var grey = [UInt8](), row = [String: Int]()
         for name in Self.shown {
