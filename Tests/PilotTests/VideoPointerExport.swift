@@ -94,12 +94,13 @@ struct VideoPointerExport {
 
         // A frame of each, at `t`, with the box where it differs from the export with no track.
         // `near` keeps the box to that far round `around` (a fraction of the frame): an encode's noise elsewhere stays out.
-        func changed(_ file: URL, from base: URL, at t: Double, _ name: String, around: CGPoint? = nil, near: CGFloat = 120) async throws -> (box: CGRect, size: CGSize) {
+        func changed(_ file: URL, from base: URL, at t: Double, _ name: String, around: CGPoint? = nil, near: CGFloat = 120,
+                     threshold: Int = 48) async throws -> (box: CGRect, size: CGSize) {
             let a = try await Self.frame(file, at: t), b = try await Self.frame(base, at: t)
             if let kept { try #require(ImageFormat.png.encode(a)).write(to: kept.appending(path: "\(name)-\(String(format: "%.1f", t))s.png")) }
             let size = CGSize(width: a.width, height: a.height)
             let window = around.map { CGRect(x: $0.x * size.width - near, y: $0.y * size.height - near, width: 2 * near, height: 2 * near) }
-            return (Self.difference(a, b, within: window), size)
+            return (Self.difference(a, b, threshold: threshold, within: window), size)
         }
         func px(_ p: CGPoint, _ size: CGSize) -> CGPoint { CGPoint(x: p.x * size.width, y: p.y * size.height) }
 
@@ -126,7 +127,9 @@ struct VideoPointerExport {
         #expect(!moving.box.isNull, "the pointer is hidden before it has been still long enough")
 
         // R4: 0.2 s after the click, T4's ripple round the click's place, wider than the pointer.
-        let ring = try await changed(ringed, from: plain, at: Self.click + 0.2, "drawn-click-ring")
+        // The ring wears the theme's effect colour: Tokyo Night's pale blue on the fixture's white page differs by less than
+        // Lagoon's cyan did, so its shape is read at a lower threshold, near the click, where no encode noise reaches.
+        let ring = try await changed(ringed, from: plain, at: Self.click + 0.2, "drawn-click-ring", around: Self.rest, threshold: 16)
         let clickAt = px(Self.rest, ring.size)
         print("video-pointer: R4 at 2.2 s, ring \(Self.text(ring.box)) round the click at \(Self.text(clickAt))")
         #expect(abs(ring.box.midX - clickAt.x) < 4 && abs(ring.box.midY - clickAt.y) < 4, "the ring is not round the click: \(ring.box)")
