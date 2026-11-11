@@ -219,14 +219,17 @@ MAX_SIDE, MAX_PIXELS = 16384, 50 * 1000 * 1000
 HEIC_BRANDS = {b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1"}
 BEACONS = ("url(", "@import", "://")
 # Characters that hide or reorder text ("Trojan Source", data smuggled in selectors): every control (Cc), format
-# character (Cf: bidi controls, zero widths, tags, U+FFF9-FFFB, U+206A-206F), line and paragraph separator (Zl, Zp),
-# surrogate (a file name that isn't UTF-8) and private-use character (Co), plus these, which Unicode files elsewhere:
-# U+0085, U+034F, the Hangul fillers, U+180E, U+2800, all variation selectors and the tag block. A text file may hold
-# tabs and carriage returns; an extension.json `icon` may join emoji with U+200D and U+FE0F.
+# character (Cf), line and paragraph separator (Zl, Zp), surrogate (a file name that isn't UTF-8) and private-use
+# character (Co), plus Unicode's whole Default_Ignorable_Code_Point set as fixed ranges, so the answer doesn't hang on
+# the Python's Unicode version (unassigned code points, Cn, still pass), and U+2800, a blank that shows nothing. A text
+# file may hold tabs, never a bare carriage return (Python ends a line there); an extension.json icon, at the top or a
+# command's, may join emoji with U+200D and U+FE0F.
 HIDDEN_CATEGORIES = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co"}
-HIDDEN_RANGES = ((0x0085, 0x0085), (0x034F, 0x034F), (0x115F, 0x1160), (0x180E, 0x180E), (0x2800, 0x2800),
-                 (0x3164, 0x3164), (0xFFA0, 0xFFA0), (0xFE00, 0xFE0F), (0xE0000, 0xE007F), (0xE0100, 0xE01EF))
-LINE_TEXT = {0x09, 0x0D}
+HIDDEN_RANGES = ((0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+                 (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x2800, 0x2800),
+                 (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8),
+                 (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF))
+LINE_TEXT = {0x09}
 EMOJI_JOINERS = {0x200D, 0xFE0F}
 # Latin look-alikes from Cyrillic and Greek, for comparing titles (NFKC alone keeps them apart).
 LOOKALIKES = str.maketrans("аеорсухіјѕԁɡοανρτκιВЕКМНОРСТХ", "aeopcyxijsdgoavptkiBEKMHOPCTX")
@@ -317,21 +320,24 @@ def check_text(where, text, problems, allowed):
 
 def check_strings(name, manifest, problems):
     """No hidden or reordering character in any decoded key or string of a manifest (a JSON escape like \\u202e only
-    shows once decoded); an extension's `icon` values may join emoji."""
-    def walk(value, key):
+    shows once decoded); an extension's own icon and its commands' icons may join emoji."""
+    def icon(where):
+        return name == "extension.json" and (where == ("icon",) or len(where) == 3 and where[0] == "commands"
+                                             and isinstance(where[1], int) and where[2] == "icon")
+
+    def walk(value, where):
         if isinstance(value, str):
-            allowed = EMOJI_JOINERS if name == "extension.json" and key == "icon" else frozenset()
-            bad = hidden_chars(value, allowed)
+            bad = hidden_chars(value, EMOJI_JOINERS if icon(where) else frozenset())
             if bad:
                 problems.append("%s: %s holds hidden or reordering characters (%s)" % (name, ascii(value), ", ".join(bad)))
         elif isinstance(value, dict):
             for k, v in value.items():
-                walk(k, None)
-                walk(v, k)
+                walk(k, ())  # a key is never an icon value
+                walk(v, where + (k,))
         elif isinstance(value, list):
-            for v in value:
-                walk(v, key)
-    walk(manifest, None)
+            for i, v in enumerate(value):
+                walk(v, where + (i,))
+    walk(manifest, ())
 
 
 def text_of(path):
@@ -513,9 +519,11 @@ def lookalikes(titles):
     return problems
 
 
-def first_sender(path):
-    """The author email of the commit that first added `path` (a pack folder), or None when git doesn't know it."""
-    out = subprocess.run(["git", "log", "--diff-filter=A", "--reverse", "--format=%ae", "--", str(path)],
+def first_sender(path, base):
+    """The author email of the commit that first added `path` (a pack folder) in `base`'s history, the trusted side;
+    None when `base` never had it, a new pack. The branch's own history is never read: a merged orphan commit could
+    claim any pack first."""
+    out = subprocess.run(["git", "log", base, "--diff-filter=A", "--reverse", "--format=%ae", "--", str(path)],
                          cwd=ROOT, capture_output=True, text=True)
     lines = out.stdout.splitlines() if out.returncode == 0 else []
     return lines[0] if lines else None
@@ -535,19 +543,20 @@ def flags(author, base):
         return subprocess.run(["git"] + list(args), cwd=ROOT, capture_output=True, text=True)
     if git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
         return ["--author needs the whole history: this clone is shallow or not a git repo (fetch with --unshallow)"], []
-    out = git("diff", "--name-only", "--relative", "%s...HEAD" % base, "--", ".")
+    # No rename detection: a renamed pack shows both its old path and its new one.
+    out = git("diff", "--no-renames", "-z", "--name-only", "--relative", "%s...HEAD" % base, "--", ".")
     if out.returncode != 0:
         return ["cannot compare with %s: %s" % (base, out.stderr.strip())], []
     packs = set()
-    for changed in out.stdout.splitlines():
+    for changed in filter(None, out.stdout.split("\0")):
         parts = Path(changed).parts
         if len(parts) > 2 and parts[0] in (build_index.EXTENSIONS.name, build_index.THEMES.name):
             packs.add(Path(parts[0], parts[1]))
     found = []
     for pack in sorted(packs):
-        email = first_sender(ROOT / pack)
+        email = first_sender(ROOT / pack, base)
         if email is not None and not sent_by(email, author):
-            found.append("flag: %s was first sent by %s, not %s: Sven reads it" % (pack.as_posix(), email, author))
+            found.append("flag: %s was first sent by %s, not %s: Sven reads it" % (pack.as_posix(), ascii(email), author))
     return [], found
 
 
@@ -601,17 +610,22 @@ def check(folder):
 
 
 def strays(root):
-    """Anything in a kind's folder that isn't a pack folder (a file, a link, a hidden folder), but its .gitkeep."""
+    """Anything in a kind's folder that isn't a pack folder (a file, a link, a hidden folder), but a .gitkeep that is a
+    regular file."""
     if not root.is_dir():
         return []
     return ["%s is not a pack folder" % ascii(p.name) for p in sorted(root.iterdir())
-            if p.name != ".gitkeep" and (p.is_symlink() or not p.is_dir() or p.name.startswith("."))]
+            if not (p.name == ".gitkeep" and p.is_file() and not p.is_symlink())
+            and (p.is_symlink() or not p.is_dir() or p.name.startswith("."))]
+
+
+SHIPPED = ROOT.parent / "Packaging" / "ThemePacks"
 
 
 def bundled_lookalikes(titles):
     """Catalogue themes whose id is, or whose title looks like, a theme Pilot ships (Packaging/ThemePacks)."""
     shipped = {}
-    for folder in build_index.folders(ROOT.parent / "Packaging" / "ThemePacks"):
+    for folder in build_index.folders(SHIPPED):
         title = title_of(folder, "manifest.json")
         if isinstance(title, str):
             shipped[folder.name] = skeleton(title)
@@ -654,6 +668,8 @@ def main(argv=None):
                 failed = True
                 print("%s/%s: %s" % (kind, folder.name, problem))
         titles = {f.name: title_of(f, manifest_name) for f in folders}
+        if root == build_index.THEMES and not SHIPPED.is_dir():
+            print("note: no Packaging/ThemePacks beside catalogue/, so themes were not compared with the ones Pilot ships")
         for problem in lookalikes(titles) + (bundled_lookalikes(titles) if root == build_index.THEMES else []):
             failed = True
             print("%s/%s" % (kind, problem))
