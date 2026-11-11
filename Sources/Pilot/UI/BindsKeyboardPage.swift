@@ -47,7 +47,8 @@ struct BindsKeyboardPage: View {
         let bound = binds.bound
         let key = (picked?.layer == layer ? picked?.code : nil) ?? Self.firstPick(bound, board: board.full)
         let only: BindsPage.Tab? = layer == .plain && asList ? .plain : nil, back = search.isEmpty ? { asList = false } : nil
-        Group {
+        // A link or the search to Swap keys or Overlay scrolls under the board to it.
+        KitLanding { Group {
             if listed && toybox {
                 ToyBindsList(only: only, seed: search, back: back)
             } else if listed {
@@ -57,7 +58,7 @@ struct BindsKeyboardPage: View {
                     if toybox { toy(binds, key: key) } else { instrument(binds, key: key) }
                 }, bound: bound, key: key)
             }
-        }
+        } }
         .onChange(of: startOnPlain) { if startOnPlain { layer = .plain } }
         .onChange(of: editBind.wrappedValue, initial: true) {
             guard let action = editBind.wrappedValue else { return }
@@ -118,12 +119,21 @@ struct BindsKeyboardPage: View {
 
     /// Toybox (card agent-bo-95423182): its own page on this page's state, dialogs and keys.
     private func toy(_ binds: HomeBinds, key: Int64?) -> some View {
-        ToyBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts)
+        ToyBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts, below: Self.below)
     }
 
     /// Instrument (card agent-bo-95423181): its own page on this page's state, dialogs and keys.
     private func instrument(_ binds: HomeBinds, key: Int64?) -> some View {
-        InstrumentBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts)
+        InstrumentBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts, below: Self.below)
+    }
+
+    /// Under the board and its inspector, back from More (pages round 4, Sven's Q95): Swap keys, then what the overlay
+    /// shows, longest last; each a place a link or the search lands on.
+    static var below: AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 0) {
+            KeySwapsBlock().id(AppSection.keySwaps)
+            OverlayPicksBlocks()
+        })
     }
 
     /// A free key's bind starts from it on this tab's sublayer; nil on Plain.
@@ -179,29 +189,24 @@ private struct PicksKeys: ViewModifier {
     }
 }
 
-/// Keys' More (simplify-pages T14; Overlay, Swap keys and Export and import were Binds' tabs): Swap keys, Export and
-/// import, Cleaning, and what the overlay shows, longest last, each a place a link or the search lands on. Cleaning's Set
-/// key opens the bind editor on the keyboard, as Launcher's Set key does, More having no editor of its own.
+/// Keys' More (simplify-pages T14; Overlay, Swap keys and Export and import were Binds' tabs): Export and import and
+/// Cleaning, each a place a link or the search lands on; Swap keys and the overlay went back under the board (pages
+/// round 4). Cleaning's Set key opens the bind editor on the keyboard, as Launcher's Set key does, More having no editor
+/// of its own.
 struct BindsMorePage: View {
-    /// The window's search, which the overlay's list filters by.
-    var search = ""
     /// Binds' editor on that action, on the keyboard.
     var editBind: (String) -> Void = { _ in }
 
-    /// More's index. A row added to or moved off a block changes its count here; the overlay's list is one.
+    /// More's index. A row added to or moved off a block changes its count here.
     static let entries = [
-        MoreEntry(id: .keySwaps, symbol: "arrow.left.arrow.right", controls: 3),
         MoreEntry(id: .exportImport, symbol: "arrow.up.arrow.down", controls: 3),
         MoreEntry(id: .cleaning, symbol: "lock", controls: 2),
-        MoreEntry(id: .overlay, symbol: "rectangle.grid.2x2", controls: 4),
     ]
 
     var body: some View {
         KitMore(entries: Self.entries) {
-            KeySwapsBlock().moreBlock(.keySwaps)
             ExportImportRows().moreBlock(.exportImport)
             KeyboardLockCard { editing in editing.action.map(editBind) }.moreBlock(.cleaning)
-            OverlayPicksBlocks(search: search)
         }
     }
 }

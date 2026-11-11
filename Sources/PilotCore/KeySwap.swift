@@ -1,6 +1,6 @@
 import Foundation
 
-/// A key Binds › More › Swap keys offers (Q406): Caps Lock, each side of Control, Option and Command, Escape, Tab, Return,
+/// A key Binds › Swap keys offers (Q406): Caps Lock, each side of Control, Option and Command, Escape, Tab, Return,
 /// Delete and the F keys. F18 is not offered: Caps Lock becomes it while it is a layer key. Fn is left out: its usage
 /// is Apple's vendor page, unverified against hidutil.
 public enum SwapKey: String, CaseIterable, Codable, Identifiable, Sendable {

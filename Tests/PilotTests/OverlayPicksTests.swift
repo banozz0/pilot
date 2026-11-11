@@ -3,16 +3,16 @@ import Foundation
 import Testing
 @testable import Pilot
 
-/// Binds › More › Overlay (story 56, Sven 2026-10-10): a switch per bind for what holding Hyper shows, reached from Binds' tabs,
+/// Binds › Overlay (story 56, Sven 2026-10-10): a switch per bind for what holding Hyper shows, reached from Binds' tabs,
 /// a link, the window's search and the overlay's own Edit what shows; the overlay lays out however many are picked.
 @MainActor
 @Suite("Overlay picks")
 struct OverlayPicksTests {
-    @Test("Overlay is a place on Keys' More (simplify-pages T14, Sven's Q1; a Binds tab since story 56), which a link and the window's search reach; Instrument and Toybox give More the frame's bar")
+    @Test("Overlay is a place on Keys' front, under the board (pages round 4, Sven's Q95; on More from simplify-pages T14, a Binds tab since story 56), which a link and the window's search reach; Instrument and Toybox give More the frame's bar")
     func place() {
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"],
-                "Abilities went to Menu (C3); Overlay, Swap keys and Export and import are on More (simplify-pages T14)")
-        #expect(AppSection.overlay.onMore == .bindsMore)
+                "Abilities went to Menu (C3); Export and import and Cleaning are on More")
+        #expect(AppSection.overlay.onFront && AppSection.overlay.onMore == nil && AppSection.keySwaps.onFront)
         #expect(AppPlace.linked(URL(string: "pilot://open?page=binds&tab=overlay")!) == AppPlace(.overlay))
         #expect(AppPlace.search("overlay").first == AppPlace(.overlay))
         #expect(AppPlace.search("cheat sheet").first == AppPlace(.overlay))
@@ -32,7 +32,7 @@ struct OverlayPicksTests {
         nonisolated(unsafe) var fired = 0
         withObservationTracking { _ = settings.overlayPicks } onChange: { fired += 1 }
         settings.overlayPicks = ["windows.close"]
-        #expect(fired == 1, "Binds › More › Overlay's switches follow a change")
+        #expect(fired == 1, "Binds › Overlay's switches follow a change")
         #expect(PilotSettings(defaults: defaults, loginItem: item).overlayPicks == ["windows.close"])
     }
 

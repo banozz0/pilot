@@ -84,7 +84,7 @@ struct ToyOverlay: View {
     @Environment(\.style) private var style
     let title: String
     let rows: [BindsPage.Row]
-    /// As InstrumentOverlay's: the binds cut and the footer's link to Binds › More › Overlay.
+    /// As InstrumentOverlay's: the binds cut and the footer's link to Binds › Overlay.
     var more = 0
     var edit: (() -> Void)?
     /// The layer key whose sign leads the header; the engine's, else Caps Lock.

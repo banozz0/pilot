@@ -106,7 +106,7 @@ struct PageView: View {
                      editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openExtension: { model.goExtensionPage($0) }) { model.go($0) }
         case .binds:
             if section == .bindsMore {
-                BindsMorePage(search: model.query) { model.editBind = $0; model.go(AppPlace(.binds)) }
+                BindsMorePage { model.editBind = $0; model.go(AppPlace(.binds)) }
             } else if section == .mouse {
                 // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
                 KitPage { MouseButtonsBlocks() }

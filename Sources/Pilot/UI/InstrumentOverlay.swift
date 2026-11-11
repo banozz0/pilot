@@ -9,7 +9,7 @@ struct InstrumentOverlay: View {
     @Environment(\.style) private var style
     let title: String
     let rows: [BindsPage.Row]
-    /// The binds past what fits (OverlayView cuts them) and the footer's link to Binds › More › Overlay.
+    /// The binds past what fits (OverlayView cuts them) and the footer's link to Binds › Overlay.
     var more = 0
     var edit: (() -> Void)?
     /// The layer key whose sign leads the header; the engine's, else Caps Lock.
@@ -77,7 +77,7 @@ struct InstrumentOverlay: View {
 
     /// The rows in columns of even height, a module's eyebrow over its first bind in each column (never left alone at a
     /// column's foot). Rows not grouped by module (My most used, ranked by presses) go without eyebrows. One column up to 6
-    /// binds, two up to 16, three up to 30, four up to 48, five past that (`columnBreaks`; Binds › More › Overlay, 2026-10-10).
+    /// binds, two up to 16, three up to 30, four up to 48, five past that (`columnBreaks`; Binds › Overlay, 2026-10-10).
     static func columns(_ rows: [BindsPage.Row]) -> [[Line]] {
         var runs: [String] = []
         for row in rows where runs.last != row.module { runs.append(row.module) }

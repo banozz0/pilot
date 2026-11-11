@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Binds › More › Overlay and the overlay it picks for (story 56), opt-in like the other renders: the window on Binds › More › Overlay
+/// Binds › Overlay and the overlay it picks for (story 56), opt-in like the other renders: the window on Binds › Overlay
 /// in Instrument and Toybox under Tokyo Night at 1440 by 900, at Every bind and after a few switches; the page
 /// searched; the overlay with 3, 40, 60 and 140 binds in each style, its foot's Edit what shows and "+ N more".
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter OverlayPicksRenders`
@@ -16,7 +16,7 @@ extension SharedLook {
 struct OverlayPicksRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Binds › More › Overlay and the overlay with few and many binds render in every style",
+    @Test("Binds › Overlay and the overlay with few and many binds render in every style",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])

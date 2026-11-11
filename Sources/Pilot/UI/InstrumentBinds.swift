@@ -6,8 +6,8 @@ import SwiftUI
 /// the six tabs and their counts, Conflicts while there is a clash, List, the preset and New bind; the keyboard in one
 /// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
 /// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
-/// Change key, Unbind and Reset, the tab's free keys and the key on every tab. The binds as a table are List's; Cleaning
-/// is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
+/// Change key, Unbind and Reset, the tab's free keys and the key on every tab; then Swap keys and what the overlay shows
+/// (pages round 4). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
 /// presets and the list behave as in Toybox. Over 1100 pt the inspector stands beside the board while the board there
 /// holds every name whole, else under a board across the page, in two columns while it is 600 pt wide. The page
 /// scrolls; nothing in it scrolls on its own.
@@ -20,6 +20,8 @@ struct InstrumentBindsPage: View {
     let boards: KeyboardCaptions.Boards
     let refusal: String?
     let acts: BindsKeyboardPage.Acts
+    /// The blocks under the board and its inspector (Swap keys and the overlay, pages round 4).
+    var below: AnyView? = nil
     /// The module the board lights; nil for all six.
     @State var module: Int?
     @State private var width: CGFloat = 0
@@ -177,12 +179,15 @@ struct InstrumentBindsPage: View {
     /// inspector is cut. The binds as a table are the List button's (simplify-pages T14).
     private func beside(_ marks: InstrumentBoardFit.Marks) -> some View {
         FillScroll {
-            PinnedBeside {
-                keyboard(marks).frame(maxWidth: .infinity, alignment: .top)
-            } side: {
-                sideInspector
+            VStack(spacing: 0) {
+                PinnedBeside {
+                    keyboard(marks).frame(maxWidth: .infinity, alignment: .top)
+                } side: {
+                    sideInspector
+                }
+                .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
+                below?.padding(.horizontal, Self.side(width, style)).padding(.bottom, Self.pinInset)
             }
-            .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
         }
     }
 
@@ -210,6 +215,7 @@ struct InstrumentBindsPage: View {
                 keyboard(marks)
                 InstrumentBindsInspector(binds: binds, key: key, layer: layer, boards: boards, clashes: clashes, refusal: refusal, acts: acts,
                                          shape: width - 2 * Self.side(width, style) >= 600 ? .columns : .column)
+                below
             }
             .padding(.horizontal, Self.side(width, style)).padding(.vertical, 20)
         }

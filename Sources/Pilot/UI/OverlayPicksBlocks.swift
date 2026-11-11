@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Binds › More › Overlay (story 56, Sven 2026-10-10: "a list of all keybinds and let me toggle"): what holding Hyper shows. The
+/// Binds › Overlay (story 56, Sven 2026-10-10: "a list of all keybinds and let me toggle"): what holding Hyper shows. The
 /// mode on top, then every bind of the active preset the overlay can show, grouped by module with its key and a switch,
 /// searched. A switch in Every bind or My most used turns the overlay to My own pick from what it shows now, so nothing
 /// else moves; Show all goes back to Every bind, the default. Its blocks stand on Keys' More (simplify-pages T14; a Binds

@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Binds › More › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs, Caps Lock ↔ Control and the like,
+/// Binds › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs, Caps Lock ↔ Control and the like,
 /// written with Caps Lock's F18 as one mapping set and taken off at quit. A swap on a Hyper key is refused, and one the
 /// layer keys or another tool's mapping later catch waits, its row saying why (Q407). A block on Keys' More
 /// (simplify-pages T14; a Binds tab until then), its intro as its note.

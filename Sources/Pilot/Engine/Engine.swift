@@ -79,7 +79,7 @@ final class PilotSettings {
         get { defaults.bool(forKey: "update.selfUpdatingCasks") }
         set { defaults.set(newValue, forKey: "update.selfUpdatingCasks") }
     }
-    /// Binds › More › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs. Stored like layerKeys, so a
+    /// Binds › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs. Stored like layerKeys, so a
     /// change reaches the mapping at once.
     var keySwaps: [KeySwap] {
         didSet {
@@ -187,12 +187,12 @@ final class PilotSettings {
     }
     /// At launch: the login item matches the setting.
     func applyLaunchAtLogin() { loginItem.apply(launchAtLogin) }
-    /// The actions "My own pick" lists, switched on in Binds › More › Overlay or the Binds editor. One set for every preset: a
-    /// pick is an action, which shows with the key the active preset gives it. Stored, so Binds › More › Overlay's switches follow.
+    /// The actions "My own pick" lists, switched on in Binds › Overlay or the Binds editor. One set for every preset: a
+    /// pick is an action, which shows with the key the active preset gives it. Stored, so Binds › Overlay's switches follow.
     var overlayPicks: Set<String> {
         didSet { defaults.set(overlayPicks.sorted(), forKey: "overlayPicks") }
     }
-    /// Binds › More › Overlay's switch: the overlay turns to My own pick, from `shown` (what it shows now) with `action` in or out.
+    /// Binds › Overlay's switch: the overlay turns to My own pick, from `shown` (what it shows now) with `action` in or out.
     func showInOverlay(_ action: String, _ on: Bool, shown: Set<String>) { pickOverlay(OverlayPage.picks(switching: action, on: on, shown: shown)) }
     /// The overlay lists `picks` alone (My own pick).
     func pickOverlay(_ picks: Set<String>) {
@@ -266,7 +266,7 @@ final class Engine {
     func pauseKeyboard() { tap.pause(); log.notice("tap paused") }
     func resumeKeyboard() { tap.resume(); log.notice("tap resumed") }
     private let overlay = HyperOverlay()
-    /// The actions holding Hyper shows now on any sublayer (Binds › More › Overlay's switches).
+    /// The actions holding Hyper shows now on any sublayer (Binds › Overlay's switches).
     func overlayShown() -> Set<String> {
         OverlayPage.shown(store: binds.store, actions: bindActions, mode: settings.overlayMode, presses: pressCounts?.counts ?? [:],
                           picks: settings.overlayPicks)
@@ -293,7 +293,7 @@ final class Engine {
     private(set) var lastError: String?
     /// Pilot's key mapping set as last written (Caps Lock to F18, the swaps), empty when none is.
     @ObservationIgnored private(set) var mappingWritten: [KeyMappingEntry] = []
-    /// The UserKeyMapping entries Pilot did not write, as last read: Binds › More › Swap keys refuses a swap on their keys.
+    /// The UserKeyMapping entries Pilot did not write, as last read: Binds › Swap keys refuses a swap on their keys.
     private(set) var foreignMapping: [KeyMappingEntry] = []
 
     init() {

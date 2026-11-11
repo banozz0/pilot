@@ -15,6 +15,8 @@ struct ToyBindsPage: View {
     let boards: KeyboardCaptions.Boards
     let refusal: String?
     let acts: BindsKeyboardPage.Acts
+    /// The blocks under the board's lower half (Swap keys and the overlay, pages round 4).
+    var below: AnyView? = nil
     @State private var width: CGFloat = 1364
     @State private var clashes = 0
 
@@ -34,6 +36,7 @@ struct ToyBindsPage: View {
                 ToyBindsBoard(boards: boards, binds: binds, layerKeys: engine.settings.layerKeys, layer: layer, picked: key, pick: acts.pick,
                               open: { acts.open($0, bound: binds.bound, layer: layer) }, whole: true)
                 lower(width - 2 * side)
+                below
                 if let refusal {
                     Label(refusal, systemImage: "exclamationmark.triangle.fill").font(style.toyNunito(700, 13)).foregroundStyle(style.color(\.text2))
                         .symbolRenderingMode(.multicolor)

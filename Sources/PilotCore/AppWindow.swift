@@ -468,7 +468,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud,
                                                      .menuExtras, .translate, .aliases, .quicklinks,
                                                      .installLists, .helpers, .hiddenApps,
-                                                     .overlay, .keySwaps, .exportImport, .cleaning,
+                                                     .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceMonitors, .workspaceSwipe,
                                                      .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle]
 
@@ -478,6 +478,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
+                                                     .keySwaps, .overlay,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
 
     /// A block on its page's front that a link or the search scrolls to.
