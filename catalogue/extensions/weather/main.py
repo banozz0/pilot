@@ -45,16 +45,16 @@ GEOCODING = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 CREDIT = "Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0)"
 # WMO weather codes as Open-Meteo gives them: words, the day's emoji, the night's.
-CODES = {0: ("Clear", "☀️", "🌙"), 1: ("Mainly clear", "🌤️", "🌙"), 2: ("Partly cloudy", "⛅", "☁️"),
-         3: ("Overcast", "☁️", "☁️"), 45: ("Fog", "🌫️", "🌫️"), 48: ("Freezing fog", "🌫️", "🌫️"),
-         51: ("Light drizzle", "🌦️", "🌧️"), 53: ("Drizzle", "🌦️", "🌧️"), 55: ("Heavy drizzle", "🌧️", "🌧️"),
-         56: ("Freezing drizzle", "🌧️", "🌧️"), 57: ("Freezing drizzle", "🌧️", "🌧️"),
-         61: ("Light rain", "🌦️", "🌧️"), 63: ("Rain", "🌧️", "🌧️"), 65: ("Heavy rain", "🌧️", "🌧️"),
-         66: ("Freezing rain", "🌧️", "🌧️"), 67: ("Freezing rain", "🌧️", "🌧️"),
-         71: ("Light snow", "🌨️", "🌨️"), 73: ("Snow", "🌨️", "🌨️"), 75: ("Heavy snow", "❄️", "❄️"),
-         77: ("Snow grains", "🌨️", "🌨️"), 80: ("Light showers", "🌦️", "🌧️"), 81: ("Showers", "🌧️", "🌧️"),
-         82: ("Heavy showers", "🌧️", "🌧️"), 85: ("Snow showers", "🌨️", "🌨️"), 86: ("Snow showers", "🌨️", "🌨️"),
-         95: ("Thunderstorm", "⛈️", "⛈️"), 96: ("Thunderstorm, hail", "⛈️", "⛈️"), 99: ("Thunderstorm, hail", "⛈️", "⛈️")}
+CODES = {0: ("Clear", "☀\ufe0f", "🌙"), 1: ("Mainly clear", "🌤\ufe0f", "🌙"), 2: ("Partly cloudy", "⛅", "☁\ufe0f"),
+         3: ("Overcast", "☁\ufe0f", "☁\ufe0f"), 45: ("Fog", "🌫\ufe0f", "🌫\ufe0f"), 48: ("Freezing fog", "🌫\ufe0f", "🌫\ufe0f"),
+         51: ("Light drizzle", "🌦\ufe0f", "🌧\ufe0f"), 53: ("Drizzle", "🌦\ufe0f", "🌧\ufe0f"), 55: ("Heavy drizzle", "🌧\ufe0f", "🌧\ufe0f"),
+         56: ("Freezing drizzle", "🌧\ufe0f", "🌧\ufe0f"), 57: ("Freezing drizzle", "🌧\ufe0f", "🌧\ufe0f"),
+         61: ("Light rain", "🌦\ufe0f", "🌧\ufe0f"), 63: ("Rain", "🌧\ufe0f", "🌧\ufe0f"), 65: ("Heavy rain", "🌧\ufe0f", "🌧\ufe0f"),
+         66: ("Freezing rain", "🌧\ufe0f", "🌧\ufe0f"), 67: ("Freezing rain", "🌧\ufe0f", "🌧\ufe0f"),
+         71: ("Light snow", "🌨\ufe0f", "🌨\ufe0f"), 73: ("Snow", "🌨\ufe0f", "🌨\ufe0f"), 75: ("Heavy snow", "❄\ufe0f", "❄\ufe0f"),
+         77: ("Snow grains", "🌨\ufe0f", "🌨\ufe0f"), 80: ("Light showers", "🌦\ufe0f", "🌧\ufe0f"), 81: ("Showers", "🌧\ufe0f", "🌧\ufe0f"),
+         82: ("Heavy showers", "🌧\ufe0f", "🌧\ufe0f"), 85: ("Snow showers", "🌨\ufe0f", "🌨\ufe0f"), 86: ("Snow showers", "🌨\ufe0f", "🌨\ufe0f"),
+         95: ("Thunderstorm", "⛈\ufe0f", "⛈\ufe0f"), 96: ("Thunderstorm, hail", "⛈\ufe0f", "⛈\ufe0f"), 99: ("Thunderstorm, hail", "⛈\ufe0f", "⛈\ufe0f")}
 # The same codes as Pilot's line icons (ADR 0010, amended 2026-10-25, Q475): the day's name, the night's. A hero's and a
 # strip's glyph only, and only for a Pilot whose `pilot.icons` lists the name; any other gets the emoji.
 LINES = {0: ("sun", "moon"), 1: ("cloud.sun", "cloud.moon"), 2: ("cloud.sun", "cloud.moon"), 3: ("cloud", "cloud"),
@@ -330,7 +330,7 @@ def percent(value):
 
 
 def condition(code, day=True):
-    words, sun, moon = CODES.get(code, ("Unknown", "🌡️", "🌡️"))
+    words, sun, moon = CODES.get(code, ("Unknown", "🌡\ufe0f", "🌡\ufe0f"))
     return words, sun if day else moon
 
 
@@ -541,7 +541,7 @@ def place_block(run, kept):
                 for i, r in enumerate(held.get("results") or []) if place_of(r)][:FOUND_ROWS]
         if not rows:
             rows = [{"id": "place:none", "title": held.get("error") or "Open-Meteo knows no place called %s" % held["query"],
-                     "icon": "⚠️" if held.get("error") else "🔎"}]
+                     "icon": "⚠\ufe0f" if held.get("error") else "🔎"}]
         inner.append({"type": "list", "items": rows})
     if want.get("picked"):
         inner.append({"type": "buttons", "actions": [{"type": "run", "command": "pick-place", "title": "Use the City setting",
@@ -570,7 +570,7 @@ def bar(run):
     if popover:
         answer_blocks(run, kept, error, running, "popover")
     elif not kept:
-        send({"type": "bar", "text": "🌡️ –", "tone": "warn", "blocks": [{"type": "markdown", "text": problem(error, running)}]})
+        send({"type": "bar", "text": "🌡\ufe0f –", "tone": "warn", "blocks": [{"type": "markdown", "text": problem(error, running)}]})
     else:
         weather = Weather(kept)
         message = {"type": "bar", "text": weather.bar_text(), "blocks": view_blocks(run, weather, error, "popover")}

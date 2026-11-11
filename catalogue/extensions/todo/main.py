@@ -360,10 +360,10 @@ def done_blocks(done, today):
 # ---- surfaces ----
 
 def bar_text(groups):
-    """☑️ 3, or ☑️ 3 · 1 with one due today or overdue."""
+    """☑\ufe0f 3, or ☑\ufe0f 3 · 1 with one due today or overdue."""
     open_count = sum(len(todos) for _, todos in groups)
     due = sum(len(todos) for name, todos in groups if name in ("Overdue", "Today"))
-    return "☑️ %d" % open_count + (" · %d" % due if due else "")
+    return "☑\ufe0f %d" % open_count + (" · %d" % due if due else "")
 
 
 def popover_blocks(groups, done, today):
@@ -448,7 +448,7 @@ def list_todos(run):
         found += [menu_row(t, today, name, undo) for t in todos]
     found += [menu_row(t, today, None, undo) for t in done]
     if not found:
-        found = [{"title": "Nothing to do", "subtitle": "Type a to-do and press Return to add it", "icon": "☑️"}]
+        found = [{"title": "Nothing to do", "subtitle": "Type a to-do and press Return to add it", "icon": "☑\ufe0f"}]
     send({"type": "list", "items": found[:200]})
 
 

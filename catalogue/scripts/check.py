@@ -184,9 +184,18 @@ def check_files(folder, problems, limits=(MAX_FILES, MAX_FILE, MAX_TOTAL)):
     for f in found:
         if f["size"] > most_file:
             problems.append("%s is over %d MB" % (f["path"], most_file // 2 ** 20))
-        for number, line in enumerate((text_of(folder / f["path"]) or "").splitlines(), 1):
-            if any(ord(c) in INVISIBLE for c in line):
-                problems.append("%s:%d holds a bidirectional or invisible control character" % (f["path"], number))
+        data = (folder / f["path"]).read_bytes()
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            text = None
+        if text is None and image_size(data) is None:
+            problems.append("%s is neither UTF-8 text nor a PNG, JPEG or HEIC image" % f["path"])
+        if f["executable"] and not (text or "").startswith("#!"):
+            problems.append("%s is executable but not a script that starts #!" % f["path"])
+        if text is not None:
+            # Emoji in an extension's icons join with U+200D and U+FE0F; check_strings holds them to `icon` values.
+            check_text(f["path"], text, problems, LINE_TEXT | (EMOJI_JOINERS if f["path"] == "extension.json" else set()))
     if sum(f["size"] for f in found) > most_total:
         problems.append("over %d MB in all" % (most_total // 2 ** 20))
     return found
@@ -209,9 +218,16 @@ THEME_LIMITS = (300, 8 * 1024 * 1024, 40 * 1024 * 1024)  # files, a file, in all
 MAX_SIDE, MAX_PIXELS = 16384, 50 * 1000 * 1000
 HEIC_BRANDS = {b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1"}
 BEACONS = ("url(", "@import", "://")
-# Bidirectional controls ("Trojan Source") and invisible characters. U+200D and U+FE0F stay: emoji icons join with them.
-INVISIBLE = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A)) | {0x061C, 0x200B, 0x200C, 0x200E, 0x200F, 0x00AD,
-                                                                        0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0xFEFF}
+# Characters that hide or reorder text ("Trojan Source", data smuggled in selectors): every control (Cc), format
+# character (Cf: bidi controls, zero widths, tags, U+FFF9-FFFB, U+206A-206F), line and paragraph separator (Zl, Zp),
+# surrogate (a file name that isn't UTF-8) and private-use character (Co), plus these, which Unicode files elsewhere:
+# U+0085, U+034F, the Hangul fillers, U+180E, U+2800, all variation selectors and the tag block. A text file may hold
+# tabs and carriage returns; an extension.json `icon` may join emoji with U+200D and U+FE0F.
+HIDDEN_CATEGORIES = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co"}
+HIDDEN_RANGES = ((0x0085, 0x0085), (0x034F, 0x034F), (0x115F, 0x1160), (0x180E, 0x180E), (0x2800, 0x2800),
+                 (0x3164, 0x3164), (0xFFA0, 0xFFA0), (0xFE00, 0xFE0F), (0xE0000, 0xE007F), (0xE0100, 0xE01EF))
+LINE_TEXT = {0x09, 0x0D}
+EMOJI_JOINERS = {0x200D, 0xFE0F}
 # Latin look-alikes from Cyrillic and Greek, for comparing titles (NFKC alone keeps them apart).
 LOOKALIKES = str.maketrans("аеорсухіјѕԁɡοανρτκιВЕКМНОРСТХ", "aeopcyxijsdgoavptkiBEKMHOPCTX")
 
@@ -277,6 +293,47 @@ def image_size(data):
     return None
 
 
+def hidden_chars(text, allowed=frozenset()):
+    """The code points in `text` that hide or reorder text, as U+XXXX, each once, `allowed` ones aside."""
+    found = []
+    for c in text:
+        point = ord(c)
+        if point in allowed:
+            continue
+        if unicodedata.category(c) in HIDDEN_CATEGORIES or any(a <= point <= b for a, b in HIDDEN_RANGES):
+            name = "U+%04X" % point
+            if name not in found:
+                found.append(name)
+    return found
+
+
+def check_text(where, text, problems, allowed):
+    """No hidden or reordering character on any line of a text file; lines split on newlines only."""
+    for number, line in enumerate(text.split("\n"), 1):
+        bad = hidden_chars(line, allowed)
+        if bad:
+            problems.append("%s:%d holds hidden or reordering characters (%s)" % (where, number, ", ".join(bad)))
+
+
+def check_strings(name, manifest, problems):
+    """No hidden or reordering character in any decoded key or string of a manifest (a JSON escape like \\u202e only
+    shows once decoded); an extension's `icon` values may join emoji."""
+    def walk(value, key):
+        if isinstance(value, str):
+            allowed = EMOJI_JOINERS if name == "extension.json" and key == "icon" else frozenset()
+            bad = hidden_chars(value, allowed)
+            if bad:
+                problems.append("%s: %s holds hidden or reordering characters (%s)" % (name, ascii(value), ", ".join(bad)))
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                walk(k, None)
+                walk(v, k)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v, key)
+    walk(manifest, None)
+
+
 def text_of(path):
     """A file's text when it is UTF-8, else None (an image, say)."""
     try:
@@ -287,13 +344,14 @@ def text_of(path):
 
 def check_tree(folder, problems):
     """Both kinds: nothing build_index.files leaves out, so a pack holds only what the index lists. No symlink, no hidden
-    file or folder, no Python cache; Finder's .DS_Store is the one exception, as git ignores it."""
+    file or folder (Finder's .DS_Store too), no Python cache, and no hidden or reordering character in any name."""
     for dirpath, dirnames, filenames in os.walk(folder):
         for name in sorted(dirnames + filenames):
             path = Path(dirpath) / name
             where = path.relative_to(folder).as_posix()
-            if name == ".DS_Store":
-                continue
+            bad = hidden_chars(name)
+            if bad:
+                problems.append("%s: its name holds hidden or reordering characters (%s)" % (ascii(where), ", ".join(bad)))
             if path.is_symlink():
                 problems.append("%s is a symlink" % where)
             elif name.startswith("."):
@@ -408,6 +466,7 @@ def check_theme(folder):
         return problems + ["manifest.json does not read: %s" % e]
     if not isinstance(manifest, dict):
         return problems + ["manifest.json is not an object"]
+    check_strings("manifest.json", manifest, problems)
     wallpapers, preview = check_manifest(folder, manifest, problems)
     found = check_files(folder, problems, THEME_LIMITS)
     for asset in wallpapers + ([preview] if preview else []):
@@ -455,34 +514,41 @@ def lookalikes(titles):
 
 
 def first_sender(path):
-    """Who first added `path` (a pack folder) to git: the author's name and email, or None when git doesn't know it."""
-    out = subprocess.run(["git", "log", "--diff-filter=A", "--reverse", "--format=%an%x09%ae", "--", str(path)],
+    """The author email of the commit that first added `path` (a pack folder), or None when git doesn't know it."""
+    out = subprocess.run(["git", "log", "--diff-filter=A", "--reverse", "--format=%ae", "--", str(path)],
                          cwd=ROOT, capture_output=True, text=True)
     lines = out.stdout.splitlines() if out.returncode == 0 else []
-    return tuple(lines[0].split("\t", 1)) if lines else None
+    return lines[0] if lines else None
+
+
+def sent_by(email, login):
+    """Whether `email` is GitHub's noreply address for `login` (id+login@ or the older login@), in any case. An author
+    name is free text anyone can type, and any other address is unproven, so neither ever counts."""
+    pattern = r"(?:[0-9]+\+)?%s@users\.noreply\.github\.com" % re.escape(login)
+    return re.fullmatch(pattern, email, re.IGNORECASE) is not None
 
 
 def flags(author, base):
-    """Packs this branch changes since `base` that someone other than `author` (a GitHub login) first sent."""
-    out = subprocess.run(["git", "diff", "--name-only", "%s...HEAD" % base, "--", "."], cwd=ROOT,
-                         capture_output=True, text=True)
+    """(problems, flags): packs this branch changes since `base` that `author` (a GitHub login) did not first send.
+    Needs the whole history: in a shallow clone every pack would look first added by the oldest commit there."""
+    def git(*args):
+        return subprocess.run(["git"] + list(args), cwd=ROOT, capture_output=True, text=True)
+    if git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+        return ["--author needs the whole history: this clone is shallow or not a git repo (fetch with --unshallow)"], []
+    out = git("diff", "--name-only", "--relative", "%s...HEAD" % base, "--", ".")
     if out.returncode != 0:
-        return ["cannot compare with %s: %s" % (base, out.stderr.strip())]
-    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        return ["cannot compare with %s: %s" % (base, out.stderr.strip())], []
     packs = set()
     for changed in out.stdout.splitlines():
-        parts = Path(top, changed).relative_to(ROOT).parts
-        if len(parts) > 2 and parts[0] in ("extensions", "themes"):
+        parts = Path(changed).parts
+        if len(parts) > 2 and parts[0] in (build_index.EXTENSIONS.name, build_index.THEMES.name):
             packs.add(Path(parts[0], parts[1]))
     found = []
     for pack in sorted(packs):
-        sender = first_sender(ROOT / pack)
-        if sender is None:
-            continue  # a new pack: its sender is this author
-        name, email = sender
-        if name != author and not email.endswith("+%s@users.noreply.github.com" % author):
-            found.append("flag: %s was first sent by %s, not %s: Sven reads it" % (pack.as_posix(), name, author))
-    return found
+        email = first_sender(ROOT / pack)
+        if email is not None and not sent_by(email, author):
+            found.append("flag: %s was first sent by %s, not %s: Sven reads it" % (pack.as_posix(), email, author))
+    return [], found
 
 
 def check(folder):
@@ -497,6 +563,7 @@ def check(folder):
         return problems + ["extension.json does not read: %s" % e]
     if not isinstance(manifest, dict):
         return problems + ["extension.json is not an object"]
+    check_strings("extension.json", manifest, problems)
     ext_id = manifest.get("id")
     if not isinstance(ext_id, str) or not NAME.match(ext_id):
         problems.append("id \"%s\" must be lowercase letters, digits and hyphens" % ext_id)
@@ -533,6 +600,30 @@ def check(folder):
     return problems
 
 
+def strays(root):
+    """Anything in a kind's folder that isn't a pack folder (a file, a link, a hidden folder), but its .gitkeep."""
+    if not root.is_dir():
+        return []
+    return ["%s is not a pack folder" % ascii(p.name) for p in sorted(root.iterdir())
+            if p.name != ".gitkeep" and (p.is_symlink() or not p.is_dir() or p.name.startswith("."))]
+
+
+def bundled_lookalikes(titles):
+    """Catalogue themes whose id is, or whose title looks like, a theme Pilot ships (Packaging/ThemePacks)."""
+    shipped = {}
+    for folder in build_index.folders(ROOT.parent / "Packaging" / "ThemePacks"):
+        title = title_of(folder, "manifest.json")
+        if isinstance(title, str):
+            shipped[folder.name] = skeleton(title)
+    problems = []
+    for name, title in sorted(titles.items()):
+        if name in shipped:
+            problems.append("%s: Pilot ships a theme with this id" % name)
+        elif isinstance(title, str) and skeleton(title) in shipped.values():
+            problems.append("%s: its title looks like a theme Pilot ships" % name)
+    return problems
+
+
 def title_of(folder, manifest_name):
     try:
         return json.loads((folder / manifest_name).read_text(encoding="utf-8")).get("title")
@@ -551,11 +642,19 @@ def main(argv=None):
     for root, checker, manifest_name in kinds:
         kind, folders = root.name, build_index.folders(root)
         counts.append(build_index.plural(len(folders), kind[:-1]))
+        for problem in strays(root):
+            failed = True
+            print("%s/%s" % (kind, problem))
         for folder in folders:
-            for problem in checker(folder):
+            try:
+                problems = checker(folder)
+            except Exception as e:  # a hostile pack may break a rule's parser: report it, check the rest
+                problems = ["the check broke on it (%s: %s)" % (type(e).__name__, e)]
+            for problem in problems:
                 failed = True
                 print("%s/%s: %s" % (kind, folder.name, problem))
-        for problem in lookalikes({f.name: title_of(f, manifest_name) for f in folders}):
+        titles = {f.name: title_of(f, manifest_name) for f in folders}
+        for problem in lookalikes(titles) + (bundled_lookalikes(titles) if root == build_index.THEMES else []):
             failed = True
             print("%s/%s" % (kind, problem))
     if not failed:
@@ -564,9 +663,10 @@ def main(argv=None):
         if fresh != current:
             failed = True
             print("index.json is stale: run python3 scripts/build-index.py")
-    flagged = flags(args.author, args.base) if args.author else []
-    for line in flagged:
+    trouble, flagged = flags(args.author, args.base) if args.author else ([], [])
+    for line in trouble + flagged:
         print(line)
+    failed = failed or bool(trouble)
     if failed:
         return 1
     print("check: %s fine, index.json fresh" % " and ".join(counts))

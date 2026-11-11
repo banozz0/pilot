@@ -357,7 +357,7 @@ def list_sessions(run):
     show = show_of(run)
     rows, names, error = read_sessions(left(None), show)
     if error:
-        send({"type": "list", "items": [{"title": "Ghostex sessions are not available", "subtitle": error, "icon": "⚠️"}]})
+        send({"type": "list", "items": [{"title": "Ghostex sessions are not available", "subtitle": error, "icon": "⚠\ufe0f"}]})
         return
     items = []
     for s, state, idle_for in rows:

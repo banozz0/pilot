@@ -403,7 +403,7 @@ def row(repo, root, state, terminal_name, lazygit, page=False, now=None):
         host = url.split("/")[2]
         actions.append({"type": "open", "url": url, "title": "Open on %s" % ("GitHub" if host == "github.com" else host)})
     actions.append({"type": "copy", "text": repo, "title": "Copy path"})
-    item = {"id": repo, "title": name, "subtitle": summary(state, page, now), "icon": "✏️" if needs_you(state) else "🌿",
+    item = {"id": repo, "title": name, "subtitle": summary(state, page, now), "icon": "✏\ufe0f" if needs_you(state) else "🌿",
             "keywords": "%s %s" % (state["branch"] if state else "", os.path.basename(repo)), "actions": actions}
     if badges:
         item["badges"] = badges

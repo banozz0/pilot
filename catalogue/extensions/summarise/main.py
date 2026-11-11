@@ -519,7 +519,7 @@ def summarise(run, store):
             continue
         rows.append({"id": "item:" + item["id"], "title": item.get("title") or short(item["source"]), "section": "Earlier",
                      "subtitle": noun(item.get("kind")).capitalize() + " · " + short(item.get("source", "")),
-                     "icon": "🗂️", "actions": [run_action("show", "Open", {"id": item["id"]}),
+                     "icon": "🗂\ufe0f", "actions": [run_action("show", "Open", {"id": item["id"]}),
                                                delete_action(item["id"], key="cmd+delete", stay=True)]})
     if not rows:
         rows.append({"id": "hint", "title": "Copy a link or a file, or type a link or a document's name",
