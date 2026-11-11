@@ -397,8 +397,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// recording front and capture (screenshot) stuff in capture front"): the capture options and the ten other capture
     /// keys on Capture, a recording's quality, resolution, frame rate and clicks on Recording.
     case captureOptions, captureKeys, recordingQuality
-    /// Launcher's More (simplify-pages T15) and its places beside `aliases` and `quicklinks`: the rows the root can list too,
-    /// and Translate's pair.
+    /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
+    /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
     /// Install's More (simplify-pages T16) and its place beside `helpers` and `hiddenApps`: what Install and Update list,
     /// Recommend apps and the self-updating casks.
@@ -413,8 +413,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// then: the keyboard's lock for cleaning.
     case bindsMore, cleaning
     /// Workspaces' More (simplify-pages T18) and its places, each for the workspace picked on the front: the Scrolling
-    /// layout's rules, each workspace's monitor and the swipe. What opens there (Sven, 2026-11-11, after 2276) and the
-    /// rules, a preset and the window snapshot (Sven's round 3 notes on build 2300) are places on the front again.
+    /// layout's rules and the swipe. What opens there (Sven, 2026-11-11, after 2276), the rules, a preset and the window
+    /// snapshot (Sven's round 3 notes on build 2300) and each workspace's monitor (pages round 4, Sven's Q97) are places on
+    /// the front again.
     case workspacesMore, workspaceOpens, workspaceRules, workspaceScrolling, workspaceMonitors, workspaceSwipe
 
     public var page: AppPage {
@@ -466,19 +467,19 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
                                                      .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud,
-                                                     .menuExtras, .translate, .aliases, .quicklinks,
+                                                     .translate, .aliases, .quicklinks,
                                                      .installLists, .helpers, .hiddenApps,
                                                      .exportImport, .cleaning,
-                                                     .workspaceScrolling, .workspaceMonitors, .workspaceSwipe,
+                                                     .workspaceScrolling, .workspaceSwipe,
                                                      .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
-    private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
+    private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .keySwaps, .overlay,
+                                                     .keySwaps, .overlay, .menuExtras,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
 
     /// A block on its page's front that a link or the search scrolls to.

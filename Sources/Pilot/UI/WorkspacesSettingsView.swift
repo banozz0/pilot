@@ -8,9 +8,9 @@ import PilotCore
 /// in their spots over its number, and under them the picked one in the editor itself: its name, the preview whose spots
 /// take an app, the layout pictures with the apps that always land there, a preset and its window snapshot under them
 /// (back from More, Sven's round 3 notes on build 2300), and what opens there with its two rules (back from More, Sven
-/// 2026-11-11, after 2276). More edits the same pick: while it is Scrolling, that layout's centre mode and column rules,
-/// the window shelf's pictures (from Tiling, Sven 2026-11-11,
-/// after 2276), each workspace's monitor and the swipe between them (Sven's Q207 page map, from Tiling). Every change saves at once
+/// 2026-11-11, after 2276), then each workspace's monitor (back from More, pages round 4). More edits the same pick:
+/// while it is Scrolling, that layout's centre mode and column rules, the window shelf's pictures (from Tiling, Sven
+/// 2026-11-11, after 2276) and the swipe between workspaces (Sven's Q207 page map, from Tiling). Every change saves at once
 /// (Sven 2026-10-17, no Save button). Gaps, the always-float lists and the Pilot block sit under Tiling. Every rule change
 /// saves the Pilot block's settings and reloads the tiler.
 struct WorkspacesSettingsView: View {
@@ -64,7 +64,7 @@ struct WorkspacesBody: View {
     }
 
     /// The front: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
-    /// in their spots, rules, preset, snapshot and what opens there.
+    /// in their spots, rules, preset, snapshot and what opens there, then each workspace's monitor.
     private func front(_ name: String, names: [String]) -> some View {
         KitLanding { FillScroll {
             VStack(alignment: .leading, spacing: 14) {
@@ -89,6 +89,10 @@ struct WorkspacesBody: View {
                 // Its row keeps its height; the editor under it takes what is left.
                 .fixedSize(horizontal: false, vertical: true)
                 editor(name).frame(maxHeight: .infinity)
+                // Back from More (pages round 4, Sven's Q97).
+                if let monitors {
+                    WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents).id(AppSection.workspaceMonitors)
+                }
                 problems
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 28)
@@ -96,21 +100,20 @@ struct WorkspacesBody: View {
     }
 
     /// More's index. A row added to or moved off a block changes its count here; Scrolling's holds its 3 rules only while
-    /// the picked layout is Scrolling, and a render without the monitor or swipe stores leaves those out.
+    /// the picked layout is Scrolling, and a render without the swipe's store leaves it out.
     static let entries = [
         MoreEntry(id: .workspaceScrolling, symbol: "rectangle.split.3x1.fill", controls: 3),
         MoreEntry(id: .windowShelf, symbol: "rectangle.stack", controls: 4),
-        MoreEntry(id: .workspaceMonitors, symbol: "display.2", controls: 1),
         MoreEntry(id: .workspaceSwipe, symbol: "hand.draw", controls: 1),
     ]
 
     /// More (simplify-pages T18): the Scrolling place (the picked workspace's rules while its layout is Scrolling, else a
-    /// line saying so), the window shelf, each workspace's monitor and the swipe.
+    /// line saying so), the window shelf and the swipe.
     private func moreTab(_ name: String) -> some View {
         // Scrolling's rules only while the picked workspace's layout is Scrolling (Sven 2026-10-30), as the editor shows it.
         let scrolling = draft(name).layout == .scrolling
         let drawn = Self.entries
-            .filter { ($0.id != .workspaceMonitors || monitors != nil) && ($0.id != .workspaceSwipe || settings != nil) }
+            .filter { $0.id != .workspaceSwipe || settings != nil }
             .map { $0.id == .workspaceScrolling && !scrolling ? MoreEntry(id: $0.id, symbol: $0.symbol, controls: 0) : $0 }
         return KitMore(entries: drawn) {
             // Scrolling's rules only while its layout is Scrolling; else one line says so, so its words and links land.
@@ -127,9 +130,6 @@ struct WorkspacesBody: View {
             }
             .moreBlock(.workspaceScrolling)
             ShelfSettingsBlock().moreBlock(.windowShelf)
-            if let monitors {
-                WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents).moreBlock(.workspaceMonitors)
-            }
             if let settings { WorkspaceSwipeBlock(settings: settings).moreBlock(.workspaceSwipe) }
             problems
         }

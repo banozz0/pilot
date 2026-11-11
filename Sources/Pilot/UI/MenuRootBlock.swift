@@ -10,7 +10,7 @@ import SwiftUI
 struct MenuRootBlock: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: MenuRootSettings
-    /// The row whose arrows show, by id so it follows a move; nil or gone (an extra switched off on More) is the first.
+    /// The row whose arrows show, by id so it follows a move; nil or gone (an extra switched off under More rows) is the first.
     @State private var picked: String?
 
     static let note = "The rows Hyper+Space lists before you type, in your order. A hidden row still comes up when you type its name."
@@ -143,7 +143,7 @@ struct MenuRootPreview: View {
     }
 }
 
-/// Launcher › More › More rows (Sven 2026-10-20; on Your menu until simplify-pages T15): the rows the root can list among its branches, each off until its
+/// Launcher › More rows (Sven 2026-10-20; on More from simplify-pages T15 until pages round 4): the rows the root can list among its branches, each off until its
 /// switch is on, then last in What the menu shows first, to move there: a branch that lives deeper, opened where it lives (Notes in
 /// Actions), an action with no branch, run at once (Dictation), a page of Pilot's window (Stats), or the Files view.
 /// `pilot set menu.extra.<id>` flips the same switch; the Ring menu's Pilot ring lists the ones on, in that list's order.
