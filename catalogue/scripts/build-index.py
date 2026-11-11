@@ -87,7 +87,7 @@ def folders(kind=EXTENSIONS):
     """The pack folders of one kind (EXTENSIONS or THEMES), by name; hidden ones left out."""
     if not kind.is_dir():
         return []
-    return sorted(p for p in kind.iterdir() if p.is_dir() and not p.name.startswith("."))
+    return sorted(p for p in kind.iterdir() if p.is_dir() and not p.is_symlink() and not p.name.startswith("."))
 
 
 def listed(folder):

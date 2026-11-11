@@ -124,7 +124,7 @@ def host_items(run, words=""):
         if not all(w in text for w in words.lower().split()):
             continue
         items.append({
-            "id": name, "title": name, "icon": "🖥️",
+            "id": name, "title": name, "icon": "🖥\ufe0f",
             "subtitle": " · ".join(x for x in (where, tilde(settings["source"])) if x),
             "keywords": " ".join(x for x in (settings.get("hostname"), settings.get("user")) if x),
             "actions": [
@@ -135,7 +135,7 @@ def host_items(run, words=""):
     return items
 
 
-EMPTY = {"title": "No hosts in %s" % CONFIG, "icon": "🖥️",
+EMPTY = {"title": "No hosts in %s" % CONFIG, "icon": "🖥\ufe0f",
          "subtitle": "Add a Host block, e.g. Host prod with HostName 203.0.113.7, and it shows here"}
 
 

@@ -4,7 +4,7 @@
   "icon": "🌤️",
   "version": "1.3.0",
   "description": "The temperature now in the menu bar; click it for feels like, high and low, rain chance, wind, the next hours and the next 7 days, and search its city on its page. Free data from Open-Meteo, no account or key.",
-  "examples": ["The menu bar shows ☀️ 24°: click it for the next six hours and the week ahead", "On its page, type a city in Place and click it: the menu bar and the page show that city's weather"],
+  "examples": ["The menu bar shows ☀ 24°: click it for the next six hours and the week ahead", "On its page, type a city in Place and click it: the menu bar and the page show that city's weather"],
   "runtime": "process",
   "requires": ["python3", "curl"],
   "permissions": { "network": ["api.open-meteo.com", "geocoding-api.open-meteo.com"] },

@@ -234,8 +234,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "75b1e6a6575458f9c8038f0e3ff4f53859ea05b64ec91f407734e70f721f527c",
-          "size": 32147,
+          "sha256": "8005c6bca813445561e43fb67f45b37c5b8b320bbb4861db377721be81e033d1",
+          "size": 32150,
           "executable": true
         }
       ]
@@ -280,8 +280,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "0c8903aabe00a2cce02884d9016cda33f4361446648eb324f01bc4841f8805aa",
-          "size": 31642,
+          "sha256": "e26fa18a64f3f6408dc5a2885718c7a08b17a751a404c60e15ed40f62f2e0935",
+          "size": 31645,
           "executable": true
         }
       ]
@@ -334,8 +334,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "97b4fcb381b1becd8c9188d99eb376d42b57d76b8a9afcb59584f4e8247654fa",
-          "size": 24375,
+          "sha256": "8ed229dcb9e143c7c90aec0a58d1f0eab3cb0192f67de7b21bc692296d964162",
+          "size": 24381,
           "executable": true
         }
       ]
@@ -387,8 +387,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "ac884de7dbf4748bd9e36196fa622bcd8b9b76b05d19fffa73621d68fdafff67",
-          "size": 77154,
+          "sha256": "45a0231467bd7fe6282b4516268f385a399f29a701abb9bf630060c53b79a21e",
+          "size": 77166,
           "executable": true
         }
       ]
@@ -666,8 +666,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "f1da0743ce88494e54e899ebabebf0d342d18061340f17962b562e1d092c36e7",
-          "size": 9033,
+          "sha256": "9091ce612a726ab7d2e5f359effd7ffeace0828454f74c9a7947e3b5e5dd7e35",
+          "size": 9039,
           "executable": true
         }
       ]
@@ -713,8 +713,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "0ad4a52ca08cabd9c999dbbf84dff02f7e43fba88847af002e918f8bf2392ae7",
-          "size": 37053,
+          "sha256": "3eb955a2ae192a2d6854e8f4c9a2f682b97b27418fd196be36c9c9b2ae72e895",
+          "size": 37056,
           "executable": true
         }
       ]
@@ -806,8 +806,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "5802e6b3c5e2d5e97763d80fafa65cb25921123dd4ceda75d51c668def79ab61",
-          "size": 25329,
+          "sha256": "f87346046c5bb25a8e9dd1ab9f8853be23e53861439bd9f91cab29f6783a5efe",
+          "size": 25341,
           "executable": true
         }
       ]
@@ -855,8 +855,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "16282207d988a766152429097eef82e05701964950ba959663cc714dd56012f6",
-          "size": 31471,
+          "sha256": "66d25080d6d4cbad5e86ec2b109f973b2c23cabc3a221212a5ed136f9cb81c4b",
+          "size": 31483,
           "executable": true
         }
       ]
@@ -868,7 +868,7 @@
       "version": "1.3.0",
       "description": "The temperature now in the menu bar; click it for feels like, high and low, rain chance, wind, the next hours and the next 7 days, and search its city on its page. Free data from Open-Meteo, no account or key.",
       "examples": [
-        "The menu bar shows ☀️ 24°: click it for the next six hours and the week ahead",
+        "The menu bar shows ☀ 24°: click it for the next six hours and the week ahead",
         "On its page, type a city in Place and click it: the menu bar and the page show that city's weather"
       ],
       "requires": [
@@ -894,14 +894,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "a5ac85bfa8ec03d9bb9f7e7b11d279d8def7206ad4df3e7ad61cd35dae091fd9",
-          "size": 2028,
+          "sha256": "87c90d70eb4e2a3cfbd1284bb1c5c90b8c0c6c9b7415e7727ac0a5ae880d1690",
+          "size": 2025,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "6a798f401e799315ee4c505503daccf234de7d5067f8ead8ea71fa73af57942e",
-          "size": 32508,
+          "sha256": "5e38d4b918400409f9b420391e2cba5477501aa9126d338d141eda0fec3b0391",
+          "size": 32679,
           "executable": true
         }
       ]

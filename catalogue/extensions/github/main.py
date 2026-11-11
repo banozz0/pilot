@@ -388,7 +388,7 @@ def show(run, command):
     cache, wanted, running, now = current(run)
     if not cache.get("fetched"):
         if cache.get("error") and not running:
-            row = {"title": "Could not reach GitHub", "subtitle": cache["error"], "icon": "⚠️",
+            row = {"title": "Could not reach GitHub", "subtitle": cache["error"], "icon": "⚠\ufe0f",
                    "actions": [dict(REFRESH, title="Try again")]}
         else:
             row = {"title": "Fetching from GitHub…", "subtitle": "Open this again in a few seconds", "icon": "⏳",
@@ -405,7 +405,7 @@ def show(run, command):
         items.append({"title": "%s · refreshing" % seen, "subtitle": "Open this again in a few seconds for the newest",
                       "icon": "⏳"})
     elif cache.get("error"):
-        items.append({"title": "Could not refresh: %s" % cache["error"], "subtitle": seen, "icon": "⚠️",
+        items.append({"title": "Could not refresh: %s" % cache["error"], "subtitle": seen, "icon": "⚠\ufe0f",
                       "actions": [dict(REFRESH, title="Try again")]})
     send({"type": "list", "items": items})
 

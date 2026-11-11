@@ -1221,12 +1221,12 @@ def search_list(run):
         send({"type": "list", "items": [
             {"id": "hint", "title": "Type a symbol or a name", "subtitle": "BTC, AAPL, EURUSD, SPX, gold", "icon": "🔎"},
             {"id": "hint-filter", "title": "Start with crypto, stock, fund, forex, index or futures to narrow",
-             "subtitle": "crypto sol · forex eur · futures es", "icon": "🏷️"}]})
+             "subtitle": "crypto sol · forex eur · futures es", "icon": "🏷\ufe0f"}]})
         return
     found, error = search(text, kind, SEARCH_BUDGET)
     followed = {s["key"] for s in watchlist(run)}
     if error:
-        items = [{"id": "error", "title": "TradingView did not answer", "subtitle": error, "icon": "⚠️"}]
+        items = [{"id": "error", "title": "TradingView did not answer", "subtitle": error, "icon": "⚠\ufe0f"}]
     else:
         items = [found_item(s, followed, False) for s in found] or [
             {"id": "none", "title": "Nothing on TradingView for %s" % text, "icon": "🔎"}]
@@ -1254,8 +1254,8 @@ def search_blocks(run, kinds, followed):
     filters = {"type": "buttons", "actions": [{"type": "run", "command": "find", "title": ("✓ " if value == kind else "") + title,
                                                "context": {"type": value}} for value, title in FILTERS.items()]}
     rows = [found_item(s, followed, True) for s in symbols_found[:FOUND_ROWS]] or [
-        {"id": "find:none", "title": held.get("error") or "Nothing found", "icon": "⚠️" if held.get("error") else "🔎"}]
-    rows.append({"id": "find:close", "title": "Close the search", "icon": "✖️",
+        {"id": "find:none", "title": held.get("error") or "Nothing found", "icon": "⚠\ufe0f" if held.get("error") else "🔎"}]
+    rows.append({"id": "find:close", "title": "Close the search", "icon": "✖\ufe0f",
                  "actions": [{"type": "run", "command": "clear-search", "title": "Close the search"}]})
     title = "TradingView: “%s”" % held["query"]
     subtitle = "%d found · %s" % (len(symbols_found), FILTERS.get(kind, "every type"))

@@ -37,7 +37,7 @@ MP3_BYTES_PER_SECOND = 320000 // 8
 FORMATS = [
     {"id": "best", "title": "Video · best", "icon": "🎬", "words": "MP4 · H.264 + AAC",
      "args": ["-f", "bv*[vcodec^=avc1]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b", "--merge-output-format", "mp4"]},
-    {"id": "720", "title": "Video · 720p", "icon": "🎞️", "words": "MP4 · smaller file",
+    {"id": "720", "title": "Video · 720p", "icon": "🎞\ufe0f", "words": "MP4 · smaller file",
      "args": ["-f", "bv*[vcodec^=avc1][height<=720]+ba[ext=m4a]/b[ext=mp4][height<=720]/bv*[height<=720]+ba/b[height<=720]/b",
               "--merge-output-format", "mp4"]},
     {"id": "m4a", "title": "Audio · M4A", "icon": "🎧", "words": "Best audio · no re-encode",
@@ -443,7 +443,7 @@ def saved_rows(job):
     head = "Saved · %s · ~/Downloads · %s" % (megabytes(job.get("size")) or "", clock(job.get("took")))
     rows = []
     for key, title, icon, words in (("reveal", "Reveal in Finder", "📂", os.path.basename(path)),
-                                    ("open", "Open", "▶️", None),
+                                    ("open", "Open", "▶\ufe0f", None),
                                     ("copy", "Copy file", "📋", "To paste into a chat")):
         row = {"id": "saved-" + key, "section": head, "title": title, "icon": icon, "actions": saved_actions(path, key)}
         if words:
@@ -460,7 +460,7 @@ def format_rows(url, source, found, last):
     sizes_ = found.get("sizes") or {}
     rows = []
     if found.get("error"):
-        rows.append({"id": "error", "section": head, "title": "yt-dlp could not read this link", "icon": "⚠️",
+        rows.append({"id": "error", "section": head, "title": "yt-dlp could not read this link", "icon": "⚠\ufe0f",
                      "subtitle": found["error"], "actions": [run_action("refresh", "Try again", stay=True)]})
     order = sorted(FORMATS, key=lambda f: f["id"] != last)
     for f in order:
@@ -500,7 +500,7 @@ def formats(run, paths):
         last = read_json(paths.last).get("format")
         rows += format_rows(url, source, probe(paths, url), last)
         if job.get("status") == "failed" and job.get("url") == url:
-            rows.insert(0, {"id": "failed", "section": rows[0]["section"], "title": "The last try failed", "icon": "⚠️",
+            rows.insert(0, {"id": "failed", "section": rows[0]["section"], "title": "The last try failed", "icon": "⚠\ufe0f",
                             "subtitle": job.get("error", ""),
                             "actions": [run_action("download", "Try again", {"url": url, "format": job["format"],
                                                                              "title": job.get("title", "")})]})
