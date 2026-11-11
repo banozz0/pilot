@@ -1,0 +1,17 @@
+{
+  "id": "ports",
+  "title": "Ports",
+  "icon": "🔌",
+  "version": "1.1.0",
+  "description": "Frees a port a forgotten program is holding, when a dev server says the address is already in use.",
+  "examples": ["Type 3000: the node process holding it; Return quits it", "On its page, click ✕ beside a port, then Quit: the program lets go and the row goes"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 10 } },
+  "requires": ["python3", "lsof"],
+  "permissions": {},
+  "commands": [
+    { "name": "kill-port", "title": "Kill port", "mode": "list", "run": "main.py" },
+    { "name": "kill", "title": "Quit a port's program", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Ports page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

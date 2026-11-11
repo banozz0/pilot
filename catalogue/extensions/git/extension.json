@@ -1,0 +1,28 @@
+{
+  "id": "git",
+  "title": "lazygit",
+  "icon": "🌿",
+  "version": "1.2.0",
+  "description": "See which of your git repos have changes to commit or commits to push or pull; click one to open lazygit in it, or pull or push in one click.",
+  "examples": ["The menu bar shows ⎇ 2: click it to see pilot with 3 changed files and agents with 2 commits to push, then Push", "Type pil: pilot with its branch and changes; Return opens lazygit in it, Cmd+K Ghostty, Finder or its GitHub page"],
+  "runtime": "process",
+  "requires": ["python3", "git"],
+  "permissions": { "network": ["your git remotes (fetch, pull, push)"], "files": ["~/code"] },
+  "preferences": [
+    { "name": "folder", "type": "folder", "title": "Repos folder", "default": "~/code",
+      "description": "Used only when Pilot does not send its own (Defaults › Folders › Repos). Repos up to three folders deep in it are listed; node_modules, build folders and hidden folders are skipped." }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 60 }, "bar": { "command": "bar", "every": 120 } },
+  "commands": [
+    { "name": "repos", "title": "lazygit repos", "mode": "list", "run": "main.py" },
+    { "name": "bar", "title": "lazygit in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "lazygit page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "clean", "title": "Clean repos", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "find", "title": "Find a repo", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "fetch", "title": "Fetch all repos", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "pull", "title": "Pull repo", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "push", "title": "Push repo", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "open-terminal", "title": "Open repo in terminal", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "lazygit", "title": "Open lazygit in repo", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

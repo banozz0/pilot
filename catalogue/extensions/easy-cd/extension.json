@@ -1,0 +1,22 @@
+{
+  "id": "easy-cd",
+  "title": "Easy-CD folders",
+  "icon": "📂",
+  "version": "1.1.0",
+  "description": "Open the folders you pinned or visited lately with easy-cd (ecd) in a terminal, without typing a path. Its page searches them as you type.",
+  "examples": ["Type pil: your pinned ~/code/pilot first, then recent folders matching it; Return opens a terminal there", "Cmd+K on a folder: open it in Finder or copy its path"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 300 } },
+  "requires": ["python3"],
+  "permissions": { "clipboard": true, "files": ["~/.local/state/ecd"] },
+  "preferences": [
+    { "name": "terminal", "type": "app", "title": "Terminal",
+      "description": "Empty: Ghostty when it is installed, else Terminal." }
+  ],
+  "commands": [
+    { "name": "folders", "title": "Easy-CD folders", "mode": "list", "run": "main.py" },
+    { "name": "open-terminal", "title": "Open folder in terminal", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Easy-CD page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "find", "title": "Search folders", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

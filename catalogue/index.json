@@ -1,0 +1,911 @@
+{
+  "schema": 2,
+  "extensions": [
+    {
+      "id": "ai-usage",
+      "title": "AI usage",
+      "icon": "📊",
+      "version": "3.6.0",
+      "description": "See how much of your Claude and Codex limits is left this session and this week, how your pace compares, and when each resets, in the menu bar, as CodexBar shows it. Add a second Codex account with Codex's own sign-in.",
+      "examples": [
+        "Glance at the menu bar: Claude's and Codex's logo with the session left, amber once a window is 60% used, red from 85%",
+        "Click it: a card per provider and Codex account with its plan, each window's share left draining, its pace tick (red in deficit) and its reset, the pace in words on hover; Claude's per-model week, Codex's limit reset credits with Redeem reset (asked first), and one row with each status page, the usage dashboards and Add Codex account"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "usage",
+          "title": "AI usage",
+          "mode": "detail"
+        },
+        {
+          "name": "add-account",
+          "title": "Add Codex account",
+          "mode": "no-view"
+        },
+        {
+          "name": "summary",
+          "title": "AI usage summary",
+          "mode": "no-view"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "status.claude.com",
+          "status.openai.com"
+        ],
+        "clipboard": true,
+        "files": [
+          "~/.local/state/ghostex/agent-hooks/claude-statusline",
+          "~/.claude.json",
+          "~/.codex/sessions",
+          "~/.codex/archived_sessions",
+          "~/.claude/projects"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "82df8f21def3b9c9c960992dab9b17ff13954d75f8bfe357b24e4c14979c5da8",
+          "size": 4124,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "5769168759861d217e93951a313f41b294c964699aa9c9773f500944a8360682",
+          "size": 82714,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "claude-sessions",
+      "title": "Claude Sessions",
+      "icon": "🤖",
+      "version": "1.1.0",
+      "description": "Find a Claude Code session you had and pick it back up, without digging through folders. Its page searches them as you type.",
+      "examples": [
+        "Type pilot: your sessions in ~/code/pilot, newest first",
+        "Return copies claude --resume <id>; paste it in a terminal to carry on"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "sessions",
+          "title": "Claude sessions",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [
+          "~/.claude/projects"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "5cef954408a123fba9cbc9f98df2c02e715a20fd0ae9648935bc74f7399ed76a",
+          "size": 1028,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "8c09363ced21aa8a51c52f8ef6563965dc62128e819779b0ea1d323b7d9ab12b",
+          "size": 14021,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "dev-utils",
+      "title": "Dev Utils",
+      "icon": "🧰",
+      "version": "1.1.0",
+      "description": "Turns whatever you copied into the form you need, without a website. Its page takes pasted text and shows every transform.",
+      "examples": [
+        "Copy a JWT, run Decode JWT: its header, payload and when it expires",
+        "Copy 1760083200, Transform clipboard: 2025-10-10T08:00:00Z"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "transform",
+          "title": "Transform clipboard",
+          "mode": "list"
+        },
+        {
+          "name": "jwt",
+          "title": "Decode JWT from clipboard",
+          "mode": "detail"
+        },
+        {
+          "name": "new-uuid",
+          "title": "Copy new UUID",
+          "mode": "no-view"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "ed90430225c10ac4a3e525a117a7aa32a8f2b5a6d42b1514b1d286ed497c9d0f",
+          "size": 1076,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "7db28034d5cfaabfa78002647e388440c197924c974e8cd1eebde69a4f6e2f14",
+          "size": 13247,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "easy-cd",
+      "title": "Easy-CD folders",
+      "icon": "📂",
+      "version": "1.1.0",
+      "description": "Open the folders you pinned or visited lately with easy-cd (ecd) in a terminal, without typing a path. Its page searches them as you type.",
+      "examples": [
+        "Type pil: your pinned ~/code/pilot first, then recent folders matching it; Return opens a terminal there",
+        "Cmd+K on a folder: open it in Finder or copy its path"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "folders",
+          "title": "Easy-CD folders",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [
+          "~/.local/state/ecd"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "2199609ac21edbeca13d1aea2438df7d7c21b673e488e25808b78e6afccd3c49",
+          "size": 1219,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "148c88faf91e2129a6ddc8baffdf155e84afa9bf415d4af0614adc37db8589e6",
+          "size": 9751,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "ghostex",
+      "title": "Ghostex sessions",
+      "icon": "👻",
+      "version": "2.2.0",
+      "description": "See which Ghostex agents are working or waiting on you from the menu bar, read a session's chat and reply to it, and rename, tag, sleep, wake or close sessions without opening Ghostex.",
+      "examples": [
+        "The menu bar shows 👻 5: click it, pick Pilot coordinator 2, read its last replies and type an answer; Return queues it until the agent stops, Option+Return interrupts",
+        "Type pilot: every session in the pilot project with its agent and state; Return brings it up in Ghostex"
+      ],
+      "requires": [
+        "python3",
+        "ghostex"
+      ],
+      "commands": [
+        {
+          "name": "sessions",
+          "title": "Ghostex sessions",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "b120ebf1782a76bc2a64303fe5373f22a71e254d27daa6bb1ff881fb7949beb5",
+          "size": 2850,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "75b1e6a6575458f9c8038f0e3ff4f53859ea05b64ec91f407734e70f721f527c",
+          "size": 32147,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "git",
+      "title": "lazygit",
+      "icon": "🌿",
+      "version": "1.2.0",
+      "description": "See which of your git repos have changes to commit or commits to push or pull; click one to open lazygit in it, or pull or push in one click.",
+      "examples": [
+        "The menu bar shows ⎇ 2: click it to see pilot with 3 changed files and agents with 2 commits to push, then Push",
+        "Type pil: pilot with its branch and changes; Return opens lazygit in it, Cmd+K Ghostty, Finder or its GitHub page"
+      ],
+      "requires": [
+        "python3",
+        "git"
+      ],
+      "commands": [
+        {
+          "name": "repos",
+          "title": "lazygit repos",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "your git remotes (fetch, pull, push)"
+        ],
+        "clipboard": false,
+        "files": [
+          "~/code"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "cd30205e791f35365a9f7907e6bad1c54612dead8629ea81458fb46d48e865a4",
+          "size": 2132,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "0c8903aabe00a2cce02884d9016cda33f4361446648eb324f01bc4841f8805aa",
+          "size": 31642,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "title": "GitHub",
+      "icon": "🐙",
+      "version": "1.2.0",
+      "description": "See what on GitHub needs you: pull requests waiting on your review, your own with their checks, issues given to you and CI runs that failed.",
+      "examples": [
+        "Type pull: PRs waiting on your review first, then yours, each with its checks passing or failing; Return opens it on github.com",
+        "Type failing: CI runs that failed in your repos this week; Cmd+K re-runs only the failed jobs"
+      ],
+      "requires": [
+        "python3",
+        "gh"
+      ],
+      "commands": [
+        {
+          "name": "pull-requests",
+          "title": "My pull requests",
+          "mode": "list"
+        },
+        {
+          "name": "issues",
+          "title": "GitHub issues",
+          "mode": "list"
+        },
+        {
+          "name": "ci-runs",
+          "title": "Failing CI runs",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "api.github.com"
+        ],
+        "clipboard": true,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "3dc998f02f120e0d47f0976bfc2b9652435d9f18e9faeabcccc39f4f478483ea",
+          "size": 1694,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "97b4fcb381b1becd8c9188d99eb376d42b57d76b8a9afcb59584f4e8247654fa",
+          "size": 24375,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "markets",
+      "title": "Markets",
+      "icon": "📈",
+      "version": "1.4.0",
+      "description": "Stocks, ETFs and coins and their day's change in the menu bar, as text, with the day's line or as mini bars, one symbol, several side by side or in turn; click it for every symbol you follow with its price, its change and its line, each a click from its page on TradingView. Search TradingView as on its site (BTC, AAPL, EURUSD, SPX) to add stocks, funds, coin and currency pairs, indices and futures, and order or remove them on the page. Free data from TradingView, or Nasdaq and CoinGecko, in euros or your currency, no account or key.",
+      "examples": [
+        "The menu bar shows SPY ▲0.28% · BTC ▲1.4%: click it for every symbol with its price and the day's line",
+        "Type Add to Markets, then eurusd: Return on FX:EURUSD adds it; on the Markets page it searches as you type, and dragging a row (or ⌥↑ ⌥↓, ↑ ↓) orders, × removes"
+      ],
+      "requires": [
+        "python3",
+        "curl"
+      ],
+      "commands": [
+        {
+          "name": "markets",
+          "title": "Markets",
+          "mode": "list"
+        },
+        {
+          "name": "search",
+          "title": "Add to Markets",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "scanner.tradingview.com",
+          "symbol-search.tradingview.com",
+          "api.nasdaq.com",
+          "api.coingecko.com",
+          "api.frankfurter.dev"
+        ],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "73f74c65e704f2a9d7b768ec947138e1beeddbd4f02e44a00aef7268ec314541",
+          "size": 5236,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "ac884de7dbf4748bd9e36196fa622bcd8b9b76b05d19fffa73621d68fdafff67",
+          "size": 77154,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "icon": "🎵",
+      "version": "1.3.0",
+      "description": "Whatever your Mac is playing, in the menu bar, as Control Center's Now Playing sees it: Music, Spotify, a YouTube tab in Chrome, Safari or Zen, any app. Click it, or open its page, for the track with its artwork and artist, how far in, play or pause, previous and next; Favourite while Music plays. Click the track to go to the tab or app playing it. The artwork comes from Music, Spotify's cover or a YouTube tab's thumbnail. Never starts a player; macOS asks once to let Pilot control the browser (for its tab and a video's thumbnail), Spotify (its cover) and Music (its artwork and Favourite).",
+      "examples": [
+        "A YouTube video plays in Chrome: the menu bar shows ♫ and its title; a lone ♫ while paused, nothing when nothing has played",
+        "Click it, then the track: Chrome comes forward on the YouTube tab that plays it"
+      ],
+      "requires": [
+        "python3",
+        "osascript",
+        "sips",
+        "open",
+        "curl"
+      ],
+      "commands": [
+        {
+          "name": "now",
+          "title": "Now playing",
+          "mode": "detail"
+        },
+        {
+          "name": "playpause",
+          "title": "Play or pause",
+          "mode": "no-view"
+        },
+        {
+          "name": "next",
+          "title": "Next track",
+          "mode": "no-view"
+        },
+        {
+          "name": "previous",
+          "title": "Previous track",
+          "mode": "no-view"
+        },
+        {
+          "name": "favourite",
+          "title": "Favourite this Music track",
+          "mode": "no-view"
+        },
+        {
+          "name": "show",
+          "title": "Go to what's playing",
+          "mode": "no-view"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "i.ytimg.com",
+          "i.scdn.co"
+        ],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "f6512a1dd5a0cf79bc49b620c0142271c3b95a10673d8b169c443f1ee5edc5bf",
+          "size": 2440,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "3c294f9e61e3b5a325ae3785c42a5aa95192bb47709dc726a999541868b2d379",
+          "size": 26616,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "obsidian-search",
+      "title": "Obsidian search",
+      "icon": "🪨",
+      "version": "1.1.0",
+      "description": "Find a note in your Obsidian vault by its title or by what it says, without opening Obsidian first. Its page searches as you type.",
+      "examples": [
+        "Type pilot spec: notes titled with those words first, then notes that mention them, each with the line that matched; Return opens it in Obsidian",
+        "Cmd+K on a note: preview it, copy its [[wikilink]] or path, or show it in Finder"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "search",
+          "title": "Search Obsidian notes",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [
+          "~/Library/Application Support/obsidian/obsidian.json",
+          "your vault folder"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "f61b8e3f488ea190c218a337669956ed84107d4706e183ca67c6b6b9ec881190",
+          "size": 1552,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "575100404a65fb3783a5c27ac7374484663c1ac2c7deb215d5a398d31caa2922",
+          "size": 23317,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "pomodoro",
+      "title": "Pomodoro",
+      "icon": "🍅",
+      "version": "1.2.0",
+      "description": "Work in focused blocks with short breaks, the time left counting down in the menu bar.",
+      "examples": [
+        "Focus: 25 minutes start counting down in the menu bar",
+        "At zero Pilot's alert offers Start break; every 4th break is the long one"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "focus",
+          "title": "Focus",
+          "mode": "no-view"
+        },
+        {
+          "name": "break",
+          "title": "Break",
+          "mode": "no-view"
+        },
+        {
+          "name": "custom",
+          "title": "Custom focus…",
+          "mode": "list"
+        },
+        {
+          "name": "pause",
+          "title": "Pause timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "resume",
+          "title": "Resume timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "skip",
+          "title": "Skip block",
+          "mode": "no-view"
+        },
+        {
+          "name": "stop",
+          "title": "Stop timer",
+          "mode": "no-view"
+        },
+        {
+          "name": "today",
+          "title": "Pomodoro today",
+          "mode": "detail"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "c56a40e6c927097105b8fdb78036b28a809325ce890ac63c0cd68f50f86580ec",
+          "size": 4300,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "f41f1037a23cdde7cfd759e58cd5000ec9a58cfb4ec4c8707d45eef0739e5d9f",
+          "size": 14100,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "ports",
+      "title": "Ports",
+      "icon": "🔌",
+      "version": "1.1.0",
+      "description": "Frees a port a forgotten program is holding, when a dev server says the address is already in use.",
+      "examples": [
+        "Type 3000: the node process holding it; Return quits it",
+        "On its page, click ✕ beside a port, then Quit: the program lets go and the row goes"
+      ],
+      "requires": [
+        "python3",
+        "lsof"
+      ],
+      "commands": [
+        {
+          "name": "kill-port",
+          "title": "Kill port",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "02335df76620d7641d954a57edc488fcb3f847a4fc701f47173507ed77d9c37f",
+          "size": 821,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "37a879847e0479d4dd54ba785f09df6ff4223957cb427f523bd2e76f6306ca87",
+          "size": 6610,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "ssh-hosts",
+      "title": "SSH hosts",
+      "icon": "🖥️",
+      "version": "1.1.0",
+      "description": "Connects to a server you named in your SSH config, in a new terminal window, without typing the ssh command.",
+      "examples": [
+        "Type omar: omarchy with its user and address; Return opens ssh omarchy in Ghostty",
+        "On its page, type omar in the box, then click the host: ssh omarchy opens in Ghostty"
+      ],
+      "requires": [
+        "python3",
+        "ssh"
+      ],
+      "commands": [
+        {
+          "name": "hosts",
+          "title": "SSH hosts",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [
+          "~/.ssh/config"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "195863d1fb6f596cc5606ac6916dfb65908ecf131f933c48c400227f43619d13",
+          "size": 1166,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "f1da0743ce88494e54e899ebabebf0d342d18061340f17962b562e1d092c36e7",
+          "size": 9033,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "summarise",
+      "title": "Summarise",
+      "icon": "📝",
+      "version": "1.3.0",
+      "description": "Summarises a YouTube video, a web page or a document with Pilot's AI, with its full text beside it. Save it as Markdown to Downloads, or ask about it. Its page takes a pasted link or a chosen file; its menu-bar item summarises what you copied in a click.",
+      "examples": [
+        "Copy a YouTube link, open Summarise, Return: its page shows the summary and the transcript",
+        "On its page, paste a link or choose a file, then Summarise: the summary shows there, with Copy summary"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "summarise",
+          "title": "Summarise",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "youtube.com",
+          "any page you summarise"
+        ],
+        "clipboard": true,
+        "files": [
+          "~/Downloads",
+          "the documents you summarise"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "fc334afafe2da542ec9d7f7ed18fa8b3d81e41c8b197e62c2018924071ad9a3a",
+          "size": 2089,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "0ad4a52ca08cabd9c999dbbf84dff02f7e43fba88847af002e918f8bf2392ae7",
+          "size": 37053,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "tailscale",
+      "title": "Tailscale",
+      "icon": "🛜",
+      "version": "1.2.0",
+      "description": "See which of your Tailscale devices are online, copy a device's Tailscale IP or name, and connect or disconnect Tailscale without opening its menu, from Hyper+Space, its own page or the menu bar.",
+      "examples": [
+        "Type pi: your Raspberry Pi with its OS, IP and whether it is online; Return copies its 100.x IP",
+        "Glance at the menu bar: 🛜 3 says three devices are online; click it for the list and Disconnect, or Connect when Tailscale is off, opening Tailscale.app first when it isn't running"
+      ],
+      "requires": [
+        "python3",
+        "tailscale"
+      ],
+      "commands": [
+        {
+          "name": "devices",
+          "title": "Tailscale devices",
+          "mode": "list"
+        },
+        {
+          "name": "connect",
+          "title": "Connect Tailscale",
+          "mode": "no-view"
+        },
+        {
+          "name": "disconnect",
+          "title": "Disconnect Tailscale",
+          "mode": "no-view"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": true,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "8c37bf7c2b314f45711e206227f12576f5150373ecddacfa4e502356dce66c34",
+          "size": 1337,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "4870553210bd76123acf76afb9614f14c8b05e1bf1f891c03052f7f0038b2fdf",
+          "size": 13709,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "todo",
+      "title": "To-do",
+      "icon": "☑️",
+      "version": "2.1.0",
+      "description": "A to-do list in Hyper+Space and the menu bar: type to add or filter, Return ticks one off, every other action on a key. Due days are optional: with none set it is one tidy list. Kept on this Mac only, no account and no sync.",
+      "examples": [
+        "Hyper+Space › To-do, type call mum fri and press Return: added, due Friday, under Upcoming; Return on a to-do ticks it off, ⌘Z puts it back",
+        "Type todo buy milk in Hyper+Space and press Return: Add a to-do: buy milk adds it in one step"
+      ],
+      "requires": [
+        "python3"
+      ],
+      "commands": [
+        {
+          "name": "todo",
+          "title": "To-do",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "9ec28903e76fda2a5b36009f50c086dee92c5e5b48501e2a7db27476a36f6f37",
+          "size": 2292,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "5802e6b3c5e2d5e97763d80fafa65cb25921123dd4ceda75d51c668def79ab61",
+          "size": 25329,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "video-downloader",
+      "title": "Video downloader",
+      "icon": "📥",
+      "version": "1.2.1",
+      "description": "Saves a YouTube, X or Twitch video or its audio to Downloads, through yt-dlp and ffmpeg from Homebrew. Paste a link on its page and pick a format; its menu-bar item shows a download's progress, and a click there saves the copied link.",
+      "examples": [
+        "Copy a YouTube link, open Video downloader, Return: the video saves to ~/Downloads",
+        "On its page, paste a link and click a format: the progress shows there, then Reveal in Finder"
+      ],
+      "requires": [
+        "python3",
+        "yt-dlp",
+        "ffmpeg"
+      ],
+      "commands": [
+        {
+          "name": "formats",
+          "title": "Video downloader",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "youtube.com",
+          "x.com",
+          "twitch.tv"
+        ],
+        "clipboard": true,
+        "files": [
+          "~/Downloads"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "4fccad44065afaf27d23f97db7afdd71bda864b0e585dd431862a10392c99ef8",
+          "size": 1728,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "16282207d988a766152429097eef82e05701964950ba959663cc714dd56012f6",
+          "size": 31471,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "weather",
+      "title": "Weather",
+      "icon": "🌤️",
+      "version": "1.3.0",
+      "description": "The temperature now in the menu bar; click it for feels like, high and low, rain chance, wind, the next hours and the next 7 days, and search its city on its page. Free data from Open-Meteo, no account or key.",
+      "examples": [
+        "The menu bar shows ☀️ 24°: click it for the next six hours and the week ahead",
+        "On its page, type a city in Place and click it: the menu bar and the page show that city's weather"
+      ],
+      "requires": [
+        "python3",
+        "curl"
+      ],
+      "commands": [
+        {
+          "name": "weather",
+          "title": "Weather",
+          "mode": "detail"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "api.open-meteo.com",
+          "geocoding-api.open-meteo.com"
+        ],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "a5ac85bfa8ec03d9bb9f7e7b11d279d8def7206ad4df3e7ad61cd35dae091fd9",
+          "size": 2028,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "6a798f401e799315ee4c505503daccf234de7d5067f8ead8ea71fa73af57942e",
+          "size": 32508,
+          "executable": true
+        }
+      ]
+    }
+  ],
+  "themes": []
+}

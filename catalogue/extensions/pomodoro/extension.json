@@ -1,0 +1,63 @@
+{
+  "id": "pomodoro",
+  "title": "Pomodoro",
+  "icon": "🍅",
+  "version": "1.2.0",
+  "description": "Work in focused blocks with short breaks, the time left counting down in the menu bar.",
+  "examples": ["Focus: 25 minutes start counting down in the menu bar", "At zero Pilot's alert offers Start break; every 4th break is the long one"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 60 } },
+  "requires": ["python3"],
+  "permissions": {},
+  "preferences": [
+    { "name": "focus", "type": "dropdown", "title": "Focus", "default": "25",
+      "description": "Minutes in a focus block.",
+      "data": [
+        { "title": "15 min", "value": "15" }, { "title": "20 min", "value": "20" }, { "title": "25 min", "value": "25" },
+        { "title": "30 min", "value": "30" }, { "title": "40 min", "value": "40" }, { "title": "45 min", "value": "45" },
+        { "title": "50 min", "value": "50" }, { "title": "60 min", "value": "60" }, { "title": "90 min", "value": "90" }
+      ] },
+    { "name": "shortBreak", "type": "dropdown", "title": "Short break", "default": "5",
+      "description": "Minutes in a break, and in Break.",
+      "data": [
+        { "title": "3 min", "value": "3" }, { "title": "5 min", "value": "5" }, { "title": "10 min", "value": "10" },
+        { "title": "15 min", "value": "15" }
+      ] },
+    { "name": "longBreak", "type": "dropdown", "title": "Long break", "default": "15",
+      "description": "Minutes in the long break.",
+      "data": [
+        { "title": "10 min", "value": "10" }, { "title": "15 min", "value": "15" }, { "title": "20 min", "value": "20" },
+        { "title": "25 min", "value": "25" }, { "title": "30 min", "value": "30" }
+      ] },
+    { "name": "longBreakEvery", "type": "dropdown", "title": "Long break every", "default": "4",
+      "description": "The long break comes after this many focus blocks; the count starts again each day.",
+      "data": [
+        { "title": "2 blocks", "value": "2" }, { "title": "3 blocks", "value": "3" }, { "title": "4 blocks", "value": "4" },
+        { "title": "5 blocks", "value": "5" }, { "title": "6 blocks", "value": "6" }
+      ] },
+    { "name": "sound", "type": "dropdown", "title": "End sound", "default": "Glass",
+      "description": "Played when a block ends.",
+      "data": [
+        { "title": "None", "value": "None" }, { "title": "Basso", "value": "Basso" }, { "title": "Blow", "value": "Blow" },
+        { "title": "Bottle", "value": "Bottle" }, { "title": "Frog", "value": "Frog" }, { "title": "Funk", "value": "Funk" },
+        { "title": "Glass", "value": "Glass" }, { "title": "Hero", "value": "Hero" }, { "title": "Morse", "value": "Morse" },
+        { "title": "Ping", "value": "Ping" }, { "title": "Pop", "value": "Pop" }, { "title": "Purr", "value": "Purr" },
+        { "title": "Sosumi", "value": "Sosumi" }, { "title": "Submarine", "value": "Submarine" }, { "title": "Tink", "value": "Tink" }
+      ] },
+    { "name": "autoStart", "type": "checkbox", "title": "Start the next block by itself", "default": false,
+      "description": "On, a block's end is a short message and the next block runs; off, an alert waits for you." }
+  ],
+  "commands": [
+    { "name": "focus", "title": "Focus", "mode": "no-view", "run": "main.py" },
+    { "name": "break", "title": "Break", "icon": "☕", "mode": "no-view", "run": "main.py" },
+    { "name": "custom", "title": "Custom focus…", "mode": "list", "filter": "self", "run": "main.py" },
+    { "name": "pause", "title": "Pause timer", "icon": "⏸️", "mode": "no-view", "run": "main.py" },
+    { "name": "resume", "title": "Resume timer", "icon": "▶️", "mode": "no-view", "run": "main.py" },
+    { "name": "skip", "title": "Skip block", "icon": "⏭️", "mode": "no-view", "run": "main.py" },
+    { "name": "stop", "title": "Stop timer", "icon": "⏹️", "mode": "no-view", "run": "main.py" },
+    { "name": "today", "title": "Pomodoro today", "mode": "detail", "run": "main.py" },
+    { "name": "next", "title": "Start next block", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "ended", "title": "Block ended", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Pomodoro page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "obsidian-search",
+  "title": "Obsidian search",
+  "icon": "🪨",
+  "version": "1.1.0",
+  "description": "Find a note in your Obsidian vault by its title or by what it says, without opening Obsidian first. Its page searches as you type.",
+  "examples": ["Type pilot spec: notes titled with those words first, then notes that mention them, each with the line that matched; Return opens it in Obsidian", "Cmd+K on a note: preview it, copy its [[wikilink]] or path, or show it in Finder"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 300 } },
+  "requires": ["python3"],
+  "permissions": { "clipboard": true, "files": ["~/Library/Application Support/obsidian/obsidian.json", "your vault folder"] },
+  "preferences": [
+    { "name": "vault", "type": "folder", "title": "Vault folder",
+      "description": "Empty: the vault Obsidian opened last. Hidden folders such as .obsidian and .trash are skipped." }
+  ],
+  "commands": [
+    { "name": "search", "title": "Search Obsidian notes", "mode": "list", "session": true, "filter": "self", "run": "main.py" },
+    { "name": "note", "title": "Obsidian note preview", "icon": "📄", "mode": "detail", "hidden": true, "run": "main.py" },
+    { "name": "reveal", "title": "Reveal note in Finder", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Obsidian search page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "find", "title": "Search notes", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

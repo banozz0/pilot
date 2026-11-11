@@ -1,0 +1,19 @@
+{
+  "id": "tailscale",
+  "title": "Tailscale",
+  "icon": "🛜",
+  "version": "1.2.0",
+  "description": "See which of your Tailscale devices are online, copy a device's Tailscale IP or name, and connect or disconnect Tailscale without opening its menu, from Hyper+Space, its own page or the menu bar.",
+  "examples": ["Type pi: your Raspberry Pi with its OS, IP and whether it is online; Return copies its 100.x IP", "Glance at the menu bar: 🛜 3 says three devices are online; click it for the list and Disconnect, or Connect when Tailscale is off, opening Tailscale.app first when it isn't running"],
+  "runtime": "process",
+  "requires": ["python3", "tailscale"],
+  "permissions": { "clipboard": true },
+  "surfaces": { "page": { "command": "page", "every": 60 }, "bar": { "command": "bar", "every": 60 } },
+  "commands": [
+    { "name": "devices", "title": "Tailscale devices", "mode": "list", "run": "main.py" },
+    { "name": "connect", "title": "Connect Tailscale", "mode": "no-view", "run": "main.py" },
+    { "name": "disconnect", "title": "Disconnect Tailscale", "mode": "no-view", "run": "main.py" },
+    { "name": "page", "title": "Tailscale page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "bar", "title": "Tailscale in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

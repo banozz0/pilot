@@ -1,0 +1,25 @@
+{
+  "id": "github",
+  "title": "GitHub",
+  "icon": "🐙",
+  "version": "1.2.0",
+  "description": "See what on GitHub needs you: pull requests waiting on your review, your own with their checks, issues given to you and CI runs that failed.",
+  "examples": ["Type pull: PRs waiting on your review first, then yours, each with its checks passing or failing; Return opens it on github.com", "Type failing: CI runs that failed in your repos this week; Cmd+K re-runs only the failed jobs"],
+  "runtime": "process",
+  "requires": ["python3", "gh"],
+  "permissions": { "network": ["api.github.com"], "clipboard": true },
+  "preferences": [
+    { "name": "only", "type": "text", "title": "Only these owners or repos",
+      "description": "Owners or owner/repo names, split by commas, such as banozz0, maddada/gpui-component. Empty: everything GitHub lists for you." }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 60 }, "bar": { "command": "bar", "every": 120 } },
+  "commands": [
+    { "name": "pull-requests", "title": "My pull requests", "mode": "list", "run": "main.py" },
+    { "name": "issues", "title": "GitHub issues", "mode": "list", "run": "main.py" },
+    { "name": "ci-runs", "title": "Failing CI runs", "mode": "list", "run": "main.py" },
+    { "name": "page", "title": "GitHub board", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "bar", "title": "GitHub in the top bar", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "refresh", "title": "Refresh GitHub", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "rerun", "title": "Re-run failed CI jobs", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "dev-utils",
+  "title": "Dev Utils",
+  "icon": "🧰",
+  "version": "1.1.0",
+  "description": "Turns whatever you copied into the form you need, without a website. Its page takes pasted text and shows every transform.",
+  "examples": ["Copy a JWT, run Decode JWT: its header, payload and when it expires", "Copy 1760083200, Transform clipboard: 2025-10-10T08:00:00Z"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 600 } },
+  "requires": ["python3"],
+  "permissions": { "clipboard": true },
+  "commands": [
+    { "name": "transform", "title": "Transform clipboard", "mode": "list", "run": "main.py" },
+    { "name": "jwt", "title": "Decode JWT from clipboard", "icon": "🔐", "mode": "detail", "run": "main.py" },
+    { "name": "new-uuid", "title": "Copy new UUID", "icon": "🆔", "mode": "no-view", "run": "main.py" },
+    { "name": "use", "title": "Transform text", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Dev Utils page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

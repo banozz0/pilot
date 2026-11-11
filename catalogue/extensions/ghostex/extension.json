@@ -1,0 +1,34 @@
+{
+  "id": "ghostex",
+  "title": "Ghostex sessions",
+  "icon": "👻",
+  "version": "2.2.0",
+  "description": "See which Ghostex agents are working or waiting on you from the menu bar, read a session's chat and reply to it, and rename, tag, sleep, wake or close sessions without opening Ghostex.",
+  "examples": ["The menu bar shows 👻 5: click it, pick Pilot coordinator 2, read its last replies and type an answer; Return queues it until the agent stops, Option+Return interrupts", "Type pilot: every session in the pilot project with its agent and state; Return brings it up in Ghostex"],
+  "runtime": "process",
+  "requires": ["python3", "ghostex"],
+  "permissions": {},
+  "preferences": [
+    { "name": "show", "type": "dropdown", "title": "Show", "default": "all",
+      "description": "Which sessions the list, the menu bar item and the board show: all of them, only orchestrators (Ghostex coordinators, not their threads), or one agent's.",
+      "data": [ { "title": "All sessions", "value": "all" }, { "title": "Orchestrators only", "value": "coordinator" },
+                { "title": "Claude Code", "value": "claude" }, { "title": "Codex", "value": "codex" },
+                { "title": "Designer", "value": "designer" }, { "title": "Reviewer", "value": "reviewer" },
+                { "title": "Content", "value": "content" }, { "title": "Harry", "value": "hermes-agent" } ] }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 15 }, "bar": { "command": "bar", "every": 60 } },
+  "commands": [
+    { "name": "sessions", "title": "Ghostex sessions", "mode": "list", "run": "main.py" },
+    { "name": "bar", "title": "Ghostex in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Ghostex board", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "asleep", "title": "Sleeping Ghostex sessions", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "chat", "title": "Ghostex session chat", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "send", "title": "Reply to a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "rename", "title": "Rename a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "tag", "title": "Tag a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "focus", "title": "Focus a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "sleep", "title": "Sleep a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "wake", "title": "Wake a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "close", "title": "Close a Ghostex session", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

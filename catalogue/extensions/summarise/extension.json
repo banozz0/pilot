@@ -1,0 +1,25 @@
+{
+  "id": "summarise",
+  "title": "Summarise",
+  "icon": "📝",
+  "version": "1.3.0",
+  "description": "Summarises a YouTube video, a web page or a document with Pilot's AI, with its full text beside it. Save it as Markdown to Downloads, or ask about it. Its page takes a pasted link or a chosen file; its menu-bar item summarises what you copied in a click.",
+  "examples": ["Copy a YouTube link, open Summarise, Return: its page shows the summary and the transcript", "On its page, paste a link or choose a file, then Summarise: the summary shows there, with Copy summary"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 600 }, "bar": { "command": "bar", "every": 600 } },
+  "requires": ["python3"],
+  "permissions": { "clipboard": true, "network": ["youtube.com", "any page you summarise"], "files": ["~/Downloads", "the documents you summarise"] },
+  "commands": [
+    { "name": "summarise", "title": "Summarise", "mode": "list", "filter": "self", "run": "main.py" },
+    { "name": "fetch", "title": "Summarise", "mode": "no-view", "hidden": true, "keyword": "summarise", "run": "main.py" },
+    { "name": "summarised", "title": "Summary", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "ask", "title": "Ask about it", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "answered", "title": "Answer", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "save", "title": "Save as .md", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "show", "title": "Show a summary", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "delete", "title": "Delete a summary", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "clear-failed", "title": "Clear failed summaries", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Summarise page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "bar", "title": "Summarise in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

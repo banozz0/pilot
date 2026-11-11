@@ -1,0 +1,22 @@
+{
+  "id": "ssh-hosts",
+  "title": "SSH hosts",
+  "icon": "🖥️",
+  "version": "1.1.0",
+  "description": "Connects to a server you named in your SSH config, in a new terminal window, without typing the ssh command.",
+  "examples": ["Type omar: omarchy with its user and address; Return opens ssh omarchy in Ghostty", "On its page, type omar in the box, then click the host: ssh omarchy opens in Ghostty"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 60 } },
+  "requires": ["python3", "ssh"],
+  "permissions": { "files": ["~/.ssh/config"] },
+  "preferences": [
+    { "name": "terminal", "type": "app", "title": "Terminal",
+      "description": "Empty: Ghostty when it is installed, else Terminal." }
+  ],
+  "commands": [
+    { "name": "hosts", "title": "SSH hosts", "mode": "list", "run": "main.py" },
+    { "name": "connect", "title": "Connect to SSH host", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "SSH hosts page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "filter", "title": "Filter SSH hosts", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

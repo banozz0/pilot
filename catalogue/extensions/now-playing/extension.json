@@ -1,0 +1,27 @@
+{
+  "id": "now-playing",
+  "title": "Now playing",
+  "icon": "🎵",
+  "version": "1.3.0",
+  "description": "Whatever your Mac is playing, in the menu bar, as Control Center's Now Playing sees it: Music, Spotify, a YouTube tab in Chrome, Safari or Zen, any app. Click it, or open its page, for the track with its artwork and artist, how far in, play or pause, previous and next; Favourite while Music plays. Click the track to go to the tab or app playing it. The artwork comes from Music, Spotify's cover or a YouTube tab's thumbnail. Never starts a player; macOS asks once to let Pilot control the browser (for its tab and a video's thumbnail), Spotify (its cover) and Music (its artwork and Favourite).",
+  "examples": ["A YouTube video plays in Chrome: the menu bar shows ♫ and its title; a lone ♫ while paused, nothing when nothing has played", "Click it, then the track: Chrome comes forward on the YouTube tab that plays it"],
+  "runtime": "process",
+  "requires": ["python3", "osascript", "sips", "open", "curl"],
+  "permissions": { "network": ["i.ytimg.com", "i.scdn.co"] },
+  "preferences": [
+    { "name": "bar", "type": "dropdown", "title": "Menu bar shows", "default": "artist-title",
+      "description": "The menu bar item while a track plays; paused it is a lone ♫.",
+      "data": [ { "title": "Artist – Title", "value": "artist-title" }, { "title": "Title", "value": "title" }, { "title": "Just ♫", "value": "glyph" } ] }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 15 }, "bar": { "command": "bar", "every": 60 } },
+  "commands": [
+    { "name": "now", "title": "Now playing", "mode": "detail", "run": "main.py" },
+    { "name": "playpause", "title": "Play or pause", "icon": "⏯️", "mode": "no-view", "run": "main.py" },
+    { "name": "next", "title": "Next track", "icon": "⏭️", "mode": "no-view", "run": "main.py" },
+    { "name": "previous", "title": "Previous track", "icon": "⏮️", "mode": "no-view", "run": "main.py" },
+    { "name": "favourite", "title": "Favourite this Music track", "icon": "❤️", "mode": "no-view", "run": "main.py" },
+    { "name": "show", "title": "Go to what's playing", "icon": "🎯", "mode": "no-view", "run": "main.py" },
+    { "name": "bar", "title": "Now playing in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Now playing page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "claude-sessions",
+  "title": "Claude Sessions",
+  "icon": "🤖",
+  "version": "1.1.0",
+  "description": "Find a Claude Code session you had and pick it back up, without digging through folders. Its page searches them as you type.",
+  "examples": ["Type pilot: your sessions in ~/code/pilot, newest first", "Return copies claude --resume <id>; paste it in a terminal to carry on"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 120 } },
+  "requires": ["python3"],
+  "permissions": { "clipboard": true, "files": ["~/.claude/projects"] },
+  "commands": [
+    { "name": "sessions", "title": "Claude sessions", "mode": "list", "run": "main.py" },
+    { "name": "session", "title": "Claude session", "icon": "🧾", "mode": "detail", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Claude sessions page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "find", "title": "Search sessions", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}
