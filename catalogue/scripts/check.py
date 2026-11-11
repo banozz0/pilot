@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Check every extension against the rules Pilot's Extension.swift applies, plus the catalogue's, and that index.json
-is fresh. Prints one line per problem and exits 1 when there is any.
+"""Check every extension and theme pack against the rules Pilot applies, plus the catalogue's, and that index.json
+is fresh. Prints one line per problem and exits 1 when there is any (2 when there are only flags; see --author).
 
 Pilot's rules (Sources/PilotCore/Extension.swift): id and command names `[a-z0-9][a-z0-9-]*`; runtime absent or
 `process`; at least one command; command names unique; mode no-view, list or detail; run an executable regular file
