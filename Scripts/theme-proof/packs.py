@@ -179,7 +179,12 @@ def run(seam_only=False, fixes_only=False):
             for key,role in {'comment':'muted','string':'green','keyword':'magenta','function':'blue','number':'yellow'}.items(): assert reads(style['syntax'][key]['color'],palette[role],zgrounds),(key,palette[role])
             for index in range(2):
                 css=f.path(index,True).read_text()
-                values=dict(re.findall(r'--([a-z-]+): (#[0-9a-fA-F]{6});',css))
+                # A dual-mode pack (the line-up of 18) gives Obsidian's dark mode its palette and light mode its variant.
+                dark_rule=re.search(r'\.theme-dark[^{]*\{([^}]*)\}',css)[1]
+                values=dict(re.findall(r'--([a-z-]+): (#[0-9a-fA-F]{6});',dark_rule))
+                if manifest.get('variants'):
+                    light=dict(re.findall(r'--([a-z-]+): (#[0-9a-fA-F]{6});',re.search(r'\.theme-light \{([^}]*)\}',css)[1]))
+                    assert light['background-primary']==manifest['variants']['light']['background'],(name,light)
                 for key,role in {'background-primary':'background','text-normal':'foreground','interactive-accent':'accent','text-selection':'selection','code-comment':'muted','code-string':'green','code-function':'blue','code-keyword':'magenta','code-value':'yellow'}.items():
                     assert reads(values[key],palette[role],ogrounds,key.startswith(('text-normal','code-'))),(key,values[key],palette[role])
             state=f.read_wall(); assert state['preferences']==f.desktop['preferences']
@@ -345,7 +350,7 @@ def run(seam_only=False, fixes_only=False):
                     wide=next((x for x in own(f).get('wallpapers',[]) if x['target']=={'display':{'_0':'wide'}}),None)
                     if step=='apply':
                         assert f.read_wall()['displays'][1]['image'].endswith('dracula-tall.png')
-                        if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.heic')
+                        if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png')
                         else: assert wide is None and f.read_wall()['displays'][0]['image']==mine
                         f.restore()
                     if kind=='inside': restored(f)

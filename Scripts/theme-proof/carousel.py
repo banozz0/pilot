@@ -227,7 +227,7 @@ def real_shape(passed):
         assert wide['centre'] == wide['current'] == sources[1] and len(wide['palette']) == 8 and wide['favourites'] == []
         f.stop()
         assert f.allows(1)
-        passed("real shape: a missing ~/Pictures/Wallpapers is the empty state; factory Dusk's two files list one per screen shape (HEIC on the wide, PNG on the tall), centred on the current one")
+        passed("real shape: a missing ~/Pictures/Wallpapers is the empty state; factory Void's two files list one per screen shape (HEIC on the wide, PNG on the tall), centred on the current one")
     finally:
         f.stop()
         f.receipt()
@@ -293,7 +293,7 @@ def themes(passed):
         assert "favourites are Wallpapers mode's" in f.call('carousel', '--mode', 'themes', '--favourites', ok=False)['error']['message']
         assert 'takes no --screen' in f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes', '--screen', 'wide', ok=False)['error']['message']
         assert watched() == before
-        passed('themes: Themes mode lists the 15 packs the style takes (14 factory, 1 user) by title, none marked before an Apply, each with its image for the screen shape and 8 palette dots; previews draw Zed, Ghostty and Obsidian; browsing and search change nothing')
+        passed(f'themes: Themes mode lists the {len(expected)} packs the style takes ({len(expected) - 1} factory, 1 user) by title, none marked before an Apply, each with its image for the screen shape and 8 palette dots; previews draw Zed, Ghostty and Obsidian; browsing and search change nothing')
 
         # Tokyo Night applied through the carousel, after its Allow.
         assert f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes')['status'] == 'applied'
