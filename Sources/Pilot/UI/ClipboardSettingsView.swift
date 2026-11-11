@@ -1,25 +1,24 @@
 import AppKit
 import Clipboard
+import PilotCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7). Its front (simplify-pages T10): the
-/// newest copies with the app each came from, how long to keep, Save images, the panel's key and Clear history. Its
-/// More: the apps never recorded, card numbers and keys that expire, what Return does and the sort, and the tags.
+/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7). One front, its More gone (pages
+/// round 4, Sven's Q100): the newest copies, small, with the app each came from; how long to keep, Save images and the
+/// panel's key; the apps never recorded, card numbers and keys that expire, what Return does and the sort, the tags,
+/// and Clear history.
 struct ClipboardSettingsView: View {
     @Environment(\.ink) private var ink
     let history: ClipboardHistory
-    /// The More tab shows, not the front.
-    let more: Bool
     @State private var settings: ClipboardSettings
     @State private var tags: [ClipTag]
     @State private var confirmingClear = false
 
     private static let dayChoices: [Int?] = [1, 7, 30, 90, 365, nil]
 
-    init(history: ClipboardHistory = .shared, more: Bool = false) {
+    init(history: ClipboardHistory = .shared) {
         self.history = history
-        self.more = more
         _settings = State(initialValue: history.settings)
         _tags = State(initialValue: history.tags())
     }
@@ -27,32 +26,22 @@ struct ClipboardSettingsView: View {
     static let intro = "What you copy is kept here; passwords never are."
     static let introInfo = "Anything an app marks as secret is never stored."
 
-    /// More's index (simplify-pages T10): a list counts once. A row added to or moved off a block changes its count here.
-    static let entries = [
-        MoreEntry(id: .clipNever, symbol: "nosign", controls: 2),
-        MoreEntry(id: .clipExpire, symbol: "creditcard", controls: 2),
-        MoreEntry(id: .clipPanel, symbol: "doc.on.clipboard", controls: 2),
-        MoreEntry(id: .clipTags, symbol: "tag", controls: 1),
-    ]
+    /// The newest copies Recent shows: one short row of them (Sven, pages round 4: "make the recent part in front small").
+    static let recentShown = 4
 
     var body: some View {
-        Group {
-            if more {
-                KitMore(entries: Self.entries) {
-                    neverBlock.moreBlock(.clipNever)
-                    KitBlock(title: "Card numbers and keys", symbol: "creditcard") { expire }.moreBlock(.clipExpire)
-                    KitBlock(title: "In the panel", symbol: "doc.on.clipboard") { panel }.moreBlock(.clipPanel)
-                    KitBlock(title: "Tags", symbol: "tag") { tagRows }.moreBlock(.clipTags)
-                }
-            } else {
-                let kept = history.recent()
-                KitPage(intro: Self.intro, info: Self.introInfo) {
-                    KitBlock(title: "Recent", symbol: "clock") {
-                        Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
-                    } content: { recent(kept.prefix(20)) }
-                    keepBlock
-                    clear.padding(.top, 16)
-                }
+        let kept = history.recent()
+        KitLanding {
+            KitPage(intro: Self.intro, info: Self.introInfo) {
+                KitBlock(title: "Recent", symbol: "clock") {
+                    Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
+                } content: { recent(kept.prefix(Self.recentShown)) }
+                keepBlock
+                neverBlock.id(AppSection.clipNever)
+                KitBlock(title: AppSection.clipExpire.title, symbol: "creditcard") { expire }.id(AppSection.clipExpire)
+                KitBlock(title: AppSection.clipPanel.title, symbol: "doc.on.clipboard") { panel }.id(AppSection.clipPanel)
+                KitBlock(title: AppSection.clipTags.title, symbol: "tag") { tagRows }.id(AppSection.clipTags)
+                clear.padding(.top, 16)
             }
         }
         // A sort changed in the panel while this page is open: take it, so a later edit here does not undo it.
@@ -107,7 +96,7 @@ struct ClipboardSettingsView: View {
         }
     }
 
-    /// More's card numbers and keys (P65): a copied one leaves the history on its own.
+    /// Card numbers and keys (P65): a copied one leaves the history on its own.
     @ViewBuilder private var expire: some View {
         BlockRow(first: true) {
             Toggle("Expire card numbers and keys", isOn: $settings.expireSecrets)
@@ -141,8 +130,6 @@ struct ClipboardSettingsView: View {
             Button("Add app…", action: addApps).buttonStyle(.pilot)
         }
     }
-
-    // MARK: More
 
     @ViewBuilder private var panel: some View {
         BlockRow(first: true) {
@@ -196,16 +183,18 @@ struct ClipboardSettingsView: View {
 
     // MARK: Recent
 
-    /// The newest copies as cards: the app each came from (its own icon), what it is, and when.
+    /// The newest copies as small cards, one row while they fit: the app each came from (its own icon), what it is, and
+    /// when; the panel holds the rest.
     @ViewBuilder private func recent(_ clips: ArraySlice<StoredClip>) -> some View {
         if clips.isEmpty {
-            EmptyState(title: "Nothing copied yet", line: "What you copy shows here, newest first, with the app it came from.").padding(.vertical, 8)
+            Text("Nothing copied yet: what you copy shows here, newest first.").font(ink.ui(12)).foregroundStyle(ink.muted)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
         } else {
-            CardGrid(minimum: 240, spacing: 8, stretch: true) {
+            CardGrid(minimum: 150, spacing: 8, most: Self.recentShown, stretch: true) {
                 ForEach(clips, id: \.id) { clip in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 7) {
-                            AppGlyph(bundles: clip.sourceApp.map { [$0] } ?? [], symbol: clip.kind.symbol, colour: .neutral, size: 20)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 6) {
+                            AppGlyph(bundles: clip.sourceApp.map { [$0] } ?? [], symbol: clip.kind.symbol, colour: .neutral, size: 16)
                             Text(clip.sourceApp.flatMap(AppsModule.appName) ?? clip.kind.label).foregroundStyle(ink.text2).lineLimit(1)
                             Image(systemName: clip.kind.symbol).font(ink.ui(10)).help(clip.kind.label)
                             if clip.pinned { Image(systemName: "pin.fill").font(ink.ui(9)).foregroundStyle(ink.mark(ink.accentInk)) }
@@ -213,16 +202,15 @@ struct ClipboardSettingsView: View {
                             Text(Self.ago(clip.copiedAt)).lineLimit(1)
                         }
                         .font(ink.ui(11)).foregroundStyle(ink.muted)
-                        Text(clip.title.trimmingCharacters(in: .whitespacesAndNewlines)).font(ink.ui(12.5)).foregroundStyle(ink.text)
-                            .lineLimit(4).truncationMode(.tail).fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
+                        Text(clip.title.trimmingCharacters(in: .whitespacesAndNewlines)).font(ink.ui(12)).foregroundStyle(ink.text)
+                            .lineLimit(1).truncationMode(.tail)
                     }
-                    .frame(minHeight: 96, alignment: .top)
-                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
                     .innerCard()
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
         }
     }
 

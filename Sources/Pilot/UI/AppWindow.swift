@@ -89,8 +89,9 @@ final class AppWindowModel {
                 sections[place.page] = more
                 blockFocus = section
             } else if section.onFront {
-                // A place on the front: the front, scrolled to its block (Sven, 2026-11-11, after 2276).
-                sections[place.page] = nil
+                // A place on the front: the front, or the tab it sits on, scrolled to its block (Sven, 2026-11-11, after
+                // 2276; pages round 4).
+                sections[place.page] = section.frontTab
                 blockFocus = section
             } else {
                 sections[place.page] = section

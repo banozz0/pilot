@@ -3,20 +3,19 @@ import PilotCore
 import SwiftUI
 
 /// Tools › Captures (spec `capture.html`, Q157), in tabs (page map, Sven 2026-10-17; simplify-pages T13). Capture: how a
-/// capture ends, the three daily keys and the Captures folder; the newest captures are on History. Recording: what a
-/// recording hears, its count down, its keys and the Recordings folder. More: the capture options, the other keys and a
-/// recording's quality. Every row has an ⓘ; a key's is the line Binds shows for it.
+/// capture ends, the three daily keys, the Captures folder, the capture options and the other capture keys; the newest
+/// captures are on History. Recording: what a recording hears, its count down, its keys, the Recordings folder and its
+/// quality. No More: its blocks went back to the front of their kind (pages round 4, Sven's Q102). Every row has an ⓘ; a
+/// key's is the line Binds shows for it.
 struct CapturesPage: View {
     @Bindable var store: CaptureSettingsStore
     var bar: BarItemsStore = .shared
 
     /// The Recording tab rather than Capture.
     var recording = false
-    /// The More tab: the capture options, the other keys and a recording's quality (simplify-pages T13).
-    var more = false
 
-    init(store: CaptureSettingsStore = .shared, recording: Bool = false, more: Bool = false) {
-        self.store = store; self.recording = recording; self.more = more
+    init(store: CaptureSettingsStore = .shared, recording: Bool = false) {
+        self.store = store; self.recording = recording
     }
 
     static let note = "The capture keys freeze the screen and capture with Pilot."
@@ -39,35 +38,19 @@ struct CapturesPage: View {
         static let recordingsFolder = "Where recordings are saved. Show opens it, Change picks another, Default goes back to ~/Movies/Pilot."
     }
 
-    /// More's index (simplify-pages T13). A row added to or moved off a block changes its count here.
-    static let entries = [
-        MoreEntry(id: .captureOptions, symbol: "camera.viewfinder", controls: 5),
-        MoreEntry(id: .captureKeys, symbol: "keyboard", controls: keys.count - frontKeys),
-        MoreEntry(id: .recordingQuality, symbol: "record.circle", controls: 4),
-    ]
-
-    /// The keys Capture's front shows: Area, Window and Full screen; the rest are on More.
+    /// The keys Capture's first block shows: Area, Window and Full screen; the rest are under More capture keys.
     static let frontKeys = 3
 
     var body: some View {
-        Group {
-            if more {
-                KitMore(entries: Self.entries) {
-                    KitBlock(title: "Capture", symbol: "camera.viewfinder") { options }.moreBlock(.captureOptions)
-                    KitBlock(title: "More capture keys", symbol: "keyboard") { keyRows(Array(Self.keys.dropFirst(Self.frontKeys)), first: true) }
-                        .moreBlock(.captureKeys)
-                    KitBlock(title: "Recording quality", symbol: "record.circle") { quality }.moreBlock(.recordingQuality)
-                }
-            } else {
-                KitPage {
-                    if recording { recordingTab } else { captureTab }
-                }
+        KitLanding {
+            KitPage {
+                if recording { recordingTab } else { captureTab }
             }
         }
     }
 
-    /// Capture's front (simplify-pages T13): After capture, the three daily keys and the folder; the newest captures are on
-    /// History.
+    /// Capture's front (simplify-pages T13): After capture, the three daily keys and the folder, then the capture options
+    /// and the other keys (pages round 4); the newest captures are on History.
     @ViewBuilder private var captureTab: some View {
         CapturePreview(after: store.settings.afterCapture, place: store.settings.thumbnailPlace)
         KitBlock(title: "Capture", symbol: "camera.viewfinder", note: Self.note) {
@@ -79,15 +62,18 @@ struct CapturesPage: View {
             keyRows(Array(Self.keys.prefix(Self.frontKeys)))
         }
         KitBlock(title: "Folder", symbol: "folder") { folderRow("Captures", kind: .capture, info: Info.capturesFolder) }
+        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.id(AppSection.captureOptions)
+        KitBlock(title: AppSection.captureKeys.title, symbol: "keyboard") { keyRows(Array(Self.keys.dropFirst(Self.frontKeys)), first: true) }
+            .id(AppSection.captureKeys)
     }
 
-    /// More's capture options: the Capture menu, hidden icons, the thumbnail's place, scrolling and the delay.
+    /// The capture options: the Capture menu, hidden icons, the thumbnail's place, scrolling and the delay.
     @ViewBuilder private var options: some View {
         BlockRow(first: true) {
             label("Capture menu", Info.menu)
             Segments(selection: menuPlace, options: [(nil, "Off"), (.menuBar, "Menu bar"), (.topBar, "Top bar"), (.both, "Both")], label: "Capture menu")
         }
-            BlockRow { Toggle("Hide desktop icons in captures and recordings", isOn: $store.settings.hideDesktopIcons).toggleStyle(.pilotSwitchRow(info: Info.hideIcons)) }
+        BlockRow { Toggle("Hide desktop icons in captures and recordings", isOn: $store.settings.hideDesktopIcons).toggleStyle(.pilotSwitchRow(info: Info.hideIcons)) }
         if store.settings.afterCapture == .thumbnail {
             BlockRow {
                 label("Thumbnail place", Info.thumbnailPlace)
@@ -118,9 +104,10 @@ struct CapturesPage: View {
             keyRows(Self.recordKeys)
         }
         KitBlock(title: "Folder", symbol: "folder") { folderRow("Recordings", kind: .recording, info: Info.recordingsFolder) }
+        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.id(AppSection.recordingQuality)
     }
 
-    /// More's recording quality: quality, resolution, frame rate and clicks.
+    /// The recording quality: quality, resolution, frame rate and clicks.
     @ViewBuilder private var quality: some View {
         BlockRow(first: true) {
             label("Quality", Info.quality)

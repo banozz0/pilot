@@ -52,7 +52,7 @@ struct AppWindowFrameTests {
             // (simplify-pages T7); every other part is the tab picked or the place scrolled to.
             else if let more = place.section?.onMore { #expect(model.section(of: place.page) == more && model.blockFocus == place.section, "\(name)") }
             // A place on a front opens the front, its block asked for (snapshots: Workspaces' front since round 3).
-            else if place.section?.onFront == true { #expect(model.section(of: place.page) == nil && model.blockFocus == place.section, "\(name)") }
+            else if let section = place.section, section.onFront { #expect(model.section(of: place.page) == section.frontTab && model.blockFocus == place.section, "\(name)") }
             else { #expect(model.section(of: place.page) == place.section ?? place.page.firstSection, "\(name)") }
             #expect(place.page.tabs.isEmpty || place.page.tabs.contains { $0.value == model.section(of: place.page) } || place.section?.isMerged == true, "\(name)")
         }

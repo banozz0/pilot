@@ -51,7 +51,7 @@ struct AppWindowTests {
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's, Activity's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Convert", "File search", "Duplicates", "Folders"])
-        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.snippets.tabs.isEmpty)
+        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
         // Reports beside the runs it records, Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "Reports"] && AppPage.activity.tabs.isEmpty)
         #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "More"])
@@ -59,7 +59,7 @@ struct AppWindowTests {
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
         #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup", "More"])
-        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
+        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
         for page in [AppPage.stats, .activity] { #expect(page.tabs.isEmpty, "\(page)") }
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).

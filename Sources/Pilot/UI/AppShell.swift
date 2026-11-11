@@ -131,9 +131,9 @@ struct PageView: View {
             if section == .reports { ReportsPage(open: model.reportPick).onDisappear { model.reportPick = nil } }
             else { UpkeepPage { id in model.go(AppPlace(.reports)); model.reportPick = id } }
         case .stats: StatsPage(onScreen: model.live) { model.go($0) }
-        case .clipboard: ClipboardSettingsView(more: section == .clipboardMore)
+        case .clipboard: ClipboardSettingsView()
         case .captures:
-            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
+            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
         case .snippets: SnippetsSettingsView()
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
