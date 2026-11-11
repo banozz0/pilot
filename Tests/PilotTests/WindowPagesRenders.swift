@@ -73,8 +73,8 @@ struct WindowPagesRenders {
             frame.layoutSubtreeIfNeeded()
             try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
                 .write(to: dir.appendingPathComponent("\(name)-660-sidebar.png"))
-            // Fronts at the window's first size: Pilot's, Open with's and Captures' fit without a scroll with their previews
-            // (simplify-pages T8, T26, T27); Tiling's, System's, Workspaces' and Voice's fronts and the More tabs show how
+            // Fronts at the window's first size: Open with's and Captures' fit without a scroll with their previews
+            // (simplify-pages T26, T27) until pages round 4 brought more back; Pilot's, Tiling's, System's, Workspaces' and Voice's fronts and the More tabs show how
             // much does (Sven, 2026-11-11, after 2276), Workspaces' also with four workspaces, as Sven keeps them.
             func wanted(_ file: String) -> Bool { only.map { $0.contains { file.contains($0) } } ?? true }
             func front(_ place: AppPlace, _ file: String) throws {
@@ -84,9 +84,14 @@ struct WindowPagesRenders {
                 frame.layoutSubtreeIfNeeded()
                 try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
             }
-            let fronts = [AppPage.general, .menu, .openWith, .tiling, .captures, .system, .binds, .workspaces, .voice].map { ($0.rawValue, AppPlace($0)) }
-                + [("voice-more", AppPlace(.voiceMore)), ("workspaces-more", AppPlace(.workspacesMore)),
-                   ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse))]
+            // Pages round 4 (Sven's ticks back onto the fronts): Look's, Clipboard's, Install's, Captures' Recording and AI's
+            // Setup fronts too, and the Mores that stay.
+            let fronts = [AppPage.general, .menu, .openWith, .tiling, .captures, .system, .binds, .workspaces, .voice, .look, .clipboard,
+                          .install].map { ($0.rawValue, AppPlace($0)) }
+                + [("captures-recording", AppPlace(.recording)), ("ai-setup", AppPlace(.aiSetup)),
+                   ("voice-more", AppPlace(.voiceMore)), ("workspaces-more", AppPlace(.workspacesMore)),
+                   ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse)), ("menu-more", AppPlace(.menuMore)),
+                   ("look-more", AppPlace(.lookMore)), ("install-more", AppPlace(.installMore))]
             for (page, place) in fronts { try front(place, "\(name)-660-\(page)") }
             if wanted("\(name)-660-workspaces-4") {
                 let list = engine.workspaceList, kept = list.count
