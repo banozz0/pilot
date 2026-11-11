@@ -60,6 +60,13 @@ struct SandboxHost {
         // PILOT_SANDBOX_NOTIFICATIONS=<folder>: Notification Center's tree as a file there, read through the real reader and
         // feed; the live source is never made in a test run, so nothing on the Mac is observed or moved.
         if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOTIFICATIONS"] { NotificationFixture.install(folder) }
+        // PILOT_SANDBOX_SPACES=<file.json>: the window server's Spaces layout as a file in CGSCopyManagedDisplaySpaces' shape,
+        // read at each ask, so `pilot list top-bar-screens` shows which screens' bars a fullscreen Space hides.
+        if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_SPACES"] {
+            DisplaySpaces.layout = {
+                (try? Data(contentsOf: URL(filePath: file))).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] } ?? []
+            }
+        }
         // A test run's bundle has no Pilot Info.plist: the app's, so `status --part update` names the feed a bundle would, or
         // PILOT_SANDBOX_INFO's, a built bundle's Contents/Info.plist, to read the route that build takes.
         let info = ProcessInfo.processInfo.environment["PILOT_SANDBOX_INFO"].map { URL(filePath: $0) }

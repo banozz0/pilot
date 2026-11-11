@@ -173,7 +173,7 @@ extension ControlVerbs {
     }
 
     /// The screens connected now and whether the top bar shows on each (Menu bar › Screens); a screen never seen
-    /// before gets one.
+    /// before gets one, and one on a fullscreen Space keeps it out of sight.
     private func registerTopBarScreens(_ reach: BarReach) {
         let topBar = { () throws(ControlError) -> TopBarController in
             guard let topBar = reach.topBar() else { throw ControlError(.notReady, "Pilot's top bar is not up yet; ask again in a moment") }
@@ -182,7 +182,8 @@ extension ControlVerbs {
         let screenRow = { (topBar: TopBarController, name: String) -> JSONValue in
             let screen = topBar.connected.first { $0.name == name }
             return .object(["screen": .string(name), "on": .bool(!topBar.leftOut.contains(name)),
-                            "height": screen.map { .number(Double(TopBarGeometry.inset($0.strip))) } ?? .null])
+                            "height": screen.map { .number(Double(TopBarGeometry.inset($0.strip))) } ?? .null,
+                            "fullscreen": .bool(topBar.fullscreen.contains(name))])
         }
         /// A connected screen's name: the page lists only those.
         let connected = { (topBar: TopBarController, name: String) throws(ControlError) -> String in
@@ -192,7 +193,7 @@ extension ControlVerbs {
             return name
         }
         register(ControlCollection(
-            "top-bar-screens", help: "The screens connected now and whether Pilot's top bar shows on each (Menu bar › Screens). add shows it on a screen, remove leaves that screen out.",
+            "top-bar-screens", help: "The screens connected now and whether Pilot's top bar shows on each (Menu bar › Screens); fullscreen is true while that screen's current Space is a fullscreen app's, where its bar stays out of sight. add shows it on a screen, remove leaves that screen out.",
             fields: [.init("screen", help: "a connected screen's name, as pilot list top-bar-screens names it")],
             rowKey: "screen",
             list: { () throws(ControlError) in let t = try topBar(); return .array(t.connected.map { screenRow(t, $0.name) }) },

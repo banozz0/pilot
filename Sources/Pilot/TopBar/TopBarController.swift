@@ -15,9 +15,12 @@ protocol TopBarPanels: AnyObject {
     func reservedHeight(on screen: TopBarGeometry.Screen, configuration: BarPresetConfiguration) -> Double
     /// Every bar's window level, the ones shown later too.
     var level: NSWindow.Level { get set }
+    /// Keeps the bars on these screens out of sight, their room and geometry kept, and brings back the rest.
+    func cover(_ screens: Set<String>)
 }
 
 extension TopBarPanels {
+    func cover(_ screens: Set<String>) {}
     func reservedHeight(on screen: TopBarGeometry.Screen, configuration: BarPresetConfiguration) -> Double {
         configuration.height + configuration.topMargin
     }
@@ -54,6 +57,7 @@ final class TopBarController {
     /// The bars last written while on, so a screen notification that changes nothing writes nothing.
     @ObservationIgnored private var written: [PilotBlock.BarInset]?
     @ObservationIgnored private var screenObserver: NSObjectProtocol?
+    @ObservationIgnored private var spaceObserver: NSObjectProtocol?
     /// Told after each switch that went through, on or off; Engine points it at the Menu bar page's placement.
     @ObservationIgnored var switched: @MainActor (Bool) -> Void = { _ in }
 
@@ -90,7 +94,25 @@ final class TopBarController {
                                                                 object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.screensChanged() }
         }
+        // Only the workspace's centre posts Space changes: entering or leaving fullscreen, or a swipe to another Space.
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                                                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.coverFullscreen() }
+        }
         if state.isOn { panels.show(on: picked) }
+        coverFullscreen()
+    }
+
+    /// The screens whose current Space is a fullscreen app's (or Split View's), read fresh: their bars stay out of sight
+    /// while another screen keeps its own. `.fullScreenNone` keeps none off such a Space: it only stops the bar going
+    /// fullscreen itself, and a non-activating panel on every Space shows over a fullscreen app.
+    var fullscreen: Set<String> { TopBarGeometry.covered(connected, spaces: DisplaySpaces.layout()) }
+
+    /// Hides the bars on fullscreen Spaces and brings back the others; purely visual, so the block and the tiler's room
+    /// stay as they are.
+    private func coverFullscreen() {
+        guard state.isOn else { return }
+        panels.cover(fullscreen)
     }
 
     func set(_ on: Bool) {
@@ -111,7 +133,7 @@ final class TopBarController {
             }
             written = on ? bars : nil
             // A screen left out while switching on is caught up here.
-            if on { follow() } else { panels.hideAll() }
+            if on { follow(); coverFullscreen() } else { panels.hideAll() }
             switched(on)
             tblog.notice("top bar \(on ? "on" : "off", privacy: .public), \(bars.map { "\($0.monitor) \($0.height)" }.joined(separator: ", "), privacy: .public)")
         }
@@ -127,6 +149,7 @@ final class TopBarController {
     func screensChanged() {
         connected = screens()
         follow()
+        coverFullscreen()
     }
 
     /// Held, the bars drop under the menu bar, so an autohidden menu bar revealing at the top edge shows over them and
@@ -182,10 +205,33 @@ enum TopBarScreens {
     }
 }
 
+/// The window server's Spaces layout, each display's current Space among them (CGSCopyManagedDisplaySpaces, private, as
+/// the background blur's CGS calls are); `layout` is swapped for a file in the sandbox.
+@MainActor
+enum DisplaySpaces {
+    static var layout: @MainActor () -> [[String: Any]] = live
+
+    private typealias Connection = @convention(c) () -> Int32
+    private typealias Copy = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    private static let calls: (Connection, Copy)? = {
+        guard let handle = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
+              let connection = dlsym(handle, "CGSMainConnectionID"), let copy = dlsym(handle, "CGSCopyManagedDisplaySpaces") else {
+            tblog.error("top bar: no CGSCopyManagedDisplaySpaces, so bars stay on fullscreen Spaces")
+            return nil
+        }
+        return (unsafeBitCast(connection, to: Connection.self), unsafeBitCast(copy, to: Copy.self))
+    }()
+
+    private static func live() -> [[String: Any]] {
+        guard let (connection, copy) = calls else { return [] }
+        return copy(connection())?.takeRetainedValue() as? [[String: Any]] ?? []
+    }
+}
+
 /// One borderless, non-activating panel per screen at the status bar's level (25): over the menu bar (24), so an
 /// autohidden menu bar revealing on hover slides out under the bar, never over it (card agent-bo-95423007; SketchyBar's
-/// topmost=on), and over the Dock (20). On every Space, never key, never in Cmd+Tab. Each panel tracks edit mode's drags
-/// and hands right-clicks and the wheel to the item under the pointer (TopBarPanel).
+/// topmost=on), and over the Dock (20). On every Space but a fullscreen app's (`cover`), never key, never in Cmd+Tab.
+/// Each panel tracks edit mode's drags and hands right-clicks and the wheel to the item under the pointer (TopBarPanel).
 @MainActor
 final class TopBarWindows: TopBarPanels {
     private struct Key: Hashable { let screen: String; var side: TopBarSide? = nil }
@@ -193,6 +239,8 @@ final class TopBarWindows: TopBarPanels {
     private let sources: BarSources
     private let store: BarItemsStore
     private var shown: [TopBarGeometry.Screen] = []
+    /// Screens on a fullscreen Space: their panels stay made and placed, out of sight.
+    private var covered: Set<String> = []
 
     init(sources: BarSources, store: BarItemsStore) {
         self.sources = sources
@@ -281,7 +329,7 @@ final class TopBarWindows: TopBarPanels {
                     clip.layoutSubtreeIfNeeded()
                 } else {
                     panel.pin(frame)
-                    if !panel.isVisible { panel.orderFrontRegardless() }
+                    place(panel, of: key, wanted: true)
                 }
             }
         }
@@ -313,12 +361,27 @@ final class TopBarWindows: TopBarPanels {
               let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip else { return }
         // The final row rectangle drives the crop, window bounds and input region together. No full-width window.
         guard let frame = BarPresetGeometry.islandFrame(rect, in: clip.canvas) else {
-            panel.orderOut(nil)
+            place(panel, of: key, wanted: false)
             return
         }
         clip.crop = rect
         panel.pin(frame)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        place(panel, of: key, wanted: true)
+    }
+
+    func cover(_ screens: Set<String>) {
+        guard screens != covered else { return }
+        covered = screens
+        tblog.notice("top bar hidden on fullscreen Spaces: \(screens.isEmpty ? "none" : screens.sorted().joined(separator: ", "), privacy: .public)")
+        panels.forEach { place($0.value, of: $0.key, wanted: $0.value.wanted) }
+    }
+
+    /// A bar's window on screen when Pilot wants it there and its screen is on no fullscreen Space; out of sight otherwise.
+    private func place(_ panel: TopBarPanel, of key: Key, wanted: Bool) {
+        panel.wanted = wanted
+        if wanted, !covered.contains(key.screen) {
+            if !panel.isVisible { panel.orderFrontRegardless() }
+        } else if panel.isVisible { panel.orderOut(nil) }
     }
 
     /// A bar's window around its content, at `level`.
@@ -350,6 +413,8 @@ final class TopBarPanel: NSPanel {
     /// Where Pilot put the bar: a move or resize by anyone else goes back here (card agent-bo-95423038; the tiler's unpark
     /// moved the bars mid-screen, and nothing put them back until Pilot restarted).
     private var pinned: NSRect?
+    /// Whether Pilot wants it on screen, a fullscreen Space aside (TopBarWindows.place).
+    var wanted = false
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)

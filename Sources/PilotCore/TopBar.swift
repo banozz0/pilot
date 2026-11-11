@@ -126,6 +126,17 @@ public enum TopBarGeometry {
     public static func bars(_ screens: [Screen]) -> [PilotBlock.BarInset] {
         screens.map { PilotBlock.BarInset(monitor: $0.name, height: inset($0.strip)) }
     }
+
+    /// The screens, by name, whose bar stays out of sight: those whose current Space is no desktop (a fullscreen app's,
+    /// or Split View's), from the window server's Spaces layout in CGSCopyManagedDisplaySpaces' shape (each display's
+    /// "Display Identifier" and "Current Space", whose "type" is 0 on a desktop). A display named "Main" is the one Space
+    /// every screen shares (Displays have separate Spaces off). A screen on a desktop keeps its bar.
+    public static func covered(_ screens: [Screen], spaces: [[String: Any]]) -> Set<String> {
+        let away = spaces.filter { (($0["Current Space"] as? [String: Any])?["type"] as? Int ?? 0) != 0 }
+            .compactMap { ($0["Display Identifier"] as? String)?.uppercased() }
+        if away.contains("MAIN") { return Set(screens.map(\.name)) }
+        return Set(screens.filter { $0.displayUUID.map { away.contains($0.uppercased()) } ?? false }.map(\.name))
+    }
 }
 
 /// The top bar's own settings before card agent-bo-95422910, read only to carry them into the bar items (BarSettings.migrated).
