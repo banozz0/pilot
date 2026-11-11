@@ -143,6 +143,7 @@ cp "$ROOT/Packaging/themes.json" "$APP/Contents/Resources/"  # Omarchy's theme p
 cp -R "$ROOT/Packaging/ThemePacks" "$APP/Contents/Resources/ThemePacks"  # immutable local factory packs and asset provenance
 cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases (lossless WebP) and palettes (CursorSets, P84)
 cp "$ROOT/Packaging/Omarchy-LICENSE.txt" "$APP/Contents/Resources/Omarchy-LICENSE.txt"  # MIT keeps its notice
+cp "$ROOT/Packaging/Theme-palettes-LICENSES.txt" "$APP/Contents/Resources/Theme-palettes-LICENSES.txt"  # MIT and Apache-2.0 keep their notices (theme packs' palettes)
 cp "$ROOT/Packaging/NotificationNanny-LICENSE.txt" "$APP/Contents/Resources/NotificationNanny-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/emoji.json" "$APP/Contents/Resources/"  # gemoji's emoji names and keywords (EmojiSearch)
 cp "$ROOT/Packaging/gemoji-LICENSE.txt" "$APP/Contents/Resources/gemoji-LICENSE.txt"  # MIT keeps its notice

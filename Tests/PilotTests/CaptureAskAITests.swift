@@ -138,7 +138,7 @@ struct CaptureAskAIRenders {
         look.glass = false
         defer { (look.style, look.themeID, look.glass) = saved }
         let picture = try #require(CaptureAskAI.picture(CaptureAskAITests.capture()))
-        for (style, theme) in [(PilotStyle.instrument, "lagoon"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
             (look.style, look.themeID) = (style, theme)
             let waiting = AIChatModel()
             waiting.route = "Claude Code · Haiku"

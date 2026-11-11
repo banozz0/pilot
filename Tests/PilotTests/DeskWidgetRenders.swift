@@ -13,7 +13,7 @@ import WebKit
 /// - Each folder reads as a widget the way `pilot widget check` reads one, walks clean, and carries the kit unchanged.
 /// - The feeds that need no network (To-do, System, AI usage) run once through Pilot's runner, trusted, against the moved
 ///   home, and answer data: `desk-widgets/feeds.txt`.
-/// - All six pages load offscreen on fixed data with Lagoon's and Porcelain's colours handed in as `theme`, each drawn on a
+/// - All six pages load offscreen on fixed data with Tokyo Night's and Porcelain's colours handed in as `theme`, each drawn on a
 ///   solid tile, one sheet a theme: `desk-widgets/desk-<theme>.png`.
 @MainActor
 @Suite("Desk widget renders")
@@ -103,13 +103,13 @@ struct DeskWidgetRenders {
         try lines.joined(separator: "\n").appending("\n").write(to: dir.appending(path: "feeds.txt"), atomically: true, encoding: .utf8)
     }
 
-    @Test("All six on fixed data, in Lagoon and Porcelain",
+    @Test("All six on fixed data, in Tokyo Night and Porcelain",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RESOURCES"] != nil))
     func sheets() async throws {
         let dir = try Self.dir()
         testApp()
         let store = try Self.store()
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             let theme = try #require(PilotTheme.named(themeID))
             var shots: [String: NSImage] = [:]
             for id in Self.ids {

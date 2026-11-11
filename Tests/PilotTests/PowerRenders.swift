@@ -7,7 +7,7 @@ import Testing
 
 extension SharedLook {
 /// The Power item's popover (Sven 2026-10-10): its six actions, and Restart's confirm in place, in Instrument on
-/// Lagoon. A fake runner, so nothing runs. Opt-in like the other renders, in a moved home:
+/// Tokyo Night. A fake runner, so nothing runs. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter PowerRenders`
 @MainActor
 @Suite("Power renders")
@@ -30,7 +30,7 @@ struct PowerRenders {
         let runner = FakeRunner()
         var restart = PowerAsk()
         restart.pick(.restart, on: runner)
-        (look.themeID, look.style, look.glass) = ("lagoon", .instrument, false)
+        (look.themeID, look.style, look.glass) = ("tokyo-night", .instrument, false)
         let tokens = StyleTokens.of(.instrument, theme: look.theme)
         for (state, ask) in [("actions", PowerAsk()), ("confirm-restart", restart)] {
             try writeRender(PowerPopover(runner: runner, ask: ask).styled(.barPopovers, look: look).pilotTheme(look: look).padding(24)

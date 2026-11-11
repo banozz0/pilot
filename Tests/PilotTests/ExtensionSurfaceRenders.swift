@@ -181,7 +181,7 @@ struct ExtensionSurfaceRenders {
         let detail = Extension.Detail(markdown: "# Valletta\n\n27 °C and partly cloudy. Feels like 29 °C. Wind 14 km/h from the north-west; 4 % chance of rain this afternoon.\n\nTomorrow: 26 °C, sunny.",
                                       metadata: [.init(label: "Feels", text: "29 °C"), .init(label: "Wind", text: "14 km/h NW"), .init(label: "Humidity", text: "68 %")],
                                       actions: [])
-        for (theme, shade) in [("lagoon", "dark"), ("porcelain", "light")] {
+        for (theme, shade) in [("tokyo-night", "dark"), ("porcelain", "light")] {
             (look.themeID, look.style) = (theme, .instrument)
             let tokens = StyleTokens.of(.instrument, theme: look.theme)
             let model = ExtensionPopoverModel(id: "weather", folder: exts, storage: storage, run: { _, _, _ in .blocks(blocks) })

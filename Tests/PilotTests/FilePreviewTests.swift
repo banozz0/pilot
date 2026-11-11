@@ -98,7 +98,7 @@ struct FilePreviewRenders {
         let (style, theme) = (look.style, look.themeID)
         defer { look.style = style; look.themeID = theme }
         look.style = .instrument
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let dir = try FilePreviewTests.folder()
         defer { try? FileManager.default.removeItem(at: dir) }
         let shot = dir.appending(path: "pilot shot.png")

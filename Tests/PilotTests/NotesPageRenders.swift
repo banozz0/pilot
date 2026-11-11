@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// The Notes page (task N1; direction B, P60), opt-in like the other renders: the whole window on the page in Instrument
-/// and Toybox under Lagoon (dark) and Porcelain (light) at 1440 by 900, Instrument at 760 too; then the page alone in
-/// each style on Lagoon: the docked list searched, asking before the Trash, a note showing a picture pasted in (notes
+/// and Toybox under Tokyo Night (dark) and Porcelain (light) at 1440 by 900, Instrument at 760 too; then the page alone in
+/// each style on Tokyo Night: the docked list searched, asking before the Trash, a note showing a picture pasted in (notes
 /// round 2), empty Scratch's invitation, Cmd+K, and the folder line asking whether to move the notes to a picked folder.
 /// The notes are the panel renders' nine, seeded in a temporary folder, never Pilot's own.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter NotesPageRenders`
@@ -57,13 +57,13 @@ struct NotesPageRenders {
             ("scratch", .init(), NoteStore.scratch), ("actions", .init(actions: true), hero.id),
             ("move", .init(picked: URL(fileURLWithPath: NSHomeDirectory()).appending(path: "Vault/Inbox")), hero.id),
         ]
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
             for style in PilotStyle.allCases {
                 let name = style.rawValue
                 look.style = style
                 AppWindowController.applyLook(look, to: window)
-                let widths = theme == "lagoon" && style == .instrument ? [1440, 760] : [1440]
+                let widths = theme == "tokyo-night" && style == .instrument ? [1440, 760] : [1440]
                 for width in widths where wanted("window-\(name)-\(theme)-\(width)") {
                     window.setContentSize(NSSize(width: CGFloat(width), height: 900))
                     model.go(AppPlace(.notes))
@@ -78,7 +78,7 @@ struct NotesPageRenders {
                         #expect(words.contains("Change"), "\(name) \(theme): \(words)")
                     }
                 }
-                for state in states where theme == "lagoon" && wanted("page-\(name)-\(state.name)") {
+                for state in states where theme == "tokyo-night" && wanted("page-\(name)-\(state.name)") {
                     let notes = NotesModel(store: store, defaults: try #require(UserDefaults(suiteName: testSuite())))
                     notes.reload()
                     notes.open(state.open)

@@ -13,7 +13,7 @@ import time
 
 import hashlib
 
-WIDE = {name: '-wide.heic' for name in ['cinder','verdigris','cyanotype','folio','wisteria','orchid','lagoon','void','garnet','dusk','porcelain','workshop','toybox-night','toybox']}
+WIDE = {name: '-wide.heic' for name in ['folio','wisteria','void','garnet','porcelain','toybox-night','toybox']}
 def sips_size(path):
     out = subprocess.run(['sips','-g','pixelWidth','-g','pixelHeight',str(path)],capture_output=True,text=True,check=True).stdout.split()
     return int(out[-3]), int(out[-1])
@@ -132,7 +132,7 @@ def run(seam_only=False, fixes_only=False):
             assert 'Source file: '+Path(pick[0]).name in provenance and 'Licence unverified: check before a public release.' in provenance,name
             assert hashlib.sha256(wide.read_bytes()).hexdigest() in provenance,name
         before=f.snapshot()
-        for name in ['lagoon','orchid']:
+        for name in ['tokyo-night','dracula']:
             result=f.call('theme','check',name)
             assert result['valid'] and result['factory'] and len(result['images'])==2
             assert set(result['pack']['adapters'])=={'ghostty','zed','obsidian'}
@@ -140,7 +140,7 @@ def run(seam_only=False, fixes_only=False):
             # Ghostty 2, Zed's theme file and both its light and dark slots 3, two vaults 4.
             assert len(plan['changes'])==9 and len(plan['wallpapers'])==3
         assert f.snapshot()==before
-        f.controls(allow='no'); f.call('theme','apply',f.plan('lagoon'),ok=False)
+        f.controls(allow='no'); f.call('theme','apply',f.plan('tokyo-night'),ok=False)
         assert f.snapshot()==before; f.controls()
         passed('isolation before Apply: explicit fake display/workspace state and recording callbacks; private socket/core-theme registry; no Engine/settings/desktop APIs; list/check/plan/denial read-only; picked wide wallpapers ship at their own size as HEIC, source and unchecked licence named')
         if seam_only: return
@@ -150,7 +150,7 @@ def run(seam_only=False, fixes_only=False):
 
         source=(life.REPO/'Sources/PilotCore/PilotTheme.swift').read_text()
         raw_words=['binding','owned','passive refresh','assignments verified','status:','files: verified','refresh:','display(','Plan ']
-        for name in ['lagoon','orchid']:
+        for name in ['tokyo-night','dracula']:
             manifest=pack(f,name); palette=manifest['palette']
             block=source.split('PilotTheme(id: "'+name+'"')[1].split('PilotTheme(id:')[0]
             expected={key:'#'+value.upper() for key,value in re.findall(r'(\w+): 0x([A-Fa-f0-9]{6})',block)}
@@ -191,19 +191,27 @@ def run(seam_only=False, fixes_only=False):
             assert ledger['wallpapers'][0]['original']=={'sources':{'_0':f.desktop['sources']}}
             f.checkpoint(name)
             (f.root/(name+'-palette-proof.json')).write_text(json.dumps(dict(expected=expected,actual=native,ledger=ledger),indent=2))
-        f.stop(); f.start(); assert f.call('theme','status')['selected']['id']=='orchid'
+        f.stop(); f.start(); assert f.call('theme','status')['selected']['id']=='dracula'
         assert f.restore()['status']=='restored'; restored(f); assert f.factory_snapshot()==f.factory
         f.stop(); allows=[x for x in (f.root/f'host-{f.counter}.log').read_text().splitlines() if x.startswith('THEME Allow asked:')]  # The host's log is complete only once it stops.
         assert allows and any('Wallpaper on Display 1' in x and (str(f.root/'app') in x or str(f.root/'app').replace(os.path.expanduser('~'),'~',1) in x) for x in allows),allows
         for raw in raw_words+f.settings['wallpaperBindings']: assert not any(raw in x for x in allows),(raw,allows)
         f.start()
-        passed('exact existing Lagoon/Orchid native colours, graphs, selection and all three app ANSI/syntax mappings; fixed style geometry/type; matching shape assignments; pins/timer/order/shuffle/fit/workspace preferences untouched; A->B->restart->Restore recovers original baseline')
+        passed('exact existing Tokyo Night/Dracula native colours, graphs, selection and all three app ANSI/syntax mappings; fixed style geometry/type; matching shape assignments; pins/timer/order/shuffle/fit/workspace preferences untouched; A->B->restart->Restore recovers original baseline')
         f.stop()
+
+        # Line-up of 18: an update retires the applied pack. Its factory folder is gone; the ledger keeps the pack whole, so
+        # status still reads it after a restart and Restore puts back the original baseline without the folder.
+        f=fixture('retired'); f.start(); f.apply('void'); f.stop()
+        shutil.rmtree(f.root/'factory'/'void'); f.factory=f.factory_snapshot()
+        f.start(); assert f.call('theme','status')['selected']['id']=='void'
+        assert f.restore()['status']=='restored'; restored(f); assert f.factory_snapshot()==f.factory; f.stop()
+        passed('a retired pack: applied, its factory folder removed as an update removes it, restart reads it from the ledger and Restore recovers the original baseline')
 
         # The existing scheduler's ownership seam journals before its recording effect, including after restart.
         for stage in [None,'cycle-journal','cycle-effect','cycle-after-effect','cycle-after-ledger']:
-            f=fixture('cycle'); f.start(); f.apply('lagoon'); f.stop(); f.start()
-            before=f.read_wall(); original=copy.deepcopy(own(f)); plan=f.plan('orchid')
+            f=fixture('cycle'); f.start(); f.apply('tokyo-night'); f.stop(); f.start()
+            before=f.read_wall(); original=copy.deepcopy(own(f)); plan=f.plan('dracula')
             files={k:v for k,v in f.snapshot().items() if k.startswith(('app/','zed/','vaults/'))}
             after=next(path for path in before['sources'] if path!=before['displays'][0]['image'])
             f.controls(**({'fail':stage} if stage else {}))
@@ -220,9 +228,9 @@ def run(seam_only=False, fixes_only=False):
                 f.call('theme','apply',plan,ok=False)
                 assert next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}})['last']['image']['_0']==after
             f.controls(); f.stop(); f.start()
-            f.apply('orchid'); f.restore(); restored(f); f.stop()
+            f.apply('dracula'); f.restore(); restored(f); f.stop()
         for stage in ['cycle-after-effect','cycle-after-ledger']:
-            f=fixture('cycle-crash'); f.start(); f.apply('lagoon'); before=f.read_wall()
+            f=fixture('cycle-crash'); f.start(); f.apply('tokyo-night'); before=f.read_wall()
             after=next(path for path in before['sources'] if path!=before['displays'][0]['image'])
             f.controls(crash=stage); f.call('theme','fixture-cycle','wide',after,ok=False); f.stop(crashed=True)
             assert (f.root/'state/pending.json').exists(); f.controls(); f.start()
@@ -231,7 +239,7 @@ def run(seam_only=False, fixes_only=False):
         passed('existing scheduler seam after restart journals before assignment; cycle failures/crashes preserve first baseline, advance only last ownership, leave app files untouched, and recover before A->B->Restore')
 
         # A custom ID and same-ID revision reach the real cursor palette resolver without stock fallback.
-        f=fixture('custom'); custom=copy.deepcopy(f.packs[0]); custom['palette']=copy.deepcopy(pack(f,'lagoon')['palette']); custom['wallpapers']=[]
+        f=fixture('custom'); custom=copy.deepcopy(f.packs[0]); custom['palette']=copy.deepcopy(pack(f,'tokyo-night')['palette']); custom['wallpapers']=[]
         f.save_pack(custom); f.start(); f.apply(); first=f.appearance()
         custom['palette'].update(accent='#314159',cyan='#271828',native_second='#271828',dark_background='#102030',foreground='#EEDDCC',native_graph1='#314159')
         f.save_pack(custom); f.apply(); second=f.appearance()
@@ -266,26 +274,26 @@ def run(seam_only=False, fixes_only=False):
                 (d/'images').mkdir(); (d/'images/link').symlink_to(outside if kind=='folder-link' else outside/'real.png')
                 f.packs[0]['wallpapers']=['images']; f.save_pack(f.packs[0])
             if kind in ['collision','writable-collision']:
-                dest=f.root/('packs' if kind=='collision' else 'user-packs')/'lagoon'; shutil.copytree(f.root/'factory/lagoon',dest)
+                dest=f.root/('packs' if kind=='collision' else 'user-packs')/'tokyo-night'; shutil.copytree(f.root/'factory/tokyo-night',dest)
             if kind=='stock-id':
                 dest=f.root/'packs/toybox'; dest.mkdir(); (dest/'manifest.json').write_text(json.dumps(dict(f.packs[0],id='toybox')))
             if kind=='factory-claim': f.save_pack(dict(f.packs[0],factory=True))
-            f.start(); negative(f,('theme','plan','apply','lagoon' if 'collision' in kind else ('toybox' if kind=='stock-id' else 'a'))); f.stop()
+            f.start(); negative(f,('theme','plan','apply','tokyo-night' if 'collision' in kind else ('toybox' if kind=='stock-id' else 'a'))); f.stop()
         passed('missing/undecodable/escaping/symlink-folder assets and imported factory self-claims refuse; user and writable-root collisions cannot silently shadow immutable factory data')
 
         # Every wallpaper input is rechecked after Allow as well as before it, without regenerating a plan.
         for kind in ['source','image','preferences','bindings','asset','added','removed']:
             for during in [False,True]:
-                f=fixture('stale'); f.start(); plan=f.plan('lagoon')
+                f=fixture('stale'); f.start(); plan=f.plan('tokyo-night')
                 def edit():
                     state=f.read_wall()
                     if kind=='source': state['sources'].append(str(f.root/'later.png')); f.write_wall(state)
                     elif kind=='image': state['displays'][0]['image']=str(f.root/'later.png'); f.write_wall(state)
                     elif kind=='preferences': state['preferences']['fitShape']=False; f.write_wall(state)
                     elif kind=='bindings': f.manifest.write_text(f.manifest.read_text()+' ')
-                    elif kind=='asset': (f.root/'factory/lagoon/wallpapers/lagoon-wide.heic').write_bytes(life.WALLPAPER_A)
-                    elif kind=='added': (f.root/'factory/lagoon/wallpapers/new.png').write_bytes(life.WALLPAPER_A)
-                    else: (f.root/'factory/lagoon/wallpapers/lagoon-wide.heic').unlink()
+                    elif kind=='asset': (f.root/'factory/tokyo-night/wallpapers/tokyo-night-wide.png').write_bytes(life.WALLPAPER_A)
+                    elif kind=='added': (f.root/'factory/tokyo-night/wallpapers/new.png').write_bytes(life.WALLPAPER_A)
+                    else: (f.root/'factory/tokyo-night/wallpapers/tokyo-night-wide.png').unlink()
                 if during: held(f,edit,plan)
                 else:
                     edit(); before=f.snapshot(); f.call('theme','apply',plan,ok=False); assert f.snapshot()==before
@@ -293,7 +301,7 @@ def run(seam_only=False, fixes_only=False):
         passed('sources/current images/preferences/display bindings/assets/folder additions/removals stale before and after Allow: no file/assignment effects, no replacement plan')
 
         for kind in ['unrelated','owned','pin']:
-            f=fixture('later'); f.start(); f.apply('lagoon'); state=f.read_wall()
+            f=fixture('later'); f.start(); f.apply('tokyo-night'); state=f.read_wall()
             if kind=='unrelated': state['preferences']['interval']=60; state['preferences']['workspaceSources']['42']=[str(f.root/'later.png')]
             elif kind=='owned': state['displays'][0]['image']=str(f.root/'later.png')
             else: state['displays'][0]['pinned']=True
@@ -324,20 +332,20 @@ def run(seam_only=False, fixes_only=False):
         for kind in ['inside','outside']:
             for crash in [None,'after-wallpaper:0']:
                 for step in ['apply','restore']:
-                    f=fixture('moved'); f.start(); f.apply('lagoon'); state=moved(f,kind); mine=state['displays'][0]['image']
-                    words=f.call('theme','plan','apply','orchid') if step=='apply' else f.call('theme','plan','restore')
+                    f=fixture('moved'); f.start(); f.apply('tokyo-night'); state=moved(f,kind); mine=state['displays'][0]['image']
+                    words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
                     assert words['review']['kept']==([] if kind=='inside' else ['Your wallpaper on one screen stays: you changed it after the theme.']),words['review']
                     if crash:
                         before=f.read_wall(); ledger=(f.root/'state/ownership.json').read_bytes(); f.controls(crash=crash)
                         f.call('theme','apply' if step=='apply' else 'restore',words['id'],ok=False); f.stop(crashed=True); f.controls(); f.start()
                         assert not (f.root/'state/pending.json').exists() and f.read_wall()==before and (f.root/'state/ownership.json').read_bytes()==ledger
-                        words=f.call('theme','plan','apply','orchid') if step=='apply' else f.call('theme','plan','restore')
+                        words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
                     answer=f.call('theme','apply' if step=='apply' else 'restore',words['id'])
                     assert answer['status']==('applied' if step=='apply' else 'restored') and answer['kept']==([] if kind=='inside' else ['Kept your wallpaper on one screen.']),answer
                     wide=next((x for x in own(f).get('wallpapers',[]) if x['target']=={'display':{'_0':'wide'}}),None)
                     if step=='apply':
-                        assert f.read_wall()['displays'][1]['image'].endswith('orchid-tall.png')
-                        if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('orchid-wide.heic')
+                        assert f.read_wall()['displays'][1]['image'].endswith('dracula-tall.png')
+                        if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.heic')
                         else: assert wide is None and f.read_wall()['displays'][0]['image']==mine
                         f.restore()
                     if kind=='inside': restored(f)
@@ -346,7 +354,7 @@ def run(seam_only=False, fixes_only=False):
                         assert own(f).get('wallpapers',[])==[] and own(f)['claims']==[]; f.preserved()
                     f.stop()
         # Pilot's own cycle steps on from a drifted screen instead of stopping there for good.
-        f=fixture('moved-cycle'); f.start(); f.apply('lagoon')
+        f=fixture('moved-cycle'); f.start(); f.apply('tokyo-night')
         back=next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}})['last']['image']['_0']; moved(f,'inside')
         f.call('theme','fixture-cycle','wide',back)
         assert f.read_wall()['displays'][0]['image']==back and next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}})['last']=={'image':{'_0':back}}
@@ -357,8 +365,8 @@ def run(seam_only=False, fixes_only=False):
         for switching in [False,True]:
             for stage in stages:
                 f=fixture('fail'); f.start()
-                if switching: f.apply('lagoon')
-                before=f.read_wall(); plan=f.plan('orchid' if switching else 'lagoon')
+                if switching: f.apply('tokyo-night')
+                before=f.read_wall(); plan=f.plan('dracula' if switching else 'tokyo-night')
                 f.controls(fail=stage)
                 answer=f.call('theme','apply',plan,ok=stage!='journal')
                 committed=stage in ['after-ledger','cleanup','after-cleanup','effect']
@@ -373,15 +381,15 @@ def run(seam_only=False, fixes_only=False):
         passed('initial and A->B failures at journal/file/every wallpaper/ledger/cleanup/refresh stages: original baseline survives; pre-operation assignment rollback verified; file/effect/refresh outcomes remain truthful')
 
         for stage in ['after-write:0','after-wallpaper:0','after-wallpaper:1','after-wallpaper:2','after-ledger']:
-            f=fixture('crash'); f.start(); f.apply('lagoon'); before=f.read_wall(); plan=f.plan('orchid'); f.controls(crash=stage)
+            f=fixture('crash'); f.start(); f.apply('tokyo-night'); before=f.read_wall(); plan=f.plan('dracula'); f.controls(crash=stage)
             f.call('theme','apply',plan,ok=False); f.stop(crashed=True); f.controls(); f.start()
-            if stage=='after-ledger': assert f.call('theme','status')['selected']['id']=='orchid'
-            else: assert f.call('theme','status')['selected']['id']=='lagoon' and f.read_wall()==before
+            if stage=='after-ledger': assert f.call('theme','status')['selected']['id']=='dracula'
+            else: assert f.call('theme','status')['selected']['id']=='tokyo-night' and f.read_wall()==before
             assert not (f.root/'state/pending.json').exists(); f.restore(); restored(f); f.stop()
         passed('durable pending journal restart reconciles file-only, partial wallpaper and committed assignments; original pre-Pilot baseline survives A->B crash->Restore')
 
         # Failed rollback is retained and retried, not called verified or silently discarded.
-        f=fixture('retained'); f.start(); f.apply('lagoon'); before=f.read_wall(); plan=f.plan('orchid')
+        f=fixture('retained'); f.start(); f.apply('tokyo-night'); before=f.read_wall(); plan=f.plan('dracula')
         f.controls(fail='ledger+wallpaper-rollback:1'); answer=f.call('theme','apply',plan)
         assert answer['status']=='failed' and answer['recovery']['status']=='recovery retained'
         assert (f.root/'state/pending.json').exists(); f.checkpoint('retained'); f.controls(); f.stop(); f.start()
@@ -389,7 +397,7 @@ def run(seam_only=False, fixes_only=False):
         passed('failed wallpaper rollback retains durable journal and accurate conflict rows; restart retries only owned assignments and recovers original baseline')
 
         for phase in ['before','after']:
-            f=fixture('callback'); f.start(); f.apply('lagoon'); before=f.read_wall(); plan=f.plan('orchid')
+            f=fixture('callback'); f.start(); f.apply('tokyo-night'); before=f.read_wall(); plan=f.plan('dracula')
             f.controls(wallpaperFail=phase); answer=f.call('theme','apply',plan)
             assert answer['status']=='failed' and answer['refresh']=='not attempted'
             assert answer['recovery']['status']==('rollback verified' if phase=='before' else 'recovery retained'),answer
@@ -398,7 +406,7 @@ def run(seam_only=False, fixes_only=False):
         passed('recording callbacks that throw before or after assignment report failure truthfully; uncertain rollback retains its journal until restart verifies it')
 
         for kind in ['duplicate','unbound','wrong-value']:
-            f=fixture('ledger'); f.start(); f.apply('lagoon'); f.stop(); path=f.root/'state/ownership.json'; value=own(f)
+            f=fixture('ledger'); f.start(); f.apply('tokyo-night'); f.stop(); path=f.root/'state/ownership.json'; value=own(f)
             if kind=='duplicate': value['wallpapers'].append(value['wallpapers'][0])
             elif kind=='unbound': value['wallpapers'][1]['target']={'display':{'_0':'unbound'}}
             else: value['wallpapers'][0]['last']={'image':{'_0':str(f.root/'baseline.png')}}
@@ -410,7 +418,7 @@ def run(seam_only=False, fixes_only=False):
             answer=f.restore(); assert answer['status']=='restored' and [x for x in answer['kept'] if 'no longer connected' in x],answer
             assert own(f).get('wallpapers',[])==[] and not (f.root/'state/pending.json').exists(); f.stop()
         for kind in ['unbound','inconsistent']:
-            f=fixture('journal'); f.start(); f.apply('lagoon'); plan=f.plan('orchid'); f.controls(crash='after-wallpaper:0')
+            f=fixture('journal'); f.start(); f.apply('tokyo-night'); plan=f.plan('dracula'); f.controls(crash='after-wallpaper:0')
             f.call('theme','apply',plan,ok=False); f.stop(crashed=True); f.controls(); path=f.root/'state/pending.json'; value=json.loads(path.read_text())
             if kind=='unbound': value['wallpapers'][0]['target']={'display':{'_0':'unbound'}}
             else: value['wallpapers'][0]['after']={'sources':{'_0':[str(f.root/'other.png')]}}
@@ -472,7 +480,7 @@ def review_regressions(fixture, passed):
 
     # Refused cycles preserve the external choice, exact ledger bytes, pending absence and callback log.
     for kind in ['image','sources','collection','pin','workspace']:
-        f=fixture('r1');f.start();f.apply('lagoon');owned=f.read_wall();original=ledger(f);later=copy.deepcopy(owned);f.checkpoint('owned')
+        f=fixture('r1');f.start();f.apply('tokyo-night');owned=f.read_wall();original=ledger(f);later=copy.deepcopy(owned);f.checkpoint('owned')
         after=next(x for x in later['sources'] if x!=later['displays'][0]['image'])
         if kind=='image':later['displays'][0]['image']=str(f.root/'baseline.png')
         elif kind=='sources':later['sources']=list(reversed(later['sources']))
@@ -597,7 +605,7 @@ def review_regressions(fixture, passed):
 
     f=fixture('r5');f.start();before=f.snapshot();stock=f.call('theme','fixture-colour','theme');assert stock['custom']==stock['renderer']==stock['theme']
     assert f.call('theme','fixture-colour','#ABCDEF')['custom']=='#ABCDEF' and f.snapshot()==before
-    custom=copy.deepcopy(f.packs[0]);custom['palette']=copy.deepcopy(json.loads((f.root/'factory/lagoon/manifest.json').read_text())['palette'])
+    custom=copy.deepcopy(f.packs[0]);custom['palette']=copy.deepcopy(json.loads((f.root/'factory/tokyo-night/manifest.json').read_text())['palette'])
     for accent in ['#314159','#271828']:
         custom['palette']['accent']=accent;f.save_pack(custom);f.apply();before=f.snapshot()
         answer=f.call('theme','fixture-colour','theme');assert answer['custom']==answer['renderer']==answer['theme']==accent

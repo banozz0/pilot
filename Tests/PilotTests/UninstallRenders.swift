@@ -42,7 +42,7 @@ struct UninstallRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
         look.style = .instrument
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
             let ask = UninstallModel(items: Self.items, phase: .confirming)
             ask.ticked.insert("pilot")

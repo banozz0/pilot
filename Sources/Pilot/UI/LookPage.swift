@@ -364,7 +364,7 @@ private struct ThemePackControls: View {
     private func edit(copy: Bool) {
         do {
             let owner = try ThemeCoordinator.production()
-            let id = selected.isEmpty ? (packs.first?.id ?? "lagoon") : selected
+            let id = selected.isEmpty ? (packs.first?.id ?? PilotTheme.defaultID) : selected
             var value = try owner.store.draft(id)
             let loaded = try owner.store.load(id)
             if copy || loaded.factory {

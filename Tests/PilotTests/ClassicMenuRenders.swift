@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Hyper+Space menu as Classic draws it (menu Rail and Classic T8, frames D1–D8), Lagoon and Porcelain, through
+/// The Hyper+Space menu as Classic draws it (menu Rail and Classic T8, frames D1–D8), Tokyo Night and Porcelain, through
 /// HUD.makePanel as Pilot shows it: the root with Waiting, Tab at the empty root onto Windows, a search across kinds, the calculator, translation and colour cards, no match and Install. The sizes, the face and the cards are
 /// checked always; the pictures are opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-rh PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ClassicMenuRenders`
@@ -79,7 +79,7 @@ struct ClassicMenuRenders {
         let search = ClassicStatus(model: try #require(states["D3-search"])).hints
         #expect(search.first?.key == "Tab" && search.first?.label == "kind" && !search.contains { $0.key == "⇧Tab" }, "\(search)")
         #expect(ClassicStatus.sign("Tab") == "⇥" && ClassicStatus.sign("Esc") == "esc")
-        for id in ["lagoon", "porcelain"] {
+        for id in ["tokyo-night", "porcelain"] {
             let colors = StyleTokens.instrumentColors(try #require(PilotTheme.named(id)))
             #expect(Contrast.ratio(colors[keyPath: ClassicStatus.quiet(colors)].rgb, colors.sunken.rgb) >= 4.5, "\(id) quiet")
             #expect(Contrast.ratio(colors.text2.rgb, colors.sunken.rgb) >= 4.5, "\(id) text2")
@@ -88,7 +88,7 @@ struct ClassicMenuRenders {
         }
     }
 
-    @Test("Classic renders in Lagoon and Porcelain, frames D1–D8", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Classic renders in Tokyo Night and Porcelain, frames D1–D8", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -101,10 +101,10 @@ struct ClassicMenuRenders {
         defer { look.style = style; look.themeID = theme }
         look.style = .instrument
         let only = Self.env["PILOT_RENDER_ONLY"]
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
             let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
-                .appendingPathComponent("menu-classic-\(themeID == "lagoon" ? "dark" : "light")")
+                .appendingPathComponent("menu-classic-\(themeID == "tokyo-night" ? "dark" : "light")")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for (name, model) in try Self.states() where only.map(name.contains) ?? true {
                 try InstrumentMenuRenders.render(MenuView(model: model), name, in: dir)

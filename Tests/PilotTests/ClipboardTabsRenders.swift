@@ -9,7 +9,7 @@ import Testing
 
 /// Offscreen renders of the clipboard panel's tabs (card agent-bo-95422970): five tags, so the strip overflows, with the
 /// pick on All, Image, Pinned and a tag near the end, then the empty tabs (a tag and a kind with no copies, a search
-/// with no match), and the confirm before a tag is deleted, in Lagoon and Workshop; per theme,
+/// with no match), and the confirm before a tag is deleted, in Tokyo Night and Folio; per theme,
 /// one sheet stacks the first four and one the empty ones. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ClipboardTabsRenders`
 extension SharedLook {
@@ -40,7 +40,7 @@ struct ClipboardTabsRenders {
             ("07-search-empty", "Image, searched for a word no image has", .kind(.image), "aerospace"),
         ]
         var strips: [(String, NSBitmapImageRep)] = []
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             look.themeID = theme
             var shots: [(String, NSBitmapImageRep)] = []
             for state in states {
@@ -78,7 +78,7 @@ struct ClipboardTabsRenders {
         let db = FileManager.default.temporaryDirectory.appending(path: "pilot-render-colour-\(UUID().uuidString).sqlite")
         defer { for s in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: db.path + s) } }
         let store = try Self.sampleStore(at: db)
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
             let model = PanelModel(store: store)
             model.tab = .kind(.colour)
@@ -122,7 +122,7 @@ struct ClipboardTabsRenders {
         let store = try Self.sampleStore(at: db)
         let image = try #require(try store.unreadImages().first)
         try store.setRecognised(image, "Invoice 2026-104\nPilot Ltd, Valletta\nTotal due: €1,240.00\nPay by 31 October")
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             look.themeID = theme
             let model = PanelModel(store: store)
             model.tab = .kind(.image)

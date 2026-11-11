@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Binds' Save map in the active theme (Q646, spec pilot-1-1 T5): BindsMapRenders' fixture drawn with MapInk in Void (Sven's),
-/// Porcelain (light) and Lagoon (today's fixed look), each in its own colour scheme, so the builder sees the map follow the
+/// Porcelain (light) and Tokyo Night (today's fixed look), each in its own colour scheme, so the builder sees the map follow the
 /// theme and its kinds' colours in a grey theme. Opt-in like the other renders; it measures each page and prints its size,
 /// and BindsMapRenders keeps the A4 check (2480 by 3508 px).
 /// `CFFIXED_USER_HOME=/tmp/<fresh> PILOT_RENDER_DIR=/tmp/<fresh> swift test --filter BindsMapThemeRenders`
@@ -16,7 +16,7 @@ import Testing
 struct BindsMapThemeRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Save map draws in Void, Porcelain and Lagoon", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Save map draws in Void, Porcelain and Tokyo Night", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's binds")
@@ -32,7 +32,7 @@ struct BindsMapThemeRenders {
         try Data(contentsOf: BindsMapRenders.fixture).write(to: engine.binds.fileURL)
         engine.binds.load()
         let model = BindsMapModel(engine: engine, board: BindsKeyboard.Board(.ansi, compact: true), date: Date(timeIntervalSince1970: 1_792_368_000))
-        for id in ["void", "porcelain", "lagoon"] {
+        for id in ["void", "porcelain", "tokyo-night"] {
             let theme = try #require(PilotTheme.named(id))
             let renderer = ImageRenderer(content: BindsMapSheet(model: model, ink: MapInk(theme)).environment(\.colorScheme, theme.dark ? .dark : .light))
             renderer.scale = 2

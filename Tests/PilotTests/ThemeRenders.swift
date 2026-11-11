@@ -8,7 +8,7 @@ import Testing
 
 /// Offscreen renders of design round 4's foundation (card agent-bo-95422890), for Moody beside the approved artifact
 /// 5sh21HWjCjsWYAwWKTibcE: a sheet of the twelve themes (each card in its own colours and display face, its roles and
-/// graphs under it), and the app window in Lagoon and in Workshop. Opt-in like the other renders, in a moved home:
+/// graphs under it), and the app window in Tokyo Night and in Folio. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ThemeRenders`
 extension SharedLook {
 @MainActor
@@ -28,7 +28,7 @@ struct ThemeRenders {
 
         try render(ThemeSheet().frame(width: 1240), to: dir.appendingPathComponent("01-twelve-themes.png"))
         // The kit's gallery, section 5 of the artifact, in three themes (card agent-bo-95422891).
-        for id in ["lagoon", "workshop", "void"] {
+        for id in ["tokyo-night", "folio", "void"] {
             Look.shared.themeID = id
             try render(KitGallery().pilotTheme(), to: dir.appendingPathComponent("kit-\(id).png"))
         }
@@ -69,17 +69,17 @@ struct ThemeRenders {
         let page = HomePage(onScreen: false) { _ in }.environment(engine)
             .frame(width: 1000, height: 1250).pilotTheme().background(Theme.background)
         try render(page, to: dir.appendingPathComponent("home.png"))
-        // Binds as a keyboard (card agent-bo-95422894), Lagoon and Workshop (brackets).
-        for id in ["lagoon", "workshop"] {
+        // Binds as a keyboard (card agent-bo-95422894), Tokyo Night and Folio (brackets).
+        for id in ["tokyo-night", "folio"] {
             Look.shared.themeID = id
-            for plain in [false, true] where !(plain && id == "workshop") {
+            for plain in [false, true] where !(plain && id == "folio") {
                 let page = BindsKeyboardPage(search: "", startOnPlain: plain) { _ in }.environment(engine)
                     .frame(width: 1000, height: 720).pilotTheme().background(Theme.background)
                 try render(page, to: dir.appendingPathComponent("binds-\(id)\(plain ? "-plain" : "").png"))
             }
         }
         Look.shared.themeID = PilotTheme.defaultID
-        for (i, id) in ["lagoon", "workshop", "void"].enumerated() {
+        for (i, id) in ["tokyo-night", "folio", "void"].enumerated() {
             Look.shared.themeID = id   // saved in the moved home only; Ghostty is never touched
             let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
             AppWindowController.applyLook(.shared, to: window)

@@ -146,7 +146,7 @@ struct BindsMapModel {
 
 // MARK: Ink and type
 
-/// The map's colours, from the active theme (Q646, spec pilot-1-1 T30; Lagoon, Pilot's default, when none is given): its
+/// The map's colours, from the active theme (Q646, spec pilot-1-1 T30; Pilot's default when none is given): its
 /// ground, surfaces, lines and text, and four kind colours that never repeat (Lagoon's Windows and Captures share a teal on
 /// the Binds page; a map coloured by kind cannot).
 struct MapInk {
@@ -154,7 +154,7 @@ struct MapInk {
     let ground, surface, raised, line, line2, text, text2, text3, accent, onAccent: Color
     let kinds: [Color]
 
-    init(_ t: PilotTheme = PilotTheme.named("lagoon") ?? .standard) {
+    init(_ t: PilotTheme = .standard) {
         theme = t
         let c = { Color(hex: $0) }
         ground = c(t.ground); surface = c(t.surface); raised = c(t.raised); line = c(t.line); line2 = c(t.line2)

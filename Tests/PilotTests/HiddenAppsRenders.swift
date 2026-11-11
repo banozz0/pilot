@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Install › Hidden apps (Q713) in each style under Lagoon, from seeded rows, on a store of its own that flags nothing,
+/// Install › Hidden apps (Q713) in each style under Tokyo Night, from seeded rows, on a store of its own that flags nothing,
 /// so no app of this Mac is touched. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=<fresh dir under /tmp> PILOT_RENDER_DIR=<fresh dir> PILOT_RESOURCES=Packaging swift test --filter HiddenAppsRenders`
 extension SharedLook {
@@ -35,7 +35,7 @@ struct HiddenAppsRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for style in PilotStyle.allCases {
             look.style = style
             let page = MonitorsGround { HiddenAppsBlock(store: store, rows: Self.rows, choices: []) }

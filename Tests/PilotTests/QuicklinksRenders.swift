@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Defaults › Quicklinks (card agent-bo-95423030) for Sven and Moody: the section alone at the page widths of a 1000 and a
-/// 760 window, Lagoon and Workshop: as it opens on the shipped four, the mouse over GitHub, GitHub open
+/// 760 window, Tokyo Night and Folio: as it opens on the shipped four, the mouse over GitHub, GitHub open
 /// in the editor, a new link refused for GitHub's keyword, and empty; RestyledRenders draws it on the whole page. Each book
 /// lives in a temporary folder, in a moved home; nothing opens a URL. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter QuicklinksRenders`
@@ -17,7 +17,7 @@ extension SharedLook {
 struct QuicklinksRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Defaults › Quicklinks renders in Lagoon and Workshop", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Defaults › Quicklinks renders in Tokyo Night and Folio", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's files")
@@ -49,7 +49,7 @@ struct QuicklinksRenders {
         ]
         let only = Self.env["PILOT_RENDER_ONLY"]
         defer { Look.shared.themeID = PilotTheme.defaultID }
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             Look.shared.themeID = theme
             for width in [1000, 760] {
                 for state in states {

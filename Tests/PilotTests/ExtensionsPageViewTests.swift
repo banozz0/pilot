@@ -229,7 +229,7 @@ struct ExtensionsPageViewTests {
                   settings: ExtensionsSettings? = nil, focus: String? = nil) async throws {
             guard wanted(name) else { return }
             shown = settings ?? full
-            look.themeID = dark ? "lagoon" : "workshop"
+            look.themeID = dark ? "tokyo-night" : "folio"
             look.style = style
             AppWindowController.applyLook(.shared, to: window)
             window.setContentSize(NSSize(width: CGFloat(size.0), height: CGFloat(size.1)))

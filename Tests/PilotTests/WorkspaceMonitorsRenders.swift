@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The Monitor picks on Workspaces (N7; on Tiling until Sven's Q207 page map), opt-in like the other renders: the tab in Instrument and Toybox under
-/// Lagoon, with Sven's three displays: 1 and 2 on Main, 3 and 4 on the LG, which is
+/// Tokyo Night, with Sven's three displays: 1 and 2 on Main, 3 and 4 on the LG, which is
 /// drawn once plugged in and once unplugged (its picks then say "unplugged"), 5 to 9 on Any. Nothing reaches an engine.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WorkspaceMonitorsRenders`
 extension SharedLook {
@@ -41,7 +41,7 @@ struct WorkspaceMonitorsRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for style in PilotStyle.allCases {
             look.style = style
             for (state, displays) in [("plugged", Self.displays), ("unplugged", [Self.displays[0], Self.displays[2]])] {

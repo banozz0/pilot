@@ -8,7 +8,7 @@ import Testing
 
 /// The window's built layouts (window directions, Sven 2026-10-11, design 6D3E1T482hjVZaUkgMvvDb), opt-in like the other
 /// renders, each in its own folder: Home, Keys › Binds and Desktop › Menu bar in the whole window at 1440 by 900,
-/// Instrument (Lagoon, Porcelain) and Toybox (Toybox Night, Toybox), dark and light; then Menu bar at 760 dark (the rail's
+/// Instrument (Tokyo Night, Porcelain) and Toybox (Toybox Night, Toybox), dark and light; then Menu bar at 760 dark (the rail's
 /// list folds into the header, the tabs drop their names), and the rail's Binds at 1600 dark, full width as every one-page area.
 /// `PILOT_RENDER_SHAPE=tabs` (or rail) renders one layout. Seeded as Home's renders are, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WindowRailRenders`
@@ -19,7 +19,7 @@ struct WindowRailRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
     static let pages: [AppPage] = [.home, .binds, .menuBar]
     static let looks: [(name: String, style: PilotStyle, theme: String)] = [
-        ("instrument-dark", .instrument, "lagoon"), ("instrument-light", .instrument, "porcelain"),
+        ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
         ("toybox-dark", .toybox, "toybox-night"), ("toybox-light", .toybox, "toybox"),
     ]
 

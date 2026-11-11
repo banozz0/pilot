@@ -38,7 +38,7 @@ struct HomeSettleTests {
         let look = Look.shared
         let saved = (look.style, look.themeID, look.glass)
         defer { (look.style, look.themeID, look.glass) = saved }
-        (look.style, look.themeID, look.glass) = (.instrument, "orchid", true)
+        (look.style, look.themeID, look.glass) = (.instrument, "dracula", true)
 
         // Taller than the smaller windows, so the scroller shows there.
         let defaults = try #require(UserDefaults(suiteName: testSuite()))
@@ -97,7 +97,7 @@ struct HomeSettleTests {
         let look = Look.shared
         let saved = (look.style, look.themeID)
         defer { (look.style, look.themeID) = saved }
-        (look.style, look.themeID) = (.instrument, "lagoon")
+        (look.style, look.themeID) = (.instrument, "tokyo-night")
         let store = HomeLayoutStore(defaults: try #require(UserDefaults(suiteName: testSuite())))
         var sources = HomeSources()
         sources.lastCopied = { nil }

@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Aliases (card agent-bo-95423037) for Sven and Moody. Defaults › Aliases alone at the page widths of a 1000 and a 760
-/// window, Lagoon and Workshop: six aliases, the mouse over Ghostty, Ghostty open in the editor, Safari
+/// window, Tokyo Night and Folio: six aliases, the mouse over Ghostty, Ghostty open in the editor, Safari
 /// refused Ghostty's alias, Finder asked for by the menu (new), the menu's ask on an empty list, and empty; then the
 /// whole page as the menu opens it, 900 pt high over mockup D's configs, the asked editor brought into view. The menu with alias chips: a root
 /// search for an alias (its row first and current, another aliased row at rest) and the root's quiet list with Install
@@ -25,7 +25,7 @@ struct AliasesRenders {
         Alias(key: "package:cask:zed", alias: "z", title: "Zed"), Alias(key: "action:apps.clipboard", alias: "cb", title: "Clipboard history"),
     ]
 
-    @Test("Defaults › Aliases and the menu's alias chips render in Lagoon and Workshop",
+    @Test("Defaults › Aliases and the menu's alias chips render in Tokyo Night and Folio",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -55,7 +55,7 @@ struct AliasesRenders {
         ]
         let only = Self.env["PILOT_RENDER_ONLY"]
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.glass = false }
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             Look.shared.themeID = theme
             for width in [1000, 760] {
                 for state in states {

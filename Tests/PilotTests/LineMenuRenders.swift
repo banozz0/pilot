@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Hyper+Space menu as Line draws it (menu-morph T1, vault Projects/Pilot/specs/menu-morph.html), Lagoon and Porcelain,
+/// The Hyper+Space menu as Line draws it (menu-morph T1, vault Projects/Pilot/specs/menu-morph.html), Tokyo Night and Porcelain,
 /// through HUD.makePanel as Pilot shows it, from the real model: the root, a search for "notes" across apps, windows,
 /// actions and settings with its Search files row, the Files view, the calculator, colour and translation cards, Cmd+K,
 /// Ask Quick AI, System's switches, every window Tab lists, no match, and apps' commands (P38). Sizes are checked always;
@@ -109,7 +109,7 @@ struct LineMenuRenders {
         #expect(line.type.row == tokens.type.row && line.type.caption == tokens.type.caption)
     }
 
-    @Test("Line renders in Lagoon and Porcelain, frames L1–L35, and Stats' screen in Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Line renders in Tokyo Night and Porcelain, frames L1–L35, and Stats' screen in Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -127,10 +127,10 @@ struct LineMenuRenders {
             try FileManager.default.createDirectory(at: URL(filePath: path).deletingLastPathComponent(), withIntermediateDirectories: true)
             try text.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
             let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
-                .appendingPathComponent("menu-line-\(themeID == "lagoon" ? "dark" : "light")")
+                .appendingPathComponent("menu-line-\(themeID == "tokyo-night" ? "dark" : "light")")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let thumbnails = FileThumbnails.shared
             thumbnails.make = FileThumbnailRenders.fake

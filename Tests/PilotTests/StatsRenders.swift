@@ -8,7 +8,7 @@ import Testing
 
 /// Stats as the approved mockup ErxOpOTBN8U (card agent-bo-95422992): the strip under the chips redraws as a chip is
 /// clicked, every run; and, opt-in like the other renders, the whole window at 1440, 1000 and 760 in
-/// Lagoon on the mockup's Mac mini (seeded readings, the menu bar showing CPU, Memory, Storage and Temperature), the
+/// Tokyo Night on the mockup's Mac mini (seeded readings, the menu bar showing CPU, Memory, Storage and Temperature), the
 /// CPU chart's hover, 1 hour and Today, Graph and One item, and the chooser before and after Network's chip is clicked:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter StatsRenders`
 extension SharedLook {
@@ -177,7 +177,7 @@ struct StatsRenders {
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID }
         for width in [1440, 1000, 760] where wanted("window-\(width)") {
             window.setContentSize(NSSize(width: CGFloat(width), height: width == 760 ? 3000 : 1900))

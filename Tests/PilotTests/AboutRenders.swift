@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Hyper+Space › About (Q443) as Line draws it, in Lagoon, Porcelain and Toybox, from seeded facts (Sven's Mac mini as read
+/// Hyper+Space › About (Q443) as Line draws it, in Tokyo Night, Porcelain and Toybox, from seeded facts (Sven's Mac mini as read
 /// 2026-10-24), never this Mac's. Opt-in, offscreen:
 /// `CFFIXED_USER_HOME=/tmp/pilot-rh PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AboutRenders`
 extension SharedLook {
@@ -39,7 +39,7 @@ struct AboutRenders {
             .init(label: "Updated", value: "Saturday, 24 October 2026 at 13:57", note: "Pilot"),
         ])
 
-    @Test("About renders in Lagoon, Porcelain and Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("About renders in Tokyo Night, Porcelain and Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -54,8 +54,8 @@ struct AboutRenders {
         defer { look.style = style; look.themeID = theme }
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("about")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        for (name, kind, themeID) in [("about-lagoon", PilotStyle.instrument, "lagoon"), ("about-porcelain", .instrument, "porcelain"),
-                                      ("about-toybox", .toybox, "lagoon")] {
+        for (name, kind, themeID) in [("about-lagoon", PilotStyle.instrument, "tokyo-night"), ("about-porcelain", .instrument, "porcelain"),
+                                      ("about-toybox", .toybox, "tokyo-night")] {
             look.style = kind
             look.themeID = themeID
             let model = MenuModel(nav: MenuNavigator(entries: try LineMenuRenders.built(), branch: .about))

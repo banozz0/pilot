@@ -71,7 +71,7 @@ struct ToyboxHomeRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         let look = Look.shared
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
 
         func shot(_ name: String, style: PilotStyle, dark: Bool = true, page: AppPage = .home, width: Int = 1440, height: Int = 900) throws {

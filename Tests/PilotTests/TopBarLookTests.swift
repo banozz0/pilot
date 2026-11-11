@@ -87,7 +87,7 @@ struct TopBarLookTests {
         look.glass = false
         // The light bar only for the render.
         let rendering = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"] != nil
-        for (themeName, theme, colourName, colour) in [("dark", "lagoon", "red", ColourChoice.custom(Self.red)), ("light", "porcelain", "theme", .theme)]
+        for (themeName, theme, colourName, colour) in [("dark", "tokyo-night", "red", ColourChoice.custom(Self.red)), ("light", "porcelain", "theme", .theme)]
             where colourName == "red" || rendering {
             look.preview(theme)
             let apps = await Self.capturedApps()
@@ -165,7 +165,7 @@ struct TopBarLookTests {
 
     @Test("A Clear bar shows no colour, so its text is the theme's own on any colour picked; its ground is all but nothing, yet not nothing (Sven on build 60)")
     func clearBar() async throws {
-        let tokens = StyleTokens.of(.instrument, theme: try #require(PilotTheme.named("lagoon")))
+        let tokens = StyleTokens.of(.instrument, theme: try #require(PilotTheme.named("tokyo-night")))
         #expect(TopBarColour.tokens(.custom(0xFBFCFF), style: tokens, background: .clear) == tokens)
         #expect(TopBarColour.tokens(.custom(0xFBFCFF), style: tokens, background: .glass) == TopBarColour.tokens(.custom(0xFBFCFF), style: tokens))
         let (rep, timer) = try await Self.bar(style: .instrument, background: .clear, colour: .custom(Self.red))
@@ -201,7 +201,7 @@ struct TopBarLookTests {
 
     @Test("The bar's text keeps the theme's on the theme's colour, and on a picked one turns white or near-black, whichever reads better")
     func contrastRule() throws {
-        for id in ["porcelain", "lagoon"] {
+        for id in ["porcelain", "tokyo-night"] {
             let theme = try #require(PilotTheme.named(id))
             let style = PilotStyle.instrument
             let tokens = StyleTokens.of(style, theme: theme)
@@ -226,7 +226,7 @@ struct TopBarLookTests {
     func solidBarReads() async throws {
         let look = Look.shared, saved = look.theme.id
         defer { look.preview(saved) }
-        for theme in ["porcelain", "lagoon"] {
+        for theme in ["porcelain", "tokyo-night"] {
             look.preview(theme)
             let style = PilotStyle.instrument
             for colour in [ColourChoice.theme, .custom(Self.red)] {
@@ -270,7 +270,7 @@ struct TopBarLookTests {
         let look = Look.shared, saved = (look.theme.id, look.glass)
         defer { look.preview(saved.0); look.glass = saved.1 }
         look.glass = true
-        for (themeName, theme) in [("light", "porcelain"), ("dark", "lagoon")] {
+        for (themeName, theme) in [("light", "porcelain"), ("dark", "tokyo-night")] {
             look.preview(theme)
             let style = PilotStyle.instrument
             for background in TopBarBackground.allCases {

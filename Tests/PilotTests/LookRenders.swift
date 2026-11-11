@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Offscreen renders of the Look page (card agent-bo-95422896) for Moody beside the approved artifact 5sh21HWjCjsWYAwWKTibcE:
-/// Lagoon, Workshop and Void, Glass off and on, and Glass at 100 % over white so the floor raises the
+/// Tokyo Night, Folio and Void, Glass off and on, and Glass at 100 % over white so the floor raises the
 /// surface (the amber badge). The page runs on a Look of its own (a fake Ghostty, its own defaults); only the shared
 /// look's theme is previewed, in a moved home. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter LookRenders`
@@ -25,7 +25,7 @@ struct LookRenders {
             let value = try JSONDecoder().decode(JSONValue.self, from: bytes)
             guard case .object(let fields) = value, case .array(let inputs) = fields["inputs"],
                   let plan = inputs.first, let result = inputs.last else { throw ThemeFailure("missing review render fixture") }
-            look.style = .instrument; look.themeID = "lagoon"; Self.mirror(look, spot: nil)
+            look.style = .instrument; look.themeID = "tokyo-night"; Self.mirror(look, spot: nil)
             try writeRender(ThemePreviewSummary(plan: plan) { ThemePlanReview(plan: plan) }
                 .padding(20).frame(width: 760, height: 420, alignment: .topLeading)
                 .styled(.page(.look), look: look).pilotTheme(look: look).background(Theme.background),
@@ -43,10 +43,10 @@ struct LookRenders {
                 "changed": .array(["Pilot", "wallpaper", "Ghostty", "Zed", "Obsidian vault notes", "VS Code"].map(JSONValue.string)),
                 "changes": .array(["Pilot: colours, cursor colours", "Wallpaper collection: 2 images", "Ghostty", "Zed", "Obsidian vault notes", "VS Code"].map(JSONValue.string)),
                 "next": .array([.string("Reload Obsidian to see it.")])])
-            for id in ["lagoon", "porcelain"] {
+            for id in ["tokyo-night", "porcelain"] {
                 look.style = .instrument; look.themeID = id; Self.mirror(look, spot: nil)
                 let themes = PilotTheme.designed.filter { ThemeNativePalette.stock($0.id).compatible(with: look.style.rawValue) }
-                try writeRender(ThemeSection(themes: themes, picked: "lagoon", columns: 4, applied: true, canApply: true, running: false,
+                try writeRender(ThemeSection(themes: themes, picked: "tokyo-night", columns: 4, applied: true, canApply: true, running: false,
                                              pick: { _ in }, apply: {}, restore: {}) {
                         Text(themeOutcomeText(result))
                         DisclosureGroup("Details") { Text(themeOutcomeDetails(result)).font(.caption) }
@@ -63,13 +63,13 @@ struct LookRenders {
                                  adapters: ["ghostty": .object([:]), "zed": .object([:]), "obsidian": .object([:])])
             pack.material = .init(glass: true, transparency: 35, blur: "full")
             let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            let wide = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/lagoon/wallpapers/lagoon-wide.heic"))
-            let tall = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/lagoon/wallpapers/lagoon-tall.png"))
+            let wide = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-wide.png"))
+            let tall = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-tall.png"))
             for style in PilotStyle.allCases {
-                for id in ["lagoon", "porcelain"] {
+                for id in ["tokyo-night", "porcelain"] {
                     look.style = style; look.themeID = id; Self.mirror(look, spot: nil)
                     var draft = ThemePackStore.Draft(pack: pack)
-                    if id == "lagoon" {
+                    if id == "tokyo-night" {
                         draft.pack.wallpapers = ["wallpapers/Tide.png", "wallpapers/Dusk.png"]
                         draft.files = ["wallpapers/Tide.heic": wide, "wallpapers/Dusk.png": tall]
                     }
@@ -87,7 +87,7 @@ struct LookRenders {
         func shot(_ name: String, width: CGFloat = 1000, height: CGFloat = 860) throws {
             try Self.shot(look, spot: spot, to: dir.appendingPathComponent("\(name).png"), width: width, height: height)
         }
-        for id in ["lagoon", "workshop", "void"] {
+        for id in ["tokyo-night", "folio", "void"] {
             look.themeID = id
             try shot("look-\(id)", height: 1000)
         }
@@ -157,7 +157,7 @@ struct LookRenders {
     @Test("The Look page shows every line whole at both window widths", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderWidths() throws {
         let (look, dir) = try Self.setUp()
-        for id in ["lagoon", "workshop"] {
+        for id in ["tokyo-night", "folio"] {
             look.themeID = id
             for window in [AppWindowController.size.width, AppWindowController.minSize.width] {
                 try Self.shot(look, to: dir.appendingPathComponent("look-widths-\(id)-\(Int(window)).png"), width: Self.page(window), height: 1400)
@@ -171,7 +171,7 @@ struct LookRenders {
     @Test("The Look page's style picker renders in every style", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderStyles() throws {
         let (look, dir) = try Self.setUp()
-        for id in ["lagoon", "workshop"] {
+        for id in ["tokyo-night", "folio"] {
             look.themeID = id
             for style in PilotStyle.allCases {
                 look.style = style
@@ -187,7 +187,7 @@ struct LookRenders {
     @Test("The Look page's Hyper+Space menu picker renders", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderMenuLayout() throws {
         let (look, dir) = try Self.setUp()
-        for id in ["lagoon", "porcelain"] {
+        for id in ["tokyo-night", "porcelain"] {
             look.themeID = id
             for layout in MenuLayoutStyle.allCases {
                 look.menuLayout = layout
@@ -197,7 +197,7 @@ struct LookRenders {
                 }
             }
         }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         look.menuLayout = .rail
         look.style = .toybox
         try Self.shot(look, more: true, to: dir.appendingPathComponent("look-menu-toybox-lagoon.png"), width: Self.page(AppWindowController.size.width), height: 760)
@@ -211,7 +211,7 @@ struct LookRenders {
     @Test("The Look page's style picker shows every word whole at every page width", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RENDER_OCR"] != nil))
     func styleWords() throws {
         let (look, dir) = try Self.setUp()
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         Self.mirror(look, spot: nil)
         for style in PilotStyle.allCases {
             look.style = style
@@ -234,14 +234,14 @@ struct LookRenders {
     }
 
     /// Look in the whole window at its first size, 1000 by 660 (simplify-pages T20, T28): the front, Glass off and on over
-    /// Lagoon's wallpaper, and More, in Instrument and Toybox, a dark theme and a light one. The shared look in a moved home,
+    /// Tokyo Night's wallpaper, and More, in Instrument and Toybox, a dark theme and a light one. The shared look in a moved home,
     /// so Theme draws its packs' section; nothing reaches Ghostty or the apps.
     @Test("Look's front and More at 1000 by 660", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderWindow() throws {
         let (_, dir) = try Self.setUp()
         let engine = try SharedLook.HomeRenders.engine()
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let still = WallpaperScreen.thumbnail(root.appending(path: "Packaging/ThemePacks/lagoon/wallpapers/lagoon-wide.heic"), size: 640)
+        let still = WallpaperScreen.thumbnail(root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-wide.png"), size: 640)
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)
             .environment(\.lookPreviewStill, still)))
@@ -250,7 +250,7 @@ struct LookRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved; Self.resetShared() }
-        let screens = [WallpaperScreen(id: 1, name: "Built-in Retina Display", portrait: false, detail: "lagoon-wide.heic · 1 of 2",
+        let screens = [WallpaperScreen(id: 1, name: "Built-in Retina Display", portrait: false, detail: "tokyo-night-wide.png · 1 of 2",
                                        thumb: still, next: still, nextName: nil)]
         func shot(_ place: AppPlace, _ name: String) throws {
             model.go(place)
@@ -258,7 +258,7 @@ struct LookRenders {
             frame.layoutSubtreeIfNeeded()
             try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
-        for (style, themes) in [(PilotStyle.instrument, ["lagoon", "porcelain"]), (.toybox, ["toybox-night", "toybox"])] {
+        for (style, themes) in [(PilotStyle.instrument, ["tokyo-night", "porcelain"]), (.toybox, ["toybox-night", "toybox"])] {
             for theme in themes {
                 look.style = style; look.themeID = theme
                 AppWindowController.applyLook(look, to: window)
@@ -280,8 +280,8 @@ struct LookRenders {
     }
 
     /// Look's preview, the desk in the theme (round 3 note 3, Sven's pick A of the look-preview-design round and its
-    /// tweak): the whole window at 1000 by 660 in Lagoon and in Toybox's night, then the preview alone at the size that
-    /// window gives it (354 by 257, measured in the round) in two dark packs and two light ones, and once at 978 by 344
+    /// tweak): the whole window at 1000 by 660 in Tokyo Night and in Toybox's night, then the preview alone at the size that
+    /// window gives it (354 by 257, measured in the round) in four of the line-up of 18's new packs, and once at 978 by 344
     /// (Sven's wider window on build 2300). Each pack's own manifest and wide wallpaper.
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter "LookRenders/renderPreview"`
     @Test("Look's preview as a desk in four packs", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -306,14 +306,14 @@ struct LookRenders {
         defer { (shared.themeID, shared.style, shared.glass) = saved; shared.packChanged(nil); look.packChanged(nil); Self.resetShared() }
 
         // In place: the whole window, the shared look.
-        let lagoon = try still("lagoon")
+        let tokyo = try still("tokyo-night")
         let engine = try SharedLook.HomeRenders.engine()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)
-            .environment(\.lookPreviewStill, lagoon)))
+            .environment(\.lookPreviewStill, tokyo)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        for (style, id) in [(PilotStyle.instrument, "lagoon"), (.toybox, "toybox-night")] {
+        for (style, id) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox-night")] {
             if style == .instrument { try wear(shared, id, dark: true) } else { shared.packChanged(nil); shared.style = style; shared.themeID = id }
             shared.glass = false
             AppWindowController.applyLook(shared, to: window)
@@ -331,11 +331,11 @@ struct LookRenders {
                                 .styled(.page(.look), look: look).pilotTheme(look: look).background(Theme.background),
                             to: dir.appendingPathComponent("\(name).png"), wait: 0.5)
         }
-        for (id, dark) in [("lagoon", true), ("garnet", true), ("porcelain", false), ("wisteria", false)] {
+        for (id, dark) in [("tokyo-night", true), ("catppuccin", true), ("gruvbox", true), ("dracula", true)] {
             try wear(look, id, dark: dark); try wear(shared, id, dark: dark)
             let picture = try still(id)
             try shot(id, picture)
-            if id == "lagoon" { try shot("wide-lagoon", picture, width: 978, height: 344) }
+            if id == "tokyo-night" { try shot("wide-tokyo-night", picture, width: 978, height: 344) }
         }
     }
 

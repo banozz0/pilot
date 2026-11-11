@@ -174,9 +174,9 @@ struct PanelRenders {
         try render(OverlayView(title: "Hyper", rows: rows), "07-overlay", in: dir)
         try render(OverlayView(title: "Hyper+Ctrl", rows: []), "08-overlay-empty", in: dir)
         try render(TipView(text: "Workspace 2 saved: 3 windows"), "09-tip", in: dir)
-        // Convert's tips with their button (card agent-bo-95423211), in the theme of the run and in Workshop, the light one,
+        // Convert's tips with their button (card agent-bo-95423211), in the theme of the run and in Folio, the light one,
         // previewed so nothing is saved.
-        for (id, suffix) in [(Look.shared.themeID, ""), ("workshop", "-workshop")] {
+        for (id, suffix) in [(Look.shared.themeID, ""), ("folio", "-workshop")] {
             Look.shared.preview(id)
             try render(TipView(text: "Converting 2 of 5 to JPG…", action: HUD.TipAction(title: "Cancel") {}), "09-tip-progress\(suffix)", in: dir)
             try render(TipView(text: "3 files converted to JPG", action: HUD.TipAction(title: "Reveal") {}), "09-tip-done\(suffix)", in: dir)

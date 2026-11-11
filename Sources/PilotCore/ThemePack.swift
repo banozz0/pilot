@@ -74,13 +74,14 @@ public struct ThemePack: Codable, Equatable, Sendable {
 
     /// Resolve colours without changing the style's geometry or typography.
     public func appearance(keeping base: PilotTheme) -> PilotTheme {
-        // Decoded packs are validated; direct Codable construction must never trap either.
+        // Decoded packs are validated; direct Codable construction must never trap either. A `native_` role overrides the
+        // terminal slot where a source's ANSI colours do not carry that meaning (Matte Black's yellow slot is a red).
         func c(_ role: String, _ native: String? = nil) -> UInt32 { (native.flatMap { palette["native_" + $0] } ?? palette[role]).flatMap(Self.colorValue) ?? 0 }
         return PilotTheme(id: id, name: title, tagline: "Theme pack", source: id, dark: dark,
                           ground: c("background"), sidebar: c("dark_background"), surface: c("darker_background"),
                           raised: c("lighter_background"), line: c("muted", "line"), line2: c("dark_foreground", "line2"),
                           text: c("foreground"), text2: c("light_foreground"), text3: c("muted", "text3"), accent: c("accent"),
-                          second: c("cyan", "second"), third: c("magenta", "third"), good: c("green"), amber: c("yellow"), problem: c("red"),
+                          second: c("cyan", "second"), third: c("magenta", "third"), good: c("green", "good"), amber: c("yellow", "amber"), problem: c("red", "problem"),
                           graphs: [c("cyan", "graph1"), c("magenta", "graph2"), c("yellow", "graph3")], selection: id == base.id ? base.selection : Paint(c("selection", "selection"), palette["native_selection"] == nil ? 1 : (dark ? 0.16 : 0.14)),
                           onAccent: id == base.id ? base.onAccent : nil, focus: base.focus, radius: base.radius, face: base.face, wallpaper: base.wallpaper)
     }

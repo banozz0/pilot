@@ -11,7 +11,7 @@ import Testing
 /// back byte for byte: UTF-8 with a byte order mark and CRLF in a 0600 file, UTF-16 LE, a guessed Latin-1 with CR, mixed
 /// line endings, a link to a Markdown file, an extended attribute; never saved over: read-only, locked, in the Trash;
 /// refused: a binary, a file over 20 MB; a change on disk reloads a clean file and waits over an edited one. Then the window
-/// in Instrument and Toybox under Lagoon (dark) and Porcelain (light): Markdown drawn, raw, plain text, the changed-on-disk
+/// in Instrument and Toybox under Tokyo Night (dark) and Porcelain (light): Markdown drawn, raw, plain text, the changed-on-disk
 /// question.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter TextWindowRenders`
 extension SharedLook {
@@ -292,7 +292,7 @@ struct TextWindowRenders {
         let only = env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map { $0.split(separator: ",").contains { name.contains($0) } } ?? true }
 
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
             for style in PilotStyle.allCases {
                 look.style = style
@@ -300,7 +300,7 @@ struct TextWindowRenders {
                     ("md", markdown, false, false), ("md-raw", markdown, true, false), ("txt", plain, false, false),
                     ("changed", markdown, false, true),
                 ]
-                for state in states where (theme == "lagoon" || state.name == "md") && wanted("\(style.rawValue)-\(theme)-\(state.name)") {
+                for state in states where (theme == "tokyo-night" || state.name == "md") && wanted("\(style.rawValue)-\(theme)-\(state.name)") {
                     state.doc.model.raw = state.raw
                     state.doc.model.changedOnDisk = state.changed ? Date(timeIntervalSince1970: 1_793_000_000) : nil
                     if state.changed { state.doc.model.text = sample + "\n\nAn edit not saved yet." }

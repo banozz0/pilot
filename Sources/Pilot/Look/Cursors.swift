@@ -189,13 +189,16 @@ struct CursorCatalogue: Decodable, Sendable {
         func palette(_ colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil) -> [String: String] {
             let own = palettes["own"] ?? [:]
             guard colours != .own else { return own }
+            // A designed theme the set has no palette for (the line-up of 18's) is recoloured from its own roles.
+            let resolved = resolved ?? (palettes[theme] == nil ? PilotTheme.named(theme) : nil)
             let themed: [String: String]
             if let resolved {
-                // Preserve each designed atlas's role mapping; replace Lagoon's semantic colours by content.
-                let reference = PilotTheme.standard
-                let pairs: [(UInt32, UInt32)] = [(reference.sidebar, resolved.sidebar), (reference.text, resolved.text),
-                    (reference.accent, resolved.accent), (reference.second, resolved.second), (reference.third, resolved.third),
-                    (reference.problem, resolved.problem), (reference.surface, resolved.surface),
+                // Preserve each designed atlas's role mapping; replace Lagoon's semantic colours by content. The atlas is
+                // drawn in Lagoon's colours (retired 2026-11-11), so its hexes stay the reference: sidebar, text, accent,
+                // second, third, problem, surface.
+                let pairs: [(UInt32, UInt32)] = [(0x050B13, resolved.sidebar), (0xE4EEF5, resolved.text),
+                    (0x2BC4F0, resolved.accent), (0x22C7A9, resolved.second), (0xF59BBB, resolved.third),
+                    (0xFF7A85, resolved.problem), (0x0C1724, resolved.surface),
                     (0x1B7A95, Contrast.hex(Contrast.mix(Contrast.rgb(resolved.accent), [0, 0, 0], 0.62)))]
                 let mapping = Dictionary(pairs.map { (ColourAnswer.hex($0.0).lowercased(), ColourAnswer.hex($0.1)) }, uniquingKeysWith: { first, _ in first })
                 themed = (palettes["lagoon"] ?? own).mapValues { mapping[$0.lowercased()] ?? $0 }

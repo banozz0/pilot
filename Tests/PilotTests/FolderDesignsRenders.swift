@@ -9,7 +9,7 @@ import Testing
 /// Pilot's folder designs (P54) as Pilot loads them, through `FolderDesigns.art` into NSImage: each at 16, 32, 128 and
 /// 512 px on Finder's light and dark grounds, sheets of all of them (the twelve, plain and the kinds' 54, T61) twelve to a
 /// sheet per ground, two folders in the moved home dressed and their icons read back as Finder reads them, plain with a
-/// picture in its front, and Files › Folders' Design list in Lagoon (dark) and Porcelain (light) with the moved home's
+/// picture in its front, and Files › Folders' Design list in Tokyo Night (dark) and Porcelain (light) with the moved home's
 /// Downloads ticked, so its kind's designs come first. On the way it checks the picker lists a Downloads folder's designs
 /// first and that pictures waiting in To add join Your designs once. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> PILOT_RESOURCES=Packaging swift test --filter FolderDesignsRenders`
@@ -105,7 +105,7 @@ struct FolderDesignsRenders {
         let store = YourFolderDesigns(folder: URL(fileURLWithPath: home).appending(path: "Your folder designs", directoryHint: .isDirectory))
         let waiting = store.folder.appending(path: YourFolderDesigns.waiting, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: waiting, withIntermediateDirectories: true)
-        for id in ["lagoon", "downloads-pour"] {
+        for id in ["tokyo-night", "downloads-pour"] {
             try FileManager.default.copyItem(at: try #require(BundledJSON.url(id, "heic", in: "folder-designs")), to: waiting.appending(path: "\(id) text-free.heic"))
         }
         let added = store.addWaiting().map(\.design.title)
@@ -121,7 +121,7 @@ struct FolderDesignsRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
         look.style = .instrument
-        for theme in ["lagoon", "porcelain"] where PilotTheme.named(theme) != nil {
+        for theme in ["tokyo-night", "porcelain"] where PilotTheme.named(theme) != nil {
             look.themeID = theme
             let model = FolderDesignsModel(yours: none)
             await model.add([downloads])

@@ -9,7 +9,7 @@ import Testing
 /// The Workspaces page with Add and Delete (Sven 2026-10-17), opt-in like the other renders: nine workspaces in one row
 /// (Sven's Q37), its More with workspace 2 picked while 1 is on screen (simplify-pages T18),
 /// then five after 3 is deleted (4 and up moving down a number), then one with Delete off; workspace 2 named Chat, so it
-/// shows its name alone; the Monitors and Swipe blocks on More. In Instrument and Toybox under Lagoon. Nothing
+/// shows its name alone; the Monitors and Swipe blocks on More. In Instrument and Toybox under Tokyo Night. Nothing
 /// reaches an engine: the tiler is never started.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WorkspacesPageRenders`
 extension SharedLook {
@@ -56,7 +56,7 @@ struct WorkspacesPageRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for count in [9, 5, 1] {
             if count == 5 { while list.count > 6 { list.remove() }; list.remove("3") }
             while list.count > count { list.remove() }

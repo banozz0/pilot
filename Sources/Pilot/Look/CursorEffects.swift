@@ -134,10 +134,12 @@ struct CursorEffectColours: Equatable, Sendable {
         (self.effect, self.rightClick, self.edge, effectRGB) = (CursorArt.colour(effect), rightClick, edge, effect)
     }
 
-    /// The current theme's, or Lagoon's for a theme effects.json does not list. A custom colour (T33) takes the trail,
+    /// The current theme's: effects.json's, else made from its own colours, else Lagoon's for an unknown id. A custom colour (T33) takes the trail,
     /// ring and left ripple, with its edge by effects.py's rule (black on a colour over 0.45 luminance, else white); the
     /// right-click ripple stays the theme's second colour (Q818).
     static func of(_ theme: String, colour: ColourChoice = .theme, resolved: PilotTheme? = nil) -> CursorEffectColours {
+        // A designed theme effects.json does not list takes its own accent, as a pack does.
+        let resolved = resolved ?? (table[theme] == nil ? PilotTheme.named(theme) : nil)
         let themed = resolved.map { CursorEffectColours(effect: $0.accent, rightClick: CursorArt.colour($0.second),
             edge: CursorArt.colour(Contrast.luminance(Contrast.rgb($0.accent)) > 0.45 ? 0x000000 : 0xFFFFFF)) } ?? table[theme] ?? table["lagoon"] ?? lagoon
         guard case .custom(let rgb) = colour else { return themed }

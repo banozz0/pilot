@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Binds › Abilities and a page with ⓘ tips (story 155), opt-in like the other renders: the window on Abilities in
-/// Instrument and Toybox under Lagoon at 1440 by 900, Instrument at 760 too; the list searched for "wallpaper", and for
+/// Instrument and Toybox under Tokyo Night at 1440 by 900, Instrument at 760 too; the list searched for "wallpaper", and for
 /// "bitwarden" (More abilities); Binds' own bar with its Abilities button; Clipboard in Instrument with its tips
 /// (Pomodoro's page, the other, left Pilot on 2026-10-10).
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter AbilitiesRenders`
@@ -38,7 +38,7 @@ struct AbilitiesRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
 
         func shoot(_ place: AppPlace, _ name: String, width: Int = 1440) throws {
             window.setContentSize(NSSize(width: CGFloat(width), height: 900))

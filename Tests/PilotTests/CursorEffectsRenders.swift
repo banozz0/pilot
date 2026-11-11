@@ -7,14 +7,14 @@ import ImageScale
 
 /// Cursor trails and halos (P84), drawn offscreen through `CursorEffectPainter` onto a fixed sample path, never in an
 /// overlay: each trail, the Ring (still and mid-squeeze), a left and a right ripple, and the Spotlight, on a dark and a
-/// light ground in Lagoon's and Porcelain's colours, so the 1.5 pt edge shows on both:
+/// light ground in Tokyo Night's and Porcelain's colours, so the 1.5 pt edge shows on both:
 /// `PILOT_RENDER_DIR=<tmp> swift test --filter CursorEffectsRenders`.
 @MainActor
 @Suite("Cursor effects renders")
 struct CursorEffectsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
     static let panel = CGSize(width: 260, height: 150), scale = 2
-    static let grounds: [(name: String, grey: CGFloat, theme: String)] = [("dark", 0.12, "lagoon"), ("light", 0.96, "porcelain")]
+    static let grounds: [(name: String, grey: CGFloat, theme: String)] = [("dark", 0.12, "tokyo-night"), ("light", 0.96, "porcelain")]
 
     /// A sweep left to right with one wave, sampled every 8 ms over `length` and ending now (t = 1), at the pointer.
     static func path(_ length: TimeInterval, now: TimeInterval = 1) -> [CursorEffectState.Sample] {

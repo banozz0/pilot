@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Menu bar in the whole window at 1440, 1000 and 760 in every style in Lagoon (card agent-bo-95423001), opt-in like
+/// Menu bar in the whole window at 1440, 1000 and 760 in every style in Tokyo Night (card agent-bo-95423001), opt-in like
 /// the other renders: nothing runs past the window's right edge; with PILOT_RENDER_OCR=1 too, every line whole, so Vision
 /// reads no ellipsis anywhere, and the strip short of room drops Finder before Pilot's items. In a moved home, with Stats'
 /// readings and the mockup's menu bar:
@@ -66,7 +66,7 @@ struct MenuBarRenders {
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         let picked = Look.shared.style
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = picked }
         model.go(AppPlace(.menuBar))
@@ -199,7 +199,7 @@ struct MenuBarRenders {
         let engine = Engine()
         StatsRenders.seed(SystemSampler.shared)
         StatsRenders.pickMockup(BarItemsStore.shared)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         // Liquid Glass draws nothing off screen: Calm's capsules on the flat fill, so the renders show them.
         let glass = Look.shared.glass
         Look.shared.glass = false

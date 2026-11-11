@@ -136,7 +136,7 @@ struct WindowBorderControllerTests {
         look.windowBorderWidth = 6
         #expect(await Self.settles { surface.shown?.width == 6 })
         #expect(surface.shown?.frame == CGRect(x: 94, y: 424, width: 812, height: 612))
-        look.pick("workshop")
+        look.pick("folio")
         #expect(await Self.settles { surface.shown?.color == look.theme.accent })
         look.windowBorder = false
         #expect(await Self.settles { surface.shown == nil })

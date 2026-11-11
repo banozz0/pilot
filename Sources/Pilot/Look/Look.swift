@@ -250,7 +250,7 @@ final class Look {
         menuLayout = layout
         if themes == nil {
             if let data = defaults.data(forKey: "look.appliedPalette"),
-               let palette = try? JSONDecoder().decode(ThemeNativePalette.self, from: data),
+               let palette = (try? JSONDecoder().decode(ThemeNativePalette.self, from: data))?.current,
                (try? palette.validate()) != nil, palette.compatible(with: style.rawValue) {
                 switch palette { case .stock(let id): themeID = id; case .pack(let value): pack = value }
             } else { pack = try? ThemeCoordinator.persistedPack() }

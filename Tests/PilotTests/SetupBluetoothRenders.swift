@@ -7,7 +7,7 @@ import Testing
 
 extension SharedLook {
 /// Offscreen renders of Setup › Bluetooth after macOS refused Pilot (card agent-bo-95422970): the Ask again and Open
-/// Settings row, at the window's default and least widths, Lagoon and Workshop; then Ask again pressed
+/// Settings row, at the window's default and least widths, Tokyo Night and Folio; then Ask again pressed
 /// through the page's own button on a fake whose reset fails, so the sentence that sends you to Open Settings shows. Open
 /// Settings is never pressed (it opens System Settings). Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter SetupBluetoothRenders`
@@ -64,7 +64,7 @@ struct SetupBluetoothRenders {
             try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
 
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             look.themeID = theme
             look.preview(spot: nil)
             for window in [AppWindowController.size.width, AppWindowController.minSize.width] {

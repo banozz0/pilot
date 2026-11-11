@@ -39,7 +39,7 @@ struct BarTrayRenders {
         let look = Look.shared
         let saved = (look.style, look.themeID, look.glass, store.background, store.colour)
         defer { (look.style, look.themeID, look.glass, store.background, store.colour) = saved }
-        (look.themeID, look.glass, store.background) = ("lagoon", false, .solid)
+        (look.themeID, look.glass, store.background) = ("tokyo-night", false, .solid)
 
         // The page in Instrument at 1000 and 760; the strip mid-drag in both styles.
         look.style = .instrument
@@ -57,7 +57,7 @@ struct BarTrayRenders {
         let glass = ScrollView { MenuBarPage(onScreen: false, placement: .topBar).environment(engine) }
             .frame(width: 1000, height: 560).background(Theme.background).pilotTheme()
         _ = try ClockRenders.write(glass, size: NSSize(width: 1000, height: 560), settle: 0.8, to: dir.appendingPathComponent("page-topBar-glass-1000.png"))
-        (look.themeID, store.background, store.colour) = ("lagoon", .solid, .theme)
+        (look.themeID, store.background, store.colour) = ("tokyo-night", .solid, .theme)
         // The Group on: its readings a piece each inside its outline.
         let kept = store.settings
         store.settings.set(.group, on: true)

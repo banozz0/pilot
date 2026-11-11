@@ -41,7 +41,7 @@ struct BindHintRenders {
 
         for style in LevelHUDRenders.list("PILOT_RENDER_STYLES", "instrument,toybox") {
             look.style = try #require(PilotStyle(rawValue: style))
-            for theme in LevelHUDRenders.list("PILOT_RENDER_THEME", "lagoon,workshop,toybox") {
+            for theme in LevelHUDRenders.list("PILOT_RENDER_THEME", "tokyo-night,folio,toybox") {
                 look.themeID = theme
                 let tag = "\(style)-\(theme)"
                 let dir = out.appendingPathComponent("bind-hint-\(tag)")

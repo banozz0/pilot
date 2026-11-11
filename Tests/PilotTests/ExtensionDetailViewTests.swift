@@ -245,14 +245,14 @@ extension SharedLook {
             look.glass = false
             let shots: [(name: String, style: PilotStyle, theme: String, actions: Bool, blocks: Bool)] = [
                 // Instrument's own detail (batch 7, card agent-bo-95423181), in its theme's colours.
-                ("instrument-dark", .instrument, "lagoon", false, false),
+                ("instrument-dark", .instrument, "tokyo-night", false, false),
                 ("instrument-porcelain", .instrument, "porcelain", false, false),
-                ("instrument-lagoon-actions", .instrument, "lagoon", true, false),
+                ("instrument-lagoon-actions", .instrument, "tokyo-night", true, false),
                 // Toybox's own detail (batch 7, card agent-bo-95423182), following the theme.
                 ("toybox", .toybox, "toybox", false, false),
                 ("toybox-night-actions", .toybox, "toybox-night", true, false),
                 // pilot-1-1 T9: a detail's blocks in place of its words, its page a Cmd+Return away.
-                ("instrument-blocks", .instrument, "lagoon", false, true),
+                ("instrument-blocks", .instrument, "tokyo-night", false, true),
                 ("toybox-blocks", .toybox, "toybox", false, true),
             ]
             for shot in shots {

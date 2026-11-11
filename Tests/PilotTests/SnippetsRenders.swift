@@ -8,8 +8,8 @@ import Testing
 
 /// Offscreen renders of the Snippets page (card agent-bo-95423044): the empty page, then four snippets (Commit
 /// message with {cursor} and ;cm, Greeting with {argument}, Fix with ;cm again so the keywords clash, Address with no
-/// keyword) with Commit message, Fix and Address picked in turn, then Greeting in the narrowest window; Lagoon and
-/// Workshop, the page at the window's width beside its sidebar, trimmed under its end. Per theme, one sheet stacks them. The library is a temp file and the theme is previewed, never saved. Opt-in like the
+/// keyword) with Commit message, Fix and Address picked in turn, then Greeting in the narrowest window; Tokyo Night and
+/// Folio, the page at the window's width beside its sidebar, trimmed under its end. Per theme, one sheet stacks them. The library is a temp file and the theme is previewed, never saved. Opt-in like the
 /// other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter SnippetsRenders`
 extension SharedLook {
@@ -25,7 +25,7 @@ struct SnippetsRenders {
         SnippetsEditorTests.address,
     ]
 
-    @Test("The snippets editor renders empty and with each kind of keyword picked, in Lagoon and Workshop",
+    @Test("The snippets editor renders empty and with each kind of keyword picked, in Tokyo Night and Folio",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -48,7 +48,7 @@ struct SnippetsRenders {
             ("04-no-keyword", "Address picked: no keyword", false, { SnippetsSettingsView(library: full, selected: Self.snippets[3].id) }),
             ("05-narrow", "Greeting picked: {argument}, the window at its least width", true, { SnippetsSettingsView(library: full, selected: Self.snippets[1].id) }),
         ]
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             Look.shared.preview(theme)
             var shots: [(String, NSBitmapImageRep)] = []
             for state in states {

@@ -28,7 +28,7 @@ struct OnboardingRenders {
         DisplayFaces.register()
         let engine = try SharedLook.HomeRenders.engine()
         let look = Look.shared
-        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "lagoon"
+        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
 
         // A fresh Mac: nothing on it; Notes already opens Obsidian, .txt TextEdit, .md nothing.

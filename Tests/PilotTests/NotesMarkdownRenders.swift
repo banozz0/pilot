@@ -36,7 +36,7 @@ struct NotesMarkdownRenders {
         let store = try NotesPanelRenders.seed(folder)
         let reference = try store.create(text: NotesMarkdownTests.reference)
 
-        let passes: [(PilotStyle, String, String)] = [(.instrument, "lagoon", "dark"), (.instrument, "workshop", "light"),
+        let passes: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light"),
                                                       (.toybox, "toybox-night", "dark"), (.toybox, "toybox", "light")]
         for (style, theme, side) in passes {
             look.style = style

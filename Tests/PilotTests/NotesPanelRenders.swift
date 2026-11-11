@@ -8,7 +8,7 @@ import Testing
 
 /// Offscreen renders of the Quick notes panel, direction B (P60): writing with the format bar over a selection, empty
 /// Scratch's invitation, the drawer previewing another note, a search showing the matched lines, Cmd+K with its Format
-/// group, and Cmd+Backspace's Trash question; Instrument on Lagoon in every state, on Porcelain writing, and Toybox
+/// group, and Cmd+Backspace's Trash question; Instrument on Tokyo Night in every state, on Porcelain writing, and Toybox
 /// writing and with the drawer, drawn through HUD.makePanel as Pilot shows it. The notes are seeded in a temporary
 /// folder, never Pilot's own. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter NotesPanelRenders`
@@ -62,7 +62,7 @@ struct NotesPanelRenders {
         let hero = try #require(try store.load().first { $0.title == "Ship the notes panel" })
 
         let all = ["1-writing", "2-scratch", "3-drawer", "4-search", "5-actions", "6-trash"]
-        let passes: [(PilotStyle, String, [String])] = [(.instrument, "lagoon", all), (.instrument, "porcelain", ["1-writing"]),
+        let passes: [(PilotStyle, String, [String])] = [(.instrument, "tokyo-night", all), (.instrument, "porcelain", ["1-writing"]),
                                                         (.toybox, "toybox-night", ["1-writing", "3-drawer"])]
         for (style, theme, states) in passes {
             look.style = style

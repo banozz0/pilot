@@ -60,7 +60,7 @@ struct WidgetCIRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let widget = try #require(ReadyWidgets.widget(ReadyWidgets.ci))
         #expect(widget.data == .ci && widget.draw == .blocks && widget.title == "GitHub checks")
         // A long list at the widget's own size: it scrolls, its foot fading, over the count line.

@@ -45,7 +45,7 @@ struct WidgetsPageRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         // Each card's preview as the page's load fills it: the fixed readings and notes, the Launcher's tiles, and with
         // PILOT_RESOURCES=Packaging the desk pages' pictures through the app's own path (fitted to their content), on
         // fixed data, as one placed or drawn unplaced keeps it; Weather has none yet, so its card says it draws once
@@ -106,7 +106,7 @@ struct WidgetsPageRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for style in PilotStyle.allCases {
             look.style = style
             let sheet = WidgetBuilderSheet(spec: df, store: store, saved: { _ in }, cancel: {}).styled(.page(.widgets)).pilotTheme(look: look)

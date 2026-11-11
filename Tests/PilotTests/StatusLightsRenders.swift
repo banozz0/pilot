@@ -65,7 +65,7 @@ struct StatusLightsRenders {
         lights.push(id: "build", state: .working, title: "swift build --product Pilot", family: .job, detail: "Compiling", session: "S1:P:G")
         lights.push(id: "test", state: .error, title: "swift test --filter Binds", family: .job, detail: "exit 1", session: nil)
 
-        for (style, theme) in [(PilotStyle.instrument, "lagoon"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
             look.style = style
             look.themeID = theme
             let canvas = Color(look.chromeTokens(.topBar).colors.canvas)

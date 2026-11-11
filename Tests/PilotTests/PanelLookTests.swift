@@ -55,7 +55,7 @@ struct PanelLookTests {
         let dark = HUD.makePanel(Color.clear.frame(width: 120, height: 60), look: look)
         defer { dark.close() }
         #expect(dark.appearance?.name == .darkAqua)
-        look.pick("workshop")
+        look.pick("folio")
         let light = HUD.makePanel(Color.clear.frame(width: 120, height: 60), look: look)
         defer { light.close() }
         #expect(light.appearance?.name == .aqua)

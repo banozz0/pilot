@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The workspace editor popup as mockup E (card agent-bo-95422980) over the Workspaces page, in the whole window at
-/// 1440 × 900, the window as it opens (1000 × 660), at its least (760 × 520) and the mockup's own 990 × 940, in Lagoon:
+/// 1440 × 900, the window as it opens (1000 × 660), at its least (760 × 520) and the mockup's own 990 × 940, in Tokyo Night:
 /// three apps with the mouse over the main one, the picker open on the dashed spot with "s" typed, own
 /// sizes, a new workspace, scrolling's strip with the mouse on a column peeking in, the picker open on a placed app to swap it,
 /// and at the least window the popup scrolled to its rules. Each state opens a fresh popup, and each is also cropped to
@@ -114,7 +114,7 @@ struct WorkspaceEditorRenders {
         ]
         // PILOT_RENDER_ONLY narrows the renders to the file names holding it.
         let only = Self.env["PILOT_RENDER_ONLY"]
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         for size in [CGSize(width: 1440, height: 900), AppWindowController.size, AppWindowController.minSize, CGSize(width: 990, height: 940)] {
             window.setContentSize(size)
             for state in states where state.name != "rules" || size.width == 760 {

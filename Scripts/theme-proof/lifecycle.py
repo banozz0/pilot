@@ -707,7 +707,7 @@ def participation_fixes(passed):
     for kind in ['palette', 'zed', 'obsidian', 'custom']:
         f = Fixture('ng-' + kind, ghostty=False)
         native = f.root / 'native.json'
-        original_native = dict(palette={'stock': {'_0': 'lagoon'}}, material=dict(glass=False, transparency=43, blur='light'))
+        original_native = dict(palette={'stock': {'_0': 'tokyo-night'}}, material=dict(glass=False, transparency=43, blur='light'))
         native.write_text(json.dumps(original_native))
         f.settings.update(nativeState=str(native), nativeBaseline=original_native)
         destination = f.root / kind
@@ -1001,7 +1001,7 @@ def contained_legacy_aliases(passed):
         root = f.root / 'gh'; root.mkdir()
         (root / 'pilot.conf').symlink_to('gone')  # Any read of this link throws, so success proves no read happened.
         native = f.root / 'native.json'
-        baseline = dict(palette={'stock': {'_0': 'lagoon'}}, material=dict(glass=False, transparency=43, blur='light'))
+        baseline = dict(palette={'stock': {'_0': 'tokyo-night'}}, material=dict(glass=False, transparency=43, blur='light'))
         native.write_text(json.dumps(baseline))
         f.settings.update(nativeState=str(native), nativeBaseline=baseline)
         f.settings['binding']['root'] = str(root)
@@ -1067,7 +1067,7 @@ def detected_apps(passed):
             file.parent.mkdir(parents=True)
             file.write_bytes(json.dumps({'vaults': {n: {'path': str(r), 'ts': 1, 'open': True} for n, r in roots.items()}}).encode() if registry is None else registry)
         f.settings['detectHome'] = str(home)
-        baseline = dict(palette={'stock': {'_0': 'lagoon'}}, material=dict(glass=False, transparency=43, blur='light'))
+        baseline = dict(palette={'stock': {'_0': 'tokyo-night'}}, material=dict(glass=False, transparency=43, blur='light'))
         if cursor: baseline['cursor'] = cursor
         if dark is not None: baseline['dark'] = dark  # macOS's mode as the fixture plays it; the real one is never read here.
         (f.root / 'native.json').write_text(json.dumps(baseline))  # As in the app, Pilot's own look changes even when no other app is here.
@@ -1309,12 +1309,12 @@ def detected_apps(passed):
         answer = f.restore()
         assert answer['status'] == 'restored' and native()['dark'] is True and native()['palette'] == {'stock': {'_0': 'void'}} and tree(home, store) == before, answer
         assert [w for w in answer['kept'] if w.startswith('Kept the Pilot colours')], answer['kept']
-        personal(palette={'stock': {'_0': 'lagoon'}})
+        personal(palette={'stock': {'_0': 'tokyo-night'}})
         assert f.apply(light)['status'] == 'applied'; personal(palette={'stock': {'_0': 'void'}})
         plan = f.call('theme', 'plan', 'apply', dark); assert [w for w in plan['review']['kept'] if 'Pilot colours' in w and 'take this theme' in w], plan['review']
         assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and native()['palette'] != {'stock': {'_0': 'void'}}
         assert f.restore()['status'] == 'restored' and native()['palette'] == {'stock': {'_0': 'void'}} and native()['dark'] is True
-        personal(palette={'stock': {'_0': 'lagoon'}})
+        personal(palette={'stock': {'_0': 'tokyo-night'}})
         f.call('theme', 'follow', 'mode', 'personal')
         plan = f.call('theme', 'plan', 'apply', light); assert not [c for c in plan['review']['changes'] if c.startswith('macOS')], plan['review']
         assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and native()['dark'] is True; shows()
@@ -1608,7 +1608,7 @@ def main_thread(passed):
     state = f.root / 'ghostex.json'
     state.write_text(json.dumps(dict(installed=True, running=True, values=dict(zip(keys, ['dark-2', 'green', 'slate', '#002934', '#d7d8df'])))))
     native = f.root / 'native.json'
-    baseline = dict(palette={'stock': {'_0': 'lagoon'}}, material=dict(glass=False, transparency=43, blur='light'), dark=True)
+    baseline = dict(palette={'stock': {'_0': 'tokyo-night'}}, material=dict(glass=False, transparency=43, blur='light'), dark=True)
     native.write_text(json.dumps(baseline))
     f.settings.update(ghostexSettings=str(state), nativeState=str(native), nativeBaseline=baseline); f.manifest.write_text(json.dumps(f.settings))
     light = next(p['id'] for p in f.packs if not p['dark'])
@@ -1809,7 +1809,7 @@ let screens = (1...8).map { ThemeAllowText.Entry(name: "Wallpaper on Screen \($0
 let skip = (0..<3).map { "App\($0) skipped: a long reason that wording trims away first" }
 var cases: [[String: Any]] = []
 func run(_ name: String, _ e: [ThemeAllowText.Entry], _ s: [String]) {
-    let text = ThemeAllowText.fit(lead: "Lagoon", entries: e, skipped: s, limit: 1200, home: home)
+    let text = ThemeAllowText.fit(lead: "Tokyo Night", entries: e, skipped: s, limit: 1200, home: home)
     cases.append(["case": name, "text": text, "names": e.filter { !$0.screen }.map(\.name), "paths": e.flatMap(\.paths).count])
 }
 run("short", [dot], [])

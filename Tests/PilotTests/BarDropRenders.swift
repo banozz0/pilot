@@ -22,7 +22,7 @@ struct BarDropRenders {
 
     static let screens: [(name: String, size: CGSize)] = [("1080", CGSize(width: 1080, height: 1920)), ("3440", CGSize(width: 3440, height: 1440))]
     static let looks: [(name: String, style: PilotStyle, theme: String)] = [
-        ("instrument-dark", .instrument, "lagoon"), ("instrument-light", .instrument, "porcelain"),
+        ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
         ("toybox-dark", .toybox, "toybox-night"), ("toybox-light", .toybox, "toybox"),
     ]
     static let strip: CGFloat = 32

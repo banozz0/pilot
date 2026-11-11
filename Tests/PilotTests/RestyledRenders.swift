@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Offscreen renders of Workspaces (and its Tiling tab), Install (Catalogue and Web apps) and Defaults (card
-/// agent-bo-95422897) for Moody beside the approved artifact 5sh21HWjCjsWYAwWKTibcE: the whole window in Lagoon and
-/// Workshop, on an engine in a moved home with app rules, floats, layouts and two snapshots seeded; Defaults
+/// agent-bo-95422897) for Moody beside the approved artifact 5sh21HWjCjsWYAwWKTibcE: the whole window in Tokyo Night and
+/// Folio, on an engine in a moved home with app rules, floats, layouts and two snapshots seeded; Defaults
 /// again with All kinds open. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter RestyledRenders`
 extension SharedLook {
@@ -17,7 +17,7 @@ extension SharedLook {
 struct RestyledRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Workspaces, Install and Defaults render in Lagoon and Workshop", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Workspaces, Install and Defaults render in Tokyo Night and Folio", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -52,7 +52,7 @@ struct RestyledRenders {
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         let frame = try #require(window.contentView?.superview)
         let places = [AppPlace(.workspaces), AppPlace(.tiling), AppPlace(.install, .catalogue), AppPlace(.install, .webApps), AppPlace(.openWith), AppPlace(.configs)]
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             Look.shared.themeID = theme
             for place in places {
                 model.go(place)
@@ -77,7 +77,7 @@ struct RestyledRenders {
         window.close()
     }
 
-    /// Defaults as mockup D (card agent-bo-95422980) at the window widths 1440, 1000 and 760, in Lagoon: the whole window
+    /// Defaults as mockup D (card agent-bo-95422980) at the window widths 1440, 1000 and 760, in Tokyo Night: the whole window
     /// as it opens, then the page alone (beside the window's 206 pt sidebar and hairline) as it opens, with the mouse over
     /// AeroSpace, with Ghostty's preview open and filtered for "nvim". The configs are seeded in the moved home with the
     /// mockup's dates, eight in a dotfiles folder; defaults and the editor are fakes. Each PNG is trimmed below the page's
@@ -107,7 +107,7 @@ struct RestyledRenders {
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         for width in [1440, 1000, 760] {
             // The whole window, tall enough for the whole page; trimmed under the page's end.
             let tall = CGFloat(width == 760 ? 3300 : 2700)

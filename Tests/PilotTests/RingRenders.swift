@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The This window ring (Q415) as the ring's panel draws it: its eight wedges with the engine's names, Move window to next
-/// workspace aimed, in Instrument on Lagoon, solid. Opt-in like the other renders, in a moved home:
+/// workspace aimed, in Instrument on Tokyo Night, solid. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter RingRenders`
 extension SharedLook {
 @MainActor
@@ -27,7 +27,7 @@ struct RingRenders {
         let look = Look.shared
         let saved = (look.style, look.themeID, look.glass)
         look.style = .instrument
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         // Solid: the glass would show whatever sits behind the test window.
         look.glass = false
         defer { (look.style, look.themeID, look.glass) = saved }

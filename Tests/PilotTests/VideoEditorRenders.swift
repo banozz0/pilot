@@ -11,7 +11,7 @@ import Testing
 /// The record editor in A (Sven, Q806; editors-round-2's record mocks and 12 parity rows): the real VideoEditorView on a
 /// made-up recording of the capture editor's billing page (VideoFixture) with a pointer track of three clicks, each
 /// inspector tab, a picked zoom following and holding, the backdrop, cropping, an export running in the bar, undo and
-/// redo, and the smallest and a large window, in Instrument (Lagoon, Workshop) and Toybox (toybox-night, toybox). The
+/// redo, and the smallest and a large window, in Instrument (Tokyo Night, Folio) and Toybox (toybox-night, toybox). The
 /// preview's AVPlayerLayer draws nothing into a snapshot, so each state's preview frame is read through the editor's own
 /// composition and shown in its place (VideoEditorView.still). Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter VideoEditorRenders`

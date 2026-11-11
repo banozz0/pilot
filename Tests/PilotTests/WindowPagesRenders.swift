@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// C3's page map (Sven, 2026-10-10): every page and tab in the whole window, Instrument in Nightwatch and Toybox in Lagoon
+/// C3's page map (Sven, 2026-10-10): every page and tab in the whole window, Instrument in Nightwatch and Toybox in Tokyo Night
 /// at 1000 and at the least width, 760, and the Hyper+Space menu's root in each, all one scale step bigger; and Home at the
 /// window's first size, 1000 by 660. Seeded as InstrumentPagesRenders is (fakes; nothing reaches the tiler or the network). Opt-in, in
 /// a moved home:
@@ -47,7 +47,7 @@ struct WindowPagesRenders {
         // PILOT_RENDER_ONLY narrows to the file names holding one of its comma-separated words.
         let only = Self.env["PILOT_RENDER_ONLY"]?.split(separator: ",").map(String.init)
         let looks: [(name: String, style: PilotStyle, theme: String, widths: [Int])] = [
-            ("instrument", .instrument, "nightwatch", [1000, 760]), ("toybox", .toybox, "lagoon", [1000, 760]),
+            ("instrument", .instrument, "nightwatch", [1000, 760]), ("toybox", .toybox, "tokyo-night", [1000, 760]),
         ]
         for (name, style, theme, widths) in looks {
             look.style = style

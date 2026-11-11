@@ -4,7 +4,7 @@ title: Theme
 description: Creates and edits portable palettes, wallpapers and app themes; previews before Apply
 when: Creating or changing a theme pack
 symbol: paintpalette
-starter: "Make a theme from Lagoon with "
+starter: "Make a theme from Tokyo Night with "
 ---
 # Create or change a theme
 

@@ -219,11 +219,11 @@ def real_shape(passed):
         empty = f.call('carousel', '--screen', 'wide')
         assert empty['empty'] is True and empty['source'] == 'Your folders', empty
         f.call('theme', 'opt-out', 'zed'); f.call('theme', 'opt-out', 'obsidian')  # Not bound in this fixture.
-        f.apply('dusk')
+        f.apply('void')
         sources = f.read_wall()['sources']
-        assert [Path(p).name for p in sources] == ['dusk-tall.png', 'dusk-wide.heic'], sources
+        assert [Path(p).name for p in sources] == ['void-tall.png', 'void-wide.heic'], sources
         wide, tall = f.call('carousel', '--screen', 'wide'), f.call('carousel', '--screen', 'tall')
-        assert wide['theme'] == 'dusk' and wide['images'] == [sources[1]] and tall['images'] == [sources[0]], (wide, tall)
+        assert wide['theme'] == 'void' and wide['images'] == [sources[1]] and tall['images'] == [sources[0]], (wide, tall)
         assert wide['centre'] == wide['current'] == sources[1] and len(wide['palette']) == 8 and wide['favourites'] == []
         f.stop()
         assert f.allows(1)
@@ -282,49 +282,49 @@ def themes(passed):
                           key=lambda p: p['title'].lower())
         before = watched()
         listed = f.call('carousel', '--mode', 'themes', '--screen', 'wide')
-        assert [t['id'] for t in listed['themes']] == [p['id'] for p in expected] and listed['total'] == 15, [t['id'] for t in listed['themes']]
+        assert [t['id'] for t in listed['themes']] == [p['id'] for p in expected] and listed['total'] == len(expected), [t['id'] for t in listed['themes']]
         assert listed['current'] is None and not any(t['current'] for t in listed['themes'])
         assert listed['apps'] == {'editor': 'Zed', 'terminal': 'Ghostty', 'notes': 'Obsidian'}, listed['apps']
-        lagoon = next(t for t in listed['themes'] if t['id'] == 'lagoon')
-        assert lagoon['image'].endswith('lagoon-wide.heic') and len(lagoon['palette']) == 8, lagoon
-        tall = next(t for t in f.call('carousel', '--mode', 'themes', '--screen', 'tall')['themes'] if t['id'] == 'lagoon')
-        assert tall['image'].endswith('lagoon-tall.png'), tall
-        assert f.call('carousel', '--mode', 'themes', '--query', 'orch')['images'] == ['orchid']
+        tokyo = next(t for t in listed['themes'] if t['id'] == 'tokyo-night')
+        assert tokyo['image'].endswith('tokyo-night-wide.png') and len(tokyo['palette']) == 8, tokyo
+        tall = next(t for t in f.call('carousel', '--mode', 'themes', '--screen', 'tall')['themes'] if t['id'] == 'tokyo-night')
+        assert tall['image'].endswith('tokyo-night-tall.png'), tall
+        assert f.call('carousel', '--mode', 'themes', '--query', 'drac')['images'] == ['dracula']
         assert "favourites are Wallpapers mode's" in f.call('carousel', '--mode', 'themes', '--favourites', ok=False)['error']['message']
-        assert 'takes no --screen' in f.call('carousel', 'pick', 'lagoon', '--mode', 'themes', '--screen', 'wide', ok=False)['error']['message']
+        assert 'takes no --screen' in f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes', '--screen', 'wide', ok=False)['error']['message']
         assert watched() == before
         passed('themes: Themes mode lists the 15 packs the style takes (14 factory, 1 user) by title, none marked before an Apply, each with its image for the screen shape and 8 palette dots; previews draw Zed, Ghostty and Obsidian; browsing and search change nothing')
 
-        # Lagoon applied through the carousel, after its Allow.
-        assert f.call('carousel', 'pick', 'lagoon', '--mode', 'themes')['status'] == 'applied'
+        # Tokyo Night applied through the carousel, after its Allow.
+        assert f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes')['status'] == 'applied'
         marked = f.call('carousel', '--mode', 'themes')
-        assert marked['current'] == 'lagoon' and [t['id'] for t in marked['themes'] if t['current']] == ['lagoon']
+        assert marked['current'] == 'tokyo-night' and [t['id'] for t in marked['themes'] if t['current']] == ['tokyo-night']
         wall = f.read_wall()
         applied = watched()
 
         # Declined: theme, wallpaper and every file as they were.
         f.controls(allow='no')
-        refused = f.call('carousel', 'pick', 'orchid', '--mode', 'themes', ok=False)
-        assert 'not allowed: ' in refused['error']['message'] and 'Orchid' in refused['error']['message'], refused
-        assert f.call('theme', 'status')['selected']['id'] == 'lagoon' and f.read_wall() == wall and watched() == applied
-        passed('themes: picking Orchid with Lagoon applied raises its Apply Allow; declined, the theme, the wallpaper and every file stay as they were')
+        refused = f.call('carousel', 'pick', 'dracula', '--mode', 'themes', ok=False)
+        assert 'not allowed: ' in refused['error']['message'] and 'Dracula' in refused['error']['message'], refused
+        assert f.call('theme', 'status')['selected']['id'] == 'tokyo-night' and f.read_wall() == wall and watched() == applied
+        passed('themes: picking Dracula with Tokyo Night applied raises its Apply Allow; declined, the theme, the wallpaper and every file stay as they were')
 
-        # Allowed: Orchid applies, and Wallpapers mode then lists Orchid's images.
+        # Allowed: Dracula applies, and Wallpapers mode then lists Dracula's images.
         f.controls(allow='yes')
-        assert f.call('carousel', 'pick', 'orchid', '--mode', 'themes')['status'] == 'applied'
-        assert f.call('theme', 'status')['selected']['id'] == 'orchid'
+        assert f.call('carousel', 'pick', 'dracula', '--mode', 'themes')['status'] == 'applied'
+        assert f.call('theme', 'status')['selected']['id'] == 'dracula'
         walls = f.call('carousel', '--screen', 'wide')
-        assert walls['theme'] == 'orchid' and walls['source'] == "Orchid's wallpapers" and walls['images'] and all('/orchid/' in p for p in walls['images']), walls
+        assert walls['theme'] == 'dracula' and walls['source'] == "Dracula's wallpapers" and walls['images'] and all('/dracula/' in p for p in walls['images']), walls
         zed = (home / '.config/zed/settings.json').read_bytes()
         assert (home / '.config/zed/themes/pilot-theme.json').exists() and (vault / '.obsidian/snippets/pilot-theme.css').exists()
-        passed("themes: allowed, Orchid applies to Ghostty, Zed and the vault, and Wallpapers mode then lists Orchid's images")
+        passed("themes: allowed, Dracula applies to Ghostty, Zed and the vault, and Wallpapers mode then lists Dracula's images")
 
-        # Return is a press in Pilot: Lagoon applies in one step, with no Allow (the host's log, read at stop, counts
+        # Return is a press in Pilot: Tokyo Night applies in one step, with no Allow (the host's log, read at stop, counts
         # the asks: the press adds none); the CLI's picks above still asked.
-        pressed = f.call('carousel', 'fixture-press', 'lagoon')
-        assert pressed['status'] == 'applied' and f.call('theme', 'status')['selected']['id'] == 'lagoon', pressed
-        assert f.call('carousel', '--mode', 'themes')['current'] == 'lagoon'
-        passed('themes: Return (the press) applies Lagoon in one step with no Allow, as Look\'s Apply does; the CLI pick still asks')
+        pressed = f.call('carousel', 'fixture-press', 'tokyo-night')
+        assert pressed['status'] == 'applied' and f.call('theme', 'status')['selected']['id'] == 'tokyo-night', pressed
+        assert f.call('carousel', '--mode', 'themes')['current'] == 'tokyo-night'
+        passed('themes: Return (the press) applies Tokyo Night in one step with no Allow, as Look\'s Apply does; the CLI pick still asks')
 
         # Restore stays Look's, and puts everything back.
         assert f.restore()['status'] == 'restored'
@@ -336,8 +336,8 @@ def themes(passed):
         f.stop()
         asks = f.allows(1)
         assert len(asks) == 4 and sum('Apply theme' in a for a in asks) == 3 and 'Restore' in asks[3], asks
-        assert not any('Lagoon' in a for a in asks[1:3]), asks  # Orchid twice between Lagoon's CLI pick and Restore: no press ask.
-        passed('themes: Look\'s Restore puts back the folders and every byte of Zed, VS Code, Cursor and the vault, and the dotfiles-linked Ghostty config; four Allows asked in all (Lagoon, Orchid declined, Orchid, Restore), none while browsing or for the press')
+        assert not any('Tokyo Night' in a for a in asks[1:3]), asks  # Dracula twice between Tokyo Night's CLI pick and Restore: no press ask.
+        passed('themes: Look\'s Restore puts back the folders and every byte of Zed, VS Code, Cursor and the vault, and the dotfiles-linked Ghostty config; four Allows asked in all (Tokyo Night, Dracula declined, Dracula, Restore), none while browsing or for the press')
     finally:
         f.stop()
         f.receipt()
@@ -348,7 +348,7 @@ def themes(passed):
         factory(g)
         g.start(ENV)
         before = tree(g.root / 'app', g.root / 'state', g.wall)
-        failed = g.call('carousel', 'pick', 'lagoon', '--mode', 'themes', ok=False)
+        failed = g.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes', ok=False)
         assert 'not planned: ' in failed['error']['message'] and 'Zed not selected/bound' in failed['error']['message'], failed
         assert tree(g.root / 'app', g.root / 'state', g.wall) == before
         assert g.call('carousel', '--mode', 'themes')['apps'] == {'editor': None, 'terminal': 'Ghostty', 'notes': None}

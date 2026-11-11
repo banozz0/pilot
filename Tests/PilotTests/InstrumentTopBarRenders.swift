@@ -45,7 +45,7 @@ struct InstrumentTopBarRenders {
         for kind in [BarKind.otherApps, .modes, .group, .cpu, .memory, .network] { store.settings.set(kind, on: false) }
         if islands { store.settings.place(.kind(.clock), on: .centre, at: 0) }
         let sides = store.settings.preview(.topBar).top ?? [:]
-        for (mode, id) in [("dark", style == .toybox ? "toybox-night" : "lagoon"), ("light", style == .toybox ? "toybox" : "porcelain")] {
+        for (mode, id) in [("dark", style == .toybox ? "toybox-night" : "tokyo-night"), ("light", style == .toybox ? "toybox" : "porcelain")] {
             look.preview(id)
             let tokens = StyleTokens.of(style, theme: look.theme)
             let config = try #require(store.settings.preset)

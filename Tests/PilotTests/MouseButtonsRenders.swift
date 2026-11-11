@@ -44,7 +44,7 @@ struct MouseButtonsRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
 
         typealias S = MouseButtonsBlocks.Shown
         let states: [(name: String, shown: S, mice: MouseButtons.Found, spot: Int?)] = [

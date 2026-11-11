@@ -34,7 +34,7 @@ public struct ThemeStyleMemory: Codable, Sendable {
         guard PilotStyle(rawValue: previous) != nil, PilotStyle(rawValue: next) != nil else { throw ThemeFailure("unknown style") }
         try current.validate()
         if current.compatible(with: previous) { choices[previous] = current }
-        if let saved = choices[next], saved.compatible(with: next) { try saved.validate(); return saved }
+        if let saved = choices[next]?.current, saved.compatible(with: next) { try saved.validate(); return saved }
         return current.compatible(with: next) ? current : .stock(PilotTheme.defaultID)
     }
 }

@@ -91,7 +91,7 @@ struct InstrumentRenders {
             .environment(engine).environment(\.homeSources, sources)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = .instrument }
         for (name, style, dark) in [("instrument-dark", PilotStyle.instrument, true), ("instrument-light", .instrument, false)] {
             Look.shared.style = style

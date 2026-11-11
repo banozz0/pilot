@@ -18,8 +18,8 @@ struct CursorRenders {
     nonisolated static let packaging = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/Cursors")
     static let qa = URL(filePath: env["PILOT_CURSOR_QA"] ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: "hermes-vault/obsidian-vault/Projects/Pilot/Cursors 1.1/qa").path)
     /// The QA sheets' rows, top to bottom (the designer's sheets.py), and the three drawn here.
-    static let qaRows = ["own", "orchid", "lagoon", "void", "phosphor", "garnet", "dusk", "porcelain", "workshop", "toybox-night", "toybox"]
-    static let drawn = ["own", "lagoon", "porcelain"]
+    static let qaRows = ["own", "dracula", "tokyo-night", "void", "ayu-dark", "garnet", "matte-black", "porcelain", "folio", "toybox-night", "toybox"]
+    static let drawn = ["own", "tokyo-night", "porcelain"]
     /// sheets.py's flex rows: 10 px in, a 110 px label, 6 px gaps, 64 px cells (2x), 6 px above and below.
     static let cell = 64, firstX = 126, step = 70, rowHeight = 76, rowTop = 6
     /// The most one cell may be off the QA sheet on average, per channel.
@@ -111,7 +111,7 @@ struct CursorRenders {
             let ours = Bitmap(width: Self.firstX + Self.step * cursors.count, height: Self.rowHeight * rows)
             for (p, pair) in Self.pairs.enumerated() {
                 let custom = CursorCustom(set: set, fill: .custom(pair.fill), outline: .custom(pair.outline))
-                let palette = art.palette(.custom, theme: "lagoon", custom: custom)
+                let palette = art.palette(.custom, theme: "tokyo-night", custom: custom)
                 for (g, ground) in Self.grounds.enumerated() {
                     let y = (p * Self.grounds.count + g) * Self.rowHeight
                     ours.fill(y: y, height: Self.rowHeight, Contrast.rgb(ground).map { UInt8($0) })
@@ -140,9 +140,9 @@ struct CursorRenders {
             #expect(off == 0, "classic@\(n)x differs from 1x in \(off) px")
         }
         // The designs' own rules, as gen.py computes them: Duo's shade from its own fill, Toybox's candies read at 4.5:1.
-        let duo = try #require(catalogue.sets["duo"]).palette(.custom, theme: "lagoon", custom: CursorCustom(set: .duo, fill: .custom(0x2BC4F0)))
+        let duo = try #require(catalogue.sets["duo"]).palette(.custom, theme: "tokyo-night", custom: CursorCustom(set: .duo, fill: .custom(0x2BC4F0)))
         #expect(duo["shade"] == "#1B7A95" && duo["b_copy"] == "#1B7A95")
-        let toy = try #require(catalogue.sets["toybox"]).palette(.custom, theme: "lagoon", custom: CursorCustom(set: .toybox, outline: .custom(0x6B2FA8)))
+        let toy = try #require(catalogue.sets["toybox"]).palette(.custom, theme: "tokyo-night", custom: CursorCustom(set: .toybox, outline: .custom(0x6B2FA8)))
         #expect(["lilac", "mint", "coral", "sky"].allSatisfy { Contrast.ratio(Contrast.hex(toy[$0]!), 0x6B2FA8) >= 4.5 })
         print("cursor renders: classic masks pixel-true at 1x, 2x, 5x; duo shade \(duo["shade"]!); toybox candies \(["lilac", "mint", "coral", "sky"].map { toy[$0]! })")
     }

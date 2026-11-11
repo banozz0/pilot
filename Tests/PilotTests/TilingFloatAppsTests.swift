@@ -95,7 +95,7 @@ struct TilingFloatAppsRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for style in PilotStyle.allCases {
             look.style = style
             let page = MonitorsGround { TilingBody(block: block, settings: settings, apps: apps) }

@@ -56,7 +56,7 @@ struct SettingsPagesTests {
 
 extension SharedLook {
 /// Offscreen renders of the three pages for Moody beside the approved artifact 5sh21HWjCjsWYAwWKTibcE: in
-/// Lagoon and Workshop, folded and with More open; Setup with Sound and Wi-Fi open; Pilot with the permission granted
+/// Tokyo Night and Folio, folded and with More open; Setup with Sound and Wi-Fi open; Pilot with the permission granted
 /// and missing. Opt-in like the other renders, in a moved home (an Engine is built):
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter SettingsPagesRenders`
 @MainActor
@@ -89,7 +89,7 @@ struct SettingsPagesRenders {
             host.layoutSubtreeIfNeeded()
             try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
-        for theme in ["lagoon", "workshop"] {
+        for theme in ["tokyo-night", "folio"] {
             look.themeID = theme
             look.preview(spot: nil)
             let tall: CGFloat = 1000

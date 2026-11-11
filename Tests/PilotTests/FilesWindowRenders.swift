@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Pilot Files (spec pilot-1.1 T10, T5's pick B) as its window draws it, in Lagoon: a fixture Downloads in the list
+/// Pilot Files (spec pilot-1.1 T10, T5's pick B) as its window draws it, in Tokyo Night: a fixture Downloads in the list
 /// with a picture picked, and a fixture Pictures in the grid. Devices, favourites, Hidden apps and thumbnails are fixed,
 /// so nothing of this Mac's is read. Opt-in, offscreen:
 /// `CFFIXED_USER_HOME=/tmp/pilot-rh PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter FilesWindowRenders`
@@ -27,7 +27,7 @@ struct FilesWindowRenders {
         let look = Look.shared
         let (style, theme) = (look.style, look.themeID)
         defer { look.style = style; look.themeID = theme }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("pilot-files")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -122,7 +122,7 @@ struct FilesWindowRenders {
         let look = Look.shared
         let (style, theme) = (look.style, look.themeID)
         defer { look.style = style; look.themeID = theme }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("pilot-files")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let files = FileManager.default

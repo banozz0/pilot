@@ -1106,7 +1106,7 @@ struct ExplainerFilmRenders {
     /// mouse, network or this Mac's snippets.
     @Test("Cut 5's borrowed views redrawn in the film's theme, Mouse, Snippets and AI › Setup", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func dusk() async throws {
-        let dir = try Self.prepare("dusk")
+        let dir = try Self.prepare("void")
         let look = Look.shared
         let tokens = StyleTokens.of(.instrument, theme: look.theme)
         func png(_ rep: NSBitmapImageRep, _ name: String) throws {

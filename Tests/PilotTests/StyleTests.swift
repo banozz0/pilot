@@ -134,7 +134,7 @@ struct StyleTests {
             look.themeID = PilotTheme.defaultID
             // Toybox is dark or light with the theme (Sven, 2026-10-08): a light theme lightens it.
             pick(.toybox)
-            look.themeID = "workshop"; #expect(try draw() != toybox, "Toybox in a light theme drew the dark one")
+            look.themeID = "folio"; #expect(try draw() != toybox, "Toybox in a light theme drew the dark one")
             look.themeID = PilotTheme.defaultID
         }
     }

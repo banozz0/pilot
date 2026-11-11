@@ -54,19 +54,20 @@ struct PilotThemeTests {
                           wallpaper: WallpaperSpot(glow: hex(glow), amount: amount, base: hex(base)))
     }
 
-    @Test("Round 15's eight in the user's order, dark first, Lagoon the default, then Toybox Night and Toybox; seven dark, three light")
+    @Test("The line-up of 18 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones, Toybox Night and Toybox; thirteen dark, five light")
     func designed() {
-        #expect(PilotTheme.designed.map(\.id) == ["orchid", "lagoon", "void", "phosphor", "garnet", "dusk", "porcelain", "workshop", "toybox-night", "toybox", "cinder", "verdigris", "cyanotype", "folio", "celadon", "wisteria"])
-        #expect(Set(Self.round15.map(\.id)) == Set(PilotTheme.designed.prefix(8).map(\.id)))
-        #expect(PilotTheme.defaultID == "lagoon" && PilotTheme.standard.id == "lagoon")
-        #expect(PilotTheme.designed.filter(\.dark).count == 10)
+        #expect(PilotTheme.designed.map(\.id) == ["tokyo-night", "matte-black", "retro-82", "nord", "ayu-dark", "dracula",
+                                                  "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "toybox-night", "toybox"])
+        #expect(PilotTheme.defaultID == "tokyo-night" && PilotTheme.standard.id == "tokyo-night")
+        #expect(PilotTheme.designed.filter(\.dark).count == 9)
         #expect(PilotTheme.named("void")?.name == "Void" && PilotTheme.named("nope") == nil)
         for retired in PilotTheme.retired.keys { #expect(PilotTheme.named(retired) == nil, "\(retired) is gone") }
     }
 
     @Test("Every new theme's roles equal round 15's table; every theme's module colours are its accents")
     func roles() throws {
-        for row in Self.round15 {
+        // Round 15's that the line-up of 18 kept (Void, Garnet, Porcelain); its table stays as it was.
+        for row in Self.round15 where PilotTheme.named(row.id) != nil {
             let t = try #require(PilotTheme.named(row.id), "\(row.id)")
             #expect(t.name == row.name && t.tagline == row.tagline && t.source == row.source, "\(row.id)")
             let pairs: [(UInt32, String)] = [(t.ground, row.ground), (t.sidebar, row.sidebar), (t.surface, row.surface), (t.raised, row.raised),
@@ -96,15 +97,19 @@ struct PilotThemeTests {
         }
     }
 
-    @Test("A saved theme id from round 4 becomes the new theme closest to it; an unknown one the default")
+    @Test("A saved theme id from round 4 or round 15 becomes the kept theme closest to it; an unknown one the default")
     func migration() {
-        // Sven's map, 2026-10-08.
-        #expect(PilotTheme.retired == ["nightwatch": "lagoon", "ukiyo": "lagoon", "fjord": "lagoon", "teahouse": "phosphor",
-                                       "understory": "phosphor", "crema": "garnet", "hearth": "dusk", "nocturne": "dusk",
-                                       "boardwalk": "orchid", "graphite": "void", "paper": "workshop", "petal": "porcelain"])
+        // Sven's maps: round 4's (2026-10-08) carried to their final theme, and the line-up of 18's (2026-11-11).
+        #expect(PilotTheme.retired == ["nightwatch": "ayu-dark", "ukiyo": "ayu-dark", "fjord": "ayu-dark", "teahouse": "ayu-dark",
+                                       "understory": "ayu-dark", "crema": "garnet", "hearth": "void", "nocturne": "void",
+                                       "boardwalk": "dracula", "graphite": "void", "paper": "folio", "petal": "porcelain",
+                                       "lagoon": "ayu-dark", "orchid": "dracula", "phosphor": "ayu-dark", "cyanotype": "retro-82",
+                                       "verdigris": "ayu-dark", "workshop": "folio", "cinder": "matte-black", "dusk": "void"])
         for (old, new) in PilotTheme.retired { #expect(PilotTheme.current(old) == new && PilotTheme.named(new) != nil, "\(old)") }
         for t in PilotTheme.designed { #expect(PilotTheme.current(t.id) == t.id) }
-        #expect(PilotTheme.current(nil) == "lagoon" && PilotTheme.current("") == "lagoon" && PilotTheme.current("nope") == "lagoon")
+        #expect(PilotTheme.current(nil) == "tokyo-night" && PilotTheme.current("") == "tokyo-night" && PilotTheme.current("nope") == "tokyo-night")
+        // A saved stock palette moves the same way; a pack or a kept id stays as it is.
+        #expect(ThemeNativePalette.stock("lagoon").current == .stock("ayu-dark") && ThemeNativePalette.stock("void").current == .stock("void"))
     }
 
     @Test("Derived roles equal applyTheme()'s: text on the accent, accent text, key fill, selection")
@@ -164,11 +169,11 @@ struct PilotThemeTests {
 
     @Test("A glyph on a solid tile is the theme's sidebar on a light colour in a dark theme, else white; the accent's ink is the same rule")
     func ink() throws {
-        let night = try #require(PilotTheme.named("lagoon")), paper = try #require(PilotTheme.named("workshop"))
+        let night = try #require(PilotTheme.named("tokyo-night")), paper = try #require(PilotTheme.named("folio"))
         #expect(night.ink(on: night.good) == night.sidebar)
         #expect(night.ink(on: 0x205EA6) == 0xFFFFFF)
         #expect(paper.ink(on: paper.good) == 0xFFFFFF && paper.ink(on: 0xF2EFE4) == 0xFFFFFF)
-        // The rule holds unless it reads below 4.5:1 on that accent (Orchid, Garnet, Workshop; Sven's themes round, P105).
+        // The rule holds unless it reads below 4.5:1 on that accent (Garnet; Sven's themes round, P105).
         for theme in PilotTheme.designed where !StyleTokens.toyboxThemes.contains(theme.id) {
             #expect(Contrast.ratio(theme.onAccent, theme.accent) >= 4.5, "\(theme.id)")
             #expect(theme.onAccent == theme.ink(on: theme.accent) || Contrast.ratio(theme.ink(on: theme.accent), theme.accent) < 4.5, "\(theme.id)")

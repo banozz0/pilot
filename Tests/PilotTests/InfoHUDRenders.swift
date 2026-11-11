@@ -10,7 +10,7 @@ import Testing
 /// HUD.makePanel as InfoHUD.show builds it: every reading, a Mac mini's (no battery), a charging laptop's, and the time
 /// alone; per pass a sheet stacks them, so the fixed width shows. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter InfoHUDRenders`
-/// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=lagoon,workshop,toybox` (the defaults) narrow it.
+/// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=tokyo-night,folio,toybox` (the defaults) narrow it.
 extension SharedLook {
 @MainActor
 @Suite("Info HUD renders")
@@ -45,7 +45,7 @@ struct InfoHUDRenders {
 
         for style in LevelHUDRenders.list("PILOT_RENDER_STYLES", "instrument,toybox") {
             look.style = try #require(PilotStyle(rawValue: style))
-            for theme in LevelHUDRenders.list("PILOT_RENDER_THEME", "lagoon,workshop,toybox") {
+            for theme in LevelHUDRenders.list("PILOT_RENDER_THEME", "tokyo-night,folio,toybox") {
                 look.themeID = theme
                 let tag = "\(style)-\(theme)"
                 let dir = out.appendingPathComponent("info-\(tag)")

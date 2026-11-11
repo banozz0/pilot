@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "dracula",
+  "title": "Dracula",
+  "dark": true,
+  "palette": {
+    "background": "#282A36",
+    "dark_background": "#21222C",
+    "darker_background": "#353746",
+    "lighter_background": "#44475A",
+    "foreground": "#F8F8F2",
+    "dark_foreground": "#6272A4",
+    "light_foreground": "#E2E2DC",
+    "bright_foreground": "#FFFFFF",
+    "accent": "#BD93F9",
+    "selection": "#44475A",
+    "muted": "#6272A4",
+    "red": "#FF5555",
+    "yellow": "#F1FA8C",
+    "green": "#50FA7B",
+    "cyan": "#8BE9FD",
+    "blue": "#BD93F9",
+    "magenta": "#FF79C6",
+    "bright_red": "#FF6E6E",
+    "bright_yellow": "#FFFFA5",
+    "bright_green": "#69FF94",
+    "bright_cyan": "#A4FFFF",
+    "bright_blue": "#D6ACFF",
+    "bright_magenta": "#FF92DF",
+    "native_line": "#4F5263",
+    "native_line2": "#616372",
+    "native_text3": "#8894B5",
+    "native_second": "#FF79C6",
+    "native_third": "#8BE9FD",
+    "native_graph1": "#BD93F9",
+    "native_graph2": "#FF79C6",
+    "native_graph3": "#50FA7B",
+    "native_selection": "#BD93F9"
+  },
+  "styles": [
+    "instrument",
+    "toybox"
+  ],
+  "wallpapers": [
+    "wallpapers"
+  ],
+  "adapters": {
+    "ghostty": {},
+    "zed": {},
+    "obsidian": {}
+  }
+}

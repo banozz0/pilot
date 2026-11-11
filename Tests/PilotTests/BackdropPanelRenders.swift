@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 /// The backdrop panel (P70, after Snapzy's background sidebar) open in the real capture editor, in three backdrops (the
 /// accent's wash with a saved preset, a wallpaper blurred at 16:9, the capture itself frosted with a deep shadow), the
 /// second one's export as Copy and Save write it, and the after-capture thumbnail's one 4:3 card for a wide, a tall and
-/// a thin strip of a capture, at rest and hovered; Instrument (Lagoon, Workshop) and Toybox (toybox-night, toybox).
+/// a thin strip of a capture, at rest and hovered; Instrument (Tokyo Night, Folio) and Toybox (toybox-night, toybox).
 /// Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter BackdropPanelRenders`
 extension SharedLook {

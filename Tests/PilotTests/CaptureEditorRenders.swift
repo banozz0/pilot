@@ -10,7 +10,7 @@ import Testing
 
 /// The capture editor in B (Sven, Q805; editors-round-2's 21 parity rows): the real CaptureEditorView over the designer's
 /// made-up billing page, in every state Sven leaves it in, plus the smallest window and the two popovers' panels (a
-/// popover is a window of its own, which a snapshot never draws), in Instrument (Lagoon, Workshop) and Toybox
+/// popover is a window of its own, which a snapshot never draws), in Instrument (Tokyo Night, Folio) and Toybox
 /// (toybox-night, toybox). The window keeps one size whatever the state, the backdrop panel's column aside.
 /// Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureEditorRenders`
@@ -21,7 +21,7 @@ struct CaptureEditorRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
     static let passes: [(style: PilotStyle, theme: String, tag: String)] = [
-        (.instrument, "lagoon", "instrument-dark"), (.instrument, "workshop", "instrument-light"),
+        (.instrument, "tokyo-night", "instrument-dark"), (.instrument, "folio", "instrument-light"),
         (.toybox, "toybox-night", "toybox-dark"), (.toybox, "toybox", "toybox-light"),
     ]
 

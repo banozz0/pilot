@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Hyper+Space menu as the Rail draws it (menu Rail and Classic T6, frames B1–B3, B7, B8), Lagoon and Porcelain,
+/// The Hyper+Space menu as the Rail draws it (menu Rail and Classic T6, frames B1–B3, B7, B8), Tokyo Night and Porcelain,
 /// through HUD.makePanel as Pilot shows it: the root with and without recents and Waiting, Tab at the empty root onto Apps
 /// and Windows, a root search, no match, Install, System and its switches, an answer and Cmd+K at the root. The sizes and what the search line counts are
 /// checked always; the pictures are opt-in like the other renders:
@@ -100,7 +100,7 @@ struct RailMenuRenders {
         #expect(MenuModel.recent(built, picks: Frecency()).isEmpty)
     }
 
-    @Test("The Rail renders in Lagoon and Porcelain, frames B1–B3, B7, B8", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The Rail renders in Tokyo Night and Porcelain, frames B1–B3, B7, B8", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -113,9 +113,9 @@ struct RailMenuRenders {
         defer { look.style = style; look.themeID = theme }
         look.style = .instrument
         let only = Self.env["PILOT_RENDER_ONLY"]
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
-            let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menu-rail-\(themeID == "lagoon" ? "dark" : "light")")
+            let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menu-rail-\(themeID == "tokyo-night" ? "dark" : "light")")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for (name, model) in try Self.states() where only.map(name.contains) ?? true {
                 try InstrumentMenuRenders.render(MenuView(model: model), name, in: dir)

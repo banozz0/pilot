@@ -140,7 +140,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         #expect(ReadyWidgets.inCode.map(\.id) == [ReadyWidgets.thisMac, ReadyWidgets.clock, ReadyWidgets.note, ReadyWidgets.upkeep,
                                                   ReadyWidgets.launcher, ReadyWidgets.notes, ReadyWidgets.repos, ReadyWidgets.github, ReadyWidgets.ci, ReadyWidgets.nowPlaying, ReadyWidgets.folder, ReadyWidgets.markets])
         #expect(Widget.menuPicks(ReadyWidgets.widget(ReadyWidgets.launcher)?.menuField?.initial) == Self.picked.map { "action:\($0.action)" })
@@ -173,7 +173,7 @@ struct WidgetRenders {
                                                                  (.wide, .init(width: 380, height: 165)), (.large, .init(width: 300, height: 260))]
 
     /// Every native ready widget, and the Weather page when PILOT_RESOURCES bundles it, at each size class (Sven, Q727/Q729),
-    /// its own size in its own class's column (today's look), one sheet a style in Lagoon, solid: `widgets/sizes-<style>.png`.
+    /// its own size in its own class's column (today's look), one sheet a style in Tokyo Night, solid: `widgets/sizes-<style>.png`.
     @Test("Each native ready widget, and the Weather page, at its four size classes, one sheet a style",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func sizeSheets() async throws {
@@ -182,7 +182,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"; look.glass = false
+        look.themeID = "tokyo-night"; look.glass = false
         let theme = look.theme
         for (size, box) in Self.classSizes { #expect(Widget.SizeClass(width: box.width, height: box.height) == size) }
         // Held near a line, either way: a drag never flickers.
@@ -251,7 +251,7 @@ struct WidgetRenders {
     /// HTML desk widgets on the look kit, a row for each style, solid and glass, on the theme's wallpaper colours:
     /// `widgets/kit-<theme>.png`. `PILOT_RESOURCES=Packaging` bundles the desk widgets. `widgets/kit-probe.txt` says which
     /// mono face the pages' WebKit draws, which the native tiles match.
-    @Test("Native ready widgets beside the kit's HTML ones, each style, solid and glass, in Lagoon and Porcelain",
+    @Test("Native ready widgets beside the kit's HTML ones, each style, solid and glass, in Tokyo Night and Porcelain",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RESOURCES"] != nil))
     func kitSheet() async throws {
         let dir = try Self.dir()
@@ -263,7 +263,7 @@ struct WidgetRenders {
         let natives = ReadyWidgets.inCode.map { ($0, "") } + [(try #require(ReadyWidgets.widget(ReadyWidgets.notes)), Self.notes[0].id)]
         try await Self.fontProbe(try #require(store.widget("desk-todo")), store: store)
             .write(to: dir.appending(path: "kit-probe.txt"), atomically: true, encoding: .utf8)
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
             let theme = look.theme
             var pages: [String: NSImage] = [:]
@@ -355,7 +355,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let widget = try #require(ReadyWidgets.widget(ReadyWidgets.launcher))
         var rows: [NSBitmapImageRep] = []
         for style in PilotStyle.allCases {
@@ -406,7 +406,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let widget = try #require(ReadyWidgets.widget(ReadyWidgets.nowPlaying))
         #expect(widget.data == .nowPlaying && WidgetAsks.acts(widget) && Widget.SizeClass(width: widget.size.width, height: widget.size.height) == .square)
         #expect(NowPlaying.clock(72) == "1:12" && NowPlaying.clock(3729) == "1:02:09")
@@ -501,7 +501,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let widget = try #require(ReadyWidgets.widget(ReadyWidgets.repos))
         let sizes = [Widget.Size(width: 240, height: 150), widget.size, Widget.Size(width: 340, height: 300)]
         var sheet: [NSBitmapImageRep] = []
@@ -626,7 +626,7 @@ struct WidgetRenders {
         let shownSizes: [(String, Widget.Size)] = [("Large", widget.size), ("Wide", .init(width: 380, height: 165)), ("Square", .init(width: 170, height: 170)),
                                                     ("Strip", .init(width: 340, height: 70))]
         var sheet: [NSBitmapImageRep] = []
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
             for style in PilotStyle.allCases {
                 for glass in [false, true] {
@@ -725,7 +725,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let read = try FolderListing.list(root, sort: .name, hidden: ["dev.example.hidden"])
         func tile(_ size: Widget.Size, _ setUp: (WidgetFolderModel) -> Void = { _ in }) -> AnyView {
             let folder = WidgetFolderModel(.init(folder: root.path, favourites: ["~/code"]))
@@ -821,7 +821,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         let widget = try #require(ReadyWidgets.widget(ReadyWidgets.markets))
         #expect(widget.data == .markets("symbols") && WidgetAsks.acts(widget))
         #expect(WidgetMarkets.symbols(widget.settings.first { $0.name == WidgetMarkets.symbolsName }?.initial).count == 5)
@@ -878,7 +878,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = look.themeID
         defer { look.themeID = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         // What a button may run, as the live picker lists it from the registry: refused shapes never reach it.
         let picks = [("apps.clean", "Clean this Mac"), ("apps.update", "Update apps"), ("apps.install", "Install apps"), ("notes.toggle", "Quick notes"),
                      ("captures.area", "Capture area")].map { WidgetEditChoices.Pick(id: $0.0, title: $0.1, group: $0.0.split(separator: ".")[0].capitalized) }
@@ -925,7 +925,7 @@ struct WidgetRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        look.themeID = "lagoon"; look.glass = true
+        look.themeID = "tokyo-night"; look.glass = true
         for style in PilotStyle.allCases {
             look.style = style
             try Self.write(model, size: .init(width: 300, height: 220), look: look, to: dir.appending(path: "locked-card-\(style.rawValue).png"))

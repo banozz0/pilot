@@ -338,6 +338,11 @@ public struct ThemeMaterial: Codable, Equatable, Sendable {
 }
 public enum ThemeNativePalette: Codable, Equatable, Sendable {
     case stock(String), pack(ThemePack)
+    /// A saved stock palette of a retired theme as its successor (PilotTheme.retired); anything else as it is.
+    public var current: ThemeNativePalette {
+        if case .stock(let id) = self, let next = PilotTheme.retired[id] { return .stock(next) }
+        return self
+    }
     public func validate() throws {
         switch self {
         case .stock(let id): guard PilotTheme.named(id) != nil else { throw ThemeFailure("unknown local stock palette") }

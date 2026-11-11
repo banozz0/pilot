@@ -8,7 +8,7 @@ import Testing
 
 /// AI › Setup (task N10; any provider, 2026-10-10; its own page since C3; its own tab, page map 2026-10-17), opt-in like the
 /// other renders: the tab alone in
-/// Instrument and Toybox on Lagoon, and Instrument on Porcelain, in each state: the subscription signed in, signed out and
+/// Instrument and Toybox on Tokyo Night, and Instrument on Porcelain, in each state: the subscription signed in, signed out and
 /// missing, the Anthropic key missing, saved and tested, and rejected, OpenAI with no key, Ollama with a listed model
 /// that is not running, an endpoint set up, and the ChatGPT and Google subscriptions connected, not connected and
 /// missing; Claude Code's picker named by the versions its aliases run (Sven 2026-10-31, build 3); the key field with the
@@ -78,12 +78,12 @@ struct AISettingsRenders {
                 $0.set("vendor/model-x", forKey: AISettings.modelKey(.openAICompatible))
             }),
         ]
-        let looks: [(String, PilotStyle, String)] = [("instrument", .instrument, "lagoon"), ("instrument", .instrument, "porcelain"),
-                                                     ("toybox", .toybox, "lagoon")]
+        let looks: [(String, PilotStyle, String)] = [("instrument", .instrument, "tokyo-night"), ("instrument", .instrument, "porcelain"),
+                                                     ("toybox", .toybox, "tokyo-night")]
         for (name, style, theme) in looks {
             look.themeID = theme
             look.style = style
-            for (state, block) in states where theme == "lagoon" || state.hasPrefix("1") || state.hasPrefix("5") || state.hasPrefix("c1") {
+            for (state, block) in states where theme == "tokyo-night" || state.hasPrefix("1") || state.hasPrefix("5") || state.hasPrefix("c1") {
                 let page = Ground { block.frame(width: 760, height: 2000, alignment: .top) }.styled(.page(.ai)).pilotTheme(look: look)
                 try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("\(name)-\(theme)-\(state).png"))
             }

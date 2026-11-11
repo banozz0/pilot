@@ -7,7 +7,7 @@ import Testing
 
 /// The drop zone's look (card agent-bo-95423032), before and after, over a mock tiled desktop: a browser on the left
 /// half, a terminal bottom right, and an editor dragged off the top right, its landing zone splitting the browser's lower
-/// half or, as a swap, the terminal's tile, in Lagoon, Dusk and Workshop, plus each zone's corner at 4x. All layers,
+/// half or, as a swap, the terminal's tile, in Tokyo Night, Dusk and Folio, plus each zone's corner at 4x. All layers,
 /// drawn once. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-3032 PILOT_RENDER_DIR=/tmp/pilot-renders/dropzone-<run> swift test --filter DropZoneRenders`
 @MainActor
@@ -34,7 +34,7 @@ struct DropZoneRenders {
     @Test("Before and after in a dark, a warm and a light theme", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let dir = try SharedLook.ClockRenders.dir("dropzone")
-        for id in ["lagoon", "dusk", "workshop"] {
+        for id in ["tokyo-night", "void", "folio"] {
             let theme = try #require(PilotTheme.named(id))
             for (name, paint) in [("before", Self.before), ("after", Self.after)] {
                 for swap in [false, true] {

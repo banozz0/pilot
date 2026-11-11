@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Rail's answer cards (menu Rail and Classic T7, frames B4–B6), Lagoon and Porcelain: a conversion, a translation in
+/// The Rail's answer cards (menu Rail and Classic T7, frames B4–B6), Tokyo Night and Porcelain: a conversion, a translation in
 /// Translate and a typed colour, each with the Ask Quick AI row under its card. What the card reads from its row and that it
 /// fits the panel are checked always; the pictures are opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-rh PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AnswerCardRenders`
@@ -86,7 +86,7 @@ struct AnswerCardRenders {
         }
     }
 
-    @Test("The cards render in Lagoon and Porcelain, frames B4–B6", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The cards render in Tokyo Night and Porcelain, frames B4–B6", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -98,10 +98,10 @@ struct AnswerCardRenders {
         let (style, theme) = (look.style, look.themeID)
         defer { look.style = style; look.themeID = theme }
         look.style = .instrument
-        for themeID in ["lagoon", "porcelain"] {
+        for themeID in ["tokyo-night", "porcelain"] {
             look.themeID = themeID
             let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
-                .appendingPathComponent("answer-cards-\(themeID == "lagoon" ? "dark" : "light")")
+                .appendingPathComponent("answer-cards-\(themeID == "tokyo-night" ? "dark" : "light")")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for (name, model) in try Self.states() {
                 try InstrumentMenuRenders.render(MenuView(model: model), name, in: dir)

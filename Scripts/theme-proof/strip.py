@@ -26,7 +26,7 @@ class Fixture(base.Fixture):
         self.home = self.root / 'home'
         (self.home/"Library/Preferences").mkdir(parents=True)
         self.native = self.root / 'native.json'
-        self.original_native = dict(palette={'stock': {'_0': 'lagoon'}}, material=dict(glass=False, transparency=43, blur='light'))
+        self.original_native = dict(palette={'stock': {'_0': 'tokyo-night'}}, material=dict(glass=False, transparency=43, blur='light'))
         self.native.write_text(json.dumps(self.original_native))
         self.suite = 'dev.banozz.pilot.strip-' + self.root.name
         self.settings = dict(root=str(self.root), home=str(self.home), suite=self.suite,
@@ -408,7 +408,7 @@ def preservation_fixes():
                 released = doc['appearance']['after'][component]
                 assert released==json.loads(base64.b64decode(doc['beforeLedger']))['appearance']['original'][component]
                 later = {'bar':dict(configuration=dict(geometry,spacing=19)),
-                         'palette':{'stock':{'_0':'orchid'}},
+                         'palette':{'stock':{'_0':'dracula'}},
                          'material':dict(glass=False,transparency=79,blur='off')}[component]
                 doc['appearance']['after'][component]=later
                 embedded=json.loads(base64.b64decode(doc['afterLedger']))

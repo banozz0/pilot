@@ -217,7 +217,7 @@ struct MockWindow: View {
 
 /// The Window shelf's Deck (Q704, Q705, Q708), opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh> PILOT_RENDER_DIR=<fresh> [PILOT_SHELF_WALLPAPER=<png>] swift test --filter ShelfRenders`
-/// - The shelf column (ShelfColumn) at 1x, Sven's screens, and 2x, in Instrument on Lagoon (Solid and Glass) and
+/// - The shelf column (ShelfColumn) at 1x, Sven's screens, and 2x, in Instrument on Tokyo Night (Solid and Glass) and
 ///   Porcelain, and Toybox on Toybox Night and Toybox; then every theme in both styles at 1x. ImageRenderer draws them:
 ///   cacheDisplay flattens the cards' 3D turn.
 /// - The stills: the same window as the code before this change asked for it (one scaling pass to 204 px, a bilinear
@@ -289,7 +289,7 @@ struct ShelfRenders {
         let saved = (look.style, look.themeID, look.glass)
         defer { (look.style, look.themeID, look.glass) = saved }
         let looks: [(String, PilotStyle, String, Bool)] = [
-            ("Instrument · Lagoon", .instrument, "lagoon", false), ("Instrument · Lagoon · Glass", .instrument, "lagoon", true),
+            ("Instrument · Tokyo Night", .instrument, "tokyo-night", false), ("Instrument · Tokyo Night · Glass", .instrument, "tokyo-night", true),
             ("Instrument · Porcelain", .instrument, "porcelain", false), ("Toybox · Night", .toybox, "toybox-night", false),
             ("Toybox · light", .toybox, "toybox", false),
         ]
@@ -376,7 +376,7 @@ struct ShelfRenders {
         let look = Look.shared
         let saved = (look.style, look.themeID)
         defer { (look.style, look.themeID) = saved }
-        (look.style, look.themeID) = (.instrument, "lagoon")
+        (look.style, look.themeID) = (.instrument, "tokyo-night")
         let size = CGSize(width: 1440, height: 900)
         // The shelf as drawn, and where its Chrome card's front window sits (its face, top-left coordinates).
         var faces: [Int: CGRect] = [:]

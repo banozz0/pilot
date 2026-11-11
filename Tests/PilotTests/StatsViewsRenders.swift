@@ -59,7 +59,7 @@ struct StatsViewsRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         let look = Look.shared, views = StatsViewsStore.shared
-        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "lagoon"
+        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer {
             look.themeID = PilotTheme.defaultID; look.style = .instrument
             views.reset()

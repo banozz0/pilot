@@ -9,7 +9,7 @@ import Testing
 
 /// Every page card agent-bo-95423004 fills (Home, Stats, Install's Catalogue and Web apps, Defaults, Setup in each part,
 /// Look, Clipboard, Pilot; Files › Folders with three dressed folders, P43), the whole window at a fixed size the way Sven sees it (1440 × 1100, 1000 × 800, 760 × 620),
-/// untrimmed so an empty half shows, in Lagoon. Seeded as Home's renders seed it; Setup reads fakes.
+/// untrimmed so an empty half shows, in Tokyo Night. Seeded as Home's renders seed it; Setup reads fakes.
 /// Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-fill PILOT_RENDER_DIR=/tmp/pilot-renders-fill PILOT_RESOURCES=Packaging swift test --filter PageFillRenders`
 extension SharedLook {
@@ -121,7 +121,7 @@ struct PageFillRenders {
         }
         YourFolderDesigns.standard.add([pack])
         let yours = try #require(YourFolderDesigns.standard.list().first)
-        let dressed = [("Projects", yours.design.id), ("Documents/Design", "lagoon"), ("code/pilot", "terminal")]
+        let dressed = [("Projects", yours.design.id), ("Documents/Design", "tokyo-night"), ("code/pilot", "terminal")]
             .map { (URL(fileURLWithPath: home).appending(path: $0, directoryHint: .isDirectory), $1) }
         for (folder, design) in dressed {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -138,7 +138,7 @@ struct PageFillRenders {
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID }
         for (width, height) in Self.sizes {
             window.setContentSize(NSSize(width: CGFloat(width), height: CGFloat(height)))
@@ -221,7 +221,7 @@ struct PageFillRenders {
             ("learn", MenuNavigator(entries: built, branch: .keybindings)), ("trigger", MenuNavigator(entries: built, branch: .trigger)),
             ("system", MenuNavigator(entries: built, branch: .system)),
         ]
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID }
         for (name, nav) in panels {
             let panel = HUD.makePanel(MenuView(model: MenuModel(nav: nav)))

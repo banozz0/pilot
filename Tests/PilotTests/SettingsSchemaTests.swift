@@ -148,7 +148,7 @@ struct SettingsSchemaTests {
     func sameStores() async {
         let rig = Rig()
         _ = await rig.ask("set", "look.glass", "on")
-        _ = await rig.ask("set", "look.theme", "orchid")
+        _ = await rig.ask("set", "look.theme", "dracula")
         _ = await rig.ask("set", "clipboard.keepCount", "42")
         _ = await rig.ask("set", "clipboard.keepDays", "forever")
         _ = await rig.ask("set", "quickTapEscape", "off")
@@ -157,7 +157,7 @@ struct SettingsSchemaTests {
         _ = await rig.ask("set", "translate.home", "es")
         _ = await rig.ask("set", "look.windowLayout", "tabs")
         _ = await rig.ask("set", "look.menuLayout", "rail")
-        #expect(rig.look.glass && rig.look.theme.id == "orchid" && rig.look.windowShape == .tabs && rig.look.menuLayout == .rail)
+        #expect(rig.look.glass && rig.look.theme.id == "dracula" && rig.look.windowShape == .tabs && rig.look.menuLayout == .rail)
         #expect(rig.clipboard.settings.keepCount == 42 && rig.clipboard.settings.keepDays == nil)
         #expect(!rig.settings.quickTapEscape && rig.passwords.length == 32 && rig.ai.effort(for: .codex) == .high)
         // Picking the second language as the first swaps the pair, as Launcher's Translate block does.

@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Tools › Captures' two tabs (page map, Sven 2026-10-17), Capture and Recording, in each style under Lagoon, on a store of
+/// Tools › Captures' two tabs (page map, Sven 2026-10-17), Capture and Recording, in each style under Tokyo Night, on a store of
 /// its own in a moved home, so Recent lists nothing of Sven's. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter CapturesPageRenders`
 extension SharedLook {
@@ -28,7 +28,7 @@ struct CapturesPageRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         for style in PilotStyle.allCases {
             look.style = style
             for recording in [false, true] {

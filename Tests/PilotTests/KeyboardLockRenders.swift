@@ -28,7 +28,7 @@ struct KeyboardLockRenders {
         look.glass = false
         defer { (look.style, look.themeID, look.glass) = saved }
         let since = Date(timeIntervalSinceReferenceDate: 783_000_000), now = since.addingTimeInterval(12)
-        for (style, themes) in [(PilotStyle.instrument, ["nightwatch", "lagoon"]), (.toybox, ["toybox"])] {
+        for (style, themes) in [(PilotStyle.instrument, ["nightwatch", "tokyo-night"]), (.toybox, ["toybox"])] {
             look.style = style
             for theme in themes {
                 look.themeID = theme

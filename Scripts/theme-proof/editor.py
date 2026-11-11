@@ -25,7 +25,7 @@ class Fixture(packs.Fixture):
     def __init__(self, label='e'):
         super().__init__(label)
         self.native = self.root/'native.json'
-        self.original_native = dict(palette={'stock':{'_0':'lagoon'}}, material=dict(glass=False,transparency=43,blur='light'))
+        self.original_native = dict(palette={'stock':{'_0':'tokyo-night'}}, material=dict(glass=False,transparency=43,blur='light'))
         self.native.write_text(json.dumps(self.original_native))
         self.settings['nativeState'] = str(self.native)
         self.settings['nativeBaseline'] = self.original_native
@@ -82,17 +82,17 @@ def run(seam_only=False, fixes_only=False):
         f=fixture('round');f.start();before=f.effects()
         original=f.create();assert f.effects()==before
         value=f.call('theme','show','user-a');assert value['pack']==original and not value['factory']
-        duplicate=f.call('theme','duplicate','lagoon','lagoon-copy','Lagoon copy')
-        assert duplicate['id']=='lagoon-copy' and duplicate['palette']==json.loads((f.root/'factory/lagoon/manifest.json').read_text())['palette']
-        exported=f.export('lagoon-copy');envelope=json.loads(exported.read_text())
+        duplicate=f.call('theme','duplicate','tokyo-night','tokyo-night-copy','Tokyo Night copy')
+        assert duplicate['id']=='tokyo-night-copy' and duplicate['palette']==json.loads((f.root/'factory/tokyo-night/manifest.json').read_text())['palette']
+        exported=f.export('tokyo-night-copy');envelope=json.loads(exported.read_text())
         assert set(envelope)=={'format','pack','files'} and 'PROVENANCE.md' in envelope['files']
-        assert base64.b64decode(envelope['files']['PROVENANCE.md'])==(f.root/'factory/lagoon/PROVENANCE.md').read_bytes()
-        for relative,encoded in envelope['files'].items(): assert base64.b64decode(encoded)==(f.root/'factory/lagoon'/relative).read_bytes()
+        assert base64.b64decode(envelope['files']['PROVENANCE.md'])==(f.root/'factory/tokyo-night/PROVENANCE.md').read_bytes()
+        for relative,encoded in envelope['files'].items(): assert base64.b64decode(encoded)==(f.root/'factory/tokyo-night'/relative).read_bytes()
         portable=copy.deepcopy(envelope);portable['pack']['id']='imported';portable['pack']['title']='Imported'
         incoming=f.root/'incoming.json';incoming.write_text(json.dumps(portable));f.call('theme','import',str(incoming))
         out=f.export('imported','imported.json');assert json.loads(out.read_text())==portable
         assert f.effects()==before and f.factory_snapshot()==f.factory
-        f.call('theme','import',str(incoming),ok=False);f.call('theme','duplicate','lagoon','lagoon','Collision',ok=False)
+        f.call('theme','import',str(incoming),ok=False);f.call('theme','duplicate','tokyo-night','tokyo-night','Collision',ok=False)
         f.call('theme','new',str(f.root/'user-a'),ok=False)
         old=f.call('theme','show','user-a')['revision'];edited=copy.deepcopy(original);edited['palette']['accent']='#314159'
         edited['variants']={'light':copy.deepcopy(edited['palette'])};edited['material']=dict(glass=True,transparency=35,blur='full')
@@ -181,11 +181,11 @@ def run(seam_only=False, fixes_only=False):
         f.controls(style='toybox');plan=f.plan('user-a');f.controls(style='instrument');f.call('theme','apply',plan,ok=False)
         f.controls(style='toybox');f.apply('user-a');f.restore();f.stop()
         passed('Toybox compatibility enforced by discovery/check/plan/apply freshness beyond picker; hand-authored restriction and common stock coexist')
-        f=fixture('memory');f.start();assert 'toybox' not in [x['id'] for x in f.call('theme','colours')];native=f.native_value();native['palette']={'stock':{'_0':'orchid'}};f.native.write_text(json.dumps(native))
+        f=fixture('memory');f.start();assert 'toybox' not in [x['id'] for x in f.call('theme','colours')];native=f.native_value();native['palette']={'stock':{'_0':'dracula'}};f.native.write_text(json.dumps(native))
         f.call('theme','fixture-style','toybox');assert 'toybox' in [x['id'] for x in f.call('theme','colours')];native=f.native_value();native['palette']={'stock':{'_0':'toybox'}};f.native.write_text(json.dumps(native))
-        assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'orchid'}}
+        assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'dracula'}}
         assert f.call('theme','fixture-style','toybox')=={'stock':{'_0':'toybox'}}
-        f.stop();f.start();assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'orchid'}};f.stop()
+        f.stop();f.start();assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'dracula'}};f.stop()
         passed('native shared compatible-style memory returns prior Instrument/Toybox palette and persists across process restart')
 
 
@@ -200,7 +200,7 @@ def run(seam_only=False, fixes_only=False):
             elif kind=='authority':p['factoryRoot']=str(f.root/'factory')
             elif kind=='bad-image':p['wallpapers']=['bad.png'];images={'bad.png':b'not an image'}
             elif kind=='missing':p['wallpapers']=['missing.png']
-            elif kind=='collision':p['id']='lagoon'
+            elif kind=='collision':p['id']='tokyo-night'
             elif kind=='file-directory':p['wallpapers']=['asset','asset/image.png'];images={'asset':life.WALLPAPER_A}
             elif kind=='material':p['material']=dict(glass=True,transparency=101,blur='arbitrary')
             folder=f.folder(p,images=images);before=f.effects();f.call('theme','new',folder,ok=False);assert f.effects()==before
@@ -283,7 +283,7 @@ def run(seam_only=False, fixes_only=False):
             future=executor.submit(f.call,'theme','apply',plan,ok=False)
             deadline=time.monotonic()+10
             while not (f.root/'asked').exists() and time.monotonic()<deadline:time.sleep(.05)
-            assert (f.root/'asked').exists();f.call('theme','duplicate','lagoon','during-allow','Not saved',ok=False)
+            assert (f.root/'asked').exists();f.call('theme','duplicate','tokyo-night','during-allow','Not saved',ok=False)
             changed=f.native_value();changed['material']['transparency']=81;f.native.write_text(json.dumps(changed));(f.root/'go').touch();future.result()
         assert not (f.root/'user-packs/during-allow').exists();f.stop()
         passed('denial has zero effects; single queue rejects concurrent save during Allow; later personal native input invalidates approved plan')
@@ -353,7 +353,7 @@ def review_fixes(fixture, passed):
             elif reference=='display':wall['displays'][0]['image']=path
             elif reference=='preferences':wall['preferences']['nested']={'images':[[path]]}
             else:
-                f.apply('user-a' if reference=='last' else 'lagoon')
+                f.apply('user-a' if reference=='last' else 'tokyo-night')
                 record=f.root/'state/ownership.json';ledger=json.loads(record.read_text())
                 # Exercise both source-list and display-image recovered values without changing current appearance.
                 for claim in ledger['wallpapers']:
@@ -523,7 +523,7 @@ def rollback_fixes(fixture, passed):
             else:
                 personal=copy.deepcopy(f.desktop);personal['sources']=[str(image)]
                 for display in personal['displays']:display['image']=str(image)
-                f.write_wall(personal);f.apply('lagoon')
+                f.write_wall(personal);f.apply('tokyo-night')
                 record=json.loads((f.root/'state/ownership.json').read_text())
                 assert str(image) in json.dumps(record['wallpapers'])
             effects=f.effects();revision=f.call('theme','show','user-a')['revision'];original=tree(folder)

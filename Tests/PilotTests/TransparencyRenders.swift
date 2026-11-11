@@ -9,7 +9,7 @@ import Testing
 @testable import Pilot
 
 /// Transparency (Sven, 2026-10-08, design round 15), opt-in like the other renders: Home at 1440 by 900 on Glass,
-/// under Instrument and Toybox at Transparency 0, 50 and 100 %, in Lagoon and in Porcelain. An offscreen draw
+/// under Instrument and Toybox at Transparency 0, 50 and 100 %, in Tokyo Night and in Porcelain. An offscreen draw
 /// cannot capture the window's blur, so the content is composited over the wallpaper at PILOT_WALLPAPER blurred in
 /// CoreImage, under the ground's tint at its strength (whole while the window is solid). Seeded in a moved home with
 /// Home's renders' fakes; nothing reaches the tiler, the clipboard or the timer.
@@ -51,7 +51,7 @@ struct TransparencyRenders {
         let size = NSSize(width: 1440, height: 900)
         let wall = try Self.blurredWallpaper(URL(fileURLWithPath: try #require(Self.env["PILOT_WALLPAPER"])), size: size)
 
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             for style in PilotStyle.allCases {
                 for transparency in [0, 50, 100] {
                     let name = "transparency-\(style.rawValue)-\(theme)-\(String(format: "%03d", transparency))"

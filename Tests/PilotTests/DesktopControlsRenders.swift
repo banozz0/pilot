@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The desktop controls' native faces (spec desktop-controls T2): the tall Dropdown panel, the pill (each view compact and
-/// open) and the Carousel in both modes, in Instrument on Lagoon (dark) and Porcelain (light), each face fed plain values.
+/// open) and the Carousel in both modes, in Instrument on Tokyo Night (dark) and Porcelain (light), each face fed plain values.
 /// The panel and the pill hang under a stand-in solid top bar over a wallpaper, so the attachment shows; Glass is off, as
 /// glass draws nothing offscreen (T6 judges the material on Sven's screen). Empty states: nothing playing, no
 /// extensions, nothing running, no images. Reduce Motion: the pill's drop halfway open, sliding and fading. Sven's picks
@@ -19,10 +19,10 @@ extension SharedLook {
 @Suite("Desktop controls renders")
 struct DesktopControlsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
-    static let looks: [(name: String, theme: String)] = [("lagoon", "lagoon"), ("porcelain", "porcelain")]
+    static let looks: [(name: String, theme: String)] = [("tokyo-night", "tokyo-night"), ("porcelain", "porcelain")]
     static let strip: CGFloat = 32
 
-    @Test("The Dropdown panel, the pill and the Carousel render in Lagoon and Porcelain, every state",
+    @Test("The Dropdown panel, the pill and the Carousel render in Tokyo Night and Porcelain, every state",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -317,17 +317,17 @@ struct DesktopControlsRenders {
     }
 
     static func themes(_ walls: [NSImage]) -> CarouselValues {
-        let ids = ["porcelain", "orchid", "lagoon", "dusk", "phosphor", "garnet"]
+        let ids = ["porcelain", "dracula", "tokyo-night", "void", "ayu-dark", "garnet"]
         let items: [CarouselValues.Item] = ids.compactMap { id in
             guard let theme = PilotTheme.named(id) else { return nil }
             let t = StyleTokens.of(.instrument, theme: theme)
             let look = CarouselValues.ThemeLook(dark: t.dark, ground: t.color(\.canvas), window: t.color(\.panel), raised: t.color(\.raised),
                                                 line: t.color(\.line2), text: t.color(\.text), muted: t.color(\.text3), accent: t.color(\.accent),
                                                 second: Color(Paint(theme.second)), third: Color(Paint(theme.third)))
-            let image: NSImage? = id == "lagoon" ? walls[0] : id == "orchid" ? walls[walls.count - 1] : nil
-            return .init(title: theme.name, image: image, current: id == "lagoon", tagline: theme.tagline,
+            let image: NSImage? = id == "tokyo-night" ? walls[0] : id == "dracula" ? walls[walls.count - 1] : nil
+            return .init(title: theme.name, image: image, current: id == "tokyo-night", tagline: theme.tagline,
                          palette: palette(theme), look: look,
-                         apps: id == "dusk" ? nil : .init(editor: "Zed", terminal: "Ghostty", notes: "Obsidian"))
+                         apps: id == "void" ? nil : .init(editor: "Zed", terminal: "Ghostty", notes: "Obsidian"))
         }
         return CarouselValues(mode: .themes, items: items, index: 2)
     }
@@ -339,7 +339,7 @@ struct DesktopControlsRenders {
            let names = try? FileManager.default.contentsOfDirectory(atPath: folder).filter({ $0.hasSuffix(".png") }).sorted(),
            names.count >= 8 {
             // Lagoon first, the generated six, Orchid last (the Carousel's order).
-            let ordered = names.filter { !$0.contains("orchid") } + names.filter { $0.contains("orchid") }
+            let ordered = names.filter { !$0.contains("dracula") } + names.filter { $0.contains("dracula") }
             let images = ordered.compactMap { Self.thumbnail(URL(fileURLWithPath: folder).appendingPathComponent($0)) }
             if images.count >= 8 { return images }
         }

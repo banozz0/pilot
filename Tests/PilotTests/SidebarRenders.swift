@@ -8,7 +8,7 @@ import Testing
 
 /// The window's areas (Sven 2026-10-16): Ask and Extensions are areas of their own (Cmd+8 and Cmd+9 since Launcher took Cmd+3, P37), and the Extensions
 /// area lists every installed extension under its page, a bar-only one (Now playing) and one with neither among them.
-/// Drawn in the whole window, rail and toolbar tabs, Instrument on Lagoon and Toybox, at 1440 by 900, and the rail at 760
+/// Drawn in the whole window, rail and toolbar tabs, Instrument on Tokyo Night and Toybox, at 1440 by 900, and the rail at 760
 /// tall. A fake Extensions folder in the moved home; nothing runs.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter SidebarRenders`
 extension SharedLook {
@@ -70,7 +70,7 @@ struct SidebarRenders {
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
 
-        for (name, style, theme) in [("instrument", PilotStyle.instrument, "lagoon"), ("toybox", .toybox, "toybox")] {
+        for (name, style, theme) in [("instrument", PilotStyle.instrument, "tokyo-night"), ("toybox", .toybox, "toybox")] {
             (look.style, look.themeID) = (style, theme)
             for shape in WindowShape.allCases {
                 look.windowShape = shape

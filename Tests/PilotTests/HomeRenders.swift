@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Home as direction B of the approved mockup vg74ARspzoo (card agent-bo-95422992), opt-in like the other renders: the
-/// whole window at 1440, 1000 and 760 in Lagoon, then the page alone in its four states (Working, Key
+/// whole window at 1440, 1000 and 760 in Tokyo Night, then the page alone in its four states (Working, Key
 /// clicked on Hyper+B, Hyper off, Needs you with the tiler stopped) at 1440, Key clicked and Hyper off at 1000 and 760
 /// too. Seeded in a moved home: the mockup's workspaces with their names and windows, binds with the mockup's apps on T,
 /// B, G, I, Z and M, today's presses, Stats' readings and a last copy (fakes; nothing reaches the tiler or the
@@ -113,7 +113,7 @@ struct HomeRenders {
             .environment(engine).environment(\.homeSources, sources)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID }
         for width in [1440, 1000, 760] where wanted("window-\(width)") {
             window.setContentSize(NSSize(width: CGFloat(width), height: width == 760 ? 3200 : 2200))

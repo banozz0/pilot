@@ -8,7 +8,7 @@ import Testing
 
 /// Workspaces, Binds and Home's editor popup in the whole window (card agent-bo-95423003, Sven 2026-10-07: "half the
 /// screen is empty"): at 1440, 1000 and 760 wide, each 4:3 as Sven's 1600 × 1200 window, plus that window itself, in
-/// Lagoon. Presets, rules, layouts and a snapshot are seeded in a moved home; nothing reaches the tiler.
+/// Tokyo Night. Presets, rules, layouts and a snapshot are seeded in a moved home; nothing reaches the tiler.
 /// The Binds board reads the Mac's keyboard layout (read only). Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter FillRenders`
 extension SharedLook {
@@ -65,7 +65,7 @@ struct FillRenders {
         let frame = try #require(window.contentView?.superview)
 
         let only = Self.env["PILOT_RENDER_ONLY"]
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         let sizes = [CGSize(width: 1440, height: 1080), CGSize(width: 1000, height: 750), CGSize(width: 760, height: 570), CGSize(width: 1600, height: 1200)]
         for size in sizes {
             window.setContentSize(size)

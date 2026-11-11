@@ -245,7 +245,7 @@ struct HomeLayoutRenders {
         // Home, whose tray holds the extension pages; Most used carried to the right of the board; Reduce Motion; the
         // keyboard's ring on Clipboard, and Clipboard moved a row up by its arrow. Then Sven's goal in edit mode at his window
         // and the default one, each block's class checked against P91's frames 4 and 5.
-        let themes: [(String, PilotStyle, String)] = [("instrument-dark", .instrument, "lagoon"), ("instrument-light", .instrument, "porcelain"),
+        let themes: [(String, PilotStyle, String)] = [("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
                                                       ("toybox", .toybox, "toybox"), ("film", .instrument, ExplainerFilmRenders.theme)]
         let fourSizes = [(760, 520), (1000, 660), (1440, 900), (1720, 1440)], svensSizes = [(1000, 660), (1640, 1250)]
         let edits: [(name: String, layout: HomeLayout, sizes: [(Int, Int)])] = [

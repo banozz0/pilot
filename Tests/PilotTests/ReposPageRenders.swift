@@ -39,7 +39,7 @@ struct ReposPageRenders {
         let engine = try SharedLook.HomeRenders.engine()
         engine.settings.developer = true
         let look = Look.shared
-        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "lagoon"
+        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument; look.glass = true }
 
         func page(_ name: String, _ start: ReposPage.Start, height: CGFloat = 860) throws {

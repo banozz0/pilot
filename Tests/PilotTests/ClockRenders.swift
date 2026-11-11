@@ -87,7 +87,7 @@ struct ClockRenders {
     }
 
     /// Each style on a dark and a light theme.
-    static let looks: [(PilotStyle, String, String)] = [(.instrument, "lagoon", "dark"), (.instrument, "workshop", "light"),
+    static let looks: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light"),
                                                         (.toybox, "toybox-night", "dark"), (.toybox, "toybox", "light")]
 
     @Test("SPEC story 168, omarchy-ideas T8: the clock's popover in Omarchy's look (hero date, year rail, today outlined) with events off, given (a second zone, coloured events over three days) and refused, in Instrument and Toybox, dark and light",

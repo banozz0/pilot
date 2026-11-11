@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Binds › More › Overlay and the overlay it picks for (story 56), opt-in like the other renders: the window on Binds › More › Overlay
-/// in Instrument and Toybox under Lagoon at 1440 by 900, at Every bind and after a few switches; the page
+/// in Instrument and Toybox under Tokyo Night at 1440 by 900, at Every bind and after a few switches; the page
 /// searched; the overlay with 3, 40, 60 and 140 binds in each style, its foot's Edit what shows and "+ N more".
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter OverlayPicksRenders`
 extension SharedLook {
@@ -35,7 +35,7 @@ struct OverlayPicksRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
 
         func shoot(_ name: String) throws {
             window.setContentSize(NSSize(width: 1440, height: 900))

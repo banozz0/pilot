@@ -25,7 +25,7 @@ struct PermissionDragRenders {
         defer { DisplayFaces.directory = faces }
         let look = PanelLookTests.look()
         let passes: [(String, PilotStyle, String)] = [
-            ("instrument-dark", .instrument, "lagoon"), ("instrument-light", .instrument, "porcelain"), ("toybox", .toybox, "toybox"),
+            ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"), ("toybox", .toybox, "toybox"),
         ]
         for (tag, style, theme) in passes {
             look.style = style

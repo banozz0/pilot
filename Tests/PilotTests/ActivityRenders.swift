@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Activity (task N3), opt-in like the other renders: the whole window on the page in Instrument and Toybox, under Lagoon
+/// Activity (task N3), opt-in like the other renders: the whole window on the page in Instrument and Toybox, under Tokyo Night
 /// (dark) and Porcelain (light) at 1440 by 900 and Instrument at 760; then
 /// the page alone in each style with an app opened, a row hovered and a force quit waiting to be confirmed, and searched
 /// and sorted by memory, and narrow. Seeded rows on real bundles of this Mac for the icons; nothing is read or quit.
@@ -81,13 +81,13 @@ struct ActivityRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
 
-        for theme in ["lagoon", "porcelain"] {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
             for style in PilotStyle.allCases {
                 let name = style.rawValue
                 look.style = style
                 AppWindowController.applyLook(look, to: window)
-                let widths = theme == "lagoon" && style == .instrument ? [1440, 760] : [1440]
+                let widths = theme == "tokyo-night" && style == .instrument ? [1440, 760] : [1440]
                 for width in widths where wanted("window-\(name)-\(theme)-\(width)") {
                     window.setContentSize(NSSize(width: CGFloat(width), height: 900))
                     model.go(AppPlace(.activity))
@@ -100,7 +100,7 @@ struct ActivityRenders {
                 // The page alone at the window's page width: its states, then a search sorted by memory.
                 // And narrow, where the actions go under the hovered row.
                 for (state, start, width) in [("states", Self.states, 1000), ("search", Self.searched, 1000), ("narrow", Self.states, 520)]
-                where theme == "lagoon" && wanted("page-\(name)-\(state)") {
+                where theme == "tokyo-night" && wanted("page-\(name)-\(state)") {
                     let page = ActivityGround { ActivityPage(onScreen: false, start: start) }.styled(.page(.activity))
                         .environment(engine).frame(width: CGFloat(width), height: 1600).pilotTheme(look: look)
                     try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(name)-\(state).png"))

@@ -8,7 +8,7 @@ import Testing
 @testable import Pilot
 
 /// Voice › Dictation (story 194, Q452), in each state of its speech model and microphone, Instrument on
-/// Lagoon. A fake helper; nothing downloads or records.
+/// Tokyo Night. A fake helper; nothing downloads or records.
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter DictationBlockRenders`
 extension SharedLook {
 @MainActor
@@ -24,7 +24,7 @@ struct DictationBlockRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.themeID = "lagoon"
+        look.themeID = "tokyo-night"
         look.style = .instrument
 
         func block(_ grant: AVAuthorizationStatus, _ drive: (PilotDictationTests.Rig) throws -> Void) throws -> DictationBlock {

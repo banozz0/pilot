@@ -32,15 +32,15 @@ struct KitTests {
 
     /// Round 4's Paper's ground was its raised colour, so a suite drawing while Paper leaked out of a draw counted a pill that was
     /// not there (StripStyleTests' hover, HomePageTests' pixel pairs, on a loaded Mac).
-    @Test("A draw on another theme puts Lagoon back before any other main-actor work runs")
+    @Test("A draw on another theme puts Tokyo Night back before any other main-actor work runs")
     func previewStaysInItsTurn() async throws {
-        Self.drawn.removeValue(forKey: "\(KitSample.chip)|workshop")
+        Self.drawn.removeValue(forKey: "\(KitSample.chip)|folio")
         let seen = Task { @MainActor in
             var ids: Set<String> = []
             while !Task.isCancelled { ids.insert(Look.shared.theme.id); await Task.yield() }
             return ids
         }
-        _ = try await Self.draw(.chip, theme: "workshop")
+        _ = try await Self.draw(.chip, theme: "folio")
         seen.cancel()
         #expect(await seen.value == [PilotTheme.defaultID])
     }
@@ -73,7 +73,7 @@ struct KitTests {
 
     @Test("Each component follows the theme", arguments: KitSample.allCases)
     func followsTheme(_ sample: KitSample) async throws {
-        let night = try await Self.draw(sample, theme: "lagoon"), paper = try await Self.draw(sample, theme: "workshop")
+        let night = try await Self.draw(sample, theme: "tokyo-night"), paper = try await Self.draw(sample, theme: "folio")
         #expect(Self.differ(night, paper), "\(sample.title) ignores the theme")
     }
 
@@ -81,7 +81,7 @@ struct KitTests {
     /// (selection, soft fills), or the white of Calm's thumbs: no colour of its own.
     @Test("Each component's colours come from the theme", arguments: KitSample.allCases)
     func colours(_ sample: KitSample) async throws {
-        for id in ["dusk", "phosphor"] { try await coloursCome(from: id, sample) }
+        for id in ["void", "ayu-dark"] { try await coloursCome(from: id, sample) }
     }
 
     private func coloursCome(from id: String, _ sample: KitSample) async throws {

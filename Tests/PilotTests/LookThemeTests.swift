@@ -26,10 +26,10 @@ struct LookThemeTests {
         func again() -> Look { Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), defaults: defaults) }
     }
 
-    @Test("A fresh install is Instrument, Lagoon, Glass off with Transparency at 33 %, the window and panels solid")
+    @Test("A fresh install is Instrument, Tokyo Night, Glass off with Transparency at 33 %, the window and panels solid")
     func defaults() {
         let look = Bench().look
-        #expect(look.style == .instrument && look.themeID == "lagoon" && look.theme.id == "lagoon")
+        #expect(look.style == .instrument && look.themeID == "tokyo-night" && look.theme.id == "tokyo-night")
         #expect(!look.glass && look.transparency == 33)
         let l = look.layers
         #expect([l.ground, l.sidebar, l.card, l.well, l.raised, l.keyFree] == Array(repeating: 1, count: 6))
@@ -41,11 +41,11 @@ struct LookThemeTests {
         let bench = Bench()
         let look = bench.look
         look.style = .toybox
-        look.themeID = "orchid"
+        look.themeID = "dracula"
         look.glass = true
         look.transparency = 55
         let next = bench.again()
-        #expect(next.style == .toybox && next.themeID == "orchid" && next.theme.id == "orchid")
+        #expect(next.style == .toybox && next.themeID == "dracula" && next.theme.id == "dracula")
         #expect(next.glass && next.transparency == 55 && next.effectiveMaterial == .glass)
         // Transparency stays between 0 and 100.
         look.transparency = -12
@@ -98,24 +98,24 @@ struct LookThemeTests {
         withObservationTracking { _ = look.theme } onChange: { theme.raised = true }
         withObservationTracking { _ = look.layers } onChange: { material.raised = true }
         withObservationTracking { _ = look.style } onChange: { style.raised = true }
-        look.themeID = "workshop"
+        look.themeID = "folio"
         look.transparency = 60
         look.style = .toybox
         #expect(theme.raised && material.raised && style.raised)
-        #expect(look.colors.ground == ThemeColors(PilotTheme.named("workshop")!).ground && !look.theme.dark)
+        #expect(look.colors.ground == ThemeColors(PilotTheme.named("folio")!).ground && !look.theme.dark)
     }
 
     @Test("Picking a theme writes Ghostty once from its Omarchy palette, and nothing else")
     func pickRestylesGhostty() throws {
         let bench = Bench()
-        bench.look.pick("dusk")
-        #expect(bench.ghostty.written == [GhosttyLook(theme: LookTests.themes.named("last-horizon"))])
+        bench.look.pick("void")
+        #expect(bench.ghostty.written == [GhosttyLook(theme: LookTests.themes.named("vantablack"))])
     }
 
-    @Test("A theme retired in round 15 starts as the new theme closest to it, saved, and Ghostty follows through the pick's path; an unknown id is the default")
+    @Test("A retired theme starts as the kept theme closest to it, saved, and Ghostty follows through the pick's path; an unknown id is the default")
     func retired() async throws {
         // The whole map is PilotThemeTests.migration's; here the app's start with a retired id and an unknown one.
-        for (old, new) in [("paper", "workshop"), ("nope", "lagoon")] {
+        for (old, new) in [("paper", "folio"), ("nope", "tokyo-night")] {
             let defaults = LookTests.defaults()
             defaults.set(old, forKey: "look.theme")
             let bench = Bench(defaults: defaults)
@@ -130,15 +130,15 @@ struct LookThemeTests {
         let bench = Bench(defaults: defaults), fresh = Bench()
         try await Task.sleep(for: .milliseconds(50))
         #expect(bench.look.themeID == "void" && bench.ghostty.written.isEmpty && fresh.ghostty.written.isEmpty)
-        #expect(fresh.look.themeID == "lagoon" && fresh.defaults.string(forKey: "look.theme") == nil)
+        #expect(fresh.look.themeID == "tokyo-night" && fresh.defaults.string(forKey: "look.theme") == nil)
         // Pilot's look taken out of Ghostty stays out: the id moves on, Ghostty is left alone.
         let out = LookTests.defaults()
         out.set("hearth", forKey: "look.theme")
         let ghostty = LookTests.FakeGhostty()
         ghostty.isApplied = false
-        #expect(Look(themes: LookTests.themes, ghostty: ghostty, defaults: out).themeID == "dusk")
+        #expect(Look(themes: LookTests.themes, ghostty: ghostty, defaults: out).themeID == "void")
         try await Task.sleep(for: .milliseconds(50))
-        #expect(ghostty.written.isEmpty && out.string(forKey: "look.theme") == "dusk")
+        #expect(ghostty.written.isEmpty && out.string(forKey: "look.theme") == "void")
     }
 
     @Test("The wallpaper's brightness is read only from a file that is there: a renamed one leaves the theme's own spot")

@@ -33,7 +33,7 @@ struct RecordingControlRenders {
         let recorder = Recorder()
         let scrolling = ScrollCapture(area: CGRect(x: 0, y: 0, width: 40, height: 60), display: 1, scale: 1) { _, _ in }
         let auto = ScrollCapture(area: CGRect(x: 0, y: 0, width: 40, height: 60), display: 1, scale: 1, auto: true) { _, _ in }
-        for (style, theme) in [(PilotStyle.instrument, "lagoon"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
             look.style = style
             look.themeID = theme
             for (name, phase, elapsed) in [("1-counting", Recorder.Phase.counting(3), 0.0), ("2-recording", .recording, 42.4), ("3-paused", .paused, 725.0)] {

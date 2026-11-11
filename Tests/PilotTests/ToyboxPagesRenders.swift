@@ -53,8 +53,8 @@ struct ToyboxPagesRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         let look = Look.shared
-        // PILOT_RENDER_THEME picks the theme (Lagoon by default): Toybox follows it.
-        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "lagoon"
+        // PILOT_RENDER_THEME picks the theme (Tokyo Night by default): Toybox follows it.
+        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
 
         func shot(_ name: String, _ place: AppPlace, style: PilotStyle, dark: Bool = true, width: Int = 1440, height: Int = 900) throws {

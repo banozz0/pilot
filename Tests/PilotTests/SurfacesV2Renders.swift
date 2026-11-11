@@ -121,7 +121,7 @@ struct SurfacesV2Renders {
             ]),
         ]
         let item = ExtensionBar.Item(id: "surfaces-demo", title: "AI usage", icon: "📊", hasPage: true, answer: nil, problem: nil)
-        for (name, theme) in [("dark", "lagoon"), ("light", "workshop")] {
+        for (name, theme) in [("dark", "tokyo-night"), ("light", "folio")] {
             (look.themeID, look.style) = (theme, .instrument)
             let tokens = StyleTokens.of(.instrument, theme: look.theme)
             let model = SurfacesV2Tests.popover(exts, storage: storage) { _, _ in .blocks(blocks) }

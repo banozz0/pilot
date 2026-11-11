@@ -31,7 +31,7 @@ struct TransparencyLookTests {
         defer { look.glass = saved.0; look.transparency = saved.1; look.style = saved.2 }
         look.style = .instrument
         look.glass = false
-        for id in ["lagoon", "porcelain"] {
+        for id in ["tokyo-night", "porcelain"] {
             look.themeID = id
             #expect(Self.today(look.colors, in: Self.environment(.window, look)) && Self.today(look.colors), "\(id) solid")
         }

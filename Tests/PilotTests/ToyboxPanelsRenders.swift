@@ -12,7 +12,7 @@ import Testing
 /// states; the clipboard panel's; then the top bar's popovers, the Pilot dropdown at rest and while things run, and the bind editor. Toybox follows the
 /// theme, so each runs per theme. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ToyboxPanelsRenders`
-/// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=toybox,toybox-night,lagoon` (the defaults) narrow it;
+/// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=toybox,toybox-night,tokyo-night` (the defaults) narrow it;
 /// `PILOT_RENDER_ONLY=<part>[,<part>]` keeps the parts named (hud, overlay, notes, clipboard, topbar, bind-editor).
 extension SharedLook {
 @MainActor
@@ -55,7 +55,7 @@ struct ToyboxPanelsRenders {
         let out = URL(fileURLWithPath: try #require(env["PILOT_RENDER_DIR"]))
         for style in list("PILOT_RENDER_STYLES", "instrument,toybox") {
             look.style = try #require(PilotStyle(rawValue: style))
-            for theme in list("PILOT_RENDER_THEME", "toybox,toybox-night,lagoon") {
+            for theme in list("PILOT_RENDER_THEME", "toybox,toybox-night,tokyo-night") {
                 look.themeID = theme
                 try await body(Pass(out: out, tag: "\(style)-\(theme)"))
             }

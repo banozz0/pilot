@@ -109,8 +109,8 @@ struct BindEditorRenders {
             ("a17-mouse-play", { BindEditor(action: nil, actions: actions, windowHeight: $0, mouse: back, finder: finder("play")) }),
         ]
         for dark in [true, false] {
-            // Instrument is dark or light as its theme is: Lagoon dark, Porcelain light.
-            look.themeID = dark ? "lagoon" : "porcelain"
+            // Instrument is dark or light as its theme is: Tokyo Night dark, Porcelain light.
+            look.themeID = dark ? "tokyo-night" : "porcelain"
             for (name, editor) in states {
                 for (window, height) in [("1000x660", CGFloat(660)), ("760x520", CGFloat(520))] {
                     let view = editor(height).environment(engine).styled(.page(.binds), look: look).pilotTheme(look: look)

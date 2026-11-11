@@ -103,7 +103,7 @@ struct InstrumentBindsRenders {
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("binds-groups")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = .instrument }
-        for (style, theme) in [(PilotStyle.instrument, "void"), (.instrument, "workshop"), (.instrument, "lagoon"), (.toybox, "toybox-night"), (.toybox, "void")] {
+        for (style, theme) in [(PilotStyle.instrument, "void"), (.instrument, "folio"), (.instrument, "tokyo-night"), (.toybox, "toybox-night"), (.toybox, "void")] {
             Look.shared.style = style
             Look.shared.themeID = theme
             let rep = try rendered(hosted(BindsKeyboardPage(search: "") { _ in }, engine, width: 1207, height: 900), wait: 0.9)

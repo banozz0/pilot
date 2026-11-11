@@ -38,7 +38,7 @@ struct MoreTabRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
         let looks: [(name: String, style: PilotStyle, themes: [(String, String)])] = [
-            ("instrument", .instrument, [("dark", "lagoon"), ("light", "porcelain")]),
+            ("instrument", .instrument, [("dark", "tokyo-night"), ("light", "porcelain")]),
             ("toybox", .toybox, [("dark", "toybox-night"), ("light", "toybox")]),
         ]
         for (name, style, themes) in looks {

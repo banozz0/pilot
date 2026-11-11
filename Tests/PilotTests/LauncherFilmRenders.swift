@@ -32,7 +32,7 @@ struct LauncherFilmRenders {
                                                               ("ql", "gh pilot"), ("fix", "fix"), ("aloud", "read aloud")]
 
     /// Cut 3's "make it yours": the menu's first look in Instrument and Toybox, dark and light.
-    static let looks: [(PilotStyle, String)] = [(.instrument, "dusk"), (.instrument, "porcelain"), (.instrument, "orchid"),
+    static let looks: [(PilotStyle, String)] = [(.instrument, "void"), (.instrument, "porcelain"), (.instrument, "dracula"),
                                                 (.toybox, "toybox-night"), (.toybox, "toybox")]
 
     @Test("The launcher's typed frames, the morph probe and the 1920 top bar", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))

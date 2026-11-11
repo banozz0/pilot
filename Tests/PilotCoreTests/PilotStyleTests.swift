@@ -67,7 +67,7 @@ struct PilotStyleTests {
         for style in PilotStyle.allCases {
             let c = StyleTokens.of(style, theme: theme).colors
             #expect(c.groups.count == BindsKeyboard.modules.count, "\(style) \(theme.id)")
-            // Toybox's are its theme's module colours, which some themes repeat (Dusk, Lagoon).
+            // Toybox's are its theme's module colours, which a theme may repeat.
             if style == .instrument { #expect(Set(c.groups.map(\.rgb)).count == c.groups.count, "\(theme.id)") }
             for fill in c.groups {
                 let second = Contrast.mix(Contrast.rgb(c.onGroup2.rgb), Contrast.rgb(fill.rgb), c.onGroup2.alpha)
@@ -79,14 +79,14 @@ struct PilotStyleTests {
 
     @Test("A theme whose sidebar is its ground gets one a step darker")
     func instrumentSidebarStep() throws {
-        let lagoon = try #require(PilotTheme.named("lagoon"))
-        let flat = PilotTheme(id: "flat", name: "Flat", tagline: "", source: "", dark: true, ground: lagoon.ground, sidebar: lagoon.ground,
-                              surface: lagoon.surface, raised: lagoon.raised, line: lagoon.line, line2: lagoon.line2, text: lagoon.text,
-                              text2: lagoon.text2, text3: lagoon.text3, accent: lagoon.accent, second: lagoon.second, third: lagoon.third,
-                              good: lagoon.good, amber: lagoon.amber, problem: lagoon.problem, graphs: lagoon.graphs, focus: lagoon.focus,
-                              radius: lagoon.radius, face: lagoon.face, wallpaper: lagoon.wallpaper)
+        let base = try #require(PilotTheme.named("tokyo-night"))
+        let flat = PilotTheme(id: "flat", name: "Flat", tagline: "", source: "", dark: true, ground: base.ground, sidebar: base.ground,
+                              surface: base.surface, raised: base.raised, line: base.line, line2: base.line2, text: base.text,
+                              text2: base.text2, text3: base.text3, accent: base.accent, second: base.second, third: base.third,
+                              good: base.good, amber: base.amber, problem: base.problem, graphs: base.graphs, focus: base.focus,
+                              radius: base.radius, face: base.face, wallpaper: base.wallpaper)
         let sidebar = StyleTokens.instrumentColors(flat).sidebar
-        #expect(sidebar != Paint(lagoon.ground) && Contrast.luminance(Contrast.rgb(sidebar.rgb)) < Contrast.luminance(Contrast.rgb(lagoon.ground)))
+        #expect(sidebar != Paint(base.ground) && Contrast.luminance(Contrast.rgb(sidebar.rgb)) < Contrast.luminance(Contrast.rgb(base.ground)))
     }
 
     @Test("On a pure-black ground the sunk well and a flat sidebar step toward white, under the panel (Void, 2026-10-08)")

@@ -52,7 +52,7 @@ struct ToyboxBindsRenders {
         let engine = try engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("binds")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        Look.shared.themeID = "lagoon"
+        Look.shared.themeID = "tokyo-night"
         defer { Look.shared.themeID = PilotTheme.defaultID; pick(.instrument) }
         let only = Self.env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }
