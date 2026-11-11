@@ -848,6 +848,66 @@
         "bright_blue": "#d6acff",
         "bright_magenta": "#ff92df"
       }
+    },
+    {
+      "id": "jade-horse",
+      "name": "Jade Horse",
+      "dark": true,
+      "colors": {
+        "background": "#142620",
+        "dark_background": "#0f1e19",
+        "darker_background": "#0a1713",
+        "lighter_background": "#203b31",
+        "foreground": "#dfede5",
+        "dark_foreground": "#91ad9f",
+        "light_foreground": "#bed6c9",
+        "bright_foreground": "#f0faf4",
+        "accent": "#8bcbb1",
+        "selection": "#2b5147",
+        "muted": "#64887b",
+        "red": "#d88d91",
+        "yellow": "#c5cc91",
+        "green": "#8bcbb1",
+        "cyan": "#86c7c5",
+        "blue": "#96b7d0",
+        "magenta": "#b7a1c8",
+        "bright_red": "#e6a6aa",
+        "bright_yellow": "#dce1ac",
+        "bright_green": "#a7dfc5",
+        "bright_cyan": "#a2dcda",
+        "bright_blue": "#b0cde3",
+        "bright_magenta": "#cfbce0"
+      }
+    },
+    {
+      "id": "akane",
+      "name": "Akane",
+      "dark": true,
+      "colors": {
+        "background": "#12101c",
+        "dark_background": "#0c0a14",
+        "darker_background": "#08070e",
+        "lighter_background": "#221c2c",
+        "foreground": "#f0c4a8",
+        "dark_foreground": "#8a6e6c",
+        "light_foreground": "#f3d0b8",
+        "bright_foreground": "#f7e0cc",
+        "accent": "#e15a48",
+        "selection": "#2c2438",
+        "muted": "#6d5a68",
+        "red": "#d6453d",
+        "yellow": "#f0b45a",
+        "green": "#7e9a6a",
+        "cyan": "#4a9bb0",
+        "blue": "#5b7fa8",
+        "magenta": "#c45c78",
+        "bright_red": "#f06a58",
+        "bright_yellow": "#f6cc7a",
+        "bright_green": "#9ab57e",
+        "bright_cyan": "#7ec4d2",
+        "bright_blue": "#7a9cc4",
+        "bright_magenta": "#e07a94"
+      }
     }
   ]
 }
