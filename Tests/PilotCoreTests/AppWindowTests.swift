@@ -64,9 +64,10 @@ struct AppWindowTests {
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
-        #expect(AppPage.openWith.tabs.map(\.title) == ["Open with", "More"])
-        // A page's front, then its More (simplify-pages T7, T9): More last.
-        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"] && AppPage.tiling.tabs.map(\.title) == ["Tiling", "More"])
+        // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103).
+        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty)
+        // A page's front, then its More (simplify-pages T7): More last.
+        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"])
     }
 
     /// Every name pilot://open has used for a page or a part, the 21 before the round-4 cut and the 7 C3 renamed or moved,

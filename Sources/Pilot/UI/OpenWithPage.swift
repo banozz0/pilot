@@ -13,12 +13,9 @@ struct OpenWithPage: View {
     /// All kinds, folded until asked for.
     @State private var allKinds: Bool
     private let editor: EditorChoice
-    /// The More tab shows, not the front: Apps for keys (simplify-pages T11).
-    private let more: Bool
 
     /// A render or a test may fold All kinds out and pass its own defaults and editor.
-    init(more: Bool = false, allKinds: Bool = false, kinds: DefaultAppsModel = DefaultAppsModel(), editor: EditorChoice = .shared) {
-        self.more = more
+    init(allKinds: Bool = false, kinds: DefaultAppsModel = DefaultAppsModel(), editor: EditorChoice = .shared) {
         _allKinds = State(initialValue: allKinds)
         _kinds = State(initialValue: kinds)
         self.editor = editor
@@ -42,15 +39,8 @@ struct OpenWithPage: View {
         .filter { !$0.kinds.isEmpty }
 
     var body: some View {
-        if more {
-            // One block, so no index (Sven's Q60).
-            KitMore(entries: [MoreEntry(id: .appsForKeys, symbol: "key", controls: 1)]) {
-                // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
-                AppRolesBlock().moreBlock(.appsForKeys)
-            }
-        } else {
-            front
-        }
+        // Apps for keys back on the front, and Open with's More gone with it (pages round 4, Sven's Q103).
+        KitLanding { front }
     }
 
     private var front: some View {
@@ -69,6 +59,8 @@ struct OpenWithPage: View {
                 if allKinds { others.padding(.top, 10) }
             }
             opensIn
+            // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
+            AppRolesBlock().id(AppSection.appsForKeys)
         }
         .onAppear {
             kinds.load()

@@ -8,11 +8,9 @@ import PilotCore
 /// map). Every block change goes to Pilot's tiler at once.
 struct TilingSettingsView: View {
     @Environment(Engine.self) private var engine
-    /// The More tab shows, not the front (simplify-pages T9).
-    var more = false
 
     var body: some View {
-        TilingBody(block: engine.pilotBlock, settings: engine.settings, more: more)
+        TilingBody(block: engine.pilotBlock, settings: engine.settings)
     }
 }
 
@@ -23,43 +21,33 @@ struct TilingBody: View {
     let settings: PilotSettings
     /// The apps Always float lists; renders pass their own, the app reads them when the block appears.
     var apps: [(name: String, bundle: String)]? = nil
-    /// The More tab shows: the window titles that float, and the mouse and motion (back from System, Sven's Q81).
-    var more = false
     @State private var newTitle = ""
     /// The Look the Focused window block binds to; a render passes its own.
     var look: Look = .shared
 
-    static let intro = "How Pilot's tiler lays windows out: the gaps, the window in front and the apps that float."
-    static let introInfo = "The window titles that float, dragging and the windows' motion are on More."
+    static let intro = "How Pilot's tiler lays windows out: the gaps, the window in front, what floats and how windows move."
 
     var body: some View {
-        if more {
-            KitMore(entries: Self.entries) {
-                floatTitles.moreBlock(.floatTitles)
-                mouse.moreBlock(.motion)
-            }
-        } else {
-            // The focused window whole and the apps that float, back from More (Sven, 2026-11-11, after 2276).
-            KitLanding {
-                KitPage(intro: Self.intro, info: Self.introInfo) {
-                    if ink.isInstrument {
-                        // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
-                        InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
-                    } else {
-                        gaps; FocusedWindowBlock(look: look).id(AppSection.focusedWindow)
-                    }
-                    FloatAppsBlock(block: block, apps: apps).id(AppSection.floatApps)
-                    if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
+        // The focused window whole and the apps that float, back from More (Sven, 2026-11-11, after 2276); the window
+        // titles and the mouse and motion too, and Tiling's More with them (pages round 4, Sven's Q98).
+        KitLanding {
+            KitPage(intro: Self.intro) {
+                if ink.isInstrument {
+                    // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
+                    InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
+                } else {
+                    gaps; FocusedWindowBlock(look: look).id(AppSection.focusedWindow)
                 }
+                FloatAppsBlock(block: block, apps: apps).id(AppSection.floatApps)
+                if ink.isInstrument {
+                    InstrumentPair { floatTitles.id(AppSection.floatTitles) } right: { mouse.id(AppSection.motion) }
+                } else {
+                    floatTitles.id(AppSection.floatTitles); mouse.id(AppSection.motion)
+                }
+                if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
             }
         }
     }
-
-    /// More's index (simplify-pages T9): a list counts once. A row added to or moved off a block changes its count here.
-    static let entries = [
-        MoreEntry(id: .floatTitles, symbol: "textformat", controls: 2),
-        MoreEntry(id: .motion, symbol: "cursorarrow.motionlines", controls: 2),
-    ]
 
     private var gaps: some View {
         KitBlock(title: "Gaps", symbol: "rectangle.split.3x1", focused: true, fill: true) {

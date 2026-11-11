@@ -120,7 +120,7 @@ struct PageView: View {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
         case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
-        case .tiling: TilingSettingsView(more: section == .tilingMore)
+        case .tiling: TilingSettingsView()
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
@@ -149,7 +149,7 @@ struct PageView: View {
             case .installMore: InstallMorePage()
             default: CataloguePage(category: model.catalogueCategory, search: InstallSearcher.search)
             }
-        case .openWith: OpenWithPage(more: section == .openWithMore)
+        case .openWith: OpenWithPage()
         case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
         case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
         case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.catalogueCategory = CataloguePage.fonts })

@@ -380,17 +380,17 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Pilot's More tab (simplify-pages T7, Sven's Q60 B): the blocks the page's front leaves out, with their index beside.
     /// Always the page's last tab (AppPage.tabs); `tab=more` names it on its page.
     case pilotMore
-    /// Tiling's More (simplify-pages T9) and its places: the always-float window titles and the mouse and motion (on
-    /// System from Sven's Q78 until his Q81, 2026-11-11); the always-float apps and the focused window are places on the
-    /// front (Sven, 2026-11-11, after 2276).
-    case tilingMore, floatApps, floatTitles, motion, focusedWindow
+    /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
+    /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
+    case floatApps, floatTitles, motion, focusedWindow
     /// Workspaces' More's window shelf (on Tiling's More until Sven, 2026-11-11, after 2276).
     case windowShelf
     /// Clipboard's More (simplify-pages T10) and its places: the apps never recorded, card numbers and keys that expire,
     /// the panel's Return and sort, and the tags.
     case clipboardMore, clipNever, clipExpire, clipPanel, clipTags
-    /// Open with's More (simplify-pages T11) and its one block: the app or site each role key opens.
-    case openWithMore, appsForKeys
+    /// Open with's place on its front, back from More with its More (pages round 4, Sven's Q103): the app or site each
+    /// role key opens.
+    case appsForKeys
     /// Voice's More (simplify-pages T12) and its places: the recent takes, the taught words and replacements, and Read
     /// aloud's media and better voices; dictation's key and what shows while you speak are a place on the front again
     /// (Sven, 2026-11-11, after 2276).
@@ -427,9 +427,9 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data, .notifications, .pilotMore: .general
-        case .tilingMore, .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
+        case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
         case .clipboardMore, .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
-        case .openWithMore, .appsForKeys: .openWith
+        case .appsForKeys: .openWith
         case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud: .voice
         case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
@@ -453,9 +453,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public static func more(of page: AppPage) -> AppSection? {
         switch page {
         case .general: .pilotMore
-        case .tiling: .tilingMore
         case .clipboard: .clipboardMore
-        case .openWith: .openWithMore
         case .voice: .voiceMore
         case .captures: .capturesMore
         case .menu: .menuMore
@@ -470,8 +468,8 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [.hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .floatTitles, .motion, .windowShelf,
-                                                     .clipNever, .clipExpire, .clipPanel, .clipTags, .appsForKeys,
+                                                     .windowShelf,
+                                                     .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud,
                                                      .captureOptions, .captureKeys, .recordingQuality,
                                                      .menuExtras, .translate, .aliases, .quicklinks,
@@ -483,7 +481,7 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
-    private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .focusedWindow, .floatApps,
+    private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
 
     /// A block on its page's front that a link or the search scrolls to.
@@ -528,7 +526,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .pilotMore, .tilingMore, .clipboardMore, .openWithMore, .voiceMore, .capturesMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .pilotMore, .clipboardMore, .voiceMore, .capturesMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: "More"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -608,7 +606,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .pilotMore, .tilingMore, .clipboardMore, .openWithMore, .voiceMore, .capturesMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .pilotMore, .clipboardMore, .voiceMore, .capturesMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: []
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
         case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset", "snapshot", "save", "restore",
                                "reopen"]
@@ -700,6 +698,8 @@ public struct AppPlace: Hashable, Sendable {
         "instructions": AppPlace(.agents), "launcher": AppPlace(.menu),
         // System's More, gone since its parts came back to the front (Sven, 2026-11-11, after 2276).
         "systemMore": AppPlace(.system),
+        // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
+        "tilingMore": AppPlace(.tiling), "openWithMore": AppPlace(.openWith),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.
@@ -733,7 +733,7 @@ public struct AppPlace: Hashable, Sendable {
         "rings": AppPlace(.rings),
         // The window shelf left Tiling's More for Workspaces' (Sven, 2026-11-11, after 2276); the mouse's buttons left
         // Binds for System (Sven's Q68) and came back (round 3), so `page=system&tab=mouse` lands on Binds; Tiling's
-        // mouse and motion went there too (Q78) and came back (Q81), so `page=system&tab=motion` lands on Tiling's More.
+        // mouse and motion went there too (Q78) and came back (Q81), so `page=system&tab=motion` lands on Tiling's front.
         "windowShelf": AppPlace(.windowShelf), "mouse": AppPlace(.mouse), "motion": AppPlace(.motion),
     ]
 
