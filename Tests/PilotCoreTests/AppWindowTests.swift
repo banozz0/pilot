@@ -58,7 +58,7 @@ struct AppWindowTests {
         // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
-        #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup", "More"])
+        #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
         for page in [AppPage.stats, .activity] { #expect(page.tabs.isEmpty, "\(page)") }
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
@@ -66,8 +66,8 @@ struct AppWindowTests {
         #expect(AppPage.system.tabs.isEmpty)
         // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103).
         #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty)
-        // A page's front, then its More (simplify-pages T7): More last.
-        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"])
+        // Pilot's blocks back on its front, its More gone (pages round 4, Sven's Q106).
+        #expect(AppPage.general.tabs.isEmpty)
     }
 
     /// Every name pilot://open has used for a page or a part, the 21 before the round-4 cut and the 7 C3 renamed or moved,

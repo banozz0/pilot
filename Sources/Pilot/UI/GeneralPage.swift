@@ -6,17 +6,15 @@ import SwiftUI
 /// The Pilot page (General until simplify-pages T4): Pilot's own page as an app, the way an About and General pane open
 /// in Raycast and Ice (Sven 2026-10-10: "it should be like the Pilot general app"). Its front (simplify-pages T8): who Pilot
 /// is, its mark, name, version and build, whether this build is current with Check for updates, and Support; the
-/// permission when it is missing (Home links here); where the Hyper key sits, with Change; and Startup. Its More tab
-/// (T7, Sven's Q60 B): the Hyper keys and their options, every permission Pilot asks for with its fix, what runs, Pilot's
-/// data (its folder and the pilot command) and About, the index beside. What the overlay shows lives on Binds › More › Overlay,
-/// export and import on Binds › More › Export and import, the helpers on Install › Helpers (page map, Sven 2026-10-17), AI on its
-/// own page, the quick-notes folder on Notes; the on/off switch on Home and in the dropdown.
+/// permission when it is missing (Home links here); then, back from its More (pages round 4, Sven's Q106), the Hyper key
+/// with where it sits and its options, Startup, what runs, other apps' notifications, every permission Pilot asks for
+/// with its fix, Pilot's data (its folder and the pilot command) and About. What the overlay shows lives on Keys ›
+/// Overlay, export and import on Keys › More › Export and import, the helpers on Install › Helpers (page map, Sven
+/// 2026-10-17), AI on its own page, the quick-notes folder on Notes; the on/off switch on Home and in the dropdown.
 struct GeneralPage: View {
     @Environment(Engine.self) private var engine
     @Environment(\.ink) private var ink
     @Environment(\.style) private var style
-    /// The More tab shows, not the front; a block a link or the search asked for comes from the window (blockLanding).
-    let more: Bool
     @State private var confirming: LayerKeyChange?
     /// Read when the page shows and when Pilot comes back to the front, not on every redraw (it lists a folder).
     @State private var fullDisk: Bool?
@@ -40,58 +38,40 @@ struct GeneralPage: View {
     static let tagline = "Your Mac from the keyboard: the Hyper key, tiling, workspaces and one menu for everything."
     /// Support (Sven 2026-10-10): Pilot's GitHub Sponsors page.
     static let supportURL = URL(string: "https://github.com/sponsors/banozz0")!
-    /// Accessibility's ⓘ, on Needs you and on More's Permissions.
+    /// Accessibility's ⓘ, on Needs you and on Permissions.
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
 
-    /// The front's blocks sit in pairs from this width up, so Needs you, the Hyper key and Startup fit the window's first
-    /// size (simplify-pages T8); narrower they stack (Moody: at 760 they ran off the right edge).
+    /// The front's short blocks sit in pairs from this width up (simplify-pages T8); narrower they stack (Moody: at 760
+    /// they ran off the right edge).
     static func paired(width: CGFloat) -> Bool { width >= 820 }
 
     /// `acknowledgementsOpen` is for the renders; the app always opens the page with the list closed.
-    init(more: Bool = false, acknowledgementsOpen: Bool = false) {
-        self.more = more
+    init(acknowledgementsOpen: Bool = false) {
         _acknowledgementsOpen = State(initialValue: acknowledgementsOpen)
     }
 
     var body: some View {
         let granted = engine.gate.isTrusted
-        Group {
-            if more {
-                KitMore(entries: Self.entries(granted: granted)) {
-                    hyperKeys.moreBlock(.hyperKey)
-                    permissions(granted).moreBlock(.permissions)
-                    status.moreBlock(.status)
-                    data.moreBlock(.data)
-                    notifications.moreBlock(.notifications)
-                    about.moreBlock(.about)
+        KitLanding {
+            KitPage {
+                header
+                if !granted { needsYou }
+                // Its rows run too wide for a column (Hold Hyper's).
+                hyperKeys(focused: granted).id(AppSection.hyperKey)
+                if wide {
+                    // Two columns, each block at its own height, so none stretches to its neighbour's foot.
+                    columns { startup; status.id(AppSection.status) } right: { notifications.id(AppSection.notifications) }
+                } else {
+                    startup; status.id(AppSection.status); notifications.id(AppSection.notifications)
                 }
-            } else {
-                KitPage {
-                    header
-                    if !granted { needsYou }
-                    if wide {
-                        // Two columns, each block at its own height, so none stretches to its neighbour's foot.
-                        columns { hyperKey(focused: granted) } right: { startup }
-                    } else {
-                        hyperKey(focused: granted); startup
-                    }
-                }
-                .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
+                permissions(granted).id(AppSection.permissions)
+                data.id(AppSection.data)
+                about.id(AppSection.about)
             }
+            .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
         }
         .layerKeyConfirm($confirming, settings: engine.settings, from: .settings)
         .task { updates.countOnce() }
-    }
-
-    /// More's index: each block with its rows, a heading not counted; Accessibility is on Needs you until granted. A row
-    /// added to or moved off a block changes its count here.
-    static func entries(granted: Bool) -> [MoreEntry] {
-        [MoreEntry(id: .hyperKey, symbol: "command", controls: LayerKey.allCases.count + 3),
-         MoreEntry(id: .permissions, symbol: "lock.shield", controls: (granted ? 1 : 0) + 5),
-         MoreEntry(id: .status, symbol: "waveform.path.ecg", controls: 3),
-         MoreEntry(id: .data, symbol: "folder", controls: 5),
-         MoreEntry(id: .notifications, symbol: "bell", controls: 2),
-         MoreEntry(id: .about, symbol: "info.circle", controls: 2)]
     }
 
     /// Two columns of blocks the page's gap apart, each top-aligned at its own height; from `paired(width:)`, under
@@ -183,22 +163,14 @@ struct GeneralPage: View {
 
     // MARK: Groups
 
-    /// The front's Hyper key: where it sits, and Change, which opens More's Hyper key (simplify-pages T8).
-    private func hyperKey(focused: Bool) -> some View {
-        KitBlock(title: "Hyper key", symbol: "command", focused: focused) {
-            Button("Change") { AppWindowController.shared.open(AppPlace(.hyperKey)) }.buttonStyle(.pilot)
-                .help("The Hyper keys and their options, on More")
-        } content: {
-            // Small: where the key sits, not a keyboard to read (Sven: the card was mostly empty under the picker).
-            LayerKeyPicture(keys: engine.settings.layerKeys).frame(maxWidth: LayerKeyPicture.compactWidth).frame(maxWidth: .infinity).padding(.vertical, 10)
-        }
-    }
-
-    /// More's Hyper key: a switch per layer key, a quick tap, the bind hints and the hold overlay.
-    private var hyperKeys: some View {
+    /// The Hyper key: where it sits (simplify-pages T8's front block, with its Change to More until pages round 4), then
+    /// a switch per layer key, a quick tap, the bind hints and the hold overlay.
+    private func hyperKeys(focused: Bool) -> some View {
         @Bindable var settings = engine.settings
-        return KitBlock(title: "Hyper key", symbol: "command") {
-            BlockRow(first: true) {
+        return KitBlock(title: "Hyper key", symbol: "command", focused: focused) {
+            // Small: where the key sits, not a keyboard to read (Sven: the card was mostly empty under the picker).
+            LayerKeyPicture(keys: settings.layerKeys).frame(maxWidth: LayerKeyPicture.compactWidth).frame(maxWidth: .infinity).padding(.vertical, 10)
+            BlockRow {
                 Text("Hyper keys")
                 InfoMark(text: "Each key that is on is Hyper by itself, so Caps Lock+Space and right Command+Space both open the menu. A Control, Option or Command that is on is no longer itself; the other side still is, so only one side can be on. With left Command on, Cmd+C, Cmd+V and Cmd+Tab need right Command. Caps Lock becomes Hyper while Pilot runs and goes back to Caps Lock when it quits.")
                 Spacer()
@@ -265,7 +237,7 @@ struct GeneralPage: View {
         }
     }
 
-    /// More's Permissions: each grant Pilot asks for with its fix. Ungranted, Accessibility's one home is Needs you on the
+    /// Permissions: each grant Pilot asks for with its fix. Ungranted, Accessibility's one home is Needs you on the
     /// front (simplify-pages T2).
     private func permissions(_ granted: Bool) -> some View {
         KitBlock(title: "Permissions", symbol: "lock.shield") {
@@ -294,7 +266,7 @@ struct GeneralPage: View {
         }
     }
 
-    /// More's Status: whether Pilot's parts are alive.
+    /// Status: whether Pilot's parts are alive.
     private var status: some View {
         KitBlock(title: "Status", symbol: "waveform.path.ecg") {
             BlockRow(first: true) {

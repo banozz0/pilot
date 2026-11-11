@@ -153,11 +153,10 @@ struct PageView: View {
         case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
         case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
         case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.catalogueCategory = CataloguePage.fonts })
-        case .general: GeneralPage(more: section == .pilotMore)
+        case .general: GeneralPage()
         case .ai:
             switch section {
             case .aiSetup: AISetupPage()
-            case .aiMore: AISetupPage(more: true)
             default: AIPage()
             }
         case .voice: VoicePage(more: section == .voiceMore)

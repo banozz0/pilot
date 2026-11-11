@@ -372,14 +372,12 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts, how
     /// apps show, the glass's transparency and blur, the cursor, and the folders and order the wallpaper cycles through.
     case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
-    /// Pilot's places on its More tab (simplify-pages T7, T8) beside `permissions` and `about`: the Hyper keys and their
-    /// options, what runs, and Pilot's folder, command and Uninstall.
+    /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
+    /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
+    /// and Uninstall.
     case hyperKey, status, data
-    /// Pilot's More tab: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications).
+    /// Pilot's front: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications).
     case notifications
-    /// Pilot's More tab (simplify-pages T7, Sven's Q60 B): the blocks the page's front leaves out, with their index beside.
-    /// Always the page's last tab (AppPage.tabs); `tab=more` names it on its page.
-    case pilotMore
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
     case floatApps, floatTitles, motion, focusedWindow
@@ -408,8 +406,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// System's places on its front: the sound input, the keyboard layout, the mouse's speeds and the keys of every part
     /// (on a More tab from simplify-pages T17 until Sven, 2026-11-11, after 2276).
     case soundInput, keyboardLayout, mouseSpeed, systemKeys
-    /// AI's More (simplify-pages T19) and its places: the fallback provider, the AI's keys and when a chat starts over.
-    case aiMore, aiFallback, aiKeys, aiNewChat
+    /// AI Setup's places, back from More with AI's More (pages round 4, Sven's Q105): the fallback provider, the AI's keys
+    /// and when a chat starts over.
+    case aiFallback, aiKeys, aiNewChat
     /// Keys' More (simplify-pages T14) and its place beside `overlay`, `keySwaps` and `exportImport`, Binds' tabs until
     /// then: the keyboard's lock for cleaning.
     case bindsMore, cleaning
@@ -427,7 +426,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
-        case .permissions, .about, .hyperKey, .status, .data, .notifications, .pilotMore: .general
+        case .permissions, .about, .hyperKey, .status, .data, .notifications: .general
         case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .appsForKeys: .openWith
@@ -435,7 +434,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
         case .agents: .configs
-        case .aiSetup, .aiMore, .aiFallback, .aiKeys, .aiNewChat: .ai
+        case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
         case .wallpaper, .lookMore, .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle: .look
         }
@@ -445,7 +444,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// not Install's.
     /// `more` is the page's More tab.
     public static func tab(_ name: String, on page: AppPage) -> AppSection? {
-        if name == "more" { return more(of: page) }
+        // AI's More went back onto Setup (pages round 4): its link lands there, not on the chat.
+        if name == "more" { return more(of: page) ?? (page == .ai ? .aiSetup : nil) }
         return page == .extensions && name == "catalogue" ? .extensionCatalogue : AppSection(rawValue: name)
     }
 
@@ -453,11 +453,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// its blocks to `onMoreTab`.
     public static func more(of page: AppPage) -> AppSection? {
         switch page {
-        case .general: .pilotMore
         case .voice: .voiceMore
         case .menu: .menuMore
         case .install: .installMore
-        case .ai: .aiMore
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
         case .look: .lookMore
@@ -466,12 +464,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     }
 
     /// The places that are blocks on their page's More tab.
-    private static let onMoreTab: Set<AppSection> = [.hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .windowShelf,
+    private static let onMoreTab: Set<AppSection> = [.windowShelf,
                                                      .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud,
                                                      .menuExtras, .translate, .aliases, .quicklinks,
                                                      .installLists, .helpers, .hiddenApps,
-                                                     .aiFallback, .aiKeys, .aiNewChat,
                                                      .overlay, .keySwaps, .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceMonitors, .workspaceSwipe,
                                                      .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle]
@@ -480,7 +476,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
-                                                     .captureOptions, .captureKeys, .recordingQuality,
+                                                     .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
+                                                     .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
 
     /// A block on its page's front that a link or the search scrolls to.
@@ -491,6 +488,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var frontTab: AppSection? {
         switch self {
         case .recordingQuality: .recording
+        case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
         default: nil
         }
     }
@@ -534,7 +532,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .pilotMore, .voiceMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: "More"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -614,7 +612,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .pilotMore, .voiceMore, .menuMore, .installMore, .aiMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: []
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
         case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset", "snapshot", "save", "restore",
                                "reopen"]
@@ -666,7 +664,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .rings: ["ring", "ring menu", "radial menu", "pie menu", "wheel", "flick", "opie", "wedge", "hold to open"]
         case .agents: ["agent instructions", "instructions", "agents.md", "claude.md", "soul", "persona", "agent brief", "ai agents",
                        "agent settings", "codex", "hermes", "empryo", "opencode"]
-        // Its keys, fallback and new chat moved with their blocks to More (simplify-pages T19).
+        // Its keys, fallback and new chat are places of their own on Setup (pages round 4).
         case .aiSetup: ["provider", "api key", "model", "effort", "anthropic", "openai", "ollama", "codex", "sign in"]
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "countdown", "count down", "recordings folder"]
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
@@ -708,7 +706,7 @@ public struct AppPlace: Hashable, Sendable {
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
         "tilingMore": AppPlace(.tiling), "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
-        "capturesMore": AppPlace(.captures),
+        "capturesMore": AppPlace(.captures), "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.
@@ -829,7 +827,7 @@ public enum HomeProblems {
                             lastError: String?) -> [Problem] {
         var list: [Problem] = []
         if !accessibilityGranted { list.append(Problem(kind: .accessibility, title: "Accessibility is not granted", detail: "Pilot sees no keys until it is", place: AppPlace(.general))) }
-        // Accessibility's Grant is Needs you on Pilot's front until it is granted; Password field lock is on More › Status.
+        // Accessibility's Grant is Needs you on Pilot's front until it is granted; Password field lock is on its Status.
         if let secureInput { list.append(Problem(kind: .secureInput, title: secureInput.title, detail: secureInput.detail, place: AppPlace(.status))) }
         if !tilerRunning {
             list.append(Problem(kind: .tiler, title: "\(tilerName) is not running",

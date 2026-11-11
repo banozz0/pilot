@@ -29,17 +29,17 @@ struct SettingsPagesTests {
         #expect(!StatsPage.intro.lowercased().contains("menu bar"), "Stats still says the menu bar is picked there")
     }
 
-    @Test("Pilot's parts are its front and its More (simplify-pages T7): every old Pilot part and link lands on the page, a place on More on that tab with its block asked for")
+    @Test("Pilot's parts are places on its front, its More gone (pages round 4): every old Pilot part and link lands on the page, a place with its block asked for")
     func pilotParts() {
-        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"])
-        for name in ["pilot", "general", "permissions", "otherApps", "about"] {
+        #expect(AppPage.general.tabs.isEmpty)
+        for name in ["pilot", "general", "permissions", "otherApps", "about", "pilotMore"] {
             let model = AppWindowModel(defaults: UserDefaults(suiteName: testSuite())!)
             let place = AppPlace.linked(URL(string: "pilot://open?page=\(name)")!)
             #expect(place?.page == .general, "\(name)")
             guard let place else { continue }
             model.go(place)
-            #expect(model.page == .general && model.section(of: .general) == (place.section?.onMore ?? place.section)
-                    && model.blockFocus == (place.section?.onMore == nil ? nil : place.section), "\(name)")
+            #expect(model.page == .general && model.section(of: .general) == nil
+                    && model.blockFocus == (place.section?.onFront == true ? place.section : nil), "\(name)")
         }
     }
 
@@ -98,7 +98,7 @@ struct SettingsPagesRenders {
             try await shot("clipboard-\(theme)", SettingsPagesTests.clipboard(), height: tall)
             engine.gate.seed(trusted: true)
             try await shot("general-\(theme)", GeneralPage(), height: tall)
-            try await shot("general-acknowledgements-open-\(theme)", GeneralPage(more: true, acknowledgementsOpen: true), height: tall)
+            try await shot("general-acknowledgements-open-\(theme)", GeneralPage(acknowledgementsOpen: true), height: tall)
             engine.gate.seed(trusted: false)
             try await shot("general-permission-missing-\(theme)", GeneralPage(), height: tall)
             // The page map's two new tabs (2026-10-17).

@@ -5,35 +5,25 @@ import SwiftUI
 /// AI › Setup (page map, Sven 2026-10-17, Q210): every AI setting, which until then hid in the chat's popovers. Every
 /// provider on one line (name, state, one button), two columns where the window has the room; a line's click picks the
 /// provider AI uses, and another line's button signs in, connects or installs at once, or opens that provider's set-up in
-/// a popover. The picked provider's set-up (sign-in, key, address, model, effort, Test) is a block of its own. AI's More
-/// (simplify-pages T19) holds the fallback, the AI keys and when a new chat starts. A new provider is a new AIProvider
-/// case: it lists itself here.
+/// a popover. The picked provider's set-up (sign-in, key, address, model, effort, Test) is a block of its own, then the
+/// fallback, the AI keys and when a new chat starts (on AI's More from simplify-pages T19 until pages round 4, Sven's
+/// Q105). A new provider is a new AIProvider case: it lists itself here.
 struct AISetupPage: View {
     @Environment(\.aiPageSources) private var sources
     private let given: AISettings?
     private let test: AIPage.Test?
-    /// AI's More tab rather than Setup.
-    private let more: Bool
 
     /// `settings` and `test` are the renders' seams; the app's page reads AISettings.shared.
-    init(settings: AISettings? = nil, test: AIPage.Test? = nil, more: Bool = false) {
+    init(settings: AISettings? = nil, test: AIPage.Test? = nil) {
         given = settings
         self.test = test
-        self.more = more
     }
 
     static let intro = "Which AI answers, and how it signs in."
-    static let introInfo = "It answers the chat, Ask AI and Fix selected text; the keys that open them, the fallback and a new chat are on More."
-
-    /// More's index. A row added to or moved off a block changes its count here.
-    static let entries = [
-        MoreEntry(id: .aiFallback, symbol: "arrow.triangle.branch", controls: 1),
-        MoreEntry(id: .aiKeys, symbol: "keyboard", controls: 6),
-        MoreEntry(id: .aiNewChat, symbol: "bubble.left.and.bubble.right", controls: 1),
-    ]
+    static let introInfo = "It answers the chat, Ask AI and Fix selected text."
 
     var body: some View {
-        if more { AIMoreBody(settings: given ?? sources.settings()) } else { AISetupBody(settings: given ?? sources.settings(), test: test) }
+        AISetupBody(settings: given ?? sources.settings(), test: test)
     }
 }
 
@@ -50,14 +40,15 @@ private struct AISetupBody: View {
     private var provider: AIProvider { settings.provider }
 
     var body: some View {
-        GeometryReader { g in
+        KitLanding { GeometryReader { g in
             KitPage(intro: AISetupPage.intro, info: AISetupPage.introInfo) {
                 providers(width: g.size.width)
                 KitBlock(title: AIPage.lineName(provider), symbol: "slider.horizontal.3", note: provider.detail) {
                     AIProviderSetup(route: provider, settings: settings, test: test, inline: true).id(provider)
                 }
+                AISetupMore(settings: settings)
             }
-        }
+        } }
         .task(id: provider) {
             // A popover's Use picked its provider and took its line's button away: none opens again by itself.
             settingUp = nil
@@ -185,24 +176,22 @@ private struct AISetupBody: View {
     }
 }
 
-/// AI's More (simplify-pages T19): the fallback, the AI's keys and when a chat starts over, each a place. The fallback's
-/// choices are the providers ready to answer, so it reads their state as Setup does.
-private struct AIMoreBody: View {
+/// Setup's blocks after the picked provider's (AI's More from simplify-pages T19 until pages round 4): the fallback, the
+/// AI's keys and when a chat starts over, each a place. The fallback's choices are the providers ready to answer, read
+/// as Setup reads them.
+private struct AISetupMore: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: AISettings
 
     private var provider: AIProvider { settings.provider }
 
     var body: some View {
-        KitMore(entries: AISetupPage.entries) {
-            fallback.moreBlock(.aiFallback)
-            keys.moreBlock(.aiKeys)
-            chat.moreBlock(.aiNewChat)
-        }
-        .task(id: provider) { await AIPage.refresh(settings) }
+        fallback.id(AppSection.aiFallback)
+        keys.id(AppSection.aiKeys)
+        chat.id(AppSection.aiNewChat)
     }
 
-    /// The AI that answers a request once when the picked one fails (on More, simplify-pages T19).
+    /// The AI that answers a request once when the picked one fails.
     private var fallback: some View {
         KitBlock(title: AppSection.aiFallback.title, symbol: "arrow.triangle.branch") {
             BlockRow(first: true) {

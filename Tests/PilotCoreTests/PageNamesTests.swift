@@ -9,7 +9,7 @@ struct PageNamesTests {
     @Test("A part's path is its page and its own title, as the window shows them")
     func paths() {
         #expect(AppPlace(.conflicts).path == "Binds › Conflicts")
-        #expect(AppPlace(.permissions).path == "Pilot › More › Permissions")
+        #expect(AppPlace(.permissions).path == "Pilot › Permissions" && AppPlace(.recordingQuality).path == "Captures › Recording › Recording quality")
         #expect(AppPlace(.reports).path == "Update & Clean › Reports" && AppPlace(.stats).path == "Stats" && AppPlace(.tiling).path == "Tiling")
     }
 
