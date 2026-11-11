@@ -186,10 +186,20 @@ struct CursorCatalogue: Decodable, Sendable {
 
         /// The set's own colours, the theme's (an unknown theme id falls back to `own`, spec §1), or Custom's two on
         /// top of the theme's; Custom without its colours reads as the theme's.
-        func palette(_ colours: CursorColours, theme: String, custom: CursorCustom? = nil) -> [String: String] {
+        func palette(_ colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil) -> [String: String] {
             let own = palettes["own"] ?? [:]
             guard colours != .own else { return own }
-            let themed = palettes[theme].map { $0.merging(own) { picked, _ in picked } } ?? own
+            let themed: [String: String]
+            if let resolved {
+                // Preserve each designed atlas's role mapping; replace Lagoon's semantic colours by content.
+                let reference = PilotTheme.standard
+                let pairs: [(UInt32, UInt32)] = [(reference.sidebar, resolved.sidebar), (reference.text, resolved.text),
+                    (reference.accent, resolved.accent), (reference.second, resolved.second), (reference.third, resolved.third),
+                    (reference.problem, resolved.problem), (reference.surface, resolved.surface),
+                    (0x1B7A95, Contrast.hex(Contrast.mix(Contrast.rgb(resolved.accent), [0, 0, 0], 0.62)))]
+                let mapping = Dictionary(pairs.map { (ColourAnswer.hex($0.0).lowercased(), ColourAnswer.hex($0.1)) }, uniquingKeysWith: { first, _ in first })
+                themed = (palettes["lagoon"] ?? own).mapValues { mapping[$0.lowercased()] ?? $0 }
+            } else { themed = palettes[theme].map { $0.merging(own) { picked, _ in picked } } ?? own }
             guard colours == .custom, let custom else { return themed }
             return custom.palette(themed)
         }
@@ -503,7 +513,7 @@ enum CursorEngine {
     /// Registers `set` in `colours` (the theme `theme`'s when it follows the theme), each cursor under every name it
     /// stands for, read back to confirm; then the Dock override. macOS's own are backed up first, and a
     /// `com.apple.coregraphics.*` name the backup does not hold keeps macOS's cursor. Returns the page's line.
-    static func apply(_ set: CursorSetID, colours: CursorColours, theme: String, custom: CursorCustom? = nil, system: (any CursorSystem)?,
+    static func apply(_ set: CursorSetID, colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil, system: (any CursorSystem)?,
                       place: CursorPlace, folder: URL? = CursorCatalogue.folder) -> String {
         guard let system else { return "This macOS lacks the private calls cursor sets need, so they are off." }
         guard let folder, let catalogue = CursorCatalogue.load(folder), let art = catalogue.sets[set.rawValue] else {
@@ -511,7 +521,7 @@ enum CursorEngine {
         }
         let held: Set<String>
         do { held = try backUp(system, place: place).held } catch { return error.line }
-        let palette = art.palette(colours, theme: theme, custom: custom)
+        let palette = art.palette(colours, theme: theme, custom: custom, resolved: resolved)
         let points = CGFloat(catalogue.canvasPoints)
         var sheets = [Int: CursorArt.Sheet]()
         for scale in catalogue.scales { sheets[scale] = CursorArt.sheet(folder, set: set.rawValue, scale: scale) }
@@ -706,7 +716,7 @@ final class CursorSets {
     }
 
     private func followTheme() {
-        withObservationTracking { _ = Look.shared.themeID } onChange: { [weak self] in
+        withObservationTracking { _ = Look.shared.paletteRevision } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 if self.colours != .own { self.reapply(after: 0.2) }   // Custom stands on the theme's colours too
@@ -719,8 +729,8 @@ final class CursorSets {
     func apply() {
         guard mayApply else { return }
         if set == .macOS { restore(); return }
-        let (set, colours, theme, custom) = (set, colours, Look.shared.themeID, custom(set))
-        run { CursorEngine.apply(set, colours: colours, theme: theme, custom: custom, system: LiveCursors(), place: $0) }
+        let (set, colours, theme, custom, resolved) = (set, colours, Look.shared.themeID, custom(set), Look.shared.packAppearance)
+        run { CursorEngine.apply(set, colours: colours, theme: theme, custom: custom, resolved: resolved, system: LiveCursors(), place: $0) }
     }
 
     /// Look › Cursor › Restore: macOS's cursor saved first, so the next login does not bring Pilot's set back, then put back.
@@ -765,13 +775,16 @@ final class CursorSamples {
     private var palettes: [CursorSetID: (key: String, palette: [String: String])] = [:]
     private var images: [String: (palette: [String], image: CGImage)] = [:]
 
-    init(folder: URL? = CursorCatalogue.folder) { self.folder = folder }
+    init(folder: URL? = CursorCatalogue.folder, catalogue: CursorCatalogue? = nil) {
+        self.folder = folder
+        if let catalogue { self.catalogue = catalogue }
+    }
 
     /// `set`'s palette in `colours` on `theme`, Custom's from `custom`; empty when the art is missing.
-    func palette(_ set: CursorSetID, _ colours: CursorColours, theme: String, custom: CursorCustom) -> [String: String] {
-        let key = "\(colours) \(theme) \(custom.fill.rawValue) \(custom.outline.rawValue)"
+    func palette(_ set: CursorSetID, _ colours: CursorColours, theme: String, custom: CursorCustom, resolved: PilotTheme? = nil) -> [String: String] {
+        let key = "\(colours) \(theme) \(custom.fill.rawValue) \(custom.outline.rawValue) \(String(describing: resolved))"
         if let kept = palettes[set], kept.key == key { return kept.palette }
-        let palette = catalogue?.sets[set.rawValue]?.palette(colours, theme: theme, custom: custom) ?? [:]
+        let palette = catalogue?.sets[set.rawValue]?.palette(colours, theme: theme, custom: custom, resolved: resolved) ?? [:]
         palettes[set] = (key, palette)
         return palette
     }

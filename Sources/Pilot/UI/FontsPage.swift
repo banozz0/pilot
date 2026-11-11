@@ -11,15 +11,15 @@ struct FontsPage: View {
     /// Opens Install's catalogue on its Fonts category.
     var getMore: () -> Void = {}
 
-    /// The page's help: the apps Pilot writes a font into, in Use fonts in's order, and that the rest keep their own.
-    static var help: String {
+    static let intro = "macOS has no system-wide font, so Pilot sets it in each app's own settings."
+    /// The intro's ⓘ: the apps Pilot writes a font into, in Use fonts in's order, and that the rest keep their own.
+    static var introInfo: String {
         let apps = FontPlace.known.map(\.app).reduce(into: ["Pilot"]) { if !$0.contains($1) { $0.append($1) } }
-        return "macOS has no system-wide font, so Pilot sets it in each app's own settings: \(ListFormatter.localizedString(byJoining: apps)). "
-            + "Other apps keep their own font setting."
+        return "Pilot sets it in: \(ListFormatter.localizedString(byJoining: apps)). Other apps keep their own font setting."
     }
 
     var body: some View {
-        KitPage(intro: Self.help) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             FontUseBlock(fonts: fonts, places: places, installed: installed)
             KitBlock(title: "Get more fonts", symbol: "arrow.down.circle") {
                 BlockRow(first: true) {

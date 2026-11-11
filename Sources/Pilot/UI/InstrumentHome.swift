@@ -67,7 +67,7 @@ private struct InstrumentNotice: View {
     static func eyebrow(_ kind: HomeProblems.Problem.Kind) -> String {
         switch kind {
         case .accessibility: "Accessibility"
-        case .secureInput: "Secure input"
+        case .secureInput: "Password field lock"
         case .tiler: "Tiling"
         case .error: "Pilot"
         }

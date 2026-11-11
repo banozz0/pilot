@@ -46,7 +46,7 @@ struct HomePageTests {
         restart.run()
         #expect(restarted.count == 1 && went.count == 0)
         let none = HomeFix.of(Self.error, go: { _ in }, restartTiler: {})
-        #expect(try fix(Self.access).title == "Open Permissions" && none == nil)
+        #expect(try fix(Self.access).title == "Grant Accessibility" && none == nil)
         #expect(HomeGreeting.line(hyperOn: true, problems: [Self.tiler], layerKey: "Caps Lock", workspace: nil, tiler: "Pilot's tiler")
                 == "Hyper is on. Pilot's tiler is not running, so nothing tiles.")
     }

@@ -3,16 +3,13 @@ import PilotCore
 import SwiftUI
 
 /// Voice › Dictation (Q144; Q452: Pilot's own alone): the two binds and the dictation key, the speech models (each
-/// downloaded, used and removed on its own), what shows while you speak and where, the waveform's colour, and the microphone grant.
+/// downloaded, used and removed on its own), what shows while you speak and where with its preview, the waveform's
+/// colour, and the microphone grant. Whole on Voice's front (split front and More by simplify-pages T12 until Sven,
+/// 2026-11-11, after 2276).
 struct DictationBlock: View {
     @Environment(Engine.self) private var engine: Engine?
-    let dictation: PilotDictation
-    let microphone: MicrophoneGrant
-
-    init(dictation: PilotDictation = .shared, microphone: MicrophoneGrant = .shared) {
-        self.dictation = dictation
-        self.microphone = microphone
-    }
+    var dictation: PilotDictation = .shared
+    var microphone: MicrophoneGrant = .shared
 
     static let note = "Your dictation keys start and stop Pilot's dictation, with a speech model on this Mac. "
         + "Mode lights' microphone light shows when it listens."
@@ -25,13 +22,76 @@ struct DictationBlock: View {
             let models = dictation.models
             BlockRow { Text("Speech models").frame(maxWidth: .infinity, alignment: .leading) }
             ForEach(models.offered, id: \.choice) { SpeechModelRow(model: $0, models: models) }
+            // What shows while you speak, over the rows that set it (simplify-pages T27).
+            DictationPreview(setup: .init(showIn: dictation.showIn, barSide: dictation.barSide, colour: dictation.waveColour,
+                                          topBarShows: engine?.topBar.isOn ?? false),
+                             words: dictation.whileSpeaking == .words)
+                .padding(.vertical, 10)
             PilotDictationRows(pilot: dictation, topBarOn: engine?.topBar.isOn ?? false)
-            MicrophoneRow(microphone: microphone)
-            BlockRow {
-                FinePrint(text: "Pilot records while you dictate, \(models.active?.choice.name ?? "the speech model") writes it down on this Mac "
-                          + "and Pilot pastes it where you type. Nothing leaves the Mac.").frame(maxWidth: .infinity, alignment: .leading)
-            }
+            front(models)
         }
+    }
+
+    /// The block's foot: the microphone grant and what dictation does with what you say.
+    @ViewBuilder private func front(_ models: SpeechModels) -> some View {
+        MicrophoneRow(microphone: microphone)
+        BlockRow {
+            FinePrint(text: "Pilot records while you dictate, \(models.active?.choice.name ?? "the speech model") writes it down on this Mac "
+                      + "and Pilot pastes it where you type. Nothing leaves the Mac.").frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Voice's preview on More (simplify-pages T27, the prototype's pill): a screen in small (MiniDesktop) with a take where
+/// the take's own Setup puts it: the floating pill at the foot, a slot in the top bar at Position, or both (the pill alone
+/// while the top bar is off, as a take falls back), the words beside a smaller waveform at Words, in the Waveform colour;
+/// the pill's own parts and spacing (DictationCircle, DictationWave, DictationPill's), so it looks as it will.
+struct DictationPreview: View {
+    @Environment(\.ink) private var ink
+    @Environment(\.style) private var style
+    let setup: DictationOverlay.Setup
+    /// While you speak is Words.
+    let words: Bool
+
+    /// A take's levels, as a voice draws them.
+    private static let levels: [Double] = [0.3, 0.7, 0.45, 0.9, 0.55, 0.2, 0.8, 0.5, 1, 0.35, 0.7, 0.25, 0.85, 0.45, 0.6, 0.4, 0.75, 0.3]
+    private struct Shown: Equatable { let setup: DictationOverlay.Setup, words: Bool }
+
+    var body: some View {
+        // The window stands clear of the bar's strip.
+        MiniDesktop(windows: ["Notes"], outer: 20, focused: nil)
+            .overlay(alignment: .top) { if setup.inBar { bar } }
+            .overlay(alignment: .bottom) { if setup.inPill { pill.padding(.bottom, 8) } }
+            .frame(height: 96)
+            .animation(Kit.change, value: Shown(setup: setup, words: words))
+    }
+
+    private func wave(_ bars: Int, plain: Color) -> some View {
+        DictationWave(levels: Array(Self.levels.prefix(bars)), colour: setup.waveColour(plain: plain)).scaleEffect(0.8)
+    }
+
+    private var pill: some View {
+        HStack(spacing: 8) {
+            DictationCircle(symbol: "xmark", light: false)
+            if words { Text("Meet at seven").font(ink.ui(10, .medium)).foregroundStyle(.white).lineLimit(1) }
+            wave(words ? DictationOverlay.wordsBars : DictationOverlay.bars, plain: DictationWave.white)
+            DictationCircle(symbol: "checkmark", light: true)
+        }
+        .padding(.horizontal, 6).frame(height: 30)
+        .dictationSurface(Capsule())
+    }
+
+    /// Pilot's top bar in small, the take at Position.
+    private var bar: some View {
+        HStack(spacing: 0) {
+            if setup.barSide != .left { Spacer() }
+            HStack(spacing: 4) {
+                wave(DictationOverlay.topBarBars, plain: BarMetrics.glyphInk(style))
+                if words { Text("Meet at seven").font(ink.ui(8.5)).foregroundStyle(ink.text).lineLimit(1) }
+            }
+            if setup.barSide != .right { Spacer() }
+        }
+        .padding(.horizontal, 10).frame(height: 16).frame(maxWidth: .infinity).background(ink.surface)
     }
 }
 

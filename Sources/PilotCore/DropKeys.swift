@@ -31,9 +31,10 @@ public struct DropKeys: Equatable, Sendable {
         switch focused {
         case nil:
             return Escape(passes: true, closes: nil)
-        case .askAI:
-            close(.askAI)
-            return Escape(passes: false, closes: .askAI)
+        case .askAI, .pill:
+            let drop = focused!
+            close(drop)
+            return Escape(passes: false, closes: drop)
         case .terminal:
             if let escapeAt, time - escapeAt <= Self.doubleEscape {
                 close(.terminal)
@@ -50,7 +51,11 @@ public struct DropKeys: Equatable, Sendable {
     /// A drop's key: an open drop closes, the other keeping or taking the keyboard; a closed one opens beside any other
     /// and takes the keyboard.
     public mutating func toggle(_ drop: BarDropKind) {
-        if open.contains(drop) { close(drop) } else { open.insert(drop); focus(drop) }
+        if open.contains(drop) { return close(drop) }
+        // The pill is one open at a time: it closes the others as it opens, and they close it (spec desktop-controls).
+        if drop == .pill { open = [] } else { open.remove(.pill) }
+        open.insert(drop)
+        focus(drop)
     }
 
     /// A click in an open drop gives it the keyboard.

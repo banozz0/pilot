@@ -196,17 +196,32 @@ extension CalmHeading where Trailing == EmptyView {
     init(title: String, note: String? = nil) { self.init(title: title, note: note) { EmptyView() } }
 }
 
-/// A page's scroll in the style: its column under the page's title, its intro line first (Home and Look's spacing).
+/// A page's scroll in the style: its column under the page's title, its intro line first (Home and Look's spacing). The
+/// intro is one line; what else it would say is `info`, an ⓘ at its end (simplify-pages T5).
 struct KitPage<Content: View>: View {
     @Environment(\.style) private var style
     var intro: String?
+    var info: String?
     var fills = false
     @ViewBuilder var content: Content
 
     var body: some View {
         switch style.kind {
-        case .toybox: ToyPage(intro: intro) { content }
-        case .instrument: InstrumentPage(intro: intro) { content }
+        case .toybox: ToyPage(intro: intro, info: info) { content }
+        case .instrument: InstrumentPage(intro: intro, info: info) { content }
+        }
+    }
+}
+
+/// A page's intro words, then its ⓘ when `info` says more: the one line every page opens on (simplify-pages T5).
+struct IntroLine<Words: View>: View {
+    var info: String?
+    @ViewBuilder var words: Words
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            words
+            if let info { InfoMark(text: info) }
         }
     }
 }

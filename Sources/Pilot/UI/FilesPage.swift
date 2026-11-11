@@ -13,18 +13,17 @@ struct ConvertPage: View {
     @State private var tools: Set<ConvertTool>?
     @State private var targeted = false
 
-    static let intro = "Convert pictures, video, sound and documents on this Mac. Nothing is uploaded; the new file lands beside the old one."
+    static let intro = "Convert pictures, video, sound and documents on this Mac. Nothing is uploaded."
+    static let introInfo = "The new file lands beside the old one."
+
+    static let otherWays = "Or in Finder: right-click, Services › Convert with Pilot…; in Hyper+Space: ⌘K on a file, Convert to…"
 
     var body: some View {
-        KitPage(intro: Self.intro) {
-            KitBlock(title: "Convert", symbol: "arrow.triangle.2.circlepath") { dropZone }
-            KitBlock(title: "Two more ways in", symbol: "hand.point.up.left") {
-                BlockRow(first: true) {
-                    TitledText(title: "In Finder", detail: "Select files, right-click, then Services › Convert with Pilot…").padding(.vertical, 4)
-                }
-                BlockRow {
-                    TitledText(title: "In Hyper+Space", detail: "Find a file, press ⌘K on it, then Convert to…").padding(.vertical, 4)
-                }
+        KitPage(intro: Self.intro, info: Self.introInfo) {
+            KitBlock(title: "Convert", symbol: "arrow.triangle.2.circlepath") {
+                dropZone
+                // The two other ways in, one line under the drop zone (simplify-pages T5).
+                Text(Self.otherWays).font(ink.ui(12)).foregroundStyle(ink.muted).padding(.bottom, 10)
             }
             KitBlock(title: "Formats", symbol: "list.bullet") { formats }
         }

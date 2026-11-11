@@ -39,6 +39,7 @@ extension ControlVerbs {
             rowKey: "item",
             list: { let lacking = reach.lacking(); return .array(bar().settings.entries.filter { $0.on && $0.kind != .extensions }.map { Self.row($0, lacking: lacking) }) },
             add: { args throws(ControlError) in
+                try bar().requireWritable()
                 let kind = try Self.movable(args.value("item") ?? "")
                 let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
@@ -50,6 +51,7 @@ extension ControlVerbs {
                 }
             },
             remove: { args throws(ControlError) in
+                try bar().requireWritable()
                 if let refusal = ControlVerb.unknownFlag(args.flags, known: ["placement"], in: "pilot remove bar-items") { throw refusal }
                 let kind = try Self.movable(try args.word(0, "item"))
                 guard bar().settings.entry(kind).on else { throw ControlError(.badValue, "\(kind.rawValue) is not on the bar") }
@@ -60,7 +62,7 @@ extension ControlVerbs {
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
         register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
@@ -71,7 +73,18 @@ extension ControlVerbs {
                                                 }))]) }) { call throws(ControlError) in
             let args = call.arguments()
             guard let sub = args.positional.first else { return Self.state(bar(), reach) }
+            try bar().requireWritable()
             switch sub {
+            case "preset":
+                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands>") }
+                try bar().choosePreset(try args.word(1, "preset"))
+                return Self.state(bar(), reach)
+            case "geometry":
+                guard args.flags.isEmpty else { throw ControlError(.badRequest, "bar geometry <field> <points>, or bar geometry <JSON>") }
+                if args.positional.count == 2 { try bar().applyGeometry(try args.word(1, "JSON")) }
+                else if args.positional.count == 3, let value = Double(try args.word(2, "points")) { try bar().setGeometry(try args.word(1, "field"), value: value) }
+                else { throw ControlError(.badValue, "bar geometry <field> <points>, or bar geometry <JSON>") }
+                return Self.state(bar(), reach)
             case "move":
                 let kind = try Self.movable(try args.word(1, "item"))
                 if let onto = args.value("onto") {
@@ -130,6 +143,7 @@ extension ControlVerbs {
             rowKey: "id",
             list: { let s = bar().settings; return .array(reach.extensions().map { Self.extensionRow($0, s) }) },
             add: { args throws(ControlError) in
+                try bar().requireWritable()
                 let item = try Self.extensionItem(args.value("id"), reach)
                 let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
                 let moves = side != nil || index != nil
@@ -143,6 +157,7 @@ extension ControlVerbs {
                 }
             },
             remove: { args throws(ControlError) in
+                try bar().requireWritable()
                 if let refusal = ControlVerb.unknownFlag(args.flags, known: ["placement"], in: "pilot remove bar-extensions") { throw refusal }
                 let item = try Self.extensionItem(try args.word(0, "id"), reach)
                 guard let word = args.value("placement") else {
@@ -215,6 +230,7 @@ extension ControlVerbs {
                         "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar).top ?? [:]).map { side, slots in
                             (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
                         })),
+                        "preset": (try? ThemeDigest.encoded(s.preset)).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) } ?? .null,
                         "exactMenuItems": .bool(s.exactMenuItems),
                         "needsScreenRecording": .bool(reach.lacksScreenRecording())]
         if let placement { answer["placement"] = .string(placement.rawValue) }

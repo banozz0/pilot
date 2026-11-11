@@ -86,6 +86,10 @@ struct SettingsSchemaTests {
         "ai.model.anthropicAPI": "claude-opus-5-5", "ai.model.openAI": "gpt-5",
         "ai.model.ollama": "qwen3", "ai.model.openAICompatible": "my-model",
         "ai.baseURL.ollama": "http://localhost:1234", "ai.baseURL.openAICompatible": "https://example.test/v1",
+        "dropdown.order": "commands,status,workspaces,switches,extensions,running,sound,connections,display,media,stats",
+        "dropdown.extensions": "weather,todo",
+        "dropdown.hidden": "none", "dropdown.pinned": "status,commands",
+        "pill.views": "controls,music,extensions,activity", "pill.hidden": "activity", "pill.extensions": "weather,todo",
         "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19", "fonts.ui": "Helvetica", "fonts.mono": "Menlo",
     ]
 
@@ -273,7 +277,7 @@ struct SettingsSchemaTests {
         #expect(allowing.asked == ["layerKey=rightCommand", "layerKey=rightCommand, capsLock"], "never asked")
         #expect(await allowing.ask("set", "layerKey", "capsLock,leftControl").ok && allowing.settings.layerKeys == [.capsLock, .leftControl])
         #expect(Rig().schema.sorted.filter(\.confirms).map(\.key)
-                == ["ai.baseURL.ollama", "ai.baseURL.openAICompatible", "ai.key.anthropicAPI", "ai.key.openAI", "ai.key.openAICompatible", "ai.provider",
+                == ["ai.baseURL.ollama", "ai.baseURL.openAICompatible", "ai.fallback", "ai.key.anthropicAPI", "ai.key.openAI", "ai.key.openAICompatible", "ai.provider",
                    "giphy.key", "keySwaps", "layerKey", "look.cursor", "look.cursorColours", "look.cursorFill", "look.cursorOutline"])
     }
 
@@ -333,7 +337,7 @@ struct SettingsSchemaTests {
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }
-        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
+        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "menuBar", "system", "tiling"].map(JSONValue.string))]))
         #expect(await rig.ask("get", "look.glass", "--page", "look").error?.code == .unknownFlag)
         #expect(await rig.ask("set", "look.glass", "on", "--force").error?.code == .unknownFlag && !rig.look.glass)
     }

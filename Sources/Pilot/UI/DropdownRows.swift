@@ -60,6 +60,37 @@ enum DropdownNow {
         }
         return items
     }
+
+    /// The running rows as the Pilot menu's Now block and the pill's Activity view draw them.
+    static var rows: [DropdownPanelValues.Running] {
+        items.map { item in
+            switch item {
+            case .recording: .init(symbol: "video", title: "Screen recording", detail: "Recording", reading: Recorder.shared.reading?.words)
+            case .timer(let line):
+                .init(symbol: "timer", title: ExtensionTimer.shared.title ?? "Timer", detail: line, reading: ExtensionTimer.shared.countdown,
+                      canPause: !ExtensionTimer.shared.buttons.isEmpty)
+            case .download(let title, let share):
+                // Only the terminal pack's download can be cancelled.
+                .init(symbol: "arrow.down.to.line", title: title, detail: "Downloading", reading: "\(Int(share * 100)) %", share: share,
+                      canStop: title == OnboardingExtras.terminalTitle)
+            }
+        }
+    }
+
+    /// Pause (`pause` true) or Stop on row `i`.
+    static func press(_ i: Int, pause: Bool) {
+        let items = items
+        guard items.indices.contains(i) else { return }
+        switch items[i] {
+        case .recording: Recorder.shared.stop()
+        case .timer: pause ? ExtensionTimer.shared.press(0) : ExtensionTimer.shared.stop()
+        case .download:
+            // Only the terminal pack's download draws Stop; another that slips in says why.
+            let running = ExtrasDownloads.shared.downloads.filter(\.isRunning)
+            if running.count == 1, running[0].title == OnboardingExtras.terminalTitle { ExtrasDownloads.shared.cancelTerminal() }
+            else { HUD.tip("This download can't be stopped; it finishes on its own") }
+        }
+    }
 }
 
 extension View {

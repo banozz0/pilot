@@ -2,13 +2,13 @@ import Foundation
 import PilotCore
 
 /// The bar items installed extensions declare (story 161; Surfaces v2), each listed in Bar settings by title and every
-/// one placed somewhere shown (Sven on build 52: no limit; six until then): each its command's short text and gauges with
-/// a tone, its own item in the macOS menu bar or drawn where the top bar's Extensions item sits, as Sven placed it
+/// one placed somewhere shown (Sven on build 52: no limit; six until then): each its command's short text and gauges
+/// with a tone, its own item in the macOS menu bar or drawn where the top bar's Extensions item sits, as Sven placed it
 /// (BarSettings.extensionItems). Asked only while one shows on a bar and the screen is in use (BarReadings holds and
-/// pauses it), and only the placed ones: each on its own pace, 60 s at the most often, one run at a time on the one loop,
-/// 2 s each, so n placed cost at most n short runs a minute, never two at once; a run of an extension's own command asks
-/// its item in a round at once (`ask`). The folder is read again on each round, so an install or an uninstall is
-/// followed within one.
+/// pauses it), and only the placed ones (and those the pill holds while it shows them): each on its own pace, 60 s at
+/// the most often, one run at a time on the one loop, 2 s each, so n placed cost at most n short runs a minute, never
+/// two at once; a run of an extension's own command asks its item in a round at once (`ask`). The folder is read again
+/// on each round, so an install or an uninstall is followed within one.
 @Observable @MainActor
 final class ExtensionBar {
     static let shared = ExtensionBar()
@@ -32,8 +32,24 @@ final class ExtensionBar {
     /// What `place` draws: the items placed there with something to show.
     func faces(in place: BarPlace) -> [ExtensionBarFace] { items.filter { shows($0.id, place) }.compactMap(\.face) }
 
+    /// The items of `ids` in that order, as they last answered; one uninstalled since is left out (the pill's and the
+    /// Pilot menu's picks).
+    func items(_ ids: [String]) -> [Item] { ids.compactMap { id in items.first { $0.id == id } } }
+
     /// An extension's bar item's text as it last answered; nil when it has none.
     func text(for id: String) -> String? { items.first { $0.id == id }?.answer.flatMap { $0.text.isEmpty ? nil : $0.text } }
+
+    /// Items surfaces beyond the bars hold while they show them (the pill's Extensions view, the Pilot menu's Extensions
+    /// card; spec desktop-controls), by holder: asked as a placed item is, and only then.
+    @ObservationIgnored private var holders: [String: Set<String>] = [:]
+    var held: Set<String> { holders.values.reduce(into: []) { $0.formUnion($1) } }
+
+    /// `holder` now shows `ids` (none: it closed). Newly held ones are asked at once.
+    func hold(_ ids: Set<String>, for holder: String) {
+        let before = held
+        holders[holder] = ids.isEmpty ? nil : ids
+        if !held.isSubset(of: before) { nudge() }
+    }
 
     /// Whether an extension's item is placed in a bar now: Engine points it at Sven's placing in Bar settings; every
     /// item shows everywhere until then (tests).
@@ -110,7 +126,7 @@ final class ExtensionBar {
         let folder = folder
         let extensions = await Task.detached { Self.withBar(in: folder) }.value
         // Every one is listed; every one placed is asked.
-        let shown = Set(extensions.map(\.id).filter { shows($0, .menuBar) || shows($0, .topBar) })
+        let shown = Set(extensions.map(\.id).filter { shows($0, .menuBar) || shows($0, .topBar) || held.contains($0) })
         var next = extensions.map { ext in
             let last = items.first { $0.id == ext.id }
             return Item(id: ext.id, title: ext.title, icon: ext.icon, hasPage: ext.page != nil, answer: last?.answer, problem: last?.problem)

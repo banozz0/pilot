@@ -28,9 +28,9 @@ struct BindsPageTests {
         #expect(ids(.layer(.alt)) == [])
         #expect(ids(.unbound) == ["windows.minimise"])
         #expect(BindsPage.Tab.sections.map(\.title)
-                == ["Hyper", "Hyper+Shift", "Hyper+Ctrl", "Hyper+Alt", "Hyper+Shift+Ctrl", "Other Hyper keys", "Plain combos", "Not bound"])
+                == ["Hyper", "Hyper+Shift", "Hyper+Ctrl", "Hyper+Alt", "Hyper+Shift+Ctrl", "Other Hyper keys", "Without Hyper", "Not bound"])
         #expect(BindsPage.Tab.sections.map(\.shortTitle)
-                == ["Hyper", "+Shift", "+Ctrl", "+Alt", "+Shift+Ctrl", "Other Hyper keys", "Plain combos", "Not bound"])
+                == ["Hyper", "+Shift", "+Ctrl", "+Alt", "+Shift+Ctrl", "Other Hyper keys", "Without Hyper", "Not bound"])
     }
 
     @Test("A row shows the key without its layer, the action, its module and whether the user set it")

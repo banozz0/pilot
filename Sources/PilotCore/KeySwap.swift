@@ -1,6 +1,6 @@
 import Foundation
 
-/// A key Binds › Swap keys offers (Q406): Caps Lock, each side of Control, Option and Command, Escape, Tab, Return,
+/// A key Binds › More › Swap keys offers (Q406): Caps Lock, each side of Control, Option and Command, Escape, Tab, Return,
 /// Delete and the F keys. F18 is not offered: Caps Lock becomes it while it is a layer key. Fn is left out: its usage
 /// is Apple's vendor page, unverified against hidutil.
 public enum SwapKey: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -83,7 +83,7 @@ public struct KeySwap: Hashable, Sendable {
     /// Q407: a swap on a Hyper key waits until another key is Hyper. Nil when it holds none.
     public func hyperProblem(_ layerKeys: [LayerKey]) -> String? {
         guard let key = keys.compactMap(\.layerKey).first(where: layerKeys.contains) else { return nil }
-        return "\(key.label) is \(layerKeys.count == 1 ? "your" : "a") Hyper key. Pick another Hyper key in General first."
+        return "\(key.label) is \(layerKeys.count == 1 ? "your" : "a") Hyper key. Pick another Hyper key on the Pilot page first."
     }
 
     /// Why the swap does not apply now, nil when it does: a Hyper key in it, or a key another tool's mapping remaps,

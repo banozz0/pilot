@@ -18,7 +18,7 @@ extension SettingsSchema {
                              throw ControlError(.badValue, "one side of Control, Option or Command at most, so the other stays itself")
                          }
                      }),
-            // Binds › Swap keys (Q406): "capsLock:leftControl,escape:tab" sets every pair at once, "" none; pilot add|remove
+            // Binds › More › Swap keys (Q406): "capsLock:leftControl,escape:tab" sets every pair at once, "" none; pilot add|remove
             // key-swaps changes one. It changes typing, so it waits on Allow.
             .text("keySwaps", "Swapped keys, first:second each", page: "binds", standard: "", confirms: true,
                   read: { settings.keySwaps.map(\.word).joined(separator: ",") },

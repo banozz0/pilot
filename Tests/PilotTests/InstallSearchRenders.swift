@@ -22,7 +22,7 @@ struct InstallSearchRenders {
                                             method: .page(URL(string: "https://www.google.com/search?q=rectangle")!))]),
     ]
 
-    @Test("A search lists each source under its heading in order, how each result installs, and the Recommend apps switch")
+    @Test("A search lists each source under its heading in order and how each result installs (Recommend apps is on More since simplify-pages T16)")
     func grouped() throws {
         RemoteIcons.shared.enabled = false
         let entries = [CatalogueEntry(id: "rectangle-pro", name: "Rectangle Pro", category: "Window manager",
@@ -45,7 +45,7 @@ struct InstallSearchRenders {
         }
         #expect(heights.allSatisfy { $0 != nil }, "read: \(text)")
         #expect(heights.compactMap(\.self) == heights.compactMap(\.self).sorted(by: >), "the sources' order, read: \(text)")
-        for line in ["App Store", "opens the repo", "Recommend apps", "busy", "Open", "Install"] {
+        for line in ["App Store", "opens the repo", "busy", "Open", "Install"] {
             #expect(text.contains(line), "\(line) missing, read: \(text)")
         }
     }

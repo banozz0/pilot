@@ -16,7 +16,7 @@ struct FeedbackTests {
 
     @Test("A bug and an idea each open their own issue form on banozz0/pilot, its fields prefilled", arguments: Feedback.Kind.allCases)
     func newIssue(kind: Feedback.Kind) {
-        let url = Feedback.url(kind, facts: Self.facts, userName: "sven")
+        let url = Feedback.url(kind, facts: Self.facts, userName: "robin")
         #expect(url.absoluteString.hasPrefix("https://github.com/banozz0/pilot/issues/new?"))
         let q = query(url)
         #expect(q["template"] == "\(kind.rawValue).yml")
@@ -37,7 +37,7 @@ struct FeedbackTests {
 
     @Test("The Mac field carries every fact, and says logs are the person's to paste")
     func facts() {
-        let body = query(Feedback.url(.bug, facts: Self.facts, userName: "sven"))["mac"] ?? ""
+        let body = query(Feedback.url(.bug, facts: Self.facts, userName: "robin"))["mac"] ?? ""
         for fact in ["0.1.0 · build 7", "Version 26.1 (Build 25B78)", "Mac16,10", "Caps Lock", "Tiling Rice · Lagoon", "Pilot's tiler"] {
             #expect(body.contains(fact), "missing \(fact)")
         }
@@ -48,7 +48,7 @@ struct FeedbackTests {
     func encoding() {
         let odd = Feedback.Facts(version: "1 & 2 + 3 # 4 = 5", macOS: "a\nb", model: "Mac16,10", layerKey: "⌥", look: "Calm · Tokyo Night",
                                  tiler: "Pilot's own")
-        let url = Feedback.url(.idea, facts: odd, userName: "sven")
+        let url = Feedback.url(.idea, facts: odd, userName: "robin")
         let raw = url.query ?? ""
         for bad in ["+", "#", " ", "\n", "⌥"] { #expect(!raw.contains(bad), "unencoded \(bad.debugDescription)") }
         #expect(raw.components(separatedBy: "&").count == 3)
@@ -62,22 +62,22 @@ struct FeedbackTests {
     func lengthCap() {
         let long = Feedback.Facts(version: String(repeating: "é", count: 20_000), macOS: "26.1", model: "Mac16,10", layerKey: "Caps Lock",
                                   look: "Calm", tiler: "Pilot's tiler")
-        let url = Feedback.url(.bug, facts: long, userName: "sven")
+        let url = Feedback.url(.bug, facts: long, userName: "robin")
         #expect(url.absoluteString.count <= Feedback.maxLength)
         // Every fact at its longest, in four-byte emoji: twelve characters each once encoded.
         let emoji = String(repeating: "🐛", count: 20_000)
         let worst = Feedback.Facts(version: emoji, macOS: emoji, model: emoji, layerKey: emoji, look: emoji, tiler: emoji)
-        #expect(Feedback.url(.bug, facts: worst, userName: "sven").absoluteString.count <= Feedback.maxLength)
+        #expect(Feedback.url(.bug, facts: worst, userName: "robin").absoluteString.count <= Feedback.maxLength)
         #expect(query(url)["mac"]?.contains("Mac16,10") == true)
     }
 
     @Test("Neither the user name nor the home folder reaches the link, whichever fact carries it")
     func noUserName() {
         let leaky = Feedback.Facts(version: "0.1.0", macOS: "26.1", model: "Mac16,10", layerKey: "Caps Lock",
-                                   look: "Calm · /Users/Sven/Themes/mine", tiler: "sven's tiler")
-        let url = Feedback.url(.bug, facts: leaky, userName: "sven")
+                                   look: "Calm · /Users/Robin/Themes/mine", tiler: "robin's tiler")
+        let url = Feedback.url(.bug, facts: leaky, userName: "robin")
         let decoded = url.absoluteString.removingPercentEncoding ?? ""
-        #expect(!decoded.localizedCaseInsensitiveContains("sven"))
+        #expect(!decoded.localizedCaseInsensitiveContains("robin"))
         #expect(!decoded.contains("/Users/"))
     }
 

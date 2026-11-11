@@ -89,6 +89,8 @@ public enum AIChat {
         public var text: String
         /// A picture sent with the message: a capture asked about (story 191).
         public var image: Image?
+        /// Which AI answered and why, on an answer the fallback gave (AIFallback).
+        public var notice: String?
 
         public init(_ role: Role, _ text: String, image: Image? = nil) { self.role = role; self.text = text; self.image = image }
     }
@@ -187,8 +189,10 @@ public enum AIChat {
         public var answer: String
         /// The session to resume next turn; nil for a route that keeps none.
         public var session: Session?
+        /// Which AI answered and why, when the fallback did (AIFallback.Notice.line).
+        public var notice: String?
 
-        public init(_ answer: String, session: Session? = nil) { self.answer = answer; self.session = session }
+        public init(_ answer: String, session: Session? = nil, notice: String? = nil) { self.answer = answer; self.session = session; self.notice = notice }
     }
 
     /// The conversation as it stands: the turns asked and answered, the session to resume, and the message on its way.
@@ -207,7 +211,9 @@ public enum AIChat {
 
         /// The answer to the last message, and the session it came from.
         public mutating func answered(_ reply: Reply) {
-            turns.append(Turn(.assistant, reply.answer))
+            var answer = Turn(.assistant, reply.answer)
+            answer.notice = reply.notice
+            turns.append(answer)
             if let next = reply.session { session = next }
         }
 

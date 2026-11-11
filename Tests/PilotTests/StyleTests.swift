@@ -130,7 +130,7 @@ struct StyleTests {
             pick(.toybox); let toybox = try draw()
             #expect(instrument != toybox, "a style drew another's pixels")
             // Instrument is dark or light with its theme (its colours are the theme's): Paper's draws light.
-            look.themeID = "porcelain"; pick(.instrument); #expect(try draw() != instrument, "Instrument on Paper drew Nightwatch")
+            pick(.instrument); look.themeID = "porcelain"; #expect(try draw() != instrument && look.style == .instrument && look.theme.id == "porcelain" && !look.theme.dark, "Instrument on Paper drew Nightwatch")
             look.themeID = PilotTheme.defaultID
             // Toybox is dark or light with the theme (Sven, 2026-10-08): a light theme lightens it.
             pick(.toybox)
@@ -362,9 +362,9 @@ struct StyleTests {
     func picker() throws {
         let (look, _) = LookPageTests().look()
         look.style = .toybox
-        let toybox = try pixels(LookPage(look: look).styled(.page(.look), look: look), look: look)
+        let toybox = try pixels(LookPage(look: look, more: true).styled(.page(.look), look: look), look: look)
         look.style = .instrument
-        let instrument = try pixels(LookPage(look: look).styled(.page(.look), look: look), look: look)
+        let instrument = try pixels(LookPage(look: look, more: true).styled(.page(.look), look: look), look: look)
         #expect(instrument != toybox, "the picker did not show Instrument picked")
     }
 }

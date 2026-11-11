@@ -59,13 +59,38 @@ struct UpscaleOptions: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 10) {
                 row("Size") {
-                    ToolSegments(options: UpscaleTarget.presets.map { ($0, "\($0)x") } + [(0, "Custom")], label: "Size",
-                                 selection: Binding(get: { custom ? 0 : target.times ?? 0 }, set: { n in
+                    ToolSegments(options: UpscaleTarget.presets.map { ($0, "\($0)x") } + [(0, "Custom"), (-1, "Monitor")], label: "Size", compact: true,
+                                 selection: Binding(get: { target.monitor != nil ? -1 : custom ? 0 : target.times ?? 0 }, set: { n in
                                      custom = n == 0
-                                     if n > 0 { job.target.setFactor(Double(n)) }
+                                     if n == -1 { job.target.setMonitor(.ultrawide34) }
+                                     else if n > 0 { job.target.setFactor(Double(n)) }
+                                     else if target.monitor != nil { job.target.setFactor(target.factor) }
                                  }))
                 }
-                if custom || target.times == nil {
+                if let monitor = target.monitor {
+                    row("Monitor") {
+                        Menu {
+                            ForEach(UpscaleTarget.Monitor.allCases, id: \.self) { preset in
+                                Button(preset.label) { job.target.setMonitor(preset, framing: target.framing) }
+                            }
+                        } label: {
+                            HStack {
+                                Text(monitor.title).styleText(\.caption).lineLimit(1)
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                            }
+                            .foregroundStyle(style.color(\.text)).padding(.horizontal, 8).frame(height: 26)
+                            .background(style.color(\.sunken), in: RoundedRectangle(cornerRadius: style.radii.control))
+                            .overlay(RoundedRectangle(cornerRadius: style.radii.control).stroke(style.color(\.line2), lineWidth: 1))
+                        }
+                        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+                        .accessibilityLabel("Monitor preset").accessibilityValue(monitor.label)
+                    }
+                    row("Framing") {
+                        ToolSegments(options: UpscaleTarget.Framing.allCases.map { ($0, $0.title) }, label: "Framing",
+                                     selection: Binding(get: { target.framing }, set: { job.target.setMonitor(monitor, framing: $0) }))
+                    }
+                } else if custom || target.times == nil {
                     HStack(alignment: .bottom, spacing: 8) {
                         PixelField(title: "Width", value: target.width) { job.target.setWidth($0) }
                         Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(style.color(\.text3))
@@ -78,6 +103,29 @@ struct UpscaleOptions: View {
                 row("Result") {
                     Text(verbatim: "\(target.originalWidth) × \(target.originalHeight)  →  \(target.width) × \(target.height) px")
                         .styleText(\.caption).foregroundStyle(style.color(\.text)).monospacedDigit().lineLimit(1).fixedSize()
+                }
+                if let monitor = target.monitor {
+                    VStack(alignment: .leading, spacing: 4) {
+                        GeometryReader { proxy in
+                            if let image = job.preview {
+                                Image(decorative: image, scale: 1).resizable()
+                                    .aspectRatio(contentMode: target.crops ? .fill : .fit)
+                                    .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+                            } else {
+                                Text("Loading preview…").styleText(\.caption).foregroundStyle(style.color(\.text3))
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        }
+                        .aspectRatio(CGFloat(monitor.size.width) / CGFloat(monitor.size.height), contentMode: .fit)
+                        .background(style.color(\.sunken))
+                        .clipShape(RoundedRectangle(cornerRadius: style.radii.control))
+                        .overlay(RoundedRectangle(cornerRadius: style.radii.control).stroke(style.color(\.line2), lineWidth: 1))
+                        Text(target.crops ? "Centred crop · \(monitor.size.width) × \(monitor.size.height) px" : "Fits inside \(monitor.size.width) × \(monitor.size.height) · no crop")
+                            .styleText(\.small).foregroundStyle(style.color(\.text3))
+                    }
+                    if let issue = target.issue {
+                        Text(issue).styleText(\.caption).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 row("Model") {
                     ToolSegments(options: UpscaleModel.allCases.map { ($0, $0.title) }, label: "Model",
@@ -124,7 +172,7 @@ struct UpscaleOptions: View {
     /// The primary button's words: Max quality's first run says it downloads.
     static func action(_ job: UpscaleJob) -> String { job.ready ? "Upscale" : "Download and upscale" }
     /// Upscale can start: nothing running, and the size bigger than the image's.
-    static func runs(_ job: UpscaleJob) -> Bool { !job.busy && job.target.grows }
+    static func runs(_ job: UpscaleJob) -> Bool { !job.busy && job.target.issue == nil }
 }
 
 /// Instrument's or Toybox's segments, as the editor's footer picks them.
@@ -132,11 +180,15 @@ struct ToolSegments<Value: Hashable>: View {
     @Environment(\.style) private var style
     let options: [(value: Value, title: String)]
     let label: String
+    var compact = false
     @Binding var selection: Value
 
     var body: some View {
         Group {
-            if style.kind == .toybox { ToySegments(selection: $selection, options: options, label: label).scaleEffect(0.85).frame(height: 34) }
+            if style.kind == .toybox {
+                ToySegments(selection: $selection, options: options, label: label)
+                    .scaleEffect(compact ? 0.72 : 0.85, anchor: .leading).frame(width: compact ? 250 : nil, height: 34, alignment: .leading)
+            }
             else { InstrumentSegments(options: options, selection: $selection, height: 22) }
         }
         .fixedSize()
@@ -216,11 +268,12 @@ struct ImageToolCard: View {
         case .upscale:
             ToolPanel(title: "Upscale", subject: name) {
                 UpscaleOptions(job: job)
-                if files.count > 1 { Text("The others change by the same amount.").styleText(\.caption).foregroundStyle(style.color(\.text3)) }
+                if files.count > 1 { Text(job.target.monitor == nil ? "The others change by the same amount." : "Each image uses this monitor preset; framing is calculated separately.").styleText(\.caption).foregroundStyle(style.color(\.text3)) }
             } buttons: {
                 Spacer()
                 ToolButtons(primary: UpscaleOptions.action(job), disabled: !UpscaleOptions.runs(job), run: upscale, cancel: cancel)
             }
+            .task(id: files.first) { if let first = files.first { await job.loadPreview(first) } }
         }
     }
 }

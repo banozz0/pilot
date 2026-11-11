@@ -60,6 +60,6 @@ struct GeneralPageTests {
     func selfUpdatingCasks() throws {
         let rig = SettingsSchemaPart2Tests.Rig()
         let get = try #require(rig.verbs.verbs["get"]?.detail)
-        #expect(try get("update.selfUpdatingCasks")?.contains("\n\(CataloguePage.selfUpdatingTitle), on the install page.\n") == true)
+        #expect(try get("update.selfUpdatingCasks")?.contains("\n\(InstallMorePage.selfUpdatingTitle), on the install page.\n") == true)
     }
 }

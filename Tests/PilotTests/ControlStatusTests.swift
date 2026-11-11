@@ -81,7 +81,8 @@ struct ControlStatusTests {
         guard case .array(let problems)? = status["problems"] else { Issue.record("no problems"); return }
         let fixes = problems.map { Self.fields($0)["fix"] }
         #expect(problems.map { Self.fields($0)["kind"] } == [.string("accessibility"), .string("tiler")])
-        #expect(fixes == [.string("pilot open permissions"), .string("pilot run engine.restartTiler")])
+        // Accessibility's Grant is Needs you on Pilot's front (simplify-pages T8).
+        #expect(fixes == [.string("pilot open general"), .string("pilot run engine.restartTiler")])
     }
 
     @Test("--part reads only the parts named, the Mac's slow ones included")

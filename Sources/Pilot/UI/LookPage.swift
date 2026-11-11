@@ -6,7 +6,8 @@ import SwiftUI
 /// colours and display face over a small window in that theme; Glass with its Transparency; the wallpaper. The focused
 /// window's border and Defocus are Tiling's Focused window block (page map, Sven 2026-10-17). Every
 /// setting has an ⓘ saying what it does (Sven, 2026-10-09). A column of cards under the page's title; nothing folds
-/// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it.
+/// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it. The front holds the preview, Glass,
+/// the wallpaper's Previous and Next, and Theme; the rest is on More (simplify-pages T20, T28).
 struct LookPage: View {
     @Environment(\.ink) private var ink
     let look: Look
@@ -24,9 +25,13 @@ struct LookPage: View {
     let section: AppSection?
     let focus: WallpaperBlock.Focus?
     let landed: () -> Void
+    /// The More tab shows, not the front; a block a link or the search asked for comes from the window (blockLanding).
+    let more: Bool
 
     init(look: Look = .shared, wallpaper: WallpaperSettings = .shared, cursors: CursorSets? = nil, effects: CursorEffects? = nil,
-         screens: [WallpaperScreen]? = nil, section: AppSection? = nil, focus: WallpaperBlock.Focus? = nil, landed: @escaping () -> Void = {}) {
+         screens: [WallpaperScreen]? = nil, more: Bool = false, section: AppSection? = nil, focus: WallpaperBlock.Focus? = nil,
+         landed: @escaping () -> Void = {}) {
+        self.more = more
         self.look = look
         self.wallpaper = wallpaper
         self.cursors = cursors ?? .of(look)
@@ -38,6 +43,10 @@ struct LookPage: View {
     }
 
     var body: some View {
+        if more { moreTab } else { front }
+    }
+
+    private var front: some View {
         ScrollViewReader { proxy in
             column.onChange(of: section, initial: true) {
                 guard let section else { return }
@@ -54,7 +63,7 @@ struct LookPage: View {
         static let style = "How Pilot is drawn: Instrument or Toybox. The theme still picks every colour."
         static let menuLayout = "How Hyper+Space draws the menu: Line, which opens as Omarchy's list and grows into a wide search on the first key; Classic, Omarchy's list in JetBrains Mono; or the Rail, with the kinds and their counts beside the hits. The keys and rows are the same in all three."
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
-        static let theme = "Pilot's colours, and whether it is dark or light. Ghostty takes the theme's colours too."
+        static let theme = "Click a theme to try it on Pilot; nothing else changes. Apply theme sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and Quick AI. Off, they are solid."
         static let transparency = "How much of the desktop shows through the glass, here and on a Glass top bar, which goes solid at 0 %. Text stays readable however far you go."
         static let glassBlur = "How much the glass blurs the desktop behind it: Full, Light, or Off for a sharp desktop under the tint. Here, on a Glass top bar and on the widgets."
@@ -75,48 +84,91 @@ struct LookPage: View {
         return instrument && width >= CGFloat(rows) * 150 + CGFloat(rows - 1) * gap ? rows : 4
     }
 
+    /// More's index (simplify-pages T20): a block's rows, a heading not counted. A row added to or moved off a block changes
+    /// its count here.
+    static let entries = [
+        MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
+        MoreEntry(id: .menuLayout, symbol: "text.magnifyingglass", controls: 1),
+        MoreEntry(id: .windowLayout, symbol: "sidebar.left", controls: 1),
+        MoreEntry(id: .appsShowAs, symbol: "square.grid.2x2", controls: 1),
+        MoreEntry(id: .glassTuning, symbol: "drop", controls: 2),
+        MoreEntry(id: .cursor, symbol: "cursorarrow", controls: 8),
+        MoreEntry(id: .wallpaperCycle, symbol: "photo.on.rectangle", controls: 7),
+    ]
+
     // MARK: The page
 
+    /// The front: the preview beside Glass and the wallpaper's Previous, Next and On its own, then Theme, so Glass, Next and
+    /// Apply theme show at the window's first size, 1000 by 660 (Sven's pick a, 2026-11-11; the prototype had Theme first).
     private var column: some View {
         @Bindable var look = look
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Pilot and Ghostty change together.").font(ink.ui(13.5)).foregroundStyle(ink.text2)
-                CalmHeading(title: "Style") { InfoMark(text: Info.style) }
-                StylePicker(look: look).padding(14).blockSurface()
-                CalmHeading(title: "Hyper+Space menu") { InfoMark(text: Info.menuLayout) }
-                MenuLayoutPicker(look: look).padding(14).blockSurface()
-                CalmHeading(title: "Window layout") { InfoMark(text: Info.windowShape) }
-                calmLine("Try each: the window redraws at once.") { windowShape }
-                CalmHeading(title: "Theme") { InfoMark(text: Info.theme) }
-                ThemeGrid(look: look, columns: themeColumns)
-                    .onGeometryChange(for: Int.self) { [instrument = ink.isInstrument] in
-                        Self.calmColumns($0.size.width, instrument: instrument)
-                    } action: { themeColumns = $0 }
-                CalmHeading(title: "Apps show as") { InfoMark(text: Info.appsShowAs) }
-                calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs }
-                // Glass, its Transparency and its Blur alone (page map, Sven 2026-10-17; Blur 2026-11-01); the rest went to Tiling › Focused window.
-                KitBlock(title: "Glass") {
-                    switchRow("Glass", Info.glass, isOn: $look.glass, first: true)
-                    if look.glass {
-                        calmRow(44) {
-                            setting("Transparency", Info.transparency); Spacer()
-                            transparencySlider
-                            transparencyValue(11.5).frame(width: 38, alignment: .trailing)
-                        }
-                        calmRow(44) {
-                            setting("Blur", Info.glassBlur); Spacer()
-                            Segments(selection: $look.glassBlur, options: GlassBlur.allCases.map { ($0, $0.title) }, label: "Blur")
-                        }
+                // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
+                HStack(alignment: .top, spacing: 14) {
+                    LookPreview(look: look).padding(.top, ink.isInstrument ? ink.style.density.padding : Toy.blockGap)
+                        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        // Glass alone; its Transparency and Blur are on More (page map, Sven 2026-10-17; Blur 2026-11-01).
+                        KitBlock(title: "Glass") { switchRow("Glass", Info.glass, isOn: $look.glass, first: true) }
+                            .disabled(look.themePressing)
+                        WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .front).id(AppSection.wallpaper)
+                    }
+                    .frame(width: ink.isInstrument ? 290 : 330)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                // With packs, ThemeSection draws the heading: Apply theme and Restore default sit on its line (Sven Q69).
+                VStack(alignment: .leading, spacing: 0) {
+                    if look.usesThemePacks { ThemePackControls(look: look, columns: themeColumns) }
+                    else {
+                        CalmHeading(title: "Theme") { InfoMark(text: Info.theme) }
+                        ThemeGrid(look: look, columns: themeColumns)
                     }
                 }
-                CursorBlock(look: look, cursors: cursors, effects: effects)
-                WallpaperBlock(settings: wallpaper, screens: screens, focus: focus).id(AppSection.wallpaper)
+                .onGeometryChange(for: Int.self) { [instrument = ink.isInstrument] in
+                    Self.calmColumns($0.size.width, instrument: instrument)
+                } action: { themeColumns = $0 }
                 errorLine.padding(.top, 12)
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 30)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// More: the style, the menu's and this window's layouts, how apps show, the glass's tuning, the cursor and the
+    /// wallpaper's folders, each a place a link or the search lands on.
+    private var moreTab: some View {
+        @Bindable var look = look
+        return KitMore(entries: Self.entries) {
+            headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
+            headed(.menuLayout, Info.menuLayout) { MenuLayoutPicker(look: look).padding(14).blockSurface() }
+            headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
+            headed(.appsShowAs, Info.appsShowAs) { calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs } }
+            KitBlock(title: "Transparency and blur", note: look.glass ? nil : "While Glass is on, on Look's front.") {
+                calmRow(44, first: true) {
+                    setting("Transparency", Info.transparency); Spacer()
+                    transparencySlider
+                    transparencyValue(11.5).frame(width: 38, alignment: .trailing)
+                }
+                calmRow(44) {
+                    setting("Blur", Info.glassBlur); Spacer()
+                    Segments(selection: $look.glassBlur, options: GlassBlur.allCases.map { ($0, $0.title) }, label: "Blur")
+                }
+            }
+            .disabled(!look.glass || look.themePressing).moreBlock(.glassTuning)
+            CursorBlock(look: look, cursors: cursors, effects: effects).moreBlock(.cursor)
+            WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .more).moreBlock(.wallpaperCycle)
+            errorLine.padding(.top, 12)
+        }
+    }
+
+    /// A block on More under its place's title and ⓘ.
+    private func headed(_ place: AppSection, _ info: String, @ViewBuilder _ card: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CalmHeading(title: place.title) { InfoMark(text: info) }
+            card()
+        }
+        .moreBlock(place)
     }
 
     /// A card of one row: its line where the rows below have their labels, its control at the trailing edge.
@@ -184,6 +236,244 @@ struct LookPage: View {
     }
 }
 
+/// T1's library + inspector, reduced to T2's saved-pack / exact-plan / Apply / Restore path.
+private struct ThemePackControls: View {
+    let look: Look
+    let columns: Int
+    @State private var applied = false
+    @State private var editor = ThemeDraftSession()
+    private var draft: ThemePackStore.Draft? {
+        get { editor.draft }
+        nonmutating set { editor.draft = newValue }
+    }
+    @State private var revision: String?
+    @State private var following = ThemeFollowing()
+    @Environment(\.ink) private var ink
+    @State private var packs: [ThemePack] = []
+    @State private var selected = ""
+    @State private var plan: ThemePlan?
+    @State private var outcome = ""
+    @State private var outcomeDetails = ""
+    private var running: Bool { look.themePressing }
+    @State private var apps: ThemeCoordinator.AppFollowing?
+
+    /// Every theme this style can wear: Pilot's own in their designed order, then the ones a person made.
+    private var cards: [PilotTheme] {
+        let style = look.style.rawValue
+        return PilotTheme.designed(for: style) + packs.filter { pack in pack.compatible(with: style) && !PilotTheme.designed.contains { $0.id == pack.id } }
+            .map { $0.appearance(keeping: .standard) }
+    }
+
+    var body: some View {
+        ThemeSection(themes: cards, picked: selected.isEmpty ? look.themeID : selected, columns: columns, applied: applied,
+                     canApply: packs.contains { $0.id == selected }, running: running,
+                     pick: { tryOn($0) }, apply: { press(selected) }, restore: { press(nil) },
+                     mode: Binding(get: { following.mode != false }, set: { value in
+                         do { following = try ThemeCoordinator.production().stageFollowing("mode", follow: value); plan = nil }
+                         catch { outcome = String(describing: error) }
+                     })) {
+            if let plan { preview(plan) }
+            if !outcome.isEmpty { Text(outcome).foregroundStyle(ink.text2).textSelection(.enabled) }
+            if !outcomeDetails.isEmpty {
+                KitFold(title: "Details") { Text(outcomeDetails).font(.caption).foregroundStyle(ink.text2).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+            }
+            if draft != nil {
+                ThemePackEditor(session: editor,
+                    save: { save(review: false) }, review: { save(review: true) }, cancel: { draft = nil })
+            }
+        } more: { more }
+        .onDisappear { editor.invalidate(); look.endTrial(keep: !applied) }
+        .task {
+            do {
+                let owner = try ThemeCoordinator.production(), store = owner.store
+                packs = try await Task.detached { try store.list() }.value
+                apps = try owner.appFollowing(); following = try owner.following()
+                let now = try owner.appliedTheme()
+                applied = now.any
+                if selected.isEmpty { selected = now.id ?? look.themeID }
+            }
+            catch { outcome = String(describing: error) }
+        }
+    }
+
+    private func tryOn(_ id: String) {
+        selected = id; plan = nil; draft = nil; outcome = ""; outcomeDetails = ""
+        look.tryOn(id: id, pack: packs.first { $0.id == id })
+    }
+
+    @ViewBuilder private var more: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                // New… copies the theme picked, so no Duplicate beside it (W11).
+                Button("New…") { edit(copy: true) }
+                Button("Import…") { importPack() }
+                Button("Edit") { edit(copy: false) }.disabled(selected.isEmpty)
+                Button("Export…") { exportPack() }.disabled(selected.isEmpty)
+            }
+            KitFold(title: "Follow or keep personal") {
+                ForEach(["palette", "wallpapers", "material", "bar", "cursor"], id: \.self) { component in
+                    Toggle("Follow pack " + component, isOn: Binding(get: {
+                        switch component { case "palette": following.palette; case "wallpapers": following.wallpapers; case "bar": following.bar == true; case "cursor": following.cursor != false; default: following.material }
+                    }, set: { value in
+                        do { following = try ThemeCoordinator.production().stageFollowing(component, follow: value); plan = nil; outcome = "Saved. Preview again before Apply." }
+                        catch { outcome = String(describing: error) }
+                    }))
+                }
+                Text("Bar geometry and fonts stay personal unless geometry follows a pack. Restore default puts back what the theme changed. Your own edits and saved packs stay.").font(.caption).foregroundStyle(ink.text2)
+            }
+            if let apps {
+                if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
+                if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
+                ForEach(apps.apps, id: \.kind) { app in
+                    if let kind = ThemeAppKind(rawValue: app.kind) { appSwitch("\(app.name) follows", on: app.on, app: .app(kind)) }
+                }
+                if !apps.vaults.isEmpty {
+                    appSwitch("Obsidian follows", on: apps.obsidianOn, app: .obsidian)
+                    ForEach(apps.vaults, id: \.root) { vault in
+                        appSwitch(ThemeCoordinator.vaultLabel(vault.root, among: apps.vaults.map(\.root)), on: vault.on, app: .vault(vault.root))
+                            .help(vault.root).padding(.leading, 18).disabled(!apps.obsidianOn)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func preview(_ plan: ThemePlan) -> some View {
+                    let details = try? ThemeCoordinator.production().describe(plan)
+                    ThemePreviewSummary(plan: details ?? .null) {
+                        if let change = try? ThemeCoordinator.production().appearanceChange(plan),
+                           let bytes = try? ThemeDigest.encoded(change) {
+                            KitFold(title: "Pilot colours and glass") {
+                                Text(String(decoding: bytes, as: UTF8.self))
+                                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                            }
+                        }
+                        ForEach(Array(plan.wallpapers.enumerated()), id: \.offset) { _, change in
+                            Text("Wallpaper before: \(themeWallpaperText(change.before))\nAfter: \(themeWallpaperText(change.after))")
+                                .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        }
+                        if !plan.ghostex.isEmpty {
+                            Text(plan.ghostex.map { "\(GhostexInterface.names[$0.key] ?? $0.key): \($0.before) → \($0.after)" }.joined(separator: "\n"))
+                                .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        }
+                        if let details { ThemePlanReview(plan: details) }
+                    }
+                    Button(plan.packID == nil ? "Restore" : "Apply") { press(plan.packID, plan: plan.id) }.disabled(running)
+    }
+
+    private func edit(copy: Bool) {
+        do {
+            let owner = try ThemeCoordinator.production()
+            let id = selected.isEmpty ? (packs.first?.id ?? "lagoon") : selected
+            var value = try owner.store.draft(id)
+            let loaded = try owner.store.load(id)
+            if copy || loaded.factory {
+                value.pack.id = "user-" + UUID().uuidString.lowercased()
+                value.pack.title += " copy"; revision = nil
+            } else { revision = loaded.revision }
+            draft = value; plan = nil
+        } catch { outcome = String(describing: error) }
+    }
+    private func save(review: Bool) {
+        guard let draft else { return }
+        do {
+            let owner = try ThemeCoordinator.production(), saved = try owner.saveDraft(draft, replacing: revision)
+            selected = saved.pack.id; revision = saved.revision; self.draft = nil
+            packs = try owner.store.list(); plan = nil; outcome = "Draft saved. Nothing applied."
+            if review { prepare(selected) }
+        } catch { outcome = String(describing: error) }
+    }
+    private func importPack() {
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.begin { answer in
+            guard answer == .OK, let path = panel.url?.path else { return }
+            do {
+                let owner = try ThemeCoordinator.production()
+                try owner.editorPath(path)
+                let saved = try owner.saveDraft(ThemePackStore.readPortable(path))
+                packs = try owner.store.list(); selected = saved.pack.id; plan = nil; draft = nil
+                outcome = "Pack imported. Nothing applied."
+            } catch { outcome = String(describing: error) }
+        }
+    }
+    private func exportPack() {
+        let panel = NSSavePanel(); panel.nameFieldStringValue = selected + ".pilot-theme.json"
+        panel.begin { answer in
+            guard answer == .OK, let path = panel.url?.path else { return }
+            do {
+                let owner = try ThemeCoordinator.production()
+                try owner.export(selected, to: path)
+                outcome = "Portable pack exported. Existing destinations are never overwritten."
+            } catch { outcome = String(describing: error) }
+        }
+    }
+
+    private func appSwitch(_ title: String, on: Bool, app: ThemeCoordinator.AppSwitch) -> some View {
+        Toggle(title, isOn: Binding(get: { on }, set: { value in
+            do { apps = try ThemeCoordinator.production().stageFollows(app, on: value); plan = nil; outcome = "Saved. Preview again before Apply." }
+            catch { outcome = String(describing: error) }
+        })).disabled(running)
+    }
+
+    /// One press applies or restores (Sven, after testing 2180): no second button and no Allow from Pilot's own window;
+    /// what changed shows afterwards, with Restore to undo it. The review panel's button passes the plan it shows, which
+    /// is spent as reviewed; a card's press plans afresh.
+    private func press(_ id: String?, plan planID: String? = nil) {
+        look.themePressing = true; plan = nil
+        Task { @MainActor in
+            defer { look.themePressing = false }
+            do {
+                let result = if let planID { try await ThemeCoordinator.production().apply(planID, peer: nil, pressed: true) }
+                             else { try await ThemeCoordinator.production().press(id) }
+                outcome = themeOutcomeText(result); outcomeDetails = themeOutcomeDetails(result)
+                applied = (try? ThemeCoordinator.production().appliedTheme().any) ?? applied
+                apps = try? ThemeCoordinator.production().appFollowing()
+                look.endTrial(keep: false)
+            }
+            catch { outcome = String(describing: error) }
+        }
+    }
+    private func prepare(_ id: String?) {
+        Task {  // Preview waits on Ghostex off the main thread.
+            do {
+                plan = try await ThemeCoordinator.production().plan(id)
+                apps = try ThemeCoordinator.production().appFollowing(); outcome = ""; outcomeDetails = ""
+            }
+            catch { plan = nil; outcome = String(describing: error) }
+        }
+    }
+}
+
+// MARK: - Preview
+
+/// Look's preview (simplify-pages T28; Sven's pick A of the look-preview-design round and its tweak, 2026-11-11): this
+/// Mac's wallpaper in small with a desk in the theme over it (LookDesk), an editor, a terminal and a notes graph with the
+/// tiler's gaps between them. It reads the main screen's wallpaper as it shows and after each step.
+struct LookPreview: View {
+    let look: Look
+    /// A render's wallpaper, so nothing is read; nil reads the main screen's.
+    @Environment(\.lookPreviewStill) private var still
+    @State private var image: NSImage?
+
+    var body: some View {
+        LookDesk(look: look, picture: (still ?? image).map { Image(nsImage: $0) })
+            .task { await read() }
+            .onReceive(NotificationCenter.default.publisher(for: WallpaperSwitch.changed)) { _ in Task { await read() } }
+            .accessibilityHidden(true)
+    }
+
+    /// The main screen's wallpaper now, off the main thread, a picture big enough for the preview.
+    private func read() async {
+        guard still == nil, let screen = NSScreen.main, let url = WallpaperSwitch.current(on: screen) else { return }
+        image = await Task.detached { WallpaperScreen.thumbnail(url, size: 640) }.value
+    }
+}
+
+extension EnvironmentValues {
+    /// Look's preview's wallpaper in a render; nil reads the main screen's.
+    @Entry var lookPreviewStill: NSImage? = nil
+}
+
 // MARK: - Cursor
 
 /// Look › Cursor (P84, spec §6; T33's mock, `Cursors 1.1/choices/cursor-designs.html`): the designs as tiles, each drawn
@@ -233,6 +523,7 @@ private struct CursorBlock: View {
                     HStack(spacing: 5) { Text("Colours"); InfoMark(text: LookPage.Info.cursorColours) }
                     Spacer()
                     Segments(selection: $cursors.colours, options: CursorColours.allCases.map { ($0, $0.title) }, label: "Cursor colours")
+                        .disabled(look.themePressing)
                 }
                 if cursors.colours == .custom { custom }
             }
@@ -244,7 +535,7 @@ private struct CursorBlock: View {
             BlockRow {
                 HStack(spacing: 5) { Text("Effect colour"); InfoMark(text: LookPage.Info.effectColour) }
                 Spacer()
-                ColourChoicePicker(choice: $effects.colour, theme: CursorEffectColours.of(look.themeID).effectRGB, label: "Effect colour")
+                ColourChoicePicker(choice: $effects.colour, theme: ColourChoicePicker.effectTheme(look.themeID, resolved: look.packAppearance), label: "Effect colour")
             }
             halo("Ring", LookPage.Info.ring, isOn: $effects.ring)
             halo("Ripple", LookPage.Info.ripple, isOn: $effects.ripple)
@@ -289,7 +580,7 @@ private struct CursorBlock: View {
 
     /// A design's arrow and pointing hand, as the tile shows them.
     private func pair(_ set: CursorSetID) -> [CGImage?] {
-        let palette = samples.palette(set, cursors.colours, theme: look.themeID, custom: cursors.custom(set))
+        let palette = samples.palette(set, cursors.colours, theme: look.themeID, custom: cursors.custom(set), resolved: look.packAppearance)
         return ["arrow", "pointing-hand"].map { samples.image(set, $0, palette: palette) }
     }
 
@@ -305,7 +596,7 @@ private struct CursorBlock: View {
     /// Fill and outline wells with a swap, a sample of the picked design on a light window, and the pair's contrast.
     @ViewBuilder private var custom: some View {
         let custom = cursors.custom(cursors.set)
-        let (fill, outline) = custom.colours(samples.palette(cursors.set, .theme, theme: look.themeID, custom: custom))
+        let (fill, outline) = custom.colours(samples.palette(cursors.set, .theme, theme: look.themeID, custom: custom, resolved: look.packAppearance))
         BlockRow {
             Spacer()
             well("Fill", fill) { cursors.fill = .custom($0) }
@@ -313,7 +604,7 @@ private struct CursorBlock: View {
             Button { (cursors.fill, cursors.outline) = (.custom(outline), .custom(fill)) } label: { Image(systemName: "arrow.left.arrow.right") }
                 .buttonStyle(.pilot).help("Swap fill and outline").accessibilityLabel("Swap fill and outline")
         }
-        let palette = samples.palette(cursors.set, .custom, theme: look.themeID, custom: custom)
+        let palette = samples.palette(cursors.set, .custom, theme: look.themeID, custom: custom, resolved: look.packAppearance)
         let ratio = Contrast.ratio(fill, outline), weak = ratio < CursorCustom.weakRatio
         HStack(spacing: 14) {
             HStack(spacing: 6) {
@@ -674,24 +965,73 @@ private struct LinePicture: View {
 private struct ThemeGrid: View {
     let look: Look
     var columns = 4
+
+    var body: some View {
+        ThemeCards(themes: PilotTheme.designed(for: look.style.rawValue),
+                   picked: look.themeID, columns: columns) { look.pick($0) }
+    }
+}
+
+/// Look › Theme as a new person meets it: the heading with Apply theme and Restore default on its line (Sven's pick A,
+/// build 2276, Q69), the themes, and everything else behind More.
+struct ThemeSection<Detail: View, More: View>: View {
+    let themes: [PilotTheme]
+    let picked: String
+    let columns: Int
+    let applied: Bool
+    let canApply: Bool
+    let running: Bool
+    let pick: (String) -> Void
+    let apply: () -> Void
+    let restore: () -> Void
+    /// Whether Apply also switches macOS to the theme's Light or Dark mode (Sven Q43, on by default).
+    var mode: Binding<Bool>? = nil
+    @ViewBuilder var detail: Detail
+    @ViewBuilder var more: More
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CalmHeading(title: "Theme") {
+                HStack(spacing: 10) {
+                    InfoMark(text: LookPage.Info.theme)
+                    if applied { Button("Restore default", action: restore).buttonStyle(.pilotSoft).disabled(running) }
+                    Button("Apply theme", action: apply).buttonStyle(.pilotPrimary).disabled(!canApply || running)
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                ThemeCards(themes: themes, picked: picked, columns: columns, pick: pick).disabled(running)
+                if let mode { Toggle("Switch macOS to light or dark with the theme", isOn: mode).disabled(running) }
+                detail
+                KitFold(title: "More") { more }
+            }
+        }
+    }
+}
+
+/// The preview cards, moved between with the arrow keys.
+struct ThemeCards: View {
+    let themes: [PilotTheme]
+    let picked: String
+    let columns: Int
+    let pick: (String) -> Void
     @FocusState private var focused: String?
 
     var body: some View {
-        let themes = PilotTheme.designed
+        let taglines = Array(Set(themes.map(\.tagline)))
         // A Grid, not a lazy one: each row is as tall as its tallest card and every card fills it, so the rows' edges
         // line up whatever each display face's height.
         Grid(horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(Array(stride(from: 0, to: themes.count, by: columns)), id: \.self) { start in
                 GridRow {
                     ForEach(themes[start..<min(start + columns, themes.count)]) { theme in
-                        ThemeCard(theme: theme, picked: look.themeID == theme.id, focused: focused == theme.id,
-                                  taglines: themes.map(\.tagline)) {
-                            look.pick(theme.id)
+                        ThemeCard(theme: theme, picked: picked == theme.id, focused: focused == theme.id,
+                                  taglines: taglines) {
+                            pick(theme.id)
                         }
                         .focusable()
                         .focused($focused, equals: theme.id)
                         .focusEffectDisabled()
-                        .onKeyPress(.return) { look.pick(theme.id); return .handled }
+                        .onKeyPress(.return) { pick(theme.id); return .handled }
                     }
                 }
             }
@@ -828,4 +1168,127 @@ private struct ThemeWindow: View {
     private static let lines: [[(ink: Int, width: CGFloat)]] = [[(2, 46)], [(3, 22), (1, 30)], [(4, 18), (2, 26), (1, 12)], [(1, 38)]]
 
     private static func ink(_ index: Int, _ t: PilotTheme) -> UInt32 { [t.text3, t.text2, t.text, t.second, t.third][index] }
+}
+
+/// Text shared with the external lifecycle proof; keeps recovery visible without a second engine or view. One summary
+/// line and what to do next; each change is behind Details (Sven, build 2276).
+func themeOutcomeText(_ result: JSONValue) -> String {
+    guard case .object(let values) = result else { return "" }
+    func strings(_ value: JSONValue?) -> [String] {
+        guard case .array(let rows) = value else { return [] }
+        return rows.compactMap(\.string)
+    }
+    let changed = strings(values["changed"]).joined(separator: ", ")
+    var lines: [String] = []
+    switch values["status"]?.string {
+    case "applied": lines.append(changed.isEmpty ? "Theme applied." : "Theme applied: \(changed).")
+    case "restored": lines.append(changed.isEmpty ? "Default appearance restored." : "Default appearance restored: \(changed).")
+    case "unchanged": lines.append("Nothing needed changing.")
+    case "failed":
+        var state: String?
+        if case .object(let recovery) = values["recovery"] { state = recovery["status"]?.string }
+        lines.append(state == "recovery retained" ? "The theme was not applied, and Pilot could not put everything back. Pilot left those files alone and tries again next launch."
+                                                  : "The theme was not applied. Everything went back as it was.")
+    default: break
+    }
+    return (lines + strings(values["next"])).joined(separator: "\n")
+}
+
+/// The long form, behind Details: each change and what was kept, why something failed, custom reloads, and each file's
+/// recovery.
+func themeOutcomeDetails(_ result: JSONValue) -> String {
+    guard case .object(let values) = result else { return "" }
+    func strings(_ value: JSONValue?) -> [String] {
+        guard case .array(let rows) = value else { return [] }
+        return rows.compactMap(\.string)
+    }
+    var lines = ["applied", "restored"].contains(values["status"]?.string) ? strings(values["changes"]).map { "Changed: \($0)" } + strings(values["kept"]) : []
+    lines += ["error", "warning"].compactMap { values[$0]?.string }
+    if case .array(let reloads) = values["reloads"] {
+        for case .object(let reload) in reloads {
+            lines.append("Reload \(reload["binding"]?.string ?? "custom app"): \(reload["outcome"]?.string ?? "no answer")")
+        }
+    }
+    if case .object(let recovery) = values["recovery"], case .array(let rows) = recovery["rows"] {
+        for case .object(let row) in rows {
+            lines.append("\(row["path"]?.string ?? row["wallpaper"]?.string ?? row["ghostex"]?.string ?? "Pilot"): \(row["rollback"]?.string ?? row["native"]?.string ?? "no answer")")
+        }
+    }
+    return lines.joined(separator: "\n")
+}
+
+func themeWallpaperText(_ value: ThemeWallpaperValue) -> String {
+    switch value {
+    case .sources(let paths): "\(paths.count) images"
+    case .image(let path): path ?? "none"
+    }
+}
+
+/// What Preview shows first: every change and skip in plain words, the long form behind Details.
+struct ThemePreviewSummary<Extra: View>: View {
+    let plan: JSONValue
+    @ViewBuilder var extra: Extra
+    @State private var expanded = false
+    @Environment(\.ink) private var ink
+
+    private func lines(_ key: String) -> [String] {
+        guard case .object(let fields) = plan, case .object(let review) = fields["review"], case .array(let rows) = review[key] else { return [] }
+        return rows.compactMap(\.string)
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(lines("changes"), id: \.self) { Text($0).textSelection(.enabled) }
+            ForEach(lines("next"), id: \.self) { Text($0).textSelection(.enabled) }
+            ForEach(lines("skipped") + lines("kept"), id: \.self) { Text($0).foregroundStyle(ink.text2).textSelection(.enabled) }
+            KitFold(title: "Details", open: $expanded) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(lines("details"), id: \.self) { Text($0).font(.caption).foregroundStyle(ink.text2) }
+                    extra
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+
+/// The native Review and offscreen proof consume the same public plan as the CLI.
+struct ThemePlanReview: View {
+    let plan: JSONValue
+    @State var expanded: Bool = false
+    var body: some View {
+        KitFold(title: "Exact file changes", open: $expanded) {
+            Text(themePlanText(plan))
+                .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+func themePlanText(_ plan: JSONValue) -> String {
+    guard case .object(let fields) = plan else { return "" }
+    func json(_ value: JSONValue) -> String {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: (try? encoder.encode(value)) ?? Data(), as: UTF8.self)
+    }
+    var lines: [String] = []
+    if case .array(let changes) = fields["changes"] {
+        for case .object(let change) in changes {
+            lines.append("File: " + (change["path"]?.string ?? "Unknown path"))
+            if let id = change["bindingID"]?.string { lines.append("Custom mapping: " + id) }
+            if let selector = change["selector"] { lines.append("Part of the file: " + json(selector)) }
+            for (key, label) in [("before", "Before"), ("after", "After"), ("proposedBytes", "New file contents")] {
+                lines.append(label + "\n" + (change[key]?.string ?? "Absent"))
+            }
+        }
+    }
+    if case .array(let reloads) = fields["reloads"] {
+        for case .object(let binding) in reloads {
+            guard case .object(let command) = binding["reload"], let executable = command["executable"] else { continue }
+            let arguments: [JSONValue] = if case .array(let argv) = command["arguments"] { argv } else { [] }
+            lines.append("Reload " + (binding["id"]?.string ?? "custom app") + ": " + (binding["app"]?.string ?? "unknown app"))
+            lines.append("Runs: " + json(.array([executable] + arguments)))
+            lines.append("Files change first. This reload asks for its own Allow.")
+        }
+    }
+    return lines.joined(separator: "\n")
 }

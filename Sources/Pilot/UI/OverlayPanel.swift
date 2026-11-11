@@ -9,7 +9,7 @@ let olog = Logger(subsystem: "dev.banozz.pilot", category: "overlay")
 /// The hold-Hyper overlay (story 55, wireframe ol5Ak83dAho section 1): the layer key held its delay with no other key shows
 /// that sublayer's binds in a non-activating panel (PilotCore's HoldOverlay times it, OverlayPage picks the rows); Shift,
 /// Ctrl or Alt turns the page, any key or the release closes it. Styled as the app window is (PanelStyle, story 105). Its
-/// footer's Edit what shows, clicked while Hyper is held, closes it and opens Binds › Overlay (story 56).
+/// footer's Edit what shows, clicked while Hyper is held, closes it and opens Binds › More › Overlay (story 56).
 @MainActor
 final class HyperOverlay {
     private var state = HoldOverlay()
@@ -49,7 +49,7 @@ final class HyperOverlay {
         apply(state.key())
     }
 
-    /// The footer's link: the overlay closes as a key would close it, and the window opens on Binds › Overlay.
+    /// The footer's link: the overlay closes as a key would close it, and the window opens on Binds › More › Overlay.
     private func editWhatShows() {
         key()
         AppWindowController.shared.open(AppPlace(.overlay))
@@ -135,7 +135,7 @@ struct OverlayView: View {
     }
 }
 
-/// The overlay's foot (story 56): how many binds did not fit, and Edit what shows, the link to Binds › Overlay. The
+/// The overlay's foot (story 56): how many binds did not fit, and Edit what shows, the link to Binds › More › Overlay. The
 /// panel never takes key focus, so the link takes the first click as the tip's button does. Nothing when neither applies.
 struct OverlayFooter: View {
     @Environment(\.style) private var style
@@ -155,7 +155,7 @@ struct OverlayFooter: View {
                     Spacer(minLength: 16)
                     if let edit {
                         AccentLink(title: "Edit what shows", action: edit).allowsWindowActivationEvents(true)
-                            .help("Binds › Overlay: pick the binds holding Hyper shows")
+                            .help("Binds › More › Overlay: pick the binds holding Hyper shows")
                     }
                 }
                 .lineLimit(1)

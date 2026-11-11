@@ -12,6 +12,16 @@ protocol PilotSwitching: AnyObject {
 extension PilotSwitch: PilotSwitching {}
 
 extension SettingsSchema {
+    /// Other apps' notifications in Pilot: General's two switches, off by default.
+    func registerNotifications(_ notifications: NotificationSettings) {
+        register([
+            .bool("notifications.enabled", "Show other apps' notifications as Pilot cards, bottom right", page: "general", standard: false,
+                  read: { notifications.enabled }, write: { notifications.enabled = $0 }),
+            .bool("notifications.hideMacBanners", "Hide macOS's own banner while Pilot's card shows", page: "general", standard: false,
+                  read: { notifications.hideMacBanners }, write: { notifications.hideMacBanners = $0 }),
+        ])
+    }
+
     /// The rest of Pilot's own settings: Look's wallpaper cycle, the overlay's mode, the notes folder, recommendations,
     /// This Mac's public IP, Update's self-updating casks and Pilot's switch. The switch's keys wait on the Allow gate, as
     /// the switch is Sven's alone; the live system values (brightness, volume, dark mode …) are actions, not settings.
@@ -70,7 +80,7 @@ extension SettingsSchema {
             .choice(PilotSettings.dictationKeyKey, "Dictation key (a tap alone, or held)", page: "voice", DictationKey.allCases,
                     standard: .off, read: { settings.dictationKey }, write: { key throws(ControlError) in
                         guard key.isFree(layerKeys: settings.layerKeys) else {
-                            throw ControlError(.badValue, "\(key.rawValue) is a Hyper key: turn it off as one in General first")
+                            throw ControlError(.badValue, "\(key.rawValue) is a Hyper key: turn it off as one on the Pilot page first")
                         }
                         settings.dictationKey = key
                     }),

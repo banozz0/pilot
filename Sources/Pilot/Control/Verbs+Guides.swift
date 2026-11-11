@@ -7,7 +7,7 @@ extension ControlVerbs {
     /// line per skill and no more. The agent runs with skills off and only `pilot` to call (AIChat.Agent.claudeArguments),
     /// so the skills come through the verb, their bodies alone: AISkills.guides, the old topic names included.
     func registerGuides(skills: @escaping @Sendable @MainActor () -> [AISkill] = { AISkills.guides }) {
-        register(ControlVerb("guide", help: "How to go about one kind of job, for Pilot's AI helper: binds, preset, layouts, settings, explain, troubleshoot, catalogue.",
+        register(ControlVerb("guide", help: "How to go about one kind of job, for Pilot's AI helper: binds, preset, layouts, settings, explain, troubleshoot, catalogue, theme.",
                              usage: "pilot guide [<topic>]", flags: []) { call throws(ControlError) in
             let skills = skills()
             guard !skills.isEmpty else { throw ControlError(.notReady, "Pilot's skills are missing from the app") }

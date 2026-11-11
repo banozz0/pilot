@@ -50,7 +50,6 @@ final class HiddenRows {
 /// `row` is told whether it is the list's first. `slot` puts Hide beside rows that end in their own button (Connect,
 /// Join); otherwise it sits over the row's free end, where only the row in use has a check.
 struct HidingList<Item, Row: View>: View {
-    @Environment(\.ink) private var ink
     let list: HiddenRows.List
     let items: [Item]
     let id: (Item) -> String?
@@ -70,16 +69,7 @@ struct HidingList<Item, Row: View>: View {
             }
         }
         if !hidden.isEmpty {
-            Button { withAnimation(Kit.change) { open.toggle() } } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right").rotationEffect(.degrees(open ? 90 : 0)).font(ink.system(9, weight: .bold))
-                    Text("Hidden (\(hidden.count))")
-                    Spacer()
-                }
-                .font(ink.ui(12, .semibold)).foregroundStyle(ink.muted).frame(minHeight: 24).contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Hidden, \(hidden.count)").accessibilityValue(open ? "shown" : "folded")
+            KitFoldLine(title: "Hidden (\(hidden.count))", open: $open, quiet: true, spoken: "Hidden, \(hidden.count)")
             if open {
                 ForEach(entries(hidden, after: shown.count)) { entry in
                     let key = id(entry.item) ?? ""

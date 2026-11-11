@@ -52,7 +52,7 @@ public struct GhosttyLook: Equatable, Sendable {
     public init(theme: OmarchyTheme?) { self.theme = theme }
 
     /// Omarchy's template: palette 0 to 15 from these roles in order.
-    private static let palette = ["background", "red", "green", "yellow", "blue", "magenta", "cyan", "foreground",
+    public static let palette = ["background", "red", "green", "yellow", "blue", "magenta", "cyan", "foreground",
                                   "muted", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_magenta", "bright_cyan", "bright_foreground"]
 
     public var text: String {
@@ -164,4 +164,32 @@ extension [OmarchyTheme] {
 
 extension GhosttyFiles: GhosttyWriting {
     public var isApplied: Bool { FileManager.default.fileExists(atPath: include) }
+}
+
+/// Pure pack adapter: a separate colour include and loader; the legacy theme/font include is baseline, never owned.
+public enum GhosttyThemeAdapter {
+    public static let begin = "# >>> Pilot theme pack >>>"
+    public static let end = "# <<< Pilot theme pack <<<"
+
+    public static func prepare(_ pack: ThemePack, binding: ThemeBinding, snapshots: [ThemeSnapshot], claims: [ThemeClaim]) throws -> [ThemeMutation] {
+        guard Set(pack.adapters.keys) == ["ghostty"], pack.adapters["ghostty"] == .object([:]) else { throw ThemeFailure("unsupported adapter data; Ghostty accepts palette roles only") }
+        guard snapshots.count == 2, binding.config != binding.generated,
+              (binding.root + binding.generated).unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0) }),
+              URL(fileURLWithPath: binding.generated).lastPathComponent == "pilot-theme.conf" else { throw ThemeFailure("Ghostty requires a distinct pilot-theme.conf binding") }
+        let config = snapshots[1], bytes = config.bytes ?? Data()
+        let newline = bytes.contains(13) ? "\r\n" : "\n"
+        let existing = claims.first { $0.path == config.path }
+        let hasBlock = try ThemeRegions.range(.block(begin: begin, end: end, prefix: 0), in: config.bytes) != nil
+        let prefix = existing.map { claim -> Int in
+            if case .block(_, _, let count) = claim.selector { return count }; return 0
+        } ?? (!hasBlock && !bytes.isEmpty && bytes.last != 10 ? newline.utf8.count : 0)
+        let selector = ThemeSelector.block(begin: begin, end: end, prefix: prefix)
+        let block = (prefix > 0 ? newline : "") + [begin, "config-file = ?\(binding.root)/\(binding.generated)", end].joined(separator: newline)
+        let next: [(ThemeSelector, Data)] = [(.file, Data(GhosttyLook(theme: pack.ghostty).text.utf8)), (selector, Data(block.utf8))]
+        return try zip(snapshots, next).map { snapshot, change in
+            let before = try ThemeRegions.owned(change.0, in: snapshot.bytes)
+            return ThemeMutation(target: snapshot, selector: change.0, before: before, after: change.1,
+                                 replacement: try ThemeRegions.replacing(change.0, in: snapshot.bytes, with: change.1))
+        }
+    }
 }

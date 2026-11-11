@@ -15,6 +15,9 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// The bar drops' items (spec Bar drops T4, design C): each lights while its drop hangs under the top bar, and a click
     /// toggles it. Left of the status lights, in the bar's middle, so the drops hang under them.
     case terminal, askAI
+    /// The pill (spec desktop-controls T5, Sven's pick A, shoulders): a capsule on the top bar showing its selected view
+    /// at a glance; a click drops its views down from the bar. Off until placed; the top bar's alone, as a drop's item is.
+    case pill
     /// Capture as a bar item (Sven, 2026-10-16): a click opens the capture menu, and the recording's time
     /// shows on it while one runs, in place of the separate red-dot control.
     case capture
@@ -54,6 +57,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .displays: "Displays"
         case .terminal: "Terminal"
         case .askAI: "Ask AI"
+        case .pill: "Pill"
         case .capture: "Capture"
         case .modes: "Status lights"
         case .clock: "Clock"
@@ -72,7 +76,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .battery, .bluetoothBatteries, .keepAwake, .power: .power
         case .volume, .keyboardLayout, .wifi, .displays: .controls
         case .modes, .clock, .timer: .timeAndFocus
-        case .terminal, .askAI, .capture: .drops
+        case .terminal, .askAI, .pill, .capture: .drops
         case .extensions: .extensions
         case .spacer, .divider, .group: .layout
         }
@@ -97,6 +101,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .wifi: [.icon, .strength]
         case .displays: [.icon]
         case .terminal, .askAI: [.iconName, .icon]
+        case .pill: [.text]
         case .capture: [.icon, .iconName]
         case .modes: [.icons]
         case .clock: [.time, .dateTime, .twoZones]
@@ -134,12 +139,13 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// Joins a saved layout on: the extensions' item draws nothing until an installed extension declares a bar item, so
     /// installing one is the ask (story 161); the bar drops' items are placed by default (spec Bar drops T4). Every other
     /// new item joins off, Status lights too: they are placed in edit mode.
-    var joinsOn: Bool { self == .extensions || isDrop }
+    var joinsOn: Bool { self == .extensions || isDrop && self != .pill }
     /// The bar drop it toggles: the terminal's or Ask AI's; nil for every other item.
     public var drop: BarDropKind? {
         switch self {
         case .terminal: .terminal
         case .askAI: .askAI
+        case .pill: .pill
         default: nil
         }
     }
@@ -160,7 +166,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .keepAwake: .toggleKeepAwake
         case .capture: .menu
-        case .spacer, .divider, .otherApps, .appMenus, .terminal, .askAI: .none
+        case .spacer, .divider, .otherApps, .appMenus, .terminal, .askAI, .pill: .none
         default: .popover
         }
     }
@@ -172,7 +178,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     var side: TopBarSide {
         switch self {
         case .pilot, .workspaces, .focusedApp, .appMenus: .left
-        case .terminal, .askAI, .modes, .clock: .centre
+        case .terminal, .askAI, .pill, .modes, .clock: .centre
         default: .right
         }
     }
@@ -366,6 +372,8 @@ public enum BarSlot: Equatable, Sendable {
 /// `bar.items`; the first start carries today's settings over (`migrated`).
 public struct BarSettings: Codable, Equatable, Sendable {
     public private(set) var entries: [BarEntry]
+    /// Absent retains the pre-preset bar, without changing saved item order.
+    public var preset: BarPresetConfiguration? = nil
     /// The clock's time, a date pattern as DateFormatter takes it; date + time puts the day before it.
     public var clock: TopBarClockFormat
     /// The clock's second zone, a time zone identifier, for the two zones style; set from the clock's popover.
@@ -577,12 +585,52 @@ private extension TopBarItem {
 }
 
 extension BarSettings {
+    /// Validate saved bytes before compatibility defaults, skipped future items or extension discovery can lose data.
+    public static func validateSavedData(_ bytes: Data) throws {
+        let decoder = JSONDecoder(), raw = try decoder.decode(JSONValue.self, from: bytes)
+        // Reuse the existing member scanner, across the whole saved object, before any lossy decoding.
+        try ThemeLedger.validateFields(bytes, encoded: ThemeDigest.encoded(raw))
+        guard case .object(let fields) = raw, case .array(let entries) = fields["entries"] else {
+            throw ThemeFailure("invalid saved bar items")
+        }
+        func check<T: Decodable>(_ type: T.Type, _ fields: [String: JSONValue], _ key: String, nullable: Bool = false) throws {
+            guard let value = fields[key] else { return } // Missing legacy fields still take their defaults.
+            if nullable && value == .null { return }
+            _ = try decoder.decode(type, from: ThemeDigest.encoded(value))
+        }
+        for entry in entries {
+            guard case .object(let fields) = entry, case .string(let kind) = fields["kind"] else {
+                throw ThemeFailure("invalid saved bar item")
+            }
+            // Future item kinds remain skippable; a malformed known item must never become a default item.
+            guard BarKind(rawValue: kind) != nil || kind == BarEntry.extensionKind else { continue }
+            try check(Bool.self, fields, "on")
+            try check(String.self, fields, "style") // A future style name still falls back to the item's first style.
+            try check(BarPlacement.self, fields, "placement")
+            try check(TopBarSide.self, fields, "side")
+            try check(Double.self, fields, "width", nullable: true)
+            try check(String.self, fields, "extension", nullable: true)
+            _ = try decoder.decode(BarEntry.self, from: ThemeDigest.encoded(entry))
+        }
+        try check(TopBarClockFormat.self, fields, "clock")
+        try check(String.self, fields, "clockZone", nullable: true)
+        for key in ["clockEvents", "exactMenuItems", "combineProcesses"] { try check(Bool.self, fields, key) }
+        try check([ExtensionBarEntry].self, fields, "extensionItems")
+        if let preset = fields["preset"] {
+            let bytes = try ThemeDigest.encoded(preset)
+            let value = try decoder.decode(BarPresetConfiguration.self, from: bytes)
+            try value.validate()
+            try ThemeLedger.validateFields(bytes, encoded: ThemeDigest.encoded(value))
+        }
+    }
+
     /// A later Pilot's item is skipped, an item this Pilot added since joins off at the end; Status lights join just before
     /// the clock and on its side, so turned on they sit left of it. The bar drops' items join on, just before the clock in
     /// the bar's middle, so the drops hang under them (spec Bar drops T4).
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         var entries = try c.decode([Lossy<BarEntry>].self, forKey: .entries).compactMap(\.value)
+        guard Set(entries.map(\.item)).count == entries.count else { throw ThemeFailure("duplicate saved bar items") }
         for kind in BarKind.allCases where !entries.contains(where: { $0.item == .kind(kind) }) {
             let clock = kind == .modes || kind.isDrop ? entries.firstIndex { $0.kind == .clock } : nil
             var entry = BarEntry(kind, on: kind.joinsOn)
@@ -595,6 +643,8 @@ extension BarSettings {
                   exactMenuItems: (try? c.decode(Bool.self, forKey: .exactMenuItems)) ?? false,
                   combineProcesses: (try? c.decode(Bool.self, forKey: .combineProcesses)) ?? false,
                   extensionItems: (try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems))?.compactMap(\.value) ?? [])
+        preset = c.contains(.preset) ? try c.decode(BarPresetConfiguration.self, forKey: .preset) : nil
+        try preset?.validate()
         placeGroupedExtensions(order: decoder.userInfo[Self.extensionOrder] as? @Sendable () -> [String])
     }
 

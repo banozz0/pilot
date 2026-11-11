@@ -3,7 +3,7 @@ import IOKit.hidsystem
 import PilotCore
 
 /// Caps Lock becomes F18 at the HID level, the hidutil technique, on every keyboard service (the Keychron's second
-/// interface included), and Binds › Swap keys' pairs swap there too (Q406): one mapping set
+/// interface included), and Binds › More › Swap keys' pairs swap there too (Q406): one mapping set
 /// (KeyMappingEntry.pilotSet), applied at launch, removed on quit or when the layer keys or swaps change. Entries Pilot
 /// did not write are written back with it, globally: one set on a single keyboard spreads to every keyboard and stays
 /// there after quit. Karabiner grabbing the keyboard makes this a no-op, and the conflict tip says so.

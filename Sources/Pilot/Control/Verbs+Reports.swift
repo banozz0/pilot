@@ -50,9 +50,9 @@ extension ControlVerbs {
         registerSpeedTest(jobs)
     }
 
-    /// `list reports` and `report <id>`: Activity › Reports, every Update and Clean run.
+    /// `list reports` and `report <id>`: Update & Clean › Reports, every Update and Clean run.
     private func registerReports(_ jobs: ControlJobs) {
-        register(ControlCollection("reports", help: "Every Update and Clean run, newest first, as Activity › Reports lists it; pilot report <id> reads one.",
+        register(ControlCollection("reports", help: "Every Update and Clean run, newest first, as Update & Clean › Reports lists it; pilot report <id> reads one.",
                                    rowKey: "id", list: { .array(jobs.store.list().map { .object(Self.reportRow($0)) }) }))
         register(ControlVerb("report", help: "One Update or Clean run as Reports opens it: how it ended, the command, its items and its output.",
                              usage: "pilot report <id>|latest [--wait]",

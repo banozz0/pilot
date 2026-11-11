@@ -20,8 +20,8 @@ struct InfoHUDRenders {
 
     static let states: [(name: String, model: InfoModel)] = [
         ("1-every-reading", InfoModel(time: "14:32", date: date, battery: .init(percent: 54, charging: false, minutesLeft: 190),
-                                      weather: "☀️ 24°", wifi: "Medina Home")),
-        ("2-mac-mini", InfoModel(time: "09:05", date: date, weather: "🌧️ 17°", wifi: "Medina Home")),
+                                      weather: "☀️ 24°", wifi: "Harbour Loft")),
+        ("2-desktop-mac", InfoModel(time: "09:05", date: date, weather: "🌧️ 17°", wifi: "Harbour Loft")),
         ("3-charging", InfoModel(time: "23:59", date: "Wednesday, 30 September 2026",
                                  battery: .init(percent: 82, charging: true, pluggedIn: true, minutesLeft: 80))),
         ("4-time-alone", InfoModel(time: "07:00", date: date)),

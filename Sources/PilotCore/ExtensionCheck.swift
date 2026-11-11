@@ -312,11 +312,13 @@ extension ExtensionCheck {
         return run(ok: why == nil, first, why: why)
     }
 
-    /// `ext test` reads no Keychain: a password preference is unset, as on a Mac where it was never typed.
-    private struct NoKeychain: ExtensionKeychain {
-        func password(extension id: String, preference name: String) -> String? { nil }
-        func setPassword(_ password: String?, extension id: String, preference name: String) throws {}
-        func hasPassword(extension id: String, preference name: String) -> Bool { false }
+    /// No Keychain, for `ext test` and the bar fixture: a password preference is unset, as on a Mac where it was never
+    /// typed, and nothing is written.
+    public struct NoKeychain: ExtensionKeychain {
+        public init() {}
+        public func password(extension id: String, preference name: String) -> String? { nil }
+        public func setPassword(_ password: String?, extension id: String, preference name: String) throws {}
+        public func hasPassword(extension id: String, preference name: String) -> Bool { false }
     }
 }
 

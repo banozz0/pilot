@@ -39,7 +39,7 @@ public enum BindsPage {
             switch self {
             case .layer(let s): s.title
             case .otherHyper: "Other Hyper keys"
-            case .plain: "Plain combos"
+            case .plain: AppSection.plainCombos.title
             case .unbound: "Not bound"
             }
         }

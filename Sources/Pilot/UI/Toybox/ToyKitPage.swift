@@ -9,14 +9,19 @@ import SwiftUI
 struct ToyPage<Content: View>: View {
     @Environment(\.style) private var style
     var intro: String?
+    /// The intro's ⓘ: what its one line leaves out.
+    var info: String?
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let intro {
-                    Text(intro).font(style.toyNunito(700, 14.5)).foregroundStyle(style.color(\.text2))
-                        .fixedSize(horizontal: false, vertical: true).padding(.bottom, 2)
+                    IntroLine(info: info) {
+                        Text(intro).font(style.toyNunito(700, 14.5)).foregroundStyle(style.color(\.text2))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.bottom, 2)
                 }
                 content
             }

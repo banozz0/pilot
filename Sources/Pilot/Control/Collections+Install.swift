@@ -59,7 +59,7 @@ extension ControlVerbs {
             try await Self.remove(try args.word(0, "row key; pilot list removable lists them"), s, peer: peer)
         }))
 
-        register(ControlCollection("helpers", help: "The tools other features run (General › Helpers): Homebrew, Mole, mas, npm and cargo, each with what it unlocks, whether it is installed and how it installs; pilot install helper <id> installs one.",
+        register(ControlCollection("helpers", help: "The tools other features run (Install › Command-line tools): Homebrew, Mole, mas, npm and cargo, each with what it unlocks, whether it is installed and how it installs; pilot install helper <id> installs one.",
                                    rowKey: "id", list: {
             let installed = s.helpers()
             return .array(Helper.all.map { h in

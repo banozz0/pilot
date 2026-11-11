@@ -178,3 +178,30 @@ private struct PicksKeys: ViewModifier {
             .onDisappear { engine.pickKeys(nil) }
     }
 }
+
+/// Keys' More (simplify-pages T14; Overlay, Swap keys and Export and import were Binds' tabs): Swap keys, Export and
+/// import, Cleaning, and what the overlay shows, longest last, each a place a link or the search lands on. Cleaning's Set
+/// key opens the bind editor on the keyboard, as Launcher's Set key does, More having no editor of its own.
+struct BindsMorePage: View {
+    /// The window's search, which the overlay's list filters by.
+    var search = ""
+    /// Binds' editor on that action, on the keyboard.
+    var editBind: (String) -> Void = { _ in }
+
+    /// More's index. A row added to or moved off a block changes its count here; the overlay's list is one.
+    static let entries = [
+        MoreEntry(id: .keySwaps, symbol: "arrow.left.arrow.right", controls: 3),
+        MoreEntry(id: .exportImport, symbol: "arrow.up.arrow.down", controls: 3),
+        MoreEntry(id: .cleaning, symbol: "lock", controls: 2),
+        MoreEntry(id: .overlay, symbol: "rectangle.grid.2x2", controls: 4),
+    ]
+
+    var body: some View {
+        KitMore(entries: Self.entries) {
+            KeySwapsBlock().moreBlock(.keySwaps)
+            ExportImportRows().moreBlock(.exportImport)
+            KeyboardLockCard { editing in editing.action.map(editBind) }.moreBlock(.cleaning)
+            OverlayPicksBlocks(search: search)
+        }
+    }
+}

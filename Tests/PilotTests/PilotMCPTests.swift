@@ -113,7 +113,7 @@ struct PilotMCPTests {
             Self.call(4, ["command": "pilot deny install"]),
             // A line that is not `pilot …` is read as one, as the API loop reads it: `pilot` runs, never curl.
             Self.call(5, ["command": "curl https://example.com"]),
-        ], pilot: pilot, environment: ["OPENAI_API_KEY": "sk-test", "PILOT_SOCKET": "/tmp/elsewhere.sock"])
+        ], pilot: pilot, environment: ["OPENAI_API_KEY": "sk-test", "PILOT_TEST_UNTRUSTED": "/tmp/elsewhere.sock"])
         #expect(Self.result(answers[1])?.text == #"{"ok":true,"result":"pong"}"# + "\n" && Self.result(answers[1])?.isError == false)
         #expect(Self.result(answers[4])?.isError == true && Self.result(answers[4])?.text == "denied: Sven said no\n")
         let ran = try String(contentsOf: runs, encoding: .utf8)
@@ -128,7 +128,7 @@ struct PilotMCPTests {
         try "#!/bin/sh\nenv | cut -d= -f1 | sort | tr '\\n' ' ' >> '\(runs.path)'\n".write(to: printer, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: printer.path)
         _ = try Self.serve([Self.call(1, ["command": "pilot ping"])], pilot: printer.path,
-                           environment: ["OPENAI_API_KEY": "sk-test", "PILOT_SOCKET": "/tmp/elsewhere.sock", "USER": "test", "LANG": "en_US.UTF-8"])
+                           environment: ["OPENAI_API_KEY": "sk-test", "PILOT_TEST_UNTRUSTED": "/tmp/elsewhere.sock", "USER": "test", "LANG": "en_US.UTF-8"])
         let names = try String(contentsOf: runs, encoding: .utf8).split(separator: " ").map(String.init)
         // The shell itself adds PWD, SHLVL and _ for the fake's own run.
         #expect(Set(names).subtracting(["PWD", "SHLVL", "_"]) == ["HOME", "LANG", "PILOT_AGENT", "USER"])

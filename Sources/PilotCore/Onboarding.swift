@@ -86,7 +86,7 @@ public enum Onboarding {
                     + "Review them or put them back any time in \(AppPlace(.conflicts).path)."
             case .microphone: "for Pilot's own dictation; skip it if you never dictate"
             case .screenRecording: "for screenshots, scrolling captures, recordings and exact menu bar items; skipped, your first capture asks"
-            case .inputMonitoring: "tells a mouse's media keys from your keyboard's, in Binds › Mouse"
+            case .inputMonitoring: "tells a mouse's media keys from your keyboard's, in \(AppPlace(.mouse).path)"
             case .notifications: "for low-battery alerts about your mouse, keyboard and headphones"
             case .bluetooth: "lists and connects your paired devices in Setup › Bluetooth"
             case .location: "macOS hides Wi-Fi names without it, in Setup › Wi-Fi"

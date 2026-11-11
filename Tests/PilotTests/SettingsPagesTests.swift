@@ -29,20 +29,21 @@ struct SettingsPagesTests {
         #expect(!StatsPage.intro.lowercased().contains("menu bar"), "Stats still says the menu bar is picked there")
     }
 
-    @Test("General's parts share its one page: no tabs, and every old Pilot part and link still lands on it, picking that part")
+    @Test("Pilot's parts are its front and its More (simplify-pages T7): every old Pilot part and link lands on the page, a place on More on that tab with its block asked for")
     func pilotParts() {
-        #expect(AppPage.general.tabs.isEmpty)
+        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"])
         for name in ["pilot", "general", "permissions", "otherApps", "about"] {
             let model = AppWindowModel(defaults: UserDefaults(suiteName: testSuite())!)
             let place = AppPlace.linked(URL(string: "pilot://open?page=\(name)")!)
             #expect(place?.page == .general, "\(name)")
             guard let place else { continue }
             model.go(place)
-            #expect(model.page == .general && model.section(of: .general) == place.section, "\(name)")
+            #expect(model.page == .general && model.section(of: .general) == (place.section?.onMore ?? place.section)
+                    && model.blockFocus == (place.section?.onMore == nil ? nil : place.section), "\(name)")
         }
     }
 
-    @Test("General's old Data and Helpers parts land on their new tabs: Binds › Export and import, Install › Helpers (page map, 2026-10-17)")
+    @Test("General's old Data and Helpers parts land on their new tabs: Binds › More › Export and import, Install › Helpers (page map, 2026-10-17)")
     func movedParts() {
         for (link, section) in [("page=exportImport", AppSection.exportImport), ("page=general&tab=exportImport", .exportImport),
                                 ("page=helpers", .helpers), ("page=general&tab=helpers", .helpers)] {
@@ -97,12 +98,12 @@ struct SettingsPagesRenders {
             try await shot("clipboard-\(theme)", SettingsPagesTests.clipboard(), height: tall)
             engine.gate.seed(trusted: true)
             try await shot("general-\(theme)", GeneralPage(), height: tall)
-            try await shot("general-acknowledgements-open-\(theme)", GeneralPage(acknowledgementsOpen: true), height: tall)
+            try await shot("general-acknowledgements-open-\(theme)", GeneralPage(more: true, acknowledgementsOpen: true), height: tall)
             engine.gate.seed(trusted: false)
             try await shot("general-permission-missing-\(theme)", GeneralPage(), height: tall)
             // The page map's two new tabs (2026-10-17).
-            try await shot("helpers-\(theme)", HelpersPage(installed: ["homebrew", "mas"]), height: 600)
-            try await shot("binds-export-import-\(theme)", BindsExportImportPage(), height: 600)
+            try await shot("helpers-\(theme)", HelpersBlock(installed: ["homebrew", "mas"]), height: 600)
+            try await shot("binds-export-import-\(theme)", KitPage { ExportImportRows() }, height: 600)
         }
         look.themeID = PilotTheme.defaultID
         look.preview(spot: nil)

@@ -435,6 +435,12 @@ final class AIChatPanel {
 }
 
 extension AISettings {
+    /// A fallback's notice as a tip near the top of the screen, for the surfaces with no line of their own (an extension's
+    /// `ai` action, the bind editor's Suggest).
+    nonisolated static let tip: AIFallback.Tell = { notice in
+        DispatchQueue.main.async { MainActor.assumeIsolated { HUD.tip(notice.line, seconds: 6, top: true) } }
+    }
+
     /// The provider and model as the chat's header names them: "Claude Code · Sonnet".
     var routeName: String {
         let model = model(for: provider)

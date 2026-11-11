@@ -1191,9 +1191,9 @@ struct ExplainerFilmRenders {
         mice.binds.setMouse(MouseKeys.underHyper(MouseKeys.media(17)), to: "media.previous", device: core, button: 5)
         defer { for b in mice.binds.store.mouseBinds { mice.binds.setMouse(b.trigger, to: nil) } }
         let found = MouseButtons.Found(mice: [core], buttons: (2...4).map { MouseKeys.button($0) })
-        typealias Shown = MouseButtonsPage.Shown
+        typealias Shown = MouseButtonsBlocks.Shown
         func mouse(_ shown: Shown, _ spot: Int?, _ name: String) throws {
-            try page(MouseButtonsPage(shown: shown, mice: found, spot: spot).environment(mice), name, width: 928, on: .page(.binds))
+            try page(KitPage { MouseButtonsBlocks(shown: shown, mice: found, spot: spot) }.environment(mice), name, width: 928, on: .page(.binds))
         }
         try mouse(Shown(learn: .idle, target: nil), nil, "mouse-1-rest")
         try mouse(Shown(learn: .got(MouseKeys.button(3), device: nil), target: 4), 4, "mouse-2-back")

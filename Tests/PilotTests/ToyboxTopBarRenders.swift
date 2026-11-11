@@ -52,6 +52,8 @@ struct ToyboxTopBarRenders {
     @Test("The top bar, its popovers, tooltip and drag chip in Toybox dark and light and in Instrument",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
+        if Self.env["PILOT_ISLANDS_RENDER"] == "1" { try InstrumentTopBarRenders.renderFloating(style: .toybox, islands: true); return }
+        if Self.env["PILOT_STRIP_RENDER"] == "1" { try InstrumentTopBarRenders.renderFloating(style: .toybox); return }
         let dir = try ClockRenders.dir("topbar")
         testApp()
         DisplayFaces.directory = LookThemeTests.fonts

@@ -262,7 +262,7 @@ struct DeskWidgetRenders {
                 + #"{"date": "2026-11-02", "code": 0, "high": 22.3, "low": 15.0, "rain": 0}, {"date": "2026-11-03", "code": 61, "high": 18.4, "low": 13.6, "rain": 70}, "#
                 + #"{"date": "2026-11-04", "code": 3, "high": 19.2, "low": 14.4, "rain": 20}]}"#
         case "desk-system":
-            text = #"{"user": "sven", "host": "mac-mini", "os": "macOS 27.2", "kernel": "Darwin 27.2.0", "arch": "arm64", "model": "Mac mini", "#
+            text = #"{"user": "robin", "host": "studio", "os": "macOS 27.2", "kernel": "Darwin 27.2.0", "arch": "arm64", "model": "Mac mini", "#
                 + #""chip": "Apple M4", "cores": "10 cores (4 P, 6 E)", "gpu": "Apple M4 · 10 cores", "shell": "zsh 5.9", "packages": 210, "#
                 + #""uptime": "3d 4h", "cpu": {"percent": 14, "load": "2.10"}, "memory": {"used": 17394000000, "total": 25769803776, "percent": 67}, "#
                 + #""disk": {"used": 412000000000, "total": 494384795648, "percent": 83}, "battery": null}"#

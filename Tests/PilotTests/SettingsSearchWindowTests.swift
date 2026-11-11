@@ -26,7 +26,7 @@ struct SettingsSearchWindowTests {
     func actions() {
         let pane = SettingsSearch.panes.first { $0.title == "Privacy & Security" }!
         #expect(SettingsActions.dynamic(SettingsSearch.actionID(pane))?.label == "Privacy & Security in System Settings")
-        #expect(SettingsActions.dynamic(SettingsSearch.actionID(AppPlace(.reports)))?.label == "Activity › Reports in Pilot")
+        #expect(SettingsActions.dynamic(SettingsSearch.actionID(AppPlace(.reports)))?.label == "Update & Clean › Reports in Pilot")
         #expect(SettingsActions.dynamic("system.wifi") == nil && SettingsActions.dynamic("window.page:nowhere") == nil)
     }
 }

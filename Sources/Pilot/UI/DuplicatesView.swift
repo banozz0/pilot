@@ -151,10 +151,11 @@ struct DuplicatesView: View {
     /// The rows' pictures, dropped with the page.
     @State private var thumbnails = FileThumbnails()
 
-    static let intro = "Identical files in your home folder, found by their contents. Hidden files, what is inside apps, libraries and other packages, git repos and the never-index list are left out. Nothing moves until you say so."
+    static let intro = "Identical files in your home folder. Nothing moves until you say so."
+    static let introInfo = "Found by their contents. Hidden files, what is inside apps, libraries and other packages, git repos and the never-index list are left out."
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             KitBlock(title: "Duplicates", symbol: "doc.on.doc", trailing: { scanButton }) { summary }
             ForEach(model.groups) { group in
                 KitBlock(title: "\(Self.bytes(group.size)) · \(group.files.count) copies") {

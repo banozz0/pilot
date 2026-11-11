@@ -4,9 +4,9 @@ import WebApps
 
 /// Install › Catalogue (design round 4 section 7, card agent-bo-95422897; stories 81 and 97 to 100): the shipped catalogue
 /// with its categories and search, every category as its own section. The catalogue is the recommendations (Sven
-/// 2026-10-09): with Recommend apps off (its switch is here too, C5) the page is its search alone, no preset picks. A
-/// pick goes through Install's confirm step, which shows the exact command first (nothing runs without it); a download
-/// opens its vendor's page. The same catalogue is the Hyper+Space menu's Install branch. Typing also searches every
+/// 2026-10-09): with Recommend apps off (its switch on Install's More since simplify-pages T16, C5) the page is its search
+/// alone, no preset picks. A pick goes through Install's confirm step, which shows the exact command first (nothing runs
+/// without it); a download opens its vendor's page. The same catalogue is the Hyper+Space menu's Install branch. Typing also searches every
 /// source at once (N9, InstallSearcher): the catalogue's matches first, then Homebrew, the App Store, GitHub, the package
 /// tools and the web, each source's block as it answers, each result saying how it installs.
 struct CataloguePage: View {
@@ -19,9 +19,6 @@ struct CataloguePage: View {
     /// The search so far and the text it answers; nil before one.
     @State private var found: (query: String, progress: InstallSearch.Progress)?
     private let recommendations = Recommendations.shared
-    /// Update's self-updating casks switch (page map, Sven 2026-10-17: until now only inside the Hyper+Space Update
-    /// branch), read once as the page opens: the setting sits in Pilot's defaults, which nothing observes.
-    @State private var selfUpdating = Engine.shared?.settings.updateSelfUpdatingCasks ?? false
 
     /// Every source for a text, each answer to the closure as it lands (InstallSearcher.search); nil in the renders,
     /// which never reach the network.
@@ -39,10 +36,8 @@ struct CataloguePage: View {
         _found = State(initialValue: found.map { (InstallSearch.Query(query)?.text ?? query, InstallSearch.Progress(groups: $0, waiting: waiting)) })
     }
 
-    /// The self-updating casks switch's words, the same as `pilot set update.selfUpdatingCasks` says them.
-    static let selfUpdatingTitle = "Update lists casks that update themselves"
-
-    static let intro = "Apps and tools Pilot installs for you, each only after you confirm the command. Search finds anything else too."
+    static let intro = "Apps and tools Pilot installs for you, each only after you confirm the command."
+    static let introInfo = "Search finds anything else too."
     /// The category Fonts' Get more fonts opens on.
     static let fonts = "Fonts"
 
@@ -72,7 +67,7 @@ struct CataloguePage: View {
     var body: some View {
         let recommend = recommendations.show
         let sections = Self.sections(entries, query: query, category: category, recommend: recommend)
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             finder(recommend).padding(.top, 16)
             // While a search answers, the catalogue's empty match is left out: the sources below say what they found.
             ForEach(sections.filter { !($0.entries.isEmpty && searched != nil) }, id: \.title) { section in
@@ -93,7 +88,7 @@ struct CataloguePage: View {
             if let searched { results(searched) }
             else if !recommend {
                 EmptyState(title: "Search for anything to install",
-                           line: "Homebrew, the App Store, GitHub and the package tools. Recommend apps is off, so Pilot lists no picks of its own.")
+                           line: "Homebrew, the App Store, GitHub and the package tools. Recommend apps is off on More, so Pilot lists no picks of its own.")
                     .padding(.vertical, 24)
             }
         }
@@ -183,11 +178,9 @@ struct CataloguePage: View {
 
     private var categories: [String] { InstallCatalogue.categories(entries) }
 
-    /// The search, the category chips ("All" first), the Recommend apps switch (C5), the same one as Defaults' and
-    /// onboarding's, and Update's self-updating casks switch, the same one as the Update branch's.
+    /// The search and the category chips ("All" first); Recommend apps and the self-updating casks are on More.
     private func finder(_ recommend: Bool) -> some View {
-        @Bindable var recommendations = recommendations
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             SearchBox(prompt: "Search Homebrew, the App Store, GitHub and more", text: $query)
             if recommend {
                 Flow(spacing: 6, lineSpacing: 6) {
@@ -195,13 +188,6 @@ struct CataloguePage: View {
                     ForEach(categories, id: \.self) { name in chip(name, on: category == name) { category = category == name ? nil : name } }
                 }
             }
-            Toggle("Recommend apps", isOn: $recommendations.show)
-                .toggleStyle(.pilotSwitchRow(info: "Off: no catalogue of picks here or in the menu, and no install suggestions anywhere in Pilot. Search still finds everything."))
-            Toggle(Self.selfUpdatingTitle, isOn: Binding(get: { selfUpdating }, set: { on in
-                selfUpdating = on
-                Engine.shared?.settings.updateSelfUpdatingCasks = on
-            }))
-            .toggleStyle(.pilotSwitchRow(info: "Apps such as Chrome or Zed update themselves; on, Hyper+Space › Update lists them too and updates them with Homebrew."))
         }
     }
 
@@ -233,5 +219,48 @@ struct CataloguePage: View {
         return cardRow(icon: MenuIcon.catalogue(entry), letter: Self.letter(entry), title: entry.name, line: how(entry),
                        installed: installed.contains(entry.id), button: download ? "Get" : "Install",
                        key: entry.key, help: download ? "Opens \(entry.vendor)'s download page" : nil)
+    }
+}
+
+/// Install's More (simplify-pages T16): what Pilot lists, Recommend apps (C5, the same switch as onboarding's) and Update's
+/// self-updating casks (the Update branch's), then the command-line tools and the hidden apps, each a place a link or the
+/// search lands on.
+struct InstallMorePage: View {
+    private let recommendations = Recommendations.shared
+    /// Update's self-updating casks switch (page map, Sven 2026-10-17: until then only inside the Hyper+Space Update
+    /// branch), read once as the tab opens: the setting sits in Pilot's defaults, which nothing observes.
+    @State private var selfUpdating = Engine.shared?.settings.updateSelfUpdatingCasks ?? false
+
+    /// The self-updating casks switch's words, the same as `pilot set update.selfUpdatingCasks` says them.
+    static let selfUpdatingTitle = "Update lists casks that update themselves"
+
+    /// More's index. A row added to or moved off a block changes its count here; the tools and the hidden apps are a list
+    /// each.
+    static let entries = [
+        MoreEntry(id: .installLists, symbol: "list.star", controls: 2),
+        MoreEntry(id: .helpers, symbol: "terminal", controls: 1),
+        MoreEntry(id: .hiddenApps, symbol: "eye.slash", controls: 1),
+    ]
+
+    var body: some View {
+        @Bindable var recommendations = recommendations
+        KitMore(entries: Self.entries) {
+            KitBlock(title: "What Pilot lists", symbol: "list.star") {
+                BlockRow(first: true) {
+                    Toggle("Recommend apps", isOn: $recommendations.show)
+                        .toggleStyle(.pilotSwitchRow(info: "Off: no catalogue of picks on Install or in the menu, and no install suggestions anywhere in Pilot. Search still finds everything."))
+                }
+                BlockRow {
+                    Toggle(Self.selfUpdatingTitle, isOn: Binding(get: { selfUpdating }, set: { on in
+                        selfUpdating = on
+                        Engine.shared?.settings.updateSelfUpdatingCasks = on
+                    }))
+                    .toggleStyle(.pilotSwitchRow(info: "Apps such as Chrome or Zed update themselves; on, Hyper+Space › Update lists them too and updates them with Homebrew."))
+                }
+            }
+            .moreBlock(.installLists)
+            HelpersBlock().moreBlock(.helpers)
+            HiddenAppsBlock().moreBlock(.hiddenApps)
+        }
     }
 }

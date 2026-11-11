@@ -21,7 +21,9 @@
 .css-fallback canvas.bgfx, .no-fx .bgfx { display: none; }
 .site .top > .still-old { display: none; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--t1) 7%, transparent) 0 5px, transparent 6px) 0 0 / 28px 28px; -webkit-mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); }
 .site .w.wide { width: min(1240px, 100% - 64px); }
-.site .hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; padding: 40px 0 96px; }
+.site .hero { padding: 40px 0 96px; }
+/* The rows and the loop share their own grid, above Pilot. (Sven 2026-11-06). */
+.site .hmain { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; }
 .site .keyline { margin-top: 26px; font: 600 clamp(20px, 2.2cqi, 26px)/1.3 var(--sans); letter-spacing: -.025em; color: var(--t1); }
 .site .keyline .kc { font-size: 1.9em; vertical-align: -.2em; margin: 0 .06em; }
 .site .keyline .dim { color: var(--t3); }
@@ -36,7 +38,12 @@
 .site .hname { margin-top: 20px; font: 560 clamp(38px, 3.6cqi, 50px)/1 var(--sans); letter-spacing: -.04em; }
 .site .hname .logo { width: .78em; height: .78em; vertical-align: -.08em; margin-right: .16em; }
 .site .hero .cap { margin-top: 14px; max-width: 520px; font: 400 16.5px/1.55 var(--sans); color: var(--t2); }
-.site .hcut { margin: 6px 0 0; display: grid; gap: 12px; position: sticky; top: 92px; }
+/* Pilot. and the caption open the hero, right under the nav, above the rows and the loop (Sven 2026-11-06). */
+.site .htop { margin-bottom: 56px; }
+.site .htop .hname { margin-top: 0; font-size: clamp(56px, 6.4cqi, 88px); }
+.site .htop .cap { max-width: 640px; font-size: 19px; }
+/* The loop holds still beside the rows, its foot level with the last one (Sven 2026-11-06: static, not sticky). */
+.site .hcut { margin: 0; display: grid; gap: 12px; align-self: end; }
 .site .hcut figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font: 400 13px/1.4 var(--mono); color: var(--t3); }
 .site .hcut figcaption a { color: var(--t1); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
 .site .filmsec { margin-top: 120px; }
@@ -430,13 +437,17 @@
   .site .w { width: calc(100% - 32px); }
   .site .nav .links { display: none; }
   .site .nav .btn { margin-left: auto; }
-  .site .hero { grid-template-columns: 1fr; gap: 32px; padding: 28px 0 56px; }
+  .site .hero { padding: 28px 0 56px; }
+  .site .hmain { grid-template-columns: 1fr; gap: 32px; }
   .site .hrows li { grid-template-columns: 1fr; gap: 1px; padding: 7px 0; }
   .site .hrows s { font-size: 18px; }
   .site .hrows span { font-size: 13.5px; line-height: 1.4; }
   .site .hname { margin-top: 18px; font-size: 38px; }
   .site .hero .cap { margin-top: 12px; font-size: 15.5px; }
   .site .hcut { position: static; }
+  .site .htop { margin-bottom: 36px; }
+  .site .htop .hname { font-size: 44px; }
+  .site .htop .cap { font-size: 15.5px; }
   .site .filmsec { margin-top: 80px; }
   .site .film .box { border-radius: 12px; }
   .site .film .play { left: 12px; bottom: 12px; height: 40px; font-size: 13px; }
@@ -946,11 +957,9 @@
 .nicon { width: 34px; display: inline-grid; place-items: center; margin-left: 6px; border: 1px solid var(--line2); background: var(--panel); color: var(--t1); transition: background-color .15s; }
 .nicon .ghm { width: 17px; height: 17px; display: block; }
 @media (hover: hover) { .nicon:hover { background: var(--s); } }
-.site .navpill .btn.sm { margin-left: 6px; padding: 0 15px; }
-.hbadge { display: inline-flex; align-items: center; gap: 10px; height: 32px; padding: 0 13px 0 5px; margin-bottom: 24px; border-radius: 999px; border: 1px solid var(--line2); background: color-mix(in srgb, var(--panel) 85%, transparent); font: 500 13px/1 var(--sans); color: var(--t1); }
-.hbadge b { height: 22px; padding: 0 9px; border-radius: 999px; display: inline-grid; place-items: center; background: var(--lime); color: var(--on-lime); font: 600 11.5px/1 var(--mono); }
-.hbadge span { color: var(--t3); transition: transform .15s var(--ease); }
-@media (hover: hover) { .hbadge:hover span { transform: translateX(2px); color: var(--t1); } }
+/* margin-top 0: the studio's bare .sm rule (margin-top: 8px) otherwise drops the nav's buttons below the others. */
+.site .navpill .btn.sm { margin: 0 0 0 6px; padding: 0 15px; }
+.site .navpill .btn.nsp { padding: 0 13px 0 11px; gap: 7px; }
 .site .hero .ctas .btn { height: 46px; padding: 0 22px; border-radius: 999px; font-size: 14.5px; }
 .tryth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; font: 400 13px/1 var(--sans); color: var(--t3); }
 .tryth span { margin-right: 4px; }
@@ -988,7 +997,7 @@
 .atabs { background: var(--g); -webkit-backdrop-filter: none; backdrop-filter: none; }   /* solid: at 92 % the page's text still showed through */
 .atabs::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 72px; background: var(--g); pointer-events: none; }
 @media (max-width: 820px) { .mgrid { grid-template-columns: 1fr; } .more2 { margin-top: 80px; } }
-@media (max-width: 560px) { .navpill { padding: 0 6px 0 10px; } .navpill .nl, .navpill .nsep { display: none; } .navpill .tbtn .tl { display: none; } .navpill .tbtn { padding: 0 7px; } }
+@media (max-width: 560px) { .navpill { padding: 0 6px 0 10px; } .navpill .nl, .navpill .nsep { display: none; } .navpill .tbtn .tl { display: none; } .navpill .tbtn { padding: 0 7px; } .navpill .nsp .sl { display: none; } .site .navpill .btn.nsp { width: 34px; padding: 0; } }
 
 /* ================================================================ the top bar's items and popovers (InstrumentTopBarRenders) */
 .tb2 [hidden] { display: none !important; }

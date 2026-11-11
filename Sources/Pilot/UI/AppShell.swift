@@ -92,6 +92,9 @@ struct PageView: View {
 
     var body: some View {
         page.styleLayout().styled(.page(model.page))
+            // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
+            // KitMore or KitLanding lands there, then clears it.
+            .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
     }
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
@@ -102,14 +105,11 @@ struct PageView: View {
             HomePage(onScreen: model.live, searching: !model.query.trimmingCharacters(in: .whitespaces).isEmpty, clashes: model.conflictCount,
                      editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openExtension: { model.goExtensionPage($0) }) { model.go($0) }
         case .binds:
-            if section == .overlay {
-                OverlayPicksPage(search: model.query)
+            if section == .bindsMore {
+                BindsMorePage(search: model.query) { model.editBind = $0; model.go(AppPlace(.binds)) }
             } else if section == .mouse {
-                MouseButtonsPage()
-            } else if section == .keySwaps {
-                KeySwapsPage()
-            } else if section == .exportImport {
-                BindsExportImportPage()
+                // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
+                KitPage { MouseButtonsBlocks() }
             } else {
                 BindsKeyboardPage(search: model.query, startOnPlain: section == .plainCombos, editBind: $model.editBind) { model.go($0) }
             }
@@ -119,18 +119,21 @@ struct PageView: View {
             } else {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
-        case .workspaces: WorkspacesSettingsView()
-        case .tiling: TilingSettingsView()
+        case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
+        case .tiling: TilingSettingsView(more: section == .tilingMore)
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
-        case .look: LookPage(section: section, focus: model.wallpaperFocus) { model.sections[.look] = nil }
+        case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
-        case .activity: if section == .reports { ReportsPage(open: model.reportPick).onDisappear { model.reportPick = nil } } else { ActivityPage(onScreen: model.live) }
-        case .upkeep: UpkeepPage { id in model.go(AppPlace(.reports)); model.reportPick = id }
+        case .activity: ActivityPage(onScreen: model.live)
+        case .upkeep:
+            if section == .reports { ReportsPage(open: model.reportPick).onDisappear { model.reportPick = nil } }
+            else { UpkeepPage { id in model.go(AppPlace(.reports)); model.reportPick = id } }
         case .stats: StatsPage(onScreen: model.live) { model.go($0) }
-        case .clipboard: ClipboardSettingsView()
-        case .captures: if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
+        case .clipboard: ClipboardSettingsView(more: section == .clipboardMore)
+        case .captures:
+            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
         case .snippets: SnippetsSettingsView()
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
@@ -143,17 +146,21 @@ struct PageView: View {
         case .install:
             switch section {
             case .webApps: WebAppsSettingsView()
-            case .helpers: HelpersPage()
-            case .hiddenApps: HiddenAppsPage()
+            case .installMore: InstallMorePage()
             default: CataloguePage(category: model.catalogueCategory, search: InstallSearcher.search)
             }
-        case .openWith: OpenWithPage()
+        case .openWith: OpenWithPage(more: section == .openWithMore)
         case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
         case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
         case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.catalogueCategory = CataloguePage.fonts })
-        case .general: GeneralPage(section: section) { model.sections[.general] = nil }
-        case .ai: if section == .aiSetup { AISetupPage() } else { AIPage() }
-        case .voice: VoicePage()
+        case .general: GeneralPage(more: section == .pilotMore)
+        case .ai:
+            switch section {
+            case .aiSetup: AISetupPage()
+            case .aiMore: AISetupPage(more: true)
+            default: AIPage()
+            }
+        case .voice: VoicePage(more: section == .voiceMore)
         case .extensions:
             if let id = model.extensionPage {
                 ExtensionSurfacePage(id: id, onScreen: model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)

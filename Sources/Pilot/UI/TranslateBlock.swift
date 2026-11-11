@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Launcher › Your menu › Translate (page map, Sven 2026-10-17; on System's Keyboard layout card until then, card
+/// Launcher › More › Translate (simplify-pages T15; Your menu's from the page map, Sven 2026-10-17; on System's Keyboard layout card until then, card
 /// agent-bo-95423002): the menu's Translate pair, the language everything goes into and where text already in it goes.
 struct TranslateBlock: View {
     @Bindable var settings: PilotSettings

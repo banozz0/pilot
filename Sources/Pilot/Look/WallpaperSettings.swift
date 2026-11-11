@@ -27,6 +27,9 @@ final class WallpaperSettings: ScreenPausing {
     private(set) var workspaceSources: [String: [String]] { didSet { defaults.set(workspaceSources, forKey: Self.workspaceSourcesKey) } }
     /// The image each workspace with its own folders last showed, so going back shows it again rather than a new pick.
     private(set) var workspaceImages: [String: String] { didSet { defaults.set(workspaceImages, forKey: Self.workspaceImagesKey) } }
+    /// The Carousel's favourite wallpapers by path (spec desktop-controls T8), in the order they were marked; F marks or
+    /// unmarks the centre one and Tab shows only these.
+    private(set) var favourites: [String] { didSet { defaults.set(favourites, forKey: Self.favouritesKey) } }
     /// Each screen only gets images of its own shape, unless none fit; off, every screen steps through every image, a
     /// wide one cropped to its middle on a portrait screen (Sven 2026-10-19, Q329). On until changed.
     var fitShape: Bool { didSet { defaults.set(fitShape, forKey: Self.fitShapeKey) } }
@@ -53,7 +56,7 @@ final class WallpaperSettings: ScreenPausing {
                        scopeKey = "wallpaper.scope", intervalKey = "wallpaper.interval", foldersKey = "wallpaper.folders",
                        screenSourcesKey = "wallpaper.screenSources", fitShapeKey = "wallpaper.fitShape",
                        workspacesKey = "wallpaper.workspaces", workspaceSourcesKey = "wallpaper.workspaceSources",
-                       workspaceImagesKey = "wallpaper.workspaceImages"
+                       workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites"
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
@@ -63,6 +66,7 @@ final class WallpaperSettings: ScreenPausing {
         workspaces = defaults.string(forKey: Self.workspacesKey).flatMap(WallpaperCycle.Workspaces.init) ?? .shared
         workspaceSources = (defaults.dictionary(forKey: Self.workspaceSourcesKey) as? [String: [String]]) ?? [:]
         workspaceImages = (defaults.dictionary(forKey: Self.workspaceImagesKey) as? [String: String]) ?? [:]
+        favourites = defaults.stringArray(forKey: Self.favouritesKey) ?? []
         fitShape = defaults.object(forKey: Self.fitShapeKey) as? Bool ?? true
         order = defaults.string(forKey: Self.orderKey).flatMap(WallpaperCycle.Order.init) ?? .name
         seed = defaults.string(forKey: Self.seedKey).flatMap(UInt64.init) ?? UInt64.random(in: 1...UInt64.max)
@@ -122,6 +126,13 @@ final class WallpaperSettings: ScreenPausing {
         if workspaceImages[workspace] != url.path { workspaceImages[workspace] = url.path }
     }
 
+    /// Marks the image at `path` a favourite, or unmarks it; true when it is one after.
+    @discardableResult func toggleFavourite(_ path: String) -> Bool {
+        if let at = favourites.firstIndex(of: path) { favourites.remove(at: at); return false }
+        favourites.append(path)
+        return true
+    }
+
     /// Drops a workspace's last image once its file is gone, so its cycle starts again.
     func forget(workspace: String) { workspaceImages[workspace] = nil }
 
@@ -155,6 +166,19 @@ final class WallpaperSettings: ScreenPausing {
     }
 
     var isStandard: Bool { sources == [WallpaperCycle.standardFolder.path] }
+
+    /// Pack ownership changes only the shared collection. Personal folders, images and cycle controls stay intact.
+    func themeSources(_ paths: [String]) { sources = paths }
+
+    func themeState(displays: [ThemeWallpaperState.Display]) -> ThemeWallpaperState {
+        func lists(_ values: [String: [String]]) -> JSONValue { .object(values.mapValues { .array($0.map(JSONValue.string)) }) }
+        return ThemeWallpaperState(sources: sources, displays: displays, preferences: [
+            "folders": .string(folders.rawValue), "screenSources": lists(screenSources),
+            "workspaces": .string(workspaces.rawValue), "workspaceSources": lists(workspaceSources),
+            "workspaceImages": .object(workspaceImages.mapValues(JSONValue.string)),
+            "order": .string(order.rawValue), "seed": .string(String(seed)), "fitShape": .bool(fitShape),
+            "scope": .string(scope.rawValue), "interval": .number(Double(interval))])
+    }
 
     func shuffleAgain() { seed = UInt64.random(in: 1...UInt64.max) }
 

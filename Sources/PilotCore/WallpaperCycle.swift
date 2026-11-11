@@ -70,12 +70,26 @@ public enum WallpaperCycle {
 
     /// Every image file in `folder` and below, by file name, hidden files left out.
     public static func images(in folder: URL) -> [URL] {
-        let all = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])?
-            .compactMap { $0 as? URL } ?? []
-        return sortedByName(all.filter(isImage))
+        (try? images(in: folder, inspect: { _ in })) ?? []
     }
 
-    static func sortedByName(_ images: [URL]) -> [URL] {
+    /// The same visible-image inventory, with a strict caller's containment check on every visible entry.
+    public static func images(in folder: URL, inspect: (URL) throws -> Void) throws -> [URL] {
+        var failure: Error?
+        guard let entries = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles], errorHandler: { _, error in failure = error; return false }) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        var images: [URL] = []
+        for case let entry as URL in entries {
+            try inspect(entry)
+            if isImage(entry), try entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory != true { images.append(entry) }
+        }
+        if let failure { throw failure }
+        return sortedByName(images)
+    }
+
+    public static func sortedByName(_ images: [URL]) -> [URL] {
         images.sorted {
             let order = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
             return order == .orderedSame ? $0.path < $1.path : order == .orderedAscending
@@ -161,7 +175,12 @@ public final class ImageShapes: @unchecked Sendable {
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int
         else { return nil }
-        let turned = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
+        return shape(width: width, height: height, orientation: properties[kCGImagePropertyOrientation] as? Int ?? 1)
+    }
+
+    /// Shared by header-only cycling and strictly decoded pack assets.
+    public static func shape(width: Int, height: Int, orientation: Int) -> WallpaperCycle.Shape {
+        let turned = (5...8).contains(orientation)
         return (turned ? height >= width : width >= height) ? .landscape : .portrait
     }
 }

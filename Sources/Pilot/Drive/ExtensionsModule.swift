@@ -220,9 +220,10 @@ enum ExtensionActions {
         case .ai(let task, let text, let then):
             // The provider is the AI page's; only the size is logged, never the text.
             dlog.notice("extension: \(ext.id, privacy: .public) asks AI about \(text.utf8.count) bytes")
-            let runner = AISettings.shared.runner()
+            let heard = AIFallback.Heard()
+            let runner = AISettings.shared.runner { heard.tell($0); AISettings.tip($0) }
             return Task {
-                let next = await ExtensionAI.ask(task, text, then: then, runner: runner)
+                let next = await ExtensionAI.ask(task, text, then: then, runner: runner, heard: heard)
                 await run(next, in: ext, inputs: inputs, quiet: quiet)?.value
             }
         }

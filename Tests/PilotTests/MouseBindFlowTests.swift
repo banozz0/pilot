@@ -20,14 +20,14 @@ struct MouseBindFlowTests {
             + #"{"action": "media.previous", "device": {"name": "HyperX Pulsefire Core", "product": 3471, "vendor": 1008}, "trigger": {"hyper": false, "key": "Mouse Next", "modifiers": []}}]"#
         let json = Data(#"{"version": 3, "preset": "myBinds", "binds": [], "mouse": \#(mouse)}"#.utf8)
         let store = try BindStore(json: json, presets: [.myBinds: Self.defaults])
-        let rows = MouseButtonsPage.rows(store.mouseBinds, found: Self.pulsefire, labels: Self.labels)
+        let rows = MouseButtonsBlocks.rows(store.mouseBinds, found: Self.pulsefire, labels: Self.labels)
 
         #expect(rows.map(\.button) == [3, 4, 5, nil])
         #expect(rows[0] == .init(button: 3, trigger: MouseKeys.button(2), device: nil, label: "Play or pause"))
         #expect(rows[1].trigger == MouseKeys.media(16) && rows[1].device == Self.core && rows[1].label == "Next track")
         #expect(rows[2].trigger == nil && rows[2].name == "Forward", "unbound: Click, then press it")
         #expect(rows[3].trigger == MouseKeys.media(17) && rows[3].name == "Next key", "a media key on no button: its own row")
-        let drawn = MouseButtonsPage.labels(rows)
+        let drawn = MouseButtonsBlocks.labels(rows)
         #expect(drawn[3] == .init(action: "Play or pause", sends: nil) && drawn[4] == .init(action: "Next track", sends: "Play key")
                 && drawn[5] == .init(action: nil, sends: nil))
 
@@ -42,28 +42,28 @@ struct MouseBindFlowTests {
     func further() {
         let seven = MouseButtons.Found(mice: [Self.core], buttons: (2...6).map { MouseKeys.button($0) })
         let binds: [(trigger: Key, bind: BindStore.MouseBind)] = [(MouseKeys.button(8), .init(action: "media.next", device: nil))]
-        let rows = MouseButtonsPage.rows(binds, found: seven, labels: Self.labels)
+        let rows = MouseButtonsBlocks.rows(binds, found: seven, labels: Self.labels)
         #expect(rows.map(\.button) == [3, 4, 5, 6, 7, 9] && rows.last?.label == "Next track" && rows.last?.name == "Button 9")
     }
 
     @Test("A press caught for a button is bound there: a media key on the button clicked, a plain button on its own")
     func bindsWhereClicked() {
-        #expect(MouseButtonsPage.button(of: MouseKeys.media(16), target: 4) == 4)
-        #expect(MouseButtonsPage.button(of: MouseKeys.button(4), target: 4) == 5, "clicked Back, pressed Forward: bound on Forward")
-        #expect(MouseButtonsPage.button(of: MouseKeys.media(16), target: nil) == nil, "Other button…: a row of its own")
+        #expect(MouseButtonsBlocks.button(of: MouseKeys.media(16), target: 4) == 4)
+        #expect(MouseButtonsBlocks.button(of: MouseKeys.button(4), target: 4) == 5, "clicked Back, pressed Forward: bound on Forward")
+        #expect(MouseButtonsBlocks.button(of: MouseKeys.media(16), target: nil) == nil, "Other button…: a row of its own")
     }
 
     @Test("Each state the box shows: waiting lights the button, a press from another mouse is told apart, a pick lights its button")
     func states() {
-        #expect(MouseButtonsPage.lit(.listening, target: 4, selected: 3) == 4)
-        #expect(MouseButtonsPage.lit(.quiet, target: 4, selected: nil) == 4)
-        #expect(MouseButtonsPage.lit(.got(MouseKeys.media(16), device: Self.core), target: 4, selected: nil) == 4)
-        #expect(MouseButtonsPage.lit(.got(MouseKeys.button(2), device: nil), target: 4, selected: nil) == 3)
-        #expect(MouseButtonsPage.lit(.idle, target: nil, selected: 5) == 5)
+        #expect(MouseButtonsBlocks.lit(.listening, target: 4, selected: 3) == 4)
+        #expect(MouseButtonsBlocks.lit(.quiet, target: 4, selected: nil) == 4)
+        #expect(MouseButtonsBlocks.lit(.got(MouseKeys.media(16), device: Self.core), target: 4, selected: nil) == 4)
+        #expect(MouseButtonsBlocks.lit(.got(MouseKeys.button(2), device: nil), target: 4, selected: nil) == 3)
+        #expect(MouseButtonsBlocks.lit(.idle, target: nil, selected: 5) == 5)
         let logitech = MouseKeys.Device(vendor: 1133, product: 45108, name: "Logitech MX Master 3S")
-        #expect(MouseButtonsPage.isOtherMouse(logitech, found: Self.pulsefire))
-        #expect(!MouseButtonsPage.isOtherMouse(Self.core, found: Self.pulsefire))
-        #expect(!MouseButtonsPage.isOtherMouse(logitech, found: MouseButtons.Found()), "no mouse found: nothing to compare with")
-        #expect(!MouseButtonsPage.isOtherMouse(nil, found: Self.pulsefire), "a plain button names no device")
+        #expect(MouseButtonsBlocks.isOtherMouse(logitech, found: Self.pulsefire))
+        #expect(!MouseButtonsBlocks.isOtherMouse(Self.core, found: Self.pulsefire))
+        #expect(!MouseButtonsBlocks.isOtherMouse(logitech, found: MouseButtons.Found()), "no mouse found: nothing to compare with")
+        #expect(!MouseButtonsBlocks.isOtherMouse(nil, found: Self.pulsefire), "a plain button names no device")
     }
 }

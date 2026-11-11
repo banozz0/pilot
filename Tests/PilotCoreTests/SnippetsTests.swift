@@ -127,7 +127,7 @@ struct SnippetsTests {
 
     @Test("Snippets is a page of its own (2026-10-10, was Clipboard's tab); a link, the old link and the search land on it")
     func page() {
-        #expect(AppPage.clipboard.tabs.isEmpty)
+        #expect(!AppPage.clipboard.tabs.contains { $0.title == "Snippets" })
         #expect(AppPlace.search("snippet") == [AppPlace(.snippets)])
         #expect(AppPlace.search("text expansion") == [AppPlace(.snippets)])
         #expect(AppPlace.linked(URL(string: "pilot://open?page=clipboard&tab=snippets")!) == AppPlace(.snippets))

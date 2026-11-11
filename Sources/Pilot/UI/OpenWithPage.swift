@@ -13,21 +13,28 @@ struct OpenWithPage: View {
     /// All kinds, folded until asked for.
     @State private var allKinds: Bool
     private let editor: EditorChoice
+    /// The More tab shows, not the front: Apps for keys (simplify-pages T11).
+    private let more: Bool
 
     /// A render or a test may fold All kinds out and pass its own defaults and editor.
-    init(allKinds: Bool = false, kinds: DefaultAppsModel = DefaultAppsModel(), editor: EditorChoice = .shared) {
+    init(more: Bool = false, allKinds: Bool = false, kinds: DefaultAppsModel = DefaultAppsModel(), editor: EditorChoice = .shared) {
+        self.more = more
         _allKinds = State(initialValue: allKinds)
         _kinds = State(initialValue: kinds)
         self.editor = editor
     }
 
-    static let intro = "The app each kind of file and link opens in. Pilot changes nothing until you pick."
-    /// Browser, text and Markdown: the kinds with a card of their own after the editor, with each card's tile and ⓘ.
-    private static let mainCards: [(kind: FileKind, symbol: String, colour: TileColour, info: String)] = [
-        ("web", "globe", TileColour.third, "Every link you click outside a browser opens in this one."),
-        ("public.plain-text", "doc.text", .neutral, "A .txt file you double-click in Finder opens in this app."),
-        ("net.daringfireball.markdown", "number", .second, "A .md file you double-click in Finder opens in this app."),
-    ].compactMap { id, symbol, colour, info in FileKinds.groups.flatMap(\.kinds).first { $0.id == id }.map { ($0, symbol, colour, info) } }
+    static let intro = "The app each kind of file and link opens in."
+    static let introInfo = "Pilot changes nothing until you pick."
+    /// Browser, text and Markdown: the kinds with a card of their own after the editor, with each card's tile and ⓘ, and
+    /// the file or link of that kind Opens in shows.
+    private static let mainCards: [(kind: FileKind, symbol: String, colour: TileColour, info: String, sample: String)] = [
+        ("web", "globe", TileColour.third, "Every link you click outside a browser opens in this one.", "banozz.dev"),
+        ("public.plain-text", "doc.text", .neutral, "A .txt file you double-click in Finder opens in this app.", "notes.txt"),
+        ("net.daringfireball.markdown", "number", .second, "A .md file you double-click in Finder opens in this app.", "README.md"),
+    ].compactMap { id, symbol, colour, info, sample in
+        FileKinds.groups.flatMap(\.kinds).first { $0.id == id }.map { ($0, symbol, colour, info, sample) }
+    }
     /// Every other kind, by group.
     private static let otherGroups = FileKinds.groups.map { group in
         (name: group.name, kinds: group.kinds.filter { kind in !mainCards.contains { $0.kind.id == kind.id } })
@@ -35,7 +42,19 @@ struct OpenWithPage: View {
         .filter { !$0.kinds.isEmpty }
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        if more {
+            // One block, so no index (Sven's Q60).
+            KitMore(entries: [MoreEntry(id: .appsForKeys, symbol: "key", controls: 1)]) {
+                // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
+                AppRolesBlock().moreBlock(.appsForKeys)
+            }
+        } else {
+            front
+        }
+    }
+
+    private var front: some View {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             DefaultsSection(title: "Opens with",
                             note: "Your editor, browser and text apps first; every other kind under All kinds.") {
                 AccentLink(title: allKinds ? "Fewer kinds" : "All kinds", chevron: allKinds ? "chevron.up" : "chevron.down") {
@@ -49,8 +68,7 @@ struct OpenWithPage: View {
                 FinePrint(text: "Web links: macOS asks you once to confirm a new browser.").padding(.top, 8)
                 if allKinds { others.padding(.top, 10) }
             }
-            // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
-            AppRolesBlock()
+            opensIn
         }
         .onAppear {
             kinds.load()
@@ -77,6 +95,35 @@ struct OpenWithPage: View {
         }
     }
 
+    /// The preview (simplify-pages T26, the prototype's Opens in): a file or link of each card's kind and the app it opens
+    /// in now, read from the cards' own picks, so a pick changes it at once; source code last, in the editor.
+    private var opensIn: some View {
+        let cards: [(name: String, bundle: String?, app: String)] = Self.mainCards.map { card in
+            let row = kinds.rows[card.kind.id]
+            return (card.sample, row?.current, row?.currentName ?? "None")
+        }
+        let samples = cards + [("main.swift", editor.app, AppsModule.appName(editor.app) ?? editor.app)]
+        // Two to a row while they fit, so the block stays short enough for the window's first size (660 tall).
+        return KitBlock(title: "Opens in", symbol: "arrow.up.forward.app") {
+            CardGrid(minimum: 240, spacing: 28, most: 2, fit: true) {
+                ForEach(samples, id: \.name) { opens($0.name, in: $0.bundle, app: $0.app) }
+            }
+            .padding(.vertical, 8)
+        }
+        .animation(Kit.change, value: samples.map(\.bundle))
+    }
+
+    /// A sample, then the app it opens in.
+    private func opens(_ name: String, in bundle: String?, app: String) -> some View {
+        HStack(spacing: 8) {
+            Text(name).font(ink.mono(11.5)).foregroundStyle(ink.text2).lineLimit(1)
+            Spacer(minLength: 8)
+            Image(systemName: "arrow.right").font(ink.ui(10)).foregroundStyle(ink.muted).accessibilityHidden(true)
+            AppLabel(name: app, bundle: bundle, size: 16).font(ink.ui(12.5)).foregroundStyle(ink.text).lineLimit(1).layoutPriority(1)
+        }
+        .frame(minHeight: 30)
+    }
+
     /// Every other kind, a block per group packed as many across as fit (Sven 2026-10-30: one long column left the
     /// window's right half empty): each kind's name, then its picker filling the rest of its row, the pickers lined up within a block.
     private var others: some View {
@@ -100,6 +147,12 @@ struct OpenWithPage: View {
             }
         }
     }
+}
+
+@MainActor extension DefaultAppsModel.Row {
+    /// The app it opens in now, by the name its choices give, else the app's own; nil for none. Its picker and Opens in
+    /// both show it.
+    var currentName: String? { current.map { bundle in choices.first { $0.bundle == bundle }?.name ?? AppsModule.appName(bundle) ?? bundle } }
 }
 
 /// One section of a page (Open with's, Configs', Menu's Aliases and Quicklinks): a heading on the page that says in
@@ -193,7 +246,7 @@ private struct KindPicker: View {
     var body: some View {
         let row = model.rows[kind.id]
         let current = row?.current
-        let name = current.map { bundle in row?.choices.first { $0.bundle == bundle }?.name ?? AppsModule.appName(bundle) ?? bundle } ?? "None"
+        let name = row?.currentName ?? "None"
         let choices = row?.choices ?? [], suggested = Set(row?.suggested ?? [])
         let top = suggested.isEmpty ? choices : (row?.suggested ?? []).compactMap { b in choices.first { $0.bundle == b } }
         let rest = suggested.isEmpty ? [] : choices.filter { !suggested.contains($0.bundle) }

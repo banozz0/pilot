@@ -13,12 +13,26 @@ import Testing
 @MainActor
 @Suite("sandbox host")
 struct SandboxHost {
-    nonisolated static let socket = ProcessInfo.processInfo.environment["PILOT_SANDBOX"]
+    nonisolated static let socket = ProcessInfo.processInfo.environment["PILOT_SANDBOX"] ?? ProcessInfo.processInfo.environment["PILOT_THEME_FIXTURE"] ?? ProcessInfo.processInfo.environment["PILOT_BAR_FIXTURE"]
 
     @Test("Serves the app's verbs on PILOT_SANDBOX until its hold file goes", .enabled(if: socket != nil))
     func serve() async throws {
+        if let fixture = ProcessInfo.processInfo.environment["PILOT_BAR_FIXTURE"] {
+            try await BarFixture.serve(fixture)
+            return
+        }
+        if let fixture = ProcessInfo.processInfo.environment["PILOT_THEME_FIXTURE"] {
+            try await ThemeFixture.serve(fixture)
+            return
+        }
         let path = URL(filePath: try #require(Self.socket))
         let hold = path.appendingPathExtension("hold")
+        // PILOT_SANDBOX_AI=<provider>:<fallback>: the AI page's picks on its store (each store has its own throwaway suite here),
+        // so a stand-in `claude` or `codex` first on the PATH answers an extension's `ai` action without a `set` (P95).
+        if let picks = ProcessInfo.processInfo.environment["PILOT_SANDBOX_AI"]?.split(separator: ":").map(String.init) {
+            AISettings.shared.provider = picks.first.flatMap(AIProvider.init(rawValue:)) ?? .claudeCode
+            AISettings.shared.fallback = picks.count > 1 ? AIProvider(rawValue: picks[1]) : nil
+        }
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores
@@ -43,6 +57,9 @@ struct SandboxHost {
                 return false
             }
         }
+        // PILOT_SANDBOX_NOTIFICATIONS=<folder>: Notification Center's tree as a file there, read through the real reader and
+        // feed; the live source is never made in a test run, so nothing on the Mac is observed or moved.
+        if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOTIFICATIONS"] { NotificationFixture.install(folder) }
         // A test run's bundle has no Pilot Info.plist: the app's, so `status --part update` names the feed a bundle would, or
         // PILOT_SANDBOX_INFO's, a built bundle's Contents/Info.plist, to read the route that build takes.
         let info = ProcessInfo.processInfo.environment["PILOT_SANDBOX_INFO"].map { URL(filePath: $0) }

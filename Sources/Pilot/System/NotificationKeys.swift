@@ -19,7 +19,7 @@ enum NotificationKeys {
         guard !walking else { return }
         walking = true
         Task.detached {
-            let pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first?.processIdentifier
+            let pid = NSRunningApplication.runningApplications(withBundleIdentifier: LiveNotificationSource.bundle).first?.processIdentifier
             let presses = press { pid.map { AXNotificationElement(AXUIElementCreateApplication($0)) } }
             await MainActor.run {
                 walking = false
@@ -52,4 +52,36 @@ final class AXNotificationElement: NotificationElement {
     }
 
     func perform(_ action: String) -> Bool { AXUIElementPerformAction(element, action as CFString) == .success }
+
+    var windows: [any NotificationElement]? { (attribute(kAXWindowsAttribute) as? [AXUIElement])?.map { AXNotificationElement($0) } }
+    // Each read is a call into Notification Center: once only, and only when the walk asks.
+    lazy var role: String? = string(kAXRoleAttribute)
+    lazy var subrole: String? = string(kAXSubroleAttribute)
+    lazy var identifier: String? = string(kAXIdentifierAttribute)
+    var value: String? { string(kAXValueAttribute) }
+    var attributedDescription: String? { string("AXAttributedDescription") }
+    var isExpanded: Bool { attribute("AXExpanded") as? Bool == true }
+
+    var position: CGPoint? {
+        guard let value = attribute(kAXPositionAttribute) else { return nil }
+        var point = CGPoint.zero
+        return AXValueGetValue(value as! AXValue, .cgPoint, &point) ? point : nil
+    }
+
+    func setPosition(_ point: CGPoint) -> Bool {
+        var target = point
+        guard let value = AXValueCreate(.cgPoint, &target) else { return false }
+        return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, value) == .success
+    }
+
+    private func attribute(_ key: String) -> AnyObject? {
+        var v: AnyObject?
+        return AXUIElementCopyAttributeValue(element, key as CFString, &v) == .success ? v : nil
+    }
+
+    /// A text attribute, plain or attributed.
+    private func string(_ key: String) -> String? {
+        let v = attribute(key)
+        return v as? String ?? (v as? NSAttributedString)?.string
+    }
 }

@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = PilotServices()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LightGlassFocus.install()
         if !AXIsProcessTrusted() { NSApp.activate() }
         AXTimeout.applyEverywhere()
         // The themes' display faces, for Pilot only; then Reduce transparency, Increase contrast and the wallpaper's
@@ -90,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LowBatteryAlerts.shared.follow()
         // Reminders from dated note lines (P66): Done and Snooze answered, the folder's reminders scheduled.
         NoteReminders.shared.start()
+        // Other apps' notifications as Pilot's cards, off by default: nothing runs until the setting is on.
+        PilotNotifications.shared.startLive(presenter: NotificationPanels())
         // A kill or a logout sends SIGTERM; route it through terminate so the Caps Lock remap is undone.
         signal(SIGTERM, SIG_IGN)
         sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)

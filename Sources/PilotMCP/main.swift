@@ -32,10 +32,23 @@ func text(_ output: String, failed: Bool) -> [String: Any] {
 
 /// Runs `pilot` with `words`: its answer, or its error (stderr, else stdout) when it exits non-zero (4 is denied).
 func run(_ words: [String]) -> (output: String, failed: Bool) {
+    let parent = ProcessInfo.processInfo.environment
+    var environment = AgentTool.environment()
+    if parent["PILOT_THEME_FIXTURE"] != nil || parent["PILOT_SOCKET"] != nil {
+        guard let manifest = parent["PILOT_THEME_FIXTURE"], !manifest.isEmpty,
+              let socket = parent["PILOT_SOCKET"], !socket.isEmpty,
+              !parent.keys.contains(where: { $0.hasPrefix("PILOT_SANDBOX") }),
+              ["CFFIXED_USER_HOME", "PILOT_LIVE", "PILOT_FOCUS"].allSatisfy({ parent[$0] == nil }) else {
+            return ("invalid isolated theme fixture environment; no socket fallback", true)
+        }
+        // The actual CLI validates explicit recording stores/socket before connecting.
+        environment["PILOT_THEME_FIXTURE"] = manifest
+        environment["PILOT_SOCKET"] = socket
+    }
     let process = Process()
     process.executableURL = URL(filePath: pilot)
     process.arguments = words
-    process.environment = AgentTool.environment()
+    process.environment = environment
     process.currentDirectoryURL = FileManager.default.temporaryDirectory
     let out = Pipe(), err = Pipe()
     process.standardOutput = out

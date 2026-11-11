@@ -2,15 +2,15 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Binds in Instrument (mockup A's binds.html, card agent-bo-95423181, ADR 0008): the page's bar with the six tabs and
-/// their counts, Conflicts, the preset and New bind; the keyboard on its panel with the modules under it (each picks what
-/// the board lights and the table lists) and how to see the overlay; the table of the module's binds with their keys,
-/// route and today's presses; and the picked key's inspector: what it does, its route, today's presses, where else it
-/// shows, its clash, Change key, Unbind and Reset, the tab's free keys and the key on every tab; the Cleaning block last
-/// (KeyboardLockCard). Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding,
-/// clearing, presets and the list behave as in Toybox. Over 1100 pt the inspector stands beside the board and the table while the board there still
-/// holds every name whole, else beside the table under a board across the page; narrower the three stack, the inspector
-/// in two columns while it is 600 pt wide. The page scrolls; nothing in it scrolls on its own.
+/// Binds in Instrument (mockup A's binds.html, card agent-bo-95423181, ADR 0008; simplify-pages T14): the page's bar with
+/// the six tabs and their counts, Conflicts while there is a clash, List, the preset and New bind; the keyboard in one
+/// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
+/// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
+/// Change key, Unbind and Reset, the tab's free keys and the key on every tab. The binds as a table are List's; Cleaning
+/// is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
+/// presets and the list behave as in Toybox. Over 1100 pt the inspector stands beside the board while the board there
+/// holds every name whole, else under a board across the page, in two columns while it is 600 pt wide. The page
+/// scrolls; nothing in it scrolls on its own.
 struct InstrumentBindsPage: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -20,32 +20,28 @@ struct InstrumentBindsPage: View {
     let boards: KeyboardCaptions.Boards
     let refusal: String?
     let acts: BindsKeyboardPage.Acts
-    /// The module the board lights and the table lists; nil for all six.
+    /// The module the board lights; nil for all six.
     @State var module: Int?
     @State private var width: CGFloat = 0
     @State private var clashes: [SymbolicHotKeys.Clash] = []
 
-    /// The width from which the inspector may stand beside the board and the table, and its own.
+    /// The width from which the inspector may stand beside the board, and its own.
     static let beside: CGFloat = 1100, inspector: CGFloat = 272
 
-    /// Where the inspector stands: beside the board and the table, beside the table under a board across the page, or
-    /// stacked under the board with the table under it.
-    enum Arrangement { case beside, under, stacked }
+    /// Where the inspector stands: beside the board, or under a board across the page.
+    enum Arrangement { case beside, under }
 
     /// The arrangement on a page `width` wide and the board's keys' width in it: from 1100 pt the inspector beside the
-    /// board while the narrower board there holds every name on the 75 % board, else under it.
+    /// board while every name fits the narrower board there, a little smaller at most, else under it.
     @MainActor static func arrangement(_ width: CGFloat, marks: InstrumentBoardFit.Marks, boards: KeyboardCaptions.Boards,
                                        style: StyleTokens) -> (Arrangement, board: CGFloat) {
         let across = width - 2 * side(width, style) - 2 * inset(width)
-        guard width >= beside else { return (.stacked, across) }
+        guard width >= beside else { return (.under, across) }
         let narrower = across - inspector - 20
-        let fit = InstrumentBoardFit.best(marks, boards: boards, width: narrower, measure: InstrumentBoardFit.measure(style.type.keyName))
-        return fit.board == boards.compact ? (.beside, narrower) : (.under, across)
-    }
-
-    /// The table's width: the page less its sides, and beside the inspector, less it and the gap.
-    private func tableWidth(_ arrangement: Arrangement) -> CGFloat {
-        width - 2 * Self.side(width, style) - (arrangement == .stacked ? 0 : Self.inspector + 20)
+        // Beside while the narrower board holds every name, a little smaller at most; the board is drawn whole either way.
+        let rooms = InstrumentBoardFit.rooms(marks, on: boards.compact, width: narrower)
+        return InstrumentBoardFit.fits(rooms, measure: InstrumentBoardFit.measure(style.type.keyName), scale: InstrumentBoardFit.gentle)
+            ? (.beside, narrower) : (.under, across)
     }
 
     /// The page's sides: the style's page margin, 16 pt on a page under 760 pt (the least window's), so the board keeps
@@ -69,7 +65,6 @@ struct InstrumentBindsPage: View {
             switch Self.arrangement(width, marks: marks, boards: boards, style: style).0 {
             case .beside: beside(marks)
             case .under: under(marks)
-            case .stacked: stacked(marks)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -113,16 +108,16 @@ struct InstrumentBindsPage: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// A tab's name in the bar: Hyper, Shift, Ctrl, Alt, Shift Ctrl, Plain combos.
+    /// A tab's name in the bar: Hyper, Shift, Ctrl, Alt, Shift Ctrl, Without Hyper.
     static func title(_ tab: BindsKeyboard.Layer) -> String {
-        tab == .plain ? "Plain combos" : tab == .hyper ? "Hyper" : String(tab.title.dropFirst(2))
+        tab == .plain ? AppSection.plainCombos.title : tab == .hyper ? "Hyper" : String(tab.title.dropFirst(2))
     }
 
     /// The single modifiers' line signs, as the mockup's tabs wear them.
     static let signs: [BindsKeyboard.Layer: String] = [.shift: "shift", .ctrl: "control", .alt: "option"]
 
-    /// The bar's buttons with their words, or, on a page too narrow for them (760 pt, one type step up), Abilities, Overlay
-    /// and Conflicts as their glyphs, so the title and New bind keep their place.
+    /// The bar's buttons with their words, or, on a page too narrow for them (760 pt, one type step up), Conflicts as its
+    /// glyph, so the title and New bind keep their place.
     private var fittedControls: some View {
         ViewThatFits(in: .horizontal) {
             controls(compact: false)
@@ -133,32 +128,28 @@ struct InstrumentBindsPage: View {
     private func controls(compact: Bool) -> some View {
         let store = engine.binds.store
         return HStack(spacing: 8) {
-            // This page draws its own bar; Abilities is Launcher › Abilities (C3), which this button opens.
-            Button { acts.go(AppPlace(.abilities)) } label: { barLabel("Abilities", symbol: "sparkles", compact: compact) }
-                .buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                .help("Everything Pilot can do, with what it does").accessibilityLabel("Abilities")
-            Button { acts.go(AppPlace(.overlay)) } label: { barLabel("Overlay", symbol: "rectangle.grid.2x2", compact: compact) }
-                .buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                .help("Pick what holding Hyper shows").accessibilityLabel("Overlay")
-            Button { acts.go(AppPlace(.mouse)) } label: { barLabel("Mouse", symbol: "computermouse", compact: compact) }
-                .buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                .help("Bind your mouse's extra buttons").accessibilityLabel("Mouse")
+            // Abilities, Overlay and Mouse have one home each: Launcher › Abilities and Keys' own tabs (simplify-pages T2).
             // macOS shortcuts on a plain combo, and Pilot's defaults another action's key left without one.
+            // Conflicts only while there is a clash (simplify-pages T14).
             let count = clashes.count + store.refused.count
-            Button { acts.go(AppPlace(.conflicts)) } label: {
-                HStack(spacing: 6) {
-                    barLabel("Conflicts", symbol: "exclamationmark.triangle", compact: compact)
-                    Text("\(count)").styleText(\.key).foregroundStyle(style.color(\.text3))
+            if count > 0 {
+                Button { acts.go(AppPlace(.conflicts)) } label: {
+                    HStack(spacing: 6) {
+                        barLabel("Conflicts", symbol: "exclamationmark.triangle", compact: compact)
+                        Text("\(count)").styleText(\.key).foregroundStyle(style.color(\.text3))
+                    }
                 }
+                .accessibilityLabel("Conflicts, \(count)")
+                .buttonStyle(InstrumentButtonStyle(kind: .raised))
+                .help("macOS shortcuts that clash with your binds without Hyper, and actions whose default key another holds")
             }
-            .accessibilityLabel("Conflicts, \(count)")
-            .buttonStyle(InstrumentButtonStyle(kind: count == 0 ? .ghost : .raised))
-            .help(count == 0 ? "No clashes" : "macOS shortcuts that clash with your plain combos, and actions whose default key another holds")
+            // Every bind of the tab as a list (the table the page drew until simplify-pages T14).
+            Button(action: acts.showList) { barLabel("List", symbol: "list.bullet", compact: compact) }
+                .buttonStyle(InstrumentButtonStyle()).help("Every bind as a list, to search and filter")
             Menu {
                 PresetPicker(presets: store.presets, active: store.preset, pick: acts.switchTo)
                 PresetMenuItems()
                 Divider()
-                Button("Show as list", action: acts.showList)
                 Button("Import or export binds…") { acts.go(AppPlace(.exportImport)) }
                 Button("Save keyboard map…") { BindsMapSave.run(engine: engine) }
                 Divider()
@@ -177,40 +168,19 @@ struct InstrumentBindsPage: View {
     }
 
     @ViewBuilder private func barLabel(_ title: String, symbol: String, compact: Bool) -> some View {
-        if compact { Image(systemName: symbol).font(style.font(\.icon)) } else { Text(title) }
+        if compact { Image(systemName: symbol).font(style.font(\.icon)).accessibilityLabel(title) } else { Text(title) }
     }
 
     // MARK: Layouts
 
-    /// The board and the table, the inspector beside them; the page scrolls when either runs past the window's foot, so
-    /// nothing in the inspector is cut.
+    /// The board, the inspector beside it; the page scrolls when either runs past the window's foot, so nothing in the
+    /// inspector is cut. The binds as a table are the List button's (simplify-pages T14).
     private func beside(_ marks: InstrumentBoardFit.Marks) -> some View {
         FillScroll {
             PinnedBeside {
-                VStack(spacing: 16) {
-                    keyboard(marks)
-                    table(rows(), .beside)
-                    KeyboardLockCard(edit: acts.edit)
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
+                keyboard(marks).frame(maxWidth: .infinity, alignment: .top)
             } side: {
                 sideInspector
-            }
-            .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
-        }
-    }
-
-    /// The board across the page, the table and the inspector beside it under it; the page scrolls as beside.
-    private func under(_ marks: InstrumentBoardFit.Marks) -> some View {
-        FillScroll {
-            VStack(spacing: 16) {
-                keyboard(marks)
-                PinnedBeside {
-                    table(rows(), .under).frame(maxWidth: .infinity, alignment: .top)
-                } side: {
-                    sideInspector
-                }
-                KeyboardLockCard(edit: acts.edit)
             }
             .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
         }
@@ -219,29 +189,27 @@ struct InstrumentBindsPage: View {
     /// The page's top and foot inset, which the pinned inspector keeps under the window's top as the page scrolls.
     static let pinInset: CGFloat = 20
 
-    /// How far down its column the inspector rides (Moody, batch 3: beside the long table the column under it was a dead
-    /// band): at its place while its column's top (`columnTop`, in the scroll view's space) is below the page's `inset`,
+    /// How far down its column the inspector rides (Moody, batch 3: beside the long table, gone with simplify-pages T14,
+    /// the column under it was a dead band): at its place while its column's top (`columnTop`, in the scroll view's space) is below the page's `inset`,
     /// then held `inset` under the window's top, never past the column's foot.
     static func pin(columnTop: CGFloat, column: CGFloat, inspector: CGFloat, inset: CGFloat) -> CGFloat {
         min(max(0, inset - columnTop), max(0, column - inspector))
     }
 
-    /// The inspector in one column beside the table, as tall as what it says.
+    /// The inspector in one column beside the board, as tall as what it says.
     private var sideInspector: some View {
         InstrumentBindsInspector(binds: binds, key: key, layer: layer, boards: boards, clashes: clashes, refusal: refusal, acts: acts,
                                  shape: .column)
             .frame(width: Self.inspector)
     }
 
-    /// Narrower: the board, the inspector (in two columns while it is 600 pt wide), then the table, the page scrolling.
-    private func stacked(_ marks: InstrumentBoardFit.Marks) -> some View {
+    /// The board across the page, the inspector under it (in two columns while it is 600 pt wide), the page scrolling.
+    private func under(_ marks: InstrumentBoardFit.Marks) -> some View {
         ScrollView {
             VStack(spacing: 16) {
                 keyboard(marks)
                 InstrumentBindsInspector(binds: binds, key: key, layer: layer, boards: boards, clashes: clashes, refusal: refusal, acts: acts,
                                          shape: width - 2 * Self.side(width, style) >= 600 ? .columns : .column)
-                table(rows(), .stacked)
-                KeyboardLockCard(edit: acts.edit)
             }
             .padding(.horizontal, Self.side(width, style)).padding(.vertical, 20)
         }
@@ -251,8 +219,10 @@ struct InstrumentBindsPage: View {
 
     private func keyboard(_ marks: InstrumentBoardFit.Marks) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            // In one piece, its names shrinking where the 75 % board is tight (Sven's Q36).
             InstrumentBindsBoard(boards: boards, binds: binds, layerKeys: engine.settings.layerKeys, layer: layer, picked: key, marks: marks,
-                                 module: module, pick: acts.pick, open: { acts.open($0, bound: binds.bound, layer: layer) }, tinted: true)
+                                 module: module, pick: acts.pick, open: { acts.open($0, bound: binds.bound, layer: layer) }, whole: true,
+                                 tinted: true)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 6) { modules; Spacer(minLength: 12); overlayHint }
                 VStack(alignment: .leading, spacing: 10) { modules; overlayHint }
@@ -286,133 +256,6 @@ struct InstrumentBindsPage: View {
         }
         .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize()
         .accessibilityElement(children: .combine)
-    }
-
-    // MARK: Table
-
-    /// One bind on the tab: its key and action, its label, today's presses and its glyph (none where another row shows
-    /// the same one: two rows sharing a glyph says nothing, HomeBinds.pictures' rule).
-    struct Row {
-        let code: Int64, action: String, label: String, today: Int
-        var glyph: BoardKey.Glyph?
-    }
-
-    /// The module's binds on the tab (every bind with no module picked), most pressed today first, then by name.
-    func rows() -> [Row] {
-        let now = Date.now
-        var rows = binds.bound.flatMap { code, actions in
-            actions.filter { binds.infos[$0] != nil && (module == nil || binds.module($0) == module) }.map {
-                Row(code: code, action: $0, label: binds.infos[$0]?.label ?? $0, today: engine.today.count(of: $0, now: now))
-            }
-        }
-        .sorted { ($1.today, $0.label) < ($0.today, $1.label) }
-        let glyphs = HomeBinds.unique(Dictionary(rows.enumerated().map { (Int64($0), binds.picture($1.action)) }, uniquingKeysWith: { a, _ in a }))
-        for i in rows.indices { rows[i].glyph = glyphs[Int64(i)] }
-        return rows
-    }
-
-    @ViewBuilder private func table(_ rows: [Row], _ arrangement: Arrangement) -> some View {
-        let columns = TableColumns(width: tableWidth(arrangement))
-        let most = max(1, rows.map(\.today).max() ?? 0)
-        let list = VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                if i > 0 { InstrumentRule() }
-                tableRow(row, columns: columns, share: Double(row.today) / Double(most))
-            }
-            if rows.isEmpty {
-                Text(module == nil ? "Nothing on \(Self.title(layer)) yet. Pick a free key to bind it." : "No \(BindsKeyboard.modules[module ?? 0]) bind on \(Self.title(layer)).")
-                    .styleText(\.body).foregroundStyle(style.color(\.text3)).padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        VStack(spacing: 0) {
-            TableLayout(columns: columns) {
-                InstrumentEyebrow(text: "Trigger")
-                InstrumentEyebrow(text: "\(module.map { BindsKeyboard.modules[$0] } ?? "All") · \(rows.count)")
-                if columns.route { InstrumentEyebrow(text: "Route") }
-                if columns.share { InstrumentEyebrow(text: "Share") }
-                InstrumentEyebrow(text: "Today")
-            }
-            .padding(.horizontal, 18).frame(height: 32)
-            InstrumentRule()
-            list
-        }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .styleSurface(\.card)
-    }
-
-    private func tableRow(_ row: Row, columns: TableColumns, share: Double) -> some View {
-        let on = row.code == key
-        return Button { acts.pick(row.code) } label: {
-            TableLayout(columns: columns) {
-                if let trigger = engine.binds.store.trigger(for: row.action) { InstrumentKeys(trigger: trigger) } else { Color.clear.frame(height: 1) }
-                HStack(spacing: 10) {
-                    Group {
-                        switch row.glyph {
-                        case .image(let image)?: Image(nsImage: image).resizable().interpolation(.high)
-                        case .symbol(let symbol)?: Image(systemName: symbol).font(style.font(\.icon)).foregroundStyle(style.color(\.text2))
-                        case nil: Color.clear
-                        }
-                    }
-                    .frame(width: 18, height: 18).accessibilityHidden(true)
-                    Text(row.label).styleText(\.body).foregroundStyle(style.color(\.text))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if columns.route { Text(row.action).styleText(\.mono).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true) }
-                if columns.share { InstrumentMeter(share: share) }
-                Text("\(row.today)").styleText(\.mono).foregroundStyle(style.color(\.text2)).monospacedDigit()
-            }
-            .padding(.horizontal, 18).padding(.vertical, 8).frame(minHeight: 34)
-            .background { if on { style.color(\.accentSoft) } }
-            .overlay(alignment: .leading) { if on { style.color(\.accent).frame(width: 2) } }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .opensOnDoubleClick { acts.edit(.init(action: row.action)) }
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
-
-/// The table's columns (the mockup's 96 pt, 1.2fr, 1.5fr, 120 pt and 56 pt): the route goes first, then the share, as
-/// the table narrows, so the keys, the action and today's count always show whole.
-struct TableColumns: Equatable {
-    let route: Bool, share: Bool
-    static let trigger: CGFloat = 96, share: CGFloat = 120, today: CGFloat = 56, gap: CGFloat = 16
-
-    /// For a table `width` wide, its sides included.
-    init(width: CGFloat) {
-        route = width >= 640
-        share = width >= 460
-    }
-
-    /// Each shown cell's width, the action's and the route's sharing what the fixed ones leave as 1.2 : 1.5.
-    func widths(_ width: CGFloat) -> [CGFloat] {
-        let shown = 3 + (route ? 1 : 0) + (share ? 1 : 0)
-        let flex = max(0, width - Self.trigger - Self.today - (share ? Self.share : 0) - Self.gap * CGFloat(shown - 1))
-        let action = route ? flex * 1.2 / 2.7 : flex
-        return [Self.trigger, action] + (route ? [flex - action] : []) + (share ? [Self.share] : []) + [Self.today]
-    }
-}
-
-/// The table's cells in their columns, each centred on the row's height; today's count against the column's right.
-private struct TableLayout: Layout {
-    let columns: TableColumns
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 800
-        let heights = zip(subviews, columns.widths(width)).map { $0.sizeThatFits(ProposedViewSize(width: $1, height: nil)).height }
-        return CGSize(width: width, height: heights.max() ?? 0)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        let widths = columns.widths(bounds.width)
-        for (i, (view, w)) in zip(subviews, widths).enumerated() {
-            let last = i == widths.count - 1
-            let fit = min(w, view.sizeThatFits(ProposedViewSize(width: w, height: nil)).width)
-            view.place(at: CGPoint(x: last ? x + w - fit : x, y: bounds.midY), anchor: .leading,
-                       proposal: ProposedViewSize(width: last ? fit : w, height: nil))
-            x += w + TableColumns.gap
-        }
     }
 }
 

@@ -81,6 +81,9 @@ struct WidgetTile: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: DeskKit.radius, style: .continuous)
         let glass = look.glass && model.page != false
+        // Light: the clipboard panel's tint inside the glass, in place of the kit's veil over it.
+        let tint = glass ? look.widgetLightTint : nil
+        let kit = DeskKit(look.theme, veiled: tint == nil)
         GeometryReader { box in
             let size = model.layout ?? Widget.SizeClass(box.size, after: held)
             Group {
@@ -89,13 +92,13 @@ struct WidgetTile: View {
                 } else if model.page != nil {
                     Color.clear
                 } else if let player = model.nowPlaying {
-                    NowPlayingPanel(player: player, title: model.title, kit: DeskKit(look.theme), size: size)
+                    NowPlayingPanel(player: player, title: model.title, kit: kit, size: size)
                 } else if let folder = model.folder {
-                    WidgetFolderView(model: folder).environment(\.deskKit, DeskKit(look.theme)).environment(\.widgetFit, WidgetFit(size: size, width: box.size.width))
+                    WidgetFolderView(model: folder).environment(\.deskKit, kit).environment(\.widgetFit, WidgetFit(size: size, width: box.size.width))
                 } else if let markets = model.markets {
-                    WidgetMarketsPanel(board: markets).environment(\.deskKit, DeskKit(look.theme)).environment(\.widgetFit, WidgetFit(size: size, width: box.size.width))
+                    WidgetMarketsPanel(board: markets).environment(\.deskKit, kit).environment(\.widgetFit, WidgetFit(size: size, width: box.size.width))
                 } else {
-                    DeskKitPanel(model: model).environment(\.deskKit, DeskKit(look.theme))
+                    DeskKitPanel(model: model).environment(\.deskKit, kit)
                         .environment(\.widgetFit, WidgetFit(size: size, width: box.size.width))
                 }
             }
@@ -103,7 +106,7 @@ struct WidgetTile: View {
             .onChange(of: size, initial: true) { if model.layout == nil { held = $1 } }
         }
         .background { if !glass { shape.fill(ink.raised) } }
-        .modifier(TileGlass(on: glass, blur: look.glassBlur, shape: shape))
+        .modifier(TileGlass(on: glass, blur: look.glassBlur, tint: tint, shape: shape))
         .clipShape(shape)
     }
 }
@@ -118,20 +121,21 @@ struct DeskKit: Sendable {
     let dark: Bool
     let text, text2, text3, accent, good, amber, problem, line2: Color
     /// `--pk-veil`: the panel over the glass or the solid tile, the ground at 58 % on a dark theme, the surface at 66 %
-    /// on a light one.
+    /// on a light one; clear on Light's glass, which is tinted instead (Look.widgetLightTint).
     let veil: Color
     /// `--pk-edge`, the panel's inset edge and the rows' hairlines; `--pk-track`, a meter's track.
     var edge: Color { text.opacity(0.09) }
     var track: Color { text.opacity(0.11) }
 
-    init(_ theme: PilotTheme) {
+    init(_ theme: PilotTheme, veiled: Bool = true) {
         func c(_ rgb: UInt32) -> Color {
             Color(.sRGB, red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
         }
         dark = theme.dark
-        text = c(theme.text); text2 = c(theme.text2); text3 = c(theme.text3); accent = c(theme.accent)
+        // Off the veil (Light's glass) the faintest text steps up one, as the clipboard's does on glass (StyleTokens.seeThrough).
+        text = c(theme.text); text2 = c(theme.text2); text3 = c(veiled ? theme.text3 : theme.text2); accent = c(theme.accent)
         good = c(theme.good); amber = c(theme.amber); problem = c(theme.problem); line2 = c(theme.line2)
-        veil = theme.dark ? c(theme.ground).opacity(0.58) : c(theme.surface).opacity(0.66)
+        veil = !veiled ? .clear : theme.dark ? c(theme.ground).opacity(0.58) : c(theme.surface).opacity(0.66)
     }
 
     func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
@@ -879,9 +883,29 @@ struct WidgetAskingView: View {
 }
 
 struct TileGlass<S: Shape>: ViewModifier {
-    let on: Bool, blur: GlassBlur, shape: S
+    let on: Bool, blur: GlassBlur
+    var tint: Color?
+    let shape: S
     func body(content: Content) -> some View {
         // Look's Blur: Full regular glass, Light clear, Off none.
-        if on, let glass = blur.glass { content.glassEffect(glass, in: shape) } else { content }
+        if on, let glass = blur.glass { content.glassEffect(glass.tint(tint), in: shape) } else { content }
+    }
+}
+
+extension Look {
+    /// Blur is Light where the clipboard panel is glass: a widget tile then draws that panel's tint.
+    var widgetLightGlass: Bool { glassBlur == .light && glassFace(.clipboard) }
+
+    /// A widget tile's tint on Light: the clipboard panel's (glassTint, Transparency's ground over the canvas), so the two
+    /// read alike. A tile has no card under its words, so where that ground leaves body text under the 4.5 : 1 floor it
+    /// lifts in 2 % steps. Nil on Full and Off and wherever the clipboard is solid: those keep the kit's veil.
+    var widgetLightTint: Color? {
+        guard widgetLightGlass else { return nil }
+        let tint = glassTint(on: .clipboard)
+        let canvas = Contrast.rgb(chromeTokens(.clipboard).colors.canvas.rgb), text = Contrast.rgb(theme.text2)
+        let spot = wallpaperSpot ?? theme.wallpaper.colour
+        var alpha = tint.alphaComponent
+        while alpha < 1, Contrast.ratio(text, Contrast.mix(canvas, spot, alpha)) < MaterialValues.floor { alpha = min(1, alpha + 0.02) }
+        return Color(nsColor: tint.withAlphaComponent(alpha))
     }
 }

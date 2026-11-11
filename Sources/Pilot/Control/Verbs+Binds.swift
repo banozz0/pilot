@@ -213,7 +213,7 @@ extension ControlVerbs {
         guard args.value("mods") == nil else { throw ControlError(.badRequest, "a mouse button takes no --mods: it binds under Hyper, or alone with --plain") }
         // A hold ("Mouse 4 Hold", P74) is never under Hyper.
         let key = Key(keyCode: code, hyper: !args.has("plain") && !MouseKeys.isHold(code))
-        guard !MouseKeys.isSent(MouseKeys.plain(key).keyCode) else { throw ControlError(.badValue, "\(key.label) is caught in Binds › Mouse, which records the mouse that sends it") }
+        guard !MouseKeys.isSent(MouseKeys.plain(key).keyCode) else { throw ControlError(.badValue, "\(key.label) is caught in \(AppPlace(.mouse).path), which records the mouse that sends it") }
         guard !MouseKeys.isMainClick(MouseKeys.plain(key).keyCode) else {
             throw ControlError(.badValue, "Mouse 1 and Mouse 2 are the main clicks and are never bound; Hyper + drag moves and resizes windows with them")
         }

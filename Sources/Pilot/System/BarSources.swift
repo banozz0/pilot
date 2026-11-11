@@ -87,7 +87,8 @@ struct BarSources {
             case .extensions: i.extensionBars = extensionBar.faces(in: .topBar)
             case .modes: i.statusLights = readings.statusLights.lights
             case .capture: i.recording = readings.recording
-            case .otherApps, .appMenus, .power, .displays, .terminal, .askAI, .spacer, .divider, .group: break
+            // The pill reads NowPlaying itself, held while its Music shows (PillDrop).
+            case .otherApps, .appMenus, .power, .displays, .terminal, .askAI, .pill, .spacer, .divider, .group: break
             }
         }
         return i

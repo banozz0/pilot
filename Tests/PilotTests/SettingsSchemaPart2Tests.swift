@@ -112,7 +112,7 @@ struct SettingsSchemaPart2Tests {
         try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
-        #expect(rig.schema.keys.count == 51)
+        #expect(rig.schema.keys.count == 55)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -229,7 +229,7 @@ struct SettingsSchemaPart2Tests {
         "clipboard.sortReversed", "clipboard.ignoredApps",
         "files.showHidden", "files.excluded", "passwords.length", "passwords.symbols", "passwords.clearAfter",
         "folders.repos", "folders.gifs", "giphy.rating", "menu.rootOrder", "menu.rootHidden", "menu.giphyKind", "abilities.added",
-        "ai.provider", "ai.chatReset", "ai.model.*", "ai.effort.*", "ai.baseURL.*", "ai.models.*",
+        "ai.provider", "ai.fallback", "ai.chatReset", "ai.model.*", "ai.effort.*", "ai.baseURL.*", "ai.models.*",
         "workspaces.count", "workspaces.monitors", "workspaces.layouts", "workspaces.atLoginSession", "snapshots.reopenApps",
         "pilotBlock", "pilotBlock.yabaiFloatsCarried", "pilotBlock.floatNamesMoved",
         "bar.items", "bar.pagePlacement", "bar.background", "bar.colour", "bar.itemColours",

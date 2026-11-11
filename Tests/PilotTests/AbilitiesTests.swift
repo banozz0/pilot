@@ -58,7 +58,7 @@ struct AbilitiesTests {
     func search() {
         let engine = Engine()
         func names(_ q: String) -> [String] { Self.groups(engine, search: q).flatMap(\.abilities).map(\.name) }
-        #expect(names("wallpaper") == ["Next wallpaper", "Next wallpaper on every screen", "Previous wallpaper", "Previous wallpaper on every screen"])
+        #expect(names("wallpaper") == ["Browse wallpapers", "Next wallpaper", "Next wallpaper on every screen", "Previous wallpaper", "Previous wallpaper on every screen"])
         #expect(names("claude").contains("Ask AI") && names("claude").contains("Fix selected text"))
         #expect(names("Hyper+V").contains("Clipboard history"))
         #expect(names("feedback").contains("Report a bug"))
@@ -130,7 +130,7 @@ struct AbilitiesTests {
 
     @Test("Menu has the Abilities tab (C3; Binds' until then), which its old link, its own and the window's search reach")
     func place() {
-        #expect(AppPage.menu.tabs.map(\.title).prefix(2) == ["Your menu", "Abilities"] && AppPage.binds.tabs.map(\.title) == ["Keyboard", "Overlay", "Mouse", "Swap keys", "Export and import"])
+        #expect(AppPage.menu.tabs.map(\.title).prefix(2) == ["Your menu", "Abilities"] && AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         #expect(AppPlace.linked(URL(string: "pilot://open?page=binds&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.linked(URL(string: "pilot://open?page=menu&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.search("what can pilot do").first == AppPlace(.abilities))

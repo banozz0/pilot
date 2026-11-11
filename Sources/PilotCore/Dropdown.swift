@@ -2,16 +2,92 @@ import Foundation
 
 /// Pilot's menu-bar dropdown (card agent-bo-95422912; round 3's dropdown, "Menu bar changes ok", redrawn in design round
 /// 4, artifact 5sh21HWjCjsWYAwWKTibcE, approved by Sven in chat 2026-10-06), compact since spec pilot-1-1 T29 (Q644 A,
-/// row set A of Q683): Status, with any problem at the top; the workspaces; six switches; Now, only while something runs;
-/// the rows with their keys; Check for updates, Settings and Quit on one line. Holding Option adds the developer rows.
+/// row set A of Q683), tall since spec desktop-controls T3 (Sven's pick A, each block its card): Status, with any problem
+/// at the top; the workspaces; six switches; what is running, only while something runs; the rows with their keys; Check
+/// for updates, Settings and Quit on one line. Holding Option adds the developer rows and the recent presses.
 public enum Dropdown {
-    public enum Block: CaseIterable, Sendable {
-        case status, workspaces, quickSwitches, now, rows, developer, footer
+    /// A block by the name `pilot set dropdown.*` takes (spec desktop-controls T4). Extensions, sound, connections,
+    /// display, media and stats are the tall menu's optional blocks, off until shown; the developer rows and the footer are
+    /// fixed.
+    public enum Block: String, CaseIterable, Codable, Sendable {
+        case status, workspaces, quickSwitches = "switches", extensions, now = "running"
+        case sound, connections, display, media, stats
+        case rows = "commands", developer, footer
     }
 
-    /// The blocks in order: the developer rows, before the footer, only while Option is held. Now draws only while
-    /// something runs (a recording, a focus timer, a download), and reads that itself, so a countdown redraws only it.
-    public static func blocks(option: Bool) -> [Block] { Block.allCases.filter { option || $0 != .developer } }
+    /// Today's compact blocks in order, as Toybox draws them: the developer rows, before the footer, only while Option is
+    /// held. Now draws only while something runs (a recording, a focus timer, a download), and reads that itself, so a
+    /// countdown redraws only it. The optional blocks are the tall menu's alone.
+    public static func blocks(option: Bool) -> [Block] {
+        [.status, .workspaces, .quickSwitches, .now, .rows, .developer, .footer].filter { option || $0 != .developer }
+    }
+
+    /// The tall menu's arrangement (spec desktop-controls T4, Launcher › Your menu's pattern): the order of the blocks
+    /// that move, which are hidden and which are pinned above the scroll. Status always shows, so a problem always leads;
+    /// the developer rows and the footer stay where they are.
+    public struct Layout: Codable, Equatable, Sendable {
+        public var order: [Block]
+        public var hidden: Set<Block>
+        public var pinned: Set<Block>
+        /// The extensions' ids whose bar items the Extensions card lists, in order (Sven, 2026-11-11, Q74 A, Q75: its own
+        /// list, not the pill's).
+        public var extensions: [String]
+
+        /// The blocks that can move, in their first order.
+        public static let arrangeable: [Block] = [.status, .workspaces, .quickSwitches, .extensions, .now, .sound, .connections, .display,
+                                                  .media, .stats, .rows]
+        /// Off until shown (Sven's "yes", 2026-11-08; Extensions, 2026-11-11).
+        public static let optional: Set<Block> = [.extensions, .sound, .connections, .display, .media, .stats]
+        public static let standard = Layout(order: arrangeable, hidden: optional, pinned: [])
+
+        public init(order: [Block], hidden: Set<Block>, pinned: Set<Block>, extensions: [String] = []) {
+            self.order = order; self.hidden = hidden; self.pinned = pinned; self.extensions = extensions
+        }
+
+        /// A layout saved before the Extensions card has no `extensions`: it reads as none.
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            order = try c.decode([Block].self, forKey: .order)
+            hidden = try c.decode(Set<Block>.self, forKey: .hidden)
+            pinned = try c.decode(Set<Block>.self, forKey: .pinned)
+            extensions = (try? c.decodeIfPresent([String].self, forKey: .extensions)) ?? []
+        }
+
+        /// The extensions asked on the menu's account while it is open: its own, only while the Extensions card shows.
+        public var asked: [String] { shown.contains(.extensions) ? extensions : [] }
+
+        /// The blocks that show, in order.
+        public var shown: [Block] { order.filter { !hidden.contains($0) } }
+
+        /// `given` first, then the rest in their first order; refuses a fixed block or one named twice.
+        public static func order(_ given: [Block]) throws(ControlError) -> [Block] {
+            if let fixed = given.first(where: { !arrangeable.contains($0) }) {
+                throw ControlError(.badValue, "\(fixed.rawValue) stays where it is; the blocks that move are \(names(arrangeable))")
+            }
+            guard Set(given).count == given.count else { throw ControlError(.badValue, "a block is named twice in \(names(given))") }
+            return given + arrangeable.filter { !given.contains($0) }
+        }
+
+        /// Refuses hiding Status, which carries every problem, or a fixed block.
+        public static func hide(_ given: Set<Block>) throws(ControlError) -> Set<Block> {
+            if given.contains(.status) { throw ControlError(.badValue, "status can't be hidden: a problem must always lead the menu") }
+            if let fixed = given.first(where: { !arrangeable.contains($0) }) { throw ControlError(.badValue, "\(fixed.rawValue) can't be hidden") }
+            return given
+        }
+
+        public static func pin(_ given: Set<Block>) throws(ControlError) -> Set<Block> {
+            if let fixed = given.first(where: { !arrangeable.contains($0) }) { throw ControlError(.badValue, "\(fixed.rawValue) can't be pinned") }
+            return given
+        }
+
+        /// `block` moved to `index` in the order (the edit list's arrows and drag), the others keeping theirs.
+        public mutating func move(_ block: Block, to index: Int) {
+            guard let from = order.firstIndex(of: block), order.indices.contains(index) else { return }
+            order.insert(order.remove(at: from), at: index)
+        }
+
+        public static func names(_ blocks: [Block]) -> String { blocks.map(\.rawValue).joined(separator: ",") }
+    }
 
     /// The status block's headline: "Pilot is on", or how many things need fixing, which then lead the dropdown.
     public static func headline(isOn: Bool, problems: Int) -> String {
@@ -182,8 +258,8 @@ public enum Dropdown {
     /// Every row the dropdown offered before card 912 or dropped since, and where it is now, so nothing goes missing.
     public static let carried: [(row: String, block: Block, now: String)] = [
         ("The workspaces with windows, a click going there", .workspaces, "a tile per workspace with its apps"),
-        ("The tiler is not running: tiling and workspaces are off", .status, "the tiler problem, Workspaces dimmed"),
-        ("Rescue stranded windows", .status, "under Option; the tiler problem restarts it"),
+        ("The tiler is not running: tiling and workspaces are off", .status, "the tiler problem with Restart; Workspaces back once it runs"),
+        ("Rescue stranded windows", .status, "a command under Option; the tiler problem restarts it"),
         ("Always rescue when the tiler quits", .developer, "gone with the old tiler (R3)"),
         ("Accessibility not granted", .status, "the Accessibility problem"),
         ("Finish setup…", .status, "Allow on the Accessibility problem"),
@@ -191,15 +267,15 @@ public enum Dropdown {
         ("Hyper held / Hyper is <key>", .status, "the line under the headline"),
         ("Pilot's last error", .status, "a problem"),
         // Now shows only what runs (spec pilot-1-1 T29): the last press went to Option's rows.
-        ("Last: <press>", .developer, "the recent presses under Option"),
-        ("Recent presses", .developer, "the recent presses under Option"),
+        ("Last: <press>", .developer, "the recent presses, commands under Option"),
+        ("Recent presses", .developer, "the recent presses, commands under Option"),
         // Pilot is the whole app, so it has no on/off here; the Hyper key does (Sven, 2026-10-07; card agent-bo-95422986).
         ("Pilot (the on/off switch)", .quickSwitches, "gone; the Hyper key switch instead"),
         // Other apps are not Pilot's to mention (Sven, C3 2026-10-10): the ticks left; the saved choice still applies.
         ("Also quit Karabiner-Elements", .developer, "gone; the saved choice still applies"),
         ("Also quit Hammerspoon", .developer, "gone; the saved choice still applies"),
         ("The switch's problem", .status, "a problem"),
-        ("Print observers", .developer, "a row under Option"),
+        ("Print observers", .developer, "a command under Option"),
         ("Open Pilot… ⌘,", .footer, "Settings ⌘,"),
         ("Quit Pilot ⌘Q", .footer, "Quit ⌘Q"),
         // Spec pilot-1-1 T29: both are on General's About, which Settings opens.

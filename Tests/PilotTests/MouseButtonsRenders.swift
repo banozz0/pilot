@@ -46,7 +46,7 @@ struct MouseButtonsRenders {
         defer { (look.themeID, look.style) = saved }
         look.themeID = "lagoon"
 
-        typealias S = MouseButtonsPage.Shown
+        typealias S = MouseButtonsBlocks.Shown
         let states: [(name: String, shown: S, mice: MouseButtons.Found, spot: Int?)] = [
             ("rest", S(learn: .idle, target: nil), pulsefire, nil),
             ("waiting", S(learn: .listening, target: 4), pulsefire, 4),
@@ -70,7 +70,7 @@ struct MouseButtonsRenders {
             look.style = style
             for (name, shown, mice, spot) in states {
                 for width in style == .instrument && ["rest", "caught"].contains(name) ? [928.0, 688] : [928] {
-                    let page = MouseButtonsPage(shown: shown, mice: mice, spot: spot)
+                    let page = KitPage { MouseButtonsBlocks(shown: shown, mice: mice, spot: spot) }
                         .styleLayout().background(Color(nsColor: .windowBackgroundColor))
                         .styled(.page(.binds)).environment(engine).frame(width: width, height: 1500).pilotTheme(look: look)
                     let suffix = width == 928 ? "" : "-\(Int(width))"

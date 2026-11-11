@@ -26,11 +26,11 @@ protocol OwnWindow: AnyObject {
 extension NSWindow: OwnWindow {
     var isFullScreen: Bool { styleMask.contains(.fullScreen) }
 
-    /// A titled, resizable window tiles and a fixed-size one floats as a dialog; panels (the menu, alerts), sheets and
+    /// A titled, resizable window tiles unless marked to float; fixed-size windows float as dialogs. Panels, sheets and
     /// child or raised windows are never laid out.
     var engineWindowType: AxUiElementWindowType {
         guard styleMask.contains(.titled), !(self is NSPanel), !isSheet, parent == nil, level == .normal else { return .popup }
-        return styleMask.contains(.resizable) ? .window : .dialog
+        return styleMask.contains(.resizable) && identifier != TilerOwnWindows.floatingIdentifier ? .window : .dialog
     }
 }
 
@@ -189,6 +189,9 @@ private func onMain(_ body: @escaping @MainActor @Sendable () -> Void) {
 /// key or activation event). It floated where AppKit put it until some other event refreshed (Sven 2026-10-10, 22 s
 /// behind Ghostex).
 public enum TilerOwnWindows {
+    fileprivate static let floatingIdentifier = NSUserInterfaceItemIdentifier("PilotFloatingWindow")
+    /// Mark before showing: a normal resizable window starts floating, while manual tiling remains available.
+    @MainActor public static func floatByDefault(_ window: NSWindow) { window.identifier = floatingIdentifier }
     @MainActor public static func shown() { refreshOnWindowEvent(kAXWindowCreatedNotification) }
     /// One of Pilot's windows was brought forward on purpose (opened, or raised again): Show desktop ends, else a window
     /// it holds in the hide corner, which raising it again (it was in front at the press) never brings back, opens out

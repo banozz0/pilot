@@ -8,7 +8,7 @@ import Synchronization
 /// No panel: a tip near the top of the screen says what happened.
 @MainActor
 final class QuickFix {
-    static let shared = QuickFix()
+    static let shared: QuickFix = QuickFix()
     /// A fix's streamed pieces go unused.
     typealias Runner = QuickAI.Runner
 
@@ -16,8 +16,10 @@ final class QuickFix {
     static let unchanged = "Nothing to fix", nothingSelected = "No text selected"
     static let password = "A password field has the keyboard, so Pilot leaves it alone."
 
+    /// A run's notice, when the fallback answered it (AIFallback); it joins the tip that ends the run.
+    let heard = AIFallback.Heard()
     /// The route picked on the AI page, read on every run.
-    var route: () -> Result<Runner, QuickAI.Failure> = { AISettings.shared.runner() }
+    var route: () -> Result<Runner, QuickAI.Failure> = { AISettings.shared.runner(told: QuickFix.shared.heard.tell) }
     var selection: () async -> SelectedText? = { await SelectedText.focused() }
     var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
     var frontmost: () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier }
@@ -49,11 +51,11 @@ final class QuickFix {
         guard !Task.isCancelled else { return }
         guard unchanged else {
             copy(fixed)
-            say(Self.copied, 3)
+            end(Self.copied)
             return ailog.notice("quick AI fix copied: \(source.app, privacy: .public) no longer has the text selected")
         }
         paste(fixed, source.text)
-        say(Self.fixed, 3)
+        end(Self.fixed)
         ailog.notice("quick AI fix pasted into \(source.app, privacy: .public), \(fixed.count) characters")
     }
 
@@ -74,9 +76,15 @@ final class QuickFix {
         }
         guard let result, let fixed = finish(result, for: text) else { return nil }
         copy(text)
-        say(Self.fixed, 3)
+        end(Self.fixed)
         ailog.notice("quick AI fix returned to the service, \(fixed.count) characters")
         return fixed
+    }
+
+    /// The run's last tip, with the notice when the fallback answered, up longer so it can be read.
+    private func end(_ text: String) {
+        let told = heard.take()?.line
+        say(told.map { "\(text). \($0)" } ?? text, told == nil ? 3 : 6)
     }
 
     /// A tip; while the service waits, only once its answer is back: placing a tip asks Accessibility for the focused
@@ -89,6 +97,7 @@ final class QuickFix {
     /// The picked route's runner with the working tip up (not for the service: its app shows it waits), or nil having
     /// said what is missing (no claude, no API key).
     private func start() -> Runner? {
+        _ = heard.take()
         switch route() {
         case .failure(let why):
             say(why.title, 3)
@@ -112,7 +121,7 @@ final class QuickFix {
             return nil
         case .success(let answer):
             let fixed = QuickAI.fitted(answer, to: text)
-            guard fixed != text else { say(Self.unchanged, 3); return nil }
+            guard fixed != text else { end(Self.unchanged); return nil }
             return fixed
         }
     }

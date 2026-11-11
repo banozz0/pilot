@@ -39,7 +39,7 @@ struct ToyFrame<Page: View>: View {
 /// The frame's layout rules beyond RailLayout's.
 enum ToyLayout {
     /// Home greets you in its own hero, and Binds draws its own title row; every other page takes the frame's header,
-    /// Binds › Overlay too (story 56).
+    /// Binds › Mouse and More too (story 56, simplify-pages T14).
     static func ownsTitleRow(_ page: AppPage, section: AppSection? = nil) -> Bool {
         page == .home || (page == .binds && section?.isPlainBindsPage != true)
     }
@@ -330,8 +330,9 @@ struct ToyPageHeader: View {
         }
     }
 
+    /// Binds' Conflicts while there is a clash (simplify-pages T14).
     @ViewBuilder private func clashes(_ page: AppPage) -> some View {
-        if page == .binds {
+        if page == .binds && model.conflictCount > 0 {
             Button { model.showsConflicts = true } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "exclamationmark.triangle.fill")

@@ -57,7 +57,8 @@ struct BindsKeyboardPageTests {
 
     @Test("Binds has no page tabs (Abilities moved to Menu in C3): Plain combos is the keyboard's last tab, and its old link opens Binds on it")
     func plainIsASublayer() {
-        #expect(AppPage.binds.tabs.map(\.value) == [nil, .overlay, .mouse, .keySwaps, .exportImport] && !AppSection.plainCombos.isTab)
+        // Overlay, Swap keys and Export and import are places on More (simplify-pages T14).
+        #expect(AppPage.binds.tabs.map(\.value) == [nil, .mouse, .bindsMore] && !AppSection.plainCombos.isTab)
         let model = AppWindowModel(defaults: UserDefaults(suiteName: testSuite())!)
         model.go(AppPlace.linked(URL(string: "pilot://open?page=plainCombos")!)!)
         #expect(model.page == .binds && model.section(of: .binds) == .plainCombos)

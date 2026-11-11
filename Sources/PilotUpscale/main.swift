@@ -1,6 +1,6 @@
 // pilot-upscale: Real-ESRGAN in a process of its own (Q248). Core ML's model, its Neural Engine buffers and a 4x image's
 // pixels go with it when it exits, so Pilot's idle cost stays zero; Cancel stops it; nothing it does can stall the tap.
-//   pilot-upscale upscale <model> <width> <height> <png|jpeg|heic> <image> <folder> <stem>
+//   pilot-upscale upscale <model> <width> <height> <png|jpeg|heic> <image> <folder> <stem> [fill]
 //       runs the model 2x or 4x (UpscaleTarget.pass), resamples down to <width> x <height> when that is smaller, and writes
 //       "<stem> 4x.png" or "<stem> 2560x1440.png" (or the next free name) in <folder>, printing "progress <done> <total>"
 //       a tile and then "wrote <path>"
@@ -68,30 +68,33 @@ struct CoreMLTiles {
 
 /// The upscaled image at `width` x `height`, and the source's size, in a function of its own so the decoded source and
 /// the model's pass are freed before the result is encoded.
-func upscale(_ image: String, model: String, width: Int, height: Int) async -> (CGImage, source: (Int, Int)) {
+func upscale(_ image: String, model: String, width: Int, height: Int, fill: Bool) async -> (CGImage, source: (Int, Int)) {
     guard let cg = ImageFiles.load(URL(filePath: image)), let source = PixelBuffer(cg) else { fail("upscale: cannot read \(image)") }
+    let factor = max(Double(width) / Double(source.width), Double(height) / Double(source.height))
+    guard factor <= 4, !fill || (Double(source.width) * factor <= Double(ResizeTarget.limit) &&
+          Double(source.height) * factor <= Double(ResizeTarget.limit)) else { fail("upscale: the target exceeds the 4x or 16,384 px limit", 2) }
     let tiles: CoreMLTiles
     do { tiles = try await CoreMLTiles(URL(filePath: model)) } catch { fail("upscale: cannot load the model: \(error)") }
-    let pass = UpscaleTarget.pass(max(Double(width) / Double(source.width), Double(height) / Double(source.height)))
+    let pass = UpscaleTarget.pass(factor)
     let result: PixelBuffer
     do {
         result = try Upscale.run(source, tile: tiles.size, scale: pass, model: tiles.run) { done, total in print("progress \(done) \(total)"); fflush(stdout) }
     } catch { fail("upscale: \(error)") }
     guard let out = result.image() else { fail("upscale: cannot make the result") }
     guard (out.width, out.height) != (width, height) else { return (out, (source.width, source.height)) }
-    guard let sized = Resample.image(out, width: width, height: height) else { fail("upscale: cannot size the result") }
+    guard let sized = Resample.image(out, width: width, height: height, fill: fill) else { fail("upscale: cannot size the result") }
     return (sized, (source.width, source.height))
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 switch arguments.first {
-case "upscale" where arguments.count == 8:
+case "upscale" where arguments.count == 8 || (arguments.count == 9 && arguments[8] == "fill"):
     let (model, width, height, format) = (arguments[1], Int(arguments[2]) ?? 0, Int(arguments[3]) ?? 0, ImageFormat(rawValue: arguments[4]))
     let (image, folder, stem) = (arguments[5], arguments[6], arguments[7])
     guard (1...ResizeTarget.limit).contains(width), (1...ResizeTarget.limit).contains(height), let format else {
         fail("upscale: the size is 1 to \(ResizeTarget.limit) a side, the format png, jpeg or heic", 2)
     }
-    let (out, source) = await upscale(image, model: model, width: width, height: height)
+    let (out, source) = await upscale(image, model: model, width: width, height: height, fill: arguments.count == 9)
     guard let data = format.encode(out) else { fail("upscale: cannot encode the result") }
     let suffix = UpscaleTarget.suffix(from: source.0, source.1, to: out.width, out.height)
     guard let url = ImageFiles.write(data, in: URL(filePath: folder), stem: stem, suffix: suffix, ext: format.fileExtension) else {
@@ -106,5 +109,5 @@ case "compile" where arguments.count == 3:
         try FileManager.default.moveItem(at: compiled, to: target)
     } catch { fail("compile: \(error)") }
 default:
-    fail("usage: pilot-upscale upscale <model> <width> <height> <png|jpeg|heic> <image> <folder> <stem> | compile <package> <out.mlmodelc>", 2)
+    fail("usage: pilot-upscale upscale <model> <width> <height> <png|jpeg|heic> <image> <folder> <stem> [fill] | compile <package> <out.mlmodelc>", 2)
 }

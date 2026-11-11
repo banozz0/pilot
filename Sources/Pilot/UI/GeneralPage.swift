@@ -3,21 +3,20 @@ import IOKit.hid
 import PilotCore
 import SwiftUI
 
-/// General (C3, Sven 2026-10-10, was the Pilot page): Pilot's own page as an app, the way an About and General pane open
-/// in Raycast and Ice (Sven 2026-10-10: "it should be like the Pilot general app"). On top, who Pilot is: its mark, name,
-/// version and build, whether this build is current with Check for updates, and Support; then the permission when it is
-/// missing (Home links here), then the app-level groups: the Hyper key, startup and every permission Pilot asks for with
-/// their fixes, Pilot's data (its folder and the pilot command) and About. What the overlay shows lives on Binds › Overlay,
-/// export and import on Binds › Export and import, the helpers on Install › Helpers (page map, Sven 2026-10-17), AI on its
+/// The Pilot page (General until simplify-pages T4): Pilot's own page as an app, the way an About and General pane open
+/// in Raycast and Ice (Sven 2026-10-10: "it should be like the Pilot general app"). Its front (simplify-pages T8): who Pilot
+/// is, its mark, name, version and build, whether this build is current with Check for updates, and Support; the
+/// permission when it is missing (Home links here); where the Hyper key sits, with Change; and Startup. Its More tab
+/// (T7, Sven's Q60 B): the Hyper keys and their options, every permission Pilot asks for with its fix, what runs, Pilot's
+/// data (its folder and the pilot command) and About, the index beside. What the overlay shows lives on Binds › More › Overlay,
+/// export and import on Binds › More › Export and import, the helpers on Install › Helpers (page map, Sven 2026-10-17), AI on its
 /// own page, the quick-notes folder on Notes; the on/off switch on Home and in the dropdown.
 struct GeneralPage: View {
     @Environment(Engine.self) private var engine
     @Environment(\.ink) private var ink
     @Environment(\.style) private var style
-    /// The part a link or the search asked for: the page scrolls there, once.
-    let section: AppSection?
-    /// Clears the part asked for, so a later visit opens on the page's top.
-    var landed: () -> Void = {}
+    /// The More tab shows, not the front; a block a link or the search asked for comes from the window (blockLanding).
+    let more: Bool
     @State private var confirming: LayerKeyChange?
     /// Read when the page shows and when Pilot comes back to the front, not on every redraw (it lists a folder).
     @State private var fullDisk: Bool?
@@ -41,59 +40,66 @@ struct GeneralPage: View {
     static let tagline = "Your Mac from the keyboard: the Hyper key, tiling, workspaces and one menu for everything."
     /// Support (Sven 2026-10-10): Pilot's GitHub Sponsors page.
     static let supportURL = URL(string: "https://github.com/sponsors/banozz0")!
-    /// Accessibility's ⓘ, on Needs you and in Startup and permissions.
+    /// Accessibility's ⓘ, on Needs you and on More's Permissions.
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
 
-    /// The page's blocks sit in pairs from this width up; narrower they stack (Moody: at 760 they ran off the right edge).
-    static func paired(width: CGFloat) -> Bool { width >= 900 }
+    /// The front's blocks sit in pairs from this width up, so Needs you, the Hyper key and Startup fit the window's first
+    /// size (simplify-pages T8); narrower they stack (Moody: at 760 they ran off the right edge).
+    static func paired(width: CGFloat) -> Bool { width >= 820 }
 
     /// `acknowledgementsOpen` is for the renders; the app always opens the page with the list closed.
-    init(section: AppSection? = nil, acknowledgementsOpen: Bool = false, landed: @escaping () -> Void = {}) {
-        self.section = section
-        self.landed = landed
+    init(more: Bool = false, acknowledgementsOpen: Bool = false) {
+        self.more = more
         _acknowledgementsOpen = State(initialValue: acknowledgementsOpen)
     }
 
     var body: some View {
         let granted = engine.gate.isTrusted
-        ScrollViewReader { proxy in
-            KitPage {
-                header
-                if !granted { needsYou.id(AppSection.permissions) }
-                if wide {
-                    // Two columns, each block at its own height, so none stretches to its neighbour's foot.
-                    columns {
-                        hyperKey(focused: granted); data
-                    } right: {
-                        startup(granted); about
+        Group {
+            if more {
+                KitMore(entries: Self.entries(granted: granted)) {
+                    hyperKeys.moreBlock(.hyperKey)
+                    permissions(granted).moreBlock(.permissions)
+                    status.moreBlock(.status)
+                    data.moreBlock(.data)
+                    notifications.moreBlock(.notifications)
+                    about.moreBlock(.about)
+                }
+            } else {
+                KitPage {
+                    header
+                    if !granted { needsYou }
+                    if wide {
+                        // Two columns, each block at its own height, so none stretches to its neighbour's foot.
+                        columns { hyperKey(focused: granted) } right: { startup }
+                    } else {
+                        hyperKey(focused: granted); startup
                     }
-                } else {
-                    hyperKey(focused: granted); startup(granted); data; about
                 }
-            }
-            .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
-            .onChange(of: section, initial: true) {
-                guard let section else { return }
-                Task { @MainActor in
-                    withAnimation(Kit.change) { proxy.scrollTo(section, anchor: .top) }
-                    landed()
-                }
+                .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
             }
         }
         .layerKeyConfirm($confirming, settings: engine.settings, from: .settings)
         .task { updates.countOnce() }
     }
 
-    /// Two columns of blocks, each column top-aligned at its own height: Instrument's pair, else two stacks the page's gap
-    /// apart.
-    @ViewBuilder private func columns(@ViewBuilder left: () -> some View, @ViewBuilder right: () -> some View) -> some View {
-        if ink.isInstrument {
-            InstrumentPair(level: false, left: left, right: right)
-        } else {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: 0, content: left).frame(maxWidth: .infinity, alignment: .top)
-                VStack(alignment: .leading, spacing: 0, content: right).frame(maxWidth: .infinity, alignment: .top)
-            }
+    /// More's index: each block with its rows, a heading not counted; Accessibility is on Needs you until granted. A row
+    /// added to or moved off a block changes its count here.
+    static func entries(granted: Bool) -> [MoreEntry] {
+        [MoreEntry(id: .hyperKey, symbol: "command", controls: LayerKey.allCases.count + 3),
+         MoreEntry(id: .permissions, symbol: "lock.shield", controls: (granted ? 1 : 0) + 5),
+         MoreEntry(id: .status, symbol: "waveform.path.ecg", controls: 3),
+         MoreEntry(id: .data, symbol: "folder", controls: 5),
+         MoreEntry(id: .notifications, symbol: "bell", controls: 2),
+         MoreEntry(id: .about, symbol: "info.circle", controls: 2)]
+    }
+
+    /// Two columns of blocks the page's gap apart, each top-aligned at its own height; from `paired(width:)`, under
+    /// InstrumentPair's 880, so the front fits the window's first size in Instrument too (simplify-pages T8).
+    private func columns(@ViewBuilder left: () -> some View, @ViewBuilder right: () -> some View) -> some View {
+        HStack(alignment: .top, spacing: ink.isInstrument ? style.density.gap : 20) {
+            VStack(alignment: .leading, spacing: 0, content: left).frame(maxWidth: .infinity, alignment: .top)
+            VStack(alignment: .leading, spacing: 0, content: right).frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -177,11 +183,23 @@ struct GeneralPage: View {
 
     // MARK: Groups
 
+    /// The front's Hyper key: where it sits, and Change, which opens More's Hyper key (simplify-pages T8).
     private func hyperKey(focused: Bool) -> some View {
+        KitBlock(title: "Hyper key", symbol: "command", focused: focused) {
+            Button("Change") { AppWindowController.shared.open(AppPlace(.hyperKey)) }.buttonStyle(.pilot)
+                .help("The Hyper keys and their options, on More")
+        } content: {
+            // Small: where the key sits, not a keyboard to read (Sven: the card was mostly empty under the picker).
+            LayerKeyPicture(keys: engine.settings.layerKeys).frame(maxWidth: LayerKeyPicture.compactWidth).frame(maxWidth: .infinity).padding(.vertical, 10)
+        }
+    }
+
+    /// More's Hyper key: a switch per layer key, a quick tap, the bind hints and the hold overlay.
+    private var hyperKeys: some View {
         @Bindable var settings = engine.settings
-        return KitBlock(title: "Hyper key", symbol: "command", focused: focused) {
+        return KitBlock(title: "Hyper key", symbol: "command") {
             BlockRow(first: true) {
-                Text("Layer keys")
+                Text("Hyper keys")
                 InfoMark(text: "Each key that is on is Hyper by itself, so Caps Lock+Space and right Command+Space both open the menu. A Control, Option or Command that is on is no longer itself; the other side still is, so only one side can be on. With left Command on, Cmd+C, Cmd+V and Cmd+Tab need right Command. Caps Lock becomes Hyper while Pilot runs and goes back to Caps Lock when it quits.")
                 Spacer()
             }
@@ -211,8 +229,6 @@ struct GeneralPage: View {
                 Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
                 Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
             }
-            // Small: where the key sits, not a keyboard to read (Sven: the card was mostly empty under the picker).
-            LayerKeyPicture(keys: settings.layerKeys).frame(maxWidth: LayerKeyPicture.compactWidth).frame(maxWidth: .infinity).padding(.vertical, 10)
         }
     }
 
@@ -226,10 +242,10 @@ struct GeneralPage: View {
         .accessibilityLabel("Hold before the overlay shows").accessibilityValue("\(seconds) seconds")
     }
 
-    /// Launch at login, the permissions with their fixes, and whether Pilot's parts are alive.
-    private func startup(_ granted: Bool) -> some View {
+    /// The front's Startup: Launch at login and Run setup again.
+    private var startup: some View {
         @Bindable var settings = engine.settings
-        return KitBlock(title: "Startup and permissions", symbol: "checkmark.shield") {
+        return KitBlock(title: "Startup", symbol: "power") {
             BlockRow(first: true) {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                     .toggleStyle(.pilotSwitchRow(info: "Pilot opens when you log in, so Hyper and your binds work from the start."))
@@ -246,14 +262,22 @@ struct GeneralPage: View {
                 Spacer()
                 Button("Run setup again") { OnboardingWindow.again(engine: engine) }.buttonStyle(.pilot)
             }
-            BlockRow {
-                Text("Accessibility")
-                InfoMark(text: Self.accessibilityInfo)
-                Spacer()
-                if granted { Chip(text: "granted", color: ink.green) }
-                else { Button("Grant") { engine.gate.request() }.buttonStyle(.pilot) }
+        }
+    }
+
+    /// More's Permissions: each grant Pilot asks for with its fix. Ungranted, Accessibility's one home is Needs you on the
+    /// front (simplify-pages T2).
+    private func permissions(_ granted: Bool) -> some View {
+        KitBlock(title: "Permissions", symbol: "lock.shield") {
+            if granted {
+                BlockRow(first: true) {
+                    Text("Accessibility")
+                    InfoMark(text: Self.accessibilityInfo)
+                    Spacer()
+                    Chip(text: "granted", color: ink.green)
+                }
             }
-            BlockRow {
+            BlockRow(first: !granted) {
                 Text("Full Disk Access")
                 InfoMark(text: "The file index: it lets the menu find files anywhere. macOS has no prompt for it: switch Pilot on in the pane.")
                 Spacer()
@@ -267,14 +291,20 @@ struct GeneralPage: View {
             }
             MicrophoneRow()
             MorePermissionRows()
-            BlockRow {
-                Text("Key engine")
+        }
+    }
+
+    /// More's Status: whether Pilot's parts are alive.
+    private var status: some View {
+        KitBlock(title: "Status", symbol: "waveform.path.ecg") {
+            BlockRow(first: true) {
+                Text("Keyboard")
                 InfoMark(text: "The part of Pilot that hears the Hyper key and runs your binds.")
                 Spacer()
                 engine.bindsArmed ? Chip(text: "running", color: ink.green) : Chip(text: "stopped", color: ink.muted)
             }
             BlockRow {
-                Text("Secure input")
+                Text("Password field lock")
                 InfoMark(text: "A password field pauses Hyper; Pilot never works around it. On: the app macOS names as holding it.")
                 Spacer()
                 switch engine.secureInput.holder {
@@ -291,7 +321,6 @@ struct GeneralPage: View {
                 engine.observers.tiler.isAnswering ? Chip(text: "running", color: ink.green) : Chip(text: "not running", color: ink.red)
             }
         }
-        .id(granted ? AppSection.permissions : nil)
     }
 
     /// Pilot's folder and the pilot command's link; export and import of the binds is Binds' (page map, Sven 2026-10-17).
@@ -320,6 +349,24 @@ struct GeneralPage: View {
         .sheet(isPresented: $uninstalling) { UninstallSheet().pilotSheet().floating() }
     }
 
+    // MARK: Notifications
+
+    /// Other apps' notifications as Pilot's cards (spec notifications.html): off by default, nothing runs until it's on.
+    private var notifications: some View {
+        @Bindable var settings = NotificationSettings.shared
+        return KitBlock(title: "Notifications", symbol: "bell") {
+            BlockRow(first: true) {
+                Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
+                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card in the bottom right, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+            }
+            BlockRow {
+                Toggle("Hide macOS's own banner", isOn: $settings.hideMacBanners)
+                    .toggleStyle(.pilotSwitchRow(info: "Moves Notification Center's banners off screen while a Pilot card shows. Nothing is lost: the notification is still in macOS's Notification Center. A notification Pilot can't fully handle, like a reply, keeps macOS's banner."))
+                    .disabled(!settings.enabled)
+            }
+        }
+    }
+
     // MARK: About
 
     /// Send feedback, the Acknowledgements (SH10: every third-party piece Pilot bundles or downloads, each opening its
@@ -341,12 +388,6 @@ struct GeneralPage: View {
                 }
             }
             .task { crash = await Task.detached { CrashReports.newest() }.value }
-            // T76: whether the terminal's pack is on this Mac.
-            BlockRow {
-                TitledText(title: "Terminal", detail: TerminalPack.isInstalled() ? "Ghostty's engine, downloaded to this Mac"
-                    : "Not downloaded: the first Hyper+T asks to download it (\(TerminalPack.pin.megabytes) MB)").padding(.vertical, 4)
-                Spacer()
-            }
             // Q455: one row, closed on every visit, that unfolds the list in place.
             BlockRow {
                 Button { withAnimation(Kit.change) { acknowledgementsOpen.toggle() } } label: {
@@ -382,7 +423,6 @@ struct GeneralPage: View {
             FinePrint(text: "Licence: MIT, free and open source. Updates arrive through Check for updates.").padding(.vertical, 8)
         }
         .sheet(item: $licence) { LicenceSheet(entry: $0).pilotSheet().floating() }
-        .id(AppSection.about)
     }
 
     /// "0.1.0" from the bundle, "dev" for a bare binary: Instrument's sidebar foot.
@@ -471,8 +511,8 @@ struct MorePermissionRows: View {
     }
 
     static let screenRecordingInfo = "Menu bar › Other apps › Show exact menu bar items draws other apps' items with it, and "
-        + "Tiling › Window shelf's pictures (Stills by default) show your shelved windows. Pilot reads it only for those, once a Stage workspace shows."
-    static let inputMonitoringInfo = "Binds › Mouse needs it to tell a media key a mouse sends from your keyboard's."
+        + "\(AppPlace(.windowShelf).path)'s pictures (Stills by default) show your shelved windows. Pilot reads it only for those, once a Stage workspace shows."
+    static let inputMonitoringInfo = "\(AppPlace(.mouse).path) needs it to tell a media key a mouse sends from your keyboard's."
     static let systemEventsInfo = "Sleep, restart, shut down and log out go through System Events, the one app Pilot automates. "
         + "While it is idle macOS may not say, so Allow can show though it is allowed."
 

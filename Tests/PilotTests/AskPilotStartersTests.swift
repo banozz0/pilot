@@ -20,9 +20,9 @@ struct AskPilotStartersTests {
         #expect(ExtensionMaker.idea(draft + "list my open ports") == "list my open ports")
     }
 
-    @Test("Ten skills, each with its line and starter; a pick fills the box over a typed / and keeps typed words")
+    @Test("Eleven skills, each with its line and starter; a pick fills the box over a typed / and keeps typed words")
     func starters() throws {
-        #expect(Self.skills.count == 10)
+        #expect(Self.skills.count == 11)
         for skill in Self.skills {
             #expect(!skill.title.isEmpty && !skill.description.isEmpty && !skill.when.isEmpty && !skill.body.isEmpty, "\(skill.name)")
             #expect(AskPilotSkills.draft(picking: skill, over: "") == skill.command + " " + skill.starter)
@@ -31,7 +31,7 @@ struct AskPilotStartersTests {
         #expect(AskPilotSkills.draft(picking: binds, over: "/bi") == "/binds Suggest Hyper binds for the apps I use most.")
         #expect(AskPilotSkills.draft(picking: binds, over: "Slack on L") == "/binds Slack on L")
         #expect(AskPilotSkills.matching(Self.skills, "se").map(\.name) == ["settings", "preset"])
-        #expect(AskPilotSkills.matching(Self.skills, "").count == 10)
+        #expect(AskPilotSkills.matching(Self.skills, "").count == 11)
         // The steps go in the message, every user turn's, the maker's /extension left to its own turn.
         let request = AIChat.Request(history: [.init(.user, "/binds"), .init(.assistant, "Five keys.")], message: "/settings menu width")
             .skilled(AgentGuidesTests.guides)

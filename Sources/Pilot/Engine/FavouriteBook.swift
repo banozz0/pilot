@@ -43,4 +43,18 @@ final class FavouriteBook {
         rows = changed
         return nil
     }
+
+    /// A folder renamed or moved, including undo: its favourites and any pinned children keep pointing at it.
+    func relocate(_ moves: [URL: URL]) -> String? {
+        let changed = Set(rows.map { row in
+            guard row.hasPrefix("file:") else { return row }
+            let url = URL(filePath: String(row.dropFirst(5)))
+            return "file:" + FileOps.relocated(url, by: moves).path
+        })
+        guard changed != rows else { return nil }
+        guard readable else { return Self.unreadable }
+        do { try store.save(changed) } catch { return "Folder moved, but favourites could not be updated: \(error.localizedDescription)" }
+        rows = changed
+        return nil
+    }
 }

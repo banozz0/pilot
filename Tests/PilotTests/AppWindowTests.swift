@@ -48,7 +48,11 @@ struct AppWindowFrameTests {
             model.go(place)
             #expect(model.page == place.page, "\(name)")
             if place.section == .conflicts { #expect(model.showsConflicts && model.section(of: .binds) == nil, "\(name)") }
-            // Plain combos stays, Binds opens on that sublayer; every other part is the tab picked or the place scrolled to.
+            // Plain combos stays, Binds opens on that sublayer; a place on a More tab opens that tab with its block asked for
+            // (simplify-pages T7); every other part is the tab picked or the place scrolled to.
+            else if let more = place.section?.onMore { #expect(model.section(of: place.page) == more && model.blockFocus == place.section, "\(name)") }
+            // A place on a front opens the front, its block asked for (snapshots: Workspaces' front since round 3).
+            else if place.section?.onFront == true { #expect(model.section(of: place.page) == nil && model.blockFocus == place.section, "\(name)") }
             else { #expect(model.section(of: place.page) == place.section ?? place.page.firstSection, "\(name)") }
             #expect(place.page.tabs.isEmpty || place.page.tabs.contains { $0.value == model.section(of: place.page) } || place.section?.isMerged == true, "\(name)")
         }
@@ -61,9 +65,9 @@ struct AppWindowFrameTests {
         // Going back to a page with its own content first shows that content again.
         let model = AppWindowModel(defaults: defaults)
         model.go(AppPlace(.reports))
-        #expect(model.section(of: .activity) == .reports)
-        model.go(AppPlace(.activity))
-        #expect(model.section(of: .activity) == nil)
+        #expect(model.section(of: .upkeep) == .reports)
+        model.go(AppPlace(.upkeep))
+        #expect(model.section(of: .upkeep) == nil)
         // Update & Clean's Open report picks the run Reports opens on; going anywhere else forgets it.
         model.reportPick = "run-1"
         model.go(AppPlace(.upkeep))

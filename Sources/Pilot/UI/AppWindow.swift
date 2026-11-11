@@ -39,6 +39,9 @@ final class AppWindowModel {
     /// opens, so a second open of the same repo starts the page on it again.
     var repoPick: String?
     var repoOpens = 0
+    /// The block a link or the search asked for on a More tab (simplify-pages T7); More scrolls there, marks it in its
+    /// index and clears it. Going anywhere else clears it too.
+    var blockFocus: AppSection?
     /// The Wallpaper row Look lights, from the desktop's Wallpaper settings…; going anywhere else clears it.
     var wallpaperFocus: WallpaperBlock.Focus?
     /// The action whose bind editor Binds opens (the menu's Set Hyper bind, card agent-bo-95422968); Binds clears it.
@@ -75,10 +78,23 @@ final class AppWindowModel {
         catalogueCategory = nil
         repoPick = nil
         wallpaperFocus = nil
+        blockFocus = nil
         searchOpen = false
         page = place.page
         if let section = place.section {
-            if section.opensAsSheet { showsConflicts = true } else { sections[place.page] = section }
+            if section.opensAsSheet {
+                showsConflicts = true
+            } else if let more = section.onMore {
+                // A place on More: its tab, and its block marked there.
+                sections[place.page] = more
+                blockFocus = section
+            } else if section.onFront {
+                // A place on the front: the front, scrolled to its block (Sven, 2026-11-11, after 2276).
+                sections[place.page] = nil
+                blockFocus = section
+            } else {
+                sections[place.page] = section
+            }
         } else if place.page.hasOwnContent {
             sections[place.page] = nil
         }
@@ -181,10 +197,12 @@ final class AppWindowController: NSObject {
     /// Launcher › Aliases' editor on that row (Set alias…, card agent-bo-95423037).
     func open(_ place: AppPlace? = nil, setup: SetupSection? = nil, extension focus: String? = nil, editBind: String? = nil, editAlias: Alias? = nil) {
         // A developer page while the Developer switch is off (a link, a bind) opens General, where the switch is.
-        let place = place.map { $0.page.isDeveloper && !DeveloperPages.on ? AppPlace(.general) : $0 }
+        var place = place.map { $0.page.isDeveloper && !DeveloperPages.on ? AppPlace(.general) : $0 }
         // System's section (Hyper+Ctrl+A, B and W, card agent-bo-95422805) and the bind to edit, kept through a locked
-        // screen's wait.
-        if place?.page == .system, let setup { model.setupSection = setup }
+        // screen's wait; the keyboard layout and the mouse are places on its front.
+        if place?.page == .system, let setup {
+            if setup.place == AppPlace(.system) { model.setupSection = setup } else { place = setup.place }
+        }
         if place?.page == .extensions, let focus { model.extensionFocus = focus }
         if place?.page == .binds, let editBind { model.editBind = editBind }
         if place?.section == .aliases, let editAlias { model.editAlias = editAlias }
@@ -227,8 +245,10 @@ final class AppWindowController: NSObject {
     }
 
     /// Opens the window on Look › Wallpaper, `focus`'s row lit: the desktop's Hyper + right-click › Wallpaper settings….
+    /// A screen's or a workspace's own folders are on Look's More (simplify-pages T20), so while they have their own it
+    /// lands there; else on the front's screen row.
     func openWallpaper(_ focus: WallpaperBlock.Focus) {
-        open(AppPlace(.wallpaper))
+        open(AppPlace(WallpaperBlock.place(for: focus, settings: .shared)))
         model.wallpaperFocus = focus
     }
 

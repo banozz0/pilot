@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import ImageScale
+import ImageIO
 import OSLog
 import PilotCore
 import SwiftUI
@@ -27,6 +28,7 @@ final class UpscaleJob {
 
     /// The size it makes of the image the panel opened on (`size(width:height:)`); several files change by its factor.
     var target = UpscaleTarget(width: 1, height: 1)
+    var preview: CGImage?
     var model: UpscaleModel = .general { didSet { ready = UpscaleModels.compiled(model) != nil } }
     var format: ImageFormat = .png
     private(set) var phase: Phase = .idle
@@ -45,6 +47,12 @@ final class UpscaleJob {
             defer { task = nil }
             var written: [URL] = []
             do {
+                let prepared = try items.map { item -> (Item, UpscaleTarget) in
+                    guard let source = ImageFiles.size(item.image) else { throw UpscaleModels.Failure("Pilot cannot read \(item.image.lastPathComponent)") }
+                    let size = target.forImage(width: source.width, height: source.height)
+                    if let issue = size.issue { throw UpscaleModels.Failure("\(item.image.lastPathComponent): \(issue)") }
+                    return (item, size)
+                }
                 let helper = try UpscaleModels.helper()
                 if UpscaleModels.compiled(model) == nil, model.download != nil {
                     phase = .downloading
@@ -52,13 +60,13 @@ final class UpscaleJob {
                     ready = UpscaleModels.compiled(self.model) != nil
                 }
                 guard let path = UpscaleModels.compiled(model) else { throw UpscaleModels.Failure("The \(model.title) model is missing") }
-                for (n, item) in items.enumerated() {
+                for (n, prepared) in prepared.enumerated() {
+                    let (item, size) = prepared
                     let label = items.count == 1 ? item.image.lastPathComponent : "\(n + 1) of \(items.count)"
                     phase = .running(Double(n) / Double(items.count), label)
-                    guard let source = ImageFiles.size(item.image) else { throw UpscaleModels.Failure("Pilot cannot read \(item.image.lastPathComponent)") }
-                    let (w, h) = target.applied(width: source.width, height: source.height)
-                    let out = try await ChildProcess.run(helper, ["upscale", path.path, "\(w)", "\(h)", format.rawValue, item.image.path,
-                                                                  item.folder.path, item.stem], timeout: .seconds(1800)) { line in
+                    let arguments = ["upscale", path.path, "\(size.width)", "\(size.height)", format.rawValue, item.image.path,
+                                     item.folder.path, item.stem] + (size.crops ? ["fill"] : [])
+                    let out = try await ChildProcess.run(helper, arguments, timeout: .seconds(1800)) { line in
                         guard let (done, total) = Self.progress(line) else { return }
                         let share = (Double(n) + Double(done) / Double(total)) / Double(items.count)
                         Task { @MainActor [weak self] in if self?.task != nil { self?.phase = .running(share, label) } }
@@ -87,7 +95,25 @@ final class UpscaleJob {
     /// The panel opens on an image of this size: the preset picked last stays picked, a typed size goes back to 4x.
     func size(width: Int, height: Int) {
         guard (width, height) != (target.originalWidth, target.originalHeight) else { return }
-        target = UpscaleTarget(width: width, height: height, times: target.times ?? 4)
+        target = target.forImage(width: width, height: height)
+        if target.monitor == nil && target.times == nil { target.setFactor(4) }
+    }
+
+    /// A small, upright preview, decoded away from the tap's main thread.
+    func loadPreview(_ url: URL) async {
+        preview = await Task.detached(priority: .userInitiated) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return Unchecked<CGImage?>(nil) }
+            return Unchecked(CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 640] as CFDictionary))
+        }.value.value
+    }
+
+    func loadPreview(_ image: CGImage) async {
+        let source = Unchecked(image)
+        preview = await Task.detached(priority: .userInitiated) {
+            let image = source.value, factor = min(1, 640 / Double(max(image.width, image.height)))
+            return Unchecked(Resample.image(image, width: max(1, Int(Double(image.width) * factor)), height: max(1, Int(Double(image.height) * factor))))
+        }.value.value
     }
 
     /// "progress 3 45" as (3, 45).
@@ -187,7 +213,7 @@ enum ImageTools {
                                  },
                                  cancel: { upscale.cancel(); close() })
         shown = card
-        let p = HUD.makePanel(card)
+        let p = HUD.makePanel(card.fixedSize().onGeometryChange(for: CGSize.self, of: \.size) { refit($0, job: upscale) })
         p.escape = { upscale.cancel(); close() }
         panel = p
         guard onScreen else { return }
@@ -199,6 +225,15 @@ enum ImageTools {
         panel?.contentView = nil
         panel = nil
         shown = nil
+    }
+
+    private static func refit(_ face: CGSize, job: UpscaleJob) {
+        guard shown?.job === job, let panel else { return }
+        let size = PopSurface.window(face, panel.margins)
+        guard abs(panel.frame.height - size.height) >= 1 || abs(panel.frame.width - size.width) >= 1 else { return }
+        var frame = CGRect(x: panel.frame.minX, y: panel.frame.maxY - size.height, width: size.width, height: size.height)
+        if let screen = panel.screen?.visibleFrame { frame.origin.y = max(screen.minY, frame.minY) }
+        panel.setFrame(frame, display: false)
     }
 
     /// Each file resized by the target's factor, in its own format, as "<name> <w>x<h>.<ext>" beside it.

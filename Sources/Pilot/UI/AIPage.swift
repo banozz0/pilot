@@ -34,8 +34,9 @@ struct AIPage: View {
     }
 
     /// Sven 2026-10-16, Q177: the page is for talking to Pilot about Pilot.
-    static let intro = "Talk to Pilot about Pilot: your keys, workspaces, settings and extensions. It reads your setup with the pilot command, "
-        + "proposes its changes as one plan, and makes them once you Allow. Ask AI opens the same chat under the top bar."
+    static let intro = "Talk to Pilot about Pilot: your keys, workspaces, settings and extensions."
+    static let introInfo = "It reads your setup with the pilot command, proposes its changes as one plan, and makes them once you Allow. "
+        + "Ask AI opens the same chat under the top bar."
 
     /// Whether the makers (/extension, /widget) can run: on Claude Code, whatever the chat's provider, so not once it is
     /// found missing (T17, AISettings.makerTurn).
@@ -134,7 +135,7 @@ private struct AIPageBody: View {
 
     var body: some View {
         GeometryReader { g in
-            KitPage(intro: AIPage.intro) {
+            KitPage(intro: AIPage.intro, info: AIPage.introInfo) {
                 chatBlock
                     .frame(height: max(320, g.size.height - chatTop - foot))
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(AIPage.space)).minY } action: { chatTop = $0 }

@@ -61,7 +61,12 @@ public struct BarDrop: Sendable {
     /// The side a drop at `x` lands on: the zones in the order they sit along the bar (a long right side can reach past an
     /// empty centre's), each reaching halfway to the next.
     func side(at x: Double) -> TopBarSide {
-        let ordered = TopBarSide.allCases.map { ($0, zone($0)) }.sorted { $0.1.lowerBound < $1.1.lowerBound }
+        // An empty side keeps its whole zone even where a full neighbour reaches over it, as on a strip narrower than the
+        // bar (P98); one so covered takes no share of the split below, or it would claim the far end.
+        let zones = TopBarSide.allCases.map { (side: $0, span: zone($0), empty: !(sides[$0] ?? []).contains(where: \.drawn)) }
+        if let hit = zones.first(where: { $0.empty && $0.span.contains(x) }) { return hit.side }
+        let ordered = zones.filter { zone in zone.empty == false || !zones.contains { !$0.empty && $0.span.overlaps(zone.span) } }
+            .map { ($0.side, $0.span) }.sorted { $0.1.lowerBound < $1.1.lowerBound }
         return zip(ordered, ordered.dropFirst()).first { x < ($0.1.upperBound + $1.1.lowerBound) / 2 }?.0.0 ?? ordered.last!.0
     }
 

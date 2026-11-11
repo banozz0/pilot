@@ -34,7 +34,7 @@ struct BindsMapRenders {
         let model = BindsMapModel(engine: engine, board: BindsKeyboard.Board(.ansi, compact: true),
                                   date: Date(timeIntervalSince1970: 1_792_368_000))
         #expect(model.layers.map(\.title) == ["Hyper", "Hyper + Shift", "Hyper + Ctrl", "Hyper + Alt", "Hyper + Shift + Ctrl",
-                                              "Hyper + Ctrl + Alt", "Plain combos"])
+                                              "Hyper + Ctrl + Alt", "Without Hyper"])
         #expect(model.keyCount == 135)
         #expect(model.mouse.count == 5)
         let png = try #require(BindsMapSheet.png(model))

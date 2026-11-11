@@ -37,7 +37,11 @@ struct InstrumentBindsBoard: View {
         ZStack(alignment: .topLeading) {
             ForEach(Array(fit.board.spots.enumerated()), id: \.offset) { _, spot in
                 let frame = InstrumentBoardFit.frame(spot, unit: unit, gap: spacing.gap)
-                key(spot, marks: marks, unit: unit, spacing: spacing, scale: fit.scale)
+                // A name never breaks inside a word: drawn small enough that its longest word fits its key (simplify-pages T14).
+                let room = InstrumentBoardFit.room(spot, frame: frame, unit: unit, spacing: spacing)
+                let name = BindsKeyboard.isLayerKey(spot, layerKeys: layerKeys, layer: layer) ? "Hyper" : marks.shows(spot).name
+                let words = name.map { InstrumentBoardFit.wordScale($0, room: room, measure: measure) } ?? 1
+                key(spot, marks: marks, unit: unit, spacing: spacing, scale: fit.scale, words: words)
                     .frame(width: max(0, frame.width), height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
                     .zIndex(spot.code != nil && spot.code == picked ? 1 : 0)
@@ -49,7 +53,7 @@ struct InstrumentBindsBoard: View {
     }
 
     private func key(_ spot: BindsKeyboard.Spot, marks: InstrumentBoardFit.Marks, unit: CGFloat, spacing: InstrumentBoardFit.Spacing,
-                     scale: CGFloat) -> some View {
+                     scale: CGFloat, words: CGFloat?) -> some View {
         let action = spot.code.flatMap { binds.bound[$0]?.first }
         let info = action.flatMap { binds.infos[$0] }
         let hyper = BindsKeyboard.isLayerKey(spot, layerKeys: layerKeys, layer: layer)
@@ -58,11 +62,11 @@ struct InstrumentBindsBoard: View {
         let kind: InstrumentBoardKey.Kind = hyper ? .hyper : held ? .held : spot.code == nil ? .modifier : info == nil ? .free : .bound
         let shows = marks.shows(spot)
         let cap = InstrumentBoardKey(
-            legend: BindsKeyboard.printed(spot), name: hyper ? "Hyper" : shows.name, glyph: shows.glyph, centred: shows.centred, kind: kind,
+            legend: BindsKeyboard.printed(spot), name: words == nil ? nil : hyper ? "Hyper" : shows.name, glyph: shows.glyph, centred: shows.centred, kind: kind,
             picked: spot.code != nil && spot.code == picked,
             group: tinted && kind == .bound ? action.map(binds.module) : nil,
             dimmed: module != nil && kind == .bound && action.map(binds.module) != module,
-            least: scale, function: spot.onFunctionRow, spacing: spacing,
+            least: scale, words: words ?? 1, function: spot.onFunctionRow, spacing: spacing,
             notch: spot.isoReturn ? KeyShape.Notch(step: unit * 0.25, upper: InstrumentBoardFit.key) : nil)
         return Group {
             if let code = spot.code {
@@ -165,10 +169,28 @@ struct InstrumentBoardFit {
         let unit = unit(board, width: width), spacing = Spacing(width: width)
         return board.spots.compactMap { spot in
             marks.shows(spot).name.map {
-                ($0, frame(spot, unit: unit, gap: spacing.gap).width - spacing.leading - spacing.trailing - (spot.isoReturn ? unit * 0.25 : 0),
-                 spot.onFunctionRow ? 1 : 2)
+                ($0, room(spot, frame: frame(spot, unit: unit, gap: spacing.gap), unit: unit, spacing: spacing), spot.onFunctionRow ? 1 : 2)
             }
         }
+    }
+
+    /// The room a key `frame` gives its name: its width less its sides and an ISO Return's notch.
+    static func room(_ spot: BindsKeyboard.Spot, frame: CGRect, unit: CGFloat, spacing: Spacing) -> CGFloat {
+        frame.width - spacing.leading - spacing.trailing - (spot.isoReturn ? unit * 0.25 : 0)
+    }
+
+    /// The least a name may be drawn at, and the step its scale takes: a name's size is one of a few, so a window resize
+    /// makes no new font (DisplayFaces keeps every size it makes).
+    static let leastWords: CGFloat = 0.5, wordStep: CGFloat = 0.05
+
+    /// The scale, at most 1 and on `wordStep`'s grid, at which `name`'s longest word fits `room` whole, so the whole board
+    /// shrinks a name rather than break a word (simplify-pages T14, Sven's Q36); nil where even `leastWords` cannot hold it,
+    /// and the key shows its legend and glyph alone, its name in its tip.
+    static func wordScale(_ name: String, room: CGFloat, measure: (String) -> CGFloat) -> CGFloat? {
+        let widest = name.split(separator: " ").map { measure(String($0)) }.max() ?? 0
+        guard widest + air > room else { return 1 }
+        let scale = ((room - air) / widest / wordStep).rounded(.down) * wordStep
+        return scale >= leastWords ? scale : nil
     }
 
     /// The lines `text` wraps to in `room`, word by word; nil when one word alone is wider than the room.
@@ -229,6 +251,8 @@ struct InstrumentBoardKey: View {
     var group: Int?
     var dimmed = false
     var least: CGFloat = 1
+    /// The name's size, of the role's, at which its longest word fits the key (InstrumentBoardFit.wordScale).
+    var words: CGFloat = 1
     var function = false
     var spacing = InstrumentBoardFit.Spacing(width: 600)
     var notch: KeyShape.Notch?
@@ -265,10 +289,15 @@ struct InstrumentBoardKey: View {
 
     @ViewBuilder private var content: some View {
         if function {
-            HStack(spacing: 4) {
-                legendText
-                Spacer(minLength: 2)
-                if let glyph { picture(glyph, side: InstrumentBoardKey.small) } else if let name { nameText(lines: 1) }
+            // The glyph or the name only where it fits beside the legend, as Toybox's keys do: on the whole board's narrow
+            // keys it would run into the next key (simplify-pages T14).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 4) {
+                    legendText
+                    Spacer(minLength: 2)
+                    if let glyph { picture(glyph, side: InstrumentBoardKey.small) } else if let name { nameText(lines: 1) }
+                }
+                HStack(spacing: 0) { legendText; Spacer(minLength: 0) }
             }
             .padding(.horizontal, 7)
             .frame(maxHeight: .infinity)
@@ -300,7 +329,8 @@ struct InstrumentBoardKey: View {
     }
 
     private func nameText(lines: Int) -> some View {
-        Text(name ?? "").styleText(\.keyName).foregroundStyle(style.color(ink(\.text)))
+        Text(name ?? "").font(style.font(\.keyName, size: style.type.keyName.size * words / style.scale)).styleText(\.keyName)
+            .foregroundStyle(style.color(ink(\.text)))
             .lineLimit(lines).minimumScaleFactor(least).fixedSize(horizontal: false, vertical: true)
     }
 

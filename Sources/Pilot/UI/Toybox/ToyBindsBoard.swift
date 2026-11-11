@@ -60,8 +60,13 @@ struct ToyBindsBoard: View {
         let legend = BindsKeyboard.printed(spot)
         let glyph = info == nil ? nil : spot.code.flatMap { glyphs[$0] }
         let notch = spot.isoReturn ? KeyShape.Notch(step: unit * 0.25, upper: ToyBoardFit.key) : nil
-        let cap = ToyBoardKey(legend: legend, name: hyper ? "Hyper" : name, kind: kind, picked: spot.code != nil && spot.code == picked,
-                              size: fit.size, least: fit.shrinks ? ToyBoardFit.leastScale : 1, glyph: glyph,
+        // A name never breaks inside a word: drawn small enough that its longest word fits its key, or left to the key's
+        // tip where none is (simplify-pages T14).
+        let room = ToyBoardFit.room(spot, frame: frame, unit: unit, spacing: spacing)
+        let nameSize = (hyper ? "Hyper" : name).flatMap { ToyBoardFit.wordSize($0, size: fit.size, room: room) }
+        let shown = nameSize == nil ? nil : hyper ? "Hyper" : name
+        let cap = ToyBoardKey(legend: legend, name: shown, kind: kind, picked: spot.code != nil && spot.code == picked,
+                              size: fit.size, nameSize: nameSize, least: fit.shrinks ? ToyBoardFit.leastScale : 1, glyph: glyph,
                               mark: hyper && frame.width >= 100,
                               lines: spot.onFunctionRow ? 1 : 2, pad: spacing.pad, notch: notch)
         return Group {
@@ -145,10 +150,32 @@ struct ToyBoardFit {
         let unit = unit(board, width: width, spacing: spacing)
         return board.spots.compactMap { spot in
             spot.code.flatMap { names[$0] }.map {
-                ($0, frame(spot, unit: unit, spacing: spacing).width - spacing.nameInset - (spot.isoReturn ? unit * 0.25 : 0),
-                 spot.onFunctionRow ? 1 : 2)
+                ($0, room(spot, frame: frame(spot, unit: unit, spacing: spacing), unit: unit, spacing: spacing), spot.onFunctionRow ? 1 : 2)
             }
         }
+    }
+
+    /// The room a key `frame` gives its name: its width less its outline, its padding and an ISO Return's notch.
+    static func room(_ spot: BindsKeyboard.Spot, frame: CGRect, unit: CGFloat, spacing: Spacing) -> CGFloat {
+        frame.width - spacing.nameInset - (spot.isoReturn ? unit * 0.25 : 0)
+    }
+
+    /// The step a name's size takes: a name's size is one of a few, so a window resize makes no new font (DisplayFaces
+    /// keeps every size it makes) and no new measure.
+    static let wordStep: CGFloat = 0.25
+
+    /// The size, at most `size` and on `wordStep`'s grid, at which `name`'s longest word fits `room` whole, so the whole
+    /// board shrinks a name rather than break a word (simplify-pages T14, Sven's Q36); nil where even half of `size` cannot
+    /// hold it, and the key shows its legend and picture alone, its name in its tip.
+    static func wordSize(_ name: String, size: CGFloat, room: CGFloat) -> CGFloat? {
+        let words = name.split(separator: " ").map(String.init)
+        let fits = { (s: CGFloat) in words.allSatisfy { width($0, size: s) + air <= room } }
+        // The face's widths are not linear in its size: start from the linear guess, on the grid, and step down until it
+        // measures whole; never under half the size, nor measured there.
+        guard !fits(size), let widest = words.map({ width($0, size: size) }).max(), widest > 0, room > air else { return room > air ? size : nil }
+        var s = (min(size, size * (room - air) / widest) / wordStep).rounded(.down) * wordStep
+        while s >= size / 2 && !fits(s) { s -= wordStep }
+        return s >= size / 2 ? s : nil
     }
 
     static func fits(_ rooms: [(name: String, room: CGFloat, lines: Int)], size: CGFloat) -> Bool {
@@ -192,6 +219,8 @@ struct ToyBoardKey: View {
     let kind: Kind
     let picked: Bool
     let size: CGFloat
+    /// The name's size where its longest word needs it smaller than `size` (ToyBoardFit.wordSize).
+    var nameSize: CGFloat?
     var least: CGFloat = 1
     var glyph: BoardKey.Glyph?
     var mark = false
@@ -218,7 +247,7 @@ struct ToyBoardKey: View {
             Spacer(minLength: 0)
             if let name {
                 Text(name)
-                    .font(ToyBindsFace.ui(800, size)).tracking(-0.05)
+                    .font(ToyBindsFace.ui(800, nameSize ?? size)).tracking(-0.05)
                     .foregroundStyle(sun ? style.color(\.onHyper) : style.color(\.text))
                     .lineLimit(lines).minimumScaleFactor(least)
                     .fixedSize(horizontal: false, vertical: true)

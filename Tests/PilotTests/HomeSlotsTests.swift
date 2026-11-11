@@ -61,8 +61,9 @@ struct HomeSlotsTests {
             store = HomeLayoutStore(defaults: try #require(UserDefaults(suiteName: testSuite())))
             store.save(layout)
             var sources = HomeSources()
-            sources.lastCopied = { nil }
-            sources.recentCopies = { [] }
+            // Copies kept, so Clipboard draws: it waits for one (simplify-pages T3).
+            sources.lastCopied = { HomeCopy(text: "bd show agent-bo-95422987", at: Date().addingTimeInterval(-125), count: InstrumentRenders.clips.count) }
+            sources.recentCopies = { InstrumentRenders.clips }
             sources.pages = { [] }
             sources.layout = { [store] in store }
             let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))

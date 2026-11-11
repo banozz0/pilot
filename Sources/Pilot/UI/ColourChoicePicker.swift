@@ -22,6 +22,16 @@ struct ColourChoicePicker: View {
         (self.theme, self.label) = (theme, label)
     }
 
+    /// The effect renderer and Custom's starting colour resolve the same current pack content.
+    static func effectTheme(_ themeID: String, resolved: PilotTheme?) -> UInt32 {
+        CursorEffectColours.of(themeID, resolved: resolved).effectRGB
+    }
+
+    static func selecting(_ custom: Bool?, choice: ColourChoice?, theme: UInt32) -> ColourChoice? {
+        guard custom != choice.map({ $0 != .theme }) else { return choice }
+        return custom.map { $0 ? .custom((choice ?? .theme).resolved(theme)) : .theme }
+    }
+
     var body: some View {
         // The well beside the two segments, or under them where a row is short of room.
         ViewThatFits(in: .horizontal) {
@@ -34,7 +44,7 @@ struct ColourChoicePicker: View {
         // nil Plain, false Theme, true Custom.
         let options: [(Bool?, String)] = (plain.map { [(nil, $0)] } ?? []) + [(false, "Theme"), (true, "Custom")]
         return Segments(selection: Binding(get: { choice.map { $0 != .theme } }, set: { custom in
-                            if custom != choice.map({ $0 != .theme }) { choice = custom.map { $0 ? .custom((choice ?? .theme).resolved(theme)) : .theme } }
+                            if custom != choice.map({ $0 != .theme }) { choice = Self.selecting(custom, choice: choice, theme: theme) }
                         }),
                         options: options.map { (value: $0.0, title: $0.1) }, label: label)
     }

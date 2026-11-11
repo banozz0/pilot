@@ -4,8 +4,9 @@ import PilotCore
 import PilotTiler
 
 /// Hyper + right-click on the empty desktop (Q743; a file, a folder or a widget keeps its own menu): a native menu at the
-/// pointer, each item what the rest of Pilot runs. Change wallpaper… shows that screen's wallpaper folders as a gallery,
-/// a click setting one (P90), and Wallpaper settings… opens Look › Wallpaper on the clicked screen's row, or its
+/// pointer, each item what the rest of Pilot runs. Change wallpaper… opens the Carousel's Wallpapers mode on that screen
+/// (spec desktop-controls T8): the current theme's wallpapers, or its cycling folders; Look's Browse as gallery keeps
+/// the gallery (P90). Wallpaper settings… opens Look › Wallpaper on the clicked screen's row, or its
 /// workspace's while each workspace has its own (Q333); Add widget puts a widget from the Widgets page where the
 /// press was; New note is the notes panel's; Show desktop is the bind's, Restore windows while it holds them out; Look
 /// switches the style and the theme as the Look page does; and Desktop icons hides Finder's icons or shows them again
@@ -40,7 +41,7 @@ enum DesktopMenu {
         }
         let focus = WallpaperBlock.Focus(display: display, workspace: display.flatMap(WallpaperSettings.shared.shownWorkspace))
         return [
-            .pick("Change wallpaper…") { GalleryWindow.shared.openWallpapers(display: display) },
+            .pick("Change wallpaper…") { WallpaperCarouselPanel.shared.open(on: screen) },
             .pick("Wallpaper settings…") { AppWindowController.shared.openWallpaper(focus) },
             .submenu("Add widget", addable),
             .pick("New note") { NotesPanel.shared.showNew() },

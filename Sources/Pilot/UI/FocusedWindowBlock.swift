@@ -17,7 +17,7 @@ struct FocusedWindowBlock: View {
         static let borderColour = "The line's colour: Theme follows the theme's accent, Custom keeps the one you pick."
         static let defocus = "How strongly the other windows blur, so the one in front stands out: Off, or 1 light to 5 heavy."
         static let defocusDim = "How dark the other windows go, from Off to 80% black, with the blur or without it."
-        static let shake = "Shaking the mouse turns Defocus on or off."
+        static let shake = "Shaking the mouse turns Dim other windows (Defocus) on or off."
         static let swings = "How many quick side-to-side swings count as a shake."
         static let within = "How fast those swings must come, in seconds."
         static let contrast = "How well Pilot's dimmest text reads over the brightest spot behind its glass. Amber means Pilot raised the surface to keep it readable."
@@ -25,28 +25,35 @@ struct FocusedWindowBlock: View {
 
     var body: some View {
         @Bindable var look = look
+        // Whole on Tiling's front again (Sven, 2026-11-11, after 2276; split front and More by simplify-pages T9).
         KitBlock(title: "Focused window", symbol: "macwindow") {
             BlockRow(first: true) { Toggle("Border on the focused window", isOn: $look.windowBorder).toggleStyle(.pilotSwitchRow(info: Info.border)) }
             BlockRow { label("Border width", Info.borderWidth); borderWidth }
             BlockRow { label("Border colour", Info.borderColour); borderColour }
             BlockRow {
                 VStack(alignment: .leading, spacing: 1) {
-                    label("Defocus blur", Info.defocus)
+                    label("Dim other windows", Info.defocus)
                     defocusHint.font(ink.ui(12))
                 }
                 .padding(.vertical, 7)
                 defocusSteps
             }
-            BlockRow {
-                label("Defocus dim", Info.defocusDim)
-                defocusDimSlider
-                defocusDimValue.frame(width: 38, alignment: .trailing)
-            }
-            BlockRow { Toggle("Shake to defocus", isOn: $look.defocusShake).toggleStyle(.pilotSwitchRow(info: Info.shake)) }
-            BlockRow { label("Swings needed", Info.swings); shakeSwings }
-            BlockRow { label("Within", Info.within); shakeWithin }
-            BlockRow { contrastBadge.font(ink.ui(12)).padding(.vertical, 6); InfoMark(text: Info.contrast) }
+            tuning
         }
+    }
+
+    /// Defocus's tuning and the contrast badge.
+    @ViewBuilder private var tuning: some View {
+        @Bindable var look = look
+        BlockRow {
+            label("How dark the others go", Info.defocusDim)
+            defocusDimSlider
+            defocusDimValue.frame(width: 38, alignment: .trailing)
+        }
+        BlockRow { Toggle("Shake to dim other windows", isOn: $look.defocusShake).toggleStyle(.pilotSwitchRow(info: Info.shake)) }
+        BlockRow { label("How hard to shake", Info.swings); shakeSwings }
+        BlockRow { label("Within", Info.within); shakeWithin }
+        BlockRow { contrastBadge.font(ink.ui(12)).padding(.vertical, 6); InfoMark(text: Info.contrast) }
     }
 
     /// A row's label with its ⓘ beside it, taking the row's spare width.
@@ -77,7 +84,7 @@ struct FocusedWindowBlock: View {
             Text("\(look.defocusShakeSwings) swings").font(ink.mono(11.5)).foregroundStyle(ink.text2)
         }
         .disabled(!look.defocusShake)
-        .accessibilityLabel("Swings needed").accessibilityValue("\(look.defocusShakeSwings) swings")
+        .accessibilityLabel("How hard to shake").accessibilityValue("\(look.defocusShakeSwings) swings")
     }
 
     /// The seconds those swings must fall within, a tenth a step, still while the shake is off.
@@ -95,13 +102,13 @@ struct FocusedWindowBlock: View {
     private var defocusSteps: some View {
         @Bindable var look = look
         return Segments(selection: $look.defocusStrength, options: Defocus.strengths.map { ($0, $0 == 0 ? "Off" : "\($0)") },
-                        label: "Defocus blur")
+                        label: "Dim other windows")
     }
 
     /// Defocus's dim (Sven, 2026-10-16), Off to 80 % black, with the blur or without it.
     private var defocusDimSlider: some View {
         KitSlider(value: Binding(get: { Double(look.defocusDim) }, set: { if Int($0) != look.defocusDim { look.defocusDim = Int($0) } }),
-                  range: Double(Defocus.dims.lowerBound)...Double(Defocus.dims.upperBound), step: 1, label: "Defocus dim")
+                  range: Double(Defocus.dims.lowerBound)...Double(Defocus.dims.upperBound), step: 1, label: "How dark the others go")
     }
 
     private var defocusDimValue: some View {

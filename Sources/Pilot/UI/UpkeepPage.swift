@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports): Update and Clean themselves, each with its
+/// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports; Reports its tab since simplify-pages T16): Update and Clean themselves, each with its
 /// last run and an Open report link to that run on Reports. A run still in its terminal is read again every 2 s until it
 /// ends, so its last run follows it. Under them, what starts at login (LoginItemsBlock, Q386).
 struct UpkeepPage: View {
@@ -11,18 +11,18 @@ struct UpkeepPage: View {
     var mole = CleanModule.mole != nil
     /// Homebrew is there for Update to read and Mole to install through; a render says which.
     var homebrew = Helper.homebrew.path() != nil
-    /// Opens Activity › Reports on a run.
+    /// Opens the Reports tab on a run.
     var openReport: (String) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
     @State private var records: [RunRecord]?
     /// Bumped when a run begins, so the page follows it to its end.
     @State private var wake = 0
 
-    static let intro = "Update previews every upgrade and Clean what Mole would remove; each asks before it runs, "
-        + "and each run is kept in Activity › Reports."
+    static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
+    static let introInfo = "Clean runs Mole. Each run is kept on the Reports tab."
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             start
             LoginItemsBlock()
         }

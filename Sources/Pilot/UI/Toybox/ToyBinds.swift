@@ -1,11 +1,11 @@
 import PilotCore
 import SwiftUI
 
-/// Binds in Toybox (card agent-bo-95423182, mockup B binds.html): the title with the tab's count and how to press it, My
-/// binds or Omarchy, Find and Add bind; the six tabs as chips with their counts beside the module legend; the keyboard in
-/// its case; then the picked key, the tab's binds by module, and its free keys with the macOS clash state; the Cleaning
-/// block last (KeyboardLockCard). Every act is BindsKeyboardPage's own (`BindsKeyboardPage.Acts`), so picking, binding,
-/// clearing, presets, Find and the tabs behave as in Instrument.
+/// Binds in Toybox (card agent-bo-95423182, mockup B binds.html; simplify-pages T14): the title with the tab's count and
+/// how to press it, My binds or Omarchy, Find (the list) and Add bind; the six tabs as chips with their counts beside the
+/// module legend; the keyboard in its case, in one piece (Sven's Q36); then the picked key, the tab's binds by module, and
+/// its free keys with the macOS clashes while there are any. Cleaning is on More. Every act is BindsKeyboardPage's own
+/// (`BindsKeyboardPage.Acts`), so picking, binding, clearing, presets, Find and the tabs behave as in Instrument.
 struct ToyBindsPage: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -32,9 +32,8 @@ struct ToyBindsPage: View {
                 header(count: counts[layer] ?? 0)
                 chips(counts)
                 ToyBindsBoard(boards: boards, binds: binds, layerKeys: engine.settings.layerKeys, layer: layer, picked: key, pick: acts.pick,
-                              open: { acts.open($0, bound: binds.bound, layer: layer) })
+                              open: { acts.open($0, bound: binds.bound, layer: layer) }, whole: true)
                 lower(width - 2 * side)
-                KeyboardLockCard(edit: acts.edit)
                 if let refusal {
                     Label(refusal, systemImage: "exclamationmark.triangle.fill").font(style.toyNunito(700, 13)).foregroundStyle(style.color(\.text2))
                         .symbolRenderingMode(.multicolor)
@@ -66,7 +65,7 @@ struct ToyBindsPage: View {
                 line.fixedSize(horizontal: false, vertical: true)
                 controls().padding(.top, 4)
             }
-            // The least window, one type step up (C3): Find, Abilities and Overlay as their glyphs.
+            // The least window, one type step up (C3): Find as its glyph.
             VStack(alignment: .leading, spacing: 10) {
                 name
                 line.fixedSize(horizontal: false, vertical: true)
@@ -81,13 +80,9 @@ struct ToyBindsPage: View {
                         options: engine.binds.store.presets.map { ($0, $0.title) }, label: "Layout")
             PresetMoreMenu()
             Button(action: acts.showList) { barLabel("Find", "magnifyingglass", compact) }.buttonStyle(.pilot).help("Find")
-            // This page draws its own title row, so the frame's Binds › Overlay tab is not here (story 56); Abilities is Launcher › Abilities (C3).
-            Button { acts.go(AppPlace(.abilities)) } label: { barLabel("Abilities", "sparkles", compact) }.buttonStyle(.pilot).help("Abilities")
-            Button { acts.go(AppPlace(.overlay)) } label: { barLabel("Overlay", "rectangle.grid.2x2", compact) }.buttonStyle(.pilot).help("Overlay")
-            Button { acts.go(AppPlace(.mouse)) } label: { barLabel("Mouse", "computermouse", compact) }.buttonStyle(.pilot).help("Mouse buttons")
+            // Abilities, Overlay and Mouse have one home each: Launcher › Abilities and Keys' own tabs (simplify-pages T2).
             Button { acts.edit(.init(action: nil)) } label: { Label("Add bind", systemImage: "plus") }.buttonStyle(.pilotPrimary)
             Menu {
-                Button("Show as list", action: acts.showList)
                 Button("Import or export binds…") { acts.go(AppPlace(.exportImport)) }
                 Button("Save keyboard map…") { BindsMapSave.run(engine: engine) }
                 Divider()
@@ -301,32 +296,32 @@ struct ToyBindsPage: View {
                         .accessibilityLabel("\(run.label): free")
                 }
             }
-            Spacer(minLength: 0)
-            clashState
+            // The clashes only while there are some (simplify-pages T14).
+            if clashes > 0 {
+                Spacer(minLength: 0)
+                clashState
+            }
         }
     }
 
-    /// ShortcutConflicts' state: no clashes in the good colour, else how many in the problem colour with a way to them.
+    /// ShortcutConflicts' state: how many clashes, in the problem colour, with a way to them.
     private var clashState: some View {
-        let ok = clashes == 0
-        return HStack(spacing: 10) {
-            Image(systemName: ok ? "checkmark" : "exclamationmark")
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark")
                 .font(.system(size: 12, weight: .black)).foregroundStyle(style.color(\.outline))
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Toy.module(ok ? 2 : 3, style)))
+                .background(Circle().fill(Toy.module(3, style)))
                 .overlay { Circle().strokeBorder(style.color(\.outline), lineWidth: 2) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(ok ? "No clashes" : "\(clashes) clash\(clashes == 1 ? "" : "es")").font(style.toyNunito(800, 13.5)).foregroundStyle(style.color(\.text))
+                Text("\(clashes) clash\(clashes == 1 ? "" : "es")").font(style.toyNunito(800, 13.5)).foregroundStyle(style.color(\.text))
                 Text("with macOS shortcuts").font(style.toyNunito(700, 13.5)).foregroundStyle(style.color(\.text2))
             }
             Spacer(minLength: 8)
-            if !ok {
-                Button("Show") { acts.go(AppPlace(.conflicts)) }.buttonStyle(ToyBindsButton(small: true))
-            }
+            Button("Show") { acts.go(AppPlace(.conflicts)) }.buttonStyle(ToyBindsButton(small: true))
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Toy.moduleSoft(ok ? 2 : 3, style), in: .rect(cornerRadius: 14, style: .continuous))
+        .background(Toy.moduleSoft(3, style), in: .rect(cornerRadius: 14, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(style.color(\.outline), lineWidth: 2) }
         .accessibilityElement(children: .combine)
     }

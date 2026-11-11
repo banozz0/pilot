@@ -61,7 +61,7 @@ struct LoginItemsBlock: View {
             }
             Spacer(minLength: 8)
             if item.isPilot {
-                Text("General › Launch at login").font(ink.ui(11.5)).foregroundStyle(ink.text2)
+                Text("Pilot › Launch at login").font(ink.ui(11.5)).foregroundStyle(ink.text2)
             } else if model.appHeld.contains(item.label), item.kind == .loginItem {
                 Text("Its app keeps it: Open Login Items…").font(ink.ui(11.5)).foregroundStyle(ink.text2)
             } else if item.canSwitch {

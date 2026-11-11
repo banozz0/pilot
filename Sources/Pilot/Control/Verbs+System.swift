@@ -23,7 +23,7 @@ final class ControlSystem {
         Look.shared.pickLayout($0)
         return Look.shared.layoutError
     }
-    var dark: @MainActor () -> Bool = { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
+    var dark: @MainActor () -> Bool = { MacAppearance.isDark() }
     /// Whether Finder draws the desktop's icons (its CreateDesktop), only read here.
     var desktopIcons: @MainActor () -> Bool = { FinderDesktopIcons.shown }
     /// System › Mouse's pointer speed, only read here.

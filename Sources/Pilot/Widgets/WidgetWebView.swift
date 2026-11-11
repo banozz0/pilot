@@ -71,7 +71,7 @@ final class WidgetWebView {
         view.uiDelegate = guardian
         page.resized = { [weak self] in self?.resized() }
         // A load (the first, or once more after a crash) starts with the class it was made with: it gets the one now.
-        guardian.loaded = { [weak self] in self?.mark() }
+        guardian.loaded = { [weak self] in self?.mark(); self?.applyVeil() }
         view.load(URLRequest(url: Self.url(widget.id)))
     }
 
@@ -84,6 +84,21 @@ final class WidgetWebView {
         guard next != size else { return }
         size = next
         mark()
+    }
+
+    /// The tile under this page is Light's tinted glass (Look.widgetLightTint).
+    private var bare: Bool { seeThrough && Look.shared.widgetLightGlass }
+
+    /// On Light the kit's veil comes off the page and its faintest text steps up to the second text, as the clipboard's does
+    /// on glass (StyleTokens.seeThrough); any other blur keeps the kit's own. Set on `<html>`, so a widget's copy of the kit
+    /// needs no change.
+    func applyVeil() {
+        let text3 = String(format: "#%06x", bare ? Look.shared.theme.text2 : Look.shared.theme.text3)
+        view.callAsyncJavaScript("""
+            const s = document.documentElement.style
+            if (bare) s.setProperty('--pk-veil', 'transparent'); else s.removeProperty('--pk-veil')
+            s.setProperty('--pk-text3', text3)
+            """, arguments: ["bare": bare, "text3": text3], in: nil, in: .page) { _ in }
     }
 
     /// Puts its class on the page's `<html>`, every other size class off, and tells the page.
@@ -113,7 +128,7 @@ final class WidgetWebView {
     func send(_ data: JSONValue) {
         var data = data
         if case .object(var fields) = data, fields["theme"] == nil {
-            fields["theme"] = Self.theme(Look.shared.theme)
+            fields["theme"] = Self.theme(Look.shared.theme, stepped: bare)
             data = .object(fields)
         }
         handler.latest = data
@@ -126,11 +141,12 @@ final class WidgetWebView {
         }
     }
 
-    /// PilotTheme's fields as the look kit takes them (`--pk-<field>`), each colour `#rrggbb`.
-    static func theme(_ t: PilotTheme) -> JSONValue {
+    /// PilotTheme's fields as the look kit takes them (`--pk-<field>`), each colour `#rrggbb`; `stepped`, Light's faintest
+    /// text as the second text (applyVeil).
+    static func theme(_ t: PilotTheme, stepped: Bool = false) -> JSONValue {
         func hex(_ rgb: UInt32) -> JSONValue { .string(String(format: "#%06x", rgb)) }
         return .object(["dark": .bool(t.dark), "ground": hex(t.ground), "surface": hex(t.surface), "raised": hex(t.raised),
-                        "line": hex(t.line), "line2": hex(t.line2), "text": hex(t.text), "text2": hex(t.text2), "text3": hex(t.text3),
+                        "line": hex(t.line), "line2": hex(t.line2), "text": hex(t.text), "text2": hex(t.text2), "text3": hex(stepped ? t.text2 : t.text3),
                         "accent": hex(t.accent), "second": hex(t.second), "third": hex(t.third), "good": hex(t.good),
                         "amber": hex(t.amber), "problem": hex(t.problem), "graphs": .array(t.graphs.map(hex))])
     }

@@ -37,7 +37,7 @@ struct FoldersBlock: View {
                 }
             case .gifs:
                 BlockRow {
-                    row("GIFs and pictures", info: "Trigger › Stickers and GIFs lists the pictures in this folder and its subfolders.",
+                    row("GIFs and pictures", info: "Actions › Stickers and GIFs lists the pictures in this folder and its subfolders.",
                         path: $folders.gifs, standard: PilotFolders.standardGIFs)
                 }
                 giphyRows

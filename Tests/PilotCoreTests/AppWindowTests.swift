@@ -8,19 +8,20 @@ struct AppWindowTests {
     func pages() {
         #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Look", "System", "Activity",
                                                    "Update & Clean", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
-                                                   "Configs", "Repos", "Fonts", "General", "Extensions", "Widgets"])
+                                                   "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Launcher", "Desktop", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
         // Every page in exactly one area.
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
         for page in AppPage.allCases { #expect(page.area.pages.contains(page), "\(page)") }
         #expect(AppArea.home.pages == [.home] && AppArea.keys.pages == [.binds] && AppArea.launcher.pages == [.menu])
         #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .look, .widgets])
-        #expect(AppArea.mac.pages == [.system, .activity, .upkeep, .stats])
-        #expect(AppArea.tools.pages == [.clipboard, .captures, .snippets, .notes, .files, .voice])
-        #expect(AppArea.apps.pages == [.install, .openWith, .configs, .repos, .fonts])
+        // Majors first (simplify-pages T11): ⌘5 opens Update & Clean, ⌘7 Open with.
+        #expect(AppArea.mac.pages == [.upkeep, .system, .activity, .stats])
+        #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
+        #expect(AppArea.apps.pages == [.openWith, .install, .configs, .repos, .fonts])
         // The Developer switch off (Q715) leaves Configs and Repos out of the list, Ctrl+Tab and the search.
-        #expect(AppArea.apps.pages(developer: false) == [.install, .openWith, .fonts])
-        #expect(AppArea.next(after: .openWith, developer: false) == .fonts && AppPlace.search("zshrc", developer: false).isEmpty)
+        #expect(AppArea.apps.pages(developer: false) == [.openWith, .install, .fonts])
+        #expect(AppArea.next(after: .install, developer: false) == .fonts && AppPlace.search("zshrc", developer: false).isEmpty)
         // AI and Extensions are areas of their own (Sven 2026-10-16).
         #expect(AppArea.ai.pages == [.ai] && AppArea.extensions.pages == [.extensions])
         #expect(AppArea.pilot.pages == [.general])
@@ -48,16 +49,24 @@ struct AppWindowTests {
         #expect(RailLayout.hint(.mac) == "⌘5 Mac · ⌃Tab next page" && RailLayout.hint(.keys) == "⌘2 Keys" && RailLayout.hint(.pilot) == "⌘, Pilot")
         #expect(RailLayout.hint(.extensions) == "⌘9 Extensions" && RailLayout.hint(.extensions, rows: 3) == "⌘9 Extensions · ⌃Tab next page")
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's, Activity's and Files' own content first.
-        #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Aliases", "Quicklinks", "Rings"])
+        #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Convert", "File search", "Duplicates", "Folders"])
-        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
-        #expect(AppPage.activity.tabs.map(\.title) == ["Now", "Reports"])
-        #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "Helpers", "Hidden apps"])
-        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Overlay", "Mouse", "Swap keys", "Export and import"], "Overlay stays a Binds tab (story 56)")
+        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.snippets.tabs.isEmpty)
+        // Reports beside the runs it records, Install's tools and hidden apps on its More (simplify-pages T16).
+        #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "Reports"] && AppPage.activity.tabs.isEmpty)
+        #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "More"])
+        // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
+        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
-        #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
-        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
-        for page in [AppPage.stats, .upkeep, .workspaces, .tiling, .general, .openWith, .system] { #expect(page.tabs.isEmpty, "\(page)") }
+        #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup", "More"])
+        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
+        for page in [AppPage.stats, .activity] { #expect(page.tabs.isEmpty, "\(page)") }
+        #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
+        // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
+        #expect(AppPage.system.tabs.isEmpty)
+        #expect(AppPage.openWith.tabs.map(\.title) == ["Open with", "More"])
+        // A page's front, then its More (simplify-pages T7, T9): More last.
+        #expect(AppPage.general.tabs.map(\.title) == ["Pilot", "More"] && AppPage.tiling.tabs.map(\.title) == ["Tiling", "More"])
     }
 
     /// Every name pilot://open has used for a page or a part, the 21 before the round-4 cut and the 7 C3 renamed or moved,
@@ -65,7 +74,7 @@ struct AppWindowTests {
     static let moved: [(String, AppPlace)] = [
         ("home", AppPlace(.home)), ("binds", AppPlace(.binds)), ("plainCombos", AppPlace(.binds, .plainCombos)),
         ("conflicts", AppPlace(.binds, .conflicts)), ("workspaces", AppPlace(.workspaces)),
-        ("snapshots", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("topBar", AppPlace(.menuBar)),
+        ("snapshots", AppPlace(.workspaceRules)), ("tiling", AppPlace(.tiling)), ("topBar", AppPlace(.menuBar)),
         ("webApps", AppPlace(.install, .webApps)), ("installCatalogue", AppPlace(.install, .catalogue)),
         ("configs", AppPlace(.configs)), ("defaultApps", AppPlace(.openWith)), ("clipboard", AppPlace(.clipboard)),
         // Pomodoro became an extension (2026-10-10): its old link opens the Extensions page's catalogue, where it is installed.
@@ -75,7 +84,7 @@ struct AppWindowTests {
         ("onOff", AppPlace(.home)), ("about", AppPlace(.general, .about)),
         // C3's renames and moves.
         ("pilot", AppPlace(.general)), ("stats", AppPlace(.stats)), ("defaults", AppPlace(.openWith)),
-        ("otherApps", AppPlace(.general)), ("abilities", AppPlace(.menu, .abilities)), ("reports", AppPlace(.activity, .reports)),
+        ("otherApps", AppPlace(.general)), ("abilities", AppPlace(.menu, .abilities)), ("reports", AppPlace(.upkeep, .reports)),
         ("menubar", AppPlace(.menuBar)),
         // Activity's History tab is Stats, a page of its own now (Sven 2026-10-10).
         ("history", AppPlace(.stats)),
@@ -102,8 +111,8 @@ struct AppWindowTests {
         // The tabs C3 moved to another page, by their old page and tab.
         let tabs: [(String, AppPlace)] = [
             ("page=workspaces&tab=tiling", AppPlace(.tiling)), ("page=binds&tab=abilities", AppPlace(.menu, .abilities)),
-            ("page=install&tab=reports", AppPlace(.activity, .reports)), ("page=defaults&tab=configs", AppPlace(.configs)),
-            ("page=defaults&tab=defaultApps", AppPlace(.openWith)), ("page=workspaces&tab=snapshots", AppPlace(.workspaces)),
+            ("page=install&tab=reports", AppPlace(.upkeep, .reports)), ("page=defaults&tab=configs", AppPlace(.configs)),
+            ("page=defaults&tab=defaultApps", AppPlace(.openWith)), ("page=workspaces&tab=snapshots", AppPlace(.workspaceRules)),
             ("page=pilot&tab=about", AppPlace(.general, .about)), ("page=setup&section=wifi", AppPlace(.system)),
             ("page=extensions&tab=catalogue", AppPlace(.extensions, .extensionCatalogue)), ("page=install&tab=catalogue", AppPlace(.install, .catalogue)),
             ("page=activity&tab=history", AppPlace(.stats)), ("page=activity&tab=stats", AppPlace(.stats)),
@@ -147,24 +156,37 @@ struct AppWindowTests {
         "about": ["version", "made with", "licence"],
     ]
 
-    @Test("The keyboard layout's words find System (Setup until C3), where section 7 moved it from Look (card agent-bo-95422898)")
+    @Test("The keyboard layout's words find System › Keyboard layout (Setup until C3), where section 7 moved it from Look (card agent-bo-95422898)")
     func keyboardLayoutFindsSetup() {
         for word in ["keyboard layout", "input source"] {
-            #expect(AppPlace.search(word).contains(AppPlace(.system)) && !AppPlace.search(word).contains(AppPlace(.look)), "\(word)")
+            #expect(AppPlace.search(word).contains(AppPlace(.keyboardLayout)) && !AppPlace.search(word).contains(AppPlace(.look)), "\(word)")
         }
     }
 
-    @Test("Translate's language pair feeds the menu's answer, so its words find Launcher (page map, Sven 2026-10-17; was System's)")
+    @Test("Translate's language pair feeds the menu's answer, so its words find Launcher › More › Translate (page map, Sven 2026-10-17; was System's; More since simplify-pages T15)")
     func translateFindsLauncher() {
-        for word in ["translate", "translation", "language"] { #expect(AppPlace.search(word) == [AppPlace(.menu)], "\(word)") }
+        for word in ["translate", "translation", "language"] { #expect(AppPlace.search(word) == [AppPlace(.translate)], "\(word)") }
     }
+
+    /// Old words whose controls left Pilot's front for a block on its More (simplify-pages T8).
+    static let movedToMore: [String: AppSection] = ["escape": .hyperKey, "overlay": .hyperKey, "secure input": .status, "health": .status,
+                                                    "diagnostics": .status, "log": .status, "never record": .clipNever,
+                                                    // System's input (simplify-pages T17).
+                                                    "input": .soundInput, "microphone": .soundInput,
+                                                    // Workspaces' rules and snapshot (simplify-pages T18); float lives on Tiling.
+                                                    "app rule": .workspaceRules, "always opens on": .workspaceRules, "float": .floatApps,
+                                                    "snapshot": .workspaceRules, "save": .workspaceRules, "restore": .workspaceRules,
+                                                    "reopen": .workspaceRules]
 
     @Test("Every word that found a page before the cut finds where that page went, and its old title does too")
     func oldKeywordsFindTheirPlace() {
         #expect(Self.oldKeywords.count == 21 && Set(Self.oldKeywords.keys).isSubset(of: Set(Self.moved.map(\.0))))
         for (name, place) in Self.moved where Self.oldKeywords[name] != nil {
             for word in Self.oldKeywords[name] ?? [] {
-                #expect(AppPlace.search(word).contains(place), "\(name): \"\(word)\" finds \(AppPlace.search(word).map(\.path))")
+                // A word whose control moved to a More tab finds its block there (simplify-pages T8).
+                let found = AppPlace.search(word)
+                #expect(found.contains(place) || Self.movedToMore[word].map { found.contains(AppPlace($0)) } == true,
+                        "\(name): \"\(word)\" finds \(found.map(\.path))")
             }
         }
     }
@@ -181,11 +203,13 @@ struct AppWindowTests {
         #expect(AppPlace.search("ask").contains(AppPlace(.ai)), "Ask was AI's name")
         #expect(AppPlace.search("launcher") == [AppPlace(.menu)] && AppPlace.search("agents.md") == [AppPlace(.configs, .agents)])
         #expect(AppPlace.search("homebrew").contains(AppPlace(.install, .helpers)) && AppPlace.search("export") == [AppPlace(.binds, .exportImport)])
-        #expect(AppPlace.search("border").contains(AppPlace(.tiling)) && AppPlace.search("fps") == [AppPlace(.captures, .recording)])
+        #expect(AppPlace.search("border").contains(AppPlace(.tiling)) && AppPlace.search("fps") == [AppPlace(.captures, .recordingQuality)])
         #expect(AppPlace.search("cpu") == [AppPlace(.stats)] && AppPlace.search("stats") == [AppPlace(.stats)])
         #expect(AppPlace.search("alias").first == AppPlace(.menu, .aliases) && AppPlace.search("never index") == [AppPlace(.files, .fileSearch)])
         #expect(AppPlace.search("convert") == [AppPlace(.files)] && AppPlace.search("heic") == [AppPlace(.files)])
-        for word in ["sound", "volume", "microphone", "output"] { #expect(AppPlace.search(word).first == AppPlace(.system), "\(word)") }
+        for word in ["sound", "volume", "output"] { #expect(AppPlace.search(word).first == AppPlace(.system), "\(word)") }
+        // The input is its own place on System's front.
+        #expect(AppPlace.search("microphone").contains(AppPlace(.soundInput)))
         // Setup was System's name; AI › Setup's title comes first now, System right after it.
         #expect(AppPlace.search("setup").prefix(2) == [AppPlace(.ai, .aiSetup), AppPlace(.system)])
         #expect(AppPlace.search("  ").isEmpty && AppPlace.search("zzz").isEmpty)
@@ -243,7 +267,8 @@ struct HomeProblemsTests {
                                     lastError: "Could not remap Caps Lock.")
         #expect(all.map(\.title) == ["Accessibility is not granted", "Vesktop has the keyboard (a password field)", "Pilot's tiler is not running",
                                       "Could not remap Caps Lock."])
-        #expect(all.map(\.place) == [AppPlace(.general, .permissions), AppPlace(.general, .permissions), AppPlace(.tiling), nil])
+        // Accessibility's Grant is on Pilot's front, Password field lock on More › Status (simplify-pages T8).
+        #expect(all.map(\.place) == [AppPlace(.general), AppPlace(.status), AppPlace(.tiling), nil])
         #expect(all[2].kind == .tiler)
     }
 }

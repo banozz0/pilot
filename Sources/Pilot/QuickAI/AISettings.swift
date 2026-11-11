@@ -35,6 +35,12 @@ final class AISettings {
     var chatReset: AIChat.Reset {
         didSet { defaults.set(chatReset.rawValue, forKey: "ai.chatReset") }
     }
+
+    /// The AI that answers when the picked one fails for usage, billing or sign-in (AIFallback, P95); nil is None, a fresh
+    /// Mac's.
+    var fallback: AIProvider? {
+        didSet { defaults.set(fallback?.rawValue, forKey: "ai.fallback") }
+    }
     /// Each route's pick, by model id or alias; a route with none runs its default (nil being the CLI's own).
     private var picked: [AIProvider: String] = [:]
     /// Each route's effort; a route with none runs low.
@@ -70,6 +76,7 @@ final class AISettings {
         if stored != nil && known == nil { defaults.removeObject(forKey: "ai.provider") }
         provider = known ?? .claudeCode
         chatReset = defaults.string(forKey: "ai.chatReset").flatMap(AIChat.Reset.init(rawValue:)) ?? .standard
+        fallback = defaults.string(forKey: "ai.fallback").flatMap(AIProvider.init(rawValue:))
         for route in AIProvider.allCases {
             picked[route] = defaults.string(forKey: Self.modelKey(route))
             efforts[route] = defaults.string(forKey: Self.effortKey(route)).flatMap(AIEffort.init(rawValue:))
@@ -185,16 +192,35 @@ final class AISettings {
         return .success((key, base))
     }
 
-    /// The runner for the picked provider, or why there is none.
-    /// `effort` given runs it at that effort whatever the AI page picks (the bind editor's Suggest with AI: low, Q124).
-    func runner(effort: AIEffort? = nil) -> Result<QuickAI.Runner, QuickAI.Failure> { route(effort: effort).map { $0.run(_:text:) } }
+    /// The fallback a run may use: none when it is unset or is the picked provider (picked after it was set).
+    var fallbackInUse: AIProvider? { fallback == provider ? nil : fallback }
 
-    /// AI chat's runner for the picked provider (story 166), or why there is none.
-    func chatRunner() -> Result<AIChat.Runner, QuickAI.Failure> { route().map { $0.chat(_:text:) } }
+    /// What the Fallback picker offers: every other provider that is set up, and the one already picked though it is not
+    /// (a CLI still being checked, a key just removed).
+    var fallbackChoices: [AIProvider] { AIProvider.allCases.filter { $0 != provider && (ready($0) || $0 == fallback) } }
 
-    /// The picked provider set up from the AI page: its CLI or its API.
-    func route(effort fixed: AIEffort? = nil) -> Result<any AIChat.Route, QuickAI.Failure> {
-        let provider = provider
+    /// The runner for the picked provider with its fallback behind it, or why there is none; `told` hears when the fallback
+    /// answered, a tip unless the surface has a line of its own. `effort` given runs it at that effort whatever the AI page
+    /// picks (the bind editor's Suggest with AI: low, Q124).
+    func runner(effort: AIEffort? = nil, told: @escaping AIFallback.Tell = AISettings.tip) -> Result<QuickAI.Runner, QuickAI.Failure> {
+        routeWithFallback(effort: effort, told: told).map { $0.run(_:text:) }
+    }
+
+    /// AI chat's runner for the picked provider (story 166) with its fallback behind it, or why there is none. The reply
+    /// carries the notice.
+    func chatRunner() -> Result<AIChat.Runner, QuickAI.Failure> { routeWithFallback(told: { _ in }).map { $0.chat(_:text:) } }
+
+    /// The picked provider's route, with the fallback's behind it when one is in use.
+    private func routeWithFallback(effort: AIEffort? = nil, told: @escaping AIFallback.Tell) -> Result<any AIChat.Route, QuickAI.Failure> {
+        let chosen = provider
+        return route(of: chosen, effort: effort).map { first -> any AIChat.Route in
+            guard let second = fallbackInUse else { return first }
+            return AIFallback.Route(first: first, chosen: chosen, second: second, told: told) { self.route(of: second, effort: effort) }
+        }
+    }
+
+    /// `provider` set up from the AI page: its CLI or its API.
+    func route(of provider: AIProvider, effort fixed: AIEffort? = nil) -> Result<any AIChat.Route, QuickAI.Failure> {
         if provider == .claudeCode {
             guard var cli = findCLI() else { return .failure(.missing) }
             cli.model = model(for: .claudeCode)?.id
@@ -297,10 +323,10 @@ final class AISettings {
     /// Stops a Connect still waiting on the browser.
     func cancelConnect(_ provider: AIProvider) { connects[provider]?.cancel() }
 
-    /// Test: one tiny question through the picked provider; nil when it answered.
+    /// Test: one tiny question through the picked provider alone, so a provider out of usage says so; nil when it answered.
     func test() async -> QuickAI.Failure? {
         do throws(QuickAI.Failure) {
-            _ = try await runner().get()(.ask("Reply with the single word OK.")) { _ in }
+            _ = try await route(of: provider).get().run(.ask("Reply with the single word OK.")) { _ in }
             ailog.notice("quick AI test passed on \(self.provider.rawValue, privacy: .public)")
             return nil
         } catch {

@@ -3,47 +3,57 @@ import Clipboard
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7): how long to keep and the apps
-/// never recorded, what Return does, the sort, the tags and the bind, then the newest copies with the app each came from
-/// and Clear history. Nothing folds (card agent-bo-95423004; Sven, 2026-10-07: "dont leave half empty").
+/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7). Its front (simplify-pages T10): the
+/// newest copies with the app each came from, how long to keep, Save images, the panel's key and Clear history. Its
+/// More: the apps never recorded, card numbers and keys that expire, what Return does and the sort, and the tags.
 struct ClipboardSettingsView: View {
     @Environment(\.ink) private var ink
     let history: ClipboardHistory
+    /// The More tab shows, not the front.
+    let more: Bool
     @State private var settings: ClipboardSettings
     @State private var tags: [ClipTag]
     @State private var confirmingClear = false
 
     private static let dayChoices: [Int?] = [1, 7, 30, 90, 365, nil]
 
-    init(history: ClipboardHistory = .shared) {
+    init(history: ClipboardHistory = .shared, more: Bool = false) {
         self.history = history
+        self.more = more
         _settings = State(initialValue: history.settings)
         _tags = State(initialValue: history.tags())
     }
 
     static let intro = "What you copy is kept here; passwords never are."
+    static let introInfo = "Anything an app marks as secret is never stored."
+
+    /// More's index (simplify-pages T10): a list counts once. A row added to or moved off a block changes its count here.
+    static let entries = [
+        MoreEntry(id: .clipNever, symbol: "nosign", controls: 2),
+        MoreEntry(id: .clipExpire, symbol: "creditcard", controls: 2),
+        MoreEntry(id: .clipPanel, symbol: "doc.on.clipboard", controls: 2),
+        MoreEntry(id: .clipTags, symbol: "tag", controls: 1),
+    ]
 
     var body: some View {
-        let kept = history.recent()
-        KitPage(intro: Self.intro) {
-            if ink.isInstrument {
-                // Instrument's two columns, rows ending level.
-                InstrumentPair { keepBlock } right: { neverBlock }
-                InstrumentPair {
-                    KitBlock(title: "In the panel", symbol: "doc.on.clipboard", fill: true) { panel }
-                } right: {
-                    KitBlock(title: "Tags", symbol: "tag", fill: true) { tagRows }
+        Group {
+            if more {
+                KitMore(entries: Self.entries) {
+                    neverBlock.moreBlock(.clipNever)
+                    KitBlock(title: "Card numbers and keys", symbol: "creditcard") { expire }.moreBlock(.clipExpire)
+                    KitBlock(title: "In the panel", symbol: "doc.on.clipboard") { panel }.moreBlock(.clipPanel)
+                    KitBlock(title: "Tags", symbol: "tag") { tagRows }.moreBlock(.clipTags)
                 }
             } else {
-                keepBlock
-                neverBlock
-                KitBlock(title: "In the panel", symbol: "doc.on.clipboard") { panel }
-                KitBlock(title: "Tags", symbol: "tag") { tagRows }
+                let kept = history.recent()
+                KitPage(intro: Self.intro, info: Self.introInfo) {
+                    KitBlock(title: "Recent", symbol: "clock") {
+                        Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
+                    } content: { recent(kept.prefix(20)) }
+                    keepBlock
+                    clear.padding(.top, 16)
+                }
             }
-            KitBlock(title: "Recent", symbol: "clock") {
-                Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
-            } content: { recent(kept.prefix(20)) }
-            clear.padding(.top, 16)
         }
         // A sort changed in the panel while this page is open: take it, so a later edit here does not undo it.
         .onChange(of: history.settings.order) { settings.order = history.settings.order }
@@ -63,7 +73,7 @@ struct ClipboardSettingsView: View {
     // MARK: Kept
 
     private var keepBlock: some View {
-        KitBlock(title: "Keep", symbol: "clock.arrow.circlepath", focused: true, fill: true) { keep }
+        KitBlock(title: "Keep", symbol: "clock.arrow.circlepath", focused: true) { keep }
     }
 
     private var neverBlock: some View {
@@ -88,8 +98,18 @@ struct ClipboardSettingsView: View {
             .labelsHidden().fixedSize()
         }
         BlockRow { Toggle("Save images", isOn: $settings.saveImages).toggleStyle(.pilotSwitchRow(info: "Off, a copied picture is left out of the history; text and files are still kept.")) }
-        // P65: a copied card number or key leaves the history on its own.
+        // Changed on the Binds screen.
         BlockRow {
+            Text("Open with")
+            InfoMark(text: "The key that opens the clipboard panel; change it on Binds.")
+            Spacer()
+            BindKey(action: "apps.clipboard")
+        }
+    }
+
+    /// More's card numbers and keys (P65): a copied one leaves the history on its own.
+    @ViewBuilder private var expire: some View {
+        BlockRow(first: true) {
             Toggle("Expire card numbers and keys", isOn: $settings.expireSecrets)
                 .toggleStyle(.pilotSwitchRow(info: "A copied card number or API key leaves the history after the minutes below; a pinned one stays. Off, they are kept like any other copy."))
         }
@@ -101,13 +121,6 @@ struct ClipboardSettingsView: View {
                     .multilineTextAlignment(.trailing).font(ink.mono(12)).pilotField().frame(width: 50)
                 Text("minutes").foregroundStyle(ink.muted)
             }
-        }
-        // SPEC.md: a password manager's copies are never kept, so this is no switch.
-        BlockRow {
-            Text("Skip passwords")
-            InfoMark(text: "Anything an app marks as secret is never stored.")
-            Spacer()
-            Chip(text: "always", color: ink.green)
         }
     }
 
@@ -149,13 +162,6 @@ struct ClipboardSettingsView: View {
             .labelsHidden().fixedSize()
             Text("Reversed").foregroundStyle(ink.text2)
             Toggle("Reversed", isOn: $settings.order.reversed).toggleStyle(.pilotSwitch)
-        }
-        // Changed on the Binds screen.
-        BlockRow {
-            Text("Open with")
-            InfoMark(text: "The key that opens the clipboard panel; change it on Binds.")
-            Spacer()
-            BindKey(action: "apps.clipboard")
         }
     }
 

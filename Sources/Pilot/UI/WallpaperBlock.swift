@@ -7,7 +7,8 @@ import SwiftUI
 /// wallpaper now, its place in the cycle and Previous and Next; the folders and images that cycle as chips with Add and
 /// Reset, the same for every screen or each screen its own (Sven 2026-10-17), under its row; workspaces on their screen's
 /// folders or each its own (Sven 2026-10-19, Q333), a row per workspace; Browse as gallery (P90); By name or Shuffle; the screen in front or every screen; and Change on its own. Self-contained, so the layout
-/// rework can move it; it reads the screens on appear and after every step.
+/// rework can move it; it reads the screens on appear and after every step. Look's front draws the screens' Previous and
+/// Next and Change on its own; its More the rest, under Wallpaper folders (simplify-pages T20).
 struct WallpaperBlock: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: WallpaperSettings
@@ -20,6 +21,9 @@ struct WallpaperBlock: View {
     private let names: [String]?
     /// The row the desktop's Hyper + right-click › Wallpaper settings… asked for, and the row it lights a moment.
     let focus: Focus?
+    /// Which rows show: all of them, Look's front's or its More's.
+    let part: Part
+    enum Part { case all, front, more }
     @State private var lit: Lit?
     private enum Lit: Equatable { case screen(String), workspace(String) }
 
@@ -30,8 +34,9 @@ struct WallpaperBlock: View {
     }
 
     init(settings: WallpaperSettings = .shared, screens: [WallpaperScreen]? = nil, count: Int? = nil, nicknames: DisplayNicknames = .shared,
-         workspaces: [String]? = nil, focus: Focus? = nil) {
+         workspaces: [String]? = nil, focus: Focus? = nil, part: Part = .all) {
         self.settings = settings
+        self.part = part
         self.nicknames = nicknames
         names = workspaces
         self.focus = focus
@@ -55,52 +60,9 @@ struct WallpaperBlock: View {
     }
 
     var body: some View {
-        KitBlock(title: "Wallpaper", symbol: "photo.on.rectangle",
-                 note: "What Next wallpaper and Previous step through, and when the wallpaper changes on its own.") {
-            BindKey(action: "system.nextWallpaper")
-        } content: {
-            ForEach(Array(screens.enumerated()), id: \.element.id) { i, screen in
-                BlockRow(first: i == 0) { screenRow(screen) }.focusBorder(on: screen.displayUUID.map { lit == .screen($0) } ?? false, radius: ink.style.radii.control)
-            }
-            BlockRow(first: screens.isEmpty) {
-                label("Folders", Info.folders)
-                Segments(selection: $settings.folders, options: [(.shared, "Same for every screen"), (.perScreen, "Each screen its own")],
-                         label: "Folders")
-            }
-            BlockRow {
-                label("Workspaces", Info.workspaces)
-                Segments(selection: $settings.workspaces, options: [(.shared, "Same as global"), (.perWorkspace, "Per workspace")],
-                         label: "Workspaces")
-            }
-            if settings.workspaces == .perWorkspace {
-                ForEach(workspaceNames, id: \.self) { workspace in
-                    BlockRow { workspaceRow(workspace) }.focusBorder(on: lit == .workspace(workspace), radius: ink.style.radii.control)
-                }
-            }
-            BlockRow {
-                label("Only images that fit the screen", Info.fit)
-                Toggle("Only images that fit the screen", isOn: $settings.fitShape).toggleStyle(.pilotSwitch).labelsHidden()
-            }
-            BlockRow { sourcesRow }
-            BlockRow {
-                label("Order", Info.order)
-                if settings.order == .shuffle {
-                    Button("Shuffle again") { settings.shuffleAgain() }.buttonStyle(.pilot)
-                }
-                Segments(selection: $settings.order, options: [(.name, "By name"), (.shuffle, "Shuffle")], label: "Order")
-            }
-            BlockRow {
-                label("Screens", Info.scope)
-                Segments(selection: $settings.scope, options: [(.focusedScreen, "Screen in front"), (.everyScreen, "Every screen")], label: "Screens")
-            }
-            BlockRow {
-                label("Change on its own", Info.interval)
-                Picker("Change on its own", selection: $settings.interval) {
-                    ForEach(WallpaperCycle.intervals, id: \.self) { Text(WallpaperCycle.intervalName($0)).tag($0) }
-                }
-                .labelsHidden().fixedSize()
-            }
-        }
+        KitBlock(title: part == .more ? "Wallpaper folders" : "Wallpaper", symbol: "photo.on.rectangle", note: note) {
+            if part != .front { BindKey(action: "system.nextWallpaper") }
+        } content: { rows }
         .task(id: Reading(urls: settings.urls, folders: settings.folders, own: settings.screenSources, workspaces: settings.workspaces,
                           workspaceOwn: settings.workspaceSources, fit: settings.fitShape, order: settings.order, seed: settings.seed)) {
             if reads { await read() }
@@ -115,7 +77,86 @@ struct WallpaperBlock: View {
         }
     }
 
+    private var note: String? {
+        switch part {
+        case .all: "What Next wallpaper and Previous step through, and when the wallpaper changes on its own."
+        case .front: nil
+        case .more: "What Next wallpaper and Previous step through."
+        }
+    }
+
+    /// A row per screen: Previous and Next off More; on More only while each screen has its own folders.
+    private var screenRows: Bool { (part != .more || settings.folders == .perScreen) && !screens.isEmpty }
+
+    /// The part's rows: the screens with Previous and Next off More; on More, each screen's own folders while each has its
+    /// own; the folders, workspaces, fit, images, order and screens off the front; Change on its own off More.
+    @ViewBuilder private var rows: some View {
+        if screenRows {
+            ForEach(Array(screens.enumerated()), id: \.element.id) { i, screen in
+                BlockRow(first: i == 0) {
+                    switch part {
+                    case .all: screenRow(screen)
+                    case .front: screenLine(screen, label: screenLabel(screen), compact: true)
+                    case .more: ownRow(screen)
+                    }
+                }
+                .focusBorder(on: screen.displayUUID.map { lit == .screen($0) } ?? false, radius: ink.style.radii.control)
+            }
+        }
+        if part != .front { cycleRows }
+        if part != .more {
+            BlockRow(first: part == .front && !screenRows) {
+                label(part == .front ? "On its own" : "Change on its own", Info.interval)
+                Picker("Change on its own", selection: $settings.interval) {
+                    ForEach(WallpaperCycle.intervals, id: \.self) { Text(WallpaperCycle.intervalName($0)).tag($0) }
+                }
+                .labelsHidden().fixedSize()
+            }
+        }
+    }
+
+    /// What the wallpaper cycles through and how: More's rows.
+    @ViewBuilder private var cycleRows: some View {
+        BlockRow(first: !screenRows) {
+            label("Folders", Info.folders)
+            Segments(selection: $settings.folders, options: [(.shared, "Same for every screen"), (.perScreen, "Each screen its own")],
+                     label: "Folders")
+        }
+        BlockRow {
+            label("Workspaces", Info.workspaces)
+            Segments(selection: $settings.workspaces, options: [(.shared, "Same as global"), (.perWorkspace, "Per workspace")],
+                     label: "Workspaces")
+        }
+        if settings.workspaces == .perWorkspace {
+            ForEach(workspaceNames, id: \.self) { workspace in
+                BlockRow { workspaceRow(workspace) }.focusBorder(on: lit == .workspace(workspace), radius: ink.style.radii.control)
+            }
+        }
+        BlockRow {
+            label("Only images that fit the screen", Info.fit)
+            Toggle("Only images that fit the screen", isOn: $settings.fitShape).toggleStyle(.pilotSwitch).labelsHidden()
+        }
+        BlockRow { sourcesRow }
+        BlockRow {
+            label("Order", Info.order)
+            if settings.order == .shuffle {
+                Button("Shuffle again") { settings.shuffleAgain() }.buttonStyle(.pilot)
+            }
+            Segments(selection: $settings.order, options: [(.name, "By name"), (.shuffle, "Shuffle")], label: "Order")
+        }
+        BlockRow {
+            label("Screens", Info.scope)
+            Segments(selection: $settings.scope, options: [(.focusedScreen, "Screen in front"), (.everyScreen, "Every screen")], label: "Screens")
+        }
+    }
+
     /// The row `focus` lights: its workspace's while each workspace has its own and that one has a row, else its screen's.
+    /// Where the desktop's Wallpaper settings… lands for `focus`: the row it lights, on More while that is a screen's or a
+    /// workspace's own folders, else on the front (simplify-pages T20).
+    static func place(for focus: Focus, settings: WallpaperSettings) -> AppSection {
+        settings.folders == .perScreen || settings.workspaces == .perWorkspace && focus.workspace != nil ? .wallpaperCycle : .wallpaper
+    }
+
     private func row(_ focus: Focus) -> Lit? {
         if settings.workspaces == .perWorkspace, let workspace = focus.workspace, workspaceNames.contains(workspace) {
             return .workspace(workspace)
@@ -132,19 +173,19 @@ struct WallpaperBlock: View {
     }
 
     private func screenRow(_ screen: WallpaperScreen) -> some View {
-        let unique = screens.filter { $0.displayUUID == screen.displayUUID }.count == 1
-        let label = nicknames.label(systemName: screen.name, displayUUID: unique ? screen.displayUUID : nil)
-        return VStack(alignment: .leading, spacing: 6) {
-            screenLine(screen, label: label)
+        VStack(alignment: .leading, spacing: 6) {
+            screenLine(screen, label: screenLabel(screen))
             if settings.folders == .perScreen { ownSources(screen) }
         }
         .padding(.vertical, 6)
     }
 
-    private func screenLine(_ screen: WallpaperScreen, label: String) -> some View {
-        HStack(spacing: 10) {
+    /// The screen's wallpaper now and, dimmed, the next, its name and place in the cycle, Previous and Next; `compact` (Look's
+    /// front, its preview beside showing the wallpaper now) leaves out the picture of now and the ⓘ.
+    private func screenLine(_ screen: WallpaperScreen, label: String, compact: Bool = false) -> some View {
+        HStack(spacing: compact ? 8 : 10) {
             HStack(spacing: 4) {
-                picture(screen.thumb, portrait: screen.portrait)
+                if !compact { picture(screen.thumb, portrait: screen.portrait) }
                 // What Next gives, dimmed (Sven 2026-10-10: "so he sees what Next will give").
                 if let next = screen.next {
                     picture(next, portrait: screen.portrait).opacity(0.45)
@@ -153,15 +194,33 @@ struct WallpaperBlock: View {
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) { Text(label).lineLimit(1).help(label); InfoMark(text: Info.screen) }
+                HStack(spacing: 6) { Text(label).lineLimit(1).help(label); if !compact { InfoMark(text: Info.screen) } }
                 Text(screen.detail).font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(1).truncationMode(.middle)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button { step(screen, forward: false) } label: { Image(systemName: "chevron.left") }
-                .buttonStyle(.pilot).accessibilityLabel("Previous wallpaper on \(label)").help("Previous wallpaper")
-            Button { step(screen, forward: true) } label: { Text("Next") }
-                .buttonStyle(.pilot).accessibilityLabel("Next wallpaper on \(label)")
+            stepButtons(screen, label: label)
         }
+    }
+
+    /// More, while each screen has its own folders: the screen's name, then its folders.
+    private func ownRow(_ screen: WallpaperScreen) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(screenLabel(screen)).lineLimit(1)
+            ownSources(screen)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func screenLabel(_ screen: WallpaperScreen) -> String {
+        let unique = screens.filter { $0.displayUUID == screen.displayUUID }.count == 1
+        return nicknames.label(systemName: screen.name, displayUUID: unique ? screen.displayUUID : nil)
+    }
+
+    @ViewBuilder private func stepButtons(_ screen: WallpaperScreen, label: String) -> some View {
+        Button { step(screen, forward: false) } label: { Image(systemName: "chevron.left") }
+            .buttonStyle(.pilot).accessibilityLabel("Previous wallpaper on \(label)").help("Previous wallpaper")
+        Button { step(screen, forward: true) } label: { Text("Next") }
+            .buttonStyle(.pilot).accessibilityLabel("Next wallpaper on \(label)")
     }
 
     /// The screen's own folders as chips with Reset and Add…, or that it uses the shared ones.
@@ -349,16 +408,17 @@ struct WallpaperScreen: Identifiable, @unchecked Sendable {
     }
 
     /// A 160 px picture of the image from its file, made once per file: a step's new image was the last read's next one.
-    nonisolated static func thumbnail(_ url: URL) -> NSImage? {
+    /// Another `size` (Look's preview) is made each time, not kept: its view holds the one it shows.
+    nonisolated static func thumbnail(_ url: URL, size: Int = 160) -> NSImage? {
         let key = url.path as NSString
-        if let made = thumbnails.object(forKey: key) { return made }
+        if size == 160, let made = thumbnails.object(forKey: key) { return made }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                                                          kCGImageSourceCreateThumbnailWithTransform: true,
-                                                                         kCGImageSourceThumbnailMaxPixelSize: 160] as CFDictionary)
+                                                                         kCGImageSourceThumbnailMaxPixelSize: size] as CFDictionary)
         else { return nil }
         let made = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
-        thumbnails.setObject(made, forKey: key)
+        if size == 160 { thumbnails.setObject(made, forKey: key) }
         return made
     }
 

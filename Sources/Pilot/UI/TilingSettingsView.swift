@@ -8,9 +8,11 @@ import PilotCore
 /// map). Every block change goes to Pilot's tiler at once.
 struct TilingSettingsView: View {
     @Environment(Engine.self) private var engine
+    /// The More tab shows, not the front (simplify-pages T9).
+    var more = false
 
     var body: some View {
-        TilingBody(block: engine.pilotBlock, settings: engine.settings)
+        TilingBody(block: engine.pilotBlock, settings: engine.settings, more: more)
     }
 }
 
@@ -21,34 +23,49 @@ struct TilingBody: View {
     let settings: PilotSettings
     /// The apps Always float lists; renders pass their own, the app reads them when the block appears.
     var apps: [(name: String, bundle: String)]? = nil
-    @State private var installed: [(name: String, bundle: String)] = []
-    @State private var appQuery = ""
-    @State private var floatedFirst: Set<String> = []
+    /// The More tab shows: the window titles that float, and the mouse and motion (back from System, Sven's Q81).
+    var more = false
     @State private var newTitle = ""
     /// The Look the Focused window block binds to; a render passes its own.
     var look: Look = .shared
 
+    static let intro = "How Pilot's tiler lays windows out: the gaps, the window in front and the apps that float."
+    static let introInfo = "The window titles that float, dragging and the windows' motion are on More."
+
     var body: some View {
-        KitPage(intro: "How Pilot's tiler lays windows out: gaps, floats, the mouse and the focused window.") {
-            if ink.isInstrument {
-                // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
-                InstrumentPair { gaps } right: { floatApps }
-                InstrumentPair { mouse } right: { floatTitles }
-            } else {
-                gaps; floatApps; floatTitles; mouse
+        if more {
+            KitMore(entries: Self.entries) {
+                floatTitles.moreBlock(.floatTitles)
+                mouse.moreBlock(.motion)
             }
-            // Full width under the rest in both styles (page map, Sven 2026-10-17: off Look's Transparency block).
-            FocusedWindowBlock(look: look)
-            ShelfSettingsBlock()
-            if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
+        } else {
+            // The focused window whole and the apps that float, back from More (Sven, 2026-11-11, after 2276).
+            KitLanding {
+                KitPage(intro: Self.intro, info: Self.introInfo) {
+                    if ink.isInstrument {
+                        // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
+                        InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
+                    } else {
+                        gaps; FocusedWindowBlock(look: look).id(AppSection.focusedWindow)
+                    }
+                    FloatAppsBlock(block: block, apps: apps).id(AppSection.floatApps)
+                    if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
+                }
+            }
         }
     }
+
+    /// More's index (simplify-pages T9): a list counts once. A row added to or moved off a block changes its count here.
+    static let entries = [
+        MoreEntry(id: .floatTitles, symbol: "textformat", controls: 2),
+        MoreEntry(id: .motion, symbol: "cursorarrow.motionlines", controls: 2),
+    ]
 
     private var gaps: some View {
         KitBlock(title: "Gaps", symbol: "rectangle.split.3x1", focused: true, fill: true) {
             Kbd(text: "Hyper+Shift+Backspace")
         } content: {
-            GapsEditor(block: block)
+            GapsEditor(block: block, look: look)
         }
     }
 
@@ -64,7 +81,7 @@ struct TilingBody: View {
 
     private var mouse: some View {
         @Bindable var settings = settings
-        return KitBlock(title: "Mouse and motion", symbol: "cursorarrow.motionlines", fill: true) {
+        return KitBlock(title: AppSection.motion.title, symbol: "cursorarrow.motionlines", fill: true) {
             let choices = HStack(spacing: 6) {
                 Segments(selection: $settings.dragModifier, options: MouseDragSection.options, label: MouseDragSection.label)
                 // The picked choice's own line, for the two that need one.
@@ -73,46 +90,10 @@ struct TilingBody: View {
             let label = HStack(spacing: 6) { Text(MouseDragSection.label); InfoMark(text: MouseDragSection.dragTip) }
             BlockRow(first: true) { label; Spacer(); choices }
             BlockRow {
-                Toggle("Glide windows", isOn: block.binding(\.glide))
+                Toggle("Animate windows", isOn: block.binding(\.glide))
                     .toggleStyle(.pilotSwitchRow(info: "Tiled windows slide to their new place in under a fifth of a second. Reduce Motion and Low Power Mode always jump."))
             }
         }
-    }
-
-    /// Every app with its Float switch (C8): the installed and running apps, an app floated by id this Mac lacks, and a name
-    /// from before C8 no app answers to. Floated first, as they were when the list loaded or the search changed, so a
-    /// switch never moves its row from under the pointer.
-    private var floatApps: some View {
-        KitBlock(title: "Always float: apps", symbol: "macwindow.on.rectangle", fill: true) {
-            Text("\(block.block.floatAppIds.count + block.block.floatApps.count)").font(ink.mono(11)).foregroundStyle(ink.muted)
-        } content: {
-            BlockRow(first: true) {
-                Image(systemName: "magnifyingglass").font(ink.ui(11)).foregroundStyle(ink.muted).accessibilityHidden(true)
-                TextField("Search apps", text: $appQuery, prompt: Text("Search apps").foregroundStyle(ink.muted)).textFieldStyle(.plain)
-                InfoMark(text: "A floating app's windows keep their own size and place, out of the tiles. Matched by the app itself, whatever its name.")
-            }
-            let rows = FloatApps.rows(apps: apps ?? installed, block: block.block, query: appQuery, first: floatedFirst)
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(rows) { row in
-                        BlockRow {
-                            AppLabel(name: row.name, bundle: row.bundle, size: 18).lineLimit(1)
-                            if row.bundle == nil { Text("by name").font(ink.ui(11)).foregroundStyle(ink.muted) }
-                            Spacer()
-                            Toggle("Float \(row.name)", isOn: Binding(get: { row.floats }, set: { on in block.edit { FloatApps.set(row, on: on, in: &$0) } }))
-                                .labelsHidden().toggleStyle(.pilotSwitch)
-                        }
-                    }
-                    if rows.isEmpty { BlockRow { Text("No app called \(appQuery)").foregroundStyle(ink.muted) } }
-                }
-            }
-            .frame(height: 300)
-        }
-        .onAppear {
-            if apps == nil { installed = AppsModule.pickableApps() }
-            floatedFirst = FloatApps.floated(block.block)
-        }
-        .onChange(of: appQuery) { floatedFirst = FloatApps.floated(block.block) }
     }
 
     private var floatTitles: some View {
@@ -147,6 +128,60 @@ struct TilingBody: View {
         guard !title.isEmpty else { return }
         block.edit { $0.floatTitles.append(title) }
         newTitle = ""
+    }
+}
+
+/// Tiling's Always float: apps on its front: its own view, so a gaps edit never rebuilds and resorts its rows.
+struct FloatAppsBlock: View {
+    @Environment(\.ink) private var ink
+    let block: PilotBlockStore
+    /// The apps it lists; renders pass their own, the app reads them when the block appears.
+    var apps: [(name: String, bundle: String)]? = nil
+    @State private var installed: [(name: String, bundle: String)] = []
+    @State private var appQuery = ""
+    @State private var floatedFirst: Set<String> = []
+    /// Its rows, made again only as the apps, the search or the floats change, never on a gaps edit.
+    @State private var rows: [FloatApps.Row] = []
+
+    /// Every app with its Float switch (C8): the installed and running apps, an app floated by id this Mac lacks, and a name
+    /// from before C8 no app answers to. Floated first, as they were when the list loaded or the search changed, so a
+    /// switch never moves its row from under the pointer.
+    var body: some View {
+        KitBlock(title: "Always float: apps", symbol: "macwindow.on.rectangle", fill: true) {
+            Text("\(block.block.floatAppIds.count + block.block.floatApps.count)").font(ink.mono(11)).foregroundStyle(ink.muted)
+        } content: {
+            BlockRow(first: true) {
+                Image(systemName: "magnifyingglass").font(ink.ui(11)).foregroundStyle(ink.muted).accessibilityHidden(true)
+                TextField("Search apps", text: $appQuery, prompt: Text("Search apps").foregroundStyle(ink.muted)).textFieldStyle(.plain)
+                InfoMark(text: "A floating app's windows keep their own size and place, out of the tiles. Matched by the app itself, whatever its name.")
+            }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(rows) { row in
+                        BlockRow {
+                            AppLabel(name: row.name, bundle: row.bundle, size: 18).lineLimit(1)
+                            if row.bundle == nil { Text("by name").font(ink.ui(11)).foregroundStyle(ink.muted) }
+                            Spacer()
+                            Toggle("Float \(row.name)", isOn: Binding(get: { row.floats }, set: { on in block.edit { FloatApps.set(row, on: on, in: &$0) } }))
+                                .labelsHidden().toggleStyle(.pilotSwitch)
+                        }
+                    }
+                    if rows.isEmpty { BlockRow { Text("No app called \(appQuery)").foregroundStyle(ink.muted) } }
+                }
+            }
+            .frame(height: 300)
+        }
+        .onAppear {
+            if apps == nil { installed = AppsModule.pickableApps() }
+            floatedFirst = FloatApps.floated(block.block)
+            list()
+        }
+        .onChange(of: appQuery) { floatedFirst = FloatApps.floated(block.block); list() }
+        .onChange(of: FloatApps.floated(block.block)) { list() }
+    }
+
+    private func list() {
+        rows = FloatApps.rows(apps: apps ?? installed, block: block.block, query: appQuery, first: floatedFirst)
     }
 }
 
@@ -193,25 +228,32 @@ struct TilingBody: View {
     }
 }
 
-/// Gaps on, inner and outer as sliders, and a picture of three windows at those gaps. A drag moves the picture at once and
-/// changes the block once it rests, so the tiler lays out once per drag rather than once per point.
+/// Gaps on, inner and outer as sliders, and the preview (simplify-pages T27): three windows tiled at those gaps
+/// (MiniDesktop), the one in front with the Focused window block's border in its colour and the others dimmed and blurred
+/// as its Dim other windows sets. A drag moves the preview at once and changes the block once it rests, so the tiler lays
+/// out once per drag rather than once per point.
 private struct GapsEditor: View {
     let block: PilotBlockStore
+    let look: Look
     @State private var inner: Double?
     @State private var outer: Double?
 
     var body: some View {
         let shown = (inner: inner ?? Double(block.block.gaps.inner), outer: outer ?? Double(block.block.gaps.outer))
         VStack(alignment: .leading, spacing: 0) {
-            GapsPicture(inner: block.block.gapsOn ? shown.inner : 0, outer: block.block.gapsOn ? shown.outer : 0)
-                .padding(.bottom, 6)
+            MiniDesktop(windows: ["Ghostty", "Zen", "Notes"], inner: block.block.gapsOn ? shown.inner : 0,
+                        outer: block.block.gapsOn ? shown.outer : 0, border: look.windowBorder ? look.windowBorderWidth : nil,
+                        borderColour: Color(Paint(look.windowBorderColour.resolved(look.theme.accent))),
+                        defocus: Defocus.look(strength: look.defocusStrength, dim: look.defocusDim, reduceTransparency: look.reduceTransparency))
+                // A 1440 pt screen at 220 pt, the size the gaps picture had, so the front's height is unchanged.
+                .frame(width: 220, height: 124).frame(maxWidth: .infinity).padding(.bottom, 6)
             BlockRow {
                 Toggle("Gaps on", isOn: block.binding(\.gapsOn))
-                    .toggleStyle(.pilotSwitchRow(info: "Inner is the room between tiled windows, outer the room at the screen's edges. Off keeps both sizes for when it is back on."))
+                    .toggleStyle(.pilotSwitchRow(info: "Room between tiled windows and at the screen's edges. Off keeps both sizes for when it is back on."))
             }
-            BlockRow { DraftSlider(title: "Inner", info: "The room between tiled windows, in points.", label: "Inner gap", value: shown.inner,
+            BlockRow { DraftSlider(title: "Between windows", info: "The room between tiled windows, in points.", label: "Gap between windows", value: shown.inner,
                                    draft: $inner, range: 0...100) }
-            BlockRow { DraftSlider(title: "Outer", info: "The room between tiled windows and the screen's edges, in points.", label: "Outer gap",
+            BlockRow { DraftSlider(title: "At screen edges", info: "The room between tiled windows and the screen's edges, in points.", label: "Gap at screen edges",
                                    value: shown.outer, draft: $outer, range: 0...100) }
         }
         .task(id: inner) { await block.settleDraft(inner, \.gaps.inner) { inner = nil } }
@@ -316,32 +358,6 @@ private struct ScrollingEditor: View {
             guard !on || block.scrolling.widths.count > 1 else { return }
             block.scrolling.widths = PilotBlock.ColumnWidth.allCases.filter { $0 == width ? !on : block.scrolling.widths.contains($0) }
         }
-    }
-}
-
-/// A screen holding three tiled windows, the gaps at twice their share of a 1440 pt screen drawn 220 pt wide, so 10 pt still reads.
-private struct GapsPicture: View {
-    @Environment(\.ink) private var ink
-    let inner: Double
-    let outer: Double
-
-    var body: some View {
-        let scale = 220.0 / 720, i = inner * scale, o = outer * scale
-        let window = RoundedRectangle(cornerRadius: 4, style: .continuous)
-        let screen = RoundedRectangle(cornerRadius: 8)
-        let stacked = window.fill(ink.selected).overlay { window.strokeBorder(ink.line2, lineWidth: 1) }
-        HStack(spacing: i) {
-            window.fill(ink.accent.opacity(0.28)).overlay { window.strokeBorder(ink.accent, lineWidth: 1) }
-            VStack(spacing: i) { stacked; stacked }
-        }
-        .padding(o)
-        .frame(width: 220, height: 124)
-        .background(ink.background, in: screen)
-        .overlay { screen.strokeBorder(ink.line, lineWidth: 1) }
-        .frame(maxWidth: .infinity)
-        .animation(.easeOut(duration: 0.12), value: inner)
-        .animation(.easeOut(duration: 0.12), value: outer)
-        .accessibilityHidden(true)
     }
 }
 

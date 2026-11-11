@@ -69,7 +69,7 @@ final class WidgetDesk: ScreenPausing {
     private var drags = 0
     /// The widget `over` found under a press, waiting for `grab`.
     private var hit: (String, CGRect)?
-    private var watchingTheme = false
+    private var watchingTheme = false, watchingVeil = false
     /// How many tiles Home draws now of each Home placement, in the window on screen (Edit Home's carry draws a copy
     /// beside the one it hides): only a placement drawn at least once is fed and runs a page.
     private var homeDraws: [String: Int] = [:]
@@ -135,6 +135,7 @@ final class WidgetDesk: ScreenPausing {
             MainActor.assumeIsolated { self?.refresh() }
         }
         watchTheme()
+        watchVeil()
         widgetLog.notice("widgets: armed for \(self.placements.count, privacy: .public) placements")
     }
 
@@ -354,6 +355,23 @@ final class WidgetDesk: ScreenPausing {
                     for id in Array(self.pages.keys) { self.restart(id) }
                     self.resync()
                     self.watchTheme()
+                }
+            }
+        }
+    }
+
+    /// Blur, Glass or Transparency changed: each page's veil follows at once, without starting over. Watched as watchTheme is.
+    private func watchVeil() {
+        guard armed || !homeDrawn.isEmpty, !watchingVeil else { return }
+        watchingVeil = true
+        withObservationTracking { _ = Look.shared.widgetLightTint } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.watchingVeil = false
+                    guard self.armed || !self.homeDrawn.isEmpty else { return }
+                    self.pages.values.forEach { $0.applyVeil() }
+                    self.watchVeil()
                 }
             }
         }
@@ -584,7 +602,7 @@ final class WidgetDesk: ScreenPausing {
         let count = (homeDraws[id] ?? 0) + (drawn ? 1 : -1)
         homeDraws[id] = count > 0 ? count : nil
         syncHome()
-        if drawn { watchTheme() }
+        if drawn { watchTheme(); watchVeil() }
     }
 
     /// Each Home placement fed while its tile is drawn, else stopped, its page ended at once.

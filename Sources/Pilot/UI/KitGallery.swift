@@ -5,7 +5,7 @@ import SwiftUI
 /// The kit's gallery (card agent-bo-95422891), debug builds only: the twelve components of the approved artifact's
 /// section 5, each with the sample the artifact draws. The renders and the kit's tests draw from it.
 enum KitSample: String, CaseIterable, CustomStringConvertible {
-    case toggle, slider, segmented, row, chip, keyCap, stat, graph, search, button, empty, popover
+    case toggle, slider, segmented, row, chip, keyCap, stat, graph, search, button, empty, popover, desktop
 
     var description: String { title }
 
@@ -23,6 +23,7 @@ enum KitSample: String, CaseIterable, CustomStringConvertible {
         case .button: "Button"
         case .empty: "Empty state"
         case .popover: "Popover"
+        case .desktop: "Mini desktop"
         }
     }
 
@@ -41,6 +42,7 @@ enum KitSample: String, CaseIterable, CustomStringConvertible {
         case .button: "actions"
         case .empty: "nothing yet"
         case .popover: "menu-bar items"
+        case .desktop: "previews"
         }
     }
 
@@ -60,6 +62,14 @@ enum KitSample: String, CaseIterable, CustomStringConvertible {
         case .button: SampleButtons()
         case .empty: SampleEmpty()
         case .popover: SamplePopover().floating()
+        // Plain, then gaps, the focused window's border and Defocus on the other two (simplify-pages T25).
+        case .desktop:
+            HStack(spacing: 10) {
+                MiniDesktop(windows: ["Ghostty", "Zen", "Notes"])
+                MiniDesktop(windows: ["Ghostty", "Zen", "Notes"], inner: 20, outer: 20, border: 4,
+                            defocus: Defocus.look(strength: 2, dim: 30, reduceTransparency: false))
+            }
+            .frame(height: 110)
         }
     }
 }

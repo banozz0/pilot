@@ -9,6 +9,29 @@ import PilotCore
 enum WallpaperSwitch {
     nonisolated static let shapes = ImageShapes()
 
+    /// Production composition alone supplies this adapter. Fixture composition never calls it or desktop APIs.
+    static func themeEffects() -> ThemeCoordinator.WallpaperEffects {
+        .init(read: {
+            let settings = WallpaperSettings.shared
+            let displays = NSScreen.screens.compactMap { screen -> ThemeWallpaperState.Display? in
+                guard let id = DisplayIdentity.uuid(of: screen) else { return nil }
+                let workspace = settings.shownWorkspace(id)
+                let pinned = settings.ownWorkspace(on: id) != nil || settings.folders == .perScreen && !settings.ownSources(id).isEmpty
+                return .init(id: id, workspace: workspace, portrait: shape(of: screen) == .portrait, image: current(on: screen)?.path, pinned: pinned)
+            }
+            let state = settings.themeState(displays: displays)
+            return .init(sources: state.sources, displays: state.displays, preferences: state.preferences.merging(["cycling": .bool(queued > 0)]) { _, new in new })
+        }, write: { change in
+            switch (change.target, change.after) {
+            case (.sources, .sources(let paths)): WallpaperSettings.shared.themeSources(paths)
+            case (.display(let id), .image(let path)):
+                guard let screen = screen(id), let path, show(URL(fileURLWithPath: path), on: screen, replacing: current(on: screen), quiet: true) else { throw ThemeFailure("wallpaper assignment failed") }
+                NotificationCenter.default.post(name: changed, object: nil)
+            default: throw ThemeFailure("invalid wallpaper effect")
+            }
+        }, name: { screen($0)?.localizedName })
+    }
+
     static func step(forward: Bool) {
         step(forward: forward, everyScreen: WallpaperSettings.shared.scope == .everyScreen)
     }
@@ -30,6 +53,8 @@ enum WallpaperSwitch {
         let workspaces = displays.map { $0.flatMap(settings.ownWorkspace(on:)) }
         enqueue {
             let listed = await Task.detached { WallpaperSettings.imageLists(lists, order: order, seed: seed) }.value
+            do { try ThemeCoordinator.prepareWallpaperCycle() }
+            catch { looklog.error("wallpaper cycle deferred: \(String(describing: error), privacy: .public)"); return }
             var last: (url: URL, place: Int, count: Int)?
             for (screen, (urls, workspace)) in zip(screens, zip(lists, workspaces)) {
                 let shape = shape(of: screen), current = current(on: screen), images = listed[urls] ?? []
@@ -40,7 +65,12 @@ enum WallpaperSwitch {
                     if !quiet { HUD.tip("No images in \(urls.map { AppConfigs.tilde($0.path, home: NSHomeDirectory()) }.joined(separator: ", "))") }
                     return
                 }
-                guard show(pick.url, on: screen, replacing: current, quiet: quiet) else { return }
+                guard displays.map(settings.urls(for:)) == lists,
+                      displays.map({ $0.flatMap(settings.ownWorkspace(on:)) }) == workspaces,
+                      settings.order == order, settings.seed == seed, settings.fitShape == fit,
+                      Self.current(on: screen) == current else { return }
+                guard ThemeCoordinator.cycleWallpaper(display: DisplayIdentity.uuid(of: screen),
+                    before: current?.path, after: pick.url.path, show: { show(pick.url, on: screen, replacing: current, quiet: quiet) }) else { return }
                 if let workspace { settings.shown(pick.url, workspace: workspace) }
                 looklog.notice("wallpaper \(pick.place)/\(pick.count) on \(screen.localizedName, privacy: .public): \(pick.url.lastPathComponent, privacy: .public)")
                 last = pick
@@ -60,12 +90,37 @@ enum WallpaperSwitch {
         let workspace = DisplayIdentity.uuid(of: screen).flatMap(settings.ownWorkspace(on:))
         enqueue {
             guard show(url, on: screen, replacing: current(on: screen), quiet: false) else { return }
-            if let workspace { settings.shown(url, workspace: workspace) }
-            looklog.notice("wallpaper picked on \(screen.localizedName, privacy: .public): \(url.lastPathComponent, privacy: .public)")
-            NotificationCenter.default.post(name: changed, object: nil)
-            let place = workspace.map { Engine.shared?.presets.contents.title(for: $0) ?? WorkspacePreset.unnamed($0) } ?? screen.localizedName
-            HUD.tip("\(url.deletingPathExtension().lastPathComponent) · \(place)", seconds: 2)
+            picked(url, on: screen, workspace: workspace, settings: settings, how: "picked")
         }
+    }
+
+    /// The Carousel's pick (spec desktop-controls T8): `url` on the screen with display UUID `display`, else on
+    /// `fallback`, queued behind any step, through the scheduler's ledger seam as a step is, so a theme that owns the
+    /// screen keeps owning it and the next cycle steps on from the pick; never `set`, which leaves the ledger behind.
+    /// While the workspace shown there cycles its own folders, also as that workspace's image, as `set` does. No Allow:
+    /// only the wallpaper changes.
+    static func pick(_ url: URL, display: String?, fallback: NSScreen?, settings: WallpaperSettings = .shared) {
+        guard let screen = screen(display) ?? fallback ?? NSScreen.main else { return HUD.tip("No screen to set the wallpaper on") }
+        let display = DisplayIdentity.uuid(of: screen), workspace = display.flatMap(settings.ownWorkspace(on:))
+        enqueue {
+            let current = current(on: screen)
+            guard current?.standardizedFileURL.path != url.standardizedFileURL.path else { return }
+            guard ThemeCoordinator.cycleWallpaper(display: display, before: current?.path, after: url.path,
+                                                  show: { show(url, on: screen, replacing: current, quiet: false) }) else {
+                return HUD.tip("\(url.deletingPathExtension().lastPathComponent) was not set")
+            }
+            picked(url, on: screen, workspace: workspace, settings: settings, how: "carousel pick")
+        }
+    }
+
+    /// After a gallery or Carousel pick lands: the workspace's image while it cycles its own, the log, the Wallpaper
+    /// block's refresh and the tip saying where it went.
+    private static func picked(_ url: URL, on screen: NSScreen, workspace: String?, settings: WallpaperSettings, how: String) {
+        if let workspace { settings.shown(url, workspace: workspace) }
+        looklog.notice("wallpaper \(how, privacy: .public) on \(screen.localizedName, privacy: .public): \(url.lastPathComponent, privacy: .public)")
+        NotificationCenter.default.post(name: changed, object: nil)
+        let place = workspace.map { Engine.shared?.presets.contents.title(for: $0) ?? WorkspacePreset.unnamed($0) } ?? screen.localizedName
+        HUD.tip("\(url.deletingPathExtension().lastPathComponent) · \(place)", seconds: 2)
     }
 
     /// Sets `url` on `screen` and keeps it as the screen's current; false, logged and tipped unless `quiet`, when macOS
@@ -122,11 +177,14 @@ enum WallpaperSwitch {
     /// Runs `body` once the step under way has finished, so steps and switches never set a screen at once.
     private static func enqueue(_ body: @escaping @MainActor () async -> Void) {
         let before = stepping
+        queued += 1
         stepping = Task {
             await before?.value
             await body()
+            queued -= 1
         }
     }
+    private static var queued = 0
 
     /// The step under way, which the next one waits for.
     private static var stepping: Task<Void, Never>?

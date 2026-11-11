@@ -2,15 +2,18 @@ import Foundation
 import PilotCore
 
 extension SettingsSchema {
-    /// The AI page's keys on AISettings: the provider and chat reset, then each provider's model, effort and address.
-    /// The API keys stay in the Keychain: `get` says only whether one is saved; `set --stdin` saves one as Save does.
-    /// The provider and each address ask Allow from the socket (ControlVerbs.aiSettingAsk), as they decide where the chat,
+    /// The AI page's keys on AISettings: the provider, its fallback and chat reset, then each provider's model, effort and
+    /// address. The API keys stay in the Keychain: `get` says only whether one is saved; `set --stdin` saves one as Save does.
+    /// The provider, the fallback and each address ask Allow from the socket (ControlVerbs.aiSettingAsk), as they decide where the chat,
     /// an extension's page and a saved key go; the AI page changes them as it always has.
     @MainActor func registerAI(_ ai: AISettings) {
         ControlVerbs.aiStore = ai
         var keys: [SettingKey] = [
             .choice("ai.provider", "AI uses", page: "ai", AIProvider.allCases, standard: .claudeCode, confirms: true,
                     read: { ai.provider }, write: { ai.provider = $0 }),
+            .choice("ai.fallback", "Fallback", page: "ai", ["none"] + AIProvider.allCases.map(\.rawValue), standard: "none", confirms: true,
+                    read: { ai.fallback?.rawValue ?? "none" },
+                    write: { word in ai.fallback = AIProvider(rawValue: word) }),
             .choice("ai.chatReset", "A new chat after", page: "ai", AIChat.Reset.allCases, standard: .standard,
                     read: { ai.chatReset }, write: { ai.chatReset = $0 }),
         ]
@@ -66,16 +69,25 @@ extension ControlVerbs {
     /// The AI store the schema registered (the app's, or a test's), which the AI keys' questions read.
     static weak var aiStore: AISettings?
 
-    /// The question `set ai.provider` and `set ai.baseURL.<id>` ask, nil for any other key: the old and the new provider
+    /// `provider` as a question names it, and whether its saved key goes with the text.
+    private static func reaches(_ provider: AIProvider, _ ai: AISettings) -> String {
+        let to = destination(ai, provider: provider)
+        let saved = provider.key != .none && ai.hasKey(provider) ? (to.hasSuffix("saved key") ? "" : ", with \(provider.name)'s saved key") : "; no saved key goes there"
+        return to + saved
+    }
+
+    /// The question `set ai.provider`, `set ai.fallback` and `set ai.baseURL.<id>` ask, nil for any other key: the old and the new provider
     /// or address, and whether a saved key goes there, so a caller cannot send the chat, a page or a key elsewhere unseen.
     /// Read again after Allow, so a change while it is up denies.
     static func aiSettingAsk(_ key: String, _ shown: String) -> String? {
         guard let ai = aiStore else { return nil }
         if key == "ai.provider" {
             guard let new = AIProvider(rawValue: shown) else { return nil }
-            let to = destination(ai, provider: new)
-            let saved = new.key != .none && ai.hasKey(new) ? (to.hasSuffix("saved key") ? "" : ", with \(new.name)'s saved key") : "; no saved key goes there"
-            return "from \(destination(ai)) to \(to)\(saved)"
+            return "from \(destination(ai)) to \(reaches(new, ai))"
+        }
+        if key == "ai.fallback" {
+            guard let new = AIProvider(rawValue: shown) else { return "\(ai.provider.name) has no fallback: its failures show as errors" }
+            return "when \(ai.provider.name) \(AIFallback.when), the request goes to \(reaches(new, ai))"
         }
         let prefix = "ai.baseURL."
         guard key.hasPrefix(prefix), let p = AIProvider(rawValue: String(key.dropFirst(prefix.count))) else { return nil }

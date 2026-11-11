@@ -3,23 +3,46 @@ import PilotCore
 import SwiftUI
 
 /// Voice (2026-10-16, Sven could not find Dictation on Open with): Pilot's dictation and Read
-/// aloud's key, speed and voice (story 190, was System › Keyboard), one page in Tools.
+/// aloud's key, speed and voice (story 190, was System › Keyboard), one page in Tools. Its front (simplify-pages T12;
+/// Sven 2026-11-11, after 2276): all of Dictation, then Read aloud's key, speed and its voices behind a toggle. Its More:
+/// the recent takes, the taught words and replacements, and Read aloud's media and better voices.
 struct VoicePage: View {
     var speech: ReadAloudSettings = .shared
+    /// The More tab shows, not the front.
+    var more = false
     /// The voices it lists (SpeechVoice.shown) by language, read when the page first shows, never at launch, and again
     /// when a download lands.
     @State private var sections: (mine: [SpeechVoice.Section], rest: [SpeechVoice.Section]) = ([], [])
 
     static let intro = "Talk to your Mac and have it read to you."
 
+    /// More's index (simplify-pages T12): a list counts once. A row added to or moved off a block changes its count here.
+    static let entries = [
+        MoreEntry(id: .voiceTakes, symbol: "clock.arrow.circlepath", controls: 1),
+        MoreEntry(id: .voiceWords, symbol: "character.book.closed", controls: 2),
+        MoreEntry(id: .voiceReplacements, symbol: "arrow.left.arrow.right", controls: 2),
+        MoreEntry(id: .voiceReadAloud, symbol: "speaker.wave.2", controls: 2),
+    ]
+
     var body: some View {
-        KitPage(intro: Self.intro) {
-            DictationBlock()
-            // One column (the designer's layout A, round 2), "Fix a recent take" above the two lists (Q598).
-            DictationTakesBlock(takes: .shared, vocabulary: .shared)
-            DictationWordsBlock(vocabulary: .shared)
-            DictationReplacementsBlock(vocabulary: .shared)
-            ReadAloudBlock(speech: speech, mine: sections.mine, rest: sections.rest)
+        Group {
+            if more {
+                KitMore(entries: Self.entries) {
+                    // "Fix what you just said" above the two lists (Q598).
+                    DictationTakesBlock(takes: .shared, vocabulary: .shared).moreBlock(.voiceTakes)
+                    DictationWordsBlock(vocabulary: .shared).moreBlock(.voiceWords)
+                    DictationReplacementsBlock(vocabulary: .shared).moreBlock(.voiceReplacements)
+                    ReadAloudBlock(speech: speech, mine: [], rest: [], part: .more).moreBlock(.voiceReadAloud)
+                }
+            } else {
+                KitLanding {
+                    KitPage(intro: Self.intro) {
+                        // One column (the designer's layout A, round 2).
+                        DictationBlock().id(AppSection.voiceDictation)
+                        ReadAloudBlock(speech: speech, mine: sections.mine, rest: sections.rest, part: .front)
+                    }
+                }
+            }
         }
         .task(id: "\(speech.personal) \(speech.revision)") {
             let preferred = Locale.preferredLanguages
@@ -43,8 +66,15 @@ struct ReadAloudBlock: View {
     let rest: [SpeechVoice.Section]
     @State private var previewing: String?
     @State private var unfolded = false
+    /// The front's voices, closed until opened (Sven, 2026-11-11, after 2276: the long list behind a toggle).
+    @State private var voicesOpen = false
     /// The sections whose More is open, by heading.
     @State private var opened: Set<String> = []
+    /// Voice's front (key, speed, Kokoro and the voices) or its More (media playing and better voices; simplify-pages T12),
+    /// or every row.
+    var part: Part = .all
+
+    enum Part { case all, front, more }
 
     static let kokoroInfo = "Voices made by a neural network, far more natural than Apple's, running on this Mac: nothing you "
         + "read leaves it. Once downloaded, Automatic reads English in Kokoro's best voice; Apple's voices read other languages, "
@@ -58,7 +88,35 @@ struct ReadAloudBlock: View {
 
     var body: some View {
         let others = rest.reduce(0) { $0 + $1.voices.count }
-        KitBlock(title: "Read aloud", symbol: "speaker.wave.2", note: "Speaks the text you selected in the voice you pick here.") {
+        KitBlock(title: "Read aloud", symbol: "speaker.wave.2", note: part == .more ? nil : "Speaks the text you selected in the voice you pick here.") {
+            if part == .more { moreRows } else { frontRows(others) }
+        }
+        // Kokoro's ▶ lines are made while the voices show, never at idle: on the front once its list opens.
+        .onAppear { if part == .all || voicesOpen { kokoro.renderSamples(true) } }
+        .onChange(of: voicesOpen) { kokoro.renderSamples(voicesOpen) }
+        .onDisappear {
+            if part != .more { kokoro.renderSamples(false) }
+            if previewing != nil { ReadAloud.shared.stop() }
+        }
+    }
+
+    /// Media playing and Get better voices: More's, or the foot of every row.
+    @ViewBuilder private var moreRows: some View {
+        BlockRow(first: part == .more) {
+            HStack(spacing: 6) { Text("Media playing"); InfoMark(text: Self.mediaInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+            Segments(selection: $speech.media, options: ReadAloudSettings.Media.allCases.map { ($0, $0.label) }, label: "Media playing")
+        }
+        BlockRow {
+            Image(systemName: "arrow.down.circle").foregroundStyle(ink.muted).frame(width: 18).accessibilityHidden(true)
+            TitledText(title: Text("Get better voices"), detail: "Premium and Enhanced voices are free downloads in System Settings › Accessibility › Spoken Content")
+                .padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
+            Button { NSWorkspace.shared.open(Self.moreVoices) } label: { Chip(text: "Open", symbol: "arrow.up.right") }
+                .buttonStyle(.kitPress).help("Opens System Settings › Accessibility › Spoken Content")
+        }
+    }
+
+    /// The key, the speed, Kokoro and the voices; every row's view adds More's two after them.
+    @ViewBuilder private func frontRows(_ others: Int) -> some View {
             BlockRow(first: true) {
                 HStack(spacing: 6) { Text("Read selected text aloud"); InfoMark(text: "Reads out the text you have selected, in any app.") }.frame(maxWidth: .infinity, alignment: .leading)
                 BindKey(action: ReadAloud.id)
@@ -67,11 +125,26 @@ struct ReadAloudBlock: View {
                 HStack(spacing: 6) { Text("Speed"); InfoMark(text: "How fast the voice reads, whichever voice is picked.") }.frame(maxWidth: .infinity, alignment: .leading)
                 KitSlider(value: $speech.rate, range: ReadAloudSettings.rates, step: 0.05, label: "Read aloud speed")
             }
-            BlockRow {
-                HStack(spacing: 6) { Text("Media playing"); InfoMark(text: Self.mediaInfo) }.frame(maxWidth: .infinity, alignment: .leading)
-                Segments(selection: $speech.media, options: ReadAloudSettings.Media.allCases.map { ($0, $0.label) }, label: "Media playing")
-            }
             KokoroRow(model: kokoro)
+            if part == .front { voicesToggle }
+            if part != .front || voicesOpen { voices(others) }
+            if part == .all { moreRows }
+    }
+
+    /// The front's toggle over the voices, the one picked beside it.
+    private var voicesToggle: some View {
+        disclosure("Voices", open: voicesOpen, trailing: pickedVoice) { withAnimation(Kit.change) { voicesOpen.toggle() } }
+    }
+
+    /// The voice picked, by its name: Automatic, or one of the listed.
+    private var pickedVoice: String {
+        guard !speech.voiceID.isEmpty else { return "Automatic" }
+        let all = (mine + rest).lazy.flatMap { $0.voices + $0.more }
+        return all.first { $0.id == speech.voiceID }?.shortName ?? speech.voiceID
+    }
+
+    /// Automatic, each language's voices, the other languages behind their own More, and the Personal Voice.
+    @ViewBuilder private func voices(_ others: Int) -> some View {
             BlockRow {
                 pick("") {
                     TitledText(title: Text("Automatic"), detail: kokoro.isReady ? "Kokoro for English, else the best voice for the text's language"
@@ -84,20 +157,6 @@ struct ReadAloudBlock: View {
                 if unfolded { languages(rest) }
             }
             if speech.personal != .unsupported { personal }
-            BlockRow {
-                Image(systemName: "arrow.down.circle").foregroundStyle(ink.muted).frame(width: 18).accessibilityHidden(true)
-                TitledText(title: Text("Get better voices"), detail: "Premium and Enhanced voices are free downloads in System Settings › Accessibility › Spoken Content")
-                    .padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
-                Button { NSWorkspace.shared.open(Self.moreVoices) } label: { Chip(text: "Open", symbol: "arrow.up.right") }
-                    .buttonStyle(.kitPress).help("Opens System Settings › Accessibility › Spoken Content")
-            }
-        }
-        // Kokoro's ▶ lines are made while the page is open, never at idle.
-        .onAppear { kokoro.renderSamples(true) }
-        .onDisappear {
-            kokoro.renderSamples(false)
-            if previewing != nil { ReadAloud.shared.stop() }
-        }
     }
 
     /// Each language's heading, then its voices.
@@ -120,16 +179,23 @@ struct ReadAloudBlock: View {
 
     /// A disclosure row: More <what> (n voices), Fewer <what> once open.
     private func more(_ what: String, count: Int, open: Bool, toggle: @escaping () -> Void) -> some View {
+        disclosure(open ? "Fewer \(what)" : "More \(what) (\(count) \(count == 1 ? "voice" : "voices"))", open: open, toggle: toggle)
+    }
+
+    /// A row that opens or closes what is under it: its chevron and words, and `trailing` at the far edge.
+    private func disclosure(_ title: String, open: Bool, trailing: String? = nil, toggle: @escaping () -> Void) -> some View {
         BlockRow {
             Button(action: toggle) {
                 HStack(spacing: 6) {
                     Image(systemName: open ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold))
-                    Text(open ? "Fewer \(what)" : "More \(what) (\(count) \(count == 1 ? "voice" : "voices"))")
+                    Text(title)
                 }
                 .foregroundStyle(ink.link).contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityAddTraits(open ? .isSelected : [])
             Spacer()
+            if let trailing { Text(trailing).foregroundStyle(ink.muted).lineLimit(1) }
         }
     }
 

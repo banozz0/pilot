@@ -58,6 +58,8 @@ public enum QuickAI {
         case notInstalled(AIProvider), notConnected(AIProvider)
         /// What the picked route cannot do, said in one line (/extension on another provider, T17).
         case unsupported(String)
+        /// The chosen AI failed for this reason and its fallback (AIFallback) failed too.
+        indirect case bothFailed(AIFallback.Reason, first: AIProvider, second: AIProvider, Failure)
 
         /// What went wrong, as the panel's title.
         public var title: String {
@@ -75,6 +77,8 @@ public enum QuickAI {
             case .notInstalled(let p): "\(p.name) is not installed"
             case .notConnected(let p): "\(p.name) is not connected"
             case .unsupported(let what): what
+            case .bothFailed(let reason, let first, let second, let why):
+                "\(reason.sentence(first)) \(why == .timedOut ? "\(second.name) did not answer in time" : why.title)"
             }
         }
 
@@ -93,6 +97,7 @@ public enum QuickAI {
             case .unreachable(_, let address): "Nothing answered at \(address). Check the address on the AI page and that the server runs."
             case .notInstalled(let p): "Pilot found no \(p.command ?? "") command; press Install on the AI page."
             case .notConnected(let p): "Press Connect on the AI page to sign in with your \(p.account ?? p.name) account, then try again."
+            case .bothFailed(_, _, _, let why): why.hint
             }
         }
 

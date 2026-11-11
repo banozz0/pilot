@@ -20,6 +20,10 @@ struct WindowPagesRenders {
     /// Every page, and every tab past a page's first, by file name.
     static let places: [(String, AppPlace)] = AppPage.allCases.map { ($0.rawValue, AppPlace($0)) }
         + AppSection.allCases.filter(\.isTab).map { ("\($0.page.rawValue)-\($0.rawValue)", AppPlace($0)) }
+        // A place on a More tab: the tab, its block scrolled to and marked in the index (simplify-pages T7).
+        + AppSection.allCases.filter { $0.onMore != nil }.map { ("\($0.page.rawValue)-more-\($0.rawValue)", AppPlace($0)) }
+        // A place on a front: the front scrolled to its block (Sven, 2026-11-11, after 2276).
+        + AppSection.allCases.filter(\.onFront).map { ("\($0.page.rawValue)-front-\($0.rawValue)", AppPlace($0)) }
 
     @Test("Every page renders in Instrument and Toybox at 1000 and 760", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
@@ -69,6 +73,69 @@ struct WindowPagesRenders {
             frame.layoutSubtreeIfNeeded()
             try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
                 .write(to: dir.appendingPathComponent("\(name)-660-sidebar.png"))
+            // Fronts at the window's first size: Pilot's, Open with's and Captures' fit without a scroll with their previews
+            // (simplify-pages T8, T26, T27); Tiling's, System's, Workspaces' and Voice's fronts and the More tabs show how
+            // much does (Sven, 2026-11-11, after 2276), Workspaces' also with four workspaces, as Sven keeps them.
+            func wanted(_ file: String) -> Bool { only.map { $0.contains { file.contains($0) } } ?? true }
+            func front(_ place: AppPlace, _ file: String) throws {
+                guard wanted(file) else { return }
+                model.go(place)
+                RunLoop.main.run(until: Date().addingTimeInterval(0.7))
+                frame.layoutSubtreeIfNeeded()
+                try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
+            }
+            let fronts = [AppPage.general, .menu, .openWith, .tiling, .captures, .system, .binds, .workspaces, .voice].map { ($0.rawValue, AppPlace($0)) }
+                + [("voice-more", AppPlace(.voiceMore)), ("tiling-more", AppPlace(.tilingMore)), ("workspaces-more", AppPlace(.workspacesMore)),
+                   ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse))]
+            for (page, place) in fronts { try front(place, "\(name)-660-\(page)") }
+            if wanted("\(name)-660-workspaces-4") {
+                let list = engine.workspaceList, kept = list.count
+                while list.count > 4 { list.remove() }
+                try front(AppPlace(.workspaces), "\(name)-660-workspaces-4")
+                while list.count < kept { list.add() }
+            }
+            // The previews follow their controls (T26, T27): Launcher's with its second row hidden and its last moved first,
+            // Open with's with another editor picked, Pilot's with right Command as Hyper, Tiling's with wide gaps, a thick
+            // border and Defocus, Captures' opening the editor, Voice's at Words in both places in the theme's colour;
+            // each put back after.
+            do {
+                let root = MenuRootSettings.shared, editor = EditorChoice.shared, settings = engine.settings
+                let (savedRoot, savedPick, savedKeys) = (root.root, editor.pick, settings.layerKeys)
+                defer { (root.root, editor.pick) = (savedRoot, savedPick); settings.setLayerKeys(savedKeys, from: .settings) }
+                let captures = CaptureSettingsStore.shared, dictation = PilotDictation.shared
+                let savedCapture = captures.settings
+                let savedLook = (look.windowBorder, look.windowBorderWidth, look.defocusStrength, look.defocusDim)
+                let savedDictation = (dictation.showIn, dictation.whileSpeaking, dictation.waveColour)
+                defer {
+                    captures.settings = savedCapture
+                    (look.windowBorder, look.windowBorderWidth, look.defocusStrength, look.defocusDim) = savedLook
+                    (dictation.showIn, dictation.whileSpeaking, dictation.waveColour) = savedDictation
+                }
+                root.root.show(MenuBranch.top[1], false)
+                root.root.move(try #require(MenuBranch.top.last), to: 0)
+                editor.pick = "com.apple.TextEdit"
+                settings.setLayerKeys([.rightCommand], from: .settings)
+                (look.windowBorder, look.windowBorderWidth, look.defocusStrength, look.defocusDim) = (true, 6, 2, 40)
+                captures.settings.afterCapture = .editor
+                (dictation.showIn, dictation.whileSpeaking, dictation.waveColour) = (.both, .words, .theme)
+                for (page, place) in fronts where page != "tiling" { try front(place, "\(name)-660-\(page)-set") }
+                // Voice's bar slot needs the top bar on, which this window leaves off: the preview alone, as it draws then.
+                for side in [TopBarSide.left, .right] where wanted("\(name)-660-voice-bar") {
+                    let setup = DictationOverlay.Setup(showIn: .both, barSide: side, colour: .theme, topBarShows: true)
+                    try writeRender(DictationPreview(setup: setup, words: true).frame(width: 600).padding(20).pilotTheme(look: look).background(Theme.background),
+                                    to: dir.appendingPathComponent("\(name)-660-voice-bar-\(side.rawValue).png"))
+                }
+                // Tiling's gaps on a store of its own: the engine's hands each change to the tiler.
+                let file = "\(name)-660-tiling-set"
+                if wanted(file) {
+                    let defaults = try #require(UserDefaults(suiteName: testSuite()))
+                    defaults.set(try JSONEncoder().encode(PilotBlock(gaps: .init(inner: 24, outer: 24))), forKey: "pilotBlock")
+                    let block = PilotBlockStore(tiler: EngineObservers().tiler, defaults: defaults)
+                    let page = MonitorsGround { TilingBody(block: block, settings: engine.settings, apps: []) }
+                        .frame(width: 716, height: 560).pilotTheme(look: look)
+                    try writeRender(page, to: dir.appendingPathComponent("\(file).png"))
+                }
+            }
             // The menu's root and a search, as the panel draws them.
             for (state, nav) in [("root", AliasesRenders.root()), ("search", AliasesRenders.search())] {
                 let file = "\(name)-menu-\(state)"

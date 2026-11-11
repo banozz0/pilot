@@ -26,12 +26,16 @@ if [[ -n ${SPARKLE_ED_KEY:-} ]]; then
 elif [[ $CONFIG == release && ${PILOT_DEV:-} != 1 ]]; then
   echo "a release build needs SPARKLE_ED_KEY (Sparkle updates) or PILOT_DEV=1 (a build of Sven's own, with no updates)" >&2; exit 1
 fi
+# The build number is the commit count plus Packaging/build-number-base.txt (public-repo spec T5): the public history
+# restarted the count, and Sparkle offers only a higher build. A base that is no whole number stops the build here.
+BUILD_BASE=$(grep -v '^#' "$ROOT/Packaging/build-number-base.txt" 2>/dev/null || true)
+[[ $BUILD_BASE == <-> ]] || { echo "error: Packaging/build-number-base.txt holds no whole number" >&2; exit 1; }
 # Pilot and the PilotWebApp template. Release optimises for size (story 142): the main program is about a fifth smaller,
 # and the launcher's fuzzy rank and the tap's layer decision timed the same as -O within a few nanoseconds a key. Passed
 # here, not as Package.swift unsafeFlags: those left __text 3.4 MB bigger (25.3 against 21.9 MB, 2026-10-09). A release's
 # programs export no symbols: nothing loads into them or looks one up by name (their dlsym calls are into system
 # frameworks), and the export trie was 0.58 MB of the main program (2026-10-23).
-SWIFTFLAGS=(); [[ $CONFIG == release ]] && SWIFTFLAGS=(-Xswiftc -Osize -Xlinker -no_exported_symbols)
+BUILD_FLAGS=(${=SWIFTFLAGS:-}); [[ $CONFIG == release ]] && BUILD_FLAGS+=(-Xswiftc -Osize -Xlinker -no_exported_symbols)
 # The terminal drop's libghostty, Sentry off (T11): seconds once built for this Mac, about 5 to 10 minutes the first time.
 "$ROOT/Scripts/build-ghosttykit.sh"
 # It ships beside the app, never in it (T76): the signed pack Pilot downloads on the first Hyper+T, and the pin Pilot compiles
@@ -40,7 +44,7 @@ PACKCACHE=
 if [[ $ID != - ]]; then
   PACKCACHE=$(SIGN_ID=$ID "$ROOT/Scripts/build-terminal-pack.sh" | tee /dev/stderr | sed -n 's/^terminal pack cache: //p')
 fi
-swift build -c "$CONFIG" $SWIFTFLAGS
+swift build -c "$CONFIG" $BUILD_FLAGS
 # The menu's file index (FileIndex), Cardinal's engine on stable Rust; release always, a debug walk is ten times slower.
 cargo build --release --quiet --manifest-path "$ROOT/Helpers/pilot-files/Cargo.toml"
 # Pilot's own dictation (story 194), WhisperKit and FluidAudio in a package of its own so Pilot's build never compiles them;
@@ -49,7 +53,7 @@ cargo build --release --quiet --manifest-path "$ROOT/Helpers/pilot-files/Cargo.t
 # signed again kept it (2026-10-16), a changed one compiles again, which SpeechModel.prepareInBackground does a minute
 # after launch.
 DICTATE=$ROOT/Helpers/pilot-dictate
-swift build -c release -Xswiftc -Osize -Xlinker -no_exported_symbols --package-path "$DICTATE" --product pilot-dictate
+swift build -c release ${=SWIFTFLAGS:-} -Xswiftc -Osize -Xlinker -no_exported_symbols --package-path "$DICTATE" --product pilot-dictate
 DICTATEBIN=$(swift build -c release --package-path "$DICTATE" --show-bin-path)
 # Dictation's Pause media (MediaPause): a library /usr/bin/perl loads to pause and play what is playing; macOS 15.4 and
 # later tell only Apple's own programs that (Helpers/pilot-media/pilot-media.m).
@@ -109,8 +113,8 @@ cp "$ROOT/Packaging/Info.plist" "$APP/Contents/Info.plist"
 xcrun actool --compile "$APP/Contents/Resources" --platform macosx --minimum-deployment-target 26.0 --app-icon AppIcon \
   --output-partial-info-plist "$ROOT/.build/AppIcon-partial.plist" --errors --warnings "$ROOT/Packaging/AppIcon.icon" >/dev/null
 /usr/libexec/PlistBuddy -c "Add :PilotBuildConfiguration string $CONFIG" "$APP/Contents/Info.plist"  # LeanBudgetTests judges only release
-# The build number counts up with every commit on main (Sparkle compares it); two builds of one commit share it.
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git -C "$ROOT" rev-list --count HEAD)" "$APP/Contents/Info.plist"
+# The build number counts up with every commit on main, from the base (Sparkle compares it); two builds of one commit share it.
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(( $(git -C "$ROOT" rev-list --count HEAD) + BUILD_BASE ))" "$APP/Contents/Info.plist"
 # The version people read (About, the DMG's name): Scripts/release.sh sets PILOT_VERSION, other builds keep Info.plist's.
 [[ -n ${PILOT_VERSION:-} ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $PILOT_VERSION" "$APP/Contents/Info.plist"
 # General's update state (PilotUpdates): the commit this bundle is built from, then its route. SPARKLE_ED_KEY (checked at
@@ -136,8 +140,10 @@ fi
 cp "$ROOT/Packaging/drive-catalogue.json" "$APP/Contents/Resources/"  # the drive catalogue (DriveModule.catalogue)
 cp "$ROOT/Packaging/install-catalogue.json" "$APP/Contents/Resources/"  # Install's catalogue (SPEC.md, Install catalogue)
 cp "$ROOT/Packaging/themes.json" "$APP/Contents/Resources/"  # Omarchy's theme palettes (OmarchyThemes)
+cp -R "$ROOT/Packaging/ThemePacks" "$APP/Contents/Resources/ThemePacks"  # immutable local factory packs and asset provenance
 cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases (lossless WebP) and palettes (CursorSets, P84)
 cp "$ROOT/Packaging/Omarchy-LICENSE.txt" "$APP/Contents/Resources/Omarchy-LICENSE.txt"  # MIT keeps its notice
+cp "$ROOT/Packaging/NotificationNanny-LICENSE.txt" "$APP/Contents/Resources/NotificationNanny-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/emoji.json" "$APP/Contents/Resources/"  # gemoji's emoji names and keywords (EmojiSearch)
 cp "$ROOT/Packaging/gemoji-LICENSE.txt" "$APP/Contents/Resources/gemoji-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/CodexBar-LICENSE.txt" "$APP/Contents/Resources/CodexBar-LICENSE.txt"  # MIT keeps its notice (ExtensionGaugeIcon's Claude mark)
@@ -180,7 +186,9 @@ codesign --force --sign "$ID" "$SPARKLE/Versions/B/Updater.app"
 codesign --force --sign "$ID" "$SPARKLE"
 codesign --force --sign "$ID" --identifier dev.banozz.pilot "$APP"
 codesign --verify --strict --deep "$APP"  # a broken signature fails the build
-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
+if [[ $ID != - ]]; then
+  /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
+fi
 echo "built $APP (signed: $ID)"
 # The lean budgets (SPEC story 142): a release bundle over its size budget fails the build, after it is built.
 if [[ $CONFIG == release ]]; then "$ROOT/Scripts/lean-check.py" size --app "$APP"; fi

@@ -8,6 +8,36 @@ public protocol NotificationElement {
     var children: [any NotificationElement] { get }
     /// Performs the action under its raw name.
     func perform(_ action: String) -> Bool
+    /// AXRole and AXSubrole, what the banner reader tells a banner from its host by.
+    var role: String? { get }
+    var subrole: String? { get }
+    /// AXIdentifier: a banner's stays the same for as long as it is up.
+    var identifier: String? { get }
+    /// AXValue, a line of text's words.
+    var value: String? { get }
+    /// AXAttributedDescription's words: "App, Title, Body" on a banner.
+    var attributedDescription: String? { get }
+    /// The application element's windows; the reader walks these, never the app's menu bar. Nil when the list couldn't be
+    /// read (a timeout), so a failed read is told from one that answered with none.
+    var windows: [any NotificationElement]? { get }
+    /// AXExpanded on the application element: Notification Center's own panel is open, its rows sharing banners' subroles.
+    var isExpanded: Bool { get }
+    /// AXPosition, in screen points from the top left.
+    var position: CGPoint? { get }
+    /// Moves the element; only Notification Center's host window can move.
+    func setPosition(_ point: CGPoint) -> Bool
+}
+
+public extension NotificationElement {
+    var role: String? { nil }
+    var subrole: String? { nil }
+    var identifier: String? { nil }
+    var value: String? { nil }
+    var attributedDescription: String? { nil }
+    var windows: [any NotificationElement]? { children }
+    var isExpanded: Bool { false }
+    var position: CGPoint? { nil }
+    func setPosition(_ point: CGPoint) -> Bool { false }
 }
 
 /// Omarchy's Super+comma family on the Mac (card agent-bo-95422949, story 124): clear the latest notification, clear

@@ -3,20 +3,25 @@ import SwiftUI
 import PilotCore
 
 /// Workspaces in the editor's look (card agent-bo-95423003, Sven 2026-10-07: "i explicitly said how it should look so i
-/// can customise each workspace ... why is half the screen empty"): the workspaces along the top (two rows past five),
-/// Add and Delete over them (Sven 2026-10-17: Delete takes the picked one), each a small screen of its apps in their spots
-/// under its name, and under them the picked one in the editor itself: the preview whose spots take an app, the layout
-/// pictures, Opens here and its two rules, the apps that always land there and its window snapshot. Every change saves
-/// at once (Sven 2026-10-17, no Save button). Under the editor, while the picked workspace is Scrolling, that layout's
-/// centre mode and column rules, then each workspace's monitor and the swipe between them (Sven's Q207 page map, from Tiling). Gaps, the always-float lists
-/// and the Pilot block sit under Tiling. Every rule change saves the Pilot block's settings and reloads the tiler.
+/// can customise each workspace ... why is half the screen empty"; simplify-pages T18): Add and Delete (Sven 2026-10-17:
+/// Delete takes the picked one), the workspaces in one compact row of nine (Sven's Q37), each a small screen of its apps
+/// in their spots over its number, and under them the picked one in the editor itself: its name, the preview whose spots
+/// take an app, the layout pictures with the apps that always land there, a preset and its window snapshot under them
+/// (back from More, Sven's round 3 notes on build 2300), and what opens there with its two rules (back from More, Sven
+/// 2026-11-11, after 2276). More edits the same pick: while it is Scrolling, that layout's centre mode and column rules,
+/// the window shelf's pictures (from Tiling, Sven 2026-11-11,
+/// after 2276), each workspace's monitor and the swipe between them (Sven's Q207 page map, from Tiling). Every change saves at once
+/// (Sven 2026-10-17, no Save button). Gaps, the always-float lists and the Pilot block sit under Tiling. Every rule change
+/// saves the Pilot block's settings and reloads the tiler.
 struct WorkspacesSettingsView: View {
     @Environment(Engine.self) private var engine
+    /// The More tab (simplify-pages T18), editing the workspace picked on the front.
+    var more = false
 
     var body: some View {
         WorkspacesBody(block: engine.pilotBlock, layouts: engine.layouts, presets: engine.presets, snapshots: engine.snapshots,
                        list: engine.workspaceList, focused: engine.observers.tiler.focused, settings: engine.settings,
-                       monitors: engine.workspaceMonitors)
+                       monitors: engine.workspaceMonitors, more: more)
     }
 }
 
@@ -39,20 +44,31 @@ struct WorkspacesBody: View {
     var monitors: WorkspaceMonitorStore? = nil
     /// The displays the Monitor pick offers; renders pass their own, the app reads them live.
     var displays: [ConnectedDisplay]? = nil
-    @State private var picked: String?
+    /// The More tab (simplify-pages T18): the picked workspace's Scrolling rules, the window shelf, the monitors and the
+    /// swipe. One view with the front, so the pick carries over.
+    var more = false
+    /// The workspace picked; a render starts it on another to show More editing it.
+    @State var picked: String? = nil
     @State private var drafts = WorkspacePageDrafts()
 
-    static let intro = "Each workspace's name, layout and apps. Pick one, then click its screen to put apps in it; every change saves at once."
+    static let intro = "Each workspace's name, layout and apps."
+    static let introInfo = "Pick one, then click its screen to put apps in it; every change saves at once."
 
     var body: some View {
         let names = list?.names ?? Workspaces.all
         let name = [picked, focused].compactMap { $0 }.first(where: names.contains) ?? names[0]
-        // One row up to five, two past it, so nine never squeeze into slivers; a short last row keeps the cards' width.
-        let perRow = names.count > 5 ? (names.count + 1) / 2 : names.count
-        let rows = stride(from: 0, to: names.count, by: perRow).map { Array(names[$0..<min($0 + perRow, names.count)]) }
-        FillScroll {
+        Group {
+            if more { moreTab(name) } else { front(name, names: names) }
+        }
+        .savesWhenResting(drafts) { drafts.edited.forEach(save) }
+    }
+
+    /// The front: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
+    /// in their spots, rules, preset, snapshot and what opens there.
+    private func front(_ name: String, names: [String]) -> some View {
+        KitLanding { FillScroll {
             VStack(alignment: .leading, spacing: 14) {
-                Text(Self.intro).font(ink.ui(13.5)).foregroundStyle(ink.text2)
+                IntroLine(info: Self.introInfo) { Text(Self.intro).font(ink.ui(13.5)).foregroundStyle(ink.text2) }
                 if let list {
                     ListRow(list: list, picked: name, title: presets.contents.title(for: name)) { added in
                         withAnimation(Kit.change) { picked = added }
@@ -61,44 +77,78 @@ struct WorkspacesBody: View {
                         withAnimation(Kit.change) { picked = nil }
                     }
                 }
-                VStack(spacing: 12) {
-                    ForEach(rows, id: \.self) { row in
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(row, id: \.self) { workspace in
-                                WorkspaceCard(name: workspace, title: presets.contents.title(for: workspace), draft: draft(workspace),
-                                              picked: workspace == name, onScreen: workspace == focused,
-                                              snapshot: snapshots.saved[workspace] != nil) {
-                                    withAnimation(Kit.change) { picked = workspace }
-                                }
-                            }
-                            ForEach(row.count..<perRow, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, maxHeight: 0) }
+                HStack(alignment: .top, spacing: 6) {
+                    ForEach(names, id: \.self) { workspace in
+                        WorkspaceCard(name: workspace, title: presets.contents.title(for: workspace), draft: draft(workspace),
+                                      picked: workspace == name, onScreen: workspace == focused,
+                                      snapshot: snapshots.saved[workspace] != nil) {
+                            withAnimation(Kit.change) { picked = workspace }
                         }
                     }
                 }
-                // Its rows keep their height; the editor under them takes what is left.
+                // Its row keeps its height; the editor under it takes what is left.
                 .fixedSize(horizontal: false, vertical: true)
-                WorkspaceEditorPanel(workspace: name, presets: presets, draft: binding(name), mode: .page(extras: extras(name)),
-                                     start: start) {
-                    presets.remove(from: name)
-                    if presets.lastError == nil { drafts.revert(name) }
-                }
-                .id(name)
-                .frame(maxHeight: .infinity)
-                // Only while the picked workspace's layout is Scrolling (Sven 2026-10-30), as the editor shows it.
-                if draft(name).layout == .scrolling {
-                    WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
-                }
-                if let monitors {
-                    WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents)
-                }
-                if let settings { WorkspaceSwipeBlock(settings: settings) }
-                if let error = block.lastError ?? list?.lastError ?? snapshots.lastError ?? monitors?.lastError {
-                    FinePrint(text: error, color: ink.red)
-                }
+                editor(name).frame(maxHeight: .infinity)
+                problems
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 28)
+        } }
+    }
+
+    /// More's index. A row added to or moved off a block changes its count here; Scrolling's holds its 3 rules only while
+    /// the picked layout is Scrolling, and a render without the monitor or swipe stores leaves those out.
+    static let entries = [
+        MoreEntry(id: .workspaceScrolling, symbol: "rectangle.split.3x1.fill", controls: 3),
+        MoreEntry(id: .windowShelf, symbol: "rectangle.stack", controls: 4),
+        MoreEntry(id: .workspaceMonitors, symbol: "display.2", controls: 1),
+        MoreEntry(id: .workspaceSwipe, symbol: "hand.draw", controls: 1),
+    ]
+
+    /// More (simplify-pages T18): the Scrolling place (the picked workspace's rules while its layout is Scrolling, else a
+    /// line saying so), the window shelf, each workspace's monitor and the swipe.
+    private func moreTab(_ name: String) -> some View {
+        // Scrolling's rules only while the picked workspace's layout is Scrolling (Sven 2026-10-30), as the editor shows it.
+        let scrolling = draft(name).layout == .scrolling
+        let drawn = Self.entries
+            .filter { ($0.id != .workspaceMonitors || monitors != nil) && ($0.id != .workspaceSwipe || settings != nil) }
+            .map { $0.id == .workspaceScrolling && !scrolling ? MoreEntry(id: $0.id, symbol: $0.symbol, controls: 0) : $0 }
+        return KitMore(entries: drawn) {
+            // Scrolling's rules only while its layout is Scrolling; else one line says so, so its words and links land.
+            Group {
+                if scrolling {
+                    WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
+                } else {
+                    KitBlock(title: AppSection.workspaceScrolling.title, symbol: "rectangle.split.3x1.fill") {
+                        BlockRow(first: true) {
+                            FinePrint(text: "The Scrolling layout's rules show here once \(presets.contents.title(for: name))'s layout is Scrolling, picked on the Workspaces tab.")
+                        }
+                    }
+                }
+            }
+            .moreBlock(.workspaceScrolling)
+            ShelfSettingsBlock().moreBlock(.windowShelf)
+            if let monitors {
+                WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents).moreBlock(.workspaceMonitors)
+            }
+            if let settings { WorkspaceSwipeBlock(settings: settings).moreBlock(.workspaceSwipe) }
+            problems
         }
-        .savesWhenResting(drafts) { drafts.edited.forEach(save) }
+    }
+
+    /// The picked workspace's editor.
+    private func editor(_ name: String) -> some View {
+        WorkspaceEditorPanel(workspace: name, presets: presets, draft: binding(name), mode: .page(extras: extras(name)),
+                             start: start) {
+            presets.remove(from: name)
+            if presets.lastError == nil { drafts.revert(name) }
+        }
+        .id(name)
+    }
+
+    @ViewBuilder private var problems: some View {
+        if let error = block.lastError ?? list?.lastError ?? snapshots.lastError ?? monitors?.lastError {
+            FinePrint(text: error, color: ink.red)
+        }
     }
 
     private func draft(_ workspace: String) -> WorkspacePresetDraft {
@@ -328,8 +378,8 @@ struct WorkspaceSwipeBlock: View {
     }
 }
 
-/// One workspace along the top: a small screen of its apps where its layout puts them, its name (else "Workspace 3") and
-/// what it holds; the picked one lit, the one on screen marked. Narrow, the screen sits over the words.
+/// One of the workspaces' compact row of nine (Sven's Q37, simplify-pages T18): a small screen of its apps where its
+/// layout puts them over its number, its name in its tip; the picked one lit, the one on screen marked.
 private struct WorkspaceCard: View {
     @Environment(\.ink) private var ink
     let name: String
@@ -341,23 +391,31 @@ private struct WorkspaceCard: View {
     let snapshot: Bool
     let pick: () -> Void
     @State private var hovered = false
-    @State private var wide = true
 
     private var toybox: Bool { ink.style.kind == .toybox }
+    /// A display's width over its height, and the widest a card grows when few workspaces share the row.
+    static let screenShape: CGFloat = 16 / 10
+    static let widest: CGFloat = 150
+
+    /// Its name, then what the dot and the mark say: on screen now, a window snapshot saved.
+    private var tip: String {
+        ([title] + (onScreen ? ["on screen now"] : []) + (snapshot ? ["window snapshot saved"] : [])).joined(separator: ", ")
+    }
 
     var body: some View {
         let radius = ink.blockRadius
         Button(action: pick) {
-            Group {
-                if wide {
-                    HStack(spacing: 12) { screen.frame(width: 118, height: 74); words }
-                } else {
-                    VStack(alignment: .leading, spacing: 8) { screen.frame(height: 58); words }
+            VStack(spacing: 4) {
+                // A screen's shape, so each layout's drawing reads (Sven, 2026-11-11, after 2276: 34 pt tall squashed it).
+                screen.aspectRatio(WorkspaceCard.screenShape, contentMode: .fit)
+                HStack(spacing: 4) {
+                    Text(name).font(ink.ui(12, .semibold)).foregroundStyle(picked && toybox ? ink.onAccent : ink.text)
+                    if onScreen { Circle().fill(ink.green).frame(width: 5, height: 5).accessibilityHidden(true) }
+                    if snapshot { Image(systemName: "camera.viewfinder").font(ink.ui(9)).foregroundStyle(ink.muted).accessibilityHidden(true) }
                 }
             }
-            .padding(12)
-            // Instrument's four cards stand level when one's line wraps.
-            .frame(maxWidth: .infinity, maxHeight: ink.isInstrument ? .infinity : nil, alignment: ink.isInstrument ? .topLeading : .leading)
+            .padding(6)
+            .frame(maxWidth: Self.widest)
             .background(picked && toybox ? ink.accent : picked && !ink.isInstrument ? ink.selected : hovered ? ink.text.opacity(0.04) : .clear,
                         in: .rect(cornerRadius: radius - ink.style.depth.card.outline))
             .blockSurface()
@@ -366,10 +424,10 @@ private struct WorkspaceCard: View {
             .contentShape(.rect)
         }
         .buttonStyle(.kitPress)
+        .help(tip)
         .onHover { hovered = $0 }
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 250 } action: { wide = $0 }
         .animation(Kit.change, value: hovered)
-        .accessibilityLabel("\(title), key \(name), \(summary)")
+        .accessibilityLabel("\(tip), key \(name), \(summary)")
         .accessibilityAddTraits(picked ? .isSelected : [])
     }
 
@@ -377,33 +435,6 @@ private struct WorkspaceCard: View {
         let apps = draft.apps.count
         let how = draft.layout?.label ?? WorkspaceEditor.ownSizes
         return apps == 0 ? "\(how), no apps yet" : "\(how), \(apps) app\(apps == 1 ? "" : "s")"
-    }
-
-    /// The card's own line: Instrument's short enough to sit whole beside the screen at 1440 ("Main + stack · empty").
-    private var shown: String {
-        guard ink.isInstrument else { return summary }
-        let apps = draft.apps.count, how = draft.layout?.label ?? WorkspaceEditor.ownSizes
-        // The dot keeps to the layout's name, so a wrapped line never starts with it.
-        return "\(how)\u{00A0}· \(apps == 0 ? "empty" : "\(apps)\u{00A0}app\(apps == 1 ? "" : "s")")"
-    }
-
-    private var words: some View {
-        // On Toybox's sun-filled pick the words are the ink on the sun.
-        let sun = picked && toybox
-        let text = sun ? ink.onAccent : ink.text, text2 = sun ? ink.onAccent.opacity(0.8) : ink.text2, muted = sun ? ink.onAccent.opacity(0.66) : ink.muted
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(title).font(ink.ui(13, .semibold)).foregroundStyle(text).lineLimit(1).minimumScaleFactor(0.75)
-                Spacer(minLength: 0)
-                if onScreen { Circle().fill(ink.green).frame(width: 6, height: 6).help("On screen now").accessibilityLabel("on screen") }
-            }
-            HStack(spacing: 6) {
-                // Instrument's wraps to a second line before it would cut (a narrow window's cards).
-                Text(shown).font(ink.ui(11.5)).foregroundStyle(text2).lineLimit(ink.isInstrument ? 2 : 1)
-                    .fixedSize(horizontal: false, vertical: ink.isInstrument)
-                if snapshot { Image(systemName: "camera.viewfinder").font(ink.ui(10)).foregroundStyle(muted).help("Window snapshot saved") }
-            }
-        }
     }
 
     /// The workspace in miniature, in its layout (Sven 2026-10-30): its apps' tiles with their icons, then the layout's

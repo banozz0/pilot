@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Activity › Reports (story 153): every Update and Clean run, newest first, each opening to when it ran, how it ended,
+/// Update & Clean › Reports (story 153; Activity's until simplify-pages T16): every Update and Clean run, newest first, each opening to when it ran, how it ended,
 /// the exact command, what it was to change (Update's versions from → to, Clean's items and the space Mole freed) and
 /// what it printed. A run still in its terminal is read again every 2 s until it ends. Update and Clean themselves are
 /// Mac › Update & Clean (UpkeepPage).
@@ -21,11 +21,11 @@ struct ReportsPage: View {
     /// The run opened: the one picked, else the newest.
     private var shown: RunRecord? { records?.first { $0.id == picked } ?? records?.first }
 
-    static let intro = "Every Update and Clean run, newest first: what it was asked to do, how it ended and what it printed. "
-        + "The last \(ReportStore.keep) are kept."
+    static let intro = "Every Update and Clean run, newest first, with what it printed."
+    static let introInfo = "What each was asked to do, how it ended and what it printed. The last \(ReportStore.keep) are kept."
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             if records?.isEmpty == true {
                 EmptyState(title: "No runs yet", line: "Each Update and Clean run is kept here.").padding(.vertical, 24)
             } else if let shown {

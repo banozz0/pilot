@@ -62,7 +62,7 @@ struct EditorTopBar: View {
                 model.upscale.size(width: Int(size.width), height: Int(size.height))
                 upscaling = true
             } label: { ActionCap(symbol: "arrow.up.left.and.arrow.down.right", label: "Upscale", lit: model.upscale.busy) }
-                .buttonStyle(.plain).help("Upscale the capture, as marked up, 2x to 4x beside it")
+                .buttonStyle(.plain).help("Upscale the capture 2x to 4x, or fit it to a monitor, beside the original")
                 .popover(isPresented: $upscaling, arrowEdge: .bottom) { UpscalePopover(model: model) { upscaling = false } }
             rule
             Button(action: pin) { ActionCap(symbol: "pin", label: "Pin") }.buttonStyle(.plain).help("Pin it over your windows, and close the editor")
@@ -670,6 +670,12 @@ struct UpscalePopover: View {
                         cancel: { if model.upscale.busy { model.upscale.cancel() } else { close() } })
         }
         .background(style.color(\.panel))
+        .task {
+            if let image = await model.export(committing: false) {
+                model.upscale.size(width: image.width, height: image.height)
+                await model.upscale.loadPreview(image)
+            }
+        }
     }
 }
 

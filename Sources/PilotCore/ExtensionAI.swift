@@ -29,20 +29,34 @@ public enum ExtensionAI {
 
     /// `then` with no answer: its context's `error` says why (a context that is no object is kept under `context`).
     public static func failed(_ then: Extension.Item.Action, _ why: QuickAI.Failure) -> Extension.Item.Action {
-        guard case .run(let command, let context) = then.kind else { return then }
+        adding("error", why.message, to: then).map { Extension.Item.Action(kind: $0, title: then.title) } ?? then
+    }
+
+    /// `then` with its context's `notice` saying which AI answered, when the fallback did (AIFallback).
+    static func noted(_ then: Extension.Item.Action, _ line: String) -> Extension.Item.Action {
+        adding("notice", line, to: then).map {
+            Extension.Item.Action(kind: $0, title: then.title, icon: then.icon, destructive: then.destructive, key: then.key, stay: then.stay, clear: then.clear)
+        } ?? then
+    }
+
+    /// `then`'s run with `key` added to its context, an object context kept and any other under `context`; nil when it is no run.
+    private static func adding(_ key: String, _ value: String, to then: Extension.Item.Action) -> Extension.Item.Action.Kind? {
+        guard case .run(let command, let context) = then.kind else { return nil }
         var fields: [String: JSONValue] = if case .object(let o)? = context { o } else { context.map { ["context": $0] } ?? [:] }
-        fields["error"] = .string(why.message)
-        return Extension.Item.Action(kind: .run(command: command, context: .object(fields)), title: then.title)
+        fields[key] = .string(value)
+        return .run(command: command, context: .object(fields))
     }
 
     /// Asks `runner`, the AI page's provider or why there is none, and answers with `then` ready to run: the answer as its
-    /// input, or `failed`. Off the caller's actor, so a long text is never read on the main thread.
+    /// input, or `failed`; `heard`, the runner's, adds its `notice`. Off the caller's actor, so a long text is never read on
+    /// the main thread.
     @concurrent
-    public static func ask(_ task: String, _ text: String, then: Extension.Item.Action,
-                           runner: Result<QuickAI.Runner, QuickAI.Failure>) async -> Extension.Item.Action {
+    public static func ask(_ task: String, _ text: String, then: Extension.Item.Action, runner: Result<QuickAI.Runner, QuickAI.Failure>,
+                           heard: AIFallback.Heard? = nil) async -> Extension.Item.Action {
         do throws(QuickAI.Failure) {
             let run = try runner.get()
-            return then.answered(try await run(job(task: task, text: text)) { _ in })
+            let answer = try await run(job(task: task, text: text)) { _ in }
+            return (heard?.notice.map { noted(then, $0.line) } ?? then).answered(answer)
         } catch {
             return failed(then, error)
         }

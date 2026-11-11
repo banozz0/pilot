@@ -160,6 +160,7 @@ struct BarDropRenders {
                 let host = NSHostingView(rootView: AIChatPanel.content(model, size: nil, look: look))
                 host.sizingOptions = []
                 view = host
+            case .pill: continue   // PillPlacement hangs the pill; BarDropPlacement never frames it.
             }
             view.frame = frame
             canvas.addSubview(view)

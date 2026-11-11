@@ -12,8 +12,15 @@ protocol TopBarPanels: AnyObject {
     /// One bar on each of these screens, none on any other.
     func show(on screens: [TopBarGeometry.Screen])
     func hideAll()
+    func reservedHeight(on screen: TopBarGeometry.Screen, configuration: BarPresetConfiguration) -> Double
     /// Every bar's window level, the ones shown later too.
     var level: NSWindow.Level { get set }
+}
+
+extension TopBarPanels {
+    func reservedHeight(on screen: TopBarGeometry.Screen, configuration: BarPresetConfiguration) -> Double {
+        configuration.height + configuration.topMargin
+    }
 }
 
 /// Pilot's top bar (card agent-bo-95422850; spike vault note Projects/Pilot/Top bar spike.md): off by default, and
@@ -68,6 +75,15 @@ final class TopBarController {
     /// The screens that get a bar now.
     private var picked: [TopBarGeometry.Screen] { connected.filter { !leftOut.contains($0.name) } }
 
+    /// Same local bar.items source; changes reserve the floating bar's bottom edge, not just its painted height.
+    private var reserved: [TopBarGeometry.Screen] {
+        let preset = defaults.data(forKey: BarItemsStore.key).flatMap { try? JSONDecoder().decode(BarSettings.self, from: $0) }?.preset
+        return picked.map { screen in
+            guard let preset else { return screen }
+            return .init(name: screen.name, strip: panels.reservedHeight(on: screen, configuration: preset), displayUUID: screen.displayUUID)
+        }
+    }
+
     /// At launch: the bars come back if the switch was left on, and follow the screens from then on.
     func start() {
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -82,7 +98,7 @@ final class TopBarController {
         busy = true
         problem = nil
         connected = screens()
-        let bars = TopBarGeometry.bars(picked)
+        let bars = TopBarGeometry.bars(reserved)
         Task {
             defer { busy = false }
             do {
@@ -133,7 +149,7 @@ final class TopBarController {
     private func follow() {
         guard state.isOn else { return }
         panels.show(on: picked)
-        let bars = TopBarGeometry.bars(picked)
+        let bars = TopBarGeometry.bars(reserved)
         guard bars != written else { return }
         written = bars
         Task {
@@ -172,9 +188,11 @@ enum TopBarScreens {
 /// and hands right-clicks and the wheel to the item under the pointer (TopBarPanel).
 @MainActor
 final class TopBarWindows: TopBarPanels {
-    private var panels: [String: TopBarPanel] = [:]
+    private struct Key: Hashable { let screen: String; var side: TopBarSide? = nil }
+    private var panels: [Key: TopBarPanel] = [:]
     private let sources: BarSources
     private let store: BarItemsStore
+    private var shown: [TopBarGeometry.Screen] = []
 
     init(sources: BarSources, store: BarItemsStore) {
         self.sources = sources
@@ -186,10 +204,14 @@ final class TopBarWindows: TopBarPanels {
     /// watched even with no bar shown yet.
     private func followLook() {
         let look = Look.shared, wallpapers = BarWallpapers.shared
-        panels.forEach { Self.applyLook(look, store: store, wallpaper: wallpapers.strips[$0.key], to: $0.value) }
+        if !shown.isEmpty {
+            show(on: shown)
+            Engine.shared?.topBar.screensChanged()
+        }
+        panels.forEach { Self.applyLook(look, store: store, wallpaper: wallpapers.strips[$0.key.screen], to: $0.value) }
         withObservationTracking {
             _ = (look.appearance(for: .topBar), look.style, look.theme, look.transparency, look.glassBlur, store.background, store.colour,
-                 wallpapers.strips)
+                 wallpapers.strips, store.settings.preset)
         } onChange: { [weak self] in
             Task { @MainActor in self?.followLook() }
         }
@@ -226,33 +248,77 @@ final class TopBarWindows: TopBarPanels {
         }
     }
 
+    func reservedHeight(on screen: TopBarGeometry.Screen, configuration: BarPresetConfiguration) -> Double {
+        guard let ns = NSScreen.screens.first(where: { $0.localizedName == screen.name }) else { return configuration.height + configuration.topMargin }
+        return ns.frame.maxY - BarPresetGeometry.frame(configuration, screen: ns.frame, strip: screen.strip, notch: ns.safeAreaInsets.top).minY
+    }
+
     func show(on screens: [TopBarGeometry.Screen]) {
-        // The bars are a hard edge for the windows Pilot places.
-        Screens.bars = Dictionary(screens.map { ($0.name, $0.strip) }, uniquingKeysWith: { first, _ in first })
+        shown = screens
+        // These same panel frames define the hard edge for snapped windows and the existing item anchors.
+        Screens.bars = Dictionary(screens.map { screen in
+            let config = store.settings.preset
+            return (screen.name, config.map { reservedHeight(on: screen, configuration: $0) } ?? screen.strip)
+        }, uniquingKeysWith: { first, _ in first })
         BarWallpapers.shared.follow(screens)
-        for name in panels.keys where !screens.contains(where: { $0.name == name }) { panels.removeValue(forKey: name)?.orderOut(nil) }
+        let islands = store.settings.preset?.preset == .threeIslands
+        for key in panels.keys where !screens.contains(where: { $0.name == key.screen }) || (key.side != nil) != islands {
+            panels.removeValue(forKey: key)?.orderOut(nil)
+        }
         for screen in screens {
             guard let ns = NSScreen.screens.first(where: { $0.localizedName == screen.name }) else { continue }
-            let panel = panels[screen.name] ?? make(screen.name)
-            panels[screen.name] = panel
-            panel.pin(TopBarGeometry.frame(screen: ns.frame, strip: screen.strip))
-            if !panel.isVisible { panel.orderFrontRegardless() }
+            let frame = BarPresetGeometry.frame(store.settings.preset, screen: ns.frame, strip: screen.strip, notch: ns.safeAreaInsets.top)
+            let keys = islands ? TopBarSide.allCases.map { Key(screen: screen.name, side: $0) } : [Key(screen: screen.name)]
+            for key in keys {
+                let panel = panels[key] ?? make(key)
+                panels[key] = panel
+                panel.contentView?.wantsLayer = true
+                panel.contentView?.layer?.cornerRadius = store.settings.preset?.radius ?? 0
+                panel.contentView?.layer?.masksToBounds = true
+                if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
+                    clip.canvas = frame
+                    clip.needsLayout = true
+                    clip.layoutSubtreeIfNeeded()
+                } else {
+                    panel.pin(frame)
+                    if !panel.isVisible { panel.orderFrontRegardless() }
+                }
+            }
         }
     }
 
     func hideAll() {
+        shown = []
         Screens.bars = [:]
         BarWallpapers.shared.follow([])   // no bar, no strips read
         panels.values.forEach { $0.orderOut(nil) }
         panels = [:]
     }
 
-    private func make(_ name: String) -> TopBarPanel {
-        let content = NSHostingView(rootView: TopBarView(screen: name, sources: sources, store: store))
-        content.sizingOptions = []   // the bar's frame is Pilot's alone (pin), never its content's size
-        let panel = Self.panel(MaterialBackdrop(content: content), level: level)
-        Self.applyLook(.shared, store: store, wallpaper: BarWallpapers.shared.strips[name], to: panel)
+    private func make(_ key: Key) -> TopBarPanel {
+        let content = NSHostingView(rootView: TopBarView(screen: key.screen, sources: sources, store: store,
+            reportIsland: key.side.map { side in { [weak self] reported, rect in
+                guard reported == side else { return }
+                self?.placeIsland(key, rect: rect)
+            } }))
+        content.sizingOptions = []
+        let body: NSView = key.side == nil ? content : TopBarIslandClip(content)
+        let panel = Self.panel(MaterialBackdrop(content: body), level: level)
+        Self.applyLook(.shared, store: store, wallpaper: BarWallpapers.shared.strips[key.screen], to: panel)
         return panel
+    }
+
+    private func placeIsland(_ key: Key, rect: CGRect) {
+        guard store.settings.preset?.preset == .threeIslands, let panel = panels[key],
+              let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip else { return }
+        // The final row rectangle drives the crop, window bounds and input region together. No full-width window.
+        guard let frame = BarPresetGeometry.islandFrame(rect, in: clip.canvas) else {
+            panel.orderOut(nil)
+            return
+        }
+        clip.crop = rect
+        panel.pin(frame)
+        if !panel.isVisible { panel.orderFrontRegardless() }
     }
 
     /// A bar's window around its content, at `level`.
@@ -310,5 +376,30 @@ final class TopBarPanel: NSPanel {
     override func sendEvent(_ event: NSEvent) {
         if let anchor = ScreenAnchor.AnchorView.taking(event, in: contentView) { return anchor.take(event) }
         super.sendEvent(event)
+    }
+}
+
+/// Each island window holds the existing full row at its original coordinates, cropped to that final group.
+/// Keeping the row's coordinate space intact also keeps overflow indices and every item's existing anchor intact.
+final class TopBarIslandClip: NSView {
+    let content: NSView
+    var canvas = CGRect.zero { didSet { place() } }
+    var crop = CGRect.zero { didSet { place() } }
+    init(_ content: NSView) {
+        self.content = content
+        super.init(frame: .zero)
+        wantsLayer = true
+        clipsToBounds = true
+        addSubview(content)
+    }
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+    private func place() {
+        content.frame = CGRect(x: -crop.minX, y: crop.maxY - canvas.height, width: canvas.width, height: canvas.height)
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard BarPresetGeometry.hit(local, in: bounds),
+              BarPresetGeometry.hit(CGPoint(x: local.x + crop.minX, y: local.y + crop.minY), in: crop) else { return nil }
+        return super.hitTest(point)
     }
 }

@@ -29,19 +29,18 @@ struct SetupDevices {
 }
 
 /// Setup (round 8, Sven 2026-10-05, plan card 6Kx5FuzW2DU; on the kit, card agent-bo-95422898, design round 4 section 7):
-/// the Mac's sound, Wi-Fi, Bluetooth, displays and keep-awake, and the keyboard layout moved from Look, each changed in
-/// place inside Pilot on its own card. Where macOS refuses something to an app, an ⓘ says so instead of opening
-/// System Settings.
+/// the Mac's sound (its output and input), Wi-Fi, Bluetooth, displays, keep-awake, the keyboard layout (moved from Look),
+/// the mouse's speeds and every part's keys, each changed in place inside Pilot on its own card; no More tab (its parts
+/// came back to the front, Sven 2026-11-11, after 2276). Where macOS refuses something to an app, an ⓘ says so instead of
+/// opening System Settings.
 struct SetupPage: View {
     @Environment(\.ink) private var ink
     /// The app window shows: the page follows the Mac's changes only then (AppWindowModel.onScreen).
     let onScreen: Bool
     /// The section a key or a link asked for: the page opens it, scrolls there once and clears it.
     @Binding var section: SetupSection?
-    /// Two columns of cards once the page is this wide.
+    /// Two columns of cards once the page is `twoColumns` wide.
     @State private var wide = true
-    /// None offscreen; the cards list only the keys that are bound.
-    @Environment(Engine.self) private var engine: Engine?
     @State private var sound: SetupSound
     @State private var bluetooth: SetupBluetooth
     @State private var wifi: SetupWiFi
@@ -57,8 +56,16 @@ struct SetupPage: View {
 
     static let intro = "Sound, network, screens and sleep, changed inside Pilot."
 
+    /// The cards, in two columns once the page is wide; the keys' card closes the right (`keysCard`).
+    static let left: [SetupSection] = [.sound, .wifi, .keyboard, .mouse]
+    static let right: [SetupSection] = [.displays, .bluetooth, .keepAwake]
+    /// Every part's card, top to bottom as a narrow page stacks them.
+    static let front = left + right
+    static let twoColumns: CGFloat = 640
+
     /// `open` is the renders' old way in and changes nothing: every part shows at once.
-    init(onScreen: Bool, section: Binding<SetupSection?> = .constant(nil), open: SetupSection? = .sound, devices: SetupDevices = SetupDevices.make()) {
+    init(onScreen: Bool, section: Binding<SetupSection?> = .constant(nil), open: SetupSection? = .sound,
+         devices: SetupDevices = SetupDevices.make()) {
         self.onScreen = onScreen
         _section = section
         _sound = State(initialValue: SetupSound(audio: devices.audio))
@@ -72,7 +79,15 @@ struct SetupPage: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
+        frontPage
+        .onChange(of: onScreen, initial: true) { onScreen ? start() : sound.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: BluetoothPower.changed)) { _ in bluetooth.refreshPower() }
+        .onDisappear { sound.stop() }
+    }
+
+    /// A link or the search lands on a card's place (AppSection.onFront) through KitLanding, a key on its part here.
+    private var frontPage: some View {
+        KitLanding { ScrollViewReader { proxy in
             KitPage(intro: Self.intro, fills: true) {
                 cards
             }
@@ -82,12 +97,10 @@ struct SetupPage: View {
                 proxy.scrollTo(section, anchor: .top)
                 self.section = nil
             }
-        }
-        .onChange(of: onScreen, initial: true) { onScreen ? start() : sound.stop() }
-        .onReceive(NotificationCenter.default.publisher(for: BluetoothPower.changed)) { _ in bluetooth.refreshPower() }
-        .onDisappear { sound.stop() }
+        } }
     }
 
+    /// Every card's reads: the sound, the radios, the screens, the layouts and the pointer.
     private func start() {
         sound.start()
         Task { await bluetooth.start() }
@@ -98,70 +111,81 @@ struct SetupPage: View {
     }
 
     /// Setup's actions (SystemModule): the three Omarchy control-panel keys, the media keys and the switches.
-    static let keys: [(part: SetupSection, action: String, label: String)] = [
-        (.sound, "system.soundSettings", "Sound in Pilot"), (.sound, "media.volumeUp", "Volume up"),
-        (.sound, "media.volumeDown", "Volume down"), (.sound, "media.mute", "Mute"),
-        (.wifi, "system.wifiSettings", "Wi-Fi in Pilot"), (.wifi, "system.wifi", "Wi-Fi on or off"),
-        (.bluetooth, "system.bluetoothSettings", "Bluetooth in Pilot"), (.bluetooth, "system.bluetooth", "Bluetooth on or off"), (.displays, "system.displaySettings", "Displays in Pilot"),
-        (.keepAwake, "system.keepAwake", "Keep awake on or off"),
+    static let keys: [(action: String, label: String)] = [
+        ("system.soundSettings", "Sound in Pilot"), ("media.volumeUp", "Volume up"), ("media.volumeDown", "Volume down"),
+        ("media.mute", "Mute"), ("system.wifiSettings", "Wi-Fi in Pilot"), ("system.wifi", "Wi-Fi on or off"),
+        ("system.bluetoothSettings", "Bluetooth in Pilot"), ("system.bluetooth", "Bluetooth on or off"),
+        ("system.displaySettings", "Displays in Pilot"), ("system.keepAwake", "Keep awake on or off"),
     ]
 
     // MARK: The cards
 
-    /// Every part as its own card with its controls showing (Sven, 2026-10-07: "fill them with whats needed"), in two
-    /// columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
+    /// Every part, each its own card with its controls showing (Sven, 2026-10-07: "fill them with whats needed"), then the
+    /// keys' card, in two columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
     private var cards: some View {
         Group {
             if wide {
                 HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 14) { ForEach([SetupSection.sound, .wifi, .keyboard, .mouse], id: \.self) { card($0) } }
-                    VStack(spacing: 14) { ForEach([SetupSection.displays, .bluetooth, .keepAwake], id: \.self) { card($0) } }
+                    VStack(spacing: 14) { ForEach(Self.left, id: \.self) { card($0) } }
+                    VStack(spacing: 14) { ForEach(Self.right, id: \.self) { card($0) }; keysCard }
                 }
             } else {
-                VStack(spacing: 14) { ForEach(SetupSection.allCases, id: \.self) { card($0) } }
+                VStack(spacing: 14) { ForEach(Self.front, id: \.self) { card($0) }; keysCard }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 880 } action: { wide = $0 }
+        // Two columns from the window's first size, 1000 pt beside the list (simplify-pages T17).
+        .onGeometryChange(for: Bool.self) { $0.size.width >= Self.twoColumns } action: { wide = $0 }
         .padding(.top, 18)
     }
 
-    /// A part's card: its squircle, name and how it stands, its controls, its fine print and its keys. Instrument's is its
-    /// panel: the glyph, name and how it stands on a 44 pt header over a hairline, the rest under it.
-    private func card(_ part: SetupSection) -> some View {
+    /// A part's card, under its place where it has one (the keyboard layout's and the mouse's, which a link or the
+    /// search lands on), else its part, which a key lands on.
+    @ViewBuilder private func card(_ part: SetupSection) -> some View {
+        let card = panel(part.title, symbol: part.symbol, colour: part.colour, info: info(part)) { summary(part) } content: { detail(part) }
+        if let place = part.place.section { card.id(place) } else { card.id(part) }
+    }
+
+    /// Every part's keys: the ones that open it in Pilot, the media keys and the switches.
+    private var keysCard: some View {
+        panel(AppSection.systemKeys.title, symbol: "command", colour: 2, info: "The keys that open each part in Pilot, the media keys and the switches.") {
+            EmptyView()
+        } content: {
+            ForEach(Array(Self.keys.enumerated()), id: \.element.action) { i, key in
+                BlockRow(first: i == 0) {
+                    Text(key.label)
+                    Spacer()
+                    BindKey(action: key.action)
+                }
+            }
+        }
+        .id(AppSection.systemKeys)
+    }
+
+    /// A card: its squircle, name, its rule as an ⓘ and how it stands, then its controls. Instrument's is its panel: the
+    /// glyph, name and how it stands on a 44 pt header over a hairline, the rest under it.
+    private func panel(_ title: String, symbol: String, colour: Int, info: String?, @ViewBuilder summary: () -> some View,
+                       @ViewBuilder content: () -> some View) -> some View {
         Group {
             if ink.isInstrument {
-                InstrumentBlock(title: part.title, symbol: part.symbol) { summary(part).lineLimit(1) } content: { cardBody(part) }
+                InstrumentBlock(title: title, symbol: symbol) {
+                    HStack(spacing: 6) { summary().lineLimit(1); if let info { InfoMark(text: info) } }
+                } content: { content() }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 12) {
-                        Squircle(symbol: part.symbol, colour: ink.module(part.colour))
-                        Text(part.title).font(ink.ui(13.5, .semibold)).accessibilityAddTraits(.isHeader)
+                        Squircle(symbol: symbol, colour: ink.module(colour))
+                        Text(title).font(ink.ui(13.5, .semibold)).accessibilityAddTraits(.isHeader)
+                        if let info { InfoMark(text: info) }
                         Spacer(minLength: 8)
-                        summary(part).font(ink.ui(12.5)).foregroundStyle(ink.muted).lineLimit(1)
+                        summary().font(ink.ui(12.5)).foregroundStyle(ink.muted).lineLimit(1)
                     }
                     .padding(.bottom, 8)
-                    cardBody(part)
+                    content()
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
                 .blockSurface()
             }
-        }
-        .id(part)
-    }
-
-    /// A part's controls, its fine print and its keys.
-    @ViewBuilder private func cardBody(_ part: SetupSection) -> some View {
-        detail(part)
-        if let info = info(part) { FinePrint(text: info).padding(.top, 10) }
-        let keys = Self.keys.filter { $0.part == part && engine?.binds.store.trigger(for: $0.action) != nil }
-        if !keys.isEmpty {
-            HStack(spacing: 14) {
-                ForEach(keys, id: \.action) { key in
-                    HStack(spacing: 6) { BindKey(action: key.action); Text(key.label).font(ink.ui(12)).foregroundStyle(ink.muted) }
-                }
-            }
-            .padding(.top, 10)
         }
     }
 
@@ -217,12 +241,16 @@ struct SetupPage: View {
     @ViewBuilder private func detail(_ part: SetupSection) -> some View {
         switch part {
         case .sound:
-            ForEach(AudioDirection.allCases, id: \.self) { direction in
-                heading(direction.rawValue.capitalized, info: direction == .output
-                        ? "Click a device to play the Mac's sound through it." : "Click a device to record from it.")
-                level(direction)
-                soundDevices(direction)
+            heading("Output", info: "Click a device to play the Mac's sound through it.")
+            level(.output)
+            soundDevices(.output)
+            // The input, its own place again on the front (Sven, 2026-11-11, after 2276).
+            VStack(alignment: .leading, spacing: 0) {
+                heading("Input", info: "Click a device to record from it.")
+                level(.input)
+                soundDevices(.input)
             }
+            .id(AppSection.soundInput)
             if let problem = sound.problem { problemLine(problem) }
         case .wifi:
             wifiSection
@@ -244,10 +272,14 @@ struct SetupPage: View {
                     .toggleStyle(.pilotSwitch)
             }
             BlockRow {
-                Text("For")
-                InfoMark(text: "How long Keep awake stays on before the Mac may sleep again.")
-                Spacer()
-                Segments(selection: Binding(get: { awake.length }, set: { awake.select($0) }), options: KeepAwake.Length.allCases.map { ($0, $0.title) }, label: "Keep awake for")
+                // Beside its label, or under it in a narrow column (Toybox's chunkier segments, simplify-pages T17).
+                let label = HStack(spacing: 6) { Text("For"); InfoMark(text: "How long Keep awake stays on before the Mac may sleep again.") }
+                let pick = Segments(selection: Binding(get: { awake.length }, set: { awake.select($0) }),
+                                    options: KeepAwake.Length.allCases.map { ($0, $0.title) }, label: "Keep awake for")
+                ViewThatFits(in: .horizontal) {
+                    HStack { label; Spacer(); pick }
+                    VStack(alignment: .leading, spacing: 8) { label; pick }.padding(.vertical, 8)
+                }
             }
             if let problem = awake.problem { problemLine(problem) }
         case .keyboard:
@@ -263,7 +295,7 @@ struct SetupPage: View {
     }
 
     /// The pointer speed (Sven, Q440 to Q442): Slow, Normal or Fast picked and used, the slider on the picked one, the key
-    /// that cycles them, and the way to the mouse's buttons.
+    /// that cycles them, and the way to the mouse's buttons on Keys.
     @ViewBuilder private var mouseSection: some View {
         if let pointer {
             let speed = pointer.current ?? pointer.saved[pointer.picked]
@@ -582,14 +614,14 @@ struct SetupPage: View {
                     .accessibilityHidden(true)
                 if let volume = side.volume {
                     if volume.settable {
-                        KitSlider(value: Binding(get: { Double(volume.value) }, set: { sound.setVolume(Float($0), direction) }),
+                        KitSlider(value: Binding(get: { Double(sound.shownLevel(direction)) }, set: { sound.setVolume(Float($0), direction) }),
                                   label: "\(direction.rawValue.capitalized) volume")
                     } else {
                         Text("Fixed volume").foregroundStyle(ink.muted)
                         InfoMark(text: fixed)
                         Spacer()
                     }
-                    Text("\(Int((volume.value * 100).rounded())) %").font(ink.mono(12)).foregroundStyle(ink.text2).monospacedDigit()
+                    Text("\(Int((sound.shownLevel(direction) * 100).rounded())) %").font(ink.mono(12)).foregroundStyle(ink.text2).monospacedDigit()
                         .frame(width: 44, alignment: .trailing)
                     if volume.settable { InfoMark(text: "Drag to set the \(direction.rawValue) volume of the device in use.") }
                 } else {

@@ -79,7 +79,7 @@ final class PilotSettings {
         get { defaults.bool(forKey: "update.selfUpdatingCasks") }
         set { defaults.set(newValue, forKey: "update.selfUpdatingCasks") }
     }
-    /// Binds › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs. Stored like layerKeys, so a
+    /// Binds › More › Swap keys (Q406): pairs of keys swapped at the HID level while Pilot runs. Stored like layerKeys, so a
     /// change reaches the mapping at once.
     var keySwaps: [KeySwap] {
         didSet {
@@ -187,12 +187,12 @@ final class PilotSettings {
     }
     /// At launch: the login item matches the setting.
     func applyLaunchAtLogin() { loginItem.apply(launchAtLogin) }
-    /// The actions "My own pick" lists, switched on in Binds › Overlay or the Binds editor. One set for every preset: a
-    /// pick is an action, which shows with the key the active preset gives it. Stored, so Binds › Overlay's switches follow.
+    /// The actions "My own pick" lists, switched on in Binds › More › Overlay or the Binds editor. One set for every preset: a
+    /// pick is an action, which shows with the key the active preset gives it. Stored, so Binds › More › Overlay's switches follow.
     var overlayPicks: Set<String> {
         didSet { defaults.set(overlayPicks.sorted(), forKey: "overlayPicks") }
     }
-    /// Binds › Overlay's switch: the overlay turns to My own pick, from `shown` (what it shows now) with `action` in or out.
+    /// Binds › More › Overlay's switch: the overlay turns to My own pick, from `shown` (what it shows now) with `action` in or out.
     func showInOverlay(_ action: String, _ on: Bool, shown: Set<String>) { pickOverlay(OverlayPage.picks(switching: action, on: on, shown: shown)) }
     /// The overlay lists `picks` alone (My own pick).
     func pickOverlay(_ picks: Set<String>) {
@@ -266,7 +266,7 @@ final class Engine {
     func pauseKeyboard() { tap.pause(); log.notice("tap paused") }
     func resumeKeyboard() { tap.resume(); log.notice("tap resumed") }
     private let overlay = HyperOverlay()
-    /// The actions holding Hyper shows now on any sublayer (Binds › Overlay's switches).
+    /// The actions holding Hyper shows now on any sublayer (Binds › More › Overlay's switches).
     func overlayShown() -> Set<String> {
         OverlayPage.shown(store: binds.store, actions: bindActions, mode: settings.overlayMode, presses: pressCounts?.counts ?? [:],
                           picks: settings.overlayPicks)
@@ -280,7 +280,10 @@ final class Engine {
     /// The next write of the counts, a moment after the last press rather than one per keystroke.
     @ObservationIgnored private var pressSave: DispatchWorkItem?
     /// Today's presses for Home (card agent-bo-95422992): its count, most used and presses by hour; saved with the counts.
-    private(set) var today = TodayPresses()
+    private(set) var today = TodayPresses() { didSet { if (today.day != nil) != pressed { pressed.toggle() } } }
+    /// A press has been counted (today's file holds a day): Home's Most used waits for it (simplify-pages T3). Its own
+    /// property, so Home redraws once when it flips, not on every press as reading `today` would.
+    private(set) var pressed = false
     @ObservationIgnored private let todayFile = DayFile<TodayPresses>("presses-today")
 
     private(set) var hyperHeld = false
@@ -290,7 +293,7 @@ final class Engine {
     private(set) var lastError: String?
     /// Pilot's key mapping set as last written (Caps Lock to F18, the swaps), empty when none is.
     @ObservationIgnored private(set) var mappingWritten: [KeyMappingEntry] = []
-    /// The UserKeyMapping entries Pilot did not write, as last read: Binds › Swap keys refuses a swap on their keys.
+    /// The UserKeyMapping entries Pilot did not write, as last read: Binds › More › Swap keys refuses a swap on their keys.
     private(set) var foreignMapping: [KeyMappingEntry] = []
 
     init() {
@@ -363,6 +366,8 @@ final class Engine {
         do { today = try todayFile.load(or: TodayPresses()) } catch {
             log.error("presses: \(self.todayFile.url.path, privacy: .public) not read: \(String(describing: error), privacy: .public)")
         }
+        // init runs no didSet: a day saved before this launch counts as pressed.
+        pressed = today.day != nil
         overlay.rows = { [unowned self] page in
             OverlayPage.rows(store: binds.store, actions: bindActions, sublayer: page, mode: settings.overlayMode,
                              presses: pressCounts?.counts ?? [:], picks: settings.overlayPicks)

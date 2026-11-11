@@ -50,10 +50,10 @@ struct MenuRootSettingsTests {
             let labels = try #require(cg.cropping(to: CGRect(x: 80 * 2, y: 0, width: cg.width - 80 * 2, height: cg.height)))
             rows = try recognisedText(in: NSBitmapImageRep(cgImage: labels)).map(\.text).joined(separator: "\n")
         }
-        for line in ["Root rows", "Reset to default"] {
+        for line in ["What the menu shows first", "Reset to default"] {
             #expect(text.contains(line), "\(line) missing, read: \(text)")
         }
-        for line in ["System", "Apps", "Learn", "Trigger", "Install", "Remove", "Update", "Clean", "Extensions"] {
+        for line in ["System", "Apps", "Learn", "Actions", "Install", "Remove", "Update", "Clean", "Extensions"] {
             #expect(rows.contains(line), "\(line) missing, read: \(rows)")
         }
     }

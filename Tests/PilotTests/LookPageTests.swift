@@ -109,12 +109,12 @@ struct LookPageTests {
 
     @Test("The page draws the picked theme, the style and the Glass switch")
     func pageDrawsChoices() throws {
-        func page(_ change: (Look) -> Void = { _ in }) throws -> some View {
+        func page(more: Bool = false, _ change: (Look) -> Void = { _ in }) throws -> some View {
             let (look, _) = look()
             change(look)
             // Its own wallpaper store and no screens: each page read this Mac's wallpapers on its own, off the main actor,
             // so under the full run one page could have its rows when another had not yet (2026-10-11).
-            return LookPage(look: look, wallpaper: WallpaperSettings(defaults: UserDefaults(suiteName: testSuite())!), screens: [])
+            return LookPage(look: look, wallpaper: WallpaperSettings(defaults: UserDefaults(suiteName: testSuite())!), screens: [], more: more)
                 .frame(width: 1000, height: CGFloat(height)).clipped().pilotTheme(look: look)
         }
         // Tall enough that the Glass switch shows under the style picker (story 137), the theme cards and their window
@@ -123,22 +123,24 @@ struct LookPageTests {
         // One render in one main-actor turn, so every page sees the same moment and no other suite runs between; a gap
         // between pages, as a page drew some of its neighbour's edge without one.
         let pages = [try page(), try page(), try page { $0.pick("garnet") }, try page { $0.style = .toybox }, try page { $0.glass = true },
-                     try page { $0.menuLayout = .rail }]
+                     try page(more: true), try page(more: true) { $0.menuLayout = .rail }]
         let gap = 200
         let view = VStack(spacing: CGFloat(gap)) { ForEach(pages.indices, id: \.self) { pages[$0] } }
         let rep = try #require(snapshot(drawing: view, scale: 1))
         let data = try #require(rep.bitmapData), row = rep.bytesPerRow
         // Pixels that differ from the first page's. The same Look's glyphs land up to about 200 pixels apart from one page
         // to the next (the theme names shrink to fit); a switch flipped moves over 1,100.
-        func differing(_ i: Int) -> Int {
-            let a = UnsafeRawPointer(data).bindMemory(to: UInt32.self, capacity: height * row / 4)
+        func differing(_ i: Int, from first: Int = 0) -> Int {
+            let a = UnsafeRawPointer(data + first * (height + gap) * row).bindMemory(to: UInt32.self, capacity: height * row / 4)
             let b = UnsafeRawPointer(data + i * (height + gap) * row).bindMemory(to: UInt32.self, capacity: height * row / 4)
             return (0..<height * row / 4).count { a[$0] != b[$0] }
         }
         #expect(differing(1) < 500, "the same Look draws differently")
-        for (i, change) in ["theme", "style", "Glass switch", "Hyper+Space menu"].enumerated() {
+        for (i, change) in ["theme", "style", "Glass switch"].enumerated() {
             #expect(differing(i + 2) > 500, "the \(change) draws nothing new")
         }
+        // The Hyper+Space menu's picker is on More (simplify-pages T20): More against More.
+        #expect(differing(6, from: 5) > 500, "the Hyper+Space menu draws nothing new")
     }
 
     /// Opt-in: Vision finds the words to click on the main actor and, on a loaded Mac, stalls it for minutes (e5rt
@@ -163,7 +165,7 @@ struct LookPageTests {
     @Test("The page shows Hyper+Space menu, and Classic's tile picks Classic", .enabled(if: ProcessInfo.processInfo.environment["PILOT_LIVE"] == "1"))
     func menuLayoutOnPage() throws {
         let (look, _) = look()
-        let page = LookPage(look: look).frame(width: 1000, height: 1600).pilotTheme(look: look)
+        let page = LookPage(look: look, more: true).frame(width: 1000, height: 1600).pilotTheme(look: look)
         try hosted(page, height: 1600) { (host: NSView) throws in
             let words = try recognisedText(in: try #require(snapshot(host, scale: 2))).map(\.text)
             for label in ["Hyper+Space menu", "Rail", "Default", "Classic"] {

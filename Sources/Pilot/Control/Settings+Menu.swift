@@ -5,7 +5,9 @@ extension SettingsSchema {
     /// The menu's settings: Files' hidden files, and Passwords and Folders with its GIPHY key and rating, which sit under their
     /// abilities on Launcher › Abilities (page map, Sven 2026-10-17), so `page: "menu"` still. The never-index folders and
     /// the root's order are lists (collections), not keys.
-    func registerMenu(files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey) {
+    func registerMenu(files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey,
+                      dropdown: DropdownLayoutStore = .forSettings) {
+        registerDropdown(dropdown)
         register([
             .bool("files.showHidden", "Files opens with hidden files shown", page: "files", standard: false,
                   read: { files.showHidden }, write: { files.showHidden = $0 }),
@@ -25,6 +27,54 @@ extension SettingsSchema {
                     standard: Giphy.Rating.standard.rawValue, read: { folders.giphyRating.rawValue },
                     write: { folders.giphyRating = Giphy.Rating(rawValue: $0) ?? folders.giphyRating }),
         ])
+    }
+
+    /// The tall Pilot menu's arrangement (spec desktop-controls T4), as Menu bar › Pilot menu edits it, Instrument only:
+    /// `dropdown.order` names the blocks to lead, the rest following in their first order; `dropdown.hidden` and
+    /// `dropdown.pinned` are sets; `dropdown.extensions` the extensions the Extensions card lists. Blocks: status,
+    /// workspaces, switches, extensions, running, sound, connections, display, media, stats, commands. Status can't be
+    /// hidden; extensions, sound, connections, display, media and stats are hidden until shown.
+    func registerDropdown(_ store: DropdownLayoutStore) {
+        let all = Dropdown.Layout.arrangeable
+        func listed(_ blocks: [Dropdown.Block]) -> String { blocks.isEmpty ? "none" : Dropdown.Layout.names(blocks) }
+        register([
+            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "menuBar", standard: listed(all),
+                  read: { listed(store.layout.order) }, write: { typed throws(ControlError) in try store.setOrder(Self.blocks(typed, key: "dropdown.order")) }),
+            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status always shows)", page: "menuBar",
+                  standard: listed(all.filter(Dropdown.Layout.optional.contains)), read: { listed(all.filter(store.layout.hidden.contains)) },
+                  write: { typed throws(ControlError) in try store.setHidden(Set(Self.blocks(typed, key: "dropdown.hidden"))) }),
+            .text("dropdown.pinned", "Pilot menu's blocks pinned above its scroll, comma-separated or none", page: "menuBar", standard: "none",
+                  read: { listed(all.filter(store.layout.pinned.contains)) },
+                  write: { typed throws(ControlError) in try store.setPinned(Set(Self.blocks(typed, key: "dropdown.pinned"))) }),
+            .text("dropdown.extensions", "The extensions' bar items in the Pilot menu's Extensions card, ids comma-separated or none",
+                  page: "menuBar", standard: "none",
+                  read: { store.layout.extensions.isEmpty ? "none" : store.layout.extensions.joined(separator: ",") },
+                  write: { typed throws(ControlError) in try store.setExtensions(Self.words(typed, lowercased: false)) }),
+        ])
+    }
+
+    static func blocks(_ typed: String, key: String) throws(ControlError) -> [Dropdown.Block] {
+        try named(typed, key: key, noun: "block", from: Dropdown.Layout.arrangeable)
+    }
+
+    /// A typed list: words, comma-separated and trimmed, or none for an empty list.
+    static func words(_ typed: String, lowercased: Bool = true) -> [String] {
+        let words = typed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            .map { lowercased ? $0.lowercased() : $0 }
+        return words.map { $0.lowercased() } == ["none"] ? [] : words
+    }
+
+    /// Names as typed (the Pilot menu's blocks, the pill's views): a word list; an unknown name is refused with the
+    /// `options` there are.
+    static func named<T: RawRepresentable<String>>(_ typed: String, key: String, noun: String, from options: [T]) throws(ControlError) -> [T] {
+        var found: [T] = []
+        for word in words(typed) {
+            guard let value = T(rawValue: word) else {
+                throw ControlError(.badValue, "\(key): no \(noun) \(word); the \(noun)s are \(options.map(\.rawValue).joined(separator: ",")), or none")
+            }
+            found.append(value)
+        }
+        return found
     }
 
     /// The Hyper+Space root's extra rows (Sven 2026-10-20), one switch each as Launcher › Your menu shows them, off by

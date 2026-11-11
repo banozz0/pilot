@@ -13,9 +13,20 @@ final class BarItemsStore {
     static let key = "bar.items"
     @ObservationIgnored private let defaults: UserDefaults
 
+    /// Existing malformed data is not first launch. Keep it recoverable and refuse every writer.
+    private(set) var loadError: String?
+
+    func requireWritable() throws(ControlError) {
+        if let loadError { throw ControlError(.badValue, loadError) }
+    }
+
+    // Roll back through the backing storage: re-entering an observable setter recurses.
     /// Stored, so a change reaches both bars and the pages at once (cards 775 and 776).
     var settings: BarSettings {
-        didSet { if held == nil { save() } }
+        didSet {
+            guard loadError == nil else { _settings = oldValue; return }
+            if held == nil { save() }
+        }
     }
     /// The settings as they stood when a drag began changing them in memory (the spacer's stretch): while held a change
     /// redraws both bars and writes nothing, so a drag of many steps saves once, on `release`.
@@ -33,12 +44,13 @@ final class BarItemsStore {
     }
 
     private func save() {
+        guard loadError == nil else { return }
         if let data = try? JSONEncoder().encode(settings) { defaults.set(data, forKey: Self.key) }
     }
     /// Which bar the Menu bar page shows and + edits (Menu bar, Top bar or Both), kept across launches: it was the page's
     /// own state, so every launch opened on Menu bar (Sven, 2026-10-10).
     var pagePlacement: BarPlacement {
-        didSet { defaults.set(pagePlacement.rawValue, forKey: Self.pagePlacementKey) }
+        didSet { guard loadError == nil else { _pagePlacement = oldValue; return }; defaults.set(pagePlacement.rawValue, forKey: Self.pagePlacementKey) }
     }
     static let pagePlacementKey = "bar.pagePlacement"
     /// Set at the first start, or once a saved Pilot item has moved to the mark alone (spec pilot-1-1 T28).
@@ -51,22 +63,23 @@ final class BarItemsStore {
     /// The top bar's own Background and Colour (Sven, 2026-10-10: on Look's Glass he could not read it): Solid and the
     /// theme's bar colour until picked, whatever Look's Glass says. TopBarStrip draws them, TopBarWindows the glass.
     var background: TopBarBackground {
-        didSet { defaults.set(background.rawValue, forKey: Self.backgroundKey) }
+        didSet { guard loadError == nil else { _background = oldValue; return }; defaults.set(background.rawValue, forKey: Self.backgroundKey) }
     }
     var colour: ColourChoice {
-        didSet { defaults.set(colour.rawValue, forKey: Self.colourKey) }
+        didSet { guard loadError == nil else { _colour = oldValue; return }; defaults.set(colour.rawValue, forKey: Self.colourKey) }
     }
     static let backgroundKey = "bar.background", colourKey = "bar.colour"
     /// Item colours (Sven, Q251), on until turned off: EnvironmentValues.barItemColours.
     var itemColours: Bool {
-        didSet { defaults.set(itemColours, forKey: Self.itemColoursKey) }
+        didSet { guard loadError == nil else { _itemColours = oldValue; return }; defaults.set(itemColours, forKey: Self.itemColoursKey) }
     }
     static let itemColoursKey = "bar.itemColours"
     /// Whether Pilot's top bar is on, so items placed in both leave the macOS menu bar; Engine points it at the top
     /// bar's switch, which is observed through it.
     @ObservationIgnored var isTopBarOn: @MainActor () -> Bool = { false }
 
-    init(defaults: UserDefaults = .pilot(), statsPrefs: () -> [String: Any] = BarItemsStore.statsPrefs) {
+    init(defaults: UserDefaults = .pilot(), statsPrefs: () -> [String: Any] = BarItemsStore.statsPrefs,
+         extensionOrder: @escaping @Sendable () -> [String] = { ExtensionBar.withBar(in: Extension.folder).map(\.id) }) {
         self.defaults = defaults
         pagePlacement = defaults.string(forKey: Self.pagePlacementKey).flatMap(BarPlacement.init(rawValue:)) ?? .menuBar
         background = defaults.string(forKey: Self.backgroundKey).flatMap(TopBarBackground.init(rawValue:)) ?? .solid
@@ -75,8 +88,19 @@ final class BarItemsStore {
         // A bar saved before each extension's item had its own place (spec pilot-1.1 T50) gives each one its place in the
         // order its Extensions slot drew them, by title, as ExtensionBar lists them; the folder is read only then.
         let decoder = JSONDecoder()
-        decoder.userInfo[BarSettings.extensionOrder] = { @Sendable in ExtensionBar.withBar(in: Extension.folder).map(\.id) }
-        if let data = defaults.data(forKey: Self.key), var saved = try? decoder.decode(BarSettings.self, from: data) {
+        decoder.userInfo[BarSettings.extensionOrder] = extensionOrder
+        if let stored = defaults.object(forKey: Self.key) {
+            let savedSettings: BarSettings
+            do {
+                guard let data = stored as? Data else { throw ThemeFailure("saved bar settings are not data") }
+                try BarSettings.validateSavedData(data)
+                savedSettings = try decoder.decode(BarSettings.self, from: data)
+            } catch {
+                loadError = "saved bar settings are malformed; edits refused; original data retained"
+                settings = .defaults
+                return
+            }
+            var saved = savedSettings
             // Pilot's mark alone, once (spec pilot-1-1 T28, Sven Q643): a bar saved with the workspace number beside the mark
             // moves to the mark; a style picked after this stays.
             if !defaults.bool(forKey: Self.markAloneKey) {
@@ -113,13 +137,13 @@ final class BarItemsStore {
 
     /// What `place` draws now, the top bar's switch deciding what leaves the macOS menu bar.
     func slots(in place: BarPlace, side: TopBarSide? = nil) -> [BarSlot] {
-        settings.slots(in: place, topBarOn: isTopBarOn(), side: side)
+        loadError == nil ? settings.slots(in: place, topBarOn: isTopBarOn(), side: side) : []
     }
 
-    func shows(_ kind: BarKind, in place: BarPlace) -> Bool { settings.shows(kind, in: place, topBarOn: isTopBarOn()) }
+    func shows(_ kind: BarKind, in place: BarPlace) -> Bool { loadError == nil && settings.shows(kind, in: place, topBarOn: isTopBarOn()) }
 
     /// Whether an extension's bar item shows in `place` now (Surfaces v2).
-    func shows(extension id: String, in place: BarPlace) -> Bool { settings.shows(extension: id, in: place, topBarOn: isTopBarOn()) }
+    func shows(extension id: String, in place: BarPlace) -> Bool { loadError == nil && settings.shows(extension: id, in: place, topBarOn: isTopBarOn()) }
 
     /// The observers dump's line, so a live check reads what each bar shows: the menu bar now, the top bar once on.
     var line: String {

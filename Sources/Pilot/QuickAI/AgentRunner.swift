@@ -9,7 +9,7 @@ extension AISettings {
     /// Claude Code or codex as an agent, or why there is none; an API key's provider acts through apiAgent(). codex runs in
     /// Pilot's own Codex home with every tool off but pilot-mcp's `pilot` (Q203, AIChat.Agent.codexLock), which replaced
     /// T15's chat-only codex: its read-only sandbox refused the socket and it always loaded ~/.codex.
-    func agent() -> Result<AIChat.Agent, QuickAI.Failure> {
+    func agent(of provider: AIProvider) -> Result<AIChat.Agent, QuickAI.Failure> {
         let path: String
         switch provider {
         case .claudeCode:
@@ -33,27 +33,51 @@ extension AISettings {
 
     /// The picked API provider with the `pilot` tool (Q193), on the CLI agents' prompt (the bundle's, unless given); nil
     /// for a subscription.
-    func apiAgent(instructions given: String? = nil) -> Result<AIChat.APIAgent, QuickAI.Failure>? {
+    func apiAgent(instructions given: String? = nil) -> Result<AIChat.APIAgent, QuickAI.Failure>? { apiAgent(of: provider, instructions: given) }
+
+    func apiAgent(of provider: AIProvider, instructions given: String? = nil) -> Result<AIChat.APIAgent, QuickAI.Failure>? {
         guard provider.command == nil else { return nil }
         guard let instructions = given ?? BundledJSON.url("pilot-agent", "md").flatMap({ try? String(contentsOf: $0, encoding: .utf8) }) else {
             return .failure(.failed("Pilot's agent prompt is missing from the app"))
         }
-        return route().flatMap { route in
+        return route(of: provider).flatMap { route in
             guard let tools = route as? any AIChat.ToolRoute else { return .failure(.unsupported("\(provider.name) takes no tools")) }
             return .success(AIChat.APIAgent(tools, instructions: instructions, helpers: Self.helpers))
         }
     }
 
-    /// The turn `message` gets on the picked provider: /extension's maker; else a subscription's agent, or an API key's
-    /// loop, so the chat can change Pilot (or why it cannot); else its chat alone. A message that starts with a skill's
-    /// command carries its steps on every one of them (AIChat.Request.skilled, P29).
+    /// The turn `message` gets on the picked provider: /extension's maker, which only Claude Code can run, so it has no
+    /// fallback; else a subscription's agent, or an API key's loop, so the chat can change Pilot (or why it cannot), with its
+    /// fallback behind it. A message that starts with a skill's command carries its steps on every one of them
+    /// (AIChat.Request.skilled, P29).
     func chatTurn(for message: String) -> Result<AIChatModel.Turn, QuickAI.Failure> {
         if let maker = maker(for: message) { return maker }
-        let turn: Result<AIChatModel.Turn, QuickAI.Failure> =
-            if provider.command != nil { agent().map { $0.turn } }
-            else if let api = apiAgent() { api.map { $0.turn } }
-            else { chatRunner().map(AIChatModel.turn) }
-        return turn.map { AISkills.skilled($0) }
+        return fallingBack(agentTurn(on: provider)).map { AISkills.skilled($0) }
+    }
+
+    /// `provider`'s agent turn: its CLI's agent, or an API key's loop.
+    private func agentTurn(on provider: AIProvider) -> Result<AIChatModel.Turn, QuickAI.Failure> {
+        apiAgent(of: provider)?.map { $0.turn } ?? agent(of: provider).map { $0.turn }
+    }
+
+    /// The picked provider's turn with the fallback's behind it; the reply carries the notice.
+    private func fallingBack(_ turn: Result<AIChatModel.Turn, QuickAI.Failure>) -> Result<AIChatModel.Turn, QuickAI.Failure> {
+        guard case .success(let first) = turn, let second = fallbackInUse else { return turn }
+        let chosen = provider
+        let run: AIChatModel.Turn = { request, event throws(QuickAI.Failure) in
+            let got = try await AIFallback.attempt(first: chosen, second: second, { spoke throws(QuickAI.Failure) in
+                try await first(request) { each in
+                    if each.speaks { spoke() }
+                    event(each)
+                }
+            }, then: { () throws(QuickAI.Failure) in
+                try await self.agentTurn(on: second).get()(request, event)
+            })
+            var reply = got.answer
+            reply.notice = got.notice?.line
+            return reply
+        }
+        return .success(run)
     }
 
     /// A message sent with a picture: /widget's maker, which builds from a screenshot (Q693), even with no words; any
@@ -104,7 +128,7 @@ extension AISettings {
 /// Pilot's AI skills (P29, Sven Q268): Packaging/skills/<name>/SKILL.md, in the bundle's Resources/skills, read once, in
 /// the Skills list's order. A new skill is its file and its name here.
 enum AISkills {
-    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", ExtensionMaker.skill, WidgetMaker.skill]
+    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", "theme", ExtensionMaker.skill, WidgetMaker.skill]
         + (CataloguePublish.available ? ["publish"] : [])
     /// The guide topics before P29, which `pilot guide` still answers.
     static let renamed = ["extensions": "catalogue", "troubleshooting": "troubleshoot"]

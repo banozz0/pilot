@@ -6,8 +6,8 @@ import Testing
 @testable import Pilot
 
 /// Binds in Instrument (card agent-bo-95423181, mockup A binds.html): every name whole on its key at every page width
-/// from the least window to past the widest, the 75 % board while it holds them; an app's key its icon alone; the table's
-/// columns giving way route first; the shared core helpers Toybox's board draws with too.
+/// from the least window to past the widest, the 75 % board while it holds them; an app's key its icon alone; the shared
+/// core helpers Toybox's board draws with too. The table went with simplify-pages T14 (List shows the binds).
 @MainActor
 @Suite("Instrument Binds")
 struct InstrumentBindsTests {
@@ -35,12 +35,25 @@ struct InstrumentBindsTests {
                 #expect(over.isEmpty, "\(shape) at \(page): \(over)")
             }
             // These names, an app's among them with no icon, are too long for the board beside the inspector at 1440: it
-            // goes across the page, whole, the inspector beside the table under it.
+            // goes across the page, whole, the inspector under it.
             let wide = InstrumentBindsPage.arrangement(1207, marks: marks, boards: boards, style: Self.tokens)
             #expect(wide.0 == .under && InstrumentBoardFit.best(marks, boards: boards, width: wide.board, measure: measure).board == boards.compact)
             for page in [CGFloat(767), 551] {
                 let width = InstrumentBindsPage.arrangement(page, marks: marks, boards: boards, style: Self.tokens).board
                 #expect(InstrumentBoardFit.best(marks, boards: boards, width: width, measure: measure).board.halves == 2, "\(page)")
+            }
+            // Binds draws the board whole (simplify-pages T14, Sven's Q36): wordScale keeps each name's longest word whole, on its
+            // 0.05 grid so a resize makes no new font; this guards the helper, the renders show the board.
+            for page in stride(from: CGFloat(551), through: 1600, by: 10) {
+                let width = InstrumentBindsPage.arrangement(page, marks: marks, boards: boards, style: Self.tokens).board
+                let fit = InstrumentBoardFit.best(marks, boards: boards, width: width, measure: measure, whole: true)
+                for key in InstrumentBoardFit.rooms(marks, on: fit.board, width: width) {
+                    guard let scale = InstrumentBoardFit.wordScale(key.name, room: key.room, measure: measure) else { continue }
+                    #expect(abs((scale / InstrumentBoardFit.wordStep).rounded() * InstrumentBoardFit.wordStep - scale) < 0.0001,
+                            "\(key.name) at \(scale) is off the grid")
+                    #expect(InstrumentBoardFit.lines(key.name, room: key.room / scale, measure: measure) != nil,
+                            "\(shape) whole at \(page): \(key.name) in \(Int(key.room)) breaks a word")
+                }
             }
             // The mockup's board, its apps as their icons, stands beside the inspector at 1440.
             let icon = BoardKey.Glyph.image(NSImage(size: NSSize(width: 8, height: 8)))
@@ -81,14 +94,6 @@ struct InstrumentBindsTests {
         #expect(try shows(f10).name == "Mute" && shows(f10).glyph == nil)
         #expect(try shows(h).name == "Left" && shows(h).glyph != nil)
         #expect(try shows(KeyNames.code(for: "Q")!).name == nil, "a free key says nothing")
-    }
-
-    @Test("The table drops the route under 640 pt and the share under 460 pt, so the keys, the action and today's count stay whole")
-    func columns() {
-        let wide = TableColumns(width: 860), mid = TableColumns(width: 600), narrow = TableColumns(width: 420)
-        #expect(wide.route && wide.share && !mid.route && mid.share && !narrow.route && !narrow.share)
-        #expect(wide.widths(860).count == 5 && mid.widths(600).count == 4 && narrow.widths(420).count == 3)
-        #expect(abs(wide.widths(860).reduce(0, +) + 4 * TableColumns.gap - 860) < 0.001, "the columns fill the row")
     }
 
     @Test("The shared board helpers: the layer key is Caps Lock, right Option or right Command as picked, never on Plain; a legend prints words in lower case, letters, signs and F-keys as they are; a key's caption is the layout's")

@@ -19,6 +19,91 @@ struct InstrumentTopBarRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
     static let screen = "Studio"
 
+    /// T7 uses the actual strip/parts/editor with isolated local stores; no global readers, live sources or windows.
+    static func renderFloating(style: PilotStyle, islands: Bool = false) throws {
+        let dir = try ClockRenders.dir(islands ? "three-islands" : "floating-strip")
+        testApp()
+        let oldFonts = DisplayFaces.directory
+        DisplayFaces.directory = LookThemeTests.fonts
+        defer { DisplayFaces.directory = oldFonts }
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: home).appendingPathComponent("Library/Preferences"), withIntermediateDirectories: true)
+        let defaults = try BarFixtureDefaults(root: home, suite: "dev.banozz.pilot.strip-render-" + style.rawValue)
+        defaults.set(true, forKey: BarItemsStore.markAloneKey)
+        defaults.set(true, forKey: BarItemsStore.extensionsApartKey)
+        defaults.set(try ThemeDigest.encoded(BarSettings.defaults), forKey: BarItemsStore.key)
+        let store = BarItemsStore(defaults: defaults, statsPrefs: { [:] })
+        try store.choosePreset(islands ? "threeIslands" : "floatingStrip")
+        let look = Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), inputSources: BarReadingsTests.Sources(), defaults: defaults)
+        look.style = style
+        var input = BarInputs()
+        input.pilotTitle = "2"; input.workspaces = ["1", "2", "3"]; input.focusedWorkspace = "2"
+        input.focusedApp = "Finder"; input.volume = 0.6; input.muted = false; input.wifiOn = true
+        input.timerCountdown = "18:42"; input.timerTitle = "Focus"; input.keyboardLayout = "ABC"
+        input.now = ClockRenders.now; input.timeZone = TimeZone(secondsFromGMT: 0)!; input.locale = Locale(identifier: "en_US_POSIX")
+        for kind in [BarKind.focusedApp, .volume, .wifi, .keyboardLayout] { store.settings.set(kind, on: true) }
+        for kind in [BarKind.otherApps, .modes, .group, .cpu, .memory, .network] { store.settings.set(kind, on: false) }
+        if islands { store.settings.place(.kind(.clock), on: .centre, at: 0) }
+        let sides = store.settings.preview(.topBar).top ?? [:]
+        for (mode, id) in [("dark", style == .toybox ? "toybox-night" : "lagoon"), ("light", style == .toybox ? "toybox" : "porcelain")] {
+            look.preview(id)
+            let tokens = StyleTokens.of(style, theme: look.theme)
+            let config = try #require(store.settings.preset)
+            var effective: StyleTokens?
+            var effectiveDark: Bool?
+            var groupFrames: [String: [TopBarSide: CGRect]] = [:]
+            let image = dir.appendingPathComponent("\(islands ? "islands" : "strip")-\(style.rawValue)-\(mode).png")
+            let variants: [(String, [TopBarSide: [BarSlot]])] = islands ? [
+                ("Full centre", sides), ("Empty centre", sides.filter { $0.key != .centre }), ("All empty", [:])
+            ] : [("Floating strip", sides)]
+            try writeRender(VStack(alignment: .leading, spacing: 12) {
+                Text("\(style.rawValue) · \(mode) · \(config.preset.title)").font(.headline)
+                ForEach(variants, id: \.0) { title, items in
+                    Text(title).font(.caption)
+                    ForEach([1416, 336], id: \.self) { width in
+                        TopBarStrip(sides: items, configuration: config, reportIsland: { side, rect in
+                            groupFrames[title + String(width), default: [:]][side] = rect
+                        }) { slot in
+                            if let parts = BarParts.parts(slot, input, settings: store.settings) {
+                                BarPartsView(items: parts).fixedSize(horizontal: true, vertical: false).padding(.horizontal, 6)
+                            }
+                        }
+                        .overlay { EffectiveTokens { effective = $0; effectiveDark = $1 == .dark } }.styled(.topBar, look: look)
+                        .foregroundStyle(Color(tokens.colors.text)).tint(Color(tokens.colors.accent))
+                        .frame(width: CGFloat(width), height: config.height).clipped()
+                    }
+                }
+                BarPresetControls(store: store).frame(width: 620)
+            }.padding(12).frame(width: 1440, height: islands ? 950 : 650, alignment: .topLeading)
+                .style(tokens).font(.system(size: 13)).foregroundStyle(Color(tokens.colors.text)).tint(Color(tokens.colors.accent))
+                .background(Color(tokens.colors.canvas)), to: image, wait: 0.4)
+            let hosted = try #require(effective)
+            try #require(look.theme.dark == (mode == "dark")); try #require(hosted.kind == style && hosted.dark == (mode == "dark") && effectiveDark == (mode == "dark"))
+            if islands {
+                for width in [1416, 336] {
+                    let empty = try #require(groupFrames["All empty" + String(width)])
+                    try #require(empty.count == 3 && empty.values.allSatisfy { $0.width == 0 && $0.height == 0 })
+                    let two = try #require(groupFrames["Empty centre" + String(width)])
+                    try #require(two[.centre]?.width == 0)
+                    try #require(groupFrames["Full centre" + String(width)]?[.centre]?.width ?? 0 > 0)
+                }
+            }
+            let record: JSONValue = .object(["style": .string(hosted.kind.rawValue), "theme": .string(look.theme.id), "dark": .bool(hosted.dark),
+                "geometry": try JSONDecoder().decode(JSONValue.self, from: ThemeDigest.encoded(config)), "ground": .string(ColourAnswer.hex(hosted.colors.canvas.rgb)),
+                "foreground": .string(ColourAnswer.hex(hosted.colors.text.rgb)), "widths": .array([.number(1416), .number(336)]),
+                "variants": .array(variants.map { .string($0.0) }), "hostedEnvironmentRead": .bool(true), "effectiveColorSchemeDark": .bool(effectiveDark == true),
+                "drawnGroups": .object(groupFrames.mapValues { .object(Dictionary(uniqueKeysWithValues: $0.map { ($0.key.rawValue, .array([$0.value.minX,$0.value.minY,$0.value.width,$0.value.height].map { .number(Double($0)) })) })) })])
+            try ThemeDigest.encoded(record).write(to: image.deletingPathExtension().appendingPathExtension("json"))
+        }
+    }
+
+    private struct EffectiveTokens: View {
+        @Environment(\.style) private var style
+        @Environment(\.colorScheme) private var scheme
+        let record: (StyleTokens, ColorScheme) -> Void
+        var body: some View { Color.clear.allowsHitTesting(false).onAppear { record(style, scheme) } }
+    }
+
     /// The mockup's bar: Pilot's mark, the workspaces and the app in front on the left, the timer in the centre, the
     /// readings' group, sound, Wi-Fi, the layout and the clock on the right.
     static func sides(workspaces: BarStyle = .numbers) -> [TopBarSide: [BarSlot]] {
@@ -58,6 +143,8 @@ struct InstrumentTopBarRenders {
 
     @Test("The strip, its tooltip and edit mode in Instrument dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
+        if Self.env["PILOT_ISLANDS_RENDER"] == "1" { try Self.renderFloating(style: .instrument, islands: true); return }
+        if Self.env["PILOT_STRIP_RENDER"] == "1" { try Self.renderFloating(style: .instrument); return }
         let dir = try ClockRenders.dir("topbar-instrument")
         testApp()
         DisplayFaces.directory = LookThemeTests.fonts

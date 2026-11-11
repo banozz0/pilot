@@ -77,7 +77,7 @@ struct OverlayPageTests {
         #expect(picked.map(\.label) == ["Never pressed"])
     }
 
-    @Test("Binds › Overlay lists every sublayer's bind by module with its whole key, never a plain combo, ticked as it shows; search narrows")
+    @Test("Binds › More › Overlay lists every sublayer's bind by module with its whole key, never a plain combo, ticked as it shows; search narrows")
     func choices() {
         let shown = OverlayPage.shown(store: store, actions: actions, mode: .pick, presses: [:], picks: ["w.swap", "w.vim"])
         #expect(shown == ["w.swap"], "a picked plain combo never shows")

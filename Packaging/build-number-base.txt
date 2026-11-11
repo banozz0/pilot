@@ -1,0 +1,2 @@
+# Added to git rev-list --count HEAD for CFBundleVersion: the public history restarted the count, and Sparkle offers only a higher build (public-repo spec T5).
+2325

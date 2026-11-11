@@ -1,0 +1,51 @@
+# Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request only (never
+# the _target trigger, which runs with the base repo's rights), with a read-only token and no secrets, and no text a
+# pull request controls (title, body, branch name) is ever written into a run: line. GitHub runs the pull request's own
+# copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset (spec T27:
+# Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
+# .gitleaks.toml (gitleaks' defaults when the base has none, never the pull request's), ignores gitleaks:allow comments
+# and every .gitleaksignore, and reads each merge against its first parent.
+name: Checks
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks (version and checksum pinned)
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/bin" gitleaks
+      - name: Scan the pull request's commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git cat-file -e "$BASE:.gitleaks.toml" 2>/dev/null; then
+            git show "$BASE:.gitleaks.toml" > "$RUNNER_TEMP/gitleaks.toml"
+          else
+            printf '[extend]\nuseDefault = true\n' > "$RUNNER_TEMP/gitleaks.toml"
+          fi
+          # gitleaks reads a .gitleaksignore from its working folder and from its source's root whatever -i says, so it
+          # runs from an empty folder with the git dir as its source: no file a pull request writes is read.
+          gitdir=$(git rev-parse --absolute-git-dir)
+          mkdir -p "$RUNNER_TEMP/no-ignore" && cd "$RUNNER_TEMP/no-ignore"
+          "$RUNNER_TEMP/bin/gitleaks" git --no-banner --redact --verbose -c "$RUNNER_TEMP/gitleaks.toml" \
+            --ignore-gitleaks-allow --gitleaks-ignore-path "$RUNNER_TEMP/no-ignore" \
+            --log-opts="--diff-merges=first-parent $BASE..$HEAD" "$gitdir"

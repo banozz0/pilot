@@ -5,11 +5,11 @@ extension ControlVerbs {
     /// `pilot uninstall --list` (Q423): what General › Uninstall… lists, with sizes, read off the main actor.
     /// Read-only: moving anything to the Trash stays in the panel, under Sven's hands.
     func registerUninstall(measure: @escaping @Sendable () -> [UninstallItem] = { Uninstall.measured() }) {
-        register(ControlVerb("uninstall", help: "Everything Pilot put on this Mac, grouped, with sizes; removing it is General › Uninstall… only.",
+        register(ControlVerb("uninstall", help: "Everything Pilot put on this Mac, grouped, with sizes; removing it is Pilot › Uninstall… only.",
                              usage: "pilot uninstall --list",
                              flags: [.init("list", help: "lists what the Uninstall panel would offer and how big each is", takesValue: false)]) { call throws(ControlError) in
             guard call.arguments().has("list") else {
-                throw ControlError(.badValue, "pilot uninstall only lists (--list); moving to the Trash is General › Uninstall…")
+                throw ControlError(.badValue, "pilot uninstall only lists (--list); moving to the Trash is Pilot › Uninstall…")
             }
             let items = await Task.detached { measure() }.value
             let home = NSHomeDirectory()

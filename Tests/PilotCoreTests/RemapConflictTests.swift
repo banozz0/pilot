@@ -44,8 +44,8 @@ struct RemapConflictTests {
     func swapRefusals() {
         let capsCtrl = KeySwap(.capsLock, .leftControl)
         #expect(capsCtrl.refusal(joining: [], layerKeys: [.capsLock], foreign: [])
-                == "Caps Lock is your Hyper key. Pick another Hyper key in General first.")
-        #expect(KeySwap(.escape, .rightOption).hyperProblem([.capsLock, .rightOption]) == "Right Option is a Hyper key. Pick another Hyper key in General first.")
+                == "Caps Lock is your Hyper key. Pick another Hyper key on the Pilot page first.")
+        #expect(KeySwap(.escape, .rightOption).hyperProblem([.capsLock, .rightOption]) == "Right Option is a Hyper key. Pick another Hyper key on the Pilot page first.")
         #expect(KeyMappingEntry.pilotSet(layerKeys: [.capsLock], swaps: [capsCtrl], foreign: []) == [capsToF18])
         #expect(KeySwap(.escape, .leftControl).refusal(joining: [capsCtrl], layerKeys: [.rightCommand], foreign: []) == "Left Control is already swapped.")
         let escToTab = KeyMappingEntry(src: 0x7_0000_0029, dst: 0x7_0000_002B)

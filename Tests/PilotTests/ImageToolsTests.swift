@@ -196,7 +196,7 @@ struct ImageToolsRenders {
 
     @Test("The resize and upscale panels render in every style at their own size",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func render() throws {
+    func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
         testApp()
@@ -209,6 +209,33 @@ struct ImageToolsRenders {
         defer { (look.style, look.themeID, look.glass) = saved }
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("image-tools")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let editor = EditorModel(image: ImageToolsTests.capture(), scale: 2, accent: 0x3CD2DB, dark: true)
+        editor.pick(.crop)
+        editor.begin(CGPoint(x: 20, y: 20)); editor.end(CGPoint(x: 100, y: 60))
+        let document = editor.document
+        _ = try #require(await editor.export(committing: false))
+        #expect(editor.document == document, "A preview leaves the pending crop cancellable")
+        editor.cancelCrop()
+        #expect(editor.document == document)
+
+        let fixture = out.appending(path: "panel-source.png")
+        try #require(ImageFormat.png.encode(ImageToolsTests.capture())).write(to: fixture)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let windows = Set(NSApp.windows.map(ObjectIdentifier.init))
+        ImageTools.onScreen = false
+        defer { ImageTools.close(); ImageTools.onScreen = true }
+        ImageTools.offer(.upscale, [fixture])
+        let panel = try #require(NSApp.windows.first { !windows.contains(ObjectIdentifier($0)) })
+        let initialHeight = panel.frame.height
+        let panelJob = try #require(ImageTools.shown?.job)
+        panelJob.target.setMonitor(.ultrawide34)
+        for _ in 0..<10 where panel.frame.height <= initialHeight {
+            try await Task.sleep(for: .milliseconds(50))
+            panel.contentView?.layoutSubtreeIfNeeded()
+        }
+        #expect(panel.frame.height > initialHeight, "Finder's panel grows to fit Monitor")
+        #expect(!panel.isVisible, "The fixture never draws on Sven's screen")
+        ImageTools.close()
         let files = [URL(filePath: "/Users/ada/Pictures/Pilot/Capture 2026-10-17 at 12.04.11.png")]
         let job = UpscaleJob()
         job.size(width: 3440, height: 1440)
@@ -218,10 +245,23 @@ struct ImageToolsRenders {
         maxJob.target.setWidth(5000)
         var target = ResizeTarget(width: 3440, height: 1440)
         target.setWidth(1920)
+        let image = try #require(CaptureFixture.image())
+        let monitorFit = UpscaleJob(), monitorFill = UpscaleJob(), monitorSmall = UpscaleJob()
+        for job in [monitorFit, monitorFill] {
+            job.size(width: image.width, height: image.height)
+            job.preview = image
+            job.target.setMonitor(.ultrawide34, framing: job === monitorFill ? .fill : .fit)
+        }
+        monitorSmall.size(width: 236, height: 419)
+        monitorSmall.preview = image.cropping(to: CGRect(x: 0, y: 0, width: 236, height: 419))
+        monitorSmall.target.setMonitor(.ultrawide34, framing: .fill)
         let cards: [(String, ImageToolCard)] = [
             ("resize", ImageToolCard(mode: .resize, files: files, target: target, job: job, resize: { _ in }, upscale: {}, cancel: {})),
             ("upscale", ImageToolCard(mode: .upscale, files: files, target: target, job: job, resize: { _ in }, upscale: {}, cancel: {})),
             ("upscale-max", ImageToolCard(mode: .upscale, files: files + files, target: target, job: maxJob, resize: { _ in }, upscale: {}, cancel: {})),
+            ("monitor-fit", ImageToolCard(mode: .upscale, files: files + files, target: target, job: monitorFit, resize: { _ in }, upscale: {}, cancel: {})),
+            ("monitor-fill", ImageToolCard(mode: .upscale, files: files + files, target: target, job: monitorFill, resize: { _ in }, upscale: {}, cancel: {})),
+            ("monitor-unavailable", ImageToolCard(mode: .upscale, files: files, target: target, job: monitorSmall, resize: { _ in }, upscale: {}, cancel: {})),
         ]
         for pass in CaptureEditorRenders.passes {
             look.style = pass.style
@@ -229,7 +269,7 @@ struct ImageToolsRenders {
             let tokens = StyleTokens.of(look.style, theme: look.theme)
             for (name, card) in cards {
                 let size = NSHostingView(rootView: card.style(tokens)).fittingSize
-                #expect(size.width <= 360 && size.height <= 420, "\(name) \(pass.tag): \(size)")
+                #expect(size.width <= 360 && size.height <= (name.hasPrefix("monitor-") ? 720 : 420), "\(name) \(pass.tag): \(size)")
                 let rep = try CaptureEditorRenders.draw(card, tokens: tokens, size: size, scale: 2)
                 try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("\(name)-\(pass.tag).png"))
             }

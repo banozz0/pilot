@@ -74,14 +74,38 @@ struct FilesWindowRenders {
         list.showHidden = false
         for _ in 0..<40 where list.items.contains(where: { $0.name == ".hidden-note" }) { try await Task.sleep(for: .milliseconds(50)) }
 
-        list.selected = downloads.appending(path: "Screenshot 2026-11-03 at 14.22.png").path
+        // A file completed or edited after its first thumbnail refreshes both cached misses and pictures.
+        let shot = downloads.appending(path: "Screenshot 2026-11-03 at 14.22.png")
+        let original = try Data(contentsOf: shot), date = Date(timeIntervalSince1970: 1_800_000_000)
+        let before = try #require(await list.picture(shot, pixels: 36, modified: date))
+        try Data().write(to: shot)
+        #expect(await list.picture(shot, pixels: 36, modified: date.addingTimeInterval(1)) == nil)
+        try FileThumbnailRenders.png(shot)
+        let after = try #require(await list.picture(shot, pixels: 36, modified: date.addingTimeInterval(2)))
+        #expect(Self.pixels(before) != Self.pixels(after))
+        try original.write(to: shot)
+        list.reload()
+        try await Task.sleep(for: .milliseconds(150))
+        look.style = .instrument
+        list.select(try #require(list.items.first { $0.name == "README.md" }))
+        list.select(try #require(list.items.first { $0.name.hasPrefix("Screenshot") }), modifiers: .command)
         try await Self.render(list, "1-list", in: dir)
 
         let grid = Self.model(pictures, home: home)
         grid.mode = .grid
         try await Self.settle(grid)
-        grid.selected = pictures.appending(path: "wallpaper-lagoon.png").path
+        look.style = .toybox
+        look.themeID = "porcelain"
+        grid.select(try #require(grid.items.first))
+        grid.select(grid.items[2], modifiers: .shift)
         try await Self.render(grid, "2-grid", in: dir)
+
+        // C keeps the current folder visible at the window's minimum width, even with many ancestors.
+        let deep = try Self.fixture(home + "/Projects/Website/Assets/Images/Exports/November", [("picture.png", -1, 1)])
+        let narrow = Self.model(deep, home: home)
+        try await Self.settle(narrow)
+        look.style = .instrument
+        try await Self.render(narrow, "3-narrow-path", in: dir, size: NSSize(width: 820, height: 440))
     }
 
     /// T55: New file from the built-in and Sven's templates, Copy path's three forms, the typed path bar and its
@@ -162,6 +186,54 @@ struct FilesWindowRenders {
 
         // New file: empty Text twice (the second numbered), then Sven's template, each name open for editing.
         let snapshot = try Self.tree(projects)
+        // Existing fixture E2E now carries a group through the same public model actions the window uses.
+        let rows = model.shown
+        let folders = Array(rows.filter(\.isFolder).prefix(2))
+        var opened: [URL] = []
+        model.newWindow = { opened.append($0) }
+        model.open(folders)
+        try #require(opened == folders.map(\.url), "a grouped Open creates a window for every folder")
+        #expect(model.folder == projects)
+        model.select(rows[0])
+        model.select(rows[2], modifiers: .shift)
+        #expect(model.selectedIDs == Set(rows.prefix(3).map(\.id)))
+        model.select(rows[1], modifiers: .command)
+        #expect(model.selectedIDs == [rows[0].id, rows[2].id])
+        model.select(rows[0], modifiers: .command)
+        model.select(rows[2], modifiers: .command)
+        #expect(model.selectedIDs.isEmpty && model.selection == nil)
+        model.selectAll()
+        #expect(model.selections.count == rows.count)
+        model.select(rows[2])
+        model.select(rows[3], modifiers: .command)
+        let group = model.selections.map(\.url)
+        model.copy()
+        #expect(board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] == group)
+        model.cut()
+        #expect(cut.urls == group)
+        let payload = model.drag(model.selections.map(\.id))
+        #expect(!model.canSpring(into: group[0]))
+        model.open([try #require(rows.first { $0.id == alpha.path })])
+        try await Self.until { model.loaded && model.folder.path == alpha.path }
+        #expect(opened == folders.map(\.url), "a single folder still opens in this window")
+        #expect(model.selectedIDs.isEmpty && payload == group)
+        #expect(model.drop(payload, on: alpha))
+        try await Self.idle(model)
+        #expect(group.allSatisfy { files.fileExists(atPath: alpha.appending(path: $0.lastPathComponent).path) })
+        model.endDrag()
+        model.undo()
+        try await Self.idle(model)
+        #expect(try Self.tree(projects) == snapshot)
+        model.go(projects)
+        try await Self.until { model.loaded && model.items.count == rows.count }
+        model.select(try #require(model.items.first { $0.url == group[0] }))
+        model.select(try #require(model.items.first { $0.url == group[1] }), modifiers: .command)
+        model.trash()
+        try await Self.idle(model)
+        #expect(group.allSatisfy { !files.fileExists(atPath: $0.path) })
+        model.undo()
+        try await Self.idle(model)
+        #expect(try Self.tree(projects) == snapshot)
         model.newFile(FileTemplate.builtIn[0])
         try await Self.idle(model)
         #expect(files.fileExists(atPath: projects.appending(path: "untitled.txt").path))
@@ -354,7 +426,7 @@ struct FilesWindowRenders {
                        FilesModel.Device(name: "nas.local", symbol: "server.rack", url: URL(filePath: "/Volumes/nas"), free: 3_100 * tb / 1000, total: 4 * tb)]
         let sources = FilesModel.Sources(
             hidden: { [hiddenID] }, favourites: { ["file:" + home + "/code", "action:apps.terminal"] }, devices: { devices }, search: { _, reply in reply([]) },
-            make: { _, pixels in Self.picture(pixels) })
+            make: FileThumbnailRenders.fake)
         let model = FilesModel(folder: folder, home: home, sources: sources)
         model.start()
         return model
@@ -410,9 +482,9 @@ struct FilesWindowRenders {
     }
 
     /// The window's content at its own size, in a borderless window parked off screen, at Retina scale.
-    static func render(_ model: FilesModel, _ name: String, in dir: URL) async throws {
+    static func render(_ model: FilesModel, _ name: String, in dir: URL, size: NSSize = FilesWindows.size) async throws {
         let host = NSHostingView(rootView: FilesView(model: model).styled(.window).pilotTheme())
-        host.frame.size = FilesWindows.size
+        host.frame.size = size
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host

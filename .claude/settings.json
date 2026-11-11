@@ -1,0 +1,21 @@
+{
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true
+  },
+  "skillOverrides": {
+    "domain-modeling": "on"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && [ -d .build/ghosttykit ] || exit 0; out=$(NO_COLOR=1 nice -n 10 swift build -j 4 2>&1) && exit 0; { echo 'Stop check: swift build failed. Fix it before the turn ends.'; printf '%s\\n' \"$out\" | grep -m 20 ': error:' || printf '%s\\n' \"$out\" | tail -20; } >&2; exit 2",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

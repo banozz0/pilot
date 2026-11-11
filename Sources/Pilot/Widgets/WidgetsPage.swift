@@ -223,15 +223,17 @@ struct WidgetsPage: View {
         self.model = model; self.reads = reads; self.previews = previews
     }
 
-    static let intro = "Widgets sit on the desktop, on an empty workspace or while Show desktop holds the windows out, or on Home. Hyper+drag moves one, Hyper+right-drag resizes it, a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
+    static let intro = "Widgets on the desktop, on an empty workspace, or on Home."
+    static let introInfo = "They show while Show desktop holds the windows out too. Hyper+drag moves one, Hyper+right-drag resizes it, a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             if let note = model.note { Text(note).font(ink.ui(12)).foregroundStyle(ink.muted).padding(.top, 6) }
             ready
-            yours
-            desktop
-            home
+            // Your widgets waits until it holds something (simplify-pages T3); New widget is on Widgets. On the desktop
+            // and On Home are one Placed list (simplify-pages T19).
+            if !model.installed.isEmpty || !model.broken.isEmpty { yours }
+            placed
         }
         .task {
             guard reads else { return }
@@ -251,7 +253,9 @@ struct WidgetsPage: View {
     }
 
     private var ready: some View {
-        KitBlock(title: "Pilot's widgets", symbol: "square.grid.2x2", note: "Pilot's own, read-only and trusted; off until you add one.") {
+        KitBlock(title: "Widgets", symbol: "square.grid.2x2", note: "Pilot's own, read-only and trusted; off until you add one.") {
+            newWidget
+        } content: {
             CardGrid(minimum: 260, spacing: 8, stretch: true) {
                 ForEach(ReadyWidgets.all, id: \.id) { card($0, ready: true) }
             }
@@ -261,18 +265,7 @@ struct WidgetsPage: View {
 
     private var yours: some View {
         KitBlock(title: "Your widgets", symbol: "folder") {
-            HStack(spacing: 6) {
-                Button("Create with AI") { AIChatPanel.shared.show(typing: WidgetMaker.command + " ") }.buttonStyle(.pilot)
-                    .help("Opens the AI chat with /widget typed: describe the widget, or paste or drop a picture of one")
-                Button("New widget…") { model.building = true }.buttonStyle(.pilot).help("Pick a look and a source; no AI needed")
-                Button("Import…") { model.chooseFolder() }.buttonStyle(.pilot).help("A widget folder or .zip; or drop one on this page")
-                Button("Show folder") { model.showFolder() }.buttonStyle(.pilot)
-            }
-        } content: {
             VStack(alignment: .leading, spacing: 8) {
-                if model.installed.isEmpty && model.broken.isEmpty {
-                    Text("None yet. Duplicate one of Pilot's to edit it, or import a widget folder.").font(ink.ui(12)).foregroundStyle(ink.muted)
-                }
                 CardGrid(minimum: 300, spacing: 8, stretch: true) {
                     ForEach(model.installed, id: \.id) { card($0, ready: false) }
                 }
@@ -287,34 +280,37 @@ struct WidgetsPage: View {
         }
     }
 
-    private var desktop: some View {
-        KitBlock(title: "On the desktop", symbol: "macwindow") {
-            VStack(alignment: .leading, spacing: 6) {
-                let placed = model.placements.filter { !$0.onHome }
-                if placed.isEmpty {
-                    Text("Nothing yet: Add to desktop on any widget above.").font(ink.ui(12)).foregroundStyle(ink.muted)
-                }
-                ForEach(placed, id: \.id) { placement in
-                    row(placement) {
-                        Text("at \(Int(placement.x * 100)) %, \(Int(placement.y * 100)) % of \(placement.screen == nil ? "the main display" : "its display")")
-                            .font(ink.ui(11.5)).foregroundStyle(ink.muted)
-                        Spacer(minLength: 6)
-                        workspacePicker(placement)
-                    }
-                }
-            }
-            .padding(.vertical, 10)
+    /// Every way to a widget of your own, in one menu: the AI chat, the builder, an import, the folder.
+    private var newWidget: some View {
+        Menu {
+            Button("Create with AI") { AIChatPanel.shared.show(typing: WidgetMaker.command + " ") }
+                .help("Opens the AI chat with /widget typed: describe the widget, or paste or drop a picture of one")
+            Button("New widget…") { model.building = true }.help("Pick a look and a source; no AI needed")
+            Button("Import…") { model.chooseFolder() }.help("A widget folder or .zip; or drop one on this page")
+            Divider()
+            Button("Show folder") { model.showFolder() }
+        } label: {
+            Label("New widget", systemImage: "plus")
         }
+        .menuStyle(.button).buttonStyle(.pilot).fixedSize()
     }
 
-    private var home: some View {
-        KitBlock(title: "On Home", symbol: "house", note: "Each runs only while Home draws it; Edit Home moves, sizes and hides them.") {
+    /// Every widget placed, on the desktop first, then on Home (simplify-pages T19: were two blocks).
+    private var placed: some View {
+        KitBlock(title: "Placed", symbol: "macwindow",
+                 note: "On the desktop, or on Home, where each runs only while Home draws it; Edit Home moves, sizes and hides those.") {
             VStack(alignment: .leading, spacing: 6) {
-                let placed = model.placements.filter(\.onHome)
-                if placed.isEmpty {
-                    Text("Nothing yet: Add to Home on any widget above.").font(ink.ui(12)).foregroundStyle(ink.muted)
+                if model.placements.isEmpty {
+                    Text("Nothing yet: Add to desktop or Add to Home on any widget above.").font(ink.ui(12)).foregroundStyle(ink.muted)
                 }
-                ForEach(placed, id: \.id) { placement in row(placement) { Spacer(minLength: 6) } }
+                ForEach(model.placements.filter { !$0.onHome } + model.placements.filter(\.onHome), id: \.id) { placement in
+                    row(placement) {
+                        Text(placement.onHome ? "On Home" : "On the desktop, at \(Int(placement.x * 100)) %, \(Int(placement.y * 100)) % of \(placement.screen == nil ? "the main display" : "its display")")
+                            .font(ink.ui(11.5)).foregroundStyle(ink.muted)
+                        Spacer(minLength: 6)
+                        if !placement.onHome { workspacePicker(placement) }
+                    }
+                }
             }
             .padding(.vertical, 10)
         }

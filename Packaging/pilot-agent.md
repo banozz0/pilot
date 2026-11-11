@@ -35,6 +35,7 @@ follow them. Otherwise read one with `pilot guide <name>` when its job comes up,
 - Finding or changing a setting: `pilot guide settings`.
 - What a key does, or why it does nothing: `pilot guide explain`.
 - Something in Pilot does not work: `pilot guide troubleshoot`.
+- Creating or changing a theme pack: `pilot guide theme`.
 - Offering, installing or running an extension: `pilot guide catalogue`.
 - Sending a finished extension to Pilot's catalogue: `pilot guide publish`.
 

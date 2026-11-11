@@ -12,7 +12,8 @@ import UniformTypeIdentifiers
 /// closes. A folder opens in place, a file opens through NSWorkspace, Space Quick Looks it, search asks the pilot-files
 /// index inside the shown folder. Hidden apps (Install › Hidden apps) never show, in the listing or in a search.
 /// The file actions (T11: rename, Trash, copy, move, new folder, undo; T55: new file from a template, cut and paste) each
-/// go through T6's FileOps and nothing else, in `FilesModel.run`; every refusal it gives shows in the window. T55 adds the
+/// go through T6's FileOps in `FilesModel.run`; every refusal it gives shows in the window. Confirmed permanent Bin
+/// deletion uses TrashDeletion separately and cannot be undone. T55 adds the
 /// typed path bar (a click or Cmd+L, with folder completion), Copy path in three forms, and folder sizes in list view.
 /// Each window keeps one folder watch, its thumbnails and its folder sizes, and all go with its close: nothing runs while
 /// no window is open.
@@ -37,12 +38,23 @@ final class FilesWindows {
         bring(last.window)
     }
 
+    /// Hyper+F puts the active browser away; the next press restores its folder and selection.
+    func toggle() {
+        guard let last = open.first(where: { $0.window.isKeyWindow }) ?? open.last else { return newWindow() }
+        if NSApp.isActive, last.window.isKeyWindow, !last.window.isMiniaturized {
+            last.window.miniaturize(nil)
+        } else {
+            bring(last.window)
+        }
+    }
+
     /// Cmd+N: another window, on `folder` (the shown one) or Downloads, a step down and right of the last.
     func newWindow(_ folder: URL? = nil) {
         let model = FilesModel(folder: folder ?? FilesModel.start)
         model.newWindow = { [weak self] in self?.newWindow($0) }
         let host = NSHostingView(rootView: FilesView(model: model).styled(.window).pilotTheme().pilotWindowStyles())
         let w = AppWindowController.makeWindow(content: host, size: Self.size, minSize: Self.minSize)
+        TilerOwnWindows.floatByDefault(w)
         w.title = "Pilot Files"
         // Cmd+K's picker opens at the picked row's left, a little in, else at the content's top left.
         model.screenPoint = { [weak w] frame in
@@ -64,8 +76,11 @@ final class FilesWindows {
             },
             // The undo journal is shared with `pilot files undo` and the other windows, and the disks fill and empty
             // outside Pilot: read the next undo and the devices' space again on focus.
-            center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { [weak model] _ in
+            center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { [weak self, weak w, weak model] _ in
                 MainActor.assumeIsolated {
+                    if let self, let w, let index = self.open.firstIndex(where: { $0.window === w }) {
+                        self.open.append(self.open.remove(at: index))
+                    }
                     model?.refreshUndo()
                     model?.readSidebar()
                     model?.refreshIcons()
@@ -73,7 +88,12 @@ final class FilesWindows {
                     FilesCut.shared.dropIfStale()
                 }
             },
-        ]
+        ] + [NSWindow.didResignKeyNotification, NSApplication.didResignActiveNotification].map { name in
+            center.addObserver(forName: name, object: name == NSWindow.didResignKeyNotification ? w : nil, queue: .main) { [weak self, weak w] _ in
+                // The next key window is assigned after resign-key; let sheets and Pilot's pickers take it first.
+                DispatchQueue.main.async { if let w { self?.minimiseIfInactive(w) } }
+            }
+        }
         open.append(Open(window: w, model: model, observers: observers))
         app.applyDockIcon(.dock)
         followLook()
@@ -83,10 +103,21 @@ final class FilesWindows {
     }
 
     private func bring(_ w: PilotWindow) {
-        let shown = w.isVisible
+        let shown = w.isVisible && !w.isMiniaturized
+        if w.isMiniaturized { w.deminiaturize(nil) }
         w.makeKeyAndOrderFront(nil)
         if !shown { TilerOwnWindows.shown() }
         WindowFocus.bringForward()
+    }
+
+    private func minimiseIfInactive(_ w: PilotWindow) {
+        guard let entry = open.first(where: { $0.window === w }), w.isVisible, !w.isMiniaturized,
+              w.attachedSheet == nil, entry.model.prompt == nil else { return }
+        if NSApp.isActive {
+            guard !w.isKeyWindow, !(NSApp.keyWindow is NSPanel),
+                  !open.contains(where: { $0.window === NSApp.keyWindow }) else { return }
+        }
+        w.miniaturize(nil)
     }
 
     /// Restyles every open window as the theme, style or material changes; one watch while any is open.
@@ -211,6 +242,7 @@ final class FilesModel {
         let name: String, symbol: String, url: URL
         var free: Int64?
         let total: Int64?
+        var ejectable = false
         var id: String { url.path }
         /// The share in use, for the 3 pt bar.
         var used: Double? {
@@ -278,13 +310,51 @@ final class FilesModel {
     var sizingFolders: Bool { sizing != nil }
     var knownSizes: [String: Int64] { folderSizes.compactMapValues(\.bytes) }
 
-    /// The path bar is a field (a click on the folder's name, or Cmd+L).
+    /// The editable path field (a click on the folder's name, or Cmd+L), above the persistent bottom path.
     var editingPath = false
     /// New file's rows: Text, Markdown, then Pilot's Templates folder's files, read again on focus.
     private(set) var templates = FileTemplate.builtIn
 
-    /// Picking another item ends a rename there, keeping the name.
-    var selected: FolderItem.ID? { didSet { if renaming != nil, renaming != selected { renaming = nil } } }
+    /// The group and its active item: previews and rename still have one subject.
+    private(set) var selectedIDs: Set<FolderItem.ID> = []
+    private var active: FolderItem.ID?
+    private var anchor: FolderItem.ID?
+    var selected: FolderItem.ID? {
+        get { active }
+        set { pick(Set(newValue.map { [$0] } ?? []), active: newValue); anchor = newValue }
+    }
+
+    private func pick(_ ids: Set<FolderItem.ID>, active: FolderItem.ID?) {
+        selectedIDs = ids
+        self.active = active
+        if renaming != nil, renaming != active { renaming = nil }
+    }
+
+    func select(_ item: FolderItem, modifiers: NSEvent.ModifierFlags = []) {
+        if modifiers.contains(.shift), let anchor,
+           let start = shown.firstIndex(where: { $0.id == anchor }), let end = shown.firstIndex(where: { $0.id == item.id }) {
+            let range = Set(shown[min(start, end)...max(start, end)].map(\.id))
+            pick(modifiers.contains(.command) ? selectedIDs.union(range) : range, active: item.id)
+        } else if modifiers.contains(.command) {
+            var ids = selectedIDs
+            if !ids.insert(item.id).inserted { ids.remove(item.id) }
+            pick(ids, active: ids.contains(item.id) ? item.id : shown.last(where: { ids.contains($0.id) })?.id)
+            anchor = active
+        } else {
+            selected = item.id
+        }
+    }
+
+    func selectAll() {
+        pick(Set(shown.map(\.id)), active: selected ?? shown.first?.id)
+        anchor = active
+    }
+
+    private func pruneSelection() {
+        let ids = selectedIDs.intersection(shown.map(\.id))
+        pick(ids, active: active.flatMap { ids.contains($0) ? $0 : nil } ?? shown.first(where: { ids.contains($0.id) })?.id)
+        if let anchor, !ids.contains(anchor) { self.anchor = active }
+    }
 
     /// The search field shows; its words search the shown folder and everything under it.
     var searching = false { didSet { if !searching { query = ""; searchFocused = false } } }
@@ -316,6 +386,20 @@ final class FilesModel {
         }
     }
     private(set) var notice: Notice?
+    enum Prompt {
+        case rename(URL), delete(TrashDeletion.Plan)
+        var title: String {
+            switch self { case .rename: "Rename Folder"; case .delete: "Delete Permanently?" }
+        }
+        var message: String {
+            switch self {
+            case let .rename(url): "Rename \(url.lastPathComponent) on disk."
+            case let .delete(plan): "Permanently delete \(plan.name) from the Bin? This cannot be undone."
+            }
+        }
+    }
+    var prompt: Prompt?
+    var newName = ""
     /// The operation Cmd+Z puts back next, as FileOps' journal says (shared with `pilot files undo`), or nil.
     private(set) var nextUndo: String?
     /// The item whose name is being edited in place.
@@ -334,6 +418,7 @@ final class FilesModel {
     /// The running walk's number: what a stopped walk delivers late is dropped (`sized`).
     @ObservationIgnored private var sizingRun = 0
     @ObservationIgnored private let home: String
+    @ObservationIgnored private var draggedURLs: [URL] = []
     @ObservationIgnored var newWindow: (URL) -> Void = { _ in }
     /// A point in the window's content (top left origin) on screen, for Cmd+K's picker; nil while no window shows.
     @ObservationIgnored var screenPoint: (CGRect?) -> CGPoint? = { _ in nil }
@@ -341,6 +426,8 @@ final class FilesModel {
     @ObservationIgnored var pickedFrame: CGRect?
     @ObservationIgnored private let sources: Sources
     @ObservationIgnored private var changes: FolderChanges?
+    @ObservationIgnored private var writing = 0
+    @ObservationIgnored private var pendingLoss = false
     @ObservationIgnored private var reading: Task<Void, Never>?
     @ObservationIgnored private var asking: Task<Void, Never>?
     /// The latest search's number: a reply to an older one is dropped.
@@ -377,6 +464,38 @@ final class FilesModel {
     /// What the list or grid shows: a search's hits, else the folder's items.
     var shown: [FolderItem] { hits ?? items }
     var selection: FolderItem? { selected.flatMap { id in shown.first { $0.id == id } } }
+    var selections: [FolderItem] { shown.filter { selectedIDs.contains($0.id) } }
+    /// A context action on an unselected item acts on that item; within the group it keeps the group.
+    func selections(for item: FolderItem?) -> [FolderItem] {
+        if let item, !selectedIDs.contains(item.id) { return [item] }
+        return selections
+    }
+
+    /// The drag owns its URLs even after spring navigation clears this folder's selection.
+    func drag(_ ids: [String]) -> [URL] {
+        let urls = Dictionary(uniqueKeysWithValues: shown.map { ($0.id, $0.url) })
+        draggedURLs = ids.compactMap { urls[$0] }
+        return draggedURLs
+    }
+
+    func endDrag() { draggedURLs = [] }
+
+    func canSpring(into url: URL) -> Bool {
+        url != folder && !Self.inTrash(url) && !draggedURLs.contains {
+            url.path == $0.path || url.path.hasPrefix($0.path + "/")
+        }
+    }
+
+    var pathFolders: [Place] {
+        var urls = [folder]
+        while let first = urls.first, first.path != "/" { urls.insert(first.deletingLastPathComponent(), at: 0) }
+        return urls.map { url in
+            let place = places.first { $0.url == url }
+            let device = devices.first { $0.url == url }
+            let symbol = device?.symbol ?? place?.symbol ?? (url.path == "/Users" ? "person.2" : "folder")
+            return Place(title: device?.name ?? (url.path == "/" ? "/" : url.lastPathComponent), symbol: symbol, url: url)
+        }
+    }
     /// The selection, else the shown folder as an item of its own: what the inspector shows and Cmd+K acts on.
     var subject: FolderItem {
         selection ?? FolderItem(url: folder, name: title, isFolder: true, size: nil, modified: nil, kind: "Folder", type: "public.folder")
@@ -449,6 +568,7 @@ final class FilesModel {
                 sizeFolders()
             case .failure(let error): (listing, problem) = (nil, WidgetFolderModel.problem(error))
             }
+            if hits == nil { pruneSelection() }
             took(devices, volume: volume)
         }
     }
@@ -473,7 +593,10 @@ final class FilesModel {
         let watched = folder
         changes = FolderChanges(watched) { [weak self] gone in
             guard let self, self.folder == watched else { return }
-            if gone { self.changes = nil; self.lost() } else { self.reload() }
+            if gone {
+                self.changes = nil
+                if self.writing > 0 { self.pendingLoss = true } else { self.lost() }
+            } else { self.reload() }
         }
     }
 
@@ -522,6 +645,13 @@ final class FilesModel {
         if item.isFolder { go(item.url) } else { NSWorkspace.shared.open(item.url) }
     }
 
+    /// A group opens every folder visibly; a single folder keeps navigating this window.
+    func open(_ items: [FolderItem]) {
+        for item in items {
+            if items.count > 1, item.isFolder { newWindow(item.url) } else { open(item) }
+        }
+    }
+
     /// The Folder widget's read-only file actions, its Open opening a folder here rather than in Finder; its Copy path
     /// leaves for the window's three forms (FilesCopyPathMenu).
     func actions(_ item: FolderItem) -> [(title: String, run: () -> Void)] {
@@ -544,13 +674,14 @@ final class FilesModel {
     func showActions() {
         let item = subject
         guard let at = screenPoint(selection == nil ? nil : pickedFrame) else { return }
-        FileActionsMenu.show([item.url], at: at, except: selection == nil ? [.trash] : []) { [weak self] action in
+        let picked = selections.isEmpty ? [item] : selections
+        FileActionsMenu.show(picked.map(\.url), at: at, except: selection == nil ? [.trash] : []) { [weak self] action in
             guard let self else { return false }
             switch action {
             case .changeIcon, .resetIcon, .folderDesign: iconsChanged = true; return false
-            case .open: open(item)
-            case .trash: trash(item)
-            case .copyPath: pickPathForm(item.url)
+            case .open: open(picked)
+            case .trash: trash(picked)
+            case .copyPath: pickPathForm(picked.map(\.url))
             default: return false
             }
             return true
@@ -558,26 +689,30 @@ final class FilesModel {
     }
 
     /// Cmd+K's Copy path: a picker of its three forms, each row showing what it copies.
-    private func pickPathForm(_ url: URL) {
+    private func pickPathForm(_ urls: [URL]) {
         let forms = FolderListing.PathForm.allCases
         let rows = forms.map { form in
-            MenuEntry(title: form.title, target: .action("files.path." + form.rawValue), subtitle: FolderListing.path(url, as: form, home: home),
+            MenuEntry(title: form.title, target: .action("files.path." + form.rawValue), subtitle: urls.first.map { FolderListing.path($0, as: form, home: home) },
                       icon: .glyph("doc.on.doc", .accent))
         }
         PilotMenu.shared.pick(rows, title: "Copy path") { [weak self] row in
             guard case .action(let id) = row.target, let form = forms.first(where: { "files.path." + $0.rawValue == id }) else { return }
-            self?.copyPath(url, as: form)
+            self?.copyPaths(urls, as: form)
         }
     }
 
     /// Copy path: `url`'s path in `form` on the clipboard as text, said in the window.
     func copyPath(_ url: URL, as form: FolderListing.PathForm) {
-        let text = FolderListing.path(url, as: form, home: home)
+        copyPaths([url], as: form)
+    }
+
+    func copyPaths(_ urls: [URL], as form: FolderListing.PathForm) {
+        let text = urls.map { FolderListing.path($0, as: form, home: home) }.joined(separator: "\n")
         FilesCut.shared.clear()
         let board = FilesCut.shared.board
         board.clearContents()
         board.setString(text, forType: .string)
-        say(.done("Copied \(text)"))
+        say(.done(urls.count == 1 ? "Copied \(text)" : "Copied \(urls.count) paths."))
     }
 
     /// The arrow keys: the next or previous item, the first when none is picked.
@@ -602,6 +737,7 @@ final class FilesModel {
         if notice?.problem == false { notice = nil }
         let pressed = said
         working += 1
+        writing += 1
         Task {
             let outcome: Result<FileOps.Done, Error>
             do {
@@ -620,6 +756,12 @@ final class FilesModel {
                 filesLog.notice("pilot files: refused: \(failure.message, privacy: .private)")
             case .failure(let error): say(.refused(error.localizedDescription), pressed: pressed)
             }
+            writing -= 1
+            if writing == 0, pendingLoss {
+                pendingLoss = false
+                if !FileManager.default.fileExists(atPath: folder.path) { lost() }
+                else if changes == nil { watch() }
+            }
         }
     }
 
@@ -628,6 +770,7 @@ final class FilesModel {
     /// pressed) is added after anything said since, so a slower action's "done" never hides a quicker one's word. A
     /// second question waits until the first is answered or closed.
     private func say(_ new: Notice, pressed: Int? = nil) {
+        if let shown = notice, shown == new || (shown.text.hasSuffix(" " + new.text) && shown.clash == new.clash && shown.expect == new.expect) { return }
         if let shown = notice, shown.problem || (pressed != nil && pressed != said) {
             let stop = shown.text.hasSuffix(".") ? "" : "."
             let waiting = shown.clash != nil && new.clash != nil
@@ -642,12 +785,24 @@ final class FilesModel {
     }
 
     private func finished(_ request: FileOps.Request, _ done: FileOps.Done, pressed: Int) {
+        // Rename/move changes paths in place, not navigation history, including undo and pinned descendants.
+        func following(_ url: URL) -> URL {
+            FileOps.relocated(url, by: done.moved)
+        }
+        backList = backList.map(following)
+        forwardList = forwardList.map(following)
+        let current = following(folder)
+        if current != folder { move(to: current) }
         let next: String
         if case .undo = request { next = nextUndo.map { "Cmd+Z next: \($0)." } ?? "Nothing more to undo." } else { next = "Cmd+Z undoes it." }
         say(.done("\(done.title): done. \(next)"), pressed: pressed)
+        if let problem = FavouriteBook.shared.relocate(done.moved) { say(.refused(problem)) }
+        readSidebar()
         // The item made, moved or put back here is picked; a new folder's name opens for editing, as Finder's does.
-        if let made = done.items.first(where: { $0.deletingLastPathComponent().path == folder.path }) {
-            selected = made.path
+        let madeHere = done.items.filter { $0.deletingLastPathComponent().path == folder.path }
+        if let made = madeHere.first {
+            pick(Set(madeHere.map(\.path)), active: made.path)
+            anchor = made.path
             switch request {
             case .newFolder(_, nil), .newFile: renaming = made.path
             default: break
@@ -713,27 +868,125 @@ final class FilesModel {
         run(.rename(item.url, to: name))
     }
 
-    /// Cmd+Backspace: the picked item to the Trash.
+    /// Cmd+Backspace: the picked group to the Trash, or explicit permanent-deletion confirmation inside it.
     func trash(_ item: FolderItem? = nil) {
-        guard let item = item ?? selection else { return }
-        run(.trash([item.url]))
+        trash(selections(for: item))
     }
 
-    /// Cmd+C: the picked item on the clipboard as a file, for Cmd+V (copy) or Cmd+Option+V (move) here or in Finder.
+    private func trash(_ picked: [FolderItem]) {
+        guard !picked.isEmpty else { return }
+        if picked.allSatisfy({ Self.inTrash($0.url.deletingLastPathComponent()) }) {
+            return prepareDeletion(picked.map(\.url))
+        }
+        run(.trash(picked.map(\.url)))
+    }
+
+    func isFavourite(_ url: URL) -> Bool { sources.favourites().contains("file:" + url.path) }
+
+    func toggleFavourite(_ url: URL) {
+        if let problem = FavouriteBook.shared.set("file:" + url.path, !isFavourite(url)) { say(.refused(problem)) }
+        readSidebar()
+    }
+
+    func canRenameFolder(_ url: URL) -> Bool {
+        url.pathComponents.count > 2 && url.path != home && !Self.inTrash(url)
+            && !places.contains { $0.url.path == url.path } && !devices.contains { $0.url.path == url.path }
+    }
+
+    func isBin(_ url: URL) -> Bool {
+        url.path == home + "/.Trash" || (url.deletingLastPathComponent().lastPathComponent == ".Trashes" && url.lastPathComponent == String(geteuid()))
+    }
+
+    func askRenameFolder(_ url: URL) {
+        guard canRenameFolder(url), prompt == nil, working == 0 else { return }
+        newName = url.lastPathComponent
+        prompt = .rename(url)
+    }
+
+    func changeFolderDesign(_ urls: [URL]) {
+        iconsChanged = true
+        FolderDesigns.pick(urls)
+    }
+
+    /// The Bin action snapshots system Trash roots off main; an explicit selection never widens to the whole Bin.
+    func prepareDeletion(_ selected: [URL]? = nil) {
+        guard working == 0, prompt == nil else { return }
+        working += 1
+        let home = home, volumes = devices.map(\.url)
+        Task {
+            do {
+                let plan = try await Task.detached(priority: .userInitiated) {
+                    let fm = FileManager.default
+                    let roots = [URL(filePath: home + "/.Trash", directoryHint: .isDirectory)] + volumes.compactMap { volume -> URL? in
+                        guard (try? volume.resourceValues(forKeys: [.volumeIsLocalKey]))?.volumeIsLocal == true else { return nil }
+                        return try? fm.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: volume, create: false)
+                    }
+                    return try TrashDeletion.plan(selected, roots: roots)
+                }.value
+                if plan.count == 0 { say(.done("The Bin is empty.")) }
+                else { prompt = .delete(plan) }
+            } catch { say(.refused(error.localizedDescription)) }
+            working -= 1
+        }
+    }
+
+    /// Confirmation consumes the saved plan; cancellation just clears prompt and never calls this method.
+    func confirmPrompt(_ asked: Prompt) {
+        prompt = nil
+        switch asked {
+        case let .rename(url):
+            guard newName != url.lastPathComponent else { return }
+            run(.rename(url, to: newName))
+        case let .delete(plan):
+            working += 1
+            Task {
+                do {
+                    let count = try await Task.detached(priority: .userInitiated) { try TrashDeletion.perform(plan) }.value
+                    say(.done("Deleted \(count) \(count == 1 ? "item" : "items") permanently. This cannot be undone."))
+                } catch { say(.refused(error.localizedDescription)) }
+                working -= 1
+                reload()
+                if hits != nil { search() }
+            }
+        }
+    }
+
+    func eject(_ url: URL) {
+        guard working == 0 else { return }
+        working += 1
+        Task {
+            do {
+                let ejected = try await Task.detached(priority: .userInitiated) {
+                    guard Self.mountedDevices().contains(where: { $0.url == url && $0.ejectable }) else { return false }
+                    try NSWorkspace.shared.unmountAndEjectDevice(at: url)
+                    return true
+                }.value
+                guard ejected else { working -= 1; readSidebar(); return say(.refused("This volume is no longer available to eject.")) }
+                if folder.path == url.path || folder.path.hasPrefix(url.path + "/") { go(URL(filePath: home)) }
+                readSidebar()
+                say(.done("Ejected \(url.lastPathComponent)."))
+            } catch { say(.refused("Could not eject \(url.lastPathComponent): \(error.localizedDescription)")) }
+            working -= 1
+        }
+    }
+
+    /// Cmd+C: the picked files on the clipboard, for Cmd+V (copy) or Cmd+Option+V (move) here or in Finder.
     func copy(_ item: FolderItem? = nil) {
-        guard let item = item ?? selection else { return }
+        let picked = selections(for: item)
+        guard !picked.isEmpty else { return }
         FilesCut.shared.clear()
         let board = FilesCut.shared.board
         board.clearContents()
-        board.writeObjects([item.url as NSURL])
-        say(.done("Copied \(item.name). Cmd+V copies it into the folder shown, Cmd+Option+V moves it."))
+        board.writeObjects(picked.map { $0.url as NSURL })
+        say(.done("Copied \(picked.count == 1 ? picked[0].name : "\(picked.count) items"). Cmd+V copies into the folder shown, Cmd+Option+V moves."))
     }
 
-    /// Cmd+X: the picked item marked (dimmed) to move; the next Cmd+V moves it into the folder shown then, Esc unmarks it.
+    /// Cmd+X: the picked group marked (dimmed) to move; the next Cmd+V moves it into the folder shown then, Esc unmarks it.
     func cut(_ item: FolderItem? = nil) {
-        guard let item = item ?? selection else { return }
-        if let gone = FilesCut.shared.mark([item.url]) { return say(.refused("\(gone) is gone; nothing was cut.")) }
-        say(.done("Cut \(item.name). Cmd+V moves it into the folder shown; Esc keeps it where it is."))
+        let picked = selections(for: item)
+        guard !picked.isEmpty else { return }
+        if let gone = FilesCut.shared.mark(picked.map(\.url)) { return say(.refused("\(gone) is gone; nothing was cut.")) }
+        say(.done("Cut \(picked.count == 1 ? picked[0].name : "\(picked.count) items"). Cmd+V moves into the folder shown; Esc keeps the originals."))
     }
 
     /// Cmd+V moves the cut items into the shown folder (FileOps, so Cmd+Z puts them back), else copies the clipboard's
@@ -876,8 +1129,12 @@ final class FilesModel {
     /// or Finder. As Finder: a move on the same volume, a copy onto another or with Option held. A drop where the files
     /// already are, or of a folder onto itself, does nothing.
     func drop(_ urls: [URL], on target: URL) -> Bool {
-        let sources = urls.filter { $0.isFileURL && $0.path != target.path }
-        guard !sources.isEmpty else { return false }
+        let sources = urls.filter(\.isFileURL)
+        guard !sources.isEmpty, !sources.contains(where: { $0.standardizedFileURL == target.standardizedFileURL }) else { return false }
+        if places.last?.url == target {
+            run(.trash(sources))
+            return true
+        }
         let volume = Self.volume(target)
         let moving = !NSEvent.modifierFlags.contains(.option) && volume != nil && sources.allSatisfy { Self.volume($0)?.isEqual(volume) == true }
         if moving, sources.allSatisfy({ $0.deletingLastPathComponent().path == target.path }) { return false }
@@ -887,7 +1144,7 @@ final class FilesModel {
 
     /// Why the window won't run `request` in a Trash, or nil. The Trash takes items only through Move to Trash, whose undo
     /// knows where each came from: nothing is copied, moved, made or renamed in it, and nothing in it goes to the Trash
-    /// again (Pilot never deletes). Taking an item out of the Trash, and any undo, run.
+    /// again. Confirmed permanent deletion uses TrashDeletion separately. Taking an item out, and any undo, run.
     private static func trashRefusal(_ request: FileOps.Request) -> String? {
         let into = "Nothing goes into the Trash this way: use Move to Trash (Cmd+Backspace), so Cmd+Z can put it back."
         switch request {
@@ -896,7 +1153,7 @@ final class FilesModel {
             return inTrash(item.deletingLastPathComponent()) ? "\(item.lastPathComponent) is in the Trash; take it out before renaming it." : nil
         case let .trash(items):
             return items.first { inTrash($0.deletingLastPathComponent()) }.map {
-                "\($0.lastPathComponent) is already in the Trash. Pilot never deletes, so nothing is emptied from here."
+                "\($0.lastPathComponent) is already in the Bin. Use Delete Immediately to permanently delete it."
             }
         case .undo: return nil
         }
@@ -904,7 +1161,8 @@ final class FilesModel {
 
     /// Whether `folder` is a Trash or inside one: ~/.Trash, iCloud Drive's .Trash, or a volume's .Trashes.
     nonisolated static func inTrash(_ folder: URL) -> Bool {
-        folder.resolvingSymlinksInPath().pathComponents.contains { $0 == ".Trash" || $0 == ".Trashes" }
+        (folder.standardizedFileURL.pathComponents + folder.resolvingSymlinksInPath().pathComponents)
+            .contains { $0 == ".Trash" || $0 == ".Trashes" }
     }
 
     nonisolated private static func volume(_ url: URL) -> NSObject? {
@@ -919,7 +1177,7 @@ final class FilesModel {
         asking?.cancel()
         asked += 1
         let typed = query.trimmingCharacters(in: .whitespaces)
-        guard !typed.isEmpty else { (hits, searchNote) = (nil, nil); return }
+        guard !typed.isEmpty else { (hits, searchNote) = (nil, nil); pruneSelection(); return }
         let folder = folder, number = asked
         asking = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
@@ -937,6 +1195,7 @@ final class FilesModel {
         guard number == asked, folder == self.folder else { return }
         guard let found else {
             (hits, searchNote) = (Gallery.filter(items, typed), "Names in this folder only: searching inside it needs Full Disk Access.")
+            pruneSelection()
             return
         }
         let paths = found.prefix(Self.hitCap).map(\.path), hidden = sources.hidden()
@@ -944,6 +1203,7 @@ final class FilesModel {
             let made = await Task.detached(priority: .userInitiated) { paths.compactMap { FilesModel.item(URL(filePath: $0), hidden: hidden) } }.value
             guard !Task.isCancelled, number == asked, folder == self.folder else { return }
             (hits, searchNote) = (made, nil)
+            pruneSelection()
         }
     }
 
@@ -965,8 +1225,8 @@ final class FilesModel {
 
     /// A file's thumbnail (or with `icon` its own icon), `pixels` a side at most, made off the main thread once while
     /// the window is open; one being made is waited for.
-    func picture(_ url: URL, pixels: Int, icon: Bool = false) async -> NSImage? {
-        let key = "\(icon ? "icon \(iconEpoch) " : "")\(pixels) \(url.path)"
+    func picture(_ url: URL, pixels: Int, icon: Bool = false, modified: Date? = nil) async -> NSImage? {
+        let key = "\(icon ? "icon \(iconEpoch) " : "")\(modified?.timeIntervalSince1970 ?? 0) \(pixels) \(url.path)"
         if let made = pictures.object(forKey: key as NSString) { return made }
         guard !none.contains(key) else { return nil }
         let making = pending[key] ?? Task { [make = icon ? sources.icon : sources.make] in
@@ -994,7 +1254,7 @@ final class FilesModel {
 
     nonisolated static func isImage(_ item: FolderItem) -> Bool { item.type.flatMap { UTType($0) }?.conforms(to: .image) == true }
 
-    /// Whether a file asks QuickLook for a thumbnail (pictures, video, documents) in the grid and the inspector; folders
+    /// Whether a file asks QuickLook for a thumbnail (pictures, video, documents) in the list, grid and inspector; folders
     /// and apps keep their own icon.
     nonisolated static func thumbnails(_ item: FolderItem) -> Bool { !item.isFolder && !item.isApp }
 
@@ -1030,14 +1290,19 @@ final class FilesModel {
     /// The volumes Finder shows, the start-up disk first, each with its free and whole bytes.
     nonisolated static func mountedDevices() -> [Device] {
         let keys: [URLResourceKey] = [.volumeLocalizedNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
-                                      .volumeIsInternalKey, .volumeIsLocalKey, .volumeIsRootFileSystemKey]
+                                      .volumeIsInternalKey, .volumeIsLocalKey, .volumeIsRootFileSystemKey, .volumeIsEjectableKey, .volumeIsRemovableKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
         return urls.compactMap { url -> (Bool, Device)? in
             guard let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
             let symbol = values.volumeIsLocal == false ? "server.rack" : values.volumeIsInternal == true ? "internaldrive" : "externaldrive"
+            let volume = DiskEject.Volume(name: values.volumeLocalizedName ?? url.lastPathComponent, path: url.path,
+                                         ejectable: values.volumeIsEjectable ?? false, removable: values.volumeIsRemovable ?? false,
+                                         isInternal: values.volumeIsInternal ?? true, local: values.volumeIsLocal ?? false,
+                                         root: values.volumeIsRootFileSystem ?? false)
             return (values.volumeIsRootFileSystem == true,
                     Device(name: values.volumeLocalizedName ?? url.lastPathComponent, symbol: symbol, url: url,
-                           free: values.volumeAvailableCapacityForImportantUsage, total: values.volumeTotalCapacity.map(Int64.init)))
+                           free: values.volumeAvailableCapacityForImportantUsage, total: values.volumeTotalCapacity.map(Int64.init),
+                           ejectable: !DiskEject.ejectable([volume]).isEmpty))
         }
         .sorted { $0.0 && !$1.0 }
         .map(\.1)
@@ -1101,7 +1366,9 @@ struct FilesView: View {
                     FilesNotice(notice: notice, model: model)
                 }
                 ink.line.frame(height: 1)
-                status.padding(.horizontal, 16).frame(height: 30)
+                FilesPathBar(model: model).frame(height: 49)
+                ink.line.frame(height: 1)
+                status.padding(.horizontal, 16).frame(height: 27)
             }
             .frame(maxWidth: .infinity)
             ink.line.frame(width: 1)
@@ -1110,11 +1377,29 @@ struct FilesView: View {
         // The ground draws once: whole when Solid, none over Glass, whose tint carries it (as the app window's frame).
         .background(Theme.windowFill(ink.background))
         .background { keys }
+        .alert(model.prompt?.title ?? "", isPresented: Binding(get: { model.prompt != nil }, set: { if !$0 { model.prompt = nil } }),
+               presenting: model.prompt) { prompt in
+            switch prompt {
+            case .rename:
+                TextField("Folder name", text: $model.newName)
+                Button("Rename") { model.confirmPrompt(prompt) }.keyboardShortcut(.defaultAction)
+            case .delete:
+                Button("Delete Permanently", role: .destructive) { model.confirmPrompt(prompt) }
+            }
+            Button("Cancel", role: .cancel) { model.prompt = nil }
+        } message: { prompt in Text(prompt.message) }
+        // This container survives spring navigation. SwiftUI snapshots every URL when the drag begins.
+        .dragContainer(for: URL.self, itemID: \.path) { (ids: [String]) in model.drag(ids) }
+        .dragContainerSelection(model.selections.map(\.id))
+        .dragConfiguration(.init(allowMove: true))
+        .onDragSessionUpdated { session in
+            if case .ended = session.phase { model.endDrag() }
+        }
     }
 
     private var status: some View {
         HStack(spacing: 8) {
-            Text(Self.status(count: model.hits?.count ?? model.count, selected: model.selection)).lineLimit(1)
+            Text(Self.status(count: model.hits?.count ?? model.count, selected: model.selections)).lineLimit(1)
             if model.working > 0 {
                 ProgressView().controlSize(.mini)
                 Text("Working…").lineLimit(1)
@@ -1127,11 +1412,13 @@ struct FilesView: View {
         .font(ink.ui(12)).foregroundStyle(ink.muted)
     }
 
-    /// "10 items, 1 selected (2.1 MB)".
-    static func status(count: Int, selected: FolderItem?) -> String {
+    /// "10 items, 3 selected (2.1 MB)"; a total is shown only when every selected size is known.
+    static func status(count: Int, selected: [FolderItem]) -> String {
         let items = count == 1 ? "1 item" : "\(count) items"
-        guard let selected else { return items }
-        return selected.size.map { "\(items), 1 selected (\(FolderListing.size($0)))" } ?? "\(items), 1 selected"
+        guard !selected.isEmpty else { return items }
+        let picked = "\(items), \(selected.count) selected"
+        let sizes = selected.compactMap(\.size)
+        return sizes.count == selected.count ? "\(picked) (\(FolderListing.size(sizes.reduce(0, +))))" : picked
     }
 
     /// The window's keys: Cmd+N another window, Cmd+[ and ] back and forward, Cmd+Up the enclosing folder, Cmd+Down or
@@ -1203,6 +1490,33 @@ private struct PickedFill: ViewModifier {
     }
 }
 
+/// Native folder actions shared by the sidebar, breadcrumbs and empty space.
+private struct FilesFolderMenu: View {
+    let url: URL
+    let model: FilesModel
+
+    var body: some View {
+        Button("Open in New Window") { model.newWindow(url) }
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        Button("Info") { FilePreviewWindow.open(url) }
+        FilesCopyPathMenu(model: model, urls: [url])
+        Divider()
+        if !FilesModel.inTrash(url) || model.isFavourite(url) {
+            Button(model.isFavourite(url) ? "Remove Favourite" : "Add to Favourites") { model.toggleFavourite(url) }
+        }
+        if !FilesModel.inTrash(url) {
+            if model.canRenameFolder(url) { Button("Rename…") { model.askRenameFolder(url) } }
+            Button("Change Folder Design…") { model.changeFolderDesign([url]) }
+        }
+        if model.isBin(url) {
+            Button("Empty Bin…", role: .destructive) { model.prepareDeletion() }.disabled(model.working > 0)
+        }
+        if model.devices.contains(where: { $0.url == url && $0.ejectable }) {
+            Button("Eject") { model.eject(url) }.disabled(model.working > 0)
+        }
+    }
+}
+
 private struct FilesSidebar: View {
     @Environment(\.ink) private var ink
     let model: FilesModel
@@ -1221,7 +1535,7 @@ private struct FilesSidebar: View {
                     ForEach(model.devices) { device in
                         let free = device.free.map(FolderListing.size)
                         // "X available" under the meter, the toolbar's and the status bar's word, so the name keeps the row.
-                        row(device.url, device.symbol, device.name, help: free.map { "\($0) available" }) {
+                        row(device.url, device.symbol, device.name, folderIcon: false, help: free.map { "\($0) available" }) {
                             EmptyView()
                         } under: {
                             VStack(alignment: .leading, spacing: 4) {
@@ -1243,13 +1557,18 @@ private struct FilesSidebar: View {
     }
 
     /// A place, a favourite or a device: its glyph and name, what it shows at the right, and under it (a device's meter).
-    private func row(_ url: URL, _ symbol: String, _ title: String, help: String? = nil, @ViewBuilder trailing: () -> some View,
+    private func row(_ url: URL, _ symbol: String, _ title: String, folderIcon: Bool = true, help: String? = nil, @ViewBuilder trailing: () -> some View,
                      @ViewBuilder under: () -> some View = { EmptyView() }) -> some View {
         let here = model.folder == url.standardizedFileURL
         return Button { model.go(url) } label: {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 9) {
-                    Image(systemName: symbol).font(ink.ui(12)).frame(width: 16).foregroundStyle(here ? ink.accent : ink.text2)
+                    if folderIcon && !model.isBin(url) {
+                        FilesIcon(item: FolderItem(url: url, name: title, isFolder: true, size: nil, modified: nil, kind: "Folder", type: nil),
+                                  model: model, side: 16, lit: here)
+                    } else {
+                        Image(systemName: symbol).font(ink.ui(12)).frame(width: 16).foregroundStyle(here ? ink.accent : ink.text2)
+                    }
                     Text(title).font(ink.ui(13.5)).foregroundStyle(ink.text).lineLimit(1).truncationMode(.tail)
                     Spacer(minLength: 4)
                     trailing()
@@ -1264,6 +1583,70 @@ private struct FilesSidebar: View {
         .help(help.map { "\(FolderListing.shown(url)) · \($0)" } ?? FolderListing.shown(url))
         .accessibilityLabel(help.map { "\(title), \($0)" } ?? title)
         .accessibilityAddTraits(here ? .isSelected : [])
+        .modifier(FilesDropTarget(url: url, model: model))
+        .contextMenu { FilesFolderMenu(url: url, model: model) }
+    }
+}
+
+/// C: generous, equal-width folder targets, with middle ancestors available even in a narrow window.
+private struct FilesPathBar: View {
+    @Environment(\.ink) private var ink
+    let model: FilesModel
+    @State private var expanded = false
+    @State private var hovering = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let folders = model.pathFolders
+            let slots = max(3, Int(geometry.size.width / 128))
+            let hidden = folders.count > slots ? Array(folders.dropFirst().dropLast(slots - 2)) : []
+            HStack(spacing: 0) {
+                ForEach(folders) { place in
+                    if !hidden.contains(where: { $0.id == place.id }) {
+                        if place.id != folders.first?.id { ink.line.frame(width: 1) }
+                        target(place)
+                    } else if place.id == hidden.first?.id {
+                        ink.line.frame(width: 1)
+                        Button { expanded.toggle() } label: {
+                            Image(systemName: "ellipsis").font(ink.ui(14)).frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Enclosing folders")
+                        .accessibilityLabel("Show enclosing folders")
+                        .dropDestination(for: URL.self) { _, _ in false } isTargeted: { hovering = $0 }
+                        .task(id: hovering) {
+                            guard hovering else { return }
+                            try? await Task.sleep(for: .milliseconds(650))
+                            if !Task.isCancelled { expanded = true }
+                        }
+                        .popover(isPresented: $expanded, arrowEdge: .top) {
+                            VStack(spacing: 0) { ForEach(hidden) { target($0).frame(height: 36) } }
+                                .frame(width: 240).padding(6).background(ink.background)
+                        }
+                    }
+                }
+            }
+            .foregroundStyle(ink.text2)
+        }
+        .onChange(of: model.folder) { expanded = false }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Folder path")
+    }
+
+    private func target(_ place: FilesModel.Place) -> some View {
+        Button { model.go(place.url); expanded = false } label: {
+            HStack(spacing: 8) {
+                Image(systemName: place.symbol).foregroundStyle(ink.muted)
+                Text(place.title).font(ink.ui(12, place.url == model.folder ? .semibold : .regular)).lineLimit(1).truncationMode(.middle)
+            }
+            .padding(.horizontal, 10).frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(FolderListing.shown(place.url))
+        .accessibilityLabel(place.url.path)
+        .accessibilityAddTraits(place.url == model.folder ? .isSelected : [])
+        .modifier(FilesDropTarget(url: place.url, model: model))
+        .contextMenu { FilesFolderMenu(url: place.url, model: model) }
     }
 }
 
@@ -1425,11 +1808,14 @@ private struct FilesContent: View {
         // Search hits come from many folders, so empty space is no folder to drop into while they show.
         .dropDestination(for: URL.self) { urls, _ in model.hits == nil && model.drop(urls, on: model.folder) } isTargeted: { _ in }
         .contextMenu {
-            Button("New Folder") { model.newFolder() }
-            FilesNewFileMenu(model: model)
-            Button("Paste Here") { model.paste(moving: false) }
-            Button("Move Here") { model.paste(moving: true) }
-            FilesCopyPathMenu(model: model, url: model.folder)
+            if !FilesModel.inTrash(model.folder) {
+                Button("New Folder") { model.newFolder() }
+                FilesNewFileMenu(model: model)
+                Button("Paste Here") { model.paste(moving: false) }
+                Button("Move Here") { model.paste(moving: true) }
+                Divider()
+            }
+            FilesFolderMenu(url: model.folder, model: model)
             FilesUndoItem(model: model)
         }
     }
@@ -1464,6 +1850,7 @@ private struct FilesContent: View {
         case (_, ">", [.command, .shift]): model.showHidden.toggle()
         case (.return, _, []): model.beginRename()
         case (.delete, _, .command): model.trash()
+        case (_, "a", .command): model.selectAll()
         case (_, "c", .command): model.copy()
         case (_, "x", .command): model.cut()
         case (.escape, _, []):
@@ -1553,11 +1940,11 @@ private struct FilesNewFileMenu: View {
 /// Copy path's three forms for the right-click, each named by what it copies.
 private struct FilesCopyPathMenu: View {
     let model: FilesModel
-    let url: URL
+    let urls: [URL]
     var body: some View {
-        Menu("Copy Path") {
+        Menu(urls.count == 1 ? "Copy Path" : "Copy Paths") {
             ForEach(FolderListing.PathForm.allCases, id: \.self) { form in
-                Button(form.title) { model.copyPath(url, as: form) }
+                Button(form.title) { model.copyPaths(urls, as: form) }
             }
         }
     }
@@ -1567,10 +1954,8 @@ private struct FilesCopyPathMenu: View {
 /// it (onto a folder here moves it, through FileOps), a folder takes drops, and the right-click has the Folder widget's
 /// read-only actions, then Rename, Copy, Move to Trash and Undo.
 private struct FilesPress: ViewModifier {
-    @Environment(\.ink) private var ink
     let item: FolderItem
     let model: FilesModel
-    @State private var dropping = false
 
     func body(content: Content) -> some View {
         content
@@ -1578,24 +1963,36 @@ private struct FilesPress: ViewModifier {
             .opacity(FilesCut.shared.paths.contains(item.id) ? 0.45 : 1)
             .contentShape(.rect)
             .onTapGesture(count: 2) { model.open(item) }
-            .simultaneousGesture(TapGesture().onEnded { model.selected = item.id })
-            .onDrag { NSItemProvider(object: item.url as NSURL) }
-            .modifier(FolderDrop(item: item, model: model, on: $dropping))
-            .overlay { if dropping { RoundedRectangle(cornerRadius: ink.radius(7), style: .continuous).strokeBorder(ink.accent, lineWidth: 2) } }
+            .simultaneousGesture(TapGesture().onEnded { model.select(item, modifiers: NSEvent.modifierFlags) })
+            .draggable(containerItemID: item.id)
+            .modifier(FolderDrop(item: item, model: model))
             .contextMenu {
                 ForEach(model.actions(item), id: \.title) { action in Button(action.title, action: action.run) }
-                FilesCopyPathMenu(model: model, url: item.url)
+                if item.isFolder { Button("Open in New Window") { model.newWindow(item.url) } }
+                Button("Info") { FilePreviewWindow.open(item.url) }
+                FilesCopyPathMenu(model: model, urls: model.selections(for: item).map(\.url))
                 Divider()
-                Button("Rename") { model.beginRename(item) }
+                if !FilesModel.inTrash(item.url.deletingLastPathComponent()) {
+                    Button("Rename") { model.beginRename(item) }
+                    if item.isFolder {
+                        Button(model.isFavourite(item.url) ? "Remove Favourite" : "Add to Favourites") { model.toggleFavourite(item.url) }
+                        Button("Change Folder Design…") { model.changeFolderDesign(model.selections(for: item).filter(\.isFolder).map(\.url)) }
+                    }
+                }
                 Button("Copy") { model.copy(item) }
                 Button("Cut") { model.cut(item) }
-                Button("Move to Trash") { model.trash(item) }
+                if model.selections(for: item).allSatisfy({ FilesModel.inTrash($0.url.deletingLastPathComponent()) }) {
+                    Button("Delete Immediately…", role: .destructive) { model.trash(item) }
+                } else {
+                    Button("Move to Trash") { model.trash(item) }
+                }
                 FilesUndoItem(model: model)
             }
             .help(item.name)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.isFolder ? "\(item.name), folder" : "\(item.name), \(item.kind), \(FolderListing.size(item.size))")
-            .accessibilityAddTraits(model.selected == item.id ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction(named: "Select") { model.select(item) }
             .accessibilityAction(named: "Open") { model.open(item) }
     }
 }
@@ -1605,14 +2002,33 @@ private struct FilesPress: ViewModifier {
 private struct FolderDrop: ViewModifier {
     let item: FolderItem
     let model: FilesModel
-    @Binding var on: Bool
 
     func body(content: Content) -> some View {
         if item.isFolder {
-            content.dropDestination(for: URL.self) { urls, _ in model.drop(urls, on: item.url) } isTargeted: { on = $0 }
+            content.modifier(FilesDropTarget(url: item.url, model: model))
         } else {
             content
         }
+    }
+}
+
+/// Shared by folder rows, the sidebar and every path segment. Hovering only navigates; drop alone writes.
+private struct FilesDropTarget: ViewModifier {
+    @Environment(\.ink) private var ink
+    let url: URL
+    let model: FilesModel
+    @State private var targeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .dropDestination(for: URL.self) { urls, _ in model.drop(urls, on: url) } isTargeted: { targeted = $0 }
+            .overlay { if targeted { Rectangle().strokeBorder(ink.accent, lineWidth: 2).allowsHitTesting(false) } }
+            .task(id: targeted) {
+                guard targeted, model.canSpring(into: url) else { return }
+                try? await Task.sleep(for: .milliseconds(800))
+                guard !Task.isCancelled, model.canSpring(into: url) else { return }
+                model.go(url)
+            }
     }
 }
 
@@ -1662,10 +2078,10 @@ private struct FilesRow: View {
     let model: FilesModel
 
     var body: some View {
-        let picked = model.selected == item.id
+        let picked = model.selectedIDs.contains(item.id)
         HStack(spacing: 12) {
             HStack(spacing: 10) {
-                FilesIcon(item: item, model: model, side: 18, lit: picked)
+                FilesIcon(item: item, model: model, side: 18, lit: picked, thumbnail: true)
                 FilesName(item: item, model: model, size: 13.5)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1675,7 +2091,7 @@ private struct FilesRow: View {
         .font(ink.mono(12)).foregroundStyle(ink.text2).lineLimit(1)
         .padding(.horizontal, 16).frame(height: 30)
         .modifier(PickedFill(on: picked))
-        .modifier(PickedFrame(on: picked, model: model))
+        .modifier(PickedFrame(on: model.selected == item.id, model: model))
         .modifier(FilesPress(item: item, model: model))
     }
 }
@@ -1698,7 +2114,7 @@ private struct FilesTile: View {
     @State private var picture: NSImage?
 
     var body: some View {
-        let picked = model.selected == item.id
+        let picked = model.selectedIDs.contains(item.id)
         VStack(spacing: 8) {
             Group {
                 // A picture fills the tile; a document's page or a video's frame shows whole.
@@ -1716,12 +2132,14 @@ private struct FilesTile: View {
         }
         .padding(10).frame(maxWidth: .infinity)
         .modifier(PickedFill(on: picked, radius: 10))
-        .modifier(PickedFrame(on: picked, model: model))
+        .modifier(PickedFrame(on: model.selected == item.id, model: model))
         .modifier(FilesPress(item: item, model: model))
         // QuickLook's thumbnail for any file it draws one for (pictures, video, documents); folders and apps keep their icon.
-        .task(id: item.url.path) {
+        .task(id: "\(item.id) \(item.modified?.timeIntervalSince1970 ?? 0)") {
             guard FilesModel.thumbnails(item) else { return }
-            picture = await model.picture(item.url, pixels: 240)
+            picture = nil
+            let made = await model.picture(item.url, pixels: 240, modified: item.modified)
+            if !Task.isCancelled { picture = made }
         }
     }
 }
@@ -1734,19 +2152,26 @@ private struct FilesIcon: View {
     let model: FilesModel
     let side: CGFloat
     var lit = false
+    var thumbnail = false
     @State private var icon: NSImage?
 
     var body: some View {
         Group {
             if let icon {
-                Image(nsImage: icon).resizable().interpolation(.high)
+                Image(nsImage: icon).resizable().interpolation(.high).scaledToFit()
             } else {
                 Image(systemName: FolderListing.symbol(item)).font(.system(size: side * 0.75)).foregroundStyle(lit ? ink.accent : ink.muted)
             }
         }
         .frame(width: side, height: side)
         .accessibilityHidden(true)
-        .task(id: "\(model.iconEpoch) \(item.id)") { icon = await model.picture(item.url, pixels: Int(side * 2), icon: true) }
+        .task(id: "\(model.iconEpoch) \(item.id) \(item.modified?.timeIntervalSince1970 ?? 0)") {
+            let fallback = await model.picture(item.url, pixels: Int(side * 2), icon: true)
+            guard !Task.isCancelled else { return }
+            icon = fallback
+            if thumbnail, FilesModel.thumbnails(item),
+               let made = await model.picture(item.url, pixels: Int(side * 2), modified: item.modified), !Task.isCancelled { icon = made }
+        }
     }
 }
 
@@ -1796,7 +2221,7 @@ private struct FilesInspector: View {
         }
         .padding(.horizontal, Self.padding).padding(.top, 44).padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .task(id: "\(model.iconEpoch) \(item.id)") { await load(item) }
+        .task(id: "\(model.iconEpoch) \(item.id) \(item.modified?.timeIntervalSince1970 ?? 0)") { await load(item) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Inspector")
     }
@@ -1850,7 +2275,7 @@ private struct FilesInspector: View {
             icon = made
         }
         guard look == .picture || (look == .icon && FilesModel.thumbnails(item)) else { return }
-        if let made = await model.picture(item.url, pixels: 640), !Task.isCancelled { picture = made }
+        if let made = await model.picture(item.url, pixels: 640, modified: item.modified), !Task.isCancelled { picture = made }
     }
 }
 
@@ -1859,6 +2284,9 @@ private struct FilesKeysHelp: View {
     @Environment(\.ink) private var ink
 
     static let keys: [(keys: String, does: String)] = [
+        ("⌘-click", "Toggle a file in the selection"),
+        ("⇧-click", "Select a range"),
+        ("⌘A", "Select all"),
         ("Space", "Quick Look, again to close"),
         ("⌘K", "File actions"),
         ("⌘I", "Preview and info"),

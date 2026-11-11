@@ -30,6 +30,11 @@ final class BarDrops {
         var screen: CGRect
         var visible: CGRect
         var bar: CGRect?
+        /// Each drop's item's centre along this screen's bar, for those on it.
+        var items: [BarDropKind: CGFloat] = [:]
+        /// The flat foot of the bar window the pill's item stands on (PillPlacement.ground): its island, the floating
+        /// strip or the whole bar; nil when unknown.
+        var ground: CGRect? = nil
     }
 
     private(set) var keys = DropKeys()
@@ -79,7 +84,8 @@ final class BarDrops {
             return Spot(screen: fallback, visible: fallback, bar: nil)
         }
         let bar = Screens.bars[screen.localizedName].map { TopBarGeometry.frame(screen: screen.frame, strip: $0) }
-        return Spot(screen: screen.frame, visible: screen.visibleFrame, bar: bar)
+        return Spot(screen: screen.frame, visible: screen.visibleFrame, bar: bar, items: bar.map { BarDropLights.shared.itemCentres(on: $0) } ?? [:],
+                    ground: bar.flatMap { BarDropLights.shared.ground(of: .pill, on: $0) })
     }
 
     /// The open drops' level: one under the bar when their screen has one.
@@ -88,9 +94,13 @@ final class BarDrops {
     func isOpen(_ drop: BarDropKind) -> Bool { panels[drop] != nil }
     func window(_ drop: BarDropKind) -> NSWindow? { panels[drop] }
 
-    /// Opens `drop` showing `face` beside any other, and gives it the keyboard; an open one keeps its face.
-    func open(_ drop: BarDropKind, face: BarDropFace) {
+    /// Opens `drop` showing `face` beside any other, and gives it the keyboard; an open one keeps its face. `spot`, the
+    /// clicked item's (the pill's), is where it hangs when nothing else is open; else the focused display.
+    func open(_ drop: BarDropKind, face: BarDropFace, at spot: Spot? = nil) {
         guard !keys.open.contains(drop) else { return }
+        // A drop that opens alone takes `spot` (nil: the focused display): the pill always opens alone, and a drop that
+        // closes the pill opens alone too (DropKeys); beside an open drop it keeps that drop's spot.
+        if drop == .pill || keys.open.isEmpty || keys.open.contains(.pill) { self.spot = spot }
         faces[drop] = face
         keys.toggle(drop)
         sync()
@@ -131,10 +141,12 @@ final class BarDrops {
     }
 
     /// A click in `window`, nil in another app: in a drop it takes the keyboard; on the top bar it leaves the drops to
-    /// the item clicked (a bar drop's item toggles its own); anywhere else it hides both.
-    func clicked(in window: NSWindow?) {
+    /// the item clicked (a bar drop's item toggles its own); in an edit list that drives the drops (Menu bar › Pill, at
+    /// `point`) it leaves them open; anywhere else it hides both.
+    func clicked(in window: NSWindow?, at point: CGPoint? = nil) {
         if let window, let drop = panels.first(where: { $0.value === window })?.key { return keys.click(in: drop) }
         if window is TopBarPanel { return }
+        if window != nil, let point, BarPanel.keepsOpen(.drops, at: point) { return }
         hideAll()
     }
 
@@ -151,12 +163,15 @@ final class BarDrops {
         }
         let spot = self.spot ?? focused()
         self.spot = spot
-        let frames = BarDropPlacement.frames(open: keys.open, screen: spot.screen, visible: spot.visible, bar: spot.bar)
+        var frames = BarDropPlacement.frames(open: keys.open, screen: spot.screen, visible: spot.visible, bar: spot.bar, items: spot.items)
+        if keys.open.contains(.pill) {
+            frames[.pill] = PillPlacement.frame(item: spot.items[.pill], visible: spot.visible, bar: spot.bar, ground: spot.ground)
+        }
         let motion = mode
         for (drop, frame) in frames {
             if let panel = panels[drop] {
                 guard panel.frame != frame else { continue }
-                // The one left slides back to the centre, or the first aside for the second, on the drawer's curve.
+                // The one left slides back under its item, or the first aside for the second, on the drawer's curve.
                 if motion == .slide {
                     NSAnimationContext.runAnimationGroup { context in
                         context.duration = BarDropMotion.down
@@ -265,7 +280,7 @@ final class BarDrops {
             MainActor.assumeIsolated { self?.clicked(in: nil) }
         }) { mouseMonitors.append(outside) }
         if let inside = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.clicked(in: event.window) }
+            MainActor.assumeIsolated { self?.clicked(in: event.window, at: NSEvent.mouseLocation) }
             return event
         }) { mouseMonitors.append(inside) }
     }

@@ -50,7 +50,7 @@ struct RingsPage: View {
     var body: some View {
         let rings = store.rings
         let ring = current.ring.flatMap(rings.ring(id:)) ?? rings.rings.first
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             HStack(alignment: .top, spacing: 12) {
                 list(rings, picked: ring?.id).frame(width: 204)
                 if let ring {
@@ -79,8 +79,8 @@ struct RingsPage: View {
         }
     }
 
-    static let intro = "Hold a mouse button or a key and a ring of Pilot's actions opens at the pointer: flick toward one and let go. "
-        + "Scroll while it is open for the next ring."
+    static let intro = "Hold a mouse button or a key for a ring of actions at the pointer; flick to one and let go."
+    static let introInfo = "Scroll while it is open for the next ring."
 
     // MARK: the list
 
@@ -243,8 +243,8 @@ struct RingsPage: View {
     /// on it), and Catch one… for a button Pilot has not heard yet. A button holds one hold, so picking one moves its hold here.
     private func holdMenu(_ ring: Ring) -> some View {
         let binds = engine.binds.store.mouseBinds
-        let rows = MouseButtonsPage.rows(binds, found: engine.mouseButtons.found, labels: [:])
-        let hyper = MouseButtonsPage.hyperRows(binds, plain: rows, labels: [:])
+        let rows = MouseButtonsBlocks.rows(binds, found: engine.mouseButtons.found, labels: [:])
+        let hyper = MouseButtonsBlocks.hyperRows(binds, plain: rows, labels: [:])
         let buttons: [Hold] = rows.compactMap { row in
             guard let n = row.button else { return nil }
             // What it sends: its own bind's, else its Hyper bind's, else its button number.
@@ -261,7 +261,7 @@ struct RingsPage: View {
                 }
             }
             Divider()
-            Button("Catch another button in Binds › Mouse…") { go(AppPlace(.mouse)) }
+            Button("Catch another button in \(AppPlace(.mouse).path)…") { go(AppPlace(.mouse)) }
         } label: {
             Label("Hold a mouse button", systemImage: "computermouse")
         }
@@ -414,7 +414,7 @@ struct RingsPage: View {
 
     /// Every action a wedge may hold (none that asks for typing), searched as the bind editor's list is.
     private func actionPicker(_ ring: Ring, _ path: [Int]) -> some View {
-        let actions = MouseButtonsPage.choices(choices, search: query)
+        let actions = MouseButtonsBlocks.choices(choices, search: query)
         return VStack(alignment: .leading, spacing: 8) {
             SearchBox(prompt: "Search actions", text: $query, focused: $searching)
                 .onAppear { searching = true }

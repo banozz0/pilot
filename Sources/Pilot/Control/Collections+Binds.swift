@@ -2,7 +2,7 @@ import Foundation
 import PilotCore
 
 extension ControlVerbs {
-    /// The Binds page's lists (CLI W5): the bind presets, what holding Hyper shows (Binds › Overlay), and the macOS
+    /// The Binds page's lists (CLI W5): the bind presets, what holding Hyper shows (Binds › More › Overlay), and the macOS
     /// shortcuts a plain combo clashes with (Conflicts). `conflicts` reads and writes ShortcutConflicts; a test hands in
     /// one on a fake domain, so no test touches com.apple.symbolichotkeys.
     func registerBindCollections(_ app: ControlActions, conflicts: @escaping @Sendable @MainActor () -> ShortcutConflicts = { .shared }) {
@@ -47,7 +47,7 @@ extension ControlVerbs {
             }
         }))
 
-        register(ControlCollection("overlay-picks", help: "Every Hyper bind the overlay can show, with whether it shows now (Binds › Overlay). add shows one and remove hides one, which turns the overlay to My own pick from what it shows; remove all starts an empty pick. pilot set overlayMode every shows all again.",
+        register(ControlCollection("overlay-picks", help: "Every Hyper bind the overlay can show, with whether it shows now (Binds › More › Overlay). add shows one and remove hides one, which turns the overlay to My own pick from what it shows; remove all starts an empty pick. pilot set overlayMode every shows all again.",
                                    fields: [.init("action", help: "a bind's action id, from this list")],
                                    rowKey: "action",
                                    list: { () throws(ControlError) in .array(try Self.overlayChoices(app.running()).map(Self.overlayRow)) },
@@ -62,7 +62,7 @@ extension ControlVerbs {
             return try Self.showInOverlay(id, false, engine)
         }))
 
-        register(ControlCollection("mouse", help: "Every mouse bind Binds › Mouse shows (P58): its trigger (\"Mouse 4\" the plain press, \"Hyper+Mouse 4\" with Hyper held, \"Hyper+Mouse Scroll Up\"), the action it runs and the mouse a media key came from. remove frees one trigger, which does its own job again. pilot bind <action> \"Mouse 4\" sets one.",
+        register(ControlCollection("mouse", help: "Every mouse bind \(AppPlace(.mouse).path) shows (P58): its trigger (\"Mouse 4\" the plain press, \"Hyper+Mouse 4\" with Hyper held, \"Hyper+Mouse Scroll Up\"), the action it runs and the mouse a media key came from. remove frees one trigger, which does its own job again. pilot bind <action> \"Mouse 4\" sets one.",
                                    rowKey: "trigger",
                                    list: { () throws(ControlError) in
             let engine = try app.running()
@@ -77,7 +77,7 @@ extension ControlVerbs {
             return .object(["freed": .string(held.trigger.label), "action": .string(held.bind.action)])
         }))
 
-        register(ControlCollection("key-swaps", help: "Binds › Swap keys (Q406): pairs of keys swapped while Pilot runs, each typing the other, with why one waits (a Hyper key in it, or another tool's mapping). add swaps two keys and remove frees a pair, each after Allow. Keys: \(SwapKey.allCases.map(\.rawValue).joined(separator: ", ")).",
+        register(ControlCollection("key-swaps", help: "Binds › More › Swap keys (Q406): pairs of keys swapped while Pilot runs, each typing the other, with why one waits (a Hyper key in it, or another tool's mapping). add swaps two keys and remove frees a pair, each after Allow. Keys: \(SwapKey.allCases.map(\.rawValue).joined(separator: ", ")).",
                                    fields: [.init("keys", help: "two keys as first:second, e.g. capsLock:leftControl")],
                                    rowKey: "keys",
                                    asks: [.add, .remove],
@@ -166,7 +166,7 @@ extension ControlVerbs {
                         "problem": problem.map(JSONValue.string) ?? .null])
     }
 
-    /// Binds › Overlay's switch on one bind, answered with its row as the overlay now holds it.
+    /// Binds › More › Overlay's switch on one bind, answered with its row as the overlay now holds it.
     private static func showInOverlay(_ id: String, _ on: Bool, _ engine: Engine) throws(ControlError) -> JSONValue {
         guard overlayChoices(engine).contains(where: { $0.id == id }) else {
             throw ControlError(.unknownAction, "\(id) is not a Hyper bind the overlay shows; pilot list overlay-picks lists them")

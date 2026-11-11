@@ -17,7 +17,7 @@ struct BarDropTests {
 
     @Test("One open drop is centred under the bar, 760 by 560, either kind")
     func oneCentred() {
-        for kind in BarDropKind.allCases {
+        for kind in BarDropKind.paired {
             let frames = BarDropPlacement.frames(open: [kind], screen: Self.screen, visible: Self.visible, bar: Self.bar)
             #expect(frames.count == 1)
             #expect(frames[kind] == CGRect(x: 340, y: 1038 - 560, width: 760, height: 560))

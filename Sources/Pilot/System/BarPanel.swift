@@ -59,6 +59,20 @@ final class BarPanel: NSObject {
         (shown, shownExtension) = (id, ext)
     }
 
+    /// What an edit list drives live: the shown bar panel (the Pilot menu) or the open bar drops (the pill).
+    enum Kept { case panel, drops }
+
+    /// Views where a click leaves what they drive open (Menu bar › Pilot menu and › Pill), so each change lands in the
+    /// open menu or pill as it is made: Settings is Pilot's own window, so its clicks were outside and closed it (Sven on
+    /// build 2276).
+    private static var keepers: [(box: ScreenAnchor.Box, kept: Kept)] = []
+    static func keepOpen(_ box: ScreenAnchor.Box, _ kept: Kept) { keepers.append((box, kept)) }
+    static func release(_ box: ScreenAnchor.Box) { keepers.removeAll { $0.box === box } }
+    /// Whether a click at `point` (screen points) lands in a keeper of `kept`.
+    static func keepsOpen(_ kept: Kept, at point: CGPoint) -> Bool {
+        keepers.contains { $0.kept == kept && $0.box.view?.window?.isVisible == true && $0.box.view?.screenFrame?.contains(point) == true }
+    }
+
     /// Takes the shown panel down: after a screen change, or Power's popover once its action runs.
     @objc func close() {
         guard shown != nil else { return }
@@ -102,7 +116,7 @@ final class BarPanelWindow: BarPanelPresenting {
                     if let escape = (panel as? KeyPanel)?.escape { escape() } else { self.closeFromOutside() }
                     return true
                 }
-                let onPanel = event.window === panel || self.menuOpen
+                let onPanel = event.window === panel || self.menuOpen || BarPanel.keepsOpen(.panel, at: NSEvent.mouseLocation)
                 if BarPanelPlacement.clickCloses(at: NSEvent.mouseLocation, onPanel: onPanel, item: item) { self.closeFromOutside() }
                 return false
             }
@@ -123,7 +137,7 @@ final class BarPanelWindow: BarPanelPresenting {
     /// dropdown is .barPopovers. `margins` is the clear room round a face that draws its own soft shadow
     /// (Look.chromeMargins); a popover's face has none.
     static func keyPanel(_ content: some View, surface: StyleSurface, margins: NSEdgeInsets = NSEdgeInsetsZero,
-                         level: NSWindow.Level, place: @escaping (CGSize) -> NSRect) -> KeyPanel {
+                         level: NSWindow.Level, takesKey: Bool = true, place: @escaping (CGSize) -> NSRect) -> KeyPanel {
         let panel = KeyPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         let host = NSHostingView(rootView: content.styled(surface).pilotTheme().fixedSize()
             .onGeometryChange(for: CGSize.self, of: \.size) { [weak panel] size in
@@ -138,8 +152,9 @@ final class BarPanelWindow: BarPanelPresenting {
         panel.appearance = Look.shared.appearance(for: surface)
         panel.margins = margins
         panel.level = level
+        panel.refusesKey = !takesKey  // a notification card never takes it: the app in front keeps its typing
         panel.orderFrontRegardless()
-        panel.makeKey()
+        if takesKey { panel.makeKey() }
         return panel
     }
 
@@ -171,7 +186,9 @@ final class KeyPanel: NSPanel {
     var escape: (() -> Void)?
     /// The clear room round a restyled panel's face for its shadow (PopSurface.margins).
     var margins = NSEdgeInsetsZero
-    override var canBecomeKey: Bool { true }
+    /// Clicks reach it but it never becomes key: a surface that must leave the keyboard with the app in front.
+    var refusesKey = false
+    override var canBecomeKey: Bool { !refusesKey }
 
     override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
@@ -186,11 +203,16 @@ final class KeyPanel: NSPanel {
     /// The face's edges under the pointer, whose resize cursor it wears; nil off every edge.
     private var under: FaceEdges?
 
-    /// Resizable, from the face's edges once it has margins round it; their resize cursors show as the pointer passes.
-    func resizesFromFace() {
+    /// Resizable from the face's edges once it has margins round it; their resize cursors show as the pointer passes.
+    /// `withoutMargins` pulls a margin-less face's own edges too: a borderless window has no frame of its own to pull. Only
+    /// the notification drawer asks for it, so every other panel keeps its behaviour (review B3).
+    func resizesFromFace(withoutMargins: Bool = false) {
         styleMask.insert(.resizable)
-        if !NSEdgeInsetsEqual(margins, NSEdgeInsetsZero) { acceptsMouseMovedEvents = true }
+        edgesWithoutMargins = withoutMargins
+        if withoutMargins || !NSEdgeInsetsEqual(margins, NSEdgeInsetsZero) { acceptsMouseMovedEvents = true }
     }
+
+    private var edgesWithoutMargins = false
 
     override func sendEvent(_ event: NSEvent) {
         if let escape, event.type == .keyDown, Int64(event.keyCode) == KeyCode.escape { return escape() }
@@ -200,7 +222,7 @@ final class KeyPanel: NSPanel {
             return anchor.take(event)
         }
         if event.type == .leftMouseDown || event.type == .mouseMoved, styleMask.contains(.resizable),
-           !NSEdgeInsetsEqual(margins, NSEdgeInsetsZero) {
+           edgesWithoutMargins || !NSEdgeInsetsEqual(margins, NSEdgeInsetsZero) {
             let edges = FaceEdges.at(event.locationInWindow, window: frame.size, margins: margins)
             if event.type == .leftMouseDown, let edges { return resizeFace(edges) }
             // The cursor changes only as the pointer crosses onto, along or off an edge.

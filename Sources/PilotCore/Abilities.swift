@@ -50,9 +50,9 @@ public enum Abilities {
         typed("appCommands", "App commands", "Type an app's name or what it does, music or new event; Return runs that app's own command.",
               "new event"),
         typed("emoji", "Emoji", "Type a word, fire or heart; Return types the emoji where you were.", "fire"),
-        typed("quicklinks", "Quicklinks", "Type a quicklink's keyword and words to open a search; make them on Launcher › Quicklinks."),
+        typed("quicklinks", "Quicklinks", "Type a quicklink's keyword and words to open a search; make them on Launcher › More › Quicklinks."),
         // Its GIFs folder and GIPHY key sit under this row on Launcher › Abilities (page map, Sven 2026-10-17).
-        typed("stickers", "Stickers and GIFs", "Open Trigger › Stickers and GIFs: emoji as pictures, your GIFs folder and GIPHY's; Return pastes one.",
+        typed("stickers", "Stickers and GIFs", "Open Actions › Stickers and GIFs: emoji as pictures, your GIFs folder and GIPHY's; Return pastes one.",
               "stickers"),
         typed("snippets", "Snippets", "Type a snippet's keyword in any app, or here, to paste its text; write them on the Snippets page."),
     ]
@@ -332,7 +332,11 @@ public enum Abilities {
         "system.nextWallpaper": "Puts the next wallpaper on; Look › Wallpaper picks the images, the order and the screens.",
         "system.nextWallpaperAll": "Puts the next wallpaper on every screen at once, each from its own folders.",
         "system.nightShift": "Turns Night Shift on or off.",
+        "system.pill": "Drops the pill's views from the top bar (Music for now); with the top bar off, from the top of the screen.",
+        "system.themeCarousel": "Browses the theme packs your style takes in the Carousel, each drawn as a desktop with your apps; Return applies one after its Allow.",
+        "system.wallpaperCarousel": "Browses the current theme's wallpapers, or the folders that cycle, in the Carousel; Return sets one, F keeps it as a favourite.",
         "system.openNotification": "Opens the latest notification.",
+        "system.notificationDrawer": "Opens the list of notifications Pilot has shown.",
         "system.previousWallpaper": "Goes back to the wallpaper before.",
         "system.previousWallpaperAll": "Goes back to the wallpaper before on every screen at once.",
         "system.restart": "Restarts the Mac.",

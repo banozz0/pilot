@@ -752,9 +752,17 @@ final class EditorModel {
 
     /// The capture with its marks and crop, at its own pixels, drawn off the main thread (a blur over a 5K capture takes
     /// a while, and the Hyper tap's run loop is the main one).
-    func export() async -> CGImage? {
-        commitText()
-        commitCrop()
+    func export(committing: Bool = true) async -> CGImage? {
+        if committing { commitText(); commitCrop() }
+        var document = self.document
+        if !committing {
+            if tool == .crop { document.setCrop(cropEdit) }
+            if let id = typing {
+                let text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.isEmpty { document.delete(id) }
+                else { document.update(id) { if case .text(_, let at, let pill) = $0.kind { $0.kind = .text(text, at: at, pill: pill) } } }
+            }
+        }
         guard document.edited || resized != nil else { return image }
         let job = Unchecked((image, document, scale, document.edited, resized.map { _ in exportSize }, screen?.image))
         return await Task.detached(priority: .userInitiated) {

@@ -67,6 +67,8 @@ enum SystemModule {
         add(&registry, "clearNotification", "Clear latest notification", nil, .system) { NotificationKeys.clearLatest() }
         add(&registry, "clearAllNotifications", "Clear all notifications", nil, .system) { NotificationKeys.clearAll() }
         add(&registry, "openNotification", "Open latest notification", nil, .system) { NotificationKeys.openLatest() }
+        // The drawer of Pilot's own notifications (spec notifications.html), bindable with no default key; the bell opens it too.
+        add(&registry, "notificationDrawer", "Notification drawer", nil, .system, keywords: "bell notifications list") { PilotNotifications.shared.toggleDrawer() }
         // Omarchy's Exposé key, a default plain combo (story 106); Shortcut conflicts turns macOS's own Ctrl+Up off.
         add(&registry, "missionControl", "Mission Control", Key(keyCode: Key("up").keyCode, modifiers: .ctrl, hyper: false), .system) {
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"), configuration: .init())
@@ -113,6 +115,20 @@ enum SystemModule {
             WallpaperSwitch.step(forward: false, everyScreen: true)
         }
 
+        // The Carousel's Wallpapers mode (spec desktop-controls T8): the current theme's wallpapers, or the cycling folders,
+        // browsed by key on the focused screen; no key until Sven binds one.
+        add(&registry, "wallpaperCarousel", "Browse wallpapers", nil, .system, keywords: "carousel wallpaper picker favourites") {
+            WallpaperCarouselPanel.shared.toggle(.wallpapers, on: Screens.focusedScreen)
+        }
+        // Its Themes mode (T9): every theme pack the style takes, drawn as a desktop; Return applies one after its Allow.
+        // Either bind switches the open Carousel to its mode.
+        add(&registry, "themeCarousel", "Browse themes", nil, .system, keywords: "carousel theme picker look colours") {
+            WallpaperCarouselPanel.shared.toggle(.themes, on: Screens.focusedScreen)
+        }
+
+        // The pill's drop (spec desktop-controls T5) on the focused display, by key; works with the top bar off too.
+        add(&registry, "pill", "Open the pill", nil, .system, keywords: "pill music now playing top bar drop") { PillDrop.shared.toggle() }
+
         // Omarchy's Super+Ctrl+Alt+T, which flashes the time (story 188): the time, date, battery and weather, read on the press.
         add(&registry, "infoHUD", "Show time, battery and weather", Key("t", [.ctrl, .alt]), .system, tier: .v1_1) { InfoHUD.show() }
         // Sven, 2026-10-23 (Q420): the menu with `event ` typed, whose answer adds the event without opening Calendar.
@@ -141,7 +157,7 @@ enum SystemModule {
     /// permission; Night Shift, Wi-Fi and Bluetooth are left out when this Mac cannot say, Bluetooth also until it is
     /// allowed or when Pilot cannot switch it.
     static func switchStates() -> [String: Bool] {
-        var on = ["system.darkMode": UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark",
+        var on = ["system.darkMode": MacAppearance.isDark(),
                   "system.keepAwake": KeepAwake.shared.isOn, "system.idleLock": !KeepAwake.shared.isOn]
         on["system.nightShift"] = nightShift.isOn()
         on["system.wifi"] = wifi.isOn()

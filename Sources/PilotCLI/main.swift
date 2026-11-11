@@ -16,6 +16,35 @@ func fail(_ message: String, _ code: Int32) -> Never {
     exit(code)
 }
 
+// Fixture children are explicitly pinned before any default socket/home lookup. Other CLI
+// socket overrides keep their existing behavior; the marker opts into this strict contract.
+let fixtureEnvironment = ProcessInfo.processInfo.environment
+if let manifest = fixtureEnvironment["PILOT_THEME_FIXTURE"] {
+    do {
+        guard !manifest.isEmpty, !fixtureEnvironment.keys.contains(where: { $0.hasPrefix("PILOT_SANDBOX") }),
+              ["CFFIXED_USER_HOME", "PILOT_LIVE", "PILOT_FOCUS"].allSatisfy({ fixtureEnvironment[$0] == nil }),
+              let bytes = FileManager.default.contents(atPath: manifest),
+              let config = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              let root = config["root"] as? String, root.hasPrefix("/"),
+              URL(fileURLWithPath: root).resolvingSymlinksInPath().path == root,
+              manifest.hasPrefix(root + "/"), URL(fileURLWithPath: manifest).resolvingSymlinksInPath().path == manifest,
+              config["effects"] as? String == "recording",
+              let socket = config["socket"] as? String, socket == fixtureEnvironment["PILOT_SOCKET"],
+              let binding = config["binding"] as? [String: Any], let app = binding["root"] as? String else {
+            fail("invalid isolated theme fixture configuration; no socket fallback", 2)
+        }
+        let paths = ["packs", "writablePacks", "state", "control", "wallpaperState", "nativeState"].compactMap { config[$0] as? String }
+        guard paths.count == 6, (paths + [socket, app]).allSatisfy({
+            $0.hasPrefix(root + "/") && URL(fileURLWithPath: $0).resolvingSymlinksInPath().path == $0
+        }), socket.utf8.count < 100,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: socket),
+              attributes[.type] as? FileAttributeType == .typeSocket,
+              (attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600 else {
+            fail("invalid isolated theme fixture roots/socket; no socket fallback", 2)
+        }
+    } catch { fail("invalid isolated theme fixture configuration; no socket fallback", 2) }
+}
+
 var words = Array(CommandLine.arguments.dropFirst())
 // The command's own flag comes before the verb; every word after the verb is Pilot's.
 let raw = words.first == "--json"
@@ -94,6 +123,36 @@ func answer() -> (line: Data, object: [String: Any]) {
     }
 }
 
+// JSONSerialization's string bridge drops an embedded U+FEFF on this platform. Decode
+// the result losslessly for piped JSON, so theme previews retain their exact BOM bytes.
+private enum WireValue: Codable {
+    case string(String), integer(Int64), unsigned(UInt64), number(Double), bool(Bool), object([String: WireValue]), array([WireValue]), null
+    init(from decoder: any Decoder) throws {
+        let value = try decoder.singleValueContainer()
+        if value.decodeNil() { self = .null }
+        else if let x = try? value.decode(String.self) { self = .string(x) }
+        else if let x = try? value.decode(Bool.self) { self = .bool(x) }
+        else if let x = try? value.decode(Int64.self) { self = .integer(x) }
+        else if let x = try? value.decode(UInt64.self) { self = .unsigned(x) }
+        else if let x = try? value.decode(Double.self) { self = .number(x) }
+        else if let x = try? value.decode([String: WireValue].self) { self = .object(x) }
+        else { self = .array(try value.decode([WireValue].self)) }
+    }
+    func encode(to encoder: any Encoder) throws {
+        var value = encoder.singleValueContainer()
+        switch self {
+        case .string(let x): try value.encode(x)
+        case .integer(let x): try value.encode(x)
+        case .unsigned(let x): try value.encode(x)
+        case .number(let x): try value.encode(x)
+        case .bool(let x): try value.encode(x)
+        case .object(let x): try value.encode(x)
+        case .array(let x): try value.encode(x)
+        case .null: try value.encodeNil()
+        }
+    }
+}
+
 let (answerLine, object) = answer()
 close(fd)
 let ok = object["ok"] as? Bool == true
@@ -111,8 +170,10 @@ case let text as String: print(text, terminator: text.hasSuffix("\n") ? "" : "\n
 case let result? where printsText(terminal: isatty(STDOUT_FILENO) == 1, words: words):
     let text = readable(result)
     if !text.isEmpty { print(text) }
-case let result?:
-    let pretty = try! JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes, .fragmentsAllowed])
+case _?:
+    let wire = try! JSONDecoder().decode([String: WireValue].self, from: answerLine)
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    let pretty = try! encoder.encode(wire["result"] ?? .null)
     FileHandle.standardOutput.write(pretty + Data([0x0A]))
 }
 exit(0)

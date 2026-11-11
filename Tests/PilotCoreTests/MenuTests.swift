@@ -69,7 +69,7 @@ struct MenuNavigatorTests {
     @Test("The root lists the ten branches and nothing else, Clean after Update (card agent-bo-95422881), System last (card agent-bo-95422981), About above it (Q446), Extensions above that (story 158); Config is an extra")
     func root() {
         let nav = MenuNavigator(entries: Self.entries)
-        #expect(titles(nav) == ["Apps", "Learn", "Trigger", "Install", "Remove", "Update", "Clean", "Extensions", "About", "System"])
+        #expect(titles(nav) == ["Apps", "Learn", "Actions", "Install", "Remove", "Update", "Clean", "Extensions", "About", "System"])
         #expect(nav.rows.first?.target == .branch(.apps))
         #expect(nav.branch == nil)
     }

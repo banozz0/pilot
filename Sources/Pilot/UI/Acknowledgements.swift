@@ -34,6 +34,7 @@ struct Acknowledgement: Identifiable, Hashable {
         .init(name: "Omarchy", licence: "MIT", what: "The themes' colours", files: ["Omarchy-LICENSE.txt"]),
         .init(name: "gemoji", licence: "MIT", what: "Emoji names and keywords", files: ["gemoji-LICENSE.txt"]),
         .init(name: "Snapzy", licence: "BSD 3-Clause", what: "The capture editor's backdrop, capture history and Combine images", files: ["Snapzy-LICENSE.txt"]),
+        .init(name: "NotificationNanny", licence: "MIT", what: "How notifications are read from Notification Center", files: ["NotificationNanny-LICENSE.txt"]),
         .init(name: "CodexBar", licence: "MIT", what: "The Claude mark on extension gauges", files: ["CodexBar-LICENSE.txt"]),
         .init(name: "Sparkle", licence: "MIT and others", what: "Pilot's updates", files: ["Sparkle-LICENSE.txt"]),
         .init(name: "Display fonts", licence: "SIL OFL 1.1", what: "The themes' twelve faces", files: faces.map { "Fonts/\($0)/OFL.txt" }),

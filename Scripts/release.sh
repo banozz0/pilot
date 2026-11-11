@@ -18,7 +18,7 @@ ID=${SIGN_ID:-Pilot Release}
 [[ $VERSION =~ '^[0-9]+\.[0-9]+(\.[0-9]+)?$' ]] || { echo "error: $VERSION is not a version like 0.2.0" >&2; exit 1; }
 export SPARKLE_ED_KEY=${SPARKLE_ED_KEY:-$(<"$ROOT/Packaging/sparkle-public-key.txt")}
 # Checked before minutes of building. Main and a clean tree: the DMG holds exactly a commit on main, and PilotCommit
-# names it. Not shallow: CFBundleVersion is git rev-list --count HEAD, which a shallow clone counts from 1 (Moody, SH3).
+# names it. Not shallow: CFBundleVersion is git rev-list --count HEAD plus the base (build-app.sh), and a shallow clone counts from 1 (Moody, SH3).
 if [[ ${RELEASE_ANY_BRANCH:-} != 1 && $(git -C "$ROOT" symbolic-ref --quiet --short HEAD) != main ]]; then
   echo "error: not on main; a release is built from main" >&2; exit 1
 fi

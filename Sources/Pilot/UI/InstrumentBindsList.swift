@@ -27,9 +27,9 @@ struct InstrumentBindsList: View {
         let (layers, sections) = BindsList.list(engine.binds.store, actions: actions, only: only, filter: filter, search: search)
         VStack(spacing: 0) {
             ViewThatFits(in: .horizontal) {
-                InstrumentPageBar(title: only == .plain ? "Plain combos" : "Binds") { backButton; Spacer(minLength: 8); controls(store) }
+                InstrumentPageBar(title: only == .plain ? AppSection.plainCombos.title : "Binds") { backButton; Spacer(minLength: 8); controls(store) }
                 VStack(alignment: .leading, spacing: 0) {
-                    InstrumentPageBar(title: only == .plain ? "Plain combos" : "Binds") { backButton; Spacer(minLength: 8) }
+                    InstrumentPageBar(title: only == .plain ? AppSection.plainCombos.title : "Binds") { backButton; Spacer(minLength: 8) }
                     controls(store).padding(.horizontal, style.density.page).padding(.bottom, 12)
                 }
             }

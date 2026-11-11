@@ -4,7 +4,7 @@ import SwiftUI
 /// Binds › Mouse's box and rows (Q257): the box beside the drawing runs the catch (waiting for the press, nothing
 /// arrived, a press from another mouse), then the bind sheet picks the action; a row per button lists the same binds,
 /// its Sends field starting the same catch. With Hyper held's rows run the same flow for the Hyper actions.
-extension MouseButtonsPage {
+extension MouseButtonsBlocks {
     // MARK: Box
 
     @ViewBuilder func box(_ learn: MouseButtons.Learn, target: Int?, hyper: Bool, found: MouseButtons.Found) -> some View {
@@ -121,7 +121,7 @@ extension MouseButtonsPage {
         }
         BlockRow {
             muted("A wheel direction with no action steps through workspaces by notch."
-                  + (dragsWithHyper ? " Left and right stay out: Hyper + drag moves and resizes windows (Tiling › Drag modifier)." : ""))
+                  + (dragsWithHyper ? " Left and right stay out: Hyper + drag moves and resizes windows (\(AppPlace(.motion).path))." : ""))
             Spacer(minLength: 0)
         }
     }
@@ -235,7 +235,7 @@ extension MouseButtonsPage {
     private var deadline: Date? { shown == nil ? engine.mouseButtons.deadline : nil }
 }
 
-extension MouseButtonsPage.Row {
+extension MouseButtonsBlocks.Row {
     /// A row's identity in its list: its button, else its trigger, else what it sends (the wheel's).
     var id: String { button.map { "b\($0)" } ?? (trigger ?? sends).map { "k\($0.keyCode)" } ?? "" }
 }

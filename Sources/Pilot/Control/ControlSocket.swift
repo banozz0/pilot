@@ -27,6 +27,7 @@ final class ControlSocket {
     static func registered(status: ControlStatus = ControlStatus(), homeBlocks: HomeBlockStores = HomeBlockStores()) -> ControlVerbs {
         let verbs = ControlVerbs(plan: plan)
         verbs.registerCore()
+        verbs.registerThemes { try ThemeCoordinator.production() }
         verbs.registerPlan(gate: AllowPrompt.gate)
         verbs.registerGuides()
         verbs.registerLog()

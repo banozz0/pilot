@@ -142,7 +142,7 @@ extension ControlVerbs {
         case .run(let name, _): parts.append(runs(name, view: false))
         case .push(let name, _): parts.append(runs(name, view: true))
         case .ai(_, let text, let then):
-            parts.append("sends \(min(text.count, ExtensionAI.longest)) characters of its page to \(ControlVerbs.destination(AISettings.shared))")
+            parts.append("sends \(min(text.count, ExtensionAI.longest)) characters of its page to \(ControlVerbs.destinations(AISettings.shared))")
             if case .run(let name, _) = then.kind { parts.append("then \(runs(name, view: false)) with the answer") }
         case .open, .copy, .paste, .hud, .pilot, .timer, .alert: return nil
         }
@@ -185,9 +185,11 @@ extension ControlVerbs {
         case .ai(let task, let text, let then):
             // The provider is the AI page's; only the size is logged, never the text.
             log.notice("ext act: \(ext.id, privacy: .public) asks AI about \(text.utf8.count) bytes")
-            let next = await ExtensionAI.ask(task, text, then: then, runner: AISettings.shared.runner())
+            let heard = AIFallback.Heard()
+            let next = await ExtensionAI.ask(task, text, then: then, runner: AISettings.shared.runner(told: heard.tell), heard: heard)
             var out = try await perform(next, ext, tools, inputs)
             out["askedAI"] = .bool(true)
+            if let notice = heard.notice { out["notice"] = .string(notice.line) }
             return out
         case .push(let name, let context):
             guard let command = ext.view(name) else {

@@ -26,7 +26,7 @@ struct PageFillRenders {
         ("install-catalogue", AppPlace(.install, .catalogue), nil), ("install-webapps", AppPlace(.install, .webApps), nil),
         ("openwith", AppPlace(.openWith), nil), ("look", AppPlace(.look), nil), ("clipboard", AppPlace(.clipboard), nil),
         ("general", AppPlace(.general), nil), ("files-folders", AppPlace(.files, .folders), nil),
-    ] + SetupSection.allCases.map { ("system-\($0.rawValue)", AppPlace(.system), $0) }
+    ] + SetupPage.front.map { ("system-\($0.rawValue)", AppPlace(.system), $0) }
 
     /// A clipboard history with copies from apps on this Mac, so Recent shows real icons (in the render home).
     static func seedClips(home: URL) throws -> ClipboardStore {

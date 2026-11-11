@@ -44,7 +44,9 @@ func listWindows(_ scope: TilerWindowScope) async throws -> [TilerWindow] {
     let windows: [Window] = switch scope {
         case .all: Workspace.all.flatMap(\.allLeafWindowsRecursive)
         case .focused: focus.windowOrNil.asList()
-        case .workspace(let name): Workspace.get(byName: name).allLeafWindowsRecursive
+        // `focused` is the focused workspace, as AeroSpace's `--workspace focused` reads; taken as a name it was an empty
+        // workspace of that name, and float or tile workspace floated nothing (build 2300).
+        case .workspace(let name): (name == "focused" ? focus.workspace : Workspace.get(byName: name)).allLeafWindowsRecursive
         case .minimized: macosMinimizedWindowsContainer.children.filterIsInstance(of: Window.self)
     }
     var monitorIds: [Workspace: Int] = [:] // the monitor sort runs once per workspace, not per window

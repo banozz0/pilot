@@ -137,8 +137,9 @@ struct CursorEffectColours: Equatable, Sendable {
     /// The current theme's, or Lagoon's for a theme effects.json does not list. A custom colour (T33) takes the trail,
     /// ring and left ripple, with its edge by effects.py's rule (black on a colour over 0.45 luminance, else white); the
     /// right-click ripple stays the theme's second colour (Q818).
-    static func of(_ theme: String, colour: ColourChoice = .theme) -> CursorEffectColours {
-        let themed = table[theme] ?? table["lagoon"] ?? lagoon
+    static func of(_ theme: String, colour: ColourChoice = .theme, resolved: PilotTheme? = nil) -> CursorEffectColours {
+        let themed = resolved.map { CursorEffectColours(effect: $0.accent, rightClick: CursorArt.colour($0.second),
+            edge: CursorArt.colour(Contrast.luminance(Contrast.rgb($0.accent)) > 0.45 ? 0x000000 : 0xFFFFFF)) } ?? table[theme] ?? table["lagoon"] ?? lagoon
         guard case .custom(let rgb) = colour else { return themed }
         return CursorEffectColours(effect: rgb, rightClick: themed.rightClick,
                                    edge: CursorArt.colour(Contrast.luminance(Contrast.rgb(rgb)) > 0.45 ? 0x000000 : 0xFFFFFF))
@@ -438,7 +439,7 @@ final class CursorOverlays: NSObject {
     private let idle: @MainActor () -> Void
     /// The effect colour picked, and the colours last drawn with the theme and pick they came from.
     private var colour: ColourChoice = .theme
-    private var drawn: (theme: String, colour: ColourChoice, colours: CursorEffectColours)?
+    private var drawn: (theme: String, revision: Int, colour: ColourChoice, colours: CursorEffectColours)?
 
     init(idle: @escaping @MainActor () -> Void) {
         self.idle = idle
@@ -601,9 +602,9 @@ final class CursorOverlays: NSObject {
 
     /// The theme's or the picked colours, made again only when either changed.
     private func colours(_ theme: String) -> CursorEffectColours {
-        if let drawn, drawn.theme == theme, drawn.colour == colour { return drawn.colours }
-        let made = CursorEffectColours.of(theme, colour: colour)
-        drawn = (theme, colour, made)
+        if let drawn, drawn.theme == theme, drawn.revision == Look.shared.paletteRevision, drawn.colour == colour { return drawn.colours }
+        let made = CursorEffectColours.of(theme, colour: colour, resolved: Look.shared.packAppearance)
+        drawn = (theme, Look.shared.paletteRevision, colour, made)
         return made
     }
 

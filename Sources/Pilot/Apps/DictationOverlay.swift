@@ -28,6 +28,12 @@ final class DictationOverlay: DictationShowing {
 
         var inBar: Bool { showIn != .pill && topBarShows }
         var inPill: Bool { showIn != .topBar || !topBarShows }
+
+        /// The waveform's colour: Plain draws `plain` (the pill's white, the bar's ink), Theme the theme's signal colour,
+        /// Custom the one picked. A take and Voice's preview both draw it.
+        @MainActor func waveColour(plain: Color) -> Color {
+            colour.map { Color(Paint($0.resolved(Look.shared.theme.accent))) } ?? plain
+        }
     }
 
     enum Phase: Equatable { case hidden, listening, writing }
@@ -422,9 +428,7 @@ struct DictationCircle: View {
 extension DictationOverlay {
     /// The waveform's colour this take: Plain draws `plain` (the pill's white, the bar's ink), Theme the theme's signal
     /// colour, Custom the one picked.
-    func waveColour(plain: Color) -> Color {
-        setup.colour.map { Color(Paint($0.resolved(Look.shared.theme.accent))) } ?? plain
-    }
+    func waveColour(plain: Color) -> Color { setup.waveColour(plain: plain) }
 }
 
 /// The microphone's last readings as bars of dots: a dot each while it is quiet.

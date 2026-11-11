@@ -46,11 +46,19 @@ final class SetupSound {
         refresh()
     }
 
+    /// What a slider shows: the output reads empty while muted and its level comes back on unmute. The input keeps its level.
+    func shownLevel(_ direction: AudioDirection) -> Float {
+        direction == .output && side(direction).muted == true ? 0 : side(direction).volume?.value ?? 0
+    }
+
     func setVolume(_ value: Float, _ direction: AudioDirection) {
         guard side(direction).volume?.settable == true, let id = side(direction).current else { return }
-        if report(audio.setVolume(value, id, direction), "macOS refused the \(direction.rawValue) volume") {
-            sides[direction]?.volume = AudioLevel(value: value, settable: true)
-        }
+        guard report(audio.setVolume(value, id, direction), "macOS refused the \(direction.rawValue) volume") else { return }
+        sides[direction]?.volume = AudioLevel(value: value, settable: true)
+        // The output's mute follows its level, as macOS's slider does: above zero it sounds, at zero it is muted. The input's
+        // mute stays the person's own, so a nudge of its level never opens a muted microphone.
+        let silent = value <= 0
+        if direction == .output, let muted = side(.output).muted, muted != silent { setMuted(silent, .output) }
     }
 
     func setMuted(_ muted: Bool, _ direction: AudioDirection) {

@@ -86,13 +86,13 @@ public enum OverlayPage {
         }
     }
 
-    /// The actions the overlay shows now on any sublayer: what Binds › Overlay switches on.
+    /// The actions the overlay shows now on any sublayer: what Binds › More › Overlay switches on.
     public static func shown(store: BindStore, actions: [BindsPage.ActionInfo], mode: Mode, presses: [String: Int],
                              picks: Set<String>) -> Set<String> {
         Set(BindsPage.Sublayer.allCases.flatMap { rows(store: store, actions: actions, sublayer: $0, mode: mode, presses: presses, picks: picks).map(\.id) })
     }
 
-    /// One bind Binds › Overlay lists (story 56): what it does, its whole key ("Hyper+Shift+K"), and whether it shows.
+    /// One bind Binds › More › Overlay lists (story 56): what it does, its whole key ("Hyper+Shift+K"), and whether it shows.
     public struct Choice: Identifiable, Equatable, Sendable {
         public var id: String
         public var label: String

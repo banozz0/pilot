@@ -51,7 +51,7 @@ final class SelectionBoxModel {
 /// its selection.
 @MainActor
 final class SelectionBox {
-    static let shared = SelectionBox()
+    static let shared: SelectionBox = SelectionBox()
 
     static let width: CGFloat = 560
     static let nothingSelected = "No text selected"
@@ -60,8 +60,10 @@ final class SelectionBox {
     static let undone = "Original back", notUndone = "Can't undo here · original in clipboard history"
 
     let model = SelectionBoxModel()
+    /// A rewrite's notice, when the fallback answered it (AIFallback); one rewrite runs at a time.
+    let heard = AIFallback.Heard()
     /// One-shot rewrites (the chips, Re-prompt).
-    var route: () -> Result<QuickAI.Runner, QuickAI.Failure> = { AISettings.shared.runner() }
+    var route: () -> Result<QuickAI.Runner, QuickAI.Failure> = { AISettings.shared.runner(told: SelectionBox.shared.heard.tell) }
     /// Questions about the selection: the AI page's provider as a chat, no tools.
     var chatRoute: () -> Result<AIChat.Runner, QuickAI.Failure> = { AISettings.shared.chatRunner() }
     var edit: SelectionEdit = .shared
@@ -141,7 +143,7 @@ final class SelectionBox {
     func rewrite(_ instruction: String, label: String) {
         guard let target, !model.chat.running else { return }
         model.began(rewrite: instruction)
-        model.chat.send(label, through: route().map { Self.rewriting(target.text, instruction, with: $0) })
+        model.chat.send(label, through: route().map { Self.rewriting(target.text, instruction, with: $0, heard: heard) })
     }
 
     // The runners are built out here, not inline in `map`: Swift 6.3's IRGen crashed on a typed-throws closure there.
@@ -154,9 +156,11 @@ final class SelectionBox {
         }
     }
 
-    nonisolated static func rewriting(_ text: String, _ instruction: String, with run: @escaping QuickAI.Runner) -> AIChat.Runner {
+    nonisolated static func rewriting(_ text: String, _ instruction: String, with run: @escaping QuickAI.Runner,
+                                      heard: AIFallback.Heard) -> AIChat.Runner {
         { _, _ throws(QuickAI.Failure) in
-            AIChat.Reply(SelectionPrompt.answer(try await run(.rewrite(text, instruction: instruction)) { _ in }, for: text))
+            let answer = SelectionPrompt.answer(try await run(.rewrite(text, instruction: instruction)) { _ in }, for: text)
+            return AIChat.Reply(answer, notice: heard.take()?.line)
         }
     }
 

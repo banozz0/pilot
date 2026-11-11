@@ -72,7 +72,15 @@ public final class PixelBuffer: @unchecked Sendable {
 
 /// High-quality resampling (vImage's Lanczos), on premultiplied pixels so a see-through edge keeps no dark fringe.
 public enum Resample {
-    public static func image(_ image: CGImage, width: Int, height: Int) -> CGImage? {
+    public static func image(_ image: CGImage, width: Int, height: Int, fill: Bool = false) -> CGImage? {
+        var image = image
+        if fill {
+            let scale = min(Double(image.width) / Double(width), Double(image.height) / Double(height))
+            let w = max(1, min(image.width, Int((Double(width) * scale).rounded())))
+            let h = max(1, min(image.height, Int((Double(height) * scale).rounded())))
+            guard let cropped = image.cropping(to: CGRect(x: (image.width - w) / 2, y: (image.height - h) / 2, width: w, height: h)) else { return nil }
+            image = cropped
+        }
         let space = PixelBuffer.space(of: image)
         let w = image.width, h = image.height
         let src = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: w * h * 4)

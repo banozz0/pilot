@@ -8,14 +8,28 @@ extension ControlVerbs {
         func pages() -> [String] { AppPage.allCases.filter { DeveloperPages.on || !$0.isDeveloper }.map(\.rawValue) }
         func parts() -> [JSONValue] { AppSection.allCases.filter { DeveloperPages.on || !$0.page.isDeveloper }.map { .string($0.rawValue) } }
         let sections = SetupSection.allCases.map(\.rawValue)
-        register(ControlVerb("open", help: "Opens Pilot's window on a page or a part of one.",
-                             usage: "pilot open <page|part> [--section <\(sections.joined(separator: "|"))>]",
-                             flags: [.init("section", help: "a System section: \(sections.joined(separator: ", "))")],
+        register(ControlVerb("open", help: "Opens Pilot's window on a page or a part of one; --where and --find only say where, opening nothing.",
+                             usage: "pilot open <page|part|pilot://open link> [--section <\(sections.joined(separator: "|"))>] [--where] | pilot open --find <words>",
+                             flags: [.init("section", help: "a System section: \(sections.joined(separator: ", "))"),
+                                     .init("where", help: "say where the name or link lands, opening nothing", takesValue: false),
+                                     .init("find", help: "the places the window's search lists for these words, best first, opening nothing")],
                              schema: { .object(["pages": .array(pages().map(JSONValue.string)), "parts": .array(parts()),
                                                 "sections": .array(sections.map(JSONValue.string))]) },
                              index: { .object(["pages": .array(pages().map(JSONValue.string))]) }) { call throws(ControlError) in
-            let args = call.arguments()
+            let args = call.arguments(switches: ["where"])
+            // Reads (simplify-pages T7): where a search, a name or a pilot://open link lands, the window left as it is.
+            if let words = args.value("find") {
+                return .array(AppPlace.search(words, developer: DeveloperPages.on).map { .string($0.path) })
+            }
             let name = try args.word(0, "page")
+            if args.flags.contains("where") {
+                let place = name.hasPrefix("pilot://") ? URL(string: name).flatMap(AppPlace.linked) : AppPlace.named(name)
+                guard let place else { throw ControlError(.unknownPage, "\(name) lands nowhere: no page, part or old name") }
+                guard DeveloperPages.on || !place.page.isDeveloper else {
+                    throw ControlError(.unknownPage, "\(place.path) is a developer page and the Developer switch is off: pilot set general.developer on")
+                }
+                return .string(place.path)
+            }
             guard let place = AppPlace.named(name) else {
                 throw ControlError(.unknownPage, "no page \(name); pages: \(pages().joined(separator: ", ")); pilot schema lists the parts")
             }
@@ -31,4 +45,5 @@ extension ControlVerbs {
             return .string("opened \(place.path)")
         })
     }
+
 }

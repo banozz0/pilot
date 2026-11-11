@@ -26,6 +26,19 @@ public enum PilotStyle: String, CaseIterable, Sendable, Codable {
     public static let scale = 14.0 / 13.0
 }
 
+/// One compatible palette memory for native style changes and the isolated public-boundary proof.
+public struct ThemeStyleMemory: Codable, Sendable {
+    public var choices: [String: ThemeNativePalette] = [:]
+    public init() {}
+    public mutating func select(from previous: String, to next: String, current: ThemeNativePalette) throws -> ThemeNativePalette {
+        guard PilotStyle(rawValue: previous) != nil, PilotStyle(rawValue: next) != nil else { throw ThemeFailure("unknown style") }
+        try current.validate()
+        if current.compatible(with: previous) { choices[previous] = current }
+        if let saved = choices[next], saved.compatible(with: next) { try saved.validate(); return saved }
+        return current.compatible(with: next) ? current : .stock(PilotTheme.defaultID)
+    }
+}
+
 /// One thing Pilot draws that a style restyles as a whole: each page of the app window, the window's own frame (its
 /// sidebar), the Hyper+Space menu, the top bar's strip (its tooltips and edit mode too), the dropdowns and
 /// popovers hung from a bar item in either bar (Pilot's dropdown, the readings', the clock's...), the hold overlay, the

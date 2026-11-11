@@ -292,7 +292,7 @@ struct BindsMapSheet: View {
         }
         .frame(width: Self.width, height: Self.a4, alignment: .top)
         .overlay(alignment: .bottomLeading) {
-            Text("Print it at 100 %: one A4 page, 2480 by 3508 px at 300 dpi. Saved from Pilot › Binds › Export and import › Save map.")
+            Text("Print it at 100 %: one A4 page, 2480 by 3508 px at 300 dpi. Saved from Pilot › Binds › More › Export and import › Save map.")
                 .font(MapType.mono(11.5)).foregroundStyle(ink.text3).padding(Self.margin)
         }
         .background(ink.ground)

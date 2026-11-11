@@ -11,13 +11,19 @@ import SwiftUI
 struct InstrumentPage<Content: View>: View {
     @Environment(\.style) private var style
     var intro: String?
+    /// The intro's ⓘ: what its one line leaves out.
+    var info: String?
     var spacing: CGFloat = 0
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: spacing) {
-                if let intro { Text(intro).styleText(\.body).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true) }
+                if let intro {
+                    IntroLine(info: info) {
+                        Text(intro).styleText(\.body).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 content
             }
             .padding(.horizontal, style.density.page).padding(.top, style.density.padding).padding(.bottom, style.density.page)

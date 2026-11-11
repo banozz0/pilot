@@ -294,6 +294,38 @@ extension GlassBlur {
     var glass: Glass? { self == .off ? nil : self == .light ? .clear : .regular }
 }
 
+/// macOS draws glass in a window without focus as inactive: on Light a blur of 10 and no refraction where a focused window
+/// has no blur, the smear Sven saw on widgets (never key) and on every window he left. It asks the window one private
+/// question, so on Light every Pilot window answers active there, in this one place; Full and Off keep macOS's answer. Only
+/// the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as they are. A macOS
+/// without the selector simply keeps its inactive glass.
+@MainActor enum LightGlassFocus {
+    static func install() {
+        let selector = NSSelectorFromString("_hasActiveAppearanceIgnoringKeyFocus")
+        guard let method = class_getInstanceMethod(NSWindow.self, selector) else { return }
+        typealias Answer = @convention(c) (NSWindow, Selector) -> Bool
+        let original = unsafeBitCast(method_getImplementation(method), to: Answer.self)
+        let answer: @convention(block) (NSWindow) -> Bool = { window in
+            (Thread.isMainThread && MainActor.assumeIsolated { Look.shared.glassBlur == .light }) || original(window, selector)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(answer))
+        follow()
+    }
+
+    /// Blur changed: every window asks again, without waiting for its focus to change.
+    private static func follow() {
+        withObservationTracking { _ = Look.shared.glassBlur } onChange: {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let send = NSSelectorFromString("_sendForcedWindowChangedKeyState")
+                    for window in NSApp.windows where window.responds(to: send) { window.perform(send) }
+                    follow()
+                }
+            }
+        }
+    }
+}
+
 private struct GlassEffect: NSViewRepresentable {
     let tint: NSColor
     let cornerRadius: CGFloat

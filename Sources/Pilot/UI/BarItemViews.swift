@@ -372,7 +372,7 @@ struct SoundPopover: View {
             }
             if let level = output.volume, level.settable {
                 HStack {
-                    Slider(value: Binding(get: { Double(level.value) }, set: { sound.setVolume(Float($0), .output) }), in: 0...1)
+                    Slider(value: Binding(get: { Double(sound.shownLevel(.output)) }, set: { sound.setVolume(Float($0), .output) }), in: 0...1)
                     if let muted = output.muted {
                         Button { sound.toggleMute(.output) } label: { Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill") }
                             .buttonStyle(.plain).accessibilityLabel(muted ? "Unmute" : "Mute")

@@ -298,9 +298,10 @@ enum OnboardingWindow {
         return true
     }
 
-    /// The menu bar's Allow for Accessibility (Sven, 2026-10-28, Q1): Welcome while it is open, else General's permissions.
+    /// The menu bar's Allow for Accessibility (Sven, 2026-10-28, Q1): Welcome while it is open, else Pilot's front, whose
+    /// Needs you holds Accessibility's Grant until it is granted (simplify-pages T8).
     static func openPermissions() {
-        if !bringForward() { AppWindowController.shared.open(.permissions) }
+        if !bringForward() { AppWindowController.shared.open(AppPlace(.general)) }
     }
 }
 

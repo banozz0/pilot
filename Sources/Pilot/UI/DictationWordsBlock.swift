@@ -87,7 +87,7 @@ struct DictationTakesBlock: View {
     static let note = "Your last \(DictationTake.kept) takes, text only, on this Mac. Click a word dictation got wrong to fix it."
 
     var body: some View {
-        KitBlock(title: "Recent takes", symbol: "clock.arrow.circlepath", note: Self.note, trailing: {
+        KitBlock(title: "Fix what you just said", symbol: "clock.arrow.circlepath", note: Self.note, trailing: {
             if !takes.takes.isEmpty { Button("Clear") { takes.clear() }.buttonStyle(.pilot) }
         }) {
             if takes.takes.isEmpty {

@@ -46,6 +46,7 @@ struct MenuBarPage: View {
     var body: some View {
         let store = BarItemsStore.shared, topBar = engine.topBar
         PageBody {
+            if let problem = store.loadError { FinePrint(text: problem, color: ink.red) }
             // The switch, its problem and the hidden items' notice are one group, closer together than the blocks.
             VStack(alignment: .leading, spacing: 8) {
                 SwitchCard(symbol: "menubar.rectangle", name: "Top bar", isOn: topBar.isOn, busy: topBar.busy,
@@ -68,6 +69,10 @@ struct MenuBarPage: View {
                     BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
                 }
             }
+            // Pilot's own menu, first after the bar it hangs from (Sven on build 2276: it sat too far down).
+            DropdownEditor(extensionBar: extensionBar)
+            PillEditor(extensionBar: extensionBar)
+            BarPresetControls(store: store)
             barColour(store)
             // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
             let columns = 2, groups = BarGroup.allCases
@@ -81,6 +86,7 @@ struct MenuBarPage: View {
             screenChoices(topBar)
             clock(store)
         }
+        .disabled(store.loadError != nil)
         .onAppear { hold(previewed(store)) }
         .onChange(of: previewed(store)) { hold(previewed(store)) }
         .onChange(of: onScreen) { hold(previewed(store)) }
@@ -242,12 +248,12 @@ struct MenuBarPage: View {
     /// while a drag is over it.
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
         let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
-        return TopBarStrip(sides: top, background: background, colour: store.colour, itemColours: store.itemColours,
+        return TopBarStrip(sides: top, configuration: store.settings.preset, background: background, colour: store.colour, glassPreview: true, itemColours: store.itemColours,
                            report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }) {
             stripSlot($0, store, inTopBar: true)
         }
-        .frame(height: 30)
-        .background { if background == .glass { BarGlassGround(colour: store.colour) } }
+        .frame(height: store.settings.preset?.height ?? 30)
+        .background { if background == .glass, store.settings.preset?.preset != .threeIslands { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
         .overlay { if let overTop { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
         .padding(.top, Self.room)
@@ -656,7 +662,7 @@ struct MenuBarPage: View {
 /// A Glass top bar's ground on the page, as the bar's window paints it (TopBarWindows.applyLook): glass in its ink's
 /// light or dark, tinted with the bar's colour at Look's Transparency. The strip itself draws no ground on Glass, so
 /// without this a colour's ink (dark, on Sven's near-white) sat faint on the page's dark desk (Sven on build 58).
-private struct BarGlassGround: View {
+struct BarGlassGround: View {
     @Environment(\.style) private var style
     let colour: ColourChoice
 
@@ -740,7 +746,7 @@ extension BarKind {
         case .keyboardLayout: "keyboard"
         case .wifi: "wifi"
         case .displays: "display"
-        case .terminal, .askAI: BarParts.dropSymbol(self)
+        case .terminal, .askAI, .pill: BarParts.dropSymbol(self)
         case .capture: BarParts.captureSymbol
         case .modes: BarParts.statusSymbol
         case .clock: "clock"
@@ -798,5 +804,38 @@ private enum BarReset {
             : placement == .both
                 ? "The items, their order and their places go back to Pilot's defaults. The clock's pattern and the bar's colour stay."
                 : "Pilot's default items come back to \(Self.bars(placement)).\(other) The clock's pattern and the bar's colour stay."
+    }
+}
+
+/// Geometry uses the same setter as pilot bar, never replaces personal items.
+struct BarPresetControls: View {
+    let store: BarItemsStore
+    @State private var problem = ""
+    var body: some View {
+        Tile(title: "Bar layout", symbol: "menubar.rectangle") {
+            Picker("Preset", selection: Binding(get: { store.settings.preset?.preset.rawValue ?? "legacy" }, set: { value in
+                do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
+            })) {
+                Text("Current layout (before presets)").tag("legacy")
+                ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+            }
+            if let config = store.settings.preset {
+                Button("Reset geometry") {
+                    do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
+                }.buttonStyle(.pilot)
+                // Each row reads the preset again, never with `!`: picking Current layout clears it, and a row can redraw
+                // before this branch goes (build 2276 trapped there).
+                ForEach(BarItemsStore.geometryFields, id: \.0) { field in
+                    Stepper(field.1 + " · " + String(format: "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
+                        store.settings.preset?[keyPath: field.2] ?? 0
+                    }, set: { value in
+                        do { try store.setGeometry(field.0, value: value); problem = "" } catch { problem = String(describing: error) }
+                    }), in: BarPresetConfiguration.ranges[field.0]!)
+                }
+            }
+            Text("Items and their order stay personal. Pack defaults and Restore are reviewed in Look.")
+            if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
+        }
+        .disabled(Look.shared.themePressing)  // A theme owns the layout: it waits while Look's Apply or Restore runs.
     }
 }

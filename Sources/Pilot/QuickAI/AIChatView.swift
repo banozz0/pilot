@@ -84,6 +84,9 @@ struct AIChatTranscript<Empty: View>: View {
                 // Each row carries its turn, never an index back into the list: New chat empties it while rows still draw.
                 ForEach(Array(model.turns.enumerated()), id: \.offset) { i, each in
                     turn(each)
+                    if let notice = each.notice {
+                        Text(notice).font(ink.ui(11.5)).foregroundStyle(ink.muted).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    }
                     AIChatCalls(model: model, calls: model.calls[i] ?? [], turn: i)
                 }
                 if model.running { AIChatStreaming(model: model) }

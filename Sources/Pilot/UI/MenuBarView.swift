@@ -146,9 +146,12 @@ struct PilotDropdown: View {
 extension Engine {
     /// Pilot's dropdown (card agent-bo-95422912), with its quick switches on the real tiler, top bar, Keep awake,
     /// clipboard and dictation key.
-    var dropdown: AnyView {
-        AnyView(PilotDropdown(switches: QuickSwitches(hyper: hyperSwitch, tiling: tilingSwitch, topBar: topBar, keepAwake: KeepAwake.shared,
-                                                      clipboard: SessionSwitch.clipboard, dictation: dictationSwitch)).environment(self))
+    var dropdown: AnyView { AnyView(PilotDropdown(switches: quickSwitches).environment(self)) }
+
+    /// The six quick switches, the Pilot menu's and the pill's Controls view's.
+    var quickSwitches: QuickSwitches {
+        QuickSwitches(hyper: hyperSwitch, tiling: tilingSwitch, topBar: topBar, keepAwake: KeepAwake.shared,
+                      clipboard: SessionSwitch.clipboard, dictation: dictationSwitch)
     }
 
 }

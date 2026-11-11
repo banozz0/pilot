@@ -40,7 +40,7 @@ public enum LoginItems {
         public let appPath: String?
         /// launchd's disabled flag is set: it does not start at login.
         public var disabled: Bool
-        /// Pilot's own (its bundle, or a job labelled under its id), which only General › Launch at login turns off.
+        /// Pilot's own (its bundle, or a job labelled under its id), which only Pilot › Launch at login turns off.
         public var isPilot = false
 
         public init(label: String, kind: Kind, path: String, bundleID: String? = nil, appPath: String? = nil, disabled: Bool = false) {

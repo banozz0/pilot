@@ -49,7 +49,8 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     /// Under the page: one row per download (card agent-bo-95422810).
     let downloads = NSStackView()
     var downloadRows: [ObjectIdentifier: DownloadRow] = [:]
-    var popups: [NSWindow] = []
+    /// Each popup window with its web view, which a video's fullscreen takes out of the window for a while.
+    var popups: [(window: NSWindow, page: WKWebView)] = []
     /// Each popup's sign-in trip, by its web view, and the page this window showed when it opened: one back on the site
     /// after a sign-in page closes itself. Judged by the stamped site alone, so Messenger's popup is not home on Facebook.
     var trips: [ObjectIdentifier: (trip: SignInTrip, opener: URL?)] = [:]
@@ -85,11 +86,17 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
         downloads.spacing = 0
         // The page takes every point the download rows leave; with no download it fills the window.
         findBar = FindBar(webView: webView)
-        let page = NSStackView(views: [findBar, webView, downloads])
+        // A video's fullscreen lifts the web view out of its superview and puts it back with addSubview, which a stack
+        // view does not take as arranged: the page came back 0 points tall, a blank window after Esc (build 2300). In a
+        // plain holder it fills by autoresizing, it comes back whole.
+        let holder = NSView()
+        webView.autoresizingMask = [.width, .height]
+        holder.addSubview(webView)
+        let page = NSStackView(views: [findBar, holder, downloads])
         page.orientation = .vertical
         page.spacing = 0
         page.distribution = .fill
-        webView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        holder.setContentHuggingPriority(.defaultLow, for: .vertical)
         downloads.setContentHuggingPriority(.required, for: .vertical)
         chrome = WindowChrome(window: window)
         window.contentView = chrome.host(page)
@@ -318,10 +325,15 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
                                              height: windowFeatures.height?.doubleValue ?? 650),
                          styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
-        w.contentView = popup
+        // In a holder it fills, as the main window's page: a video's fullscreen puts it back as a plain subview, never
+        // as the window's content view, which then neither held it nor sized it.
+        let holder = NSView()
+        popup.autoresizingMask = [.width, .height]
+        holder.addSubview(popup)
+        w.contentView = holder
         w.center()
         if !headless { w.makeKeyAndOrderFront(nil) }
-        popups.append(w)
+        popups.append((w, popup))
         var trip = SignInTrip(site: stampedSite)
         trip.visit(url)
         trips[ObjectIdentifier(popup)] = (trip, webView.url)
@@ -332,7 +344,7 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     }
 
     func webViewDidClose(_ wv: WKWebView) {
-        popups.first { $0.contentView === wv }?.close()
+        popups.first { $0.page === wv }?.window.close()
     }
 
     /// A sign-in popup back on the site closes a moment later, once the page there has handed its result to the opener,
@@ -341,7 +353,7 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     func popupFinished(_ wv: WKWebView) {
         guard let url = wv.url, let opened = trips[ObjectIdentifier(wv)], opened.trip.isOver(at: url) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak wv] in
-            guard let self, let wv, !wv.isLoading, wv.url == url, popups.contains(where: { $0.contentView === wv }) else { return }
+            guard let self, let wv, !wv.isLoading, wv.url == url, popups.contains(where: { $0.page === wv }) else { return }
             if headless { print("PILOT_POPUP_DONE \(url)"); fflush(stdout) }
             webViewDidClose(wv)
             if webView.url == opened.opener { webView.reload() }
@@ -351,11 +363,11 @@ let downloadsFolder = headless ? env["PILOT_DOWNLOADS"].map { URL(fileURLWithPat
     @objc func popupClosed(_ note: Notification) {
         guard let w = note.object as? NSWindow else { return }
         NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: w)
-        if let popup = w.contentView as? WKWebView {
+        if let popup = popups.first(where: { $0.window === w })?.page {
             popup.stopLoading()
             trips[ObjectIdentifier(popup)] = nil
         }
-        popups.removeAll { $0 === w }
+        popups.removeAll { $0.window === w }
         // On the next pass, once the close is done with it: the web view goes with the window.
         DispatchQueue.main.async { w.contentView = nil }
     }

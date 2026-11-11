@@ -39,6 +39,17 @@ struct ToyboxBindsTests {
                 let (width, spacing) = Self.board(page: page)
                 #expect(ToyBoardFit.best(names: BindsKeyboardPageTests.names, boards: boards, width: width, spacing: spacing).board.halves == 2, "\(page)")
             }
+            // Binds draws the board whole (simplify-pages T14, Sven's Q36): wordSize keeps each name's longest word whole, on its
+            // 0.25 pt grid so a resize makes no new font; this guards the helper, the renders show the board.
+            for page in stride(from: CGFloat(680), through: 1500, by: 10) {
+                let (width, spacing) = Self.board(page: page)
+                let fit = ToyBoardFit.best(names: BindsKeyboardPageTests.names, boards: boards, width: width, spacing: spacing, whole: true)
+                for key in ToyBoardFit.rooms(BindsKeyboardPageTests.names, on: fit.board, width: width, spacing: spacing) {
+                    guard let size = ToyBoardFit.wordSize(key.name, size: fit.size, room: key.room) else { continue }
+                    #expect((size / ToyBoardFit.wordStep).rounded() * ToyBoardFit.wordStep == size, "\(key.name) at \(size) pt is off the grid")
+                    #expect(ToyBoardFit.lines(key.name, size: size, room: key.room) != nil, "\(shape) whole at \(page): \(key.name) in \(key.room) pt breaks a word")
+                }
+            }
         }
     }
 

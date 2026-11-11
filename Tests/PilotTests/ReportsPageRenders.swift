@@ -4,7 +4,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Activity › Reports (story 153), drawn offscreen from a store seeded in a temporary folder, never Pilot's own: an Update
+/// Update & Clean › Reports (story 153), drawn offscreen from a store seeded in a temporary folder, never Pilot's own: an Update
 /// all that went through, an Update that failed, a Clean that freed space and one whose window was closed. Instrument
 /// and Toybox; Instrument's text is read back. Mac › Update & Clean beside it, Mole missing. PILOT_RENDER_DIR keeps the PNGs.
 @MainActor
@@ -82,7 +82,7 @@ struct ReportsPageRenders {
                 if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
             }
         }
-        for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run", "Activity › Reports"] {
+        for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run"] {
             #expect(text.contains(line), "\(line) missing, read: \(text)")
         }
         for query in ["update", "clean", "upgrade", "free space"] { #expect(AppPlace.search(query).first == AppPlace(.upkeep), "\(query)") }

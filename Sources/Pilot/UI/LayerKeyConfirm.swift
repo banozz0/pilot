@@ -17,7 +17,7 @@ struct LayerKeyConfirm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Make \(keys.label) the Hyper key?").font(.system(size: 15, weight: .semibold))
-            Text("Caps Lock goes back to Caps Lock and a tap no longer sends Escape. Hyper is \(keys.label) until you change it again on \(AppPlace(.general).path).")
+            Text("Caps Lock goes back to Caps Lock and a tap no longer sends Escape. Hyper is \(keys.label) until you change it again on \(AppPlace(.hyperKey).path).")
                 .foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

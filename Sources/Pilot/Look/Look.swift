@@ -17,11 +17,22 @@ final class Look {
     /// Instrument or Toybox (story 137, ADR 0008): a fresh install starts in Instrument. Current and the Tiling Rice layout
     /// were removed 2026-10-11 (parked on parked/current-style-tiling-rice): a saved Current loads as Instrument, and Calm is
     /// the one layout.
-    var style: PilotStyle { didSet { defaults.set(style.rawValue, forKey: Key.style) } }
+    var style: PilotStyle {
+        didSet {
+            guard oldValue != style else { return }
+            var memory = defaults.data(forKey: "look.paletteMemory").flatMap { try? JSONDecoder().decode(ThemeStyleMemory.self, from: $0) } ?? .init()
+            let chosen = (try? memory.select(from: oldValue.rawValue, to: style.rawValue, current: nativeAppearance.palette)) ?? .stock(PilotTheme.defaultID)
+            defaults.set(try? ThemeDigest.encoded(memory), forKey: "look.paletteMemory")
+            defaults.set(style.rawValue, forKey: Key.style)
+            setNativePalette(chosen)
+            resolve()
+        }
+    }
     /// The designed theme picked last (Lagoon by default); `pick` is how the Look page sets it.
     var themeID: String {
         didSet {
             defaults.set(themeID, forKey: Key.theme)
+            if pack == nil { defaults.set(try? ThemeDigest.encoded(ThemeNativePalette.stock(themeID)), forKey: "look.appliedPalette") }
             resolve()
         }
     }
@@ -95,7 +106,10 @@ final class Look {
 
     /// The theme drawn now, the picked one. Its colours are made once per theme; Theme reads them, so every surface
     /// redraws (the app window controller restyles the windows themselves).
-    private(set) var theme = PilotTheme.standard { didSet { colors = ThemeColors(theme) } }
+    private(set) var theme = PilotTheme.standard { didSet { colors = ThemeColors(theme); paletteRevision += 1 } }
+    private(set) var paletteRevision = 0
+    var packAppearance: PilotTheme? { pack == nil ? nil : theme }
+    private var pack: ThemePack?
     private(set) var colors = ThemeColors(PilotTheme.standard)
 
     /// Glass while it is on, Solid whenever macOS asks for less transparency, and at Transparency 0 %: the panels', and
@@ -234,6 +248,14 @@ final class Look {
         }
         defaults.set(true, forKey: Key.menuLayoutLine)
         menuLayout = layout
+        if themes == nil {
+            if let data = defaults.data(forKey: "look.appliedPalette"),
+               let palette = try? JSONDecoder().decode(ThemeNativePalette.self, from: data),
+               (try? palette.validate()) != nil, palette.compatible(with: style.rawValue) {
+                switch palette { case .stock(let id): themeID = id; case .pack(let value): pack = value }
+            } else { pack = try? ThemeCoordinator.persistedPack() }
+        }
+        if !ThemeNativePalette.stock(themeID).compatible(with: style.rawValue) { themeID = PilotTheme.defaultID }
         resolve()
         colors = ThemeColors(theme)
         // A theme retired in round 15 starts as its successor, saved, and Ghostty follows as on a pick unless Pilot's look
@@ -249,6 +271,7 @@ final class Look {
 
     /// Omarchy's themes, read from the bundle the first time a pick needs them.
     var themes: [OmarchyTheme] { given ?? GhosttyBridge.themes }
+    var usesThemePacks: Bool { given == nil && ghostty is GhosttyBridge.Writer }
 
     /// The main screen's wallpaper as macOS names it, whether or not its file is still there; a fake in the tests.
     @ObservationIgnored var desktopPicture: () -> URL? = { NSScreen.main.flatMap(NSWorkspace.shared.desktopImageURL) }
@@ -258,6 +281,11 @@ final class Look {
     /// Picks a designed theme, even the one picked already: the theme follows, and Ghostty takes its Omarchy palette
     /// (pick 8); the wallpaper stays.
     func pick(_ id: String) {
+        guard ThemeNativePalette.stock(id).compatible(with: style.rawValue) else { lastError = "This palette requires Toybox"; return }
+        if given == nil, !ThemeCoordinator.legacyAllowed() {
+            lastError = "Restore the active theme pack before choosing a legacy colour theme"
+            return
+        }
         themeID = id
         restyleGhostty()
         looklog.notice("theme: \(self.theme.id, privacy: .public)")
@@ -278,8 +306,56 @@ final class Look {
 
     /// The picked theme, else the default.
     private func resolve() {
-        let next = PilotTheme.named(themeID) ?? .standard
-        if next != theme { theme = next }
+        let shown = (trial ?? (trialID == nil ? pack : nil)).flatMap { $0.compatible(with: style.rawValue) ? $0 : nil }
+        // A designed theme keeps its own face and shape; any other pack takes the current theme's.
+        let base = (trialID ?? shown?.id).flatMap(PilotTheme.named) ?? PilotTheme.named(themeID) ?? .standard
+        let next = shown?.appearance(keeping: base) ?? base
+        if next != theme { madeValues.removeAll(); madeLayers.removeAll(); theme = next }
+    }
+
+    /// Pack selection is persisted by the ownership engine; the legacy theme ID remains the pre-pack baseline.
+    func packChanged(_ pack: ThemePack?) {
+        madeValues.removeAll(); madeLayers.removeAll()
+        self.pack = pack; resolve()
+    }
+
+    /// Tried on from Look › Theme: shown at once and written nowhere. What a plan reads stays `pack` and `themeID`.
+    private(set) var trial: ThemePack?
+    private(set) var trialID: String?
+
+    func tryOn(id: String, pack: ThemePack?) { trialID = id; trial = pack; resolve() }
+    /// Leaving the page. `keep` makes a designed theme Pilot's own, as a pick does, without touching Ghostty.
+    func endTrial(keep: Bool) {
+        let id = trialID
+        trial = nil; trialID = nil
+        if keep, let id, PilotTheme.named(id) != nil, themeID != id { themeID = id } else { resolve() }
+    }
+
+    /// An Apply or Restore press from Look is running. The controls for the parts a theme owns (theme, Glass, Transparency,
+    /// Blur, cursor colours, bar layout) wait, so no edit lands during macOS's mode wait and trips recovery's "later
+    /// personal appearance edit" (review 4 note).
+    var themePressing = false
+
+    var nativeBaseline: ThemeNativeAppearance {
+        .init(palette: .stock(themeID), material: .init(glass: glass, transparency: transparency, blur: glassBlur.rawValue))
+    }
+    var nativeAppearance: ThemeNativeAppearance {
+        .init(palette: pack.map(ThemeNativePalette.pack) ?? .stock(themeID),
+              material: .init(glass: glass, transparency: transparency, blur: glassBlur.rawValue))
+    }
+    private func setNativePalette(_ palette: ThemeNativePalette) {
+        switch palette {
+        case .stock(let id): pack = nil; themeID = id
+        case .pack(let value): pack = value; resolve()
+        }
+        defaults.set(try? ThemeDigest.encoded(palette), forKey: "look.appliedPalette")
+    }
+    /// The coordinator journals before this effect, then reads these same public values to verify it.
+    func applyNative(_ value: ThemeNativeAppearance) {
+        setNativePalette(value.palette)
+        if glass != value.material.glass { glass = value.material.glass }
+        if transparency != value.material.transparency { transparency = value.material.transparency }
+        if glassBlur.rawValue != value.material.blur { glassBlur = GlassBlur(rawValue: value.material.blur) ?? .full }
     }
 
     #if DEBUG

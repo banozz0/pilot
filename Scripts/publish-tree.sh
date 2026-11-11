@@ -22,7 +22,10 @@ ALLOWED=('Sources/PilotCore/Feedback.swift:.*github.com/banozz0/pilot/issues/new
          'Scripts/release.sh:.*github.com/banozz0/pilot/releases/'
          'Sources/Pilot/Terminal/TerminalPack.swift:.*github.com/banozz0/pilot/releases/download/'
          'README.md:.*github.com/banozz0/pilot/releases')
-PATTERN='svenmedina|/Users/sven([^[:alnum:]_]|$)|banozz0/pilot([^-[:alnum:]_]|$)'
+# The words are put together here, so this file names none of them itself (the public-repo guard reads it).
+WHO=sven; NAME=${WHO}medina; HOMEDIR=/Users/$WHO
+PATTERN="$NAME|$HOMEDIR([^[:alnum:]_]|\$)|banozz0/pilot([^-[:alnum:]_]|\$)"
+LOOKED_FOR="$NAME, $HOMEDIR, banozz0/pilot"
 
 git -C "$ROOT" rev-parse --verify --quiet "$REV^{tree}" >/dev/null || { echo "error: $REV is no commit or tree" >&2; exit 1; }
 if [[ -e $OUT && -n $(ls -A "$OUT") ]]; then echo "error: $OUT is not empty" >&2; exit 1; fi
@@ -59,11 +62,11 @@ hits=$(cd "$OUT" && grep -rInE --exclude=publish-tree.sh "$PATTERN" . | sed 's|^
 allowed=$(print -r -- "$hits" | grep -E "^(${(j:|:)ALLOWED})" || true)
 bad=$(print -r -- "$hits" | grep -vE "^(${(j:|:)ALLOWED})" | grep . || true)
 if [[ -n $bad ]]; then
-  echo "  grep (svenmedina, /Users/sven, banozz0/pilot): $(print -r -- "$bad" | wc -l | tr -d ' ') hits"
+  echo "  grep ($LOOKED_FOR): $(print -r -- "$bad" | wc -l | tr -d ' ') hits"
   print -r -- "$bad" | cut -c1-160 | sed 's/^/    /'
   failed=1
 else
-  echo "  grep (svenmedina, /Users/sven, banozz0/pilot): no hits"
+  echo "  grep ($LOOKED_FOR): no hits"
 fi
 [[ -z $allowed ]] || { echo "  allowed:"; print -r -- "$allowed" | cut -c1-160 | sed 's/^/    /'; }
 

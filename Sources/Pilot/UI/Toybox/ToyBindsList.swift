@@ -74,7 +74,7 @@ struct ToyBindsList: View {
             if let back {
                 Button(action: back) { Label("Keyboard", systemImage: "chevron.left") }.buttonStyle(ToyBindsButton(small: true))
             }
-            Text(only == .plain ? "Plain combos" : "Binds").styleText(\.pageTitle).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
+            Text(only == .plain ? AppSection.plainCombos.title : "Binds").styleText(\.pageTitle).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
         }
         .fixedSize()
     }

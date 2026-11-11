@@ -1,6 +1,6 @@
 import Foundation
 
-/// Binds › Export and import's Save map (Sven, 2026-10-19, Q328): every bind of the active preset as one picture to keep
+/// Binds › More › Export and import's Save map (Sven, 2026-10-19, Q328): every bind of the active preset as one picture to keep
 /// beside the keyboard. Its layers are the binds' own, read from the store rather than from the Binds page's tabs: Hyper,
 /// then each sublayer in the page's order, then any other set of modifiers under Hyper (Hyper+Ctrl+Alt), then the plain
 /// combos as one layer, each key with its own modifiers. A layer with no binds is left out.
@@ -46,8 +46,8 @@ public enum BindsMap {
         /// Its binds in board order (key code, then modifiers).
         public let entries: [Entry]
 
-        /// "Hyper", "Hyper + Shift", "Hyper + Ctrl + Alt", "Plain combos".
-        public var title: String { hyper ? (["Hyper"] + modifiers.labels).joined(separator: " + ") : "Plain combos" }
+        /// "Hyper", "Hyper + Shift", "Hyper + Ctrl + Alt", "Without Hyper".
+        public var title: String { hyper ? (["Hyper"] + modifiers.labels).joined(separator: " + ") : AppSection.plainCombos.title }
 
         /// The signs a key in this layer is pressed with after the layer key: "⇧", "⌃⌥"; empty for Hyper and Plain.
         public var signs: String { Self.signs(modifiers) }

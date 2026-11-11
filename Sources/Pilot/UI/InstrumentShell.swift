@@ -43,7 +43,7 @@ struct InstrumentFrame: View {
 }
 
 extension InstrumentFrame {
-    /// Binds draws its own bar in Instrument: its tabs and controls are the page's state. Binds › Overlay is a plain page
+    /// Binds draws its own bar in Instrument: its tabs and controls are the page's state. Binds › Mouse and More are plain pages
     /// under the frame's bar, whose tabs lead back to the keyboard (story 56).
     static func pageOwnsBar(_ page: AppPage, section: AppSection? = nil) -> Bool {
         page == .binds && section?.isPlainBindsPage != true

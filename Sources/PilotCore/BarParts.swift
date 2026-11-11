@@ -236,7 +236,7 @@ public enum BarParts {
         // The top bar draws the dots itself (TopBarStatusLights); elsewhere (the drag's chip), the item's symbol.
         case .modes: return [.symbol(statusSymbol)]
         case .capture: return capture(i.recording, style: style)
-        case .terminal, .askAI:
+        case .terminal, .askAI, .pill:
             // What the Menu bar page's strip and the drag's chip draw; the top bar draws its own lit item (TopBarDropItem).
             let symbol = BarPart.symbol(dropSymbol(entry.kind))
             return style == .icon ? [symbol] : [symbol, .text(entry.kind.title.uppercased())]
@@ -339,7 +339,13 @@ public enum BarParts {
     static func level(_ device: SystemStats.BluetoothDevice) -> Int { device.percent ?? 100 }
 
     /// A bar drop's glyph, the C frames' `>_` and `✦`.
-    public static func dropSymbol(_ kind: BarKind) -> String { kind == .askAI ? "sparkle" : "apple.terminal" }
+    public static func dropSymbol(_ kind: BarKind) -> String {
+        switch kind {
+        case .askAI: "sparkle"
+        case .pill: "capsule"
+        default: "apple.terminal"
+        }
+    }
 
     /// Bluetooth's logo is Apple's to draw only in its own menu; Pilot shows what the battery is in.
     static let bluetoothSymbol = "headphones"

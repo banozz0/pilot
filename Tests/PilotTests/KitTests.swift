@@ -65,10 +65,10 @@ struct KitTests {
         return n > a.count / 100
     }
 
-    @Test("Twelve components, as section 5 lists them")
+    @Test("Twelve components, as section 5 lists them, then the previews' mini desktop")
     func twelve() {
         #expect(KitSample.allCases.map(\.title) == ["Toggle", "Slider", "Segmented", "List row", "Chip", "Key cap", "Stat tile",
-                                                    "Mini graph", "Search field", "Button", "Empty state", "Popover"])
+                                                    "Mini graph", "Search field", "Button", "Empty state", "Popover", "Mini desktop"])
     }
 
     @Test("Each component follows the theme", arguments: KitSample.allCases)

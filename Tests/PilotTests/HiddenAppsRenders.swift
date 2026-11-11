@@ -38,7 +38,7 @@ struct HiddenAppsRenders {
         look.themeID = "lagoon"
         for style in PilotStyle.allCases {
             look.style = style
-            let page = MonitorsGround { HiddenAppsPage(store: store, rows: Self.rows, choices: []) }
+            let page = MonitorsGround { HiddenAppsBlock(store: store, rows: Self.rows, choices: []) }
                 .styled(.page(.install)).frame(width: 1000, height: 700).pilotTheme(look: look)
             try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("hidden-apps-\(style.rawValue).png"))
         }

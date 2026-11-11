@@ -71,7 +71,7 @@ struct ClassicMenuRenders {
     @Test("Classic Shell (Q139): the status line names the mode and steps the kinds with Tab; its words and mode block read at 4.5:1")
     func status() throws {
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
-        let modes = ["D1-root": "GO", "D2-tab-windows": "WINDOWS", "D3-search": "SEARCH", "D8-install": "INSTALL", "trigger": "TRIGGER"]
+        let modes = ["D1-root": "GO", "D2-tab-windows": "WINDOWS", "D3-search": "SEARCH", "D8-install": "INSTALL", "trigger": "ACTIONS"]
         for (name, mode) in modes { #expect(ClassicStatus(model: try #require(states[name])).mode == mode, "\(name)") }
         let calculator = try #require(states["D4-calculator"])
         let card = try #require(calculator.answerCard(calculator.nav.rows[0], at: 0))

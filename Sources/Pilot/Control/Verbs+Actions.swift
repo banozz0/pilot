@@ -197,7 +197,7 @@ extension ControlVerbs {
                 let withheld = RunReadback.withheld(id)
                 var tips: [String] = []
                 if withheld == nil { tips = await app.readback.watch { action.run() } } else { action.run() }
-                let off = engine.binds.store.isDisabled(id) ? "\(id) is switched off, so nothing ran; turn it on in Binds › Export and import (pilot open binds)" : nil
+                let off = engine.binds.store.isDisabled(id) ? "\(id) is switched off, so nothing ran; turn it on in Binds › More › Export and import (pilot open exportImport)" : nil
                 var answer: [String: JSONValue] = ["dispatched": .string(id), "hud": tips.isEmpty ? .null : .string(tips.joined(separator: "\n")),
                                                    "error": off.map(JSONValue.string) ?? .null]
                 answer["opens"] = ControlActions.opens(id, extensions: app.extensions()).map { .string($0.rawValue) }

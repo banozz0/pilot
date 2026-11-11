@@ -28,7 +28,7 @@ enum AppsModule {
             add(&registry, role.rawValue, role.label, key) {
                 let value = resolved(role)
                 if role == .notes && value == AppRolePicks.pilot { return NotesPanel.shared.toggle() }
-                if role == .files && value == AppRolePicks.pilot { return FilesWindows.shared.show() }
+                if role == .files && value == AppRolePicks.pilot { return FilesWindows.shared.toggle() }
                 let ok: Bool
                 switch role.target(value) {
                 case .web(let url): openWeb(url); ok = true

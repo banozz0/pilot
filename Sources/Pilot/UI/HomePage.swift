@@ -66,6 +66,16 @@ struct HomePage: View {
     /// How often the window list is read again while Home shows, so titles stay fresh.
     static let windowsEvery = Duration.seconds(15)
 
+    /// Clipboard and Most used wait until they hold something: no copy kept, no press counted yet. Edit Home still shows
+    /// them, so either can be placed any time (simplify-pages T3).
+    static func waits(_ id: String, copy: HomeCopy?, pressed: Bool) -> Bool {
+        switch HomeLayout.Block(rawValue: id) {
+        case .clipboard?: copy == nil
+        case .mostUsed?: !pressed
+        default: false
+        }
+    }
+
     /// The cells Home draws `blocks` at. Toybox's Pilot block, drawn only while something needs you, takes the top of the
     /// board when it has no cells of its own, the others moving down.
     static func cells(_ home: HomeLayout, blocks: [String], shown: [String]) -> [String: HomeCell] {
@@ -88,6 +98,7 @@ struct HomePage: View {
         let beyond = HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id))
         let shown = home.shown(extensions: beyond)
         let blocks = HomeLayout.drawn(shown, style: style.kind, needsYou: !problems.isEmpty)
+            .filter { editing != nil || !Self.waits($0, copy: copy, pressed: engine.pressed) }
         let parts = HomeParts(problems: problems, held: held, picked: $picked, copy: copy, binds: binds ?? HomeBinds(engine: engine),
                               blocks: blocks,
                               pages: pages, pageModel: { [pageModels, sources] in pageModels.model($0, make: sources.page) }, onScreen: onScreen,
@@ -283,6 +294,8 @@ enum HomeFix {
                    restartTiler: @escaping @MainActor () -> Void) -> (title: String, run: @MainActor () -> Void)? {
         switch (problem.kind, problem.place) {
         case (.tiler, _): ("Restart Pilot's tiler", restartTiler)
+        // Its Grant is Needs you on Pilot's front (simplify-pages T8): the button names what it opens, not the page.
+        case (.accessibility, let place?): ("Grant Accessibility", { go(place) })
         case (_, let place?): ("Open \(place.title)", { go(place) })
         case (_, nil): nil
         }

@@ -8,6 +8,8 @@ struct TopBarView: View {
     let screen: String
     let sources: BarSources
     let store: BarItemsStore
+    /// Final group geometry for the island windows.
+    var reportIsland: ((TopBarSide, CGRect) -> Void)? = nil
     /// Where the bar drew each slot, for the overflow item.
     var frames = BarFrames.shared
     var recorder = Recorder.shared
@@ -20,8 +22,8 @@ struct TopBarView: View {
         let sides = store.settings.preview(.topBar).top ?? [:]
         let kinds = Set(sides.values.joined().flatMap(\.kinds))
         // Each slot is its own view, so a timer tick redraws the timer, not the bar.
-        TopBarStrip(sides: sides, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,
-                    wallpaper: wallpapers.strips[screen], report: { [frames, screen] in frames.report($2, side: $0, index: $1, on: screen) },
+        TopBarStrip(sides: sides, configuration: store.settings.preset, look: Look.shared, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,
+                    wallpaper: wallpapers.strips[screen], foot: BarFoot(screen: screen, configuration: store.settings.preset), reportIsland: reportIsland, report: { [frames, screen] in frames.report($2, side: $0, index: $1, on: screen) },
                     // Capture shows the recording's time itself, in place of the red-dot control; checked first, so the bar
                     // never follows the recorder then.
                     trailing: !kinds.contains(.capture) && recorder.isActive ? AnyView(RecordingControl(recorder: recorder)) : nil,
@@ -51,7 +53,9 @@ struct TopBarSlot: View {
     var lights = BarDropLights.shared
 
     var body: some View {
-        if case .item(let entry) = slot, entry.kind.drop != nil {
+        if case .item(let entry) = slot, entry.kind == .pill {
+            TopBarPillItem(lights: lights)
+        } else if case .item(let entry) = slot, entry.kind.drop != nil {
             TopBarDropItem(entry: entry, sources: sources, store: store, lights: lights)
         } else {
             TopBarSlotView(slot: slot, screen: screen, sources: sources, store: store)
@@ -71,10 +75,48 @@ final class BarDropLights {
 
     init(open: Set<BarDropKind> = []) { self.open = open }
 
+    /// Every bar's item for each drop, so a drop can open under the one on its own screen.
+    @ObservationIgnored private var anchors: [BarDropKind: [ScreenAnchor.Box]] = [:]
+    func register(_ box: ScreenAnchor.Box, for drop: BarDropKind) { anchors[drop, default: []].append(box) }
+    func unregister(_ box: ScreenAnchor.Box, for drop: BarDropKind) { anchors[drop]?.removeAll { $0 === box } }
+
+    /// The centre of each drop's item drawn inside `bar`: an item gone for room, or a preview strip's, does not count.
+    func itemCentres(on bar: CGRect) -> [BarDropKind: CGFloat] {
+        anchors.compactMapValues { boxes in
+            boxes.lazy.compactMap { $0.view?.screenFrame }.first { $0.width > 0 && bar.contains(CGPoint(x: $0.midX, y: $0.midY)) }?.midX
+        }
+    }
+
+    /// Where `drop` hangs when its item drawn by `box` is clicked (spec desktop-controls T5): that item's own screen, its
+    /// bar, the item's centre; nil when the item is not on a bar now. Every display's bar registers its own item, so the
+    /// click names its box: taking the first registered one opened the drop on the wrong display (build 2276).
+    func spot(of drop: BarDropKind, from box: ScreenAnchor.Box) -> BarDrops.Spot? {
+        guard let view = box.view, let screen = view.window?.screen, let item = view.screenFrame else { return nil }
+        let bar = Screens.bars[screen.localizedName].map { TopBarGeometry.frame(screen: screen.frame, strip: $0) }
+        return .init(screen: screen.frame, visible: screen.visibleFrame, bar: bar, items: [drop: item.midX], ground: Self.ground(view))
+    }
+
+    /// The flat foot of the bar window `drop`'s item stands on inside `bar` (its key opens it there too); nil when none.
+    func ground(of drop: BarDropKind, on bar: CGRect) -> CGRect? {
+        anchors[drop]?.lazy.compactMap(\.view).first { $0.screenFrame.map { bar.contains(CGPoint(x: $0.midX, y: $0.midY)) } == true }
+            .flatMap(Self.ground)
+    }
+
+    /// An item's bar window (an island, the floating strip or the whole bar) less its drawn rounded corners.
+    private static func ground(_ view: NSView) -> CGRect? {
+        guard let window = view.window else { return nil }
+        return PillPlacement.ground(window: window.frame, radius: window.contentView?.layer?.cornerRadius ?? 0)
+    }
+
+    /// The open pill drop's frame (screen points), for the bar's foot to leave a gap where it joins (BarFootGap).
+    private(set) var pillDrop: CGRect?
+
     /// Reads BarDrops' open set; called by BarDrops after each change and after a click here.
     func refresh(_ drops: BarDrops = .shared) {
         let now = Set(BarDropKind.allCases.filter(drops.isOpen))
         if now != open { open = now }
+        let pill = drops.window(.pill)?.frame
+        if pill != pillDrop { pillDrop = pill }
     }
 
     /// Each item does what its key does: Ask AI's opens the chat as its action does (AIChatPanel.show: the idle reset, the
@@ -87,6 +129,8 @@ final class BarDropLights {
             chat.isShown ? chat.hide() : chat.show()
         case .terminal:
             terminal.toggle()
+        case .pill:
+            PillDrop.shared.toggle()   // no item clicked: the focused display, as its key does (the pill's item names its own)
         }
         shared.refresh()
     }
@@ -112,6 +156,8 @@ struct TopBarDropItem: View {
                 .accessibilityAddTraits(lit ? .isSelected : [])
                 .frame(maxHeight: .infinity)
                 .toyIsland(entry.kind)
+                .onAppear { lights.register(anchor, for: drop) }
+                .onDisappear { lights.unregister(anchor, for: drop) }
         }
     }
 
@@ -158,15 +204,21 @@ struct TopBarDropItem: View {
 struct TopBarStrip<Slot: View>: View {
     @Environment(\.style) private var style
     let sides: [TopBarSide: [BarSlot]]
+    var configuration: BarPresetConfiguration? = nil
+    var look: Look? = nil
     var background = TopBarBackground.solid
     var colour = ColourChoice.theme
+    var glassPreview = false
     /// Item colours (EnvironmentValues.barItemColours), the bar's switch.
     var itemColours = false
     /// The wallpaper under the bar (BarWallpapers), which a Glass or Clear bar inks and tones itself for; the Menu bar
     /// page's preview has none.
     var wallpaper: WallpaperStrip.Grid? = nil
+    /// Where this bar sits on its screen, so its foot's line can open where the pill's drop joins it; the preview has none.
+    var foot: BarFoot? = nil
     /// Where each slot is drawn, by its side and index in `sides`, in BarFrames' space: the strip's whole frame (card
     /// agent-bo-95423017).
+    var reportIsland: ((TopBarSide, CGRect) -> Void)? = nil
     var report: ((TopBarSide, Int, CGRect) -> Void)? = nil
     /// Drawn after the right side's items while it is there: the recording's control (story 192, Q162).
     var trailing: AnyView? = nil
@@ -183,20 +235,42 @@ struct TopBarStrip<Slot: View>: View {
     var body: some View {
         // Toybox's islands (ToyBar) stand on its canvas, apart, with no hairline or rule. Instrument's (InstrumentBar) draws
         // a hairline between the bar's groups, its caption face and the rule along its foot.
+        let islands = configuration?.preset == .threeIslands
         let toybox = style.kind == .toybox, instrument = style.kind == .instrument
         let rules = instrument ? sides.mapValues(InstrumentBar.hairlines(before:)) : [:]
         let placed = live?.layoutValue(key: TopBarRow.Side.self, value: liveSide).layoutValue(key: TopBarRow.Folds.self, value: true)
         // On the left it follows the mark: placed first only where there is none.
         let first = liveSide == .right || liveSide == .left && !sides.values.contains { $0.contains { $0.kinds.contains(.pilot) } }
         let ground = TopBarColour.ground(colour, style: style)
-        let (inked, tone) = TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: .shared)
-        TopBarRow(spacing: toybox ? ToyBar.spacing : InstrumentBar.spacing, gap: 12) {
+        let (inked, tone): (StyleTokens, TopBarColour.Toned?) = if let look {
+            TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: look)
+        } else { (TopBarColour.tokens(colour, style: style, background: background), nil) }
+        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil) {
+            if islands, let configuration {
+                ForEach(TopBarSide.allCases, id: \.self) { side in
+                    GeometryReader { proxy in
+                        // A zero final width draws no fill or stroke, including when every saved item is hidden.
+                        if proxy.size.width > 0, proxy.size.height > 0 {
+                            islandGround(ground: ground, tone: tone)
+                                .background { if glassPreview, background == .glass { BarGlassGround(colour: colour) } }
+                                .clipShape(.rect(cornerRadius: configuration.radius))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                        .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
+                                }
+                        }
+                    }
+                    .allowsHitTesting(false)
+                    .reported(reportIsland.map { report in { report(side, $0) } })
+                    .layoutValue(key: TopBarRow.Ground.self, value: side)
+                }
+            }
             if let placed, first { placed }
             ForEach(TopBarSide.allCases, id: \.self) { side in
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
                     let ruled = rules[side]?.contains(index) == true
                     slot(item)
-                        .instrumentRuleBefore(ruled, gap: InstrumentBar.spacing)
+                        .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
                         .reported(report.map { report in { report(side, index, $0) } })
                         .layoutValue(key: TopBarRow.Side.self, value: side)
                         .layoutValue(key: TopBarRow.Folds.self, value: item.kind.folds)
@@ -212,17 +286,71 @@ struct TopBarStrip<Slot: View>: View {
         .environment(\.barGround, tone.map { ($0.tone.ground, inked.dark) })
         .inked(inked)
         .font(toybox ? ToyBar.font : style.font(\.caption))
-        .padding(.horizontal, 6).padding(.vertical, toybox ? 0 : 3)
+        .padding(.horizontal, islands ? 0 : configuration?.padding ?? 6).padding(.vertical, islands || toybox ? 0 : 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(.named(BarFrames.space))
         .background {
-            if background == .solid { colour == .theme ? TopBarColour.themeGround(style) : Color(Paint(ground)) }
-            else { TopBarColour.toneGround(tone, background: background) }
+            if !islands { islandGround(ground: ground, tone: tone) }
         }
         // One rule along the Strip's foot on a solid bar; none on Glass, whose own edge is the line there (Sven, 2026-10-10:
         // the two drew a double line where the AI chat meets the bar).
         .overlay(alignment: .bottom) {
-            if background == .solid, instrument { InstrumentRule().style(inked) }
+            if configuration == nil, background == .solid, instrument { InstrumentRule().style(inked).footGap(foot) }
+        }
+        .clipShape(.rect(cornerRadius: configuration?.radius ?? 0))
+        .overlay {
+            if let configuration, !islands {
+                RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                    .footGap(foot)
+            }
+        }
+    }
+
+    @ViewBuilder private func islandGround(ground: UInt32, tone: TopBarColour.Toned?) -> some View {
+        if background == .solid { colour == .theme ? TopBarColour.themeGround(style) : Color(Paint(ground)) }
+        else { TopBarColour.toneGround(tone, background: background) }
+    }
+}
+
+/// Where a bar sits on its screen (screen points): the screen, and the left edge of the bar's row, which every island
+/// window of it shares (TopBarIslandClip keeps the row's coordinates).
+struct BarFoot: Equatable {
+    var screen: CGRect
+    var rowX: CGFloat
+
+    @MainActor init?(screen name: String, configuration: BarPresetConfiguration?) {
+        guard let screen = NSScreen.screens.first(where: { $0.localizedName == name }) else { return nil }
+        self.screen = screen.frame
+        rowX = BarPresetGeometry.frame(configuration, screen: screen.frame, strip: 0, notch: screen.safeAreaInsets.top).minX
+    }
+}
+
+extension View {
+    /// The bar's foot line (an island's border, the strip's, the solid bar's rule) with a gap where the open pill drop
+    /// joins it, so bar and drop read as one shape (Sven on build 2276); `x` is this view's left edge in the row.
+    @ViewBuilder func footGap(_ foot: BarFoot?, at x: CGFloat = 0) -> some View {
+        if let foot { mask { BarFootGap(foot: foot, x: x) } } else { self }
+    }
+}
+
+/// The mask: all of the line, less the open pill drop's span along its foot. Only this view reads the drop, so opening
+/// it redraws no item; with the pill closed it is one plain rectangle.
+private struct BarFootGap: View {
+    let foot: BarFoot
+    let x: CGFloat
+    var lights = BarDropLights.shared
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                if let drop = lights.pillDrop, foot.screen.contains(CGPoint(x: drop.midX, y: drop.maxY - 1)) {
+                    Rectangle().frame(width: drop.width, height: 4)
+                        .offset(x: drop.minX - foot.rowX - x, y: proxy.size.height - 4)
+                        .blendMode(.destinationOut)
+                }
+            }
+            .compositingGroup()
         }
     }
 }
@@ -375,6 +503,8 @@ struct TopBarRow: Layout {
     struct Folds: LayoutValueKey { static let defaultValue = false }
     /// The overflow item: on no side, placed only while an item goes.
     struct Overflow: LayoutValueKey { static let defaultValue = false }
+    /// A non-interactive island fill/stroke, placed from the very same final plan as its items.
+    struct Ground: LayoutValueKey { static let defaultValue: TopBarSide? = nil }
 
     /// Where each item starts in the row (nil for one that goes) and how wide it is placed.
     struct Plan {
@@ -382,12 +512,19 @@ struct TopBarRow: Layout {
         var width: [TopBarSide: [CGFloat]]
         /// Where the overflow item starts; nil while nothing goes.
         var more: CGFloat? = nil
+        var moreWidth: CGFloat = 0
+        var groups: [TopBarSide: CGRect] = [:]
+
+        func hit(at point: CGPoint) -> TopBarSide? {
+            TopBarSide.allCases.first { BarPresetGeometry.hit(point, in: groups[$0]) }
+        }
     }
 
     /// Between two items of a side.
     var spacing: CGFloat
     /// The least room between two sides.
     var gap: CGFloat
+    var islands: BarPresetConfiguration? = nil
     /// How far left of the row a subview that goes is placed.
     static let offstage: CGFloat = 10_000
 
@@ -401,12 +538,18 @@ struct TopBarRow: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let measured = measure(subviews, height: bounds.height)
-        let plan = arrange(measured.widths, least: measured.least, room: bounds.width, more: measured.more)
+        let plan = arrange(measured.widths, least: measured.least, room: bounds.width, more: measured.more, height: bounds.height)
         var next: [TopBarSide: Int] = [:]
         for subview in subviews {
+            if let side = subview[Ground.self] {
+                let rect = plan.groups[side] ?? CGRect(x: -Self.offstage, y: 0, width: 0, height: 0)
+                subview.place(at: CGPoint(x: bounds.minX + rect.minX, y: bounds.minY + rect.minY), anchor: .topLeading,
+                              proposal: ProposedViewSize(rect.size))
+                continue
+            }
             if subview[Overflow.self] {
                 let x = plan.more.map { bounds.minX + $0 } ?? bounds.minX - Self.offstage - measured.more
-                subview.place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: measured.more, height: bounds.height))
+                subview.place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: plan.moreWidth, height: bounds.height))
                 continue
             }
             let side = subview[Side.self], index = next[side, default: 0]
@@ -421,7 +564,7 @@ struct TopBarRow: Layout {
     /// overflow item's width.
     private func measure(_ subviews: Subviews, height: CGFloat) -> (widths: [TopBarSide: [CGFloat]], least: [TopBarSide: [CGFloat]], more: CGFloat) {
         var widths: [TopBarSide: [CGFloat]] = [:], least: [TopBarSide: [CGFloat]] = [:], more: CGFloat = 0
-        for subview in subviews {
+        for subview in subviews where subview[Ground.self] == nil {
             let side = subview[Side.self], width = subview.sizeThatFits(ProposedViewSize(width: nil, height: height)).width
             if subview[Overflow.self] { more = width; continue }
             widths[side, default: []].append(width)
@@ -433,31 +576,39 @@ struct TopBarRow: Layout {
     /// Where each item starts in a row `room` wide (nil for one that goes) and its width; `least` gives each item's least
     /// (an item missing from it, or all of them, does not shrink). While an item drawing something goes, the overflow
     /// item, `more` wide, sits first on the right side; none (0) leaves the row as it was.
-    func arrange(_ widths: [TopBarSide: [CGFloat]], least: [TopBarSide: [CGFloat]] = [:], room: CGFloat, more: CGFloat = 0) -> Plan {
+    func arrange(_ widths: [TopBarSide: [CGFloat]], least: [TopBarSide: [CGFloat]] = [:], room: CGFloat, more: CGFloat = 0, height: CGFloat = 0) -> Plan {
+        let island = islands != nil
+        let padding: CGFloat = island ? min(CGFloat(islands!.padding), max(0, (room - min(room, more)) / 2)) : 0
+        let measuredMore = island ? min(more, max(0, room - 2 * padding)) : more
+        func padded(_ width: CGFloat) -> CGFloat { width > 0 ? width + 2 * padding : 0 }
         let left = widths[.left] ?? [], centre = widths[.centre] ?? [], right = widths[.right] ?? []
-        var keptLeft = left.count, keptRight = right.count
+        var keptLeft = left.count, keptRight = right.count, keptCentre = centre.count
         var sized = widths
         // The centre's width, less what a folding item there gave.
-        func c() -> CGFloat { side(sized[.centre, default: []]) }
+        func c() -> CGFloat { padded(side(sized[.centre, default: []][kept(.centre)])) }
         func kept(_ s: TopBarSide) -> Range<Int> {
             switch s {
             case .left: 0..<keptLeft
-            case .centre: 0..<centre.count
+            case .centre: 0..<keptCentre
             case .right: (right.count - keptRight)..<right.count
             }
         }
         // Whether an item drawing something goes, so the overflow item shows.
         func overflows() -> Bool {
-            more > 0 && (left[keptLeft...].contains { $0 > 0 } || right[..<(right.count - keptRight)].contains { $0 > 0 })
+            measuredMore > 0 && (left[keptLeft...].contains { $0 > 0 } || right[..<(right.count - keptRight)].contains { $0 > 0 } || island && centre[keptCentre...].contains { $0 > 0 })
         }
         // The right side's width, the overflow item first in it while it shows.
         func rightSide() -> CGFloat {
             let r = side(sized[.right, default: []][kept(.right)])
-            return overflows() ? more + (r > 0 ? spacing + r : 0) : r
+            return padded(overflows() ? measuredMore + (r > 0 ? spacing + r : 0) : r)
         }
         // The centre's least and most x, clear of both sides; with no centre (the Menu's) the sides are one gap apart.
         func span() -> (lo: CGFloat, hi: CGFloat) {
-            let l = side(sized[.left, default: []][kept(.left)]), r = rightSide()
+            let l = padded(side(sized[.left, default: []][kept(.left)])), r = rightSide()
+            if island {
+                if c() > 0 { return (max(l > 0 ? l + gap : 0, r > 0 ? r + gap : 0), (room - c()) / 2) }
+                return (l + (l > 0 && r > 0 ? gap : 0), room - r)
+            }
             return (l > 0 ? l + gap : 0, room - c() - (r > 0 ? r + (c() > 0 ? gap : 0) : 0))
         }
         // The kept items that fold give what the row is short, each down to its least.
@@ -475,26 +626,39 @@ struct TopBarRow: Layout {
         }
         fold()
         // Still short: the right side gives an item, then the left; the folding items take back what that frees.
-        while keptLeft + keptRight > 0, case let (lo, hi) = span(), lo > hi {
-            if keptRight > 0 { keptRight -= 1 } else { keptLeft -= 1 }
+        while keptLeft + keptRight + (island ? keptCentre : 0) > 0, case let (lo, hi) = span(), lo > hi {
+            if keptRight > 0 { keptRight -= 1 } else if keptLeft > 0 { keptLeft -= 1 } else { keptCentre -= 1 }
             fold()
         }
         // Centred on the row while that clears both sides, else in the middle of the room between them, so it never reads
         // as one of a side's items.
         let (lo, hi) = span(), centred = (room - c()) / 2
-        let centreX = (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
+        let centreX = island ? centred : (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
         var x: [TopBarSide: [CGFloat?]] = [:]
-        let more = overflows() ? room - rightSide() : nil
-        for (s, start) in [(TopBarSide.left, CGFloat(0)), (.centre, centreX), (.right, room - side(sized[.right, default: []][kept(.right)]))] {
+        let more = overflows() ? room - rightSide() + padding : nil
+        for (s, start) in [(TopBarSide.left, padding), (.centre, centreX + padding), (.right, room - padding - side(sized[.right, default: []][kept(.right)]))] {
             let all = sized[s] ?? [], keep = kept(s)
             var at = start
             x[s] = all.indices.map { i in
-                guard keep.contains(i) else { return nil }
+                guard keep.contains(i), !island || all[i] > 0 else { return nil }
                 defer { at += all[i] > 0 ? all[i] + spacing : 0 }
                 return at
             }
         }
-        return Plan(x: x, width: sized, more: more)
+        var plan = Plan(x: x, width: sized, more: more, moreWidth: measuredMore)
+        if island {
+            for s in TopBarSide.allCases {
+                var spans = (x[s] ?? []).enumerated().compactMap { i, at -> CGRect? in
+                    guard let at, sized[s]![i] > 0 else { return nil }
+                    return CGRect(x: at, y: 0, width: sized[s]![i], height: height)
+                }
+                if s == .right, let at = more { spans.append(CGRect(x: at, y: 0, width: measuredMore, height: height)) }
+                if let first = spans.first {
+                    plan.groups[s] = spans.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -padding, dy: 0)
+                }
+            }
+        }
+        return plan
     }
 
     /// A side's width: its items that draw something, `spacing` apart; nothing when none draws.

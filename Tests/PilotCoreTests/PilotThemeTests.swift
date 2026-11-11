@@ -56,10 +56,10 @@ struct PilotThemeTests {
 
     @Test("Round 15's eight in the user's order, dark first, Lagoon the default, then Toybox Night and Toybox; seven dark, three light")
     func designed() {
-        #expect(PilotTheme.designed.map(\.id) == ["orchid", "lagoon", "void", "phosphor", "garnet", "dusk", "porcelain", "workshop", "toybox-night", "toybox"])
+        #expect(PilotTheme.designed.map(\.id) == ["orchid", "lagoon", "void", "phosphor", "garnet", "dusk", "porcelain", "workshop", "toybox-night", "toybox", "cinder", "verdigris", "cyanotype", "folio", "celadon", "wisteria"])
         #expect(Set(Self.round15.map(\.id)) == Set(PilotTheme.designed.prefix(8).map(\.id)))
         #expect(PilotTheme.defaultID == "lagoon" && PilotTheme.standard.id == "lagoon")
-        #expect(PilotTheme.designed.filter(\.dark).count == 7)
+        #expect(PilotTheme.designed.filter(\.dark).count == 10)
         #expect(PilotTheme.named("void")?.name == "Void" && PilotTheme.named("nope") == nil)
         for retired in PilotTheme.retired.keys { #expect(PilotTheme.named(retired) == nil, "\(retired) is gone") }
     }
@@ -168,7 +168,11 @@ struct PilotThemeTests {
         #expect(night.ink(on: night.good) == night.sidebar)
         #expect(night.ink(on: 0x205EA6) == 0xFFFFFF)
         #expect(paper.ink(on: paper.good) == 0xFFFFFF && paper.ink(on: 0xF2EFE4) == 0xFFFFFF)
-        for theme in PilotTheme.designed where !StyleTokens.toyboxThemes.contains(theme.id) { #expect(theme.onAccent == theme.ink(on: theme.accent), "\(theme.id)") }
+        // The rule holds unless it reads below 4.5:1 on that accent (Orchid, Garnet, Workshop; Sven's themes round, P105).
+        for theme in PilotTheme.designed where !StyleTokens.toyboxThemes.contains(theme.id) {
+            #expect(Contrast.ratio(theme.onAccent, theme.accent) >= 4.5, "\(theme.id)")
+            #expect(theme.onAccent == theme.ink(on: theme.accent) || Contrast.ratio(theme.ink(on: theme.accent), theme.accent) < 4.5, "\(theme.id)")
+        }
         // Toybox's ink, never white, on its sun.
         #expect(PilotTheme.named("toybox")?.onAccent == 0x221E35 && Contrast.ratio(0x221E35, 0xFFC933) >= 4.5)
         // The neutral tile: in a dark theme the raised colour lifted 16 % toward white; else the second text.

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import PilotCore
@@ -17,7 +18,10 @@ enum GhosttyBridge {
 
     /// Takes Pilot's block and include out of Ghostty's config, then reloads.
     static func remove(files: GhosttyFiles = .standard) {
-        change("Pilot's look taken out") { try files.remove() }
+        change("Pilot's look taken out") {
+            guard ThemeCoordinator.legacyAllowed() else { throw ThemeFailure("Restore the active theme pack before changing legacy Ghostty appearance") }
+            return try files.remove()
+        }
     }
 
     /// One write, logged; a change reloads Ghostty.
@@ -35,9 +39,20 @@ enum GhosttyBridge {
     /// A running Ghostty reloads through its menu; a stopped one reads the config at launch.
     static func reload() { DriveModule.pressMenu(bundle, reloadItem, quietWhenNotRunning: true) }
 
+    /// A theme's Apply and Restore: Ghostty › Reload Configuration pressed now, through its menu (ADR 0001, never its
+    /// key), off the main thread. Nil when Ghostty isn't running, since it reads its config at launch.
+    static func reloadNow() async -> Bool? {
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else { return nil }
+        let pid = app.processIdentifier, item = reloadItem
+        let pressed = await Task.detached(priority: .userInitiated) { AXMenu.press(pid: pid, path: item) }.value
+        looklog.notice("theme: Ghostty reload \(pressed ? "pressed" : "not found", privacy: .public)")
+        return pressed
+    }
+
     /// Look's Ghostty write on a theme pick: the standard files, then a reload when they changed; errors go to the caller.
     struct Writer: GhosttyWriting {
         func apply(_ look: GhosttyLook) throws -> Bool {
+            guard ThemeCoordinator.legacyAllowed() else { throw ThemeFailure("Restore the active theme pack before changing legacy Ghostty appearance") }
             let changed = try GhosttyFiles.standard.apply(look)
             if changed { reload() }
             return changed

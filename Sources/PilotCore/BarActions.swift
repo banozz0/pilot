@@ -217,6 +217,7 @@ public enum BarTooltip {
         case .extensions: return i.extensionBars.isEmpty ? "No extension shows anything here" : i.extensionBars.map(\.tooltip).joined(separator: " · ")
         case .terminal: return "Drop the terminal · click shows or hides it"
         case .askAI: return "Drop Ask AI · click shows or hides it"
+        case .pill: return "The pill · click drops its views"
         case .modes: return StatusDots.summary(i.statusLights)
         case .capture:
             guard let recording = i.recording else { return "Capture · click for every capture and recording" }

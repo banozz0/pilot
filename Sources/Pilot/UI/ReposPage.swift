@@ -28,7 +28,8 @@ struct ReposPage: View {
     @State private var loaded = false
     @State private var picked: String?
 
-    static let intro = "Your repos in ~/code, read-only: pick one to browse its files and preview them. Pilot never writes into a repo."
+    static let intro = "Your repos in ~/code, read-only: pick one to browse its files and preview them."
+    static let introInfo = "Pilot never writes into a repo."
 
     init(editor: EditorChoice = .shared, start: Start = .init()) {
         self.editor = editor
@@ -37,7 +38,7 @@ struct ReposPage: View {
     }
 
     var body: some View {
-        KitPage(intro: Self.intro) {
+        KitPage(intro: Self.intro, info: Self.introInfo) {
             if let repo = repos.first(where: { $0.name == picked }) {
                 RepoBrowser(repo: repo, editor: editor, start: start) { withAnimation(Kit.change) { picked = nil } }.id(repo.name)
             } else if loaded {

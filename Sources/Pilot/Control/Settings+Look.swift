@@ -11,10 +11,11 @@ extension SettingsSchema {
         register([
             .choice("look.style", "Style", page: "look", PilotStyle.allCases, standard: .instrument,
                     read: { look.style }, write: { look.style = $0 }),
-            .choice("look.theme", "Theme", page: "look", PilotTheme.designed.map(\.id), standard: PilotTheme.defaultID,
+            .choice("look.theme", "Stock theme catalog; current style choices: pilot theme colours", page: "look", PilotTheme.designed.map(\.id), standard: PilotTheme.defaultID,
                     read: { look.themeID }, write: { id throws(ControlError) in
+                        guard PilotTheme.named(id) != nil, ThemeNativePalette.stock(id).compatible(with: look.style.rawValue) else { throw ControlError(.badValue, "unknown or incompatible stock theme; pilot theme colours lists current choices") }
                         look.pick(id)
-                        if let error = look.lastError { throw ControlError(.badValue, "the theme is now \(id), but \(error)") }
+                        if let error = look.lastError { throw ControlError(.badValue, error) }
                     }),
             .bool("look.glass", "Glass", page: "look", standard: false, read: { look.glass }, write: { look.glass = $0 }),
             .int("look.transparency", "Transparency, in percent", page: "look", range: 0...100, standard: 33,

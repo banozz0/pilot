@@ -38,6 +38,7 @@ struct ToyDropdown: View {
                             case .developer: developer
                             case .footer: footer
                             case .now: EmptyView()
+                            case .extensions, .sound, .connections, .display, .media, .stats: EmptyView()  // The tall menu's alone (T4).
                             }
                         }
                         .padding(.horizontal, block == .footer ? 8 : 16).padding(.vertical, block == .footer ? 8 : 14)

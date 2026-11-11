@@ -72,10 +72,10 @@ struct WallpaperControl {
         return await Task.detached { sources.map(Self.sourceRow) }.value
     }
 
-    /// The screen `--screen` names, by name or id.
+    /// The screen `--screen` names, by name, id or display UUID.
     func screen(_ name: String) throws(ControlError) -> Screen {
         let screens = screens()
-        guard let screen = screens.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame || String($0.id) == name }) else {
+        guard let screen = screens.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame || String($0.id) == name || $0.displayUUID == name }) else {
             throw ControlError(.badValue, "--screen is one of \(screens.map(\.name).joined(separator: ", ")), not \(name)")
         }
         return screen
@@ -147,6 +147,7 @@ extension ControlVerbs {
     /// `wallpaper-sources`, `wallpaper-screens` and `pilot wallpaper next|previous|shuffle|reset`.
     func registerWallpaper(_ app: WallpaperControl = WallpaperControl()) {
         let settings = app.settings
+        registerCarousel(.live)
         register(ControlCollection(
             "wallpaper-sources", help: "The folders and images Next wallpaper cycles (Look › Wallpaper), each with its image count; "
                 + "with none, ~/Pictures/Wallpapers cycles. add asks Allow unless the path, links resolved, is inside ~/Pictures. "
@@ -217,6 +218,58 @@ extension ControlVerbs {
             default:
                 throw ControlError(.badRequest, "pilot wallpaper \(words.joined(separator: ", ")), not \(word)")
             }
+        })
+    }
+
+    /// `pilot carousel`: what the Carousel lists for a screen (spec desktop-controls T8, T9), as its face would show it,
+    /// after search and Tab; F's favourites; and the pick Return makes: a wallpaper, or with `--mode themes` a theme,
+    /// planned and applied after its Allow (Return itself is a press, with none). The listing runs off the main thread
+    /// and plans nothing.
+    func registerCarousel(_ source: WallpaperCarousel.Source) {
+        let help = [
+            ("list", "pilot carousel [list] [--query <words>] [--favourites] [--screen <name, id or display UUID>]: the images Wallpapers mode browses on that screen, the current theme's while its wallpapers are followed, else the folders it cycles; --query keeps names holding every word, --favourites only the favourites."),
+            ("favourite", "pilot carousel favourite <path> [--screen …]: marks or unmarks one listed image as a favourite, as F does; answers the list."),
+            ("pick", "pilot carousel pick <path> [--screen …]: sets one listed image as Return does, through the theme's ledger when a theme owns the screen; no Allow. With --mode themes, pick <pack id> plans that theme and applies it after its Allow, as `pilot theme apply` does; the Carousel's Return applies it at once."),
+        ] + (source.fixture ? [("fixture-press", "pilot carousel fixture-press <pack id>: the recording host's stand-in for Themes mode's Return, a press with no Allow.")] : [])
+        let words = help.map(\.0), detail = Dictionary(uniqueKeysWithValues: help)
+        let subcommands: @Sendable @MainActor () -> JSONValue = { .object(["subcommands": .array(words.map(JSONValue.string))]) }
+        register(ControlVerb("carousel", help: "The Carousel's wallpapers or themes, favourites and pick, as its keys browse them.",
+                             usage: "pilot carousel [list] [--mode wallpapers|themes] [--query <words>] [--favourites] [--screen <screen>] | favourite <path> | pick <path or pack id>",
+                             flags: [.init("mode", help: "wallpapers (the default) or themes: the pack library the style takes"),
+                                     .init("query", help: "list only: names holding every word"),
+                                     .init("favourites", help: "list only: only the favourites, as Tab shows", takesValue: false),
+                                     .init("screen", help: "the screen, by name, id or display UUID; the focused one without")],
+                             schema: subcommands, index: subcommands, detail: { detail[$0] }) { call throws(ControlError) in
+            let args = call.arguments(switches: ["favourites"])
+            let word = args.positional.first ?? "list"
+            guard words.contains(word) else { throw ControlError(.badRequest, "pilot carousel \(words.joined(separator: ", ")), not \(word)") }
+            if let refusal = ControlVerb.unknownFlag(args.flags, known: word == "list" ? ["mode", "query", "favourites", "screen"] : ["mode", "screen"], in: "pilot carousel \(word)") {
+                throw refusal
+            }
+            let mode: WallpaperCarousel.Mode
+            switch args.value("mode") ?? "wallpapers" {
+            case "wallpapers": mode = .wallpapers
+            case "themes": mode = .themes
+            case let other: throw ControlError(.badValue, "--mode is wallpapers or themes, not \(other)")
+            }
+            guard mode == .wallpapers || word != "favourite" && !args.has("favourites") else { throw ControlError(.badValue, "favourites are Wallpapers mode's") }
+            guard mode == .wallpapers || word != "pick" || !args.has("screen") else { throw ControlError(.badValue, "a theme applies to every screen: pick takes no --screen in Themes mode") }
+            // A theme's pick goes straight to its plan, which refuses an unknown pack or one the style does not take.
+            if mode == .themes, word == "pick" { return try await source.applyTheme(try args.word(1, "pack id")) }
+            if word == "fixture-press" { return try await source.pressTheme(try args.word(1, "pack id")) }
+            var (display, inputs) = try source.inputs(args.value("screen"))
+            if mode == .themes { inputs.apps = WallpaperCarousel.apps(source.owner()) }
+            let list = mode == .themes ? WallpaperCarousel.themes : source.list, frozen = inputs
+            let listed = await Task.detached { list(frozen) }.value
+            let model = WallpaperCarousel.Model(settings: source.settings, mode: mode)
+            if word == "list" { (model.query, model.favouritesOnly) = (args.value("query"), args.has("favourites")) }
+            model.load(listed)
+            guard word != "list" else { return model.answer }
+            let path = try args.word(1, "path")
+            guard listed.images.contains(path) else { throw ControlError(.badValue, "\(path) is not one the carousel lists here") }
+            if word == "pick" { return try await source.pick(URL(fileURLWithPath: path), display) }
+            source.settings.toggleFavourite(path)
+            return model.answer
         })
     }
 }

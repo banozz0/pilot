@@ -125,6 +125,9 @@ struct WorkspaceEditor: View {
     static let pictures: ClosedRange<CGFloat> = 32...52
     /// The layouts' column, popup and page alike: three pictures a row with their names, Main + stack the widest.
     static let layoutsWidth: CGFloat = 280
+    /// The page's preview beside its layouts from this width: the layouts, the gap, the sides and a 260 pt preview, so the
+    /// window's first size keeps them side by side (simplify-pages T18).
+    static let pageBeside: CGFloat = layoutsWidth + 18 + 2 * 18 + 260
     /// Own sizes' name in the editor (Sven 2026-10-17: "what is own sizes"): the apps side by side at the widths you set.
     static let ownSizes = "Your widths"
 
@@ -190,6 +193,8 @@ struct WorkspaceEditorPanel: View {
     @Environment(\.ink) private var ink
     enum Mode {
         case popup(close: () -> Void, fit: (CGFloat) -> Void)
+        /// The page's front: the preview, the layouts with the rules, a preset and the snapshot under them, and what opens
+        /// here (the rules on More until Sven's round 3 notes on build 2300, 2026-11-11).
         case page(extras: WorkspacePageExtras)
     }
     typealias Spot = WorkspaceEditor.Spot
@@ -348,38 +353,44 @@ struct WorkspaceEditorPanel: View {
         }
     }
 
-    /// The page's middle: the preview takes the height the page gives it with Opens here under it; the layouts, the apps
-    /// that always land here and the snapshot down the right. Under 660 pt (the least window) all of it stacks, the
-    /// preview 260 tall. The page scrolls, not the panel.
+    /// The page's middle: the front's preview takes the height the page gives it, the layouts down the right with the rules,
+    /// a preset and the snapshot under them (under 600 pt they stack, the preview 260 tall), then what opens here. The page
+    /// scrolls, not the panel.
     private var pageMiddle: some View {
-        let extras = extras.map { extras in
-            Group {
-                RulesPart(extras: extras, picking: picking == .rule) { open(.rule) }
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.rule] = $0 }
-                SnapshotPart(extras: extras)
-            }
-        }
-        return Group {
+        VStack(alignment: .leading, spacing: 22) {
             if pageWide {
                 HStack(alignment: .top, spacing: 18) {
-                    VStack(spacing: 18) {
-                        previewColumn.frame(minHeight: 260, maxHeight: .infinity)
-                        bottom
-                    }
-                    VStack(alignment: .leading, spacing: 22) { layoutColumn; extras }.frame(width: WorkspaceEditor.layoutsWidth)
+                    previewColumn.frame(minHeight: 260, maxHeight: .infinity)
+                    VStack(alignment: .leading, spacing: 22) { layoutColumn; rules }.frame(width: WorkspaceEditor.layoutsWidth)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 22) {
-                    previewColumn.frame(height: 260)
-                    layoutColumn
-                    bottom
-                    extras
-                }
+                previewColumn.frame(height: 260)
+                layoutColumn
+                rules
             }
+            // Back on the front (Sven, 2026-11-11, after 2276): a link or the search scrolls here.
+            bottom.id(AppSection.workspaceOpens)
         }
         .padding(18)
         .frame(maxHeight: .infinity, alignment: .top)
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 660 } action: { pageWide = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= WorkspaceEditor.pageBeside } action: { pageWide = $0 }
+    }
+
+    /// Under the layouts, where the page had room to spare (Sven's round 3 notes on build 2300, 2026-11-11; on More as
+    /// Rules and snapshot until then): the apps that always land here, a preset and the window snapshot.
+    @ViewBuilder private var rules: some View {
+        if let extras {
+            VStack(alignment: .leading, spacing: 22) {
+                RulesPart(extras: extras, picking: picking == .rule) { open(.rule) }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.rule] = $0 }
+                VStack(alignment: .leading, spacing: 6) {
+                    PartLabel(title: "From a preset", line: "a saved set of apps", info: Self.presetInfo)
+                    savedPresets
+                }
+                SnapshotPart(extras: extras)
+            }
+            .id(AppSection.workspaceRules)
+        }
     }
 
     private func open(_ spot: Spot) {
@@ -408,7 +419,8 @@ struct WorkspaceEditorPanel: View {
                 ForEach(LayoutChoice.rows, id: \.self) { row in
                     HStack(spacing: 8) { ForEach(row, id: \.self, content: layoutCell) }
                 }
-                savedPresets.padding(.horizontal, LayoutPicture.inset)
+                // The page keeps From a preset on More (simplify-pages T18).
+                if popup { savedPresets.padding(.horizontal, LayoutPicture.inset) }
             }
         }
     }
@@ -482,6 +494,7 @@ struct WorkspaceEditorPanel: View {
     static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two apps to set how wide each is. Every change saves at once."
     static let layoutInfo = "How the apps share the screen. Your widths puts them side by side, each at the width you set: drag the lines on the preview. The others lay the apps out for you."
     static let opensHereInfo = "The apps this workspace opens with, in order: the first fills the first spot. At login opens that app once each time you log in."
+    static let presetInfo = "A saved set of apps and a layout. Picking one fills this workspace with it; every change saves at once."
 
     // MARK: Footer
 
@@ -624,7 +637,7 @@ private struct SnapshotPart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            PartLabel(title: "Window snapshot", line: "save where windows sit, one key puts them back", info: Self.info)
+            PartLabel(title: "Window snapshot", line: "one key puts windows back", info: Self.info)
             VStack(alignment: .leading, spacing: 8) {
                 if let saved = extras.snapshot {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {

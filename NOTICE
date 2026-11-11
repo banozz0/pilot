@@ -20,7 +20,7 @@ Third-party code and assets
   builds libghostty from Ghostty's own source; what it links is listed in Packaging/Ghostty-THIRD-PARTY.txt.
 - Helpers/pilot-files/vendor/cardinal/: Cardinal's search engine (MIT); see its LICENSE and NOTICE.
 - Packaging/*-LICENSE.txt and *-NOTICES.txt: the licences of the other libraries, models and data Pilot bundles or
-  downloads (CodexBar, gemoji, Omarchy, WhisperKit, FluidAudio, Whisper, Parakeet, Kokoro, Real-ESRGAN).
+  downloads (CodexBar, gemoji, NotificationNanny, Omarchy, WhisperKit, FluidAudio, Whisper, Parakeet, Kokoro, Real-ESRGAN).
 - Packaging/Fonts/: each face with its own licence beside it.
 - The Rust crates of Helpers/pilot-files keep their licences in the cargo registry; Scripts/rust-licenses.py collects
   them into the app.

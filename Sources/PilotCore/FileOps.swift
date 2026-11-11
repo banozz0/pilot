@@ -5,7 +5,7 @@ import Foundation
 /// `pilot files undo` and the window's Cmd+Z both take from (`shared`). A request is planned first, changing nothing: every
 /// path resolved (symlinked folders included) and every item pinned by device and inode, so the Allow shows the exact plan.
 /// `perform` plans again and runs only a plan that still matches, checking each item's identity again before it touches
-/// it. Nothing here deletes: a name clash is refused unless the caller keeps both or sends the one there to the Trash, an
+/// it. FileOps never permanently deletes: a name clash is refused unless the caller keeps both or sends the one there to the Trash, an
 /// undo of a copy or a new folder sends it to the Trash, a move across volumes copies, checks the copy, then sends the
 /// source to the Trash, and an undo never moves across volumes. Anything Pilot runs can be undone: a plan is refused when
 /// the undo of any one of its steps could not be asked on its own or would need a Trash its volume lacks, and a Trash whose
@@ -57,10 +57,30 @@ public actor FileOps {
         public let title: String
         public let items: [URL]
         public let trashed: [URL]
+        /// Successful moves, including rename and undo: folder shortcuts follow the folder, not its old spelling.
+        public var moved: [URL: URL] = [:]
     }
 
     /// Which item it is, whatever path reaches it: its device and inode (lstat's, so a link is itself).
     public struct Identity: Hashable, Sendable { let device: UInt64, inode: UInt64 }
+
+    /// A moved folder and its descendants under their new path, including paths reached through a parent alias.
+    public static func relocated(_ url: URL, by moves: [URL: URL]) -> URL {
+        guard !moves.isEmpty else { return url }
+        let origins = moves.keys.sorted { $0.path.count > $1.path.count }
+        var parent = url, suffix = ""
+        // Foundation leaves a missing path unresolved after rename. Walk up until its existing alias resolves.
+        while true {
+            let path = parent.resolvingSymlinksInPath().path + suffix
+            if let from = origins.first(where: { path == $0.path || path.hasPrefix($0.path + "/") }), let to = moves[from] {
+                return URL(filePath: to.path + path.dropFirst(from.path.count), directoryHint: url.hasDirectoryPath ? .isDirectory : .notDirectory)
+            }
+            let above = parent.deletingLastPathComponent()
+            guard above.path != parent.path else { return url }
+            suffix = "/" + parent.lastPathComponent + suffix
+            parent = above
+        }
+    }
 
     /// The item at `url` itself (lstat: a link is the link), or nil when nothing is there: what Cut keeps, so the move it
     /// asks for runs only on the very items it marked (`Plan.sources`).
@@ -690,13 +710,15 @@ public actor FileOps {
 
     private func done(_ title: String, _ steps: [Step]) -> Done {
         var items: [URL] = [], trashed: [URL] = []
+        var moved: [URL: URL] = [:]
         for step in steps {
             switch step {
-            case let .made(url, _), let .moved(_, url, _): items.append(url)
+            case let .made(url, _): items.append(url)
+            case let .moved(from, url, _): items.append(url); moved[from] = url
             case let .trashed(_, to, _, _): trashed.append(to)
             }
         }
-        return Done(title: title, items: items, trashed: trashed)
+        return Done(title: title, items: items, trashed: trashed, moved: moved)
     }
 
     private func keep(_ title: String, _ steps: [Step]) {
@@ -921,5 +943,134 @@ public actor FileOps {
         if name.contains("/") || name.contains("\0") { return "a name can't hold / (\(name))" }
         if name.utf8.count > 255 { return "a name is at most 255 bytes" }
         return nil
+    }
+}
+
+/// CDXC:Files 2026-11-08 DECISION:
+/// Sven approved Empty Bin and Delete Immediately with an explicit irreversible confirmation.
+/// These never enter FileOps' undo journal. The native caller supplies system Trash roots, never an arbitrary folder.
+public enum TrashDeletion {
+    public struct Plan: Sendable {
+        fileprivate let entries: [Entry]
+        public var count: Int { entries.count }
+        public var name: String { count == 1 ? entries[0].url.lastPathComponent : "\(count) items" }
+    }
+
+    fileprivate struct Stamp: Equatable, Sendable {
+        let identity: FileOps.Identity
+        let directory: Bool
+        let modified: timespec, changed: timespec
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.identity == rhs.identity && lhs.directory == rhs.directory && lhs.modified.tv_sec == rhs.modified.tv_sec && lhs.modified.tv_nsec == rhs.modified.tv_nsec
+                && lhs.changed.tv_sec == rhs.changed.tv_sec && lhs.changed.tv_nsec == rhs.changed.tv_nsec
+        }
+    }
+
+    fileprivate struct Entry: Sendable {
+        let url: URL, root: URL, parent: URL
+        let rootID: FileOps.Identity, parentID: FileOps.Identity
+        let contents: [String: Stamp]
+    }
+
+    /// nil snapshots all current top-level items; an explicit group may name descendants, never a Trash root itself.
+    /// Later arrivals are not added to this plan. No path is followed through a symlinked Trash root or final item.
+    public static func plan(_ selected: [URL]?, roots: [URL]) throws -> Plan {
+        var allowed: [URL: FileOps.Identity] = [:]
+        for root in roots {
+            guard root.isFileURL, root.lastPathComponent == ".Trash"
+                || (root.deletingLastPathComponent().lastPathComponent == ".Trashes" && root.lastPathComponent == String(geteuid())) else {
+                throw Failure("Not a system Trash folder; nothing deleted.")
+            }
+            var info = Darwin.stat()
+            if lstat(root.path(percentEncoded: false), &info) != 0 {
+                if errno == ENOENT { continue }
+                throw Failure("Cannot read the Trash: \(String(cString: strerror(errno))). Nothing deleted.")
+            }
+            guard info.st_mode & S_IFMT == S_IFDIR, info.st_uid == geteuid() else {
+                throw Failure("The Trash folder changed or is not yours; nothing deleted.")
+            }
+            let real = root.resolvingSymlinksInPath()
+            allowed[real] = try stamp(real).identity
+        }
+        let urls = try selected ?? allowed.keys.sorted { $0.path < $1.path }.flatMap {
+            try FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)
+        }
+        var entries: [Entry] = []
+        for url in urls.sorted(by: { $0.path.count < $1.path.count }) {
+            guard url.isFileURL, ![".", ".."].contains(url.lastPathComponent) else {
+                throw Failure("Only files in the Trash can be deleted immediately.")
+            }
+            let parent = url.deletingLastPathComponent().resolvingSymlinksInPath()
+            let item = parent.appending(path: url.lastPathComponent).standardizedFileURL
+            guard let root = allowed.keys.first(where: { item.path.hasPrefix($0.path + "/") }), let rootID = allowed[root] else {
+                throw Failure("\(url.lastPathComponent) is not inside a recognized Trash folder; nothing deleted.")
+            }
+            if entries.contains(where: { item.path == $0.url.path || item.path.hasPrefix($0.url.path + "/") }) { continue }
+            entries.append(Entry(url: item, root: root, parent: parent, rootID: rootID,
+                                 parentID: try stamp(parent).identity, contents: try tree(item)))
+        }
+        return Plan(entries: entries)
+    }
+
+    /// Called only after confirmation of this exact plan. Recheck the whole group before deleting its first item.
+    /// FileManager removes a symbolic link itself, not its target. Partial failures report how much was deleted.
+    public static func perform(_ plan: Plan) throws -> Int {
+        for entry in plan.entries { try check(entry) }
+        var deleted = 0
+        var failures: [String] = []
+        for entry in plan.entries {
+            do { try check(entry) } catch {
+                failures.append("Stopped: \(error.localizedDescription)")
+                break
+            }
+            do {
+                try FileManager.default.removeItem(at: entry.url)
+                deleted += 1
+            } catch {
+                failures.append("\(entry.url.lastPathComponent) may be partially deleted: \(error.localizedDescription)")
+            }
+        }
+        if !failures.isEmpty {
+            throw Failure("Permanently deleted \(deleted) complete \(deleted == 1 ? "item" : "items") of \(plan.count). \(failures.joined(separator: " ")) Locked or permission-protected items may need unlocking or administrator approval in Finder. This cannot be undone.")
+        }
+        return deleted
+    }
+
+    private static func check(_ entry: Entry) throws {
+        guard try stamp(entry.root).identity == entry.rootID,
+              entry.parent.resolvingSymlinksInPath().path == entry.parent.path,
+              try stamp(entry.parent).identity == entry.parentID,
+              try tree(entry.url) == entry.contents else {
+            throw Failure("\(entry.url.lastPathComponent) or its folder changed since confirmation. Ask again.")
+        }
+    }
+
+    /// Snapshot every descendant without following links. A deep edit or arrival refuses the whole folder.
+    private static func tree(_ url: URL) throws -> [String: Stamp] {
+        var pending = [url], contents: [String: Stamp] = [:]
+        while let next = pending.popLast() {
+            let info = try stamp(next)
+            contents[next.path] = info
+            if info.directory {
+                pending += try FileManager.default.contentsOfDirectory(at: next, includingPropertiesForKeys: nil)
+            }
+        }
+        return contents
+    }
+
+    private static func stamp(_ url: URL) throws -> Stamp {
+        var info = Darwin.stat()
+        guard lstat(url.path(percentEncoded: false), &info) == 0 else {
+            throw Failure("Cannot read \(url.lastPathComponent): \(String(cString: strerror(errno))).")
+        }
+        return Stamp(identity: FileOps.Identity(device: UInt64(UInt32(bitPattern: info.st_dev)), inode: info.st_ino),
+                     directory: info.st_mode & S_IFMT == S_IFDIR,
+                     modified: info.st_mtimespec, changed: info.st_ctimespec)
+    }
+
+    public struct Failure: Error, LocalizedError, Sendable {
+        public let message: String
+        init(_ message: String) { self.message = message }
+        public var errorDescription: String? { message }
     }
 }

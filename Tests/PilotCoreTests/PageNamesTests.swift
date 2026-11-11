@@ -9,8 +9,8 @@ struct PageNamesTests {
     @Test("A part's path is its page and its own title, as the window shows them")
     func paths() {
         #expect(AppPlace(.conflicts).path == "Binds › Conflicts")
-        #expect(AppPlace(.permissions).path == "General › Permissions")
-        #expect(AppPlace(.reports).path == "Activity › Reports" && AppPlace(.stats).path == "Stats" && AppPlace(.tiling).path == "Tiling")
+        #expect(AppPlace(.permissions).path == "Pilot › More › Permissions")
+        #expect(AppPlace(.reports).path == "Update & Clean › Reports" && AppPlace(.stats).path == "Stats" && AppPlace(.tiling).path == "Tiling")
     }
 
     @Test("Onboarding's clash row sends the user to Binds › Conflicts")

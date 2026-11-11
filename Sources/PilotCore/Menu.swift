@@ -464,6 +464,8 @@ public indirect enum MenuBranch: Hashable, Sendable {
         case .homebrew: "Search packages"
         case .stickers: "Stickers and GIFs"
         case .qr: "QR"
+        // The plain word for the row (simplify-pages T4); its id, frecency and links stay `trigger`.
+        case .trigger: "Actions"
         default: rawValue.capitalized
         }
     }

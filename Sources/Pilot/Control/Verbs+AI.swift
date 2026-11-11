@@ -160,7 +160,7 @@ extension ControlVerbs {
         // address changed while it was up denies.
         return try await s.gate.allow(ControlGate.Ask("Ask AI", (new || model.turns.isEmpty ? "in a new chat, "
                                                                   : "in the open chat, its \(model.turns.count) earlier turn\(model.turns.count == 1 ? "" : "s") going with it, ")
-                                          + "sends to \(destination(s.settings)): \(ControlGate.Ask.visible(text)); the answer comes back to the command"),
+                                          + "sends to \(destinations(s.settings)): \(ControlGate.Ask.visible(text)); the answer comes back to the command"),
                                       peer: call.peer) { () throws(ControlError) in
             let route = destination(s.settings)
             guard !model.running else { throw ControlError(.notReady, "an answer started while asking, so nothing was sent") }
@@ -201,6 +201,11 @@ extension ControlVerbs {
         return name + address + key
     }
 
+    /// `destination` for the picked provider, naming its fallback too, for a question about text that may reach either.
+    static func destinations(_ ai: AISettings) -> String {
+        destination(ai) + (ai.fallbackInUse.map { " (or \(destination(ai, provider: $0)) if \(ai.provider.name) \(AIFallback.when))" } ?? "")
+    }
+
     /// The longest a turn `ai ask` can start runs: an agent's or an API agent's (AIChat.Agent, AIToolLoop: 300 s); a
     /// chat-only provider's answer stops sooner.
     private static let chatTimeout: Duration = .seconds(300)
@@ -217,6 +222,7 @@ extension ControlVerbs {
         guard mine(asked, model, text) else { return .object(["cleared": .bool(true), "provider": .string(provider)]) }
         var out: [String: JSONValue] = ["turns": .number(Double(turns.count)), "provider": .string(provider)]
         if turns.indices.contains(asked + 1), turns[asked + 1].role == .assistant { out["reply"] = .string(turns[asked + 1].text) }
+        if turns.indices.contains(asked + 1), let notice = turns[asked + 1].notice { out["notice"] = .string(notice) }
         if let calls = model.calls[asked], !calls.isEmpty {
             out["commands"] = .array(calls.map { .object(["command": .string($0.command), "failed": .bool($0.failed)]) })
         }
