@@ -4,8 +4,9 @@ import SwiftUI
 
 /// Voice (2026-10-16, Sven could not find Dictation on Open with): Pilot's dictation and Read
 /// aloud's key, speed and voice (story 190, was System › Keyboard), one page in Tools. Its front (simplify-pages T12;
-/// Sven 2026-11-11, after 2276): all of Dictation, then Read aloud's key, speed and its voices behind a toggle. Its More:
-/// the recent takes, the taught words and replacements, and Read aloud's media and better voices.
+/// Sven 2026-11-11, after 2276): all of Dictation, the words it spells your way (pages round 4, Sven's Q101), then Read
+/// aloud's key, speed and its voices behind a toggle. Its More: the recent takes, the replacements, and Read aloud's media
+/// and better voices.
 struct VoicePage: View {
     var speech: ReadAloudSettings = .shared
     /// The More tab shows, not the front.
@@ -19,7 +20,6 @@ struct VoicePage: View {
     /// More's index (simplify-pages T12): a list counts once. A row added to or moved off a block changes its count here.
     static let entries = [
         MoreEntry(id: .voiceTakes, symbol: "clock.arrow.circlepath", controls: 1),
-        MoreEntry(id: .voiceWords, symbol: "character.book.closed", controls: 2),
         MoreEntry(id: .voiceReplacements, symbol: "arrow.left.arrow.right", controls: 2),
         MoreEntry(id: .voiceReadAloud, symbol: "speaker.wave.2", controls: 2),
     ]
@@ -28,9 +28,8 @@ struct VoicePage: View {
         Group {
             if more {
                 KitMore(entries: Self.entries) {
-                    // "Fix what you just said" above the two lists (Q598).
+                    // "Fix what you just said" above the replacements (Q598; Words went to the front, pages round 4).
                     DictationTakesBlock(takes: .shared, vocabulary: .shared).moreBlock(.voiceTakes)
-                    DictationWordsBlock(vocabulary: .shared).moreBlock(.voiceWords)
                     DictationReplacementsBlock(vocabulary: .shared).moreBlock(.voiceReplacements)
                     ReadAloudBlock(speech: speech, mine: [], rest: [], part: .more).moreBlock(.voiceReadAloud)
                 }
@@ -39,6 +38,7 @@ struct VoicePage: View {
                     KitPage(intro: Self.intro) {
                         // One column (the designer's layout A, round 2).
                         DictationBlock().id(AppSection.voiceDictation)
+                        DictationWordsBlock(vocabulary: .shared).id(AppSection.voiceWords)
                         ReadAloudBlock(speech: speech, mine: sections.mine, rest: sections.rest, part: .front)
                     }
                 }

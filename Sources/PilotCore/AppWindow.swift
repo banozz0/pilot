@@ -390,9 +390,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Open with's place on its front, back from More with its More (pages round 4, Sven's Q103): the app or site each
     /// role key opens.
     case appsForKeys
-    /// Voice's More (simplify-pages T12) and its places: the recent takes, the taught words and replacements, and Read
-    /// aloud's media and better voices; dictation's key and what shows while you speak are a place on the front again
-    /// (Sven, 2026-11-11, after 2276).
+    /// Voice's More (simplify-pages T12) and its places: the recent takes, the replacements, and Read aloud's media and
+    /// better voices; dictation's key and what shows while you speak (Sven, 2026-11-11, after 2276) and the taught words
+    /// (pages round 4, Sven's Q101) are places on the front again.
     case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud
     /// Captures' places on its fronts, back from More with its More (pages round 4, Sven's Q102: "recording stuff in
     /// recording front and capture (screenshot) stuff in capture front"): the capture options and the ten other capture
@@ -401,8 +401,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
     /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
-    /// Install's More (simplify-pages T16) and its place beside `helpers` and `hiddenApps`: what Install and Update list,
-    /// Recommend apps and the self-updating casks.
+    /// What Install and Update list, Recommend apps and the self-updating casks: a place on Install's Catalogue (on its More,
+    /// beside `helpers` and `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
     /// System's places on its front: the sound input, the keyboard layout, the mouse's speeds and the keys of every part
     /// (on a More tab from simplify-pages T17 until Sven, 2026-11-11, after 2276).
@@ -467,9 +467,9 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
-                                                     .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud,
+                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud,
                                                      .translate, .aliases, .quicklinks,
-                                                     .installLists, .helpers, .hiddenApps,
+                                                     .helpers, .hiddenApps,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
                                                      .lookStyle, .menuLayout, .windowLayout, .glassTuning]
@@ -481,17 +481,20 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .appsShowAs, .cursor, .wallpaperCycle,
-                                                     .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
+                                                     .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation,
+                                                     .voiceWords, .installLists]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
 
     /// The tab a front block sits on when it is not the page's first view (pages round 4): a recording's quality on
-    /// Captures' Recording, and the AI's fallback, keys and new chat on AI's Setup. Nil for the page's own first view.
+    /// Captures' Recording, the AI's fallback, keys and new chat on AI's Setup, and what Install lists on its Catalogue
+    /// (Install is only its parts). Nil for the page's own first view.
     public var frontTab: AppSection? {
         switch self {
         case .recordingQuality: .recording
         case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
+        case .installLists: .catalogue
         default: nil
         }
     }
