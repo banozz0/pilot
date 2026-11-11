@@ -13,12 +13,32 @@ programs start `#!/usr/bin/env python3`. `surfaces` (Pilot's story 161): an obje
 of its commands and may give `every`, a number of seconds (Pilot holds a page to 10 s and a bar item to 60 s at least).
 `keyword` (2026-10-10): one lowercase word on a no-view command, unique in the extension; "todo buy milk" in Hyper+Space
 runs it with "buy milk" as its input (Pilot ignores one it can't read; this check refuses it).
+
+Theme packs (themes/<id>/) follow Pilot's ThemePack.decode and ThemePackStore.validate (Sources/PilotCore): only the
+known manifest keys, each once; schema 1; an id of 1 to 80 lowercase letters, digits and hyphens, the folder's name; a
+title with no control characters; styles instrument or toybox; every palette role as #RRGGBB, variants likewise; a
+material of glass, transparency 0 to 100 and blur full, light or off; a barPreset floatingStrip or threeIslands; adapters
+ghostty, zed and obsidian, each {}; wallpapers and preview relative paths inside the folder, and no file they don't
+name but manifest.json and PROVENANCE.md. The catalogue's own: no customMappings (their template is the one theme path
+to code); no executable file; images PNG, JPEG or HEIC by their bytes, at most 16384 pixels a side and 50 million in
+all; no `url(`, `@import` or `://` in the manifest; at most 300 files, 8 MB a file, 40 MB in all.
+
+Both kinds (outside input is hostile, public-repo spec's threat model): no symlinks, no hidden files or folders, no
+bidirectional or invisible Unicode controls in any text file, and no title that looks like another's of its kind.
+
+`--author <login> [--base <ref>]` (for CI on a pull request): a pack this branch changes since <ref> (default
+origin/main) whose folder was first added by someone else is flagged for Sven's read. Exit 0 fine, 1 problems,
+2 flags only.
 """
+import argparse
 import importlib.util
 import json
 import os
 import re
+import struct
+import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -155,28 +175,328 @@ def check_surfaces(manifest, problems):
             problems.append("surfaces.%s: every must be at least %d seconds" % (kind, 10 if kind == "page" else 60))
 
 
-def check_files(folder, problems):
+def check_files(folder, problems, limits=(MAX_FILES, MAX_FILE, MAX_TOTAL)):
+    """The limits on what ships from `folder`, and no bidi or invisible control in any of its text files; its listing."""
+    most_files, most_file, most_total = limits
     found = build_index.files(folder)
-    if len(found) > MAX_FILES:
-        problems.append("%d files, more than %d" % (len(found), MAX_FILES))
+    if len(found) > most_files:
+        problems.append("%d files, more than %d" % (len(found), most_files))
     for f in found:
-        if f["size"] > MAX_FILE:
-            problems.append("%s is over %d MB" % (f["path"], MAX_FILE // 2 ** 20))
-    if sum(f["size"] for f in found) > MAX_TOTAL:
-        problems.append("over %d MB in all" % (MAX_TOTAL // 2 ** 20))
+        if f["size"] > most_file:
+            problems.append("%s is over %d MB" % (f["path"], most_file // 2 ** 20))
+        for number, line in enumerate((text_of(folder / f["path"]) or "").splitlines(), 1):
+            if any(ord(c) in INVISIBLE for c in line):
+                problems.append("%s:%d holds a bidirectional or invisible control character" % (f["path"], number))
+    if sum(f["size"] for f in found) > most_total:
+        problems.append("over %d MB in all" % (most_total // 2 ** 20))
+    return found
+
+
+# Theme packs: ThemePack.decode (Sources/PilotCore/ThemePack.swift), OmarchyTheme.roles (Ghostty.swift).
+THEME_KEYS = {"schema", "id", "title", "dark", "palette", "styles", "wallpapers", "adapters", "variants", "material",
+              "barPreset", "customMappings", "preview"}
+THEME_REQUIRED = ("schema", "id", "title", "dark", "palette", "styles", "wallpapers", "adapters")
+ROLES = ("background", "dark_background", "darker_background", "lighter_background", "foreground", "dark_foreground",
+         "light_foreground", "bright_foreground", "accent", "selection", "muted", "red", "yellow", "green", "cyan", "blue",
+         "magenta", "bright_red", "bright_yellow", "bright_green", "bright_cyan", "bright_blue", "bright_magenta")
+COLOUR = re.compile(r"#[0-9A-Fa-f]{6}\Z")
+THEME_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,79}\Z")
+STYLES = {"instrument", "toybox"}
+ADAPTERS = {"ghostty", "zed", "obsidian"}
+BAR_PRESETS = {"floatingStrip", "threeIslands"}
+BLURS = {"full", "light", "off"}
+THEME_LIMITS = (300, 8 * 1024 * 1024, 40 * 1024 * 1024)  # files, a file, in all
+MAX_SIDE, MAX_PIXELS = 16384, 50 * 1000 * 1000
+HEIC_BRANDS = {b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1"}
+BEACONS = ("url(", "@import", "://")
+# Bidirectional controls ("Trojan Source") and invisible characters. U+200D and U+FE0F stay: emoji icons join with them.
+INVISIBLE = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A)) | {0x061C, 0x200B, 0x200C, 0x200E, 0x200F, 0x00AD,
+                                                                        0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0xFEFF}
+# Latin look-alikes from Cyrillic and Greek, for comparing titles (NFKC alone keeps them apart).
+LOOKALIKES = str.maketrans("аеорсухіјѕԁɡοανρτκιВЕКМНОРСТХ", "aeopcyxijsdgoavptkiBEKMHOPCTX")
+
+
+def no_duplicate_keys(pairs):
+    keys = [k for k, _ in pairs]
+    duplicate = next((k for k in keys if keys.count(k) > 1), None)
+    if duplicate is not None:
+        raise ValueError("the key \"%s\" appears twice" % duplicate)
+    return dict(pairs)
+
+
+def relative(path):
+    """ThemeFiles.relative: not empty, not absolute, no NUL, and no empty, `.` or `..` part."""
+    return isinstance(path, str) and path != "" and not path.startswith("/") and "\0" not in path \
+        and all(part not in ("", ".", "..") for part in path.split("/"))
+
+
+def image_size(data):
+    """(kind, width, height) from a PNG, JPEG or HEIC's own bytes; None when it is none of them or its size doesn't read."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR":
+        return ("PNG",) + struct.unpack(">II", data[16:24])
+    if data[:3] == b"\xff\xd8\xff":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                return None
+            marker = data[i + 1]
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+                i += 2
+                continue
+            length = struct.unpack(">H", data[i + 2:i + 4])[0]
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                height, width = struct.unpack(">HH", data[i + 5:i + 9])
+                return ("JPEG", width, height)
+            i += 2 + length
+        return None
+    if data[4:8] == b"ftyp" and data[8:12] in HEIC_BRANDS:
+        sizes = []
+
+        def boxes(start, end):
+            while start + 8 <= end:
+                size, kind = struct.unpack(">I4s", data[start:start + 8])
+                header = 8
+                if size == 1:
+                    size, header = struct.unpack(">Q", data[start + 8:start + 16])[0], 16
+                elif size == 0:
+                    size = end - start
+                if size < header or start + size > end:
+                    return
+                body = start + header
+                if kind == b"meta":
+                    boxes(body + 4, start + size)
+                elif kind in (b"iprp", b"ipco"):
+                    boxes(body, start + size)
+                elif kind == b"ispe" and body + 12 <= start + size:
+                    sizes.append(struct.unpack(">II", data[body + 4:body + 12]))
+                start += size
+        boxes(0, len(data))
+        if sizes:
+            width, height = max(sizes, key=lambda s: s[0] * s[1])
+            return ("HEIC", width, height)
+    return None
+
+
+def text_of(path):
+    """A file's text when it is UTF-8, else None (an image, say)."""
+    try:
+        return path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def check_tree(folder, problems):
+    """Both kinds: nothing build_index.files leaves out, so a pack holds only what the index lists. No symlink, no hidden
+    file or folder, no Python cache; Finder's .DS_Store is the one exception, as git ignores it."""
+    for dirpath, dirnames, filenames in os.walk(folder):
+        for name in sorted(dirnames + filenames):
+            path = Path(dirpath) / name
+            where = path.relative_to(folder).as_posix()
+            if name == ".DS_Store":
+                continue
+            if path.is_symlink():
+                problems.append("%s is a symlink" % where)
+            elif name.startswith("."):
+                problems.append("%s is hidden" % where)
+            elif name == "__pycache__" or name.endswith(".pyc"):
+                problems.append("%s is a Python cache: delete it" % where)
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "__pycache__"
+                       and not (Path(dirpath) / d).is_symlink()]
+
+
+def strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            yield k
+            yield from strings(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from strings(v)
+
+
+def check_palette(name, palette, problems):
+    if not isinstance(palette, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in palette.items()):
+        problems.append("%s must map role names to colours" % name)
+        return False
+    missing = [r for r in ROLES if r not in palette]
+    if missing:
+        problems.append("%s misses %s" % (name, ", ".join(missing)))
+    bad = sorted(k for k, v in palette.items() if not COLOUR.match(v))
+    if bad:
+        problems.append("%s: %s must be #RRGGBB" % (name, ", ".join(bad)))
+    return not missing and not bad
+
+
+def check_manifest(folder, manifest, problems):
+    """ThemePack.decode's rules on a parsed manifest, plus the catalogue's. Returns the wallpapers and preview whose
+    paths are safe to look at, ([], None) when they aren't."""
+    unknown = sorted(set(manifest) - THEME_KEYS)
+    if unknown:
+        problems.append("manifest.json has fields a pack can't carry: %s" % ", ".join(unknown))
+    missing = [k for k in THEME_REQUIRED if k not in manifest]
+    if missing:
+        problems.append("manifest.json misses %s" % ", ".join(missing))
+        return [], None
+    if "customMappings" in manifest:
+        problems.append("customMappings: a catalogue theme carries none (its template writes text into a local config)")
+    if manifest["schema"] != 1 or isinstance(manifest["schema"], bool):
+        problems.append("schema must be 1")
+    theme_id = manifest["id"]
+    if not isinstance(theme_id, str) or not THEME_ID.match(theme_id):
+        problems.append("id \"%s\" must be 1 to 80 lowercase letters, digits and hyphens" % theme_id)
+    elif folder.name != theme_id:
+        problems.append("folder name %s is not its id %s" % (folder.name, theme_id))
+    title = manifest["title"]
+    if not isinstance(title, str) or not title or any(unicodedata.category(c) in ("Cc", "Cf") for c in title):
+        problems.append("title must be text with no control characters")
+    if not isinstance(manifest["dark"], bool):
+        problems.append("dark must be true or false")
+    styles = manifest["styles"]
+    if not isinstance(styles, list) or not all(isinstance(s, str) for s in styles) or not set(styles) <= STYLES:
+        problems.append("styles must list instrument or toybox")
+    ok_palette = check_palette("palette", manifest["palette"], problems)
+    variants = manifest.get("variants")
+    if variants is not None:
+        if not isinstance(variants, dict):
+            problems.append("variants must map dark or light to a palette")
+        else:
+            for mode, palette in variants.items():
+                if mode not in ("dark", "light"):
+                    problems.append("variants: \"%s\" is not dark or light" % mode)
+                    continue
+                ok_variant = check_palette("variants.%s" % mode, palette, problems)
+                own_mode = "dark" if manifest["dark"] is True else "light"
+                if ok_variant and ok_palette and mode == own_mode and palette != manifest["palette"]:
+                    problems.append("variants.%s differs from the pack's own palette" % mode)
+    material = manifest.get("material")
+    if material is not None:
+        if not isinstance(material, dict) or set(material) != {"glass", "transparency", "blur"} \
+                or not isinstance(material["glass"], bool) or isinstance(material["transparency"], bool) \
+                or not isinstance(material["transparency"], int) or not 0 <= material["transparency"] <= 100 \
+                or material["blur"] not in BLURS:
+            problems.append("material must be glass (true or false), transparency 0 to 100 and blur full, light or off")
+    if manifest.get("barPreset") is not None and manifest["barPreset"] not in BAR_PRESETS:
+        problems.append("barPreset must be floatingStrip or threeIslands")
+    adapters = manifest["adapters"]
+    if not isinstance(adapters, dict) or not set(adapters) <= ADAPTERS or any(v != {} for v in adapters.values()):
+        problems.append("adapters must be ghostty, zed or obsidian, each {}")
+    wallpapers, preview = manifest["wallpapers"], manifest.get("preview")
+    if not isinstance(wallpapers, list) or not all(relative(w) for w in wallpapers):
+        problems.append("wallpapers must be paths inside the folder")
+        wallpapers = []
+    if preview is not None and not relative(preview):
+        problems.append("preview must be a path inside the folder")
+        preview = None
+    for text in strings(manifest):
+        for beacon in BEACONS:
+            if beacon in text.lower():
+                problems.append("manifest.json holds \"%s\": a theme never points anywhere" % beacon)
+    return wallpapers, preview
+
+
+def check_theme(folder):
+    """The problems with one theme pack folder; none when it is fine."""
+    problems = []
+    check_tree(folder, problems)
+    try:
+        manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys)
+    except FileNotFoundError:
+        return problems + ["no manifest.json"]
+    except ValueError as e:
+        return problems + ["manifest.json does not read: %s" % e]
+    if not isinstance(manifest, dict):
+        return problems + ["manifest.json is not an object"]
+    wallpapers, preview = check_manifest(folder, manifest, problems)
+    found = check_files(folder, problems, THEME_LIMITS)
+    for asset in wallpapers + ([preview] if preview else []):
+        if not any(f["path"] == asset or f["path"].startswith(asset + "/") for f in found):
+            problems.append("%s is missing or empty" % asset)
+    for f in found:
+        where = f["path"]
+        if f["executable"]:
+            problems.append("%s is executable: a theme is data" % where)
+        if where == "PROVENANCE.md" and not (text_of(folder / where) or "").strip():
+            problems.append("PROVENANCE.md must be UTF-8 text")
+        if where in ("manifest.json", "PROVENANCE.md"):
+            continue
+        if where != preview and not any(where == w or where.startswith(w + "/") for w in wallpapers):
+            problems.append("%s is not a wallpaper or the preview the manifest names" % where)
+            continue
+        size = image_size((folder / where).read_bytes())
+        if size is None:
+            problems.append("%s is not a PNG, JPEG or HEIC image whose size reads" % where)
+        elif max(size[1:]) > MAX_SIDE or size[1] * size[2] > MAX_PIXELS or min(size[1:]) == 0:
+            problems.append("%s is %dx%d: images are 1 to %d pixels a side, %d million in all"
+                            % (where, size[1], size[2], MAX_SIDE, MAX_PIXELS // 10 ** 6))
+    return problems
+
+
+def skeleton(title):
+    """What a title looks like: NFKC, Cyrillic and Greek look-alikes as Latin, case and everything but letters and
+    digits dropped."""
+    folded = unicodedata.normalize("NFKC", title).translate(LOOKALIKES).casefold()
+    return "".join(c for c in unicodedata.normalize("NFKD", folded) if c.isalnum())
+
+
+def lookalikes(titles):
+    """Problems for titles of one kind that look like another's: {folder name: title} in, one line per pair out."""
+    seen, problems = {}, []
+    for name, title in sorted(titles.items()):
+        if not isinstance(title, str):
+            continue
+        key = skeleton(title)
+        if key in seen:
+            problems.append("%s and %s: their titles look alike" % (seen[key], name))
+        else:
+            seen[key] = name
+    return problems
+
+
+def first_sender(path):
+    """Who first added `path` (a pack folder) to git: the author's name and email, or None when git doesn't know it."""
+    out = subprocess.run(["git", "log", "--diff-filter=A", "--reverse", "--format=%an%x09%ae", "--", str(path)],
+                         cwd=ROOT, capture_output=True, text=True)
+    lines = out.stdout.splitlines() if out.returncode == 0 else []
+    return tuple(lines[0].split("\t", 1)) if lines else None
+
+
+def flags(author, base):
+    """Packs this branch changes since `base` that someone other than `author` (a GitHub login) first sent."""
+    out = subprocess.run(["git", "diff", "--name-only", "%s...HEAD" % base, "--", "."], cwd=ROOT,
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        return ["cannot compare with %s: %s" % (base, out.stderr.strip())]
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    packs = set()
+    for changed in out.stdout.splitlines():
+        parts = Path(top, changed).relative_to(ROOT).parts
+        if len(parts) > 2 and parts[0] in ("extensions", "themes"):
+            packs.add(Path(parts[0], parts[1]))
+    found = []
+    for pack in sorted(packs):
+        sender = first_sender(ROOT / pack)
+        if sender is None:
+            continue  # a new pack: its sender is this author
+        name, email = sender
+        if name != author and not email.endswith("+%s@users.noreply.github.com" % author):
+            found.append("flag: %s was first sent by %s, not %s: Sven reads it" % (pack.as_posix(), name, author))
+    return found
 
 
 def check(folder):
     """The problems with one extension folder; none when it is fine."""
     problems = []
+    check_tree(folder, problems)
     try:
-        manifest = json.loads((folder / "extension.json").read_text(encoding="utf-8"))
+        manifest = json.loads((folder / "extension.json").read_text(encoding="utf-8"), object_pairs_hook=no_duplicate_keys)
     except FileNotFoundError:
-        return ["no extension.json"]
+        return problems + ["no extension.json"]
     except ValueError as e:
-        return ["extension.json does not read: %s" % e]
+        return problems + ["extension.json does not read: %s" % e]
     if not isinstance(manifest, dict):
-        return ["extension.json is not an object"]
+        return problems + ["extension.json is not an object"]
     ext_id = manifest.get("id")
     if not isinstance(ext_id, str) or not NAME.match(ext_id):
         problems.append("id \"%s\" must be lowercase letters, digits and hyphens" % ext_id)
@@ -213,23 +533,44 @@ def check(folder):
     return problems
 
 
-def main():
+def title_of(folder, manifest_name):
+    try:
+        return json.loads((folder / manifest_name).read_text(encoding="utf-8")).get("title")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Check the catalogue's extensions and themes and its index.")
+    parser.add_argument("--author", help="a pull request's GitHub login: flag packs someone else first sent")
+    parser.add_argument("--base", default="origin/main", help="what the branch is compared with (default origin/main)")
+    args = parser.parse_args(argv)
     failed = False
-    folders = build_index.folders()
-    for folder in folders:
-        for problem in check(folder):
+    kinds = ((build_index.EXTENSIONS, check, "extension.json"), (build_index.THEMES, check_theme, "manifest.json"))
+    counts = []
+    for root, checker, manifest_name in kinds:
+        kind, folders = root.name, build_index.folders(root)
+        counts.append(build_index.plural(len(folders), kind[:-1]))
+        for folder in folders:
+            for problem in checker(folder):
+                failed = True
+                print("%s/%s: %s" % (kind, folder.name, problem))
+        for problem in lookalikes({f.name: title_of(f, manifest_name) for f in folders}):
             failed = True
-            print("%s: %s" % (folder.name, problem))
+            print("%s/%s" % (kind, problem))
     if not failed:
         fresh = build_index.render(build_index.build())
         current = build_index.INDEX.read_text(encoding="utf-8") if build_index.INDEX.exists() else ""
         if fresh != current:
             failed = True
             print("index.json is stale: run python3 scripts/build-index.py")
+    flagged = flags(args.author, args.base) if args.author else []
+    for line in flagged:
+        print(line)
     if failed:
         return 1
-    print("check: %d extension%s fine, index.json fresh" % (len(folders), "" if len(folders) == 1 else "s"))
-    return 0
+    print("check: %s fine, index.json fresh" % " and ".join(counts))
+    return 2 if flagged else 0
 
 
 if __name__ == "__main__":

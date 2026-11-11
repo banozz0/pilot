@@ -18,10 +18,14 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+
+# Tests import extension programs in-process: no __pycache__ may land inside an extension folder, which check.py refuses.
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 EXTENSIONS = ROOT / "extensions"

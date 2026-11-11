@@ -108,11 +108,14 @@ def render(index):
     return json.dumps(index, indent=2, ensure_ascii=False) + "\n"
 
 
+def plural(count, word):
+    return "%d %s%s" % (count, word, "" if count == 1 else "s")
+
+
 def main():
     index = build()
     INDEX.write_text(render(index), encoding="utf-8")
-    count, themes = len(index["extensions"]), len(index["themes"])
-    print("index.json: %d extension%s, %d theme%s" % (count, "" if count == 1 else "s", themes, "" if themes == 1 else "s"))
+    print("index.json: %s, %s" % (plural(len(index["extensions"]), "extension"), plural(len(index["themes"]), "theme")))
 
 
 if __name__ == "__main__":
