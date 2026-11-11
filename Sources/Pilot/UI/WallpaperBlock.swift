@@ -151,8 +151,8 @@ struct WallpaperBlock: View {
     }
 
     /// The row `focus` lights: its workspace's while each workspace has its own and that one has a row, else its screen's.
-    /// Where the desktop's Wallpaper settings… lands for `focus`: the row it lights, on More while that is a screen's or a
-    /// workspace's own folders, else on the front (simplify-pages T20).
+    /// Where the desktop's Wallpaper settings… lands for `focus`: the row it lights, in Wallpaper folders while that is a
+    /// screen's or a workspace's own folders, else in Wallpaper (simplify-pages T20; both on the front since pages round 4).
     static func place(for focus: Focus, settings: WallpaperSettings) -> AppSection {
         settings.folders == .perScreen || settings.workspaces == .perWorkspace && focus.workspace != nil ? .wallpaperCycle : .wallpaper
     }

@@ -7,7 +7,8 @@ import SwiftUI
 /// window's border and Defocus are Tiling's Focused window block (page map, Sven 2026-10-17). Every
 /// setting has an ⓘ saying what it does (Sven, 2026-10-09). A column of cards under the page's title; nothing folds
 /// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it. The front holds the preview, Glass,
-/// the wallpaper's Previous and Next, and Theme; the rest is on More (simplify-pages T20, T28).
+/// the wallpaper's Previous and Next, and Theme, then how apps show, the cursor and the wallpaper's folders (pages round
+/// 4, Sven's Q99); the rest is on More (simplify-pages T20, T28).
 struct LookPage: View {
     @Environment(\.ink) private var ink
     let look: Look
@@ -47,7 +48,8 @@ struct LookPage: View {
     }
 
     private var front: some View {
-        ScrollViewReader { proxy in
+        // Wallpaper by its own link; a place on the front (Apps show as, Cursor, Wallpaper folders) by the window's.
+        KitLanding { ScrollViewReader { proxy in
             column.onChange(of: section, initial: true) {
                 guard let section else { return }
                 Task { @MainActor in
@@ -55,7 +57,7 @@ struct LookPage: View {
                     landed()
                 }
             }
-        }
+        } }
     }
 
     /// What each setting does, the ⓘ's words: one or two plain lines.
@@ -90,16 +92,14 @@ struct LookPage: View {
         MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
         MoreEntry(id: .menuLayout, symbol: "text.magnifyingglass", controls: 1),
         MoreEntry(id: .windowLayout, symbol: "sidebar.left", controls: 1),
-        MoreEntry(id: .appsShowAs, symbol: "square.grid.2x2", controls: 1),
         MoreEntry(id: .glassTuning, symbol: "drop", controls: 2),
-        MoreEntry(id: .cursor, symbol: "cursorarrow", controls: 8),
-        MoreEntry(id: .wallpaperCycle, symbol: "photo.on.rectangle", controls: 7),
     ]
 
     // MARK: The page
 
     /// The front: the preview beside Glass and the wallpaper's Previous, Next and On its own, then Theme, so Glass, Next and
-    /// Apply theme show at the window's first size, 1000 by 660 (Sven's pick a, 2026-11-11; the prototype had Theme first).
+    /// Apply theme show at the window's first size, 1000 by 660 (Sven's pick a, 2026-11-11; the prototype had Theme first);
+    /// under them how apps show, the cursor and the wallpaper's folders (pages round 4).
     private var column: some View {
         @Bindable var look = look
         return ScrollView {
@@ -128,6 +128,9 @@ struct LookPage: View {
                 .onGeometryChange(for: Int.self) { [instrument = ink.isInstrument] in
                     Self.calmColumns($0.size.width, instrument: instrument)
                 } action: { themeColumns = $0 }
+                headed(.appsShowAs, Info.appsShowAs) { calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs } }
+                CursorBlock(look: look, cursors: cursors, effects: effects).id(AppSection.cursor)
+                WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .more).id(AppSection.wallpaperCycle)
                 errorLine.padding(.top, 12)
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 30)
@@ -135,15 +138,14 @@ struct LookPage: View {
         }
     }
 
-    /// More: the style, the menu's and this window's layouts, how apps show, the glass's tuning, the cursor and the
-    /// wallpaper's folders, each a place a link or the search lands on.
+    /// More: the style, the menu's and this window's layouts and the glass's tuning, each a place a link or the search lands
+    /// on.
     private var moreTab: some View {
         @Bindable var look = look
         return KitMore(entries: Self.entries) {
             headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
             headed(.menuLayout, Info.menuLayout) { MenuLayoutPicker(look: look).padding(14).blockSurface() }
             headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
-            headed(.appsShowAs, Info.appsShowAs) { calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs } }
             KitBlock(title: "Transparency and blur", note: look.glass ? nil : "While Glass is on, on Look's front.") {
                 calmRow(44, first: true) {
                     setting("Transparency", Info.transparency); Spacer()
@@ -156,13 +158,11 @@ struct LookPage: View {
                 }
             }
             .disabled(!look.glass || look.themePressing).moreBlock(.glassTuning)
-            CursorBlock(look: look, cursors: cursors, effects: effects).moreBlock(.cursor)
-            WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .more).moreBlock(.wallpaperCycle)
             errorLine.padding(.top, 12)
         }
     }
 
-    /// A block on More under its place's title and ⓘ.
+    /// A block under its place's title and ⓘ, on More or the front.
     private func headed(_ place: AppSection, _ info: String, @ViewBuilder _ card: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             CalmHeading(title: place.title) { InfoMark(text: info) }

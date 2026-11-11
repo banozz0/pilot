@@ -369,8 +369,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Wallpaper block on its front (Previous, Next, Change on its own), which a link and the desktop's Hyper +
     /// right-click › Wallpaper settings… scroll to.
     case wallpaper
-    /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts, how
-    /// apps show, the glass's transparency and blur, the cursor, and the folders and order the wallpaper cycles through.
+    /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts and the
+    /// glass's transparency and blur; how apps show, the cursor, and the folders and order the wallpaper cycles through are
+    /// places on the front (pages round 4, Sven's Q99).
     case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
@@ -471,7 +472,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .installLists, .helpers, .hiddenApps,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle]
+                                                     .lookStyle, .menuLayout, .windowLayout, .glassTuning]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -479,7 +480,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .keySwaps, .overlay, .menuExtras,
+                                                     .keySwaps, .overlay, .menuExtras, .appsShowAs, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation]
 
     /// A block on its page's front that a link or the search scrolls to.
