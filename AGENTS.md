@@ -45,4 +45,4 @@ Licence: ideas only, never code, from Raycast, Vicinae, ClipBook or Alfred exten
 
 ## Where things are
 
-README.md's file map shows every file with its own first line; Sven's `file-map` tool rewrites it after files are added, moved or renamed.
+The file map (every file with its own first line) is kept in Sven's vault, not in README.md, because this repo is public; Sven's `file-map` tool rewrites it after files are added, moved or renamed.
