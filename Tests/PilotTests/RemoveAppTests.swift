@@ -146,13 +146,15 @@ struct RemoveAppTests {
     func caskStaysWhenStillOpen() async throws {
         let app = try Self.fixtureApp("dev.example.caskfixture"), copy = Copy(quits: false), record = Record()
         defer { try? FileManager.default.removeItem(at: app.deletingLastPathComponent()) }
-        var ran: [String] = []
+        var ran: [String] = [], asked = 0
         RemoveApp.removeCask("Zed", command: "brew uninstall --cask zed", key: "cask:caskfixture2", app: app,
                              confirm: { title, command, yes in record.asked.append((title, command)); record.yes = yes },
-                             run: { command, _, _ in ran.append(command) }, running: { _ in [copy] }, askForce: { _ in false })
+                             run: { command, _, _ in ran.append(command) }, running: { _ in [copy] }, askForce: { _ in asked += 1; return false },
+                             wait: .milliseconds(200))
         record.yes?()
-        try await Task.sleep(for: .seconds(6))
-        #expect(ran.isEmpty && !copy.isTerminated)
+        for _ in 0..<100 where asked == 0 { try await Task.sleep(for: .milliseconds(20)) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(asked == 1 && ran.isEmpty && !copy.isTerminated)
         #expect(RemoveApp.pending["cask:caskfixture2"] == nil)
     }
 

@@ -31,74 +31,72 @@ enum RemoveApp {
         AppLeftovers.App.bundleID(at: location).map(running) ?? []
     }
 
+    /// Remove on an app or a web app: the ask, quitting first when it runs, then the Trash, then its leftovers; `then`
+    /// runs once the Trash answered (Install › Web apps refreshes its list).
     static func remove(_ name: String, at location: URL, confirm: InstallModule.Confirm, trash: @escaping @MainActor (URL) throws -> URL,
-                       running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce,
-                       leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = offerLeftovers) {
-        // Its helpers' and extensions' ids are read while the ask is up, off the main thread: it is gone once trashed.
-        let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
+                       running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce, wait: Duration = .seconds(5),
+                       leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = offerLeftovers, then: @escaping @MainActor () -> Void = {}) {
         let file = location.lastPathComponent
-        let (title, detail) = copies(of: location, running: running).isEmpty ? ("Remove \(name)", "Move \(file) to the Trash")
-            : ("Quit and remove \(name)", "Quit \(name), then move \(file) to the Trash")
-        confirm(title, detail) {
-            // Read again at the yes: it may have quit, or opened, while the ask was up.
-            let open = copies(of: location, running: running)
-            guard !open.isEmpty else { return toTrash(name, location, trash: trash, reading: reading, leftovers: leftovers) }
-            Task {
-                guard await quit(open, name: name, askForce: askForce) else {
-                    ilog.notice("\(name, privacy: .public) not removed: still running")
-                    return HUD.tip("\(name) is still open, so it stays where it is")
+        quitThen(name, location, ask: "Move \(file) to the Trash", after: "move \(file) to the Trash", confirm: confirm, running: running, askForce: askForce, wait: wait,
+                 stillOpen: "so it stays where it is") { reading in
+            AdminTrash.trash(location, plain: trash) { result in
+                switch result {
+                case .success(let trashed):
+                    ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
+                    offer(reading, leftovers)
+                case .failure(let error):
+                    ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
+                    HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
                 }
-                toTrash(name, location, trash: trash, reading: reading, leftovers: leftovers)
+                then()
             }
         }
     }
 
-    /// Remove on a cask with an app (Q181): the ask shows the exact command, quitting first when the app runs; at the yes
-    /// the app is quit, then the command runs in the visible terminal, and its leftovers wait for its `removed` hook.
+    /// Remove on a cask with an app (Q181): the ask shows the exact command; at the yes the app is quit, then the command
+    /// runs in the visible terminal, and its leftovers wait for its `removed` hook.
     static func removeCask(_ name: String, command: String, key: String, app location: URL, confirm: InstallModule.Confirm,
-                           run: @escaping InstallModule.Run, running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce) {
+                           run: @escaping InstallModule.Run, running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce,
+                           wait: Duration = .seconds(5)) {
+        quitThen(name, location, ask: command, after: command, confirm: confirm, running: running, askForce: askForce, wait: wait,
+                 stillOpen: "so nothing ran") { reading in
+            pending[key] = reading
+            run(command, "Remove \(name)", InstallModule.hook("removed", key: key))
+        }
+    }
+
+    /// Remove's shared steps: the app's ids read off the main thread while the ask is up (it is gone after); the ask, "Quit
+    /// and remove" with "Quit <name>, then <after>" when it runs, else `ask`; at the yes, the running copies read again and quit; `act`
+    /// once none runs, else a tip and nothing done.
+    private static func quitThen(_ name: String, _ location: URL, ask: String, after: String, confirm: InstallModule.Confirm, running: @escaping Running,
+                                 askForce: @escaping AskForce, wait: Duration, stillOpen: String,
+                                 _ act: @escaping @MainActor (Task<AppLeftovers.App?, Never>) -> Void) {
         let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
-        let open = !copies(of: location, running: running).isEmpty, title = "\(open ? "Quit and remove" : "Remove") \(name)"
-        confirm(title, open ? "Quit \(name), then \(command)" : command) {
-            @MainActor func go() {
-                pending[key] = reading
-                run(command, title, InstallModule.hook("removed", key: key))
-            }
-            let copies = copies(of: location, running: running)
-            guard !copies.isEmpty else { return go() }
+        let open = !copies(of: location, running: running).isEmpty
+        confirm(open ? "Quit and remove \(name)" : "Remove \(name)", open ? "Quit \(name), then \(after)" : ask) {
+            let now = copies(of: location, running: running)
+            guard !now.isEmpty else { return act(reading) }
             Task {
-                guard await quit(copies, name: name, askForce: askForce) else {
+                guard await quit(now, name: name, wait: wait, askForce: askForce) else {
                     ilog.notice("\(name, privacy: .public) not removed: still running")
-                    return HUD.tip("\(name) is still open, so nothing ran")
+                    return HUD.tip("\(name) is still open, \(stillOpen)")
                 }
-                go()
+                act(reading)
             }
         }
     }
 
     /// The casks whose command runs in the terminal, each with its app as read before, by package key: their leftovers
-    /// are offered once the command's `removed` hook comes back.
+    /// are offered once the command's `removed` hook comes back; a failed command's stays until the next Remove of it.
     static var pending: [String: Task<AppLeftovers.App?, Never>] = [:]
 
     /// The `removed` hook for `key`: a cask Remove ran offers its leftovers; any other key nothing.
     static func removed(_ key: String, leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = offerLeftovers) {
-        guard let reading = pending.removeValue(forKey: key) else { return }
-        Task { if let app = await reading.value { leftovers(app) } }
+        pending.removeValue(forKey: key).map { offer($0, leftovers) }
     }
 
-    /// The app to the Trash (an administrator's prompt for one root owns), then its leftovers offered.
-    private static func toTrash(_ name: String, _ location: URL, trash: @MainActor (URL) throws -> URL, reading: Task<AppLeftovers.App?, Never>,
-                                leftovers: @escaping @MainActor (AppLeftovers.App) -> Void) {
-        AdminTrash.trash(location, plain: trash) { result in
-            switch result {
-            case .success(let trashed):
-                ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
-                Task { if let app = await reading.value { leftovers(app) } }
-            case .failure(let error):
-                ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
-            }
-        }
+    private static func offer(_ reading: Task<AppLeftovers.App?, Never>, _ leftovers: @escaping @MainActor (AppLeftovers.App) -> Void) {
+        Task { if let app = await reading.value { leftovers(app) } }
     }
 
     /// Quits every copy: a normal quit, `wait` for it; then, on Force quit's yes, a force quit and `forceWait`. True once

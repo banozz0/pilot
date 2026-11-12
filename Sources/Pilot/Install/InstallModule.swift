@@ -102,10 +102,11 @@ enum InstallModule {
         guard !row.system else { return HUD.tip("\(row.name) is part of macOS and can't be removed") }
         let location: URL
         switch row.source {
-        case .package(let package) where package.kind == .cask && row.app != nil:
-            return RemoveApp.removeCask(row.name, command: package.remove, key: package.key, app: URL(filePath: row.app!), confirm: confirm,
-                                        run: run, askForce: askForce)
         case .package(let package):
+            if package.kind == .cask, let app = row.app {
+                return RemoveApp.removeCask(row.name, command: package.remove, key: package.key, app: URL(filePath: app), confirm: confirm,
+                                            run: run, askForce: askForce)
+            }
             return confirmRun("Remove \(row.name)", package.remove, hook: "removed", key: package.key, confirm: confirm, run: run)
         case .npm(let name, let prefix):
             return confirmRun("Remove \(name)", "\(UpdateList.npm("uninstall", prefix: prefix)) \(name)", hook: "removed", key: row.recordKey,
@@ -117,7 +118,7 @@ enum InstallModule {
             }
             location = app.location
         }
-        trashAfterYes(row.name, location, confirm: confirm, trash: trash)
+        RemoveApp.remove(row.name, at: location, confirm: confirm, trash: trash, askForce: askForce)
     }
 
     /// Remove on Install › Web apps (card agent-bo-95422994): the same ask as the menu's Remove; `then` refreshes the
@@ -125,28 +126,7 @@ enum InstallModule {
     static func remove(_ app: InstalledWebApp, confirm: Confirm = confirm,
                        trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash, then: @escaping @MainActor () -> Void,
                        leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = RemoveApp.offerLeftovers) {
-        trashAfterYes(app.name, app.location, confirm: confirm, trash: trash, then: then, leftovers: leftovers)
-    }
-
-    /// A web app to the Trash after the ask, then its leftovers (its WebKit store, which holds its logins, and its
-    /// preferences) offered (Q181).
-    private static func trashAfterYes(_ name: String, _ location: URL, confirm: Confirm, trash: @escaping @MainActor (URL) throws -> URL,
-                                      then: @escaping @MainActor () -> Void = {},
-                                      leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = RemoveApp.offerLeftovers) {
-        let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
-        confirm("Remove \(name)", "Move \(location.lastPathComponent) to the Trash") {
-            AdminTrash.trash(location, plain: trash) { result in
-                switch result {
-                case .success(let trashed):
-                    ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
-                    Task { if let app = await reading.value { leftovers(app) } }
-                case .failure(let error):
-                    ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                    HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
-                }
-                then()
-            }
-        }
+        RemoveApp.remove(app.name, at: app.location, confirm: confirm, trash: trash, leftovers: leftovers, then: then)
     }
 
     /// Return on a pinned Update row (card agent-bo-95422979): asks with `brew unpin`, then runs it in the visible
