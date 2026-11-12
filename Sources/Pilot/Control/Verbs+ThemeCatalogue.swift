@@ -13,12 +13,14 @@ extension ControlVerbs {
         let installer = themeInstaller(owner), ids = themes.map(\.id)
         let installed = await Task.detached { installer.installed(ids) }.value
         // A shipped theme's catalogue copy only brings its pictures, on Apply (ShippedWallpapers): never installed.
+        // Built in and taking its pictures from here (palette-only in the app); a built-in pack with its own is just built in.
         let builtIn = Set(ids.filter(installer.isBuiltIn))
+        let pictured = Set(builtIn.filter { id in (try? owner.store.load(id)).map(ShippedWallpapers.wants) == true })
         return .object(["count": .number(Double(themes.count)), "themes": .array(themes.map { theme in
             let standing = ExtensionCatalogue.standing(of: theme, installed: installed), shipped = builtIn.contains(theme.id)
             var o: [String: JSONValue] = [
                 "id": .string(theme.id), "title": .string(theme.title), "dark": .bool(theme.dark), "styles": .array(theme.styles.map(JSONValue.string)),
-                "standing": .string(shipped ? "built-in" : standing.word), "button": .string(shipped ? "Built in: apply it for its wallpapers" : standing.label),
+                "standing": .string(shipped ? "built-in" : standing.word), "button": .string(shipped ? (pictured.contains(theme.id) ? "Built in: apply it for its wallpapers" : "Built in") : standing.label),
                 "files": .number(Double(theme.files.count)), "size": .number(Double(theme.size)), "digest": .string(theme.digest),
             ]
             o["preview"] = theme.preview.map(JSONValue.string)

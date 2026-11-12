@@ -63,7 +63,8 @@ extension ControlVerbs {
                     return try themeJSON(owner.stageMode(follow: words[2] == "pack"))
                 case "show" where words.count == 2, "check" where words.count == 2:
                     let loaded = try owner.store.load(words[1])
-                    // Check includes adapter validation and ownership without changing files.
+                    // Check includes adapter validation and ownership without changing files, but for a shipped pack's
+                    // pictures, which its plan fetches from the catalogue (ShippedWallpapers).
                     if words[0] == "check" { _ = try await owner.plan(words[1]) }
                     return .object(["pack": try themeJSON(loaded.pack), "revision": .string(loaded.revision), "factory": .bool(loaded.factory), "images": try themeJSON(loaded.images), "valid": .bool(true)])
                 case "plan" where words.count == 3 && words[1] == "apply":

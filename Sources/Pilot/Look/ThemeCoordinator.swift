@@ -1165,12 +1165,12 @@ final class ThemeCoordinator {
         }
     }
 
-    /// `keep`: a shipped pack whose pictures are not here (ShippedWallpapers) leaves every screen as it is, its claims
-    /// held as they are so Restore still puts the original back.
-    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?, keep: Bool = false) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget]) {
+    /// `keep`: a shipped pack whose pictures are not here (ShippedWallpapers) leaves every screen as it is: the claims
+    /// still the theme's are held as the ledger has them, with no mutation, so Restore still puts each original back.
+    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?, keep: Bool = false) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget], held: [ThemeWallpaperClaim]) {
         let claims = record.wallpapers ?? []
         guard let state else {
-            guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [])
+            guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [], [])
         }
         // What the person changed since (another image, their own collection, a pin) stays theirs and only its claim
         // goes, so one changed screen never stops the rest of an Apply or Restore.
@@ -1197,11 +1197,11 @@ final class ThemeCoordinator {
             }
         }
         // Zero images releases previous wallpaper ownership, or leaves an unmanaged wallpaper unchanged.
+        if keep { return (changes, kept, claims.filter { claim in owned.contains { $0.target == claim.target } }) }
         for claim in owned where !changes.contains(where: { $0.target == claim.target }) {
-            changes.append(keep ? .init(target: claim.target, before: claim.last, after: claim.last)
-                                : .init(target: claim.target, before: claim.last, after: claim.original, release: true))
+            changes.append(.init(target: claim.target, before: claim.last, after: claim.original, release: true))
         }
-        return (changes, kept)
+        return (changes, kept, [])
     }
 
     private func writeWallpaper(_ change: ThemeWallpaperMutation) throws {
@@ -1456,14 +1456,14 @@ final class ThemeCoordinator {
         func had() -> Bool { !shipped.wallpapers.picturing(loaded).images.isEmpty }
         do {
             guard let theme = try await shipped.index().theme(id) else {
-                return had() ? nil : "\(loaded.pack.title)'s wallpapers are not in Pilot's catalogue yet"
+                return had() ? nil : "\(loaded.pack.title)'s wallpapers are not in Pilot's catalogue yet."
             }
             let wallpapers = shipped.wallpapers
             try await Task.detached { try await wallpapers.fetch(theme, for: loaded) }.value
             return nil
         } catch {
             log.notice("theme: \(id, privacy: .public)'s wallpapers not fetched: \(ExtensionCatalogue.Problem.reason(error), privacy: .public)")
-            return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded (\(ExtensionCatalogue.Problem.reason(error)))"
+            return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded. \(ExtensionCatalogue.Problem.reason(error))"
         }
     }
     private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil) throws -> ThemePlan {
@@ -1611,7 +1611,7 @@ final class ThemeCoordinator {
         let components = try following()
         let nativePlan = try appearancePlan(loaded?.pack, old: appearanceOwnership(record, current: native?.read()), following: components)
         let unpictured = loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false
-        let (wallpapers, keptWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured)
+        let (wallpapers, keptWallpapers, heldWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured)
         if loaded != nil, cursorIsSystem(), components.cursor != false, nativePlan.1?.cursor != true {
             warnings.append(Self.cursorSkipped)
         }
@@ -1622,12 +1622,12 @@ final class ThemeCoordinator {
         let ghostexPlan = try ghostexPlan(loaded?.pack, record: record, off: local.ghostexInterfaceOff == true, state: ghostexState, warnings: &warnings)
         if loaded?.images.isEmpty == false, wallpaper == nil { warnings.append("Wallpaper skipped: Pilot can't set it here") }
         if let loaded, unpictured, components.wallpapers {
-            warnings.append("Wallpaper kept: \(shippedNote ?? "\(loaded.pack.title)'s wallpapers are not downloaded"); its colours apply")
+            warnings.append("Wallpaper kept; its colours apply: \(shippedNote ?? "\(loaded.pack.title)'s wallpapers are not downloaded.")")
         }
         let appObservations = try custom.map { try ThemeFiles.read(root: $0.app, path: "Contents/Info.plist") }
         let plan = ThemePlan(id: UUID().uuidString, packID: id, revision: loaded?.revision, binding: binding, style: style(),
                              ledger: recordFile, protectedLegacy: legacy, zed: local.zed, zedOptOut: local.zedOptOut, observations: targets + appObservations + [try state("bindings"), try state("components")],
-                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, keptWallpapers: keptWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
+                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
         if plans.count >= 32 { plans.removeAll() }
         plans[plan.id] = (plan, try context(), nativePlan.0, nativePlan.1)
         return plan
@@ -1747,7 +1747,8 @@ final class ThemeCoordinator {
         let wallpaperClaims = plan.wallpapers.filter { !$0.release }.map { change in
             ThemeWallpaperClaim(target: change.target, original: old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
         }
-        next.wallpapers = wallpaperClaims.isEmpty ? nil : wallpaperClaims
+        let claimed = wallpaperClaims + plan.heldWallpapers
+        next.wallpapers = claimed.isEmpty ? nil : claimed
         next.ghostexSettings = plan.ghostexClaims.isEmpty ? nil : plan.ghostexClaims
         if next.claims.isEmpty && next.wallpapers == nil && next.appearance == nil { next.selected = nil }  // Everything it owned has gone.
         let nextBytes = try ThemeDigest.encoded(next)
@@ -2032,6 +2033,9 @@ struct ThemeFixture: Decodable {
     let wallpaperBindings: [String]?
     let nativeBaseline: ThemeNativeAppearance?
     let custom: [ThemeMappingBinding]?
+    /// A catalogue/ folder inside the root a shipped pack's pictures are fetched from (ShippedWallpapers), into
+    /// <root>/wallpapers; nil fetches none.
+    let catalogue: String?
 
     @MainActor static func serve(_ manifest: String) async throws {
         let env = ProcessInfo.processInfo.environment
@@ -2060,7 +2064,7 @@ struct ThemeFixture: Decodable {
         for directory in [config.packs, config.writablePacks, config.state, config.binding.root] + [config.zed?.root, config.detectHome].compactMap({ $0 }) + (config.obsidian ?? []).map(\.root) {
             guard URL(fileURLWithPath: directory).resolvingSymlinksInPath().path == directory else { throw ThemeFailure("fixture root symlink") }
         }
-        for path in [config.factoryPacks, config.wallpaperState, config.cursorRoot, config.nativeState].compactMap({ $0 }) {
+        for path in [config.factoryPacks, config.wallpaperState, config.cursorRoot, config.nativeState, config.catalogue].compactMap({ $0 }) {
             guard path.hasPrefix(config.root + "/"), URL(fileURLWithPath: path).resolvingSymlinksInPath().path == path,
                   !config.socket.hasPrefix(path + "/"), path != config.socket else { throw ThemeFailure("unsafe fixture wallpaper/factory/cursor path") }
         }
@@ -2303,6 +2307,11 @@ struct ThemeFixture: Decodable {
             detect: config.detectHome.map { home in { ThemeCoordinator.detectApps(home: home, within: config.root) } },
             cursorIsSystem: { config.cursorIsMacOS == true }, ghostexColours: ghostexColours, appsHome: config.detectHome)
         _ = try coordinator.zedSelection // Validate every explicit fixture binding before exposing a socket.
+        if let catalogue = config.catalogue.map({ URL(filePath: $0, directoryHint: .isDirectory) }) {
+            let source = ExtensionCatalogue.Source.folder(catalogue)
+            coordinator.shipped = ThemeCoordinator.Shipped(wallpapers: ShippedWallpapers(root: config.root + "/wallpapers", source: source),
+                                          index: { try ExtensionCatalogue.index(await source.fetch(ExtensionCatalogue.indexPath, ExtensionCatalogue.indexLimit)) })
+        }
         let verbs = ControlVerbs(); verbs.registerCore(); verbs.registerThemes { coordinator }
         if env["PILOT_THEME_CAROUSEL"] == "1" { verbs.registerCarousel(.fixture(coordinator, root: config.root)) }  // T8's proof only.
         if let agentSkills { verbs.registerGuides(skills: { agentSkills }) }

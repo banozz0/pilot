@@ -633,7 +633,11 @@ def manifest_of(folder):
 def ships_with_pictures(folder, shipped):
     """Whether the catalogue pack `folder` is the theme Pilot ships in `shipped` with its wallpapers (Sven Q119): the app
     bundles that theme palette-only and fetches this pack's pictures on Apply, so every manifest field but `wallpapers`
-    must be the shipped one's, and it must name wallpapers."""
+    must be the shipped one's, it must name wallpapers, and its PROVENANCE.md must say where they come from (Pilot loads
+    the copy as a built-in pack, which needs one)."""
+    provenance = folder / "PROVENANCE.md"
+    if not provenance.is_file() or provenance.is_symlink() or not provenance.read_bytes().strip():
+        return False
     mine, theirs = manifest_of(folder), manifest_of(shipped)
     if not isinstance(mine, dict) or not isinstance(theirs, dict):
         return False
@@ -657,7 +661,8 @@ def bundled_lookalikes(titles):
         if name in shipped:
             if not ships_with_pictures(build_index.THEMES / name, SHIPPED / name):
                 problems.append("%s: Pilot ships a theme with this id; only that theme with its wallpapers may use it "
-                                "(manifest.json the same as Packaging/ThemePacks/%s's but for wallpapers)" % (name, name))
+                                "(manifest.json the same as Packaging/ThemePacks/%s's but for wallpapers, and a PROVENANCE.md)"
+                                % (name, name))
         elif isinstance(title, str) and skeleton(title) in shipped.values():
             problems.append("%s: its title looks like a theme Pilot ships" % name)
     return problems
