@@ -247,10 +247,8 @@ extension BarSettings {
             return false
         }
         guard !kind.pinned else { return false }
-        if drop == .group { return group(kind) }
-        // Put at a place of its own, an item is out of the Group: dragged out, it stays out (Sven on build 2372).
-        if kind != .group { set(kind, grouped: false) }
         switch (drop, placement) {
+        case (.group, _): return group(kind)
         case (.top(let side, let index), .topBar):
             set(kind, in: .topBar, on: true)
             fillGroup(kind, in: .topBar)
@@ -270,7 +268,7 @@ extension BarSettings {
             }
             fillGroup(kind, in: .menuBar)
             placeInMenuBar(kind, at: index, topBarOn: placement == .both)
-        case (.top, .menuBar), (.menu, .topBar), (.group, _): return false
+        case (.top, .menuBar), (.menu, .topBar): return false
         }
         return true
     }
@@ -345,6 +343,7 @@ extension BarSettings {
     /// The menu bar's order: `kind` goes before the slot now at `index` of the menu bar's slots without it, or after the
     /// last past the end.
     public mutating func placeInMenuBar(_ kind: BarKind, at index: Int, topBarOn: Bool) {
+        set(kind, grouped: false)
         // By item, not kind: the top bar's more dividers are dividers too.
         let others = slots(in: .menuBar, topBarOn: topBarOn).filter { $0.item != .kind(kind) }
         guard let last = others.last else { return }
@@ -361,7 +360,7 @@ extension BarSettings {
     /// The Group put on with no reading to gather draws nothing: it brings round 4's three into the same bar.
     private mutating func fillGroup(_ kind: BarKind, in place: BarPlace) {
         guard kind == .group, !slots(in: place, topBarOn: place == .topBar).contains(where: \.isGroup) else { return }
-        for reading in [BarKind.cpu, .memory, .network] {
+        for reading in BarKind.groupStarters {
             if place == .topBar { set(reading, in: .topBar, on: true) } else { set(reading, in: .menuBar, on: true) }
             set(reading, grouped: true)
         }

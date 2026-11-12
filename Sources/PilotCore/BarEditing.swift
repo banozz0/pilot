@@ -45,6 +45,11 @@ public struct BarDrop: Sendable {
     /// How far in from the Group's edges a drop joins it rather than landing beside it.
     static let groupEdge = 8.0
 
+    /// Whether a drop at `x`, `y` lands in the Group: on the bar, inside the Group's drawn slot.
+    public func joinsGroup(x: Double, y: Double, dragging: BarTrayItem?) -> Bool {
+        (0...height + Self.below).contains(y) && Self.joinsGroup(x: x, slots: TopBarSide.allCases.flatMap { sides[$0] ?? [] }, dragging: dragging)
+    }
+
     /// Whether a drop at `x` lands in the Group (the strip's own slots as drawn): inside its drawn slot, a little in from
     /// its edges so a drop at either edge still goes beside it, for an item that can join.
     public static func joinsGroup(x: Double, slots: [Slot], dragging: BarTrayItem?) -> Bool {
@@ -112,6 +117,8 @@ extension BarSettings {
     /// one with no place there yet changes nothing.
     public mutating func place(_ item: BarTrayItem, on side: TopBarSide, at index: Int) {
         guard item.kind?.pinned != true, self.index(of: item) != nil else { return }
+        // Put at a place of its own, an item is out of the Group (Sven on build 2372: dragged out, it stays out).
+        if let kind = item.kind { set(kind, grouped: false) }
         let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.item != item }
         // A link can name any index: below 0 is first.
         let index = max(index, 0)
@@ -127,10 +134,8 @@ extension BarSettings {
     public mutating func add(_ kind: BarKind, on side: TopBarSide, at index: Int) {
         guard !kind.pinned else { return }
         // The Group draws nothing without a reading: one put back after it went with its readings brings round 4's three.
-        if kind == .group, gathered.isEmpty { for reading in [BarKind.cpu, .memory, .network] { join(reading); set(reading, grouped: true) } }
+        if kind == .group, gathered.isEmpty { for reading in BarKind.groupStarters { join(reading); set(reading, grouped: true) } }
         join(kind)
-        // Put on the bar at a place of its own, it is out of the Group (Sven on build 2372: dragged out, it stays out).
-        if kind != .group { set(kind, grouped: false) }
         place(kind, on: side, at: index)
     }
 

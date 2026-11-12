@@ -293,7 +293,8 @@ struct TopBarStrip<Slot: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(.named(BarFrames.space))
         .background {
-            if !islands { islandGround(ground: ground, tone: tone).clipShape(.rect(cornerRadius: configuration?.radius ?? 0)) }
+            // The preview cuts only its ground to the bar's shape (BarClip cuts the bar's whole).
+            if !islands { islandGround(ground: ground, tone: tone).modifier(BarClip(radius: configuration?.radius ?? 0, on: preview)) }
         }
         // One rule along the Strip's foot on a solid bar; none on Glass, whose own edge is the line there (Sven, 2026-10-10:
         // the two drew a double line where the AI chat meets the bar).

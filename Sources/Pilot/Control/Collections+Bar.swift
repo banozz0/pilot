@@ -118,11 +118,11 @@ extension ControlVerbs {
                 return Self.change(kind, in: bar(), reach) { $0.set(kind, style: style) }
             case "group":
                 let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
-                guard kind.groupable else {
-                    throw ControlError(.badValue, "\(kind.rawValue) cannot be in the Group; these can: \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", "))")
+                var joined = bar().settings
+                guard joined.group(kind) else {
+                    throw ControlError(.badValue, "\(kind.rawValue) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")), while the Group is on")
                 }
-                guard bar().settings.entry(.group).on else { throw ControlError(.badValue, "the Group is off: pilot add bar-items --item group") }
-                return Self.change(kind, in: bar(), reach) { $0.group(kind) }
+                return Self.change(kind, in: bar(), reach) { $0 = joined }
             case "ungroup":
                 guard args.positional.count > 1 else {
                     Self.write(bar()) { $0.ungroup() }

@@ -269,7 +269,7 @@ struct MenuBarPage: View {
     /// while a drag is over it.
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
         let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
-        let joining = overTop.map { BarDrop.joinsGroup(x: $0.x, slots: drop.sides.values.flatMap { $0 }, dragging: dragged) } ?? false
+        let joining = overTop.map { drop.joinsGroup(x: $0.x, y: $0.y, dragging: dragged) } ?? false
         return TopBarStrip(sides: top, configuration: store.settings.preset, background: background, colour: store.colour, glassPreview: true, itemColours: store.itemColours,
                            report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }, preview: true) {
             stripSlot($0, store, inTopBar: true, joining: joining)
@@ -292,9 +292,8 @@ struct MenuBarPage: View {
     static func topDrop(_ drop: BarDrop, store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, room: CGFloat = 0,
                         animation: Animation?, over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            let target = drop.target(x: at.x, y: at.y - room, dragging: item)
-            if target != nil, BarDrop.joinsGroup(x: at.x, slots: drop.sides.values.flatMap { $0 }, dragging: item) { return .group }
-            return target.map { BarStripDrop.top($0.side, index: $0.index) }
+            if drop.joinsGroup(x: at.x, y: at.y - room, dragging: item) { return .group }
+            return drop.target(x: at.x, y: at.y - room, dragging: item).map { BarStripDrop.top($0.side, index: $0.index) }
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -378,7 +377,7 @@ struct MenuBarPage: View {
     /// One slot of a strip, piece by piece (Sven on build 54: one by one, not by sections): an item is one piece; the
     /// Group's readings are a piece each inside its outline, the outline itself dragging the whole Group; an extension's
     /// item placed in the top bar is a slot and a piece of its own (spec pilot-1.1 T50), drawn while it is installed.
-    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool = false) -> some View {
+    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool) -> some View {
         if slot.isGroup {
             groupSlot(slot, store, inTopBar: inTopBar, joining: joining)
         } else if case .extension(let id) = slot.item {

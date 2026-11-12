@@ -123,7 +123,7 @@ struct TopBarSlotView: View {
 
     /// What the slot shows: its own view (other apps, workspace numbers), its parts, or nothing (a battery not read).
     private enum Shows {
-        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([[BarPart]], tooltip: String), nothing
+        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([BarParts.KindTarget], tooltip: String), nothing
     }
 
     var body: some View {
@@ -165,11 +165,8 @@ struct TopBarSlotView: View {
         case .appMenus: TopBarAppMenus(menus: sources.readings.appMenus)
         case .workspaces(let style): TopBarWorkspacesView(screen: screen, tiler: sources.observers.tiler, style: style)
         case .modes: TopBarStatusLights(lights: sources.readings.statusLights) { perform(slot.click) }
-        case .parts(let parts, _):
-            // An extension's own item is its own target; every other item is one; in the Group the readings are one and
-            // each other item its own (BarParts.groupTargets). The top bar's targets are apart by their insets.
-            let targets = slot.isGroup ? BarParts.groupTargets(slot.entries, sources.inputs(for: slot.entries))
-                : BarParts.targets(parts, click: slot.click).map { ($0, slot.kinds) }
+        case .parts(let targets, _):
+            // The top bar's targets are apart by their insets.
             HStack(spacing: inBar ? 0 : 6) {
                 ForEach(Array(targets.enumerated()), id: \.offset) { _, each in
                     let target = each.target
@@ -191,10 +188,13 @@ struct TopBarSlotView: View {
         }
     }
 
-    /// Its parts and tooltip, from one read of its readings.
+    /// Its targets and tooltip, from one read of its readings: an extension's own item is its own target, every other
+    /// item one; in the Group the readings are one and each other item its own (BarParts.groupTargets).
     private func parts() -> Shows {
         let inputs = sources.inputs(for: slot.entries)
-        return BarParts.parts(slot, inputs, settings: store.settings).map { .parts($0, tooltip: BarTooltip.text(slot, inputs)) } ?? .nothing
+        let targets = slot.isGroup ? BarParts.groupTargets(slot.entries, inputs)
+            : BarParts.parts(slot, inputs, settings: store.settings).map { BarParts.targets($0, click: slot.click).map { ($0, slot.kinds) } } ?? []
+        return targets.isEmpty ? .nothing : .parts(targets, tooltip: BarTooltip.text(slot, inputs))
     }
 
     /// Workspace numbers read only the focused one, so a window opening redraws no tooltip.

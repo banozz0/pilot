@@ -586,7 +586,7 @@ struct SidewaysWheel: NSViewRepresentable {
         private var monitor: Any?
         /// Whether the gesture under way began over this frame, and when its last event came (a plain wheel has no phases).
         private var owned = false
-        private var last = Date.distantPast
+        private var last: TimeInterval = 0
         /// A plain wheel's notches this close together are one gesture.
         static let gap: TimeInterval = 0.3
 
@@ -605,8 +605,8 @@ struct SidewaysWheel: NSViewRepresentable {
         /// Hands an up-down scroll over this frame sideways to the view under it; false leaves the event as it is.
         func turn(_ event: NSEvent) -> Bool {
             let starts = event.phase == .began || event.phase == .mayBegin
-                || event.phase.isEmpty && event.momentumPhase.isEmpty && Date().timeIntervalSince(last) > Self.gap
-            last = Date()
+                || event.phase.isEmpty && event.momentumPhase.isEmpty && event.timestamp - last > Self.gap
+            last = event.timestamp
             if starts { owned = bounds.contains(convert(event.locationInWindow, from: nil)) }
             guard owned, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX),
                   let under = window?.contentView?.hitTest(event.locationInWindow), Self.scrollsSideways(under) else { return false }

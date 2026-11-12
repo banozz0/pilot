@@ -155,13 +155,10 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
 
     /// Can sit in the Group (Sven on build 2372: a group holds any number of items): an item drawn from its parts alone,
     /// with no view, menu or pattern of its own the Group would lose. The readings are in it until taken out.
-    public var groupable: Bool {
-        switch self {
-        case .cpu, .memory, .network, .graphics, .storage, .heat, .battery, .bluetoothBatteries, .keepAwake, .power,
-             .volume, .keyboardLayout, .wifi, .displays, .timer: true
-        default: false
-        }
-    }
+    public var groupable: Bool { [.readings, .power, .controls].contains(group) || self == .timer }
+
+    /// The readings the Group starts with when it is put on with nothing in it (round 4's three).
+    static let groupStarters: [BarKind] = [.cpu, .memory, .network]
 
     /// Pilot's own icon: always on, always in the macOS menu bar, and while the top bar is on its first left item, whatever
     /// its placement (card agent-bo-95423009: the macOS menu bar hides under the top bar).

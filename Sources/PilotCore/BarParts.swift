@@ -319,18 +319,21 @@ public enum BarParts {
         return targets
     }
 
+    /// A hit target and the items its click is for.
+    public typealias KindTarget = (target: BarTarget, kinds: [BarKind])
+
     /// The Group's hit targets (Sven on build 2372: a group holds any groupable item): each run of its readings one
     /// target opening their popover together, as the Group's click did, every other item its own targets with its own
     /// click, each with the items its click is for.
-    public static func groupTargets(_ entries: [BarEntry], _ i: BarInputs) -> [(target: BarTarget, kinds: [BarKind])] {
-        var targets: [(target: BarTarget, kinds: [BarKind])] = []
+    public static func groupTargets(_ entries: [BarEntry], _ i: BarInputs) -> [KindTarget] {
+        var targets: [KindTarget] = []
         for entry in entries {
             guard let parts = parts(entry, i) else { continue }
-            guard entry.kind.stat != nil else {
+            guard entry.kind.group == .readings else {
                 targets += Self.targets([parts], click: entry.kind.click).map { ($0, [entry.kind]) }
                 continue
             }
-            if let last = targets.last, last.kinds.allSatisfy({ $0.stat != nil }) {
+            if let last = targets.last, last.kinds.allSatisfy({ $0.group == .readings }) {
                 targets[targets.count - 1].target.parts.append(parts)
                 targets[targets.count - 1].kinds.append(entry.kind)
             } else {
