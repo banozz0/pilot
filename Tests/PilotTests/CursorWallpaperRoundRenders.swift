@@ -10,7 +10,8 @@ import Testing
 /// 2026-11-12): Look's Cursor as one cursor with its own controls and a live preview, three ways (A, B, C), and the
 /// Wallpaper blocks simpler, three ways, beside today's, each in Tokyo Night and Porcelain. The variants are mock views
 /// built here from Pilot's own kit and its real cursor art (`CursorArt` from `Packaging/Cursors`, 5x atlas) and effect
-/// painter; nothing is applied, registered or read from this Mac. Opt-in like the other renders:
+/// painter; nothing is applied or registered, and only the macOS tile reads this Mac (its arrow, as today's block draws
+/// it). Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> PILOT_RESOURCES=Packaging swift test --filter CursorWallpaperRoundRenders`
 /// (PILOT_RESOURCES lets today's Cursor tiles find their art.)
 extension SharedLook {
@@ -54,6 +55,7 @@ struct CursorWallpaperRoundRenders {
             cursors.set = .quiet; cursors.colours = .custom; cursors.fill = .custom(m.fill); cursors.outline = .custom(m.outline)
             effects.trail = .thread; effects.ring = true; effects.ripple = true; effects.spotlight = false; effects.colour = .theme
             let wallpaper = WallpaperSettings(defaults: try #require(UserDefaults(suiteName: testSuite())))
+            wallpaper.interval = 60   // as every variant shows it
             try writeRender(LookPage(look: look, wallpaper: wallpaper, cursors: cursors, effects: effects, screens: screens)
                                 .environment(\.lookPreviewStill, stills.wide[0]).styled(.page(.look), look: look)
                                 .frame(width: page, height: 2700, alignment: .top).pilotTheme(look: look).background(Theme.background),
@@ -154,7 +156,9 @@ final class RoundArt {
         if m.ripple, let hand = others.firstIndex(of: "pointing-hand") {
             state.ripples = [.init(point: spots[hand], time: 1 - 0.15, right: false)]
         }
-        CursorEffectPainter.draw(state, effect, now: 1, in: ctx)
+        // The ring at the size proposed with Size: it grows with the cursor (today it stays 17 pt).
+        CursorEffectPainter.draw(state, effect, now: 1, ring: false, in: ctx)
+        if m.ring { CursorEffectPainter.ring(radius: CursorEffectPainter.ringRadius * m.size, level: 1, effect, at: pointer, in: ctx) }
         let palette = palette(m.shape, m, theme: theme)
         func put(_ name: String, at p: CGPoint) {
             guard let c = cursor(m.shape, name, palette: palette) else { return }
