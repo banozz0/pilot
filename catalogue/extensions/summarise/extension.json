@@ -2,7 +2,7 @@
   "id": "summarise",
   "title": "Summarise",
   "icon": "📝",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Summarises a YouTube video, a web page or a document with Pilot's AI, with its full text beside it. Save it as Markdown to Downloads, or ask about it. Its page takes a pasted link or a chosen file; its menu-bar item summarises what you copied in a click.",
   "examples": ["Copy a YouTube link, open Summarise, Return: its page shows the summary and the transcript", "On its page, paste a link or choose a file, then Summarise: the summary shows there, with Copy summary"],
   "runtime": "process",

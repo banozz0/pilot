@@ -2,7 +2,7 @@
   "id": "ssh-hosts",
   "title": "SSH hosts",
   "icon": "🖥️",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Connects to a server you named in your SSH config, in a new terminal window, without typing the ssh command.",
   "examples": ["Type omar: omarchy with its user and address; Return opens ssh omarchy in Ghostty", "On its page, type omar in the box, then click the host: ssh omarchy opens in Ghostty"],
   "runtime": "process",

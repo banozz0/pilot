@@ -2,7 +2,7 @@
   "id": "todo",
   "title": "To-do",
   "icon": "☑️",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A to-do list in Hyper+Space and the menu bar: type to add or filter, Return ticks one off, every other action on a key. Due days are optional: with none set it is one tidy list. Kept on this Mac only, no account and no sync.",
   "examples": ["Hyper+Space › To-do, type call mum fri and press Return: added, due Friday, under Upcoming; Return on a to-do ticks it off, ⌘Z puts it back", "Type todo buy milk in Hyper+Space and press Return: Add a to-do: buy milk adds it in one step"],
   "runtime": "process",

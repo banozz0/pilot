@@ -2,7 +2,7 @@
   "id": "git",
   "title": "lazygit",
   "icon": "🌿",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "See which of your git repos have changes to commit or commits to push or pull; click one to open lazygit in it, or pull or push in one click.",
   "examples": ["The menu bar shows ⎇ 2: click it to see pilot with 3 changed files and agents with 2 commits to push, then Push", "Type pil: pilot with its branch and changes; Return opens lazygit in it, Cmd+K Ghostty, Finder or its GitHub page"],
   "runtime": "process",

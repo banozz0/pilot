@@ -202,7 +202,7 @@
       "id": "ghostex",
       "title": "Ghostex sessions",
       "icon": "👻",
-      "version": "2.2.0",
+      "version": "2.2.1",
       "description": "See which Ghostex agents are working or waiting on you from the menu bar, read a session's chat and reply to it, and rename, tag, sleep, wake or close sessions without opening Ghostex.",
       "examples": [
         "The menu bar shows 👻 5: click it, pick Pilot coordinator 2, read its last replies and type an answer; Return queues it until the agent stops, Option+Return interrupts",
@@ -228,7 +228,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "b120ebf1782a76bc2a64303fe5373f22a71e254d27daa6bb1ff881fb7949beb5",
+          "sha256": "7a65f91856ce62328f14010a6b984b29afe1c61f01e02db51db5fdf57238e640",
           "size": 2850,
           "executable": false
         },
@@ -244,7 +244,7 @@
       "id": "git",
       "title": "lazygit",
       "icon": "🌿",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "description": "See which of your git repos have changes to commit or commits to push or pull; click one to open lazygit in it, or pull or push in one click.",
       "examples": [
         "The menu bar shows ⎇ 2: click it to see pilot with 3 changed files and agents with 2 commits to push, then Push",
@@ -274,7 +274,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "cd30205e791f35365a9f7907e6bad1c54612dead8629ea81458fb46d48e865a4",
+          "sha256": "2fbfa3bdbbd2da434dca57b023b072dc2a36442bc8f58f43de685c6c3bb8b41e",
           "size": 2132,
           "executable": false
         },
@@ -290,7 +290,7 @@
       "id": "github",
       "title": "GitHub",
       "icon": "🐙",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "description": "See what on GitHub needs you: pull requests waiting on your review, your own with their checks, issues given to you and CI runs that failed.",
       "examples": [
         "Type pull: PRs waiting on your review first, then yours, each with its checks passing or failing; Return opens it on github.com",
@@ -328,7 +328,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "3dc998f02f120e0d47f0976bfc2b9652435d9f18e9faeabcccc39f4f478483ea",
+          "sha256": "7b73744e556473f91e438c5e55cd7a6995b7621d7776ba40903c8a73c124eb8b",
           "size": 1694,
           "executable": false
         },
@@ -344,7 +344,7 @@
       "id": "markets",
       "title": "Markets",
       "icon": "📈",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Stocks, ETFs and coins and their day's change in the menu bar, as text, with the day's line or as mini bars, one symbol, several side by side or in turn; click it for every symbol you follow with its price, its change and its line, each a click from its page on TradingView. Search TradingView as on its site (BTC, AAPL, EURUSD, SPX) to add stocks, funds, coin and currency pairs, indices and futures, and order or remove them on the page. Free data from TradingView, or Nasdaq and CoinGecko, in euros or your currency, no account or key.",
       "examples": [
         "The menu bar shows SPY ▲0.28% · BTC ▲1.4%: click it for every symbol with its price and the day's line",
@@ -381,7 +381,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "73f74c65e704f2a9d7b768ec947138e1beeddbd4f02e44a00aef7268ec314541",
+          "sha256": "caeba62a6682a2a8c4a165d6fd04a5307c3c1cef49507fe6d3b259bba87d3983",
           "size": 5236,
           "executable": false
         },
@@ -632,7 +632,7 @@
       "id": "ssh-hosts",
       "title": "SSH hosts",
       "icon": "🖥️",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "description": "Connects to a server you named in your SSH config, in a new terminal window, without typing the ssh command.",
       "examples": [
         "Type omar: omarchy with its user and address; Return opens ssh omarchy in Ghostty",
@@ -660,7 +660,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "195863d1fb6f596cc5606ac6916dfb65908ecf131f933c48c400227f43619d13",
+          "sha256": "34e894ed2e568c15f061eb00b543ca6114f101712d4fcfb55c4148b3d7ced47f",
           "size": 1166,
           "executable": false
         },
@@ -676,7 +676,7 @@
       "id": "summarise",
       "title": "Summarise",
       "icon": "📝",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "description": "Summarises a YouTube video, a web page or a document with Pilot's AI, with its full text beside it. Save it as Markdown to Downloads, or ask about it. Its page takes a pasted link or a chosen file; its menu-bar item summarises what you copied in a click.",
       "examples": [
         "Copy a YouTube link, open Summarise, Return: its page shows the summary and the transcript",
@@ -707,7 +707,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "fc334afafe2da542ec9d7f7ed18fa8b3d81e41c8b197e62c2018924071ad9a3a",
+          "sha256": "a49a65728eb532e9d9075533d54b8d4bb209db2762fa32ddd508754852dd1a68",
           "size": 2089,
           "executable": false
         },
@@ -775,7 +775,7 @@
       "id": "todo",
       "title": "To-do",
       "icon": "☑️",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "description": "A to-do list in Hyper+Space and the menu bar: type to add or filter, Return ticks one off, every other action on a key. Due days are optional: with none set it is one tidy list. Kept on this Mac only, no account and no sync.",
       "examples": [
         "Hyper+Space › To-do, type call mum fri and press Return: added, due Friday, under Upcoming; Return on a to-do ticks it off, ⌘Z puts it back",
@@ -800,7 +800,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "9ec28903e76fda2a5b36009f50c086dee92c5e5b48501e2a7db27476a36f6f37",
+          "sha256": "3cf0982d151459b7306332c425036c62b302be1bf8b45dc7732706b0fafdbd26",
           "size": 2292,
           "executable": false
         },
@@ -816,7 +816,7 @@
       "id": "video-downloader",
       "title": "Video downloader",
       "icon": "📥",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "description": "Saves a YouTube, X or Twitch video or its audio to Downloads, through yt-dlp and ffmpeg from Homebrew. Paste a link on its page and pick a format; its menu-bar item shows a download's progress, and a click there saves the copied link.",
       "examples": [
         "Copy a YouTube link, open Video downloader, Return: the video saves to ~/Downloads",
@@ -849,7 +849,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "4fccad44065afaf27d23f97db7afdd71bda864b0e585dd431862a10392c99ef8",
+          "sha256": "f9d444531225cc6610492e7eb477c3d377d9635f3e0473e36184998a46f4a898",
           "size": 1728,
           "executable": false
         },
@@ -865,7 +865,7 @@
       "id": "weather",
       "title": "Weather",
       "icon": "🌤️",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "description": "The temperature now in the menu bar; click it for feels like, high and low, rain chance, wind, the next hours and the next 7 days, and search its city on its page. Free data from Open-Meteo, no account or key.",
       "examples": [
         "The menu bar shows ☀ 24°: click it for the next six hours and the week ahead",
@@ -894,7 +894,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "87c90d70eb4e2a3cfbd1284bb1c5c90b8c0c6c9b7415e7727ac0a5ae880d1690",
+          "sha256": "24bb258361cebb124e3252dc004bc662b63173455e18e6cd8283e2945fa9679d",
           "size": 2025,
           "executable": false
         },

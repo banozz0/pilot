@@ -2,7 +2,7 @@
   "id": "ghostex",
   "title": "Ghostex sessions",
   "icon": "👻",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "See which Ghostex agents are working or waiting on you from the menu bar, read a session's chat and reply to it, and rename, tag, sleep, wake or close sessions without opening Ghostex.",
   "examples": ["The menu bar shows 👻 5: click it, pick Pilot coordinator 2, read its last replies and type an answer; Return queues it until the agent stops, Option+Return interrupts", "Type pilot: every session in the pilot project with its agent and state; Return brings it up in Ghostex"],
   "runtime": "process",
