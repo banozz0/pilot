@@ -61,25 +61,26 @@ enum DropdownNow {
         return items
     }
 
-    /// The first recording or running timer, as its row: what takes the pill-first bar's compact face over (Q164).
-    /// Downloads never do.
+    /// The recording, else the running timer, as its row: what takes the pill-first bar's compact face over (Q164).
+    /// Downloads never do, nor are they read for it.
     static var live: DropdownPanelValues.Running? {
-        zip(items, rows).first { item, _ in if case .download = item { false } else { true } }?.1
+        if Recorder.shared.isActive { return row(.recording) }
+        return NowTimer.line(ExtensionTimer.shared).map { row(.timer($0)) }
     }
 
     /// The running rows as the Pilot menu's Now block and the pill's Activity view draw them.
-    static var rows: [DropdownPanelValues.Running] {
-        items.map { item in
-            switch item {
-            case .recording: .init(symbol: "video", title: "Screen recording", detail: "Recording", reading: Recorder.shared.reading?.words)
-            case .timer(let line):
-                .init(symbol: "timer", title: ExtensionTimer.shared.title ?? "Timer", detail: line, reading: ExtensionTimer.shared.countdown,
-                      canPause: !ExtensionTimer.shared.buttons.isEmpty)
-            case .download(let title, let share):
-                // Only the terminal pack's download can be cancelled.
-                .init(symbol: "arrow.down.to.line", title: title, detail: "Downloading", reading: "\(Int(share * 100)) %", share: share,
-                      canStop: title == OnboardingExtras.terminalTitle)
-            }
+    static var rows: [DropdownPanelValues.Running] { items.map(row) }
+
+    private static func row(_ item: Item) -> DropdownPanelValues.Running {
+        switch item {
+        case .recording: .init(symbol: "video", title: "Screen recording", detail: "Recording", reading: Recorder.shared.reading?.words)
+        case .timer(let line):
+            .init(symbol: "timer", title: ExtensionTimer.shared.title ?? "Timer", detail: line, reading: ExtensionTimer.shared.countdown,
+                  canPause: !ExtensionTimer.shared.buttons.isEmpty)
+        case .download(let title, let share):
+            // Only the terminal pack's download can be cancelled.
+            .init(symbol: "arrow.down.to.line", title: title, detail: "Downloading", reading: "\(Int(share * 100)) %", share: share,
+                  canStop: title == OnboardingExtras.terminalTitle)
         }
     }
 

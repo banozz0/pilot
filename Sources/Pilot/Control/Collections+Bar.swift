@@ -266,7 +266,7 @@ extension ControlVerbs {
         // The pill-first bar draws over the saved one, which `topBar` and `preset` still show as saved.
         answer["pillFirst"] = .bool(store.pillFirst.on)
         if store.pillFirst.on {
-            answer["drawn"] = .object(Dictionary(uniqueKeysWithValues: PillFirst.sides(s).map { side, slots in
+            answer["drawn"] = .object(Dictionary(uniqueKeysWithValues: store.topBarSides.map { side, slots in
                 (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
             }))
         }

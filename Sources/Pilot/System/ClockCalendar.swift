@@ -39,6 +39,8 @@ final class ClockCalendar {
     /// Asked and refused: the popover says so and links Privacy & Security instead of listing events.
     private(set) var refused = false
     @ObservationIgnored private let make: @MainActor () -> CalendarStore
+    /// Access as macOS has it, read with no store made: a read that may not ask makes none until access is given.
+    @ObservationIgnored private let status: @MainActor () -> CalendarAccess
     /// Where a new event goes, by name, once access is given (never asked for it).
     private(set) var newEventsCalendar: String?
     @ObservationIgnored private var store: CalendarStore?
@@ -52,8 +54,10 @@ final class ClockCalendar {
     @ObservationIgnored let open: @MainActor (URL) -> Void
 
     init(store make: @escaping @MainActor () -> CalendarStore = { EventKitCalendar() },
+         status: @escaping @MainActor () -> CalendarAccess = { EventKitCalendar.status },
          open: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.make = make
+        self.status = status
         self.open = open
     }
 
@@ -109,6 +113,7 @@ final class ClockCalendar {
 
     /// The store once access is given, asked for if never asked and `ask`; nil when refused or not asked.
     private func granted(ask: Bool = true) async -> CalendarStore? {
+        if !ask, store == nil, status() != .granted { return nil }
         let store = store ?? make()
         self.store = store
         var access = store.access
@@ -132,7 +137,9 @@ final class ClockCalendar {
     private let store = EKEventStore()
     private var observer: NSObjectProtocol?
 
-    var access: CalendarAccess {
+    var access: CalendarAccess { Self.status }
+
+    static var status: CalendarAccess {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .notDetermined: .undetermined
         case .fullAccess: .granted

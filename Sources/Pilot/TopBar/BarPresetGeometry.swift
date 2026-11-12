@@ -5,21 +5,29 @@ import PilotCore
 extension BarItemsStore {
     /// The pill-first bar's id beside BarPreset's: drawn over the saved bar, never saved in it (PillFirst).
     static let pillFirstPreset = "pillFirst"
+    /// The id of no preset: the bar as it was before presets.
+    static let legacyPreset = "legacy"
+    /// Every id the picker, `bar.preset` and `pilot bar preset` take, in the picker's order.
+    static var presetIDs: [String] { [legacyPreset] + BarPreset.allCases.map(\.rawValue) + [pillFirstPreset] }
 
     /// The preset drawing now: pill-first while it is on, else the saved one, `legacy` for none.
-    var presetID: String { pillFirst.on ? Self.pillFirstPreset : settings.preset?.preset.rawValue ?? "legacy" }
+    var presetID: String { pillFirst.on ? Self.pillFirstPreset : settings.preset?.preset.rawValue ?? Self.legacyPreset }
+
+    /// What the top bar draws: the pill-first bar while it is on, else the saved items.
+    var topBarSides: [TopBarSide: [BarSlot]] { pillFirst.on ? PillFirst.sides(settings) : settings.preview(.topBar).top ?? [:] }
 
     /// Pill-first only switches its own flag. Leaving it for the preset under it keeps that preset's geometry as it was,
     /// so switching back restores the bar exactly; another preset is chosen as ever.
     func choosePreset(_ id: String) throws(ControlError) {
         try requireWritable()
         if id == Self.pillFirstPreset { pillFirst.on = true; return }
-        guard id == "legacy" || BarPreset(rawValue: id) != nil else { throw ControlError(.badValue, "unknown bar preset") }
-        let was = pillFirst.on
-        if was { pillFirst.on = false }
-        if was, id == settings.preset?.preset.rawValue ?? "legacy" { return }
-        if id == "legacy" { settings.preset = nil; return }
-        settings.preset = BarPreset(rawValue: id)!.configuration
+        let preset = BarPreset(rawValue: id)
+        guard id == Self.legacyPreset || preset != nil else { throw ControlError(.badValue, "unknown bar preset") }
+        if pillFirst.on {
+            pillFirst.on = false
+            if preset == settings.preset?.preset { return }
+        }
+        settings.preset = preset?.configuration
     }
 
     func applyGeometry(_ json: String) throws(ControlError) {

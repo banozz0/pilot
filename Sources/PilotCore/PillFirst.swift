@@ -76,9 +76,6 @@ public enum PillFirst {
 
         /// The page showing, in range.
         public var current: Int { min(max(selected, 0), pages.count - 1) }
-
-        /// The page `by` steps from the one showing, wrapping.
-        public func step(_ by: Int) -> Int { ((current + by) % pages.count + pages.count) % pages.count }
     }
 
     /// The pages as `pill.pages` writes them: kinds by name, an extensions page as `Title=id+id+id` (`Title=` with none).

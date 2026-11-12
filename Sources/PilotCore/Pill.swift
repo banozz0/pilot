@@ -113,41 +113,25 @@ public enum Pill {
     }
 }
 
-extension Pill.Layout {
-    /// The view `by` steps from the one showing, through the shown views in order, wrapping: the drop's arrows and Tab,
-    /// and the Next pill view key.
-    public func step(_ by: Int) -> Pill.View {
-        let shown = shown
-        guard let i = shown.firstIndex(of: current) else { return current }
-        return shown[((i + by) % shown.count + shown.count) % shown.count]
-    }
-}
-
 extension Pill {
     /// What a key does in the open drop (the pill from the keyboard, Sven 2026-11-12): nil passes it on. `rows` is how
     /// many rows the view showing can light, `highlight` the lit one.
     public enum Press: Equatable, Sendable {
-        /// `page` is the index form's: a page by its place among the tabs (the pill-first bar's pages).
-        case view(View), page(Int), row(Int), act(Int), stop(Int), playPause, previous, next
+        /// `page` is a tab by its place (today's views, or the pill-first bar's pages).
+        case page(Int), row(Int), act(Int), stop(Int), playPause, previous, next
 
-        /// ← → and Tab, Shift-Tab step through the views, 1 to 4 jump to one, ↑ ↓ move the lit row, Return acts on it
-        /// (Space too, outside Music), Delete stops a lit Activity row. In Music, Space plays or pauses and Shift-← →
-        /// skip: plain arrows are the views', and Control, Option or Command can be the layer key, where an arrow is a
-        /// Hyper bind (the tiler's). Any key held with Control, Option or Command passes on.
-        public static func of(code: UInt16, shift: Bool, chord: Bool, chars: String?, layout: Layout, rows: Int, highlight: Int?) -> Press? {
-            let shown = layout.shown
-            let press = of(code: code, shift: shift, chord: chord, chars: chars, tabs: shown.count, current: shown.firstIndex(of: layout.current) ?? 0,
-                           music: layout.current == .music, activity: layout.current == .activity, rows: rows, highlight: highlight)
-            if case .page(let i) = press { return .view(shown[i]) }
-            return press
-        }
+        /// Wraps `index` into `count` places: the arrows, Tab and the Next pill view key.
+        public static func wrap(_ index: Int, _ count: Int) -> Int { count == 0 ? 0 : (index % count + count) % count }
 
-        /// The same keys over `tabs` pages by place, `current` showing; `music` and `activity` say whether it plays
-        /// music or lists running things. A page is answered as `.page`.
+        /// ← → and Tab, Shift-Tab step through `tabs` pages by place (`current` showing), 1 to 9 jump to one, ↑ ↓ move
+        /// the lit row, Return acts on it (Space too, outside music), Delete stops a lit running row (`activity`). On
+        /// `music`, Space plays or pauses and Shift-← → skip: plain arrows are the pages', and Control, Option or Command
+        /// can be the layer key, where an arrow is a Hyper bind (the tiler's). Any key held with Control, Option or
+        /// Command passes on.
         public static func of(code: UInt16, shift: Bool, chord: Bool, chars: String?, tabs: Int, current: Int, music: Bool, activity: Bool,
                               rows: Int, highlight: Int?) -> Press? {
             guard !chord, tabs > 0 else { return nil }
-            func step(_ by: Int) -> Press { .page(((current + by) % tabs + tabs) % tabs) }
+            func step(_ by: Int) -> Press { .page(wrap(current + by, tabs)) }
             switch Int64(code) {
             case KeyCode.tab: return step(shift ? -1 : 1)
             case KeyCode.leftArrow, KeyCode.rightArrow:

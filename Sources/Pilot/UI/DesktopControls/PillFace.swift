@@ -54,6 +54,8 @@ struct PillValues {
             var day: String?
             /// On now.
             var now = false
+            /// Where Calendar shows it; nil opens Calendar itself.
+            var url: URL?
         }
         var access: Access
         var weekday: String

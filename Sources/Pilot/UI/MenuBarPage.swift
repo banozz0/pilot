@@ -872,7 +872,7 @@ struct BarPresetControls: View {
             Picker("Preset", selection: Binding(get: { store.presetID }, set: { value in
                 do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
             })) {
-                Text("Current layout (before presets)").tag("legacy")
+                Text("Current layout (before presets)").tag(BarItemsStore.legacyPreset)
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
                 Text("Pill first").tag(BarItemsStore.pillFirstPreset)
             }

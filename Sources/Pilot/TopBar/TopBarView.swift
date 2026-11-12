@@ -20,7 +20,7 @@ struct TopBarView: View {
 
     var body: some View {
         // The pill-first bar draws over the saved items, which stay as they are (PillFirst).
-        let sides = store.pillFirst.on ? PillFirst.sides(store.settings) : store.settings.preview(.topBar).top ?? [:]
+        let sides = store.topBarSides
         let kinds = Set(sides.values.joined().flatMap(\.kinds))
         // Each slot is its own view, so a timer tick redraws the timer, not the bar.
         TopBarStrip(sides: sides, configuration: store.settings.preset, look: Look.shared, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,

@@ -181,6 +181,11 @@ public struct ClockMonth: Equatable, Sendable {
         return min(max(now.timeIntervalSince(year.start) / year.duration, 0), 1)
     }
 
+    /// `date` by a template ("EEEdMMM" is "Thu 12 Nov"), in the locale's order: the pill-first bar's Calendar page.
+    public static func formatted(_ date: Date, _ template: String, timeZone: TimeZone, locale: Locale) -> String {
+        DateFormatter.localized(template, timeZone: timeZone, locale: locale).string(from: date)
+    }
+
     /// A listed day's name: Today, Tomorrow, else its weekday and date ("Mon 12 Oct").
     public static func dayName(_ day: Date, now: Date, timeZone: TimeZone, locale: Locale) -> String {
         let calendar = calendar(timeZone, locale: locale)

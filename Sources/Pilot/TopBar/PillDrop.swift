@@ -25,8 +25,6 @@ final class PillLayoutStore {
     func setOrder(_ views: [Pill.View]) throws(ControlError) { layout.order = try Pill.Layout.order(views) }
     func setHidden(_ views: Set<Pill.View>) throws(ControlError) { layout.hidden = try Pill.Layout.hide(views) }
     func select(_ view: Pill.View) throws(ControlError) { layout.selected = try layout.select(view) }
-    /// The next shown view, wrapping: the Next pill view key.
-    func next() { layout.selected = layout.step(1) }
     func setExtensions(_ ids: [String]) throws(ControlError) { layout.extensions = try Pill.Layout.extensions(ids) }
 
     /// The edit list's moves and switches; hiding the last view shown is refused, as `pill.hidden` refuses it.
@@ -94,7 +92,10 @@ final class PillDrop {
     /// The pill-first bar's settings while it draws; nil on today's pill.
     private var first: PillFirst.Settings? { bar.pillFirst.on ? bar.pillFirst : nil }
 
-    private var showing: Showing {
+    private var showing: Showing { showing(live: live) }
+
+    /// `showing` with the live row read once by the caller.
+    private func showing(live: DropdownPanelValues.Running?) -> Showing {
         guard let first else {
             let saved = layout.layout, shown = saved.shown
             return Showing(tabs: shown.map { PillValues.Tab(.init($0)) }, index: shown.firstIndex(of: saved.current) ?? 0,
@@ -119,7 +120,7 @@ final class PillDrop {
 
     /// What the faces draw now: the page showing, read alone.
     var values: PillValues {
-        let showing = showing
+        let live = live, showing = showing(live: live)
         var values = PillValues()
         values.page = showing.page
         values.tabs = showing.tabs
@@ -135,7 +136,7 @@ final class PillDrop {
             values.controls = Self.controls(engine)
             values.sound = DropdownBlocks.sound(engine.barSources.readings)
             values.display = screen.flatMap(DropdownBlocks.display)
-        case .calendar: values.calendar = readings.map { Self.calendar($0.calendar, now: $0.now) }
+        case .calendar: values.calendar = readings.map { Self.calendar($0.calendar, now: $0.now, hours: bar.settings.clock.hoursAndMinutes) }
         case .stats: values.stats = readings.map { Self.stats($0) } ?? []
         }
         return values
@@ -149,15 +150,22 @@ final class PillDrop {
         return values
     }
 
-    /// Whether the page showing moves once a second on its own: a playing track's clock, a recording's time (on the live
-    /// face too). A timer's countdown and a download's share are observed, so they redraw without a tick.
-    var ticks: Bool {
-        if live != nil, Recorder.shared.isActive { return true }
+    /// Whether the page showing moves once a second on its own: a playing track's clock, a recording's time. A timer's
+    /// countdown and a download's share are observed, so they redraw without a tick. The open drop's.
+    var ticks: Bool { Self.ticks(page) }
+
+    static func ticks(_ page: PillValues.Page) -> Bool {
         switch page {
         case .music: return NowPlaying.shared.track?.playing == true
         case .activity: return Recorder.shared.isActive
         case .extensions, .controls, .calendar, .stats: return false
         }
+    }
+
+    /// Whether the compact face `values` draws moves once a second: a recording's time, on its page or the live face.
+    /// Music's compact face has no clock.
+    static func compactTicks(_ values: PillValues) -> Bool {
+        Recorder.shared.isActive && (values.live?.symbol == "video" || values.live == nil && values.page == .activity)
     }
 
     /// The playing track as Music shows it; nil draws Music's empty state.
@@ -186,32 +194,22 @@ final class PillDrop {
         }
     }
 
-    /// What is left of today and tomorrow in the clock's events (ClockCalendar, the clock popover's own read), all-day
-    /// ones first each day: the Calendar page's rows.
-    static func upcoming(_ events: [ClockEvent], now: Date, calendar: Calendar = .current) -> [ClockEvent] {
-        let today = calendar.startOfDay(for: now)
-        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today), let after = calendar.date(byAdding: .day, value: 2, to: today) else { return [] }
-        return events.filter { $0.end > now && $0.start < after }
-            .sorted { a, b in
-                let dayA = a.start < tomorrow ? 0 : 1, dayB = b.start < tomorrow ? 0 : 1
-                if dayA != dayB { return dayA < dayB }
-                if a.allDay != b.allDay { return a.allDay }
-                return a.start < b.start
-            }
-    }
-
-    /// The Calendar page from the clock's events: asking until access is given or refused.
-    static func calendar(_ source: ClockCalendar, now: Date, calendar: Calendar = .current) -> PillValues.Calendar {
+    /// The Calendar page from the clock's own events and listing (ClockMonth.upcoming): what is left of today, then the
+    /// next day that has any; times in the clock's own 12 or 24 hours. Asking until access is given or refused.
+    static func calendar(_ source: ClockCalendar, now: Date, hours: TopBarClockFormat, timeZone: TimeZone = .autoupdatingCurrent,
+                         locale: Locale = .autoupdatingCurrent) -> PillValues.Calendar {
         let access: PillValues.Calendar.Access = source.refused ? .refused : source.events == nil ? .asking : .granted
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
-        let events = upcoming(source.events ?? [], now: now, calendar: calendar).map { event in
-            PillValues.Calendar.Event(time: event.allDay ? "All day" : "\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))",
-                                      title: event.title, colour: event.colour.map { Color($0) }, day: event.start >= tomorrow ? "Tomorrow" : nil,
-                                      now: !event.allDay && event.start <= now)
+        let days = ClockMonth.upcoming(source.events ?? [], now: now, timeZone: timeZone).prefix(2)
+        let events = days.enumerated().flatMap { offset, listed in
+            listed.events.map { event in
+                PillValues.Calendar.Event(time: event.allDay ? "All day" : "\(hours.text(event.start, timeZone: timeZone, locale: locale)) – \(hours.text(event.end, timeZone: timeZone, locale: locale))",
+                                          title: event.title, colour: event.colour.map { Color($0) },
+                                          day: offset == 0 ? nil : ClockMonth.dayName(listed.date, now: now, timeZone: timeZone, locale: locale),
+                                          now: offset == 0 && !event.allDay && event.start <= now, url: event.url)
+            }
         }
-        return .init(access: access, weekday: now.formatted(.dateTime.weekday(.wide)), day: now.formatted(.dateTime.day()),
-                     month: now.formatted(.dateTime.month(.wide).year()), short: now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
-                     events: events)
+        func date(_ template: String) -> String { ClockMonth.formatted(now, template, timeZone: timeZone, locale: locale) }
+        return .init(access: access, weekday: date("EEEE"), day: date("d"), month: date("MMMMyyyy"), short: date("EEEdMMM"), events: events)
     }
 
     /// The Stats page: the Pilot menu's Stats card's readings (DropdownBlocks.stats), then the free disk and, on a Mac
@@ -224,9 +222,9 @@ final class PillDrop {
                   detail: "of \(Int(base.memoryTotal)) GB", share: base.memoryTotal > 0 ? base.memoryUsed / base.memoryTotal : nil),
         ]
         if let disk = sampler.latest?.slow.disk, disk.total > 0 {
-            let free = SystemStats.decimal(Double(disk.available)).split(separator: " ")
-            stats.append(.init(symbol: "internaldrive", title: "Disk", number: String(free.first ?? ""), unit: String(free.last ?? ""),
-                               detail: "free of \(SystemStats.decimal(Double(disk.total)))", share: 1 - Double(disk.available) / Double(disk.total)))
+            let (number, unit) = StatsStrip.split(StatsFormat.bytes(Double(disk.available)))
+            stats.append(.init(symbol: "internaldrive", title: "Disk", number: number, unit: unit,
+                               detail: "free of \(StatsFormat.bytes(Double(disk.total)))", share: 1 - Double(disk.available) / Double(disk.total)))
         }
         if let battery = base.battery {
             stats.append(.init(symbol: base.charging ? "battery.100.bolt" : "battery.75", title: "Battery", number: "\(battery)", unit: "%",
@@ -275,7 +273,8 @@ final class PillDrop {
         case .calendar: readings.map { readings in
             Task { [ask = next?.ask ?? false] in await readings.calendar.load(showing: readings.now, now: readings.now, timeZone: .current, ask: ask) }
         }
-        case .stats: readings.map { readings in Task { await Self.holding([.cpu, .memory, .storage, .heat, .battery], readings) } }
+        // The battery on a Mac with one, else the temperature: the page shows one of them.
+        case .stats: readings.map { readings in Task { await Self.holding([.cpu, .memory, .storage, readings.battery == nil ? .heat : .battery], readings) } }
         case .activity, nil: nil
         }
     }
@@ -322,7 +321,7 @@ final class PillDrop {
     /// The next tab, wrapping: the Next pill view key.
     func next() {
         let showing = showing
-        select((showing.index + 1) % max(showing.tabs.count, 1))
+        select(Pill.Press.wrap(showing.index + 1, showing.tabs.count))
     }
 
     private func face() -> BarDropFace {
@@ -352,7 +351,6 @@ final class PillDrop {
         case .page(let i):
             select(i)
             highlight = 0
-        case .view: break   // the index form answers pages
         case .row(let row): highlight = row
         case .act(let row): press(row, in: values)
         case .stop(let row): act(.stop(row))
@@ -400,11 +398,10 @@ final class PillDrop {
         case .pause(let i): DropdownNow.press(i, pause: true)
         case .stop(let i): DropdownNow.press(i, pause: false)
         case .event(let i):
-            guard let readings = Engine.shared?.barSources.readings else { return }
-            let events = Self.upcoming(readings.calendar.events ?? [], now: readings.now)
-            guard events.indices.contains(i) else { return }
+            // The row as drawn, so a click opens what it showed; one with no link opens Calendar, as the clock's does.
+            guard let sources = Engine.shared?.barSources, let events = dropValues.calendar?.events, events.indices.contains(i) else { return }
             BarDrops.shared.close(.pill)
-            readings.calendar.open(events[i].url ?? URL(filePath: "/System/Applications/Calendar.app"))
+            if let url = events[i].url { sources.readings.calendar.open(url) } else { sources.openApp("com.apple.iCal") }
         case .stats:
             BarDrops.shared.close(.pill)
             AppWindowController.shared.open(AppPlace(.stats))
@@ -465,12 +462,13 @@ struct TopBarPillItem: View {
     @State private var anchor = ScreenAnchor.Box()
 
     var body: some View {
+        // Read once a draw: the face, its tick and its label.
+        let values = pill.values
         Button { pill.toggle(at: lights.spot(of: .pill, from: anchor)) } label: {
-            // A recording's time moves on the bar too, on the live face as well; Music's compact face has no clock.
-            Ticking(pill.ticks && (pill.page == .activity || pill.live != nil)) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill)) }
+            Ticking(PillDrop.compactTicks(values)) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill)) }
         }
         .buttonStyle(.kitPress)
-        .accessibilityLabel("Pill, \(pill.live?.title ?? pill.values.title)")
+        .accessibilityLabel("Pill, \(values.live?.title ?? values.title)")
         .frame(maxHeight: .infinity)
         .toyIsland(.pill)
         .onAppear { lights.register(anchor, for: .pill); pill.hold() }

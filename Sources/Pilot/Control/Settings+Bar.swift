@@ -46,10 +46,9 @@ extension SettingsSchema {
     /// exactly. `pill.pages` is its pill's pages in order: media, calendar, stats, controls, activity, and extensions
     /// pages as Name=id+id+id (up to three; Name= holds none).
     func registerPillFirst(_ bar: BarItemsStore) {
-        let presets = ["legacy"] + BarPreset.allCases.map(\.rawValue) + [BarItemsStore.pillFirstPreset]
         register([
-            .choice("bar.preset", "The top bar's preset: the saved layout's, or the pill-first bar drawn over it", page: "menuBar", presets,
-                    standard: "legacy", read: { bar.presetID }, write: { id throws(ControlError) in try bar.choosePreset(id) }),
+            .choice("bar.preset", "The top bar's preset: the saved layout's, or the pill-first bar drawn over it", page: "menuBar", BarItemsStore.presetIDs,
+                    standard: BarItemsStore.legacyPreset, read: { bar.presetID }, write: { id throws(ControlError) in try bar.choosePreset(id) }),
             .text("pill.pages", "The pill-first bar's pages, comma-separated: \(PillFirst.Kind.allCases.filter { $0 != .extensions }.map(\.rawValue).joined(separator: ", ")), or Name=id+id+id for up to three extensions",
                   page: "menuBar", standard: PillFirst.words(PillFirst.Page.standard), read: { PillFirst.words(bar.pillFirst.pages) },
                   write: { typed throws(ControlError) in
