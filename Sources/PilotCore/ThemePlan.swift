@@ -134,12 +134,12 @@ public struct ThemeWallpaperMutation: Codable, Equatable, Sendable {
 /// The apps a theme follows besides Ghostty, Zed and Obsidian. Paths and folder names are taken from each app's own
 /// documentation; none of these apps has been run against this code, so what each one does with the file is unverified.
 public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
-    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2
+    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2, btop
     public static let schemeName = "Pilot Theme"
     public var name: String {
         switch self {
         case .vscode: "VS Code"; case .cursor: "Cursor"; case .windsurf: "Windsurf"
-        case .kitty: "Kitty"; case .alacritty: "Alacritty"; case .wezterm: "WezTerm"; case .iterm2: "iTerm2"
+        case .kitty: "Kitty"; case .alacritty: "Alacritty"; case .wezterm: "WezTerm"; case .iterm2: "iTerm2"; case .btop: "btop"
         }
     }
     /// What the app does with the theme, when a person has to do something for it to show.
@@ -148,6 +148,8 @@ public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
         case .kitty: "Reload Kitty's config (Ctrl+Cmd+,) to see it."
         case .wezterm: "WezTerm: add config.color_scheme = '\(Self.schemeName)' to your wezterm.lua."
         case .iterm2: "iTerm2: pick the profile named \(Self.schemeName) in its Profiles settings."
+        // btop reads its theme at start and on Ctrl+R (or SIGUSR2): its own source, v1.4.8.
+        case .btop: "btop: a new btop starts with it; press Ctrl+R in one already open."
         default: nil
         }
     }

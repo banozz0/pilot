@@ -1,4 +1,4 @@
-"""VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm and iTerm2 through a real Allow, in fixtures shaped like each app's
+"""VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2 and btop through a real Allow, in fixtures shaped like each app's
 documented files: links out of the folder, comments, trailing commas and missing files. None of these apps is on this Mac."""
 import importlib.util, json, os, re, tomllib
 from pathlib import Path
@@ -18,7 +18,7 @@ def setup(label, **options):
     f = life.Fixture('ap-' + label); home = f.root / 'home'
     for pack in f.packs: pack['adapters'] = {'ghostty': {}}; f.save_pack(pack)
     roots = dict(vscode=home / SUPPORT / 'Code/User', cursor=home / SUPPORT / 'Cursor/User', windsurf=home / SUPPORT / 'Windsurf/User',
-                 kitty=home / '.config/kitty', alacritty=home / '.config/alacritty', wezterm=home / '.config/wezterm', iterm2=home / SUPPORT / 'iTerm2')
+                 kitty=home / '.config/kitty', alacritty=home / '.config/alacritty', wezterm=home / '.config/wezterm', iterm2=home / SUPPORT / 'iTerm2', btop=home / '.config/btop')
     for kind in options.get('apps', roots):
         roots[kind].mkdir(parents=True, exist_ok=True)
     f.settings['detectHome'] = str(home); f.manifest.write_text(json.dumps(f.settings))
@@ -41,7 +41,7 @@ def checks(passed):
         names = {a['kind']: a['on'] for a in f.call('theme', 'status')['apps']['apps']}
         assert set(names) == set(roots) and all(names.values()), names
         plan = f.call('theme', 'plan', 'apply', 'a'); changes = '\n'.join(plan['review']['changes'])
-        for name in ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2']: assert name in changes, (name, changes)
+        for name in ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2', 'btop']: assert name in changes, (name, changes)
         assert str(dots / 'cursor.json') in changes and str(dots / 'kitty.conf') in changes, changes
         steps = '\n'.join(plan['review']['next'])
         assert "config.color_scheme = 'Pilot Theme'" in steps and 'profile named Pilot Theme' in steps, steps
@@ -119,7 +119,7 @@ def checks(passed):
         f, home, roots, tree = setup('sw', apps=['vscode', 'kitty'])
         (roots['vscode'] / 'settings.json').write_bytes(JSONC); (roots['kitty'] / 'kitty.conf').write_bytes(b'font_size 13\n')
         f.start(); plan = f.call('theme', 'plan', 'apply', 'a'); shown = '\n'.join(plan['review']['changes'])
-        assert 'VS Code' in shown and 'Kitty' in shown and not any(n in shown for n in ['Cursor', 'Windsurf', 'Alacritty', 'WezTerm', 'iTerm2']), shown
+        assert 'VS Code' in shown and 'Kitty' in shown and not any(n in shown for n in ['Cursor', 'Windsurf', 'Alacritty', 'WezTerm', 'iTerm2', 'btop']), shown
         assert not (home / '.config/alacritty').exists(), 'made a config for an absent app'
         before = (roots['vscode'] / 'settings.json').read_bytes()
         f.call('theme', 'follow', 'vscode', 'off')
@@ -227,9 +227,57 @@ def checks(passed):
         (roots['kitty'] / 'kitty.conf').write_bytes(b''); f.start()
         f.apply(); f.stop()
         allow = [x for x in (f.root / 'host-1.log').read_text().splitlines() if x.startswith('THEME Allow asked:')][-1]
-        assert len(allow) < 1200 and all(n in allow for n in ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2']), allow
+        assert len(allow) < 1200 and all(n in allow for n in ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2', 'btop']), allow
 
-    for label, check in [('all seven follow together, Preview names real files, links stay, Restore byte exact', everything),
+    def btop():
+        # btop v1.4.8 (its source): every key of its Default_theme, the last color_theme line wins, and it rewrites
+        # btop.conf from memory, comments dropped, when the file lacks its version header or an option changed.
+        keys = ['main_bg', 'main_fg', 'title', 'hi_fg', 'selected_bg', 'selected_fg', 'inactive_fg', 'graph_text', 'meter_bg', 'proc_misc',
+                'cpu_box', 'mem_box', 'net_box', 'proc_box', 'div_line'] + [f'{g}_{s}' for g in ['temp', 'cpu', 'free', 'cached', 'available', 'used', 'download', 'upload', 'process']
+                for s in ['start', 'mid', 'end']] + ['proc_pause_bg', 'proc_follow_bg', 'proc_banner_bg', 'proc_banner_fg', 'followed_bg', 'followed_fg']
+        made = b'#? Config file for btop v.1.4.8\n\n#* Name of a btop++/bpytop/bashtop formatted ".theme" file.\ncolor_theme = "Default"\n\n#* Terminal background transparency.\ntheme_background = true\n\nupdate_ms = 2000\n'
+        def theme(path):
+            return dict(re.findall(r'^theme\[(\w+)\]="(#[0-9A-Fa-f]{6})"$', path.read_text(), re.M))
+        for label, conf in [('sven', None), ('made', made)]:
+            f, home, roots, tree = setup('bt' + label, apps=['btop'])
+            (roots['btop'] / 'themes').mkdir()  # The shape on Sven's Mac: an empty themes folder, no btop.conf yet.
+            for name in ['jade', 'porcelain']:
+                pack = json.loads((life.REPO / 'Packaging/ThemePacks' / name / 'manifest.json').read_text())
+                # Stock IDs are reserved, so each palette goes in as a pack of its own.
+                pack['id'] = 'fx-' + name; pack['adapters'] = {'ghostty': {}}; (f.root / 'packs' / pack['id']).mkdir(); f.save_pack(pack)
+            target, generated = roots['btop'] / 'btop.conf', roots['btop'] / 'themes/pilot.theme'
+            if conf: target.write_bytes(conf)
+            before = tree(); f.start()
+            plan = f.call('theme', 'plan', 'apply', 'fx-jade')
+            assert [c for c in plan['review']['changes'] if c.startswith('btop')], plan['review']
+            assert [n for n in plan['review']['next'] if 'Ctrl+R' in n], plan['review']['next']
+            assert tree() == before, 'Preview wrote'
+            for name in ['jade', 'porcelain']:
+                assert f.apply('fx-' + name)['status'] == 'applied'
+                palette = json.loads((life.REPO / 'Packaging/ThemePacks' / name / 'manifest.json').read_text())['palette']
+                got = theme(generated)
+                assert list(got) == keys, sorted(set(keys) ^ set(got))
+                assert got['main_bg'] == palette['background'] and got['cpu_box'] == palette['accent'] and got['process_end'] == palette['magenta'], got
+                text = target.read_text()
+                assert re.findall(r'^color_theme = "(.*)"$', text, re.M)[-1] == 'pilot' and re.findall(r'^theme_background = (\w+)$', text, re.M)[-1] == 'false', text
+                print(f'  btop {label} {name}: main_bg {got["main_bg"]} main_fg {got["main_fg"]} hi_fg {got["hi_fg"]} boxes {got["cpu_box"]} selected_bg {got["selected_bg"]}', flush=True)
+            print(f'  btop {label} btop.conf after: ' + repr(target.read_bytes()[-120:]), flush=True)
+            assert f.restore()['status'] == 'restored' and tree() == before, (target.read_bytes() if target.exists() else None)
+            assert (target.read_bytes() == conf) if conf else not target.exists()
+            f.stop()
+        # A btop that rewrites btop.conf (an option changed, or the file had no header) keeps Pilot's values and drops its
+        # markers: Pilot then counts the file as the person's, keeps following through pilot.theme, and Restore leaves it.
+        f, home, roots, tree = setup('btr', apps=['btop'])
+        target = roots['btop'] / 'btop.conf'; target.write_bytes(made); f.start()
+        assert f.apply()['status'] == 'applied'
+        rewritten = made.replace(b'"Default"', b'"pilot"').replace(b'= true', b'= false'); target.write_bytes(rewritten)
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'btop.conf' in k], plan['review']
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and target.read_bytes() == rewritten
+        assert theme(roots['btop'] / 'themes/pilot.theme')['main_bg'] == f.packs[1]['palette']['background']
+        assert f.restore()['status'] == 'restored' and target.read_bytes() == rewritten and not (roots['btop'] / 'themes/pilot.theme').exists()
+        f.stop()
+
+    for label, check in [('all eight follow together, Preview names real files, links stay, Restore byte exact', everything),
                          ('Alacritty inside an existing [general], with no file, and skipped with its own import list', alacritty_general),
                          ('a settings file Pilot made survives the editor rewriting it', made_settings_survive_the_editor),
                          ('an absent app gets nothing; each switch persists and releases', absent_and_switches),
@@ -238,7 +286,8 @@ def checks(passed):
                          ('installed apps with no config folder yet, and WezTerm by ~/.wezterm.lua, follow; Apply makes the folders and Restore removes them; Alacritty on ~/.alacritty.toml skips with why', installed_without_folders),
                          ('Apply and Restore reload Ghostty through its menu; a missing item or a closed Ghostty says so plainly', ghostty_reloads),
                          ('a broken link and a link for the generated file skip the app and write nothing', refuses),
-                         ('Allow names all seven', many)]:
+                         ('btop: every theme key, its config set and put back byte for byte, with a config and without; a btop rewrite keeps it the person\'s', btop),
+                         ('Allow names all eight', many)]:
         check(); passed('apps ' + label)
 
 

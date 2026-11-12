@@ -35,6 +35,8 @@ public enum ThemeApps {
         if folder(config + "/wezterm") || files.fileExists(atPath: home + "/.wezterm.lua") || installed(.wezterm) {
             found.append(.init(kind: .wezterm, root: config + "/wezterm", config: nil, generated: "colors/\(schemeName).toml"))
         }
+        // btop makes ~/.config/btop on its first start (XDG_CONFIG_HOME aside) and has no app bundle: the folder is the sign.
+        if folder(config + "/btop") { found.append(.init(kind: .btop, root: config + "/btop", config: "btop.conf", generated: "themes/pilot.theme")) }
         let iterm = "\(support)/\(onDisk("iTerm2"))"
         if folder(iterm) || installed(.iterm2) { found.append(.init(kind: .iterm2, root: iterm, config: nil, generated: "DynamicProfiles/pilot-theme.json")) }
         return found
@@ -43,7 +45,7 @@ public enum ThemeApps {
     /// The folders an app's files may wait on: its root and anything below it, made by Apply.
     public static func roots(home: String) -> [String] {
         let support = home + "/Library/Application Support"
-        return editors.map { "\(support)/\($0.1)/User" } + ["kitty", "alacritty", "wezterm"].map { home + "/.config/" + $0 } + ["\(support)/iTerm2"]
+        return editors.map { "\(support)/\($0.1)/User" } + ["kitty", "alacritty", "wezterm", "btop"].map { home + "/.config/" + $0 } + ["\(support)/iTerm2"]
     }
 
     /// Whether this path is an app's own config, the one file dotfiles users link. Decided from fixed shapes, never a journal.
@@ -51,6 +53,7 @@ public enum ThemeApps {
         let support = (home + "/Library/Application Support/").lowercased(), lower = root.lowercased()
         if path == "settings.json", lower.hasPrefix(support), lower.hasSuffix("/user") { return editors.contains { lower == support + $0.1.lowercased() + "/user" } }
         return (root == home + "/.config/kitty" && path == "kitty.conf") || (root == home + "/.config/alacritty" && path == "alacritty.toml")
+            || (root == home + "/.config/btop" && path == "btop.conf")
     }
 
     public static func valid(_ selector: ThemeSelector, path: String, app: ThemeAppBinding) -> Bool {
@@ -123,6 +126,11 @@ public enum ThemeApps {
 
             """
             return ([try asset(app.generated!, Data(text.utf8))], ["WezTerm: only the colour scheme file is written; your wezterm.lua stays as it is"])
+        case .btop:
+            // btop takes the last assignment of a key, so a block at the end wins over its own color_theme line. It
+            // finds themes/pilot.theme by its stem. theme_background false leaves the terminal's own see-through ground.
+            let block = "color_theme = \"\(btopTheme)\"\ntheme_background = false"
+            return ([try asset(app.generated!, btop(pack)), try loader(snapshot(app.config!), claims, line: block)], [])
         case .iterm2:
             func colour(_ hex: String) -> JSONValue {
                 let value = Int(hex.dropFirst(), radix: 16) ?? 0
@@ -137,6 +145,33 @@ public enum ThemeApps {
             for (index, value) in ansi(pack).enumerated() { profile["Ansi \(index) Color"] = colour(value) }
             return ([try asset(app.generated!, try ThemeDigest.encoded(JSONValue.object(["Profiles": .array([.object(profile)])])))], ["iTerm2: appears as a profile to pick; your default profile stays"])
         }
+    }
+
+    static let btopTheme = "pilot"
+
+    /// Every colour btop v1.4.8 reads from a theme (its `Default_theme`), from the pack's roles as Omarchy's btop template
+    /// maps them, with the four box outlines in the accent as Sven's reference shows. A key left out falls back to btop's own.
+    static func btop(_ pack: ThemePack) -> Data {
+        let p = pack.palette
+        let keys: [(String, String)] = [
+            ("main_bg", "background"), ("main_fg", "foreground"), ("title", "bright_foreground"), ("hi_fg", "accent"),
+            ("selected_bg", "selection"), ("selected_fg", "bright_foreground"), ("inactive_fg", "muted"), ("graph_text", "light_foreground"),
+            ("meter_bg", "lighter_background"), ("proc_misc", "light_foreground"),
+            ("cpu_box", "accent"), ("mem_box", "accent"), ("net_box", "accent"), ("proc_box", "accent"), ("div_line", "muted"),
+            ("temp_start", "green"), ("temp_mid", "yellow"), ("temp_end", "red"),
+            ("cpu_start", "cyan"), ("cpu_mid", "blue"), ("cpu_end", "magenta"),
+            ("free_start", "magenta"), ("free_mid", "blue"), ("free_end", "cyan"),
+            ("cached_start", "blue"), ("cached_mid", "cyan"), ("cached_end", "magenta"),
+            ("available_start", "yellow"), ("available_mid", "red"), ("available_end", "red"),
+            ("used_start", "green"), ("used_mid", "cyan"), ("used_end", "blue"),
+            ("download_start", "yellow"), ("download_mid", "red"), ("download_end", "red"),
+            ("upload_start", "green"), ("upload_mid", "cyan"), ("upload_end", "blue"),
+            ("process_start", "cyan"), ("process_mid", "blue"), ("process_end", "magenta"),
+            ("proc_pause_bg", "red"), ("proc_follow_bg", "blue"), ("proc_banner_bg", "selection"), ("proc_banner_fg", "bright_foreground"),
+            ("followed_bg", "blue"), ("followed_fg", "background")]
+        let lines = ["# Written by Pilot from its theme \(pack.title); Pilot rewrites this file, so change the look in Pilot."]
+            + keys.map { "theme[\($0.0)]=\"\(p[$0.1]!)\"" }
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
     private static func colours(_ pack: ThemePack) -> JSONValue {

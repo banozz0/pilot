@@ -201,13 +201,13 @@ enum WallpaperCarousel {
         func editor(_ kind: ThemeAppKind) -> Bool {
             switch kind {
             case .vscode, .cursor, .windsurf: true
-            case .kitty, .alacritty, .wezterm, .iterm2: false
+            case .kitty, .alacritty, .wezterm, .iterm2, .btop: false
             }
         }
         let on = found.apps.filter(\.on).compactMap { app in ThemeAppKind(rawValue: app.kind).map { ($0, app.name) } }
         var folder: ObjCBool = false
         let ghostty = FileManager.default.fileExists(atPath: owner.binding.root, isDirectory: &folder) && folder.boolValue
-        let terminal = found.ghostexFound && found.ghostexOn ? "Ghostex" : ghostty ? "Ghostty" : on.first { !editor($0.0) }?.1
+        let terminal = found.ghostexFound && found.ghostexOn ? "Ghostex" : ghostty ? "Ghostty" : on.first { !editor($0.0) && $0.0 != .btop }?.1  // btop runs inside a terminal, never as one
         return .init(editor: found.zedFound && found.zedOn ? "Zed" : on.first { editor($0.0) }?.1, terminal: terminal,
                      notes: found.obsidianOn && found.vaults.contains(where: \.on) ? "Obsidian" : nil)
     }
