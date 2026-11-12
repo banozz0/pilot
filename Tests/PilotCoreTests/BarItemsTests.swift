@@ -57,7 +57,7 @@ struct BarItemsTests {
         #expect(s.entries.map(\.kind) == order)
         let on = s.entries.filter(\.on)
         #expect(on.map(\.kind) == [.pilot, .workspaces, .otherApps, .group, .cpu, .memory, .network, .terminal, .askAI, .capture, .modes, .clock, .timer, .extensions])
-        #expect(on.map(\.style) == [.icon, .numbers, .icons, .allInOne, .text, .text, .text, .iconName, .iconName, .icon, .icons, .dateTime, .countdown, .text])
+        #expect(on.map(\.style) == [.icon, .numbers, .icons, .allInOne, .text, .text, .text, .icon, .icon, .icon, .icons, .dateTime, .countdown, .text])
         #expect(on.filter { $0.placement == .both }.map(\.kind) == [.pilot, .workspaces, .group, .cpu, .memory, .network, .timer])
         #expect(s.entry(.clock).placement == .topBar && s.entry(.otherApps).placement == .topBar && s.entry(.extensions).placement == .topBar)
         #expect(s.entry(.capture).placement == .menuBar)

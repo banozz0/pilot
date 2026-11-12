@@ -105,6 +105,11 @@ public enum TopBarGeometry {
         return measured > 0 ? measured : remembered ?? fallback
     }
 
+    /// The Full bar's least height (Sven, 2026-11-12: "maybe can be a bit bigger height size"): 36, Three islands' own;
+    /// a screen whose menu bar strip is taller (a notch's) keeps its strip.
+    public static let fullBarHeight = 36.0
+    public static func fullBar(_ strip: Double) -> Double { max(strip, fullBarHeight) }
+
     /// A bar's frame (AppKit's, bottom-left origin): its screen's top `strip`, the whole width.
     public static func frame(screen: CGRect, strip: Double) -> CGRect {
         CGRect(x: screen.minX, y: screen.maxY - strip, width: screen.width, height: strip)

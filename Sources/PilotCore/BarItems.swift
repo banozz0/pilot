@@ -436,7 +436,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public static let defaults: BarSettings = {
         let on: [BarKind: BarStyle] = [.pilot: .icon, .workspaces: .numbers, .group: .allInOne, .cpu: .text, .memory: .text,
                                        .network: .text, .timer: .countdown, .clock: .dateTime, .otherApps: .icons, .extensions: .text,
-                                       .modes: .icons, .terminal: .iconName, .askAI: .iconName, .capture: .icon]
+                                       .modes: .icons, .terminal: .icon, .askAI: .icon, .capture: .icon]
         var kinds = BarKind.allCases.filter { $0 != .group }
         kinds.insert(.group, at: kinds.firstIndex(of: .cpu)!)
         let entries = kinds.map { kind in

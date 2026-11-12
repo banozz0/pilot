@@ -69,7 +69,7 @@ extension ControlVerbs {
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
         register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
@@ -83,7 +83,7 @@ extension ControlVerbs {
             try bar().requireWritable()
             switch sub {
             case "preset":
-                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands>") }
+                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands|pills>: legacy is the Full bar") }
                 try bar().choosePreset(try args.word(1, "preset"))
                 return Self.state(bar(), reach)
             case "geometry":

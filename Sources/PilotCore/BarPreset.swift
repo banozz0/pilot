@@ -3,9 +3,19 @@ import CoreGraphics
 
 /// Portable suggestions name a built-in preset. Personal geometry and items never travel in a pack.
 public enum BarPreset: String, Codable, CaseIterable, Sendable {
-    case floatingStrip, threeIslands
-    public var title: String { self == .floatingStrip ? "Floating strip" : "Three islands" }
+    /// Pills (Sven, 2026-11-12, Q177, after a Waybar picture): each slot on its own pill, the Group one pill for all it
+    /// holds; beside Three islands, which makes one island per side.
+    case floatingStrip, threeIslands, pills
+    public var title: String {
+        switch self {
+        case .floatingStrip: "Floating strip"
+        case .threeIslands: "Three islands"
+        case .pills: "Pills"
+        }
+    }
     public var configuration: BarPresetConfiguration { .init(preset: self) }
+    /// Draws an island per side (Three islands) or per slot (Pills), each its own window, rather than one strip.
+    public var islands: Bool { self != .floatingStrip }
 }
 
 /// Local geometry only; the existing BarSettings remains the sole owner of item/group order and placement.
@@ -19,7 +29,31 @@ public struct BarPresetConfiguration: Codable, Equatable, Sendable {
     public var radius: Double = 10
     public var border: Double = 1
 
-    public init(preset: BarPreset = .floatingStrip) { self.preset = preset }
+    /// Each preset's own defaults (Sven, 2026-11-12, on the bar look round: the floating strip "a bit too big", Three
+    /// islands as it is). For Pills `height` is a pill's, `padding` the room inside one, `radius` its corners.
+    public init(preset: BarPreset = .floatingStrip) {
+        self.preset = preset
+        switch preset {
+        case .threeIslands: break
+        case .floatingStrip: (height, horizontalMargin, topMargin, spacing, padding, radius, border) = (30, 10, 6, 4, 6, 9, 1)
+        case .pills: (height, horizontalMargin, topMargin, spacing, padding, radius, border) = (28, 10, 6, 6, 6, 14, 1.5)
+        }
+    }
+
+    /// What the top bar's row lays out by (TopBarRow): Pills keep their `padding` inside each pill, never round a side.
+    public var row: BarPresetConfiguration {
+        var row = self
+        if preset == .pills { row.padding = 0 }
+        return row
+    }
+
+    /// The floating strip's defaults before 2026-11-12, every preset's then: a bar saved at exactly these was never
+    /// adjusted, so it moves to the new defaults once (BarItemsStore); one adjusted keeps its own.
+    public static let firstDefaults: BarPresetConfiguration = {
+        var c = BarPresetConfiguration(preset: .threeIslands)
+        c.preset = .floatingStrip
+        return c
+    }()
     public static let ranges: [String: ClosedRange<Double>] = [
         "height": 24...80, "horizontalMargin": 0...160, "topMargin": 0...80,
         "spacing": 0...32, "padding": 0...32, "radius": 0...40, "border": 0...4,

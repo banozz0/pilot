@@ -3,6 +3,10 @@ import PilotCore
 
 /// Native controls, settings handlers and the private host share these writers on the existing item store.
 extension BarItemsStore {
+    /// The geometry the top bar draws: the saved preset's, none for the Full bar. One name for every reader (the bar's
+    /// windows, its strip, the sandbox), so a preset that draws its own geometry changes it in one place.
+    var topBarConfiguration: BarPresetConfiguration? { settings.preset }
+
     func choosePreset(_ id: String) throws(ControlError) {
         try requireWritable()
         if id == "legacy" { settings.preset = nil; return }
