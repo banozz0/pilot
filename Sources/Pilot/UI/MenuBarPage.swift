@@ -230,26 +230,29 @@ struct MenuBarPage: View {
     /// or the Menu), the macOS menu bar with Pilot's items on the right. Each takes the tray's and its own items' drops
     /// (Q185): the top bar's sides as BarDrop zones, the menu bar's row before the slot under the pointer.
     ///
-    /// Every item shows, whatever the window's width (Sven on build 2363: other apps' items and the extensions were
-    /// missing unless Pilot was full screen): the bars lay out at least as wide as they need with nothing going for room
-    /// (StripRoom), and a page narrower than that scrolls them sideways. Scrolled, not scaled: a bar twice the page's
-    /// width would draw its words at half size, too small to read or grab; wrapped, it would not be the bar.
+    /// The top bar shows every item, whatever the window's width (Sven on build 2363: other apps' items and the extensions
+    /// were missing unless Pilot was full screen): it lays out at least as wide as it needs with nothing going for room
+    /// (StripRoom), and a page narrower than that scrolls it sideways. Scrolled, not scaled: a bar twice the page's width
+    /// would draw its words at half size, too small to read or grab; wrapped, it would not be the bar. The macOS menu
+    /// bar keeps the page's width and crowds as macOS does (menuStrip).
     @ViewBuilder private func preview(_ store: BarItemsStore) -> some View {
         let preview = store.settings.preview(placement)
         let radius = ink.corner(10, \.control)
-        ScrollView(.horizontal) {
-            // The drops, their marks and the strips' frames all sit inside the scrolled bars, so they share its places.
-            StripRoom {
-                // The page's width, the least the bars take.
-                Color.clear.frame(height: 0).containerRelativeFrame(.horizontal)
-                VStack(spacing: 0) {
-                    if let top = preview.top { topStrip(top, store: store) }
-                    if let menu = preview.menu { menuStrip(menu, store: store) }
-                    Spacer(minLength: 28)
+        VStack(spacing: 0) {
+            if let top = preview.top {
+                ScrollView(.horizontal) {
+                    // The drop, its marks and the strip's frames all sit inside the scrolled bar, so they share its places.
+                    StripRoom {
+                        // The page's width, the least the bar takes.
+                        Color.clear.frame(height: 0).containerRelativeFrame(.horizontal)
+                        topStrip(top, store: store)
+                    }
                 }
+                .scrollIndicators(.visible)
             }
+            if let menu = preview.menu { menuStrip(menu, store: store) }
+            Spacer(minLength: 28)
         }
-        .scrollIndicators(.visible)
         .frame(maxWidth: .infinity)
         // A strip of the theme's desk under the bars; Instrument's sunk well.
         .background(Desk(ink: ink))
@@ -305,7 +308,8 @@ struct MenuBarPage: View {
     }
 
     /// The macOS menu bar: Pilot's items on the right, beside the system's own; with Both, only what stays there. Short of
-    /// room the preview scrolls sideways (StripRoom), so no item goes. Extensions' own items sit before Pilot's.
+    /// room (at 760), Finder goes first (the items are what this page drags), then the leftmost items whole, as on Stats'
+    /// strip and a crowded menu bar; the strip is never wider than the page. Extensions' own items sit before Pilot's.
     private func menuStrip(_ menu: [BarSlot], store: BarItemsStore) -> some View {
         let extensions = extensionBar.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
         let slots = menuSlots(menu)
@@ -769,10 +773,9 @@ extension BarKind {
     }
 }
 
-/// The bars' preview at the width the page gives it, or wider when the bars need more with nothing going for room (Sven on
-/// build 2363): a ScrollView proposes no width, so this takes the page's width from its first view (sized to the scroll
-/// view) and the bars' own from the second (TopBarRow's natural width, every menu bar item), and lays the bars out at the
-/// wider of the two.
+/// The top bar's preview at the width the page gives it, or wider when the bar needs more with nothing going for room (Sven
+/// on build 2363): a ScrollView proposes no width, so this takes the page's width from its first view (sized to the
+/// scroll view) and the bar's own from the second (TopBarRow's natural width), and lays the bar out at the wider of the two.
 private struct StripRoom: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard subviews.count == 2 else { return .zero }

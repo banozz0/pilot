@@ -168,7 +168,7 @@ extension BarSettings {
 }
 
 /// The spacer at a width of Sven's own (Sven on build 21: free spacing; the Menu bar page's Width since Q185): one spacer
-/// at any width, saved with the bar, rather than several spacers, since the bar holds each item once.
+/// at any width, saved with the bar, rather than several spacers (dividers are the one item the top bar holds more of).
 public enum BarSpacer {
     public static let widths: ClosedRange<Double> = 4...600
 
