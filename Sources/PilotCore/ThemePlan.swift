@@ -177,11 +177,26 @@ public enum GhostexInterface {
                                "customSidebarTitlebarBackgroundTintColor": "Custom dark tint", "customSidebarTitlebarLightBackgroundTintColor": "Custom light tint", "sessionChatTheme": "Chat theme",
                                "themeSidebarContrast": "Sidebar colourfulness", "themeWorkAreaContrast": "Work area colourfulness"]
 
-    /// The colour Ghostex is tinted with: a dark pack's panel (`lighter_background`), which keeps its hue where a near-black
-    /// ground reads as plain black; a light pack's ground. Ghostex deepens a dark colour past luminance 0.04 itself.
+    /// The colour Ghostex is tinted with: the pack's ground with Ghostex's work-area step taken out, as Ghostex's own theme
+    /// presets pick theirs (its `THEME_PRESETS`). At Full Ghostex paints the sidebar the tint itself, and the work area, the
+    /// chat and a terminal set to Theme the tint moved toward white, 1 % on a dark chrome and 25 % on a light one
+    /// (`session_chat_background_for_chrome`), so they land on the ground. The pack's panel colour, tinted before, drew
+    /// Ghostex lighter than every other app (Sven on 2363, Jade). A ground too deep for the step (pure black) gets the
+    /// nearest Ghostex can draw.
     public static func tint(_ pack: ThemePack) throws -> String {
-        guard let colour = (pack.dark ? pack.palette["lighter_background"] : nil) ?? pack.palette["background"] else { throw ThemeFailure("pack has no background colour") }
-        return colour
+        guard let ground = pack.palette["background"] else { throw ThemeFailure("pack has no background colour") }
+        let step: Float = pack.dark ? 0.01 : 0.25
+        let channels = Contrast.rgb(Contrast.hex(ground)).map { channel in
+            let target = Int(channel)
+            return Double((0...255).last { workArea($0, step) == target } ?? (0...255).min { abs(workArea($0, step) - target) < abs(workArea($1, step) - target) }!)
+        }
+        return ColourAnswer.hex(Contrast.hex(channels))
+    }
+
+    /// One channel of Ghostex's work area for a tint channel: its step toward white in Float, rounded half up.
+    static func workArea(_ channel: Int, _ step: Float) -> Int {
+        let value = Float(channel)
+        return Int((value + (255 - value) * step + 0.5).rounded(.down))
     }
 
     /// The same settings Ghostex's own theme presets save, for this pack.
