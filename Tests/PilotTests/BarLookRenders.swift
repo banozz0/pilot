@@ -73,7 +73,10 @@ struct BarLookRenders {
             let ratios: JSONValue = .object(["theme": .string(look.theme.id),
                 "text3": .number(Contrast.ratio(tokens.colors.canvas.rgb, tokens.colors.text3.rgb)),
                 "text2": .number(Contrast.ratio(tokens.colors.canvas.rgb, tokens.colors.text2.rgb)),
-                "text": .number(Contrast.ratio(tokens.colors.canvas.rgb, tokens.colors.text.rgb))])
+                "text": .number(Contrast.ratio(tokens.colors.canvas.rgb, tokens.colors.text.rgb)),
+                // B's notch makes its own ground: its quiet text and its accent against it.
+                "notchText2": .number(Contrast.ratio(Notch.tokens(tight).colors.canvas.rgb, Notch.tokens(tight).colors.text2.rgb)),
+                "notchAccent": .number(Contrast.ratio(Notch.tokens(tight).colors.canvas.rgb, Notch.tokens(tight).colors.accentText.rgb))])
             try ThemeDigest.encoded(ratios).write(to: dir.appendingPathComponent("contrast.json"))
 
             // Pill first, collapsed: today on Sven's Three islands, then A, B and C; each on its pages' faces and live.
@@ -87,6 +90,9 @@ struct BarLookRenders {
             var timer = pill
             timer.live = pill.running[1]
             states.append(("live", timer, false))
+            var recording = pill
+            recording.live = pill.running[0]
+            states.append(("recording", recording, false))
             states.append(("open", pill, true))
             for variant in PillVariant.allCases {
                 for (state, values, open) in states {
@@ -109,6 +115,11 @@ struct BarLookRenders {
                     let view = draw.preset(preset, sides: sides, proposed: proposed, today: tokens, tight: tight)
                     try writeRender(view, to: dir.appendingPathComponent("\(preset.rawValue)-\(proposed ? "proposed" : "today").png"), wait: 0.4)
                 }
+            }
+
+            // Pills (Sven, 2026-11-12, after a Waybar picture): each slot its own pill, a Group one pill for all it holds.
+            for grouped in [false, true] {
+                try writeRender(draw.pills(grouped: grouped, tokens: tight), to: dir.appendingPathComponent("pills-\(grouped ? "grouped" : "each").png"), wait: 0.4)
             }
 
             // Toybox on its own pair.
@@ -239,10 +250,42 @@ struct BarLookRenders {
         }
 
         func strip(_ sides: [TopBarSide: [BarSlot]], config: BarPresetConfiguration?, tokens: StyleTokens, itemColours: Bool = false,
+                   background: TopBarBackground = .solid, pills: Bool = false,
                    pill: @escaping () -> AnyView = { AnyView(EmptyView()) }) -> some View {
             // The round's tokens inside the bar's own surface, so they reach every slot.
-            TopBarStrip(sides: sides, configuration: config, itemColours: itemColours) { self.slot($0, pill: pill) }
-                .style(tokens).styled(.topBar, look: look)
+            TopBarStrip(sides: sides, configuration: config, background: background, itemColours: itemColours) { slot in
+                if pills { self.slot(slot, pill: pill).modifier(PillGround()) } else { self.slot(slot, pill: pill) }
+            }
+            .style(tokens).styled(.topBar, look: look)
+        }
+
+        // MARK: Pills
+
+        /// The Pills preset: Three islands' row with its side grounds clear (a Clear background on a solid theme draws
+        /// nothing a viewer sees) and 6 between slots; each slot, or the Group with everything in it, on its own pill.
+        static var pillsGeometry: BarPresetConfiguration {
+            var c = BarPreset.threeIslands.configuration
+            (c.height, c.horizontalMargin, c.topMargin, c.spacing, c.padding, c.radius, c.border) = (32, 10, 6, 6, 0, 0, 0)
+            return c
+        }
+
+        func pills(grouped: Bool, tokens: StyleTokens) -> some View {
+            var s = settings
+            func item(_ kind: BarKind, _ style: BarStyle) -> BarSlot {
+                s.set(kind, on: true); s.set(kind, style: style); return .item(s.entry(kind))
+            }
+            let readings = [BarKind.cpu, .memory, .heat].map { kind in s.set(kind, style: .text); return s.entry(kind) }
+            let right: [BarSlot] = grouped
+                ? [.group(readings), item(.volume, .iconPercent), item(.wifi, .icon), item(.keepAwake, .icon), item(.power, .icon)]
+                : readings.map { .item($0) } + [item(.volume, .iconPercent), item(.wifi, .icon), item(.keepAwake, .icon), item(.power, .icon)]
+            let sides: [TopBarSide: [BarSlot]] = [.left: [item(.clock, .dateTime), item(.workspaces, .numbers), item(.focusedApp, .iconName)],
+                                                  .centre: [.item(s.entry(.pill)), item(.askAI, .icon), item(.terminal, .icon)],
+                                                  .right: right]
+            let draw = Draw(input: input, settings: s, sources: sources, store: store, look: look, wall: wall)
+            let config = Self.pillsGeometry
+            return onWall(draw.strip(sides, config: config, tokens: tokens, background: .clear, pills: true) {
+                AnyView(QuietPill(values: PillFirstRenders.values([self.wall]), open: false, boxed: false))
+            }, config: config, tokens: tokens)
         }
 
         // MARK: The presets
@@ -481,6 +524,7 @@ private struct QuietPill: View {
     @Environment(\.style) private var style
     let values: PillValues
     let open: Bool
+    var boxed = true
 
     var body: some View {
         let w = PillWords(values)
@@ -499,10 +543,23 @@ private struct QuietPill: View {
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(style.color(\.text2))
                 .rotationEffect(.degrees(open ? 180 : 0))
         }
-        .padding(.horizontal, 12).frame(height: 22)
-        .background { if open { Capsule(style: .continuous).fill(style.color(\.raised)).overlay { Capsule(style: .continuous).strokeBorder(style.color(\.line)) } } }
+        .padding(.horizontal, boxed ? 12 : 0).frame(height: 22)
+        .background { if open && boxed { Capsule(style: .continuous).fill(style.color(\.raised)).overlay { Capsule(style: .continuous).strokeBorder(style.color(\.line)) } } }
         .frame(maxHeight: .infinity)
         .fixedSize()
+    }
+}
+
+/// A Pills slot's ground (the Waybar picture): a capsule 26 high in the theme's bar colour, a thin accent ring.
+private struct PillGround: ViewModifier {
+    @Environment(\.style) private var style
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 6)
+            .frame(height: 26)
+            .background { Capsule(style: .circular).fill(style.color(\.canvas)) }
+            .overlay { Capsule(style: .circular).inset(by: 0.75).stroke(style.color(\.accentLine), lineWidth: 1.5) }
+            .frame(maxHeight: .infinity)
     }
 }
 
@@ -522,8 +579,8 @@ private enum Notch {
             (c.text, c.text2, c.text3) = (ink, mix(ground, ink, 0.72), mix(ground, ink, 0.55))
             c.line = mix(ground, ink, 0.14); c.line2 = mix(ground, ink, 0.2); c.line3 = mix(ground, ink, 0.3)
             (c.inverse, c.onInverse) = (ink, ground)
-            // The light theme's accent text is made for a light ground; on the notch the accent itself reads.
-            c.accentText = c.accent
+            // The light theme's accent measured 3.3:1 on the notch: live readings take the notch's text, the dot keeps the accent.
+            c.accentText = ink
         }
         var tokens = StyleTokens(kind: t.kind, dark: true, colors: c, type: t.type, radii: t.radii, depth: t.depth, density: t.density)
         tokens.scale = t.scale
@@ -555,7 +612,8 @@ private struct PageBody: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
                     Equaliser(playing: music.playing)
-                    Text("\(music.playing ? "Playing" : "Paused") in \(music.source)").styleText(\.small).foregroundStyle(style.color(\.text2))
+                    // Instrument's eyebrow, small capitals in Geist Mono (DESIGN.md), as today's drop.
+                    Text("\(music.playing ? "Playing" : "Paused") in \(music.source)").styleText(\.eyebrow).foregroundStyle(style.color(\.text2))
                 }
                 Text(music.title).font(style.font(\.title, size: 18)).foregroundStyle(style.color(\.text)).lineLimit(1).padding(.top, 6)
                 Text([music.artist, music.album].compactMap { $0 }.joined(separator: " · ")).styleText(\.body).foregroundStyle(style.color(\.text2)).lineLimit(1)
@@ -598,7 +656,7 @@ private struct PageBody: View {
     private func day(_ calendar: PillValues.Calendar) -> some View {
         HStack(alignment: .top, spacing: 18) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(calendar.weekday).styleText(\.small).foregroundStyle(style.color(\.accentText))
+                Text(calendar.weekday).styleText(\.eyebrow).foregroundStyle(style.color(\.accentText))
                 Text(calendar.day).font(style.font(\.title, size: 40)).monospacedDigit().foregroundStyle(style.color(\.text))
                 Text(calendar.month).styleText(\.small).foregroundStyle(style.color(\.text2))
             }
