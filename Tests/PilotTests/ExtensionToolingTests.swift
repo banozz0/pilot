@@ -151,7 +151,7 @@ struct ExtensionToolingTests {
 
     nonisolated static let catalogue = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../catalogue/extensions").standardizedFileURL
 
-    @Test("ext test --check passes each catalogue extension (13 today), read in place, and asks nothing",
+    @Test("ext test --check passes each catalogue extension (18 today), read in place, and asks nothing",
           .enabled(if: FileManager.default.fileExists(atPath: catalogue.path)))
     func catalogueChecks() async throws {
         let rig = try Rig()
@@ -167,7 +167,7 @@ struct ExtensionToolingTests {
         #expect(rig.asked.isEmpty)
     }
 
-    @Test("Each catalogue extension's install question (13 today) is short enough to be asked, every file named",
+    @Test("Each catalogue extension's install question (18 today) is short enough to be asked, every file named",
           .enabled(if: FileManager.default.fileExists(atPath: catalogue.path)))
     func catalogueQuestions() async throws {
         let rig = try Rig()

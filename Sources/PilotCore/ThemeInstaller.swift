@@ -85,8 +85,13 @@ public struct ThemeInstaller: Sendable {
             }
             return (loaded, replacing ? aside : nil)
         }
-        // The old copy goes to the Trash once the lock is let go, so a save never waits on the Trash.
-        if let replaced { try? trash(replaced) }
+        // The old copy goes to the Trash once the lock is let go, so a save never waits on the Trash; when the Trash
+        // refuses, it stays in the library as a hidden folder rather than going with the stage.
+        if let replaced {
+            do { try trash(replaced) } catch {
+                try? fm.moveItem(at: replaced, to: library.appending(path: ".pilot-replaced-\(theme.id)-\(UUID().uuidString)", directoryHint: .isDirectory))
+            }
+        }
         return loaded
     }
 

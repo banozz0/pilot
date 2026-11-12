@@ -38,7 +38,7 @@ struct ExtensionCheckTests {
 
     static func remove(_ parent: URL) { try? FileManager.default.removeItem(at: parent) }
 
-    @Test("Each catalogue extension (13 today) passes, as python3 scripts/check.py says", .enabled(if: hasCatalogue))
+    @Test("Each catalogue extension (18 today) passes, as python3 scripts/check.py says", .enabled(if: hasCatalogue))
     func catalogueAgrees() async throws {
         let folders = try FileManager.default.contentsOfDirectory(at: Self.catalogue.appending(path: "extensions"), includingPropertiesForKeys: nil)
             .filter { !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.path < $1.path }

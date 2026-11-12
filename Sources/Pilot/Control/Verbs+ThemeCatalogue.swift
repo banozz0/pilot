@@ -35,7 +35,7 @@ extension ControlVerbs {
         let had = await Task.detached { installer.installed([id]) }.value[id]
         guard had != theme.digest else { return .object(["installed": .string(id), "changed": .bool(false)]) }
         // Its files are the applied theme's (wallpapers on the desktop now): replaced or removed only once another is applied.
-        guard had == nil || (try? owner.selected())?.id != id else {
+        guard had == nil || !isApplied(id, owner) else {
             throw ControlError(.badValue, "\(id) is the theme applied now: apply another or restore first, then update it. Nothing asked.")
         }
         // An id Pilot's own themes or another pack root hold is refused before asking, so Allow never starts an install bound to fail.
@@ -56,17 +56,22 @@ extension ControlVerbs {
     static func removeTheme(_ id: String, _ owner: ThemeCoordinator, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let installer = themeInstaller(owner)
         guard let folder = installer.folder(id) else { throw ControlError(.badValue, ExtensionCatalogue.Problem.themeNotInstalled(id).reason) }
-        guard (try? owner.selected())?.id != id else { throw ControlError(.badValue, "\(id) is the theme applied now: apply another or restore first. Nothing asked.") }
+        guard !isApplied(id, owner) else { throw ControlError(.badValue, "\(id) is the theme applied now: apply another or restore first. Nothing asked.") }
         // Its manifest alone, for the title: a full load decodes every wallpaper.
         let title = (try? ThemeFiles.read(root: owner.store.writableRoot, path: id + "/manifest.json").bytes).flatMap { try? ThemePack.decode($0) }?.title ?? id
         let ask = ControlGate.Ask("Remove theme", lines: ["\(id) (\(title)) at \(folder.path) goes to the Trash"])
-            .summed("Remove theme \(title)?", ["Its folder goes to the Trash"])
+            .summed("Remove theme \(id)?", ["Its folder goes to the Trash"])
         return try await AllowPrompt.gate.allow(ask, peer: peer) { () throws(ControlError) in
             let removed = await Task.detached { Result { try installer.remove(id) } }.value
             if case .failure(let error) = removed { throw ControlError(.badValue, ExtensionCatalogue.Problem.reason(error)) }
             log.notice("theme remove: \(id, privacy: .public), from the pilot command")
             return .object(["removed": .string(id), "title": .string(title)])
         }
+    }
+
+    /// Whether `id` is the theme applied now; a ledger that does not read counts as yes, so nothing in use is replaced.
+    private static func isApplied(_ id: String, _ owner: ThemeCoordinator) -> Bool {
+        do { return try owner.selected()?.id == id } catch { return true }
     }
 
     /// The installer for your themes, reading the catalogue where the Extensions page does.
@@ -83,7 +88,8 @@ extension ControlVerbs {
             "files: \(theme.files.map(\.path).joined(separator: ", ")); \(theme.files.count) in all, \(size)",
             replacing ? "replaces the pack \(theme.id) in your themes, which goes to the Trash" : "replaces nothing: no pack \(theme.id) is in your themes",
             "runs nothing: a theme is data, and installing applies nothing",
-        ]).summed("\(verb) theme \(theme.title)?", [replacing ? "The pack in your themes goes to the Trash; nothing runs" : "Nothing runs, and nothing is applied",
+        // Named by id, as every summary is (ExtensionTools.titled): a pack's title is its author's words.
+        ]).summed("\(verb) theme \(theme.id)?", [replacing ? "The pack in your themes goes to the Trash; nothing runs" : "Nothing runs, and nothing is applied",
                                                     "From Pilot's catalogue: \(ExtensionCatalogue.home)"])
     }
 }
