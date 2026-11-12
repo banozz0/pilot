@@ -279,7 +279,7 @@ private struct ThemePackControls: View {
                      canApply: packs.contains { $0.id == selected }, running: running,
                      pick: { tryOn($0) }, apply: { press(selected) }, restore: { press(nil) },
                      mode: Binding(get: { following.mode != false }, set: { value in
-                         do { following = try ThemeCoordinator.production().stageFollowing("mode", follow: value); plan = nil }
+                         do { following = try ThemeCoordinator.production().stageMode(follow: value); plan = nil }
                          catch { outcome = String(describing: error) }
                      })) {
             if let plan { preview(plan) }
@@ -319,17 +319,6 @@ private struct ThemePackControls: View {
                 Button("Import…") { importPack() }
                 Button("Edit") { edit(copy: false) }.disabled(selected.isEmpty)
                 Button("Export…") { exportPack() }.disabled(selected.isEmpty)
-            }
-            KitFold(title: "Follow or keep personal") {
-                ForEach(["palette", "wallpapers", "material", "bar", "cursor"], id: \.self) { component in
-                    Toggle("Follow pack " + component, isOn: Binding(get: {
-                        switch component { case "palette": following.palette; case "wallpapers": following.wallpapers; case "bar": following.bar == true; case "cursor": following.cursor != false; default: following.material }
-                    }, set: { value in
-                        do { following = try ThemeCoordinator.production().stageFollowing(component, follow: value); plan = nil; outcome = "Saved. Preview again before Apply." }
-                        catch { outcome = String(describing: error) }
-                    }))
-                }
-                Text("Bar geometry and fonts stay personal unless geometry follows a pack. Restore default puts back what the theme changed. Your own edits and saved packs stay.").font(.caption).foregroundStyle(ink.text2)
             }
             if let apps {
                 if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }

@@ -193,7 +193,7 @@ struct ThemePackEditor: View {
                 Text("Keep personal layout").tag("none")
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
             }
-            Text("Suggestions only. Material and bar geometry stay personal unless explicitly followed. Items, their order and fonts stay personal.").foregroundStyle(ink.text2)
+            Text("A theme applies the material and bar layout it carries; Restore default puts yours back. Items, their order and fonts stay personal.").foregroundStyle(ink.text2)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 

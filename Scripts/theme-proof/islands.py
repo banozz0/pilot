@@ -160,20 +160,16 @@ def run(seam_only=False, fixes_only=False):
         # Real pack suggestions use the existing ownership engine and contain no personal geometry/order.
         for pack, preset in zip(f.packs, ['floatingStrip','threeIslands']):
             pack['barPreset'] = preset; f.save_pack(pack)
-        for name in ['a','b']: f.apply(name); assert f.geometry() == geometry and f.personal() == personal
-        f.restore(); assert f.geometry() == geometry and f.personal() == personal
+        # A theme changes the bar layout it carries; Restore default puts the person's back (Sven Q108).
         f.call('theme','fixture-style','toybox'); assert f.geometry() == geometry
         f.call('theme','fixture-style','instrument'); assert f.geometry() == geometry
-        f.call('theme','follow','bar','pack'); f.apply('a')
+        f.apply('a')
         assert f.geometry()['preset'] == 'floatingStrip' and f.personal() == personal
         f.apply('b'); assert f.geometry()['preset'] == 'threeIslands' and f.personal() == personal
         ledger = json.loads((f.root/'state/ownership.json').read_text())
         assert ledger['appearance']['original']['bar']['configuration'] == geometry
         f.stop(); f.start(); assert f.geometry()['preset'] == 'threeIslands'
         f.restore(); assert f.geometry() == geometry and f.personal() == personal
-        f.apply('b'); f.call('theme','follow','bar','personal'); f.apply('a')
-        assert f.geometry() == geometry and f.personal() == personal
-        f.restore(); assert f.geometry() == geometry
         outgoing = f.root/'islands-export.json'; f.call('theme','export','b',str(outgoing))
         transfer = json.loads(outgoing.read_text())
         assert transfer['pack']['barPreset'] == 'threeIslands'
@@ -190,7 +186,7 @@ def run(seam_only=False, fixes_only=False):
     strip.final_preservation()
     os.environ['PILOT_STRIP_FIX_CASE'] = 'release'
     strip.preservation_fixes()
-    passed('unchanged T7 final strict-predecode/setter/reentrance and bar/palette/material interrupted-release recovery proofs')
+    passed('unchanged T7 final strict-predecode/setter/reentrance and bar/material interrupted-release recovery proofs')
     commands = [json.loads(line) for p in EVIDENCE.glob('fixtures/*/commands.jsonl') for line in p.read_text().splitlines()]
     hashes = {str(p.relative_to(REPO)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [REPO/'.build/debug/PilotCLI', REPO/'.build/out/Products/Debug/PilotTests.xctest/Contents/MacOS/PilotTests'] if p.exists()}
     (EVIDENCE/'summary.json').write_text(json.dumps(dict(checks=len(checks), cliResponses=len(commands), hashes=hashes, pass_islands=True), indent=2))

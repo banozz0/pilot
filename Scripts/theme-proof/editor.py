@@ -1,7 +1,7 @@
 """Public PilotCLI -> early theme-only private host -> common production editor/store/coordinator.
 
 Portable JSON envelope: {format:1, pack:<schema1 manifest>, files:{relative-path:base64}}.
-No destination, local follow, ledger, executable or personal config is portable.
+No destination, ledger, executable or personal config is portable.
 """
 import base64
 import concurrent.futures
@@ -101,8 +101,8 @@ def run(seam_only=False, fixes_only=False):
         f.call('theme','edit','user-a',folder,old,ok=False)
         f.checkpoint('drafts-no-effects');f.stop();f.start();assert f.call('theme','show','user-a')['pack']==edited
         review=f.call('theme','plan','apply','user-a');assert review['native']['before']==f.original_native and review['native']['after']['palette']['pack']['_0']==edited
-        assert review['native']['palette'] and not review['native']['material'] and not review['applied'] and f.effects()==before
-        f.call('theme','apply',review['id']);a=f.native_value();assert a['palette']['pack']['_0']==edited and a['material']==f.original_native['material']
+        assert review['native']['palette'] and review['native']['material'] and not review['applied'] and f.effects()==before
+        f.call('theme','apply',review['id']);a=f.native_value();assert a['palette']['pack']['_0']==edited and a['material']==edited['material']
         pending=f.plan('user-a');rev=f.call('theme','show','user-a')['revision'];edited2=copy.deepcopy(edited);edited2['palette']['accent']='#271828'
         f.call('theme','edit','user-a',f.folder(edited2,'edited2'),rev);assert f.native_value()==a
         f.call('theme','apply',pending,ok=False)
@@ -156,24 +156,14 @@ def run(seam_only=False, fixes_only=False):
         passed('zero apps/zero wallpapers still owns native palette and restores after restart; no desktop/config changes')
 
         f=fixture('follow');f.start();p=f.create();p['material']=dict(glass=True,transparency=35,blur='off');rev=f.call('theme','show','user-a')['revision']
-        f.call('theme','edit','user-a',f.folder(p,'with-material'),rev);f.apply('user-a')
-        before=f.native_value();plan=f.plan('user-a');f.call('theme','follow','material','pack');assert f.native_value()==before
-        f.call('theme','apply',plan,ok=False);f.apply('user-a');assert f.native_value()['material']==p['material']
+        f.call('theme','edit','user-a',f.folder(p,'with-material'),rev);f.apply('user-a');assert f.native_value()['material']==p['material']
         owned=json.loads((f.root/'state/ownership.json').read_text())['appearance'];assert owned['original']['material']==f.original_native['material']
-        f.call('theme','follow','palette','personal');f.call('theme','follow','wallpapers','personal');f.apply('user-a')
-        assert f.native_value()['palette']==f.original_native['palette'] and f.native_value()['material']==p['material']
-        f.call('theme','follow','material','personal');f.apply('user-a');assert f.native_value()==f.original_native
-        # Later personal material is unowned: applying palette and Restore must preserve it.
-        changed=f.native_value();changed['material']['transparency']=67;f.native.write_text(json.dumps(changed))
-        f.call('theme','follow','palette','pack');f.apply('user-a');assert f.native_value()['material']==changed['material']
-        f.restore();assert f.native_value()==changed
-        f.call('theme','follow','material','pack');f.apply('user-a')
         changed=f.native_value();changed['material']['transparency']=83;f.native.write_text(json.dumps(changed));before=f.effects()
         # The coordinator's brief: an owned part the person changed since is let go; Restore keeps it and finishes the rest.
         answer=f.restore();assert answer['status']=='restored' and f.native_value()['material']==changed['material'],answer
         assert [w for w in answer['kept'] if w.startswith('Kept the glass')],answer['kept']
         f.checkpoint('later-owned-personal-kept');f.stop()
-        passed('local follow staged/no effects; immutable freshness; component original captured on first ownership; palette/material release; unowned later material preserved; an owned later edit is kept while Restore finishes')
+        passed('a theme applies the material it carries; component original captured on first ownership; an owned later edit is kept while Restore finishes')
 
         f=fixture('style');f.start();p=f.create();p['styles']=['toybox'];rev=f.call('theme','show','user-a')['revision'];f.call('theme','edit','user-a',f.folder(p,'restricted'),rev)
         assert 'user-a' not in [x['id'] for x in f.call('theme','list')] and 'user-a' in [x['id'] for x in f.call('theme','list-all')]

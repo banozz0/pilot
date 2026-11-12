@@ -1214,15 +1214,9 @@ def detected_apps(passed):
         assert f.apply('b')['status'] == 'applied' and state() == 'theme'
         f.stop(); f.start()
         assert f.restore()['status'] == 'restored' and state() == 'custom', 'Restore lost the previous cursor choice'
-        f.call('theme', 'follow', 'cursor', 'personal')
-        assert f.apply()['status'] == 'applied' and state() == 'custom', 'a personal cursor followed the pack'
-        assert f.restore()['status'] == 'restored' and state() == 'custom'
-        f.call('theme', 'follow', 'cursor', 'pack')
         f.controls(allow='no'); f.call('theme', 'apply', f.plan(), ok=False); f.controls()
         assert state() == 'custom', 'a denied Apply changed the cursor'
         assert f.apply()['status'] == 'applied' and state() == 'theme'
-        f.call('theme', 'follow', 'cursor', 'personal')
-        assert f.apply('b')['status'] == 'applied' and state() == 'custom', 'switching to personal did not release the cursor'
         assert f.restore()['status'] == 'restored' and state() == 'custom'
         f.stop()
         f, home, store, _, _ = setup('mac', cursor='custom')

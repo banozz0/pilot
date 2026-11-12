@@ -171,7 +171,6 @@ def run(seam_only=False, fixes_only=False):
         f.call('theme','fixture-style','toybox');assert f.geometry()==geometry and f.personal()==personal
         f.call('theme','fixture-style','instrument');assert f.geometry()==geometry and f.personal()==personal
         passed('palette A/B/Restore and actual per-style palette switches preserve personal geometry and all personal items')
-        f.call('theme','follow','bar','pack');f.call('theme','plan','apply','a',ok=False)
         for pack in f.packs:pack['barPreset']='floatingStrip';f.save_pack(pack)
         outgoing=f.root/'strip-export.json';f.call('theme','export','a',str(outgoing))
         transfer=json.loads(outgoing.read_text());assert transfer['pack']['barPreset']=='floatingStrip'
@@ -180,28 +179,24 @@ def run(seam_only=False, fixes_only=False):
         f.call('theme','import',str(incoming));second=f.root/'strip-export-2.json';f.call('theme','export','strip-import',str(second))
         assert json.loads(second.read_text())==transfer
         passed('portable export/import round-trips only the typed floatingStrip suggestion')
-        f.call('theme','follow','bar','personal');before=f.snap();plan=f.plan('a');f.controls(allow='no')
+        before=f.snap();plan=f.plan('a');f.controls(allow='no')
         f.call('theme','apply',plan,ok=False);assert f.snap()==before
-        f.controls();f.call('theme','follow','bar','pack');f.apply('a');preset=f.geometry()
+        f.controls();f.apply('a');preset=f.geometry()
         assert preset!=geometry and f.personal()==personal
         ledger=json.loads((f.root/'state/ownership.json').read_text())
         assert ledger['appearance']['barOwned'] is True and ledger['appearance']['original']['bar']['configuration']==geometry
         f.apply('b');assert json.loads((f.root/'state/ownership.json').read_text())['appearance']['original']['bar']['configuration']==geometry
         f.stop();f.start();assert f.geometry()==preset and f.personal()==personal
         f.restore();assert f.geometry()==geometry and f.personal()==personal
-        passed('real pack-follow A/B/new-process Restore restores one original geometry; no suggestion refuses; denial has no effects')
-        f.apply('a');f.call('theme','follow','bar','personal');f.apply('b');assert f.geometry()==geometry
-        f.restore();assert f.geometry()==geometry and f.personal()==personal
-        passed('Personal stages only then releases matching geometry through existing reviewed Apply')
+        passed('real pack-follow A/B/new-process Restore restores one original geometry; denial has no effects')
         # Unknown manifest authority and duplicate portable suggestion fail through the actual pack loader.
-        f.call('theme','follow','bar','personal')
         path=f.root/'packs/a/manifest.json';original=path.read_bytes();before=f.snap()
         for invalid in [dict(f.packs[0],barPreset=None),dict(f.packs[0],barPreset='unsupportedPreset'),dict(f.packs[0],geometry=geometry)]:
             path.write_text(json.dumps(invalid));f.call('theme','show','a',ok=False)
         path.write_bytes(original[:-1]+b',"barPreset":"floatingStrip"}')
         f.call('theme','show','a',ok=False);path.write_bytes(original);assert f.snap()==before
         passed('portable packs reject geometry/authority/null/unknown/duplicate preset suggestions')
-        f.call('theme','follow','bar','pack');plan=f.plan('a');f.call('bar','geometry','spacing','14');before=f.snap()
+        plan=f.plan('a');f.call('bar','geometry','spacing','14');before=f.snap()
         f.call('theme','apply',plan,ok=False);assert f.snap()==before
         # The coordinator's brief: a Look part the person changed after Apply is theirs. Restore keeps it; Apply gives it
         # the new theme with theirs as what Restore puts back. Nothing refuses.
@@ -394,15 +389,16 @@ def preservation_fixes():
         finally:
             f.stop(); f.receipt()
     if selected in ['all', 'release']:
-        for component in ['bar','palette','material']:
+        # A theme follows everything it carries (Sven Q108): B carries no bar or material, so applying it after A
+        # releases both, the partial release this case interrupts.
+        for component in ['bar','material']:
             f = Fixture('r-'+component[0])
             try:
                 f.start(); f.call('bar','preset','floatingStrip'); f.call('bar','geometry','spacing','13')
                 geometry=f.geometry()
-                for pack in f.packs:
+                for pack in f.packs[:1]:
                     pack['barPreset']='floatingStrip'; pack['material']=dict(glass=True,transparency=35,blur='full'); f.save_pack(pack)
-                for name in ['bar','material']: f.call('theme','follow',name,'pack')
-                f.apply('a'); f.call('theme','follow',component,'personal'); f.controls(crash='after-native')
+                f.apply('a'); f.controls(crash='after-native')
                 plan=f.plan('b'); f.call('theme','apply',plan,ok=False); f.stop(crashed=True); f.controls()
                 pending=f.root/'state/pending.json'; valid_pending=pending.read_bytes(); doc=json.loads(valid_pending)
                 released = doc['appearance']['after'][component]

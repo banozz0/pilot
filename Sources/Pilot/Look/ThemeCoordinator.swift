@@ -468,7 +468,7 @@ final class ThemeCoordinator {
                             vaults: found.vaults.map { .init(root: $0.root, on: !(saved.obsidianOff ?? []).contains($0.root)) },
                             apps: found.apps.map { .init(kind: $0.kind.rawValue, name: $0.kind.name, on: !(saved.appsOff ?? []).contains($0.kind)) })
     }
-    /// A personal switch like Follow or keep personal: it only shapes the next plan, whose Apply asks Allow.
+    /// A personal switch like Zed follows: it only shapes the next plan, whose Apply asks Allow.
     func stageFollows(_ app: AppSwitch, on: Bool) throws -> AppFollowing {
         guard !busy, try state("pending").bytes == nil else { throw ThemeFailure("theme mutation or recovery in progress") }
         var next = try stored()
@@ -625,28 +625,26 @@ final class ThemeCoordinator {
     func selected() throws -> ThemePack? { try ledger().1.selected }
     func wallpaperClaims() throws -> [ThemeWallpaperClaim] { try ledger().1.wallpapers ?? [] }
 
+    /// Every part a theme carries follows it and Restore default undoes it (Sven Q108); macOS's mode is the one choice
+    /// left. A staged file from before, with a part kept personal, loads as following.
     func following() throws -> ThemeFollowing {
+        var value = ThemeFollowing(); value.material = true; value.bar = true
+        value.mode = try staged().mode
+        return value
+    }
+    private func staged() throws -> ThemeFollowing {
         guard let data = try state("components").bytes else { return .init() }
         let value = try JSONDecoder().decode(ThemeFollowing.self, from: data)
         try ThemeLedger.validateFields(data, encoded: ThemeDigest.encoded(value))
         return value
     }
 
-    /// Only stages local choices. The next immutable plan observes these bytes; no active effects occur here.
-    func stageFollowing(_ component: String, follow: Bool) throws -> ThemeFollowing {
+    /// Only stages Look's Follow light and dark; the next immutable plan observes these bytes, no effects occur here.
+    func stageMode(follow: Bool) throws -> ThemeFollowing {
         guard !busy else { throw ThemeFailure("theme mutation already waiting/running") }
-        var value = try following()
-        switch component {
-        case "palette": value.palette = follow
-        case "wallpapers": value.wallpapers = follow
-        case "material": value.material = follow
-        case "bar": value.bar = follow
-        case "cursor": value.cursor = follow
-        case "mode": value.mode = follow
-        default: throw ThemeFailure("unknown component; fonts remain personal")
-        }
+        var value = try staged(); value.mode = follow
         _ = try ThemeFiles.write(ThemeDigest.encoded(value), over: state("components"))
-        return value
+        return try following()
     }
 
     /// Old schema-1 owns a pack palette already, while Look retained its pre-pack stock ID.
@@ -660,29 +658,24 @@ final class ThemeCoordinator {
     }
 
     private func appearancePlan(_ pack: ThemePack?, old owned: ThemeAppearanceOwnership?, following: ThemeFollowing) throws -> (ThemeAppearanceOwnership?, ThemeAppearanceMutation?, [String]) {
-        guard let native else {
-            guard following.bar != true else { throw ThemeFailure("bar capability unavailable") }
-            return (nil, nil, [])
-        }
+        guard let native else { return (nil, nil, []) }  // No Look here: nothing of it to take.
         let current = try native.read(); try current.validate()
         // A part the person changed since is theirs: let go, so Restore leaves it and Apply takes it as the new original.
         let kept = owned?.changed(in: current) ?? []
         let old = owned?.releasing(kept)
         guard pack != nil || old != nil else { return (nil, nil, kept) }
         var original = old?.original ?? current, after = current
-        let ownsPalette = pack != nil && following.palette, ownsMaterial = pack != nil && following.material
+        let ownsPalette = pack != nil && following.palette, ownsMaterial = pack?.material != nil && following.material
         if ownsPalette {
             if old?.paletteOwned != true { original.palette = current.palette }
             after.palette = .pack(pack!)
-        } else if old?.paletteOwned == true { after.palette = original.palette }
-        if ownsMaterial {
-            guard let material = pack?.material else { throw ThemeFailure("pack has no material default; keep personal material") }
+        } else if old?.paletteOwned == true { after.palette = original.palette.current }  // A retired original comes back as its successor.
+        if ownsMaterial, let material = pack?.material {
             if old?.materialOwned != true { original.material = current.material }
             after.material = material
         } else if old?.materialOwned == true { after.material = original.material }
-        let ownsBar = pack != nil && following.bar == true
-        if ownsBar {
-            guard current.bar != nil, let preset = pack?.barPreset else { throw ThemeFailure("pack has no bar preset default or bar capability unavailable; keep personal layout") }
+        let ownsBar = pack?.barPreset != nil && current.bar != nil && following.bar == true
+        if ownsBar, let preset = pack?.barPreset {
             if old?.barOwned != true { original.bar = current.bar }
             after.bar = .init(preset.configuration)
         } else if old?.barOwned == true { after.bar = original.bar }
@@ -698,7 +691,9 @@ final class ThemeCoordinator {
             after.dark = pack!.dark
         } else if old?.modeOwned == true { after.dark = original.dark }
         guard after.palette.compatible(with: style()) else { throw ThemeFailure("original/personal palette incompatible with current style; choose its compatible style before Restore") }
-        let next = pack.map { _ in ThemeAppearanceOwnership(original: original, last: after, following: following, paletteOwned: ownsPalette, materialOwned: ownsMaterial, barOwned: ownsBar ? true : nil, cursorOwned: ownsCursor ? true : nil, modeOwned: ownsMode ? true : nil) }
+        // What the theme took, so the ledger's following matches what it owns.
+        var took = following; took.material = ownsMaterial; took.bar = ownsBar ? true : nil
+        let next = pack.map { _ in ThemeAppearanceOwnership(original: original, last: after, following: took, paletteOwned: ownsPalette, materialOwned: ownsMaterial, barOwned: ownsBar ? true : nil, cursorOwned: ownsCursor ? true : nil, modeOwned: ownsMode ? true : nil) }
         return (next, .init(before: current, after: after, palette: ownsPalette || old?.paletteOwned == true, material: ownsMaterial || old?.materialOwned == true, bar: ownsBar || old?.barOwned == true ? true : nil, cursor: ownsCursor || old?.cursorOwned == true ? true : nil, mode: ownsMode || old?.modeOwned == true ? true : nil), kept)
     }
 
@@ -727,7 +722,7 @@ final class ThemeCoordinator {
             guard old.barOwned != true || after.appearance?.barOwned == true || change.after.bar == old.original.bar,
                   old.cursorOwned != true || after.appearance?.cursorOwned == true || change.after.cursor == old.original.cursor,
                   old.modeOwned != true || after.appearance?.modeOwned == true || change.after.dark == old.original.dark,
-                  !old.paletteOwned || after.appearance?.paletteOwned == true || change.after.palette == old.original.palette,
+                  !old.paletteOwned || after.appearance?.paletteOwned == true || change.after.palette == old.original.palette.current,
                   !old.materialOwned || after.appearance?.materialOwned == true || change.after.material == old.original.material else { throw ThemeFailure("inconsistent native release") }
         }
         if let next = after.appearance {
@@ -1290,7 +1285,7 @@ final class ThemeCoordinator {
     /// Whether a theme is on the apps now, which is when Restore has something to do.
     func appliedTheme() throws -> (id: String?, any: Bool) {
         let record = try ledger().1
-        return (record.selected?.id, !record.claims.isEmpty || !(record.wallpapers ?? []).isEmpty || record.appearance != nil || !(record.ghostexSettings ?? []).isEmpty)
+        return (record.selected.map { PilotTheme.retired[$0.id] ?? $0.id }, !record.claims.isEmpty || !(record.wallpapers ?? []).isEmpty || record.appearance != nil || !(record.ghostexSettings ?? []).isEmpty)
     }
 
     /// A vault's folder name, or with its parent when another vault has the same folder name.

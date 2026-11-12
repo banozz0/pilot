@@ -345,7 +345,8 @@ public enum ThemeNativePalette: Codable, Equatable, Sendable {
     }
     public func validate() throws {
         switch self {
-        case .stock(let id): guard PilotTheme.named(id) != nil else { throw ThemeFailure("unknown local stock palette") }
+        // A retired theme's id stays valid as saved (Restore's original, a style's memory); it means its successor.
+        case .stock(let id): guard PilotTheme.named(PilotTheme.retired[id] ?? id) != nil else { throw ThemeFailure("unknown local stock palette") }
         case .pack(let pack): _ = try ThemePack.decode(ThemeDigest.encoded(pack))
         }
     }
