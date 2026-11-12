@@ -1,5 +1,5 @@
 {
-  "source": "Palettes from Omarchy's themes/<id>/colors.toml (github.com/basecamp/omarchy, branch quattro, read 2026-10-05), MIT, Copyright (c) David Heinemeier Hansson; the licence ships as Omarchy-LICENSE.txt. The line-up of 18 (2026-11-11) adds jade-horse (Omarchy at 2c29c29, MIT), akane (Grenish/omarchy-akane-theme, no licence: colour values only), ayu-dark (ayu-theme, MIT) and dracula (dracula-theme, MIT); those licences ship as Theme-palettes-LICENSES.txt.",
+  "source": "Palettes from Omarchy's themes/<id>/colors.toml (github.com/basecamp/omarchy, branch quattro, read 2026-10-05), MIT, Copyright (c) David Heinemeier Hansson; the licence ships as Omarchy-LICENSE.txt. The line-up of 18 (2026-11-11) adds jade-horse (Omarchy at 2c29c29, MIT), akane (Grenish/omarchy-akane-theme, no licence: colour values only), ayu-dark (ayu-theme, MIT) and dracula (dracula-theme, MIT); those licences ship as Theme-palettes-LICENSES.txt. Jungle (2026-11-12) is sampled from screenshots of a Hyprland/Waybar rice whose author could not be found: colour values only.",
   "themes": [
     {
       "id": "catppuccin-latte",
@@ -907,6 +907,36 @@
         "bright_cyan": "#7ec4d2",
         "bright_blue": "#7a9cc4",
         "bright_magenta": "#e07a94"
+      }
+    },
+    {
+      "id": "jungle",
+      "name": "Jungle",
+      "dark": true,
+      "colors": {
+        "background": "#1b2215",
+        "dark_background": "#141a10",
+        "darker_background": "#10150c",
+        "lighter_background": "#2a3420",
+        "foreground": "#e8f0e6",
+        "dark_foreground": "#8e9f86",
+        "light_foreground": "#c9d3c7",
+        "bright_foreground": "#f7fbf2",
+        "accent": "#b3f256",
+        "selection": "#404933",
+        "muted": "#5b7b60",
+        "red": "#e5786d",
+        "yellow": "#d9c77a",
+        "green": "#80ea89",
+        "cyan": "#42e0b3",
+        "blue": "#86b9c9",
+        "magenta": "#d29ac4",
+        "bright_red": "#f29a8f",
+        "bright_yellow": "#ebdda0",
+        "bright_green": "#cdf1a2",
+        "bright_cyan": "#7befcb",
+        "bright_blue": "#a7d1de",
+        "bright_magenta": "#e4b8da"
       }
     }
   ]

@@ -31,8 +31,8 @@ struct GhosttyLookTests {
 
     @Test("Omarchy's 22 palettes ship, each with every role Ghostty and Pilot read, Tokyo Night as Omarchy has it")
     func palettes() throws {
-        // Pilot's own three (P105) and the line-up of 18's added sources sit beside Omarchy's in the same table.
-        let themes = Self.themes.filter { !["folio", "celadon", "wisteria", "jade-horse", "akane", "ayu-dark", "dracula"].contains($0.id) }
+        // Pilot's own three (P105), the line-up of 18's added sources and Jungle's sit beside Omarchy's in the same table.
+        let themes = Self.themes.filter { !["folio", "celadon", "wisteria", "jade-horse", "akane", "ayu-dark", "dracula", "jungle"].contains($0.id) }
         #expect(themes.count == 22)
         #expect(themes.first { $0.id == "tokyo-night" }?.colors["background"] == "#1a1b26")
         #expect(themes.first { $0.id == "tokyo-night" }?.name == "Tokyo Night")

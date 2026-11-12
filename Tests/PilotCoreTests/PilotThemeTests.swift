@@ -54,12 +54,12 @@ struct PilotThemeTests {
                           wallpaper: WallpaperSpot(glow: hex(glow), amount: amount, base: hex(base)))
     }
 
-    @Test("The line-up of 18 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones, Toybox Night and Toybox; thirteen dark, five light")
+    @Test("The line-up of 19 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones, Toybox Night, Toybox and Jungle; fourteen dark, five light")
     func designed() {
         #expect(PilotTheme.designed.map(\.id) == ["tokyo-night", "jade", "catppuccin", "gruvbox", "matte-black", "retro-82", "nord", "akane", "ayu-dark", "dracula",
-                                                  "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "toybox-night", "toybox"])
+                                                  "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "toybox-night", "toybox", "jungle"])
         #expect(PilotTheme.defaultID == "tokyo-night" && PilotTheme.standard.id == "tokyo-night")
-        #expect(PilotTheme.designed.filter(\.dark).count == 13)
+        #expect(PilotTheme.designed.filter(\.dark).count == 14)
         #expect(PilotTheme.named("void")?.name == "Void" && PilotTheme.named("nope") == nil)
         for retired in PilotTheme.retired.keys { #expect(PilotTheme.named(retired) == nil, "\(retired) is gone") }
     }
