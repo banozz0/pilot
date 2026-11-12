@@ -396,6 +396,51 @@ struct FilesWindowRenders {
         model.dismissNotice()
         try await Self.until { model.loaded && !model.sizingFolders }
         try await Self.render(model, "4-path-bar", in: dir)
+
+        // Sven on build 2410: four pictures picked in a folder shaped like his open as ONE viewer of four, in the list's
+        // order, by every Open; a double-click outside the selection opens that row alone. The batch goes where
+        // LaunchServices would hand it: AppDelegate's application(_:open:); the viewer is never on screen.
+        let pics = try Self.fixture(home + "/Pictures", [("1bc58529-a7af.png", -1, 1), ("07a2a0c5-ef56.png", -1, 1), ("8f0c3b73-606b.png", -1, 1),
+                                                         ("Bastosarus.png", -1, 1), ("Best Pa Of Wz2.mp4", 100, 1), ("bust.png", -1, 1),
+                                                         ("c7aedc90-6fa3.png", -1, 1), ("profile_background_1.jpg", -1, 1)])
+        let shelf = Self.model(pics, home: home)
+        try await Self.until { shelf.loaded }
+        var launched: [[String]] = []
+        shelf.launch = { files, _ in
+            launched.append(files.map(\.lastPathComponent))
+            AppDelegate().application(NSApplication.shared, open: files)
+        }
+        ImageViewer.onScreen = false
+        defer { ImageViewer.closeAll() }
+        let picked = ["07a2a0c5-ef56.png", "8f0c3b73-606b.png", "Bastosarus.png", "c7aedc90-6fa3.png"]
+        let pickedRows = shelf.shown.filter { picked.contains($0.name) }, listOrder = pickedRows.map(\.name)
+        #expect(pickedRows.count == 4)
+        let paths: [(String, () -> Void)] = [
+            ("Cmd+O and Cmd+Down", { shelf.openPicked() }),
+            ("the context menu's Open", { shelf.actions(pickedRows[2]).first { $0.title == "Open" }?.run() }),
+            ("the preview's and VoiceOver's Open", { shelf.openPicked(pickedRows[1]) }),
+            ("a double-click on a picked row", { shelf.select(pickedRows[3]); shelf.doubleClicked(pickedRows[3]) }),
+        ]
+        for (path, run) in paths {
+            ImageViewer.closeAll()
+            launched = []
+            shelf.selected = nil
+            for row in pickedRows { shelf.select(row, modifiers: .command) }
+            run()
+            let viewer = try #require(ImageViewer.model(showing: pics.appending(path: listOrder[0])), "\(path): no viewer on \(listOrder[0])")
+            await viewer.settled()
+            print("OPEN PATH \(path): launched \(launched), viewer \(viewer.index + 1) of \(viewer.files.count) \(viewer.files.map(\.lastPathComponent))")
+            #expect(launched == [listOrder], "\(path)")
+            #expect(viewer.files.map(\.lastPathComponent) == listOrder && ImageViewer.openCount == 1, "\(path)")
+        }
+        ImageViewer.closeAll()
+        launched = []
+        let outside = try #require(shelf.shown.first { $0.name == "bust.png" })
+        for row in pickedRows { shelf.select(row, modifiers: .command) }
+        shelf.select(outside)
+        shelf.doubleClicked(outside)
+        print("OPEN PATH a double-click outside the selection: launched \(launched)")
+        #expect(launched == [["bust.png"]])
     }
 
     /// The tree under `folder`: each item's path from it and its size, so a write undone leaves it as it was.

@@ -341,9 +341,16 @@ final class FilesModel {
             pick(ids, active: ids.contains(item.id) ? item.id : shown.last(where: { ids.contains($0.id) })?.id)
             anchor = active
         } else {
+            // A plain click on a row of a selection narrows it to the row, as Finder does; kept for a double-click's
+            // length, so a double-click there opens the selection.
+            let within = narrowed.map { $0.ids.contains(item.id) && Date().timeIntervalSince($0.at) <= NSEvent.doubleClickInterval } ?? false
+            if selectedIDs.count > 1, selectedIDs.contains(item.id) { narrowed = (selectedIDs, .now) } else if !within { narrowed = nil }
             selected = item.id
         }
     }
+
+    /// The selection a plain click on one of its rows just narrowed, and when.
+    @ObservationIgnored private var narrowed: (ids: Set<FolderItem.ID>, at: Date)?
 
     func selectAll() {
         pick(Set(shown.map(\.id)), active: selected ?? shown.first?.id)
@@ -640,9 +647,31 @@ final class FilesModel {
 
     // MARK: Opening
 
-    /// A double-click or Open: a folder opens here, anything else in its own app.
+    /// How a batch of files reaches its app: NSWorkspace, or a test's stand-in.
+    @ObservationIgnored var launch: (_ files: [URL], _ app: URL) -> Void = { files, app in
+        NSWorkspace.shared.open(files, withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// Every Open (Cmd+O, Cmd+Down, the context menu, the preview's Open, VoiceOver's): the whole selection when `item`
+    /// is in it or none is named, else `item` alone (Sven on build 2410: these opened one picture of four).
+    func openPicked(_ item: FolderItem? = nil) {
+        open(item.map(selections(for:)) ?? selections)
+    }
+
+    /// A double-click: on a row of the selection its first click narrowed, that selection, picked again; else the row.
+    func doubleClicked(_ item: FolderItem) {
+        if let n = narrowed, n.ids.contains(item.id), Date().timeIntervalSince(n.at) <= NSEvent.doubleClickInterval + 0.2 {
+            narrowed = nil
+            pick(n.ids, active: item.id)
+        }
+        openPicked(item)
+    }
+
+    /// One item opened: a folder here, anything else in its own app (macOS asks for one when none opens it).
     func open(_ item: FolderItem) {
-        if item.isFolder { go(item.url) } else { NSWorkspace.shared.open(item.url) }
+        if item.isFolder { return go(item.url) }
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: item.url) else { NSWorkspace.shared.open(item.url); return }
+        launch([item.url], app)
     }
 
     /// A group opens every folder visibly; a single folder keeps navigating this window.
@@ -657,16 +686,14 @@ final class FilesModel {
             guard let app = NSWorkspace.shared.urlForApplication(toOpen: item.url) else { NSWorkspace.shared.open(item.url); continue }
             if let i = batches.firstIndex(where: { $0.app == app }) { batches[i].files.append(item.url) } else { batches.append((app, [item.url])) }
         }
-        for batch in batches {
-            NSWorkspace.shared.open(batch.files, withApplicationAt: batch.app, configuration: NSWorkspace.OpenConfiguration())
-        }
+        for batch in batches { launch(batch.files, batch.app) }
     }
 
     /// The Folder widget's read-only file actions, its Open opening a folder here rather than in Finder; its Copy path
     /// leaves for the window's three forms (FilesCopyPathMenu).
     func actions(_ item: FolderItem) -> [(title: String, run: () -> Void)] {
         WidgetFolder.actions(item).filter { $0.title != "Copy path" }
-            .map { $0.title == "Open" ? ("Open", { [weak self] in self?.open(item) }) : $0 }
+            .map { $0.title == "Open" ? ("Open", { [weak self] in self?.openPicked(item) }) : $0 }
     }
 
     /// Space and Quick Look: the item in Quick Look, or the panel closed when it shows.
@@ -1442,7 +1469,7 @@ struct FilesView: View {
                 Button("") { model.info() }.keyboardShortcut("i")
                 Button("") { model.up() }.keyboardShortcut(.upArrow)
                 ForEach([KeyboardShortcut(.downArrow), KeyboardShortcut("o")], id: \.key) { key in
-                    Button("") { if let item = model.selection { model.open(item) } }.keyboardShortcut(key)
+                    Button("") { model.openPicked() }.keyboardShortcut(key)
                 }
             }
             // While the search field has focus, these keys are the field's (Cmd+Up and Down move its caret).
@@ -1854,7 +1881,7 @@ private struct FilesContent: View {
         switch (press.key, press.characters.lowercased(), mods) {
         case (.space, _, []): if let item = model.selection { model.quickLook(item) }
         // The window's Cmd+Down and Cmd+Up where their key equivalents miss them.
-        case (.downArrow, _, .command): if let item = model.selection { model.open(item) }
+        case (.downArrow, _, .command): model.openPicked()
         case (.upArrow, _, .command): model.up()
         // The window's Cmd+Shift+. where its key equivalent misses it: Shift+. arrives as ">" on most layouts.
         case (_, ">", [.command, .shift]): model.showHidden.toggle()
@@ -1972,7 +1999,7 @@ private struct FilesPress: ViewModifier {
             // Cut, not yet moved: dimmed, as Finder dims a hidden file.
             .opacity(FilesCut.shared.paths.contains(item.id) ? 0.45 : 1)
             .contentShape(.rect)
-            .onTapGesture(count: 2) { model.open(item) }
+            .onTapGesture(count: 2) { model.doubleClicked(item) }
             .simultaneousGesture(TapGesture().onEnded { model.select(item, modifiers: NSEvent.modifierFlags) })
             .draggable(containerItemID: item.id)
             .modifier(FolderDrop(item: item, model: model))
@@ -2003,7 +2030,7 @@ private struct FilesPress: ViewModifier {
             .accessibilityLabel(item.isFolder ? "\(item.name), folder" : "\(item.name), \(item.kind), \(FolderListing.size(item.size))")
             .accessibilityAddTraits(model.selectedIDs.contains(item.id) ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction(named: "Select") { model.select(item) }
-            .accessibilityAction(named: "Open") { model.open(item) }
+            .accessibilityAction(named: "Open") { model.openPicked(item) }
     }
 }
 
@@ -2254,7 +2281,7 @@ private struct FilesInspector: View {
 
     private func buttons(_ item: FolderItem) -> some View {
         HStack(spacing: 8) {
-            Button { model.open(item) } label: { Label("Open", systemImage: "arrow.up.forward.square") }
+            Button { model.openPicked(item) } label: { Label("Open", systemImage: "arrow.up.forward.square") }
                 .buttonStyle(.pilotPrimary)
             Button { model.quickLook(item) } label: { Label("Quick Look", systemImage: "eye") }.buttonStyle(.pilot)
             Menu {
