@@ -1655,15 +1655,14 @@
         "native_line2": "#485240",
         "native_text3": "#8E9F86",
         "native_second": "#42E0B3",
-        "native_third": "#D9C77A",
+        "native_third": "#86B9C9",
         "native_graph1": "#B3F256",
         "native_graph2": "#42E0B3",
         "native_graph3": "#80EA89",
-        "native_selection": "#B3F256",
-        "native_amber": "#EBDDA0"
+        "native_selection": "#B3F256"
       },
       "preview": null,
-      "digest": "6229136efc829ea40a24890cade1ec1107f0c6533184f9d87250ae4e25c8290d",
+      "digest": "c7f1f89a857b2d0daa8e2c01ffdd6261b95a84f899a1e57b555107f5782afe0b",
       "files": [
         {
           "path": "PROVENANCE.md",
@@ -1673,8 +1672,8 @@
         },
         {
           "path": "manifest.json",
-          "sha256": "4684452b2a77f8c97e6445ee27b75ad0173504c9cb2c6d68c1a782efba3487e4",
-          "size": 1248,
+          "sha256": "203d2a1e6511d66017f20751c60f664041671b36e04776a7e9a26e3e9adf15c7",
+          "size": 1217,
           "executable": false
         },
         {

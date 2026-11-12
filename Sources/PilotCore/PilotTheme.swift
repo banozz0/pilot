@@ -271,8 +271,8 @@ public struct PilotTheme: Equatable, Sendable, Identifiable {
         // Jungle (Sven, 2026-11-12), the 19th: printed by make_lineup.py --row jungle and placed here by hand.
         PilotTheme(id: "jungle", name: "Jungle", tagline: "Lime light through morning fog", source: "jungle", dark: true,
                    ground: 0x1B2215, sidebar: 0x141A10, surface: 0x222A1A, raised: 0x2A3420, line: 0x353F2C, line2: 0x485240,
-                   text: 0xE8F0E6, text2: 0xC9D3C7, text3: 0x8E9F86, accent: 0xB3F256, second: 0x42E0B3, third: 0xD9C77A,
-                   good: 0x80EA89, amber: 0xEBDDA0, problem: 0xE5786D, graphs: [0xB3F256, 0x42E0B3, 0x80EA89],
+                   text: 0xE8F0E6, text2: 0xC9D3C7, text3: 0x8E9F86, accent: 0xB3F256, second: 0x42E0B3, third: 0x86B9C9,
+                   good: 0x80EA89, amber: 0xD9C77A, problem: 0xE5786D, graphs: [0xB3F256, 0x42E0B3, 0x80EA89],
                    focus: .glow, radius: 1.25,
                    face: DisplayFace(family: "Recursive", file: "Recursive", weight: 700, scale: 0.94, tracking: -0.02, italic: false, axes: ["MONO": 1]),
                    wallpaper: WallpaperSpot(glow: 0xB3F256, amount: 0.28, base: 0x1B2215)),

@@ -31,12 +31,11 @@
     "native_line2": "#485240",
     "native_text3": "#8E9F86",
     "native_second": "#42E0B3",
-    "native_third": "#D9C77A",
+    "native_third": "#86B9C9",
     "native_graph1": "#B3F256",
     "native_graph2": "#42E0B3",
     "native_graph3": "#80EA89",
-    "native_selection": "#B3F256",
-    "native_amber": "#EBDDA0"
+    "native_selection": "#B3F256"
   },
   "styles": [
     "instrument",
