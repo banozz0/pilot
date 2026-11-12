@@ -10,3 +10,7 @@ build/
 *.sqlite
 *.sqlite-*
 .build/
+__pycache__/
+*.pyc
+__pycache__/
+*.pyc
