@@ -42,7 +42,7 @@ struct ImageViewerRenders {
         let photo = try #require(Self.photo(width: 3000, height: 2000))
         let beach = folder.appending(path: "beach.jpg"), turned = folder.appending(path: "portrait.jpg")
         let png = folder.appending(path: "screen.png"), gif = folder.appending(path: "wave.gif")
-        try Self.write(photo, to: beach, type: .jpeg)
+        try Self.write(photo, to: beach, type: .jpeg, exif: [kCGImagePropertyExifDateTimeOriginal: "2026:08:14 19:42:07"])
         try Self.write(photo, to: turned, type: .jpeg, orientation: 6)
         try Self.write(try #require(Self.photo(width: 1200, height: 800)), to: png, type: .png)
         try Self.writeGIF([try #require(Self.photo(width: 120, height: 80)), try #require(Self.photo(width: 120, height: 80, sun: 0.7))], to: gif)
@@ -63,6 +63,12 @@ struct ImageViewerRenders {
         let frames = try #require(ViewerImages.decode(gif, longest: nil))
         #expect(frames.frames == 2 && !ViewerImages.replaceable(gif))
         #expect(ViewerImages.replaceable(beach) && ViewerImages.replaceable(png))
+        // An iPhone's name: an uppercase HEIC, in a folder of its own.
+        let phone = folder.appending(path: "phone")
+        try FileManager.default.createDirectory(at: phone, withIntermediateDirectories: true)
+        let heic = phone.appending(path: "IMG_0001.HEIC")
+        try Self.write(try #require(Self.photo(width: 400, height: 300)), to: heic, type: .heic)
+        #expect(ViewerImages.viewable(heic) && ViewerImages.siblings(of: heic) == [heic] && ViewerImages.decode(heic, longest: nil)?.pixels == CGSize(width: 400, height: 300))
 
         try await Self.markUps(beach: beach, png: png)
         // The copy mark-up saved (and the test removed) went into the viewer's list and out again.
@@ -119,13 +125,22 @@ struct ImageViewerRenders {
             try #require(told.count >= count, "nothing was told: \(told)")
         }
 
-        // Replace on the JPEG: written back as JPEG in place, its size kept.
+        // Replace on the JPEG, framed by a see-through backdrop: written back as JPEG in place, the see-through corners white
+        // (ImageIO's JPEG writer puts them on white), the date it was taken kept.
         CaptureEditor.askSave = { _, replaceable in #expect(replaceable); return .replace }
-        try await edit(beach).finish(.done)
+        let framed = try await edit(beach)
+        framed.setBackdrop(Backdrop(fill: .clear, pad: 48, radius: 24, shadow: 0))
+        framed.finish(.done)
         try await waitTold(1)
         let bytes = try Data(contentsOf: beach)
         #expect(Array(bytes.prefix(3)) == [0xFF, 0xD8, 0xFF], "the JPEG holds \(Array(bytes.prefix(8)))")
-        #expect(ViewerImages.decode(beach, longest: nil)?.pixels == CGSize(width: 3000, height: 2000))
+        let source = try #require(CGImageSourceCreateWithData(bytes as CFData, nil))
+        let exif = (CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])?[kCGImagePropertyExifDictionary] as? [CFString: Any]
+        #expect(exif?[kCGImagePropertyExifDateTimeOriginal] as? String == "2026:08:14 19:42:07")
+        let corner = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let rep = NSBitmapImageRep(cgImage: corner)
+        let c = try #require(rep.colorAt(x: 2, y: 2)?.usingColorSpace(.sRGB))
+        #expect(c.redComponent > 0.9 && c.greenComponent > 0.9 && c.blueComponent > 0.9, "the see-through corner came out \(c)")
         #expect(told.last == "Copied, and saved over beach.jpg")
         #expect(!CaptureEditor.isOpen(file: beach))
 
@@ -179,9 +194,11 @@ struct ImageViewerRenders {
         return ctx.makeImage()
     }
 
-    static func write(_ image: CGImage, to url: URL, type: UTType, orientation: Int = 1) throws {
+    static func write(_ image: CGImage, to url: URL, type: UTType, orientation: Int = 1, exif: [CFString: Any]? = nil) throws {
         let dest = try #require(CGImageDestinationCreateWithURL(url as CFURL, type.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(dest, image, [kCGImagePropertyOrientation: orientation, kCGImagePropertyDPIWidth: 72, kCGImagePropertyDPIHeight: 72] as CFDictionary)
+        var props: [CFString: Any] = [kCGImagePropertyOrientation: orientation, kCGImagePropertyDPIWidth: 72, kCGImagePropertyDPIHeight: 72]
+        props[kCGImagePropertyExifDictionary] = exif
+        CGImageDestinationAddImage(dest, image, props as CFDictionary)
         try #require(CGImageDestinationFinalize(dest))
     }
 

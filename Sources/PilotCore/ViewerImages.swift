@@ -67,15 +67,30 @@ public enum ViewerImages {
         return writable.contains(type)
     }
 
-    /// `image` encoded in `url`'s own type (never PNG bytes under a .jpg), upright (orientation 1, since the pixels are turned
-    /// already), at `scale`'s DPI; nil when that type cannot be written.
+    /// `image` encoded in `url`'s own type (never PNG bytes under a .jpg), with the file's own metadata (date taken, place,
+    /// camera) kept and its orientation 1, since the pixels are turned already, at `scale`'s DPI (ImageIO's JPEG writer
+    /// puts a backdrop's see-through corners on white). Nil when that type cannot be written.
     public static func encode(_ image: CGImage, scale: CGFloat, like url: URL) -> Data? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), let type = CGImageSourceGetType(source) else { return nil }
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, type, 1, nil) else { return nil }
-        let dpi = 72 * scale
-        var props: [CFString: Any] = [kCGImagePropertyDPIWidth: dpi, kCGImagePropertyDPIHeight: dpi, kCGImagePropertyOrientation: 1]
-        if (type as String) == UTType.jpeg.identifier || (type as String) == UTType.heic.identifier { props[kCGImageDestinationLossyCompressionQuality] = 0.92 }
+        let dpi = 72 * scale, id = type as String
+        var props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        // The size the mark-up has now, not the one the file had.
+        for key in [kCGImagePropertyPixelWidth, kCGImagePropertyPixelHeight] { props[key] = nil }
+        if var exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+            exif[kCGImagePropertyExifPixelXDimension] = nil
+            exif[kCGImagePropertyExifPixelYDimension] = nil
+            props[kCGImagePropertyExifDictionary] = exif
+        }
+        if var tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            tiff[kCGImagePropertyTIFFOrientation] = 1
+            props[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        props[kCGImagePropertyOrientation] = 1
+        props[kCGImagePropertyDPIWidth] = dpi
+        props[kCGImagePropertyDPIHeight] = dpi
+        if id == UTType.jpeg.identifier || id == UTType.heic.identifier { props[kCGImageDestinationLossyCompressionQuality] = 0.92 }
         CGImageDestinationAddImage(dest, image, props as CFDictionary)
         return CGImageDestinationFinalize(dest) ? data as Data : nil
     }
