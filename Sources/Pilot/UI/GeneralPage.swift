@@ -39,6 +39,10 @@ struct GeneralPage: View {
     /// Support (Sven 2026-10-10): Pilot's GitHub Sponsors page.
     static let supportURL = URL(string: "https://github.com/sponsors/banozz0")!
     /// Accessibility's ⓘ, on Needs you and on Permissions.
+    static let showInInfo = "Floating: a bell you can drag, with each card in the bottom right. Top bar: a bell item in Pilot's top bar "
+        + "with the count of new ones; each card drops under it and a click lists what arrived."
+    static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
+        + "window, as widgets do. A new card still pops up above apps while it shows."
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
 
     /// The front's short blocks sit in pairs from this width up (simplify-pages T8); narrower they stack (Moody: at 760
@@ -326,10 +330,29 @@ struct GeneralPage: View {
     /// Other apps' notifications as Pilot's cards (spec notifications.html): off by default, nothing runs until it's on.
     private var notifications: some View {
         @Bindable var settings = NotificationSettings.shared
+        let placement = settings.placement
         return KitBlock(title: "Notifications", symbol: "bell") {
             BlockRow(first: true) {
                 Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
-                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card in the bottom right, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+            }
+            if settings.enabled {
+                BlockRow {
+                    HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                    Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
+                }
+                if settings.showIn == .topBar && placement == .floating {
+                    BlockRow {
+                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on in Menu bar.")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if placement == .floating {
+                    BlockRow {
+                        HStack(spacing: 6) { Text("Layer"); InfoMark(text: Self.layerInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                        Segments(selection: $settings.layer, options: NotificationSettings.Layer.allCases.map { ($0, $0.label) }, label: "Layer")
+                    }
+                }
             }
             BlockRow {
                 Toggle("Hide macOS's own banner", isOn: $settings.hideMacBanners)

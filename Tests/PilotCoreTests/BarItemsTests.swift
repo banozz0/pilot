@@ -30,11 +30,11 @@ struct BarItemsTests {
                                     ["CPU", "Memory", "Network", "Graphics", "Storage", "Heat"],
                                     [SystemStats.hasBattery ? "Battery" : "Power draw", "Bluetooth batteries", "Keep awake", "Power"],
                                     ["Volume", "Keyboard layout", "Wi-Fi", "Displays"],
-                                    ["Status lights", "Clock", "Timer"],
+                                    ["Status lights", "Clock", "Timer", "Notifications"],
                                     ["Terminal", "Ask AI", "Pill", "Capture"],
                                     ["Extensions"],
                                     ["Spacer", "Divider", "Group"]])
-        #expect(BarKind.allCases.count == 30)
+        #expect(BarKind.allCases.count == 31)
         let styles = Dictionary(uniqueKeysWithValues: BarKind.allCases.map { ($0, $0.styles.map(\.title)) })
         #expect(styles == [
             .pilot: ["icon", "icon + number", "number"], .workspaces: ["numbers", "dots", "current", "with app", "icons"],
@@ -43,7 +43,7 @@ struct BarItemsTests {
             .graphics: ["text", "graph"], .storage: ["text", "bar"], .heat: ["text", "graph"],
             .battery: ["icon + %", "icon"], .bluetoothBatteries: ["icon + %", "icon"], .keepAwake: ["icon", "icon + time"], .power: ["icon"],
             .volume: ["icon", "icon + %", "output"], .keyboardLayout: ["code", "icon", "name"], .wifi: ["icon", "strength"], .displays: ["icon"],
-            .terminal: ["icon + name", "icon"], .askAI: ["icon + name", "icon"], .pill: ["text"], .capture: ["icon", "icon + name"], .modes: ["icons"], .clock: ["time", "date + time", "two zones"], .timer: ["countdown", "ring", "icon"], .extensions: ["text"],
+            .terminal: ["icon + name", "icon"], .askAI: ["icon + name", "icon"], .pill: ["text"], .capture: ["icon", "icon + name"], .modes: ["icons"], .clock: ["time", "date + time", "two zones"], .timer: ["countdown", "ring", "icon"], .notifications: ["icon"], .extensions: ["text"],
             .spacer: ["fixed", "flexible"], .divider: ["line"], .group: ["all in one"],
         ])
     }
@@ -114,7 +114,7 @@ struct BarItemsTests {
         var s = BarSettings.defaults
         s.move(.timer, to: 1)
         #expect(s.entries.map(\.kind).prefix(3) == [.pilot, .timer, .workspaces])
-        #expect(Set(s.entries.map(\.kind)) == Set(BarKind.allCases) && s.entries.count == 30)
+        #expect(Set(s.entries.map(\.kind)) == Set(BarKind.allCases) && s.entries.count == 31)
     }
 
     @Test("The user's saved readings carry over: CPU and Memory on as text in one group, Combined processes on, the rest off")
@@ -164,7 +164,7 @@ struct BarItemsTests {
     func twiceNamed() throws {
         let saved = #"{"standard":{"left":[{"module":"clock"},{"module":"workspaces"}],"centre":[],"right":[{"module":"clock"},{"module":"cpu"}]},"screens":{},"clock":"HH:mm"}"#
         let s = BarSettings.migrated(stats: nil, topBar: try JSONDecoder().decode(TopBarSettings.self, from: Data(saved.utf8)), pomodoroCountdown: nil)
-        #expect(s.entries.count == 30 && Set(s.entries.map(\.kind)) == Set(BarKind.allCases))
+        #expect(s.entries.count == 31 && Set(s.entries.map(\.kind)) == Set(BarKind.allCases))
         #expect(s.entries.firstIndex { $0.kind == .clock }! < s.entries.firstIndex { $0.kind == .workspaces }!)
     }
 
@@ -195,7 +195,7 @@ struct BarItemsTests {
         #expect(try JSONDecoder().decode(BarSettings.self, from: data) == s)
         let odd = #"{"entries":[{"kind":"cpu","on":true,"style":"dots","placement":"both","side":"right"},{"kind":"weather","on":true,"style":"icon","placement":"both","side":"right"}],"clock":"HH:mm","combineProcesses":false}"#
         let read = try JSONDecoder().decode(BarSettings.self, from: Data(odd.utf8))
-        #expect(read.entries.count == 30 && read.entries.first?.kind == .cpu && read.entry(.cpu).style == .text && !read.clockEvents)
+        #expect(read.entries.count == 31 && read.entries.first?.kind == .cpu && read.entry(.cpu).style == .text && !read.clockEvents)
         #expect(read.entries.dropFirst().allSatisfy { !$0.on || $0.kind == .pilot || $0.kind == .extensions || $0.kind.drop != nil } && read.entry(.extensions).on)
         #expect(read.entry(.terminal).on && read.entry(.askAI).on)
     }
@@ -236,7 +236,7 @@ struct BarItemsTests {
     @Test("The user's saved layout, from before the bar drops, loads whole and gains Terminal and Ask AI on, in the bar's middle before the clock (spec Bar drops T4)")
     func dropsJoinSavedLayout() throws {
         let s = try JSONDecoder().decode(BarSettings.self, from: Data(Self.svensItems.utf8))
-        #expect(s.entries.count == 30 && Set(s.entries.map(\.kind)) == Set(BarKind.allCases))
+        #expect(s.entries.count == 31 && Set(s.entries.map(\.kind)) == Set(BarKind.allCases))
         #expect(s.slots(in: .topBar, topBarOn: true, side: .centre).map(\.kinds) == [[.timer], [.terminal], [.askAI], [.clock]])
         #expect(s.entry(.terminal).style == .iconName && s.entry(.askAI).placement == .topBar)
         // Never in the macOS menu bar: the drops hang from the top bar. A click is the top bar's own (TopBarDropItem).
@@ -253,7 +253,7 @@ struct BarItemsTests {
     func clicks() {
         #expect(BarKind.allCases.filter { $0.click == .popover } == [.pilot, .workspaces, .focusedApp, .cpu, .memory, .network, .graphics, .storage, .heat,
                                                                       .battery, .bluetoothBatteries, .power, .volume, .keyboardLayout, .wifi, .displays, .modes,
-                                                                      .clock, .timer, .extensions, .group])
+                                                                      .clock, .timer, .notifications, .extensions, .group])
         #expect(BarKind.keepAwake.click == .toggleKeepAwake && !BarKind.allCases.contains { $0.click == .cycleLayout })
         // Capture opens its menu, and it alone.
         #expect(BarKind.allCases.filter { $0.click == .menu } == [.capture])

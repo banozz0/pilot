@@ -12,18 +12,52 @@ import PilotCore
 final class NotificationSettings {
     static let shared = NotificationSettings()
     static let enabledKey = "notifications.enabled", hideKey = "notifications.hideMacBanners"
+    static let showInKey = "notifications.showIn", layerKey = "notifications.layer"
+
+    /// Where they show (Sven, 2026-11-12): floating, the bell and cards on the desktop as they first shipped, or Pilot's top
+    /// bar, a bell item there and each card dropping under it. The top bar while it is off falls back to floating.
+    enum ShowIn: String, CaseIterable, Sendable {
+        case floating, topBar
+        var label: String { self == .floating ? "Floating" : "Top bar" }
+    }
+
+    /// Floating's layer: above every window, or below them on the desktop as a widget is. A new card shows above apps either
+    /// way; only the bell and the list rest below.
+    enum Layer: String, CaseIterable, Sendable {
+        case above, below
+        var label: String { self == .above ? "Above apps" : "Below apps" }
+    }
 
     var enabled: Bool { didSet { defaults.set(enabled, forKey: Self.enabledKey); PilotNotifications.shared.settingsChanged() } }
     /// macOS's own banners move off screen while Pilot's cards show. A second switch, off by default: it moves
     /// Notification Center's window, so the first look shows both.
     var hideMacBanners: Bool { didSet { defaults.set(hideMacBanners, forKey: Self.hideKey); PilotNotifications.shared.settingsChanged() } }
+    /// The panels follow these through observation (NotificationPanels.follow), so they need no call here. Top bar puts
+    /// the bar's bell item on, which joins a layout off as every new item does.
+    var showIn: ShowIn {
+        didSet {
+            defaults.set(showIn.rawValue, forKey: Self.showInKey)
+            if showIn == .topBar { BarItemsStore.shared.settings.set(.notifications, on: true) }
+        }
+    }
+    var layer: Layer { didSet { defaults.set(layer.rawValue, forKey: Self.layerKey) } }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         enabled = defaults.bool(forKey: Self.enabledKey)
         hideMacBanners = defaults.bool(forKey: Self.hideKey)
+        showIn = defaults.string(forKey: Self.showInKey).flatMap(ShowIn.init) ?? .floating
+        layer = defaults.string(forKey: Self.layerKey).flatMap(Layer.init) ?? .above
     }
+
+    /// Where they show now: the top bar only while Pilot's is on, else floating. The one rule the panels, the bar's bell
+    /// item, the page and `pilot status` read.
+    var placement: ShowIn { showIn == .topBar && topBarOn() ? .topBar : .floating }
+    /// Whether Pilot's top bar is on: the engine's; a render stands one in.
+    @ObservationIgnored var topBarOn: @MainActor () -> Bool = { Engine.shared?.topBar.isOn ?? false }
+    /// The top bar's bell item draws: they are on and show there.
+    var inBar: Bool { enabled && placement == .topBar }
 }
 
 /// Draws what the feed says: the panels in the app, a recording in the sandbox.
@@ -298,8 +332,7 @@ final class PilotNotifications {
     /// The bell's click and its action: the drawer, what arrived in memory only.
     func toggleDrawer() {
         guard active else { return presenter?.say("Notifications in Pilot are off: Pilot › Notifications") ?? () }
-        feed.markRead()
-        publish()
+        markRead()
         presenter?.toggleDrawer()
     }
 
@@ -309,6 +342,13 @@ final class PilotNotifications {
         feed.remove(id)
         publish()
         if live { press(.close, id: id) }
+    }
+
+    /// The top bar's list opened: what arrived counts as read, as the bell's drawer does.
+    func markRead() {
+        guard active, feed.unread > 0 else { return }
+        feed.markRead()
+        publish()
     }
 
     func clearDrawer() {
@@ -474,6 +514,7 @@ final class PilotNotifications {
         let timers = watchTimer == nil ? 0 : 1
         return .object([
             "on": .bool(settings.enabled), "hideMacBanners": .bool(settings.hideMacBanners),
+            "showIn": .string(settings.showIn.rawValue), "layer": .string(settings.layer.rawValue), "placement": .string(settings.placement.rawValue),
             "observing": .bool(attached), "pid": .number(Double(attachedPID)), "reattached": .number(Double(reattached)),
             "accessibility": .bool(AXIsProcessTrusted()), "timers": .number(Double(timers)), "workspaceObservers": .number(Double(workspaceWatch.count)),
             "hostFound": .bool(hostFound), "panelOpen": .bool(panelOpen), "hostParked": .bool(parkedFrom != nil), "sweeps": .number(Double(sweeps)),

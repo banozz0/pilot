@@ -42,6 +42,7 @@ struct BarPartsTests {
         i.timerCountdown = "18:42"
         i.timerLeft = 0.75
         i.extensionBars = [ExtensionBarFace(id: "ai", title: "AI", answer: Extension.BarAnswer(text: "AI 52%"))]
+        i.notifications = 3
         return i
     }
 

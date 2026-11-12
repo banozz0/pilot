@@ -1,7 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
-import PilotCore
+@testable import PilotCore
 import SwiftUI
 import Testing
 @testable import Pilot
@@ -82,7 +82,54 @@ struct TopBarFixesRenders {
     }
 
     /// The bar: TextEdit's menus in the centre, other apps on the right, a 160-point spacer and the clock.
-    static func bar(_ menuApps: MenuApps) async throws -> TopBarView {
+    /// Notifications in each placement (Sven, 2026-11-12): the top bar's bell item with three new, a card and the list
+    /// that drop under it; and floating, the cards above the bell bottom right. Above and Below apps draw alike offscreen
+    /// (only the window level differs), so one floating picture serves both. Layout and words only: glass is off.
+    @Test("Notifications in the top bar and floating", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func notifications() async throws {
+        let dir = try ClockRenders.dir("notifications-placement")
+        testApp()
+        let look = Look.shared, settings = NotificationSettings.shared, model = NotificationCardsModel.shared
+        let (glass, saved) = (look.glass, (settings.enabled, settings.showIn, settings.topBarOn))
+        look.glass = false
+        defer {
+            look.glass = glass
+            (settings.enabled, settings.showIn, settings.topBarOn) = saved
+            (model.cards, model.drawer, model.unread) = ([], [], 0)
+        }
+        settings.topBarOn = { true }
+        settings.enabled = true
+        settings.showIn = .topBar
+        let now = Date()
+        let entries = [("Messages", "Maya", "Dinner at eight? I booked the place by the harbour."), ("Calendar", "Standup", "In 5 minutes, Room 2")]
+            .enumerated().map { i, words in
+                NotificationEntry(NotificationRead(id: "r\(i)", kind: .banner, app: words.0, title: words.1, subtitle: "", body: words.2, actions: [], opensReply: false),
+                                  at: now.addingTimeInterval(Double(-90 * i)))
+            }
+        (model.cards, model.drawer, model.unread) = ([entries[0]], entries, 3)
+        let width: CGFloat = 1440, ground = Color(white: 0.2)
+
+        let bar = try await Self.bar(MenuApps(reader: MenuAppsTests.FakeExtras(), ownPid: 13), notifications: true).frame(width: width, height: 30)
+        let dropped = HStack(alignment: .top, spacing: 16) {
+            NotificationCardStack(model: model)
+            NotificationBarDrawer(model: model)
+        }
+        .padding(.trailing, 16).styled(.barPopovers).pilotTheme()
+        let topBar = VStack(alignment: .trailing, spacing: 8) { bar; dropped }.padding(.bottom, 16).frame(width: width).background(ground)
+        try writeRender(topBar, to: dir.appendingPathComponent("top-bar.png"), wait: 0.8)
+
+        settings.showIn = .floating
+        (model.cards, model.unread) = (entries, 3)
+        let floating = VStack(alignment: .trailing, spacing: NotificationPlacement.gap) {
+            NotificationCardStack(model: model)
+            NotificationBell(model: model) { _ in }
+        }
+        .padding(NotificationPlacement.margin).frame(width: width, height: 520, alignment: .bottomTrailing).background(ground)
+        .styled(.barPopovers).pilotTheme()
+        try writeRender(floating, to: dir.appendingPathComponent("floating.png"), wait: 0.8)
+    }
+
+    static func bar(_ menuApps: MenuApps, notifications: Bool = false) async throws -> TopBarView {
         let menus = AppMenus(reader: AppMenusTests.fake(), front: { AppMenusTests.textEdit }, center: NotificationCenter())
         let readings = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: Look(inputSources: SetupKeepAwakeTests.FakeSources()),
                                    menuApps: menuApps, appMenus: menus, readBattery: { nil }, readWiFi: { nil }, clock: { ClockRenders.now },
@@ -100,6 +147,7 @@ struct TopBarFixesRenders {
         store.settings.place(.appMenus, on: .centre, at: 0)
         store.settings.place(.clock, on: .right, at: .max)
         store.settings.setSpacer(width: 160)
+        if notifications { store.settings.set(.notifications, on: true) }
         readings.hold(.appMenus)
         defer { readings.release(.appMenus) }
         await menus.reading?.value
