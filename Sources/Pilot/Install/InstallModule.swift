@@ -124,15 +124,17 @@ enum InstallModule {
 
     private static func trashAfterYes(_ name: String, _ location: URL, confirm: Confirm, trash: @escaping @MainActor (URL) throws -> URL,
                                       then: @escaping @MainActor () -> Void = {}) {
+        // An App Store app is root's: the plain move is refused, so macOS asks for an administrator as Finder does (AdminTrash).
         confirm("Remove \(name)", "Move \(location.lastPathComponent) to the Trash") {
-            do {
-                let trashed = try trash(location)
-                ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
-            } catch {
-                ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                HUD.tip("\(name) could not go to the Trash")
+            AdminTrash.trash(location, plain: trash) { result in
+                switch result {
+                case .success(let trashed): ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
+                case .failure(let error):
+                    ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
+                    HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
+                }
+                then()
             }
-            then()
         }
     }
 

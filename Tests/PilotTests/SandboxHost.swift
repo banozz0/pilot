@@ -33,6 +33,8 @@ struct SandboxHost {
             AISettings.shared.provider = picks.first.flatMap(AIProvider.init(rawValue:)) ?? .claudeCode
             AISettings.shared.fallback = picks.count > 1 ? AIProvider(rawValue: picks[1]) : nil
         }
+        // `pilot files open` makes its viewer here but never puts it on Sven's screen or activates Pilot.
+        ImageViewer.onScreen = false
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores

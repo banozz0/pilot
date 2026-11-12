@@ -31,14 +31,17 @@ enum FileActions {
                       trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash) {
         let url = URL(filePath: path)
         confirm("Move \(url.lastPathComponent) to the Trash", path) {
-            do {
-                let trashed = try trash(url)
-                // A recording's copy with its pointer drawn in goes with it (Q821), off the main thread: it is large.
-                Task.detached(priority: .utility) { RecordingHandout.forget([url]) }
-                flog.notice("trashed \(path, privacy: .public) to \(trashed.path, privacy: .public)")
-            } catch {
-                flog.error("\(path, privacy: .public) not trashed: \(error.localizedDescription, privacy: .public)")
-                HUD.tip("\(url.lastPathComponent) could not go to the Trash")
+            // A file root owns asks for an administrator, as Finder does (AdminTrash).
+            AdminTrash.trash(url, plain: trash) { result in
+                switch result {
+                case .success(let trashed):
+                    // A recording's copy with its pointer drawn in goes with it (Q821), off the main thread: it is large.
+                    Task.detached(priority: .utility) { RecordingHandout.forget([url]) }
+                    flog.notice("trashed \(path, privacy: .public) to \(trashed.path, privacy: .public)")
+                case .failure(let error):
+                    flog.error("\(path, privacy: .public) not trashed: \(error.localizedDescription, privacy: .public)")
+                    HUD.tip(AdminTrash.said(error) ?? "\(url.lastPathComponent) could not go to the Trash")
+                }
             }
         }
     }

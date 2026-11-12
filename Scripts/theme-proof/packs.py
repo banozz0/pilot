@@ -7,16 +7,9 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import struct
 import time
 
-import hashlib
-
-WIDE = {name: '-wide.heic' for name in ['folio','wisteria','void','garnet','porcelain','toybox-night','toybox']}
-def sips_size(path):
-    out = subprocess.run(['sips','-g','pixelWidth','-g','pixelHeight',str(path)],capture_output=True,text=True,check=True).stdout.split()
-    return int(out[-3]), int(out[-1])
 
 spec = importlib.util.spec_from_file_location('theme_obsidian', Path(__file__).with_name('obsidian.py'))
 obsidian = importlib.util.module_from_spec(spec)
@@ -24,15 +17,12 @@ spec.loader.exec_module(obsidian)
 life = obsidian.life
 EVIDENCE = Path(os.environ.get('PILOT_THEME_PROOF_EVIDENCE') or Path.home() / '.local/state/spec' / 'theme-system/T5/p')
 life.EVIDENCE = EVIDENCE
-# The wallpaper picks (Sven Q45-Q47) are a design file outside the repo: design/theme-packs/wallpaper-matches.json in Pilot's
-# project notes. PROVENANCE names each source by file name only, so the repo carries no one's folders.
-MATCHES = os.environ.get('PILOT_THEME_PACK_MATCHES')   # checked in run(): editor, custom and agents load this file
 
 
 class Fixture(obsidian.Fixture):
     def __init__(self, label='p'):
         super().__init__(label)
-        shutil.copytree(life.REPO/'Packaging/ThemePacks', self.root/'factory')
+        life.factory_packs(self.root/'factory')
         (self.root/'cursors').mkdir()
         shutil.copy2(life.REPO/'Packaging/Cursors/cursors.json',self.root/'cursors/cursors.json')
         self.wall = self.root/'desktop.json'
@@ -74,7 +64,6 @@ class Fixture(obsidian.Fixture):
 
 
 def run(seam_only=False, fixes_only=False):
-    if not MATCHES: raise SystemExit('set PILOT_THEME_PACK_MATCHES to wallpaper-matches.json')
     EVIDENCE.mkdir(parents=True,exist_ok=True)
     fixtures=[]; checks=[]; refusals=[]
     def fixture(label='p'):
@@ -120,17 +109,10 @@ def run(seam_only=False, fixes_only=False):
         for verb in ['set','run','wallpaper','system','install','ai']: f.call(verb,ok=False)
         assert f.call('theme','status')['effects']=='recording only'
         assert f.call('theme','status')['wallpaper']==f.desktop
-        # Sven Q45-Q47: each pick is its pack's wide wallpaper at the source's own size, HEIC, its source and unchecked licence
-        # named; Celadon, Phosphor and every tall image keep the gradient.
-        picks=json.loads(Path(MATCHES).read_text())['matches']
-        for name,pick in picks.items():
-            folder=f.root/'factory'/name; files=sorted(x.name for x in (folder/'wallpapers').iterdir())
-            provenance=(folder/'PROVENANCE.md').read_text()
-            if pick is None: assert files==[name+'-tall.png',name+'-wide.png'] and 'Source file:' not in provenance,(name,files); continue
-            wide=folder/'wallpapers'/(name+'-wide.heic'); assert files==[name+'-tall.png',wide.name],(name,files)
-            assert sips_size(wide)==sips_size(Path(pick[0])) and wide.read_bytes()[4:12] in (b'ftypheic',b'ftypheix'),(name,sips_size(wide))
-            assert 'Source file: '+Path(pick[0]).name in provenance and 'Licence unverified: check before a public release.' in provenance,name
-            assert hashlib.sha256(wide.read_bytes()).hexdigest() in provenance,name
+        # T35: Pilot.app ships every pack palette-only, its pictures in the catalogue's copy (the fixture's are made up).
+        for shipped in sorted((life.REPO/'Packaging/ThemePacks').iterdir()):
+            assert json.loads((shipped/'manifest.json').read_text())['wallpapers']==[] and not (shipped/'wallpapers').exists(),shipped.name
+            assert (life.REPO/'catalogue/themes'/shipped.name/'wallpapers').is_dir(),shipped.name
         before=f.snapshot()
         for name in ['tokyo-night','dracula']:
             result=f.call('theme','check',name)
@@ -142,9 +124,9 @@ def run(seam_only=False, fixes_only=False):
         assert f.snapshot()==before
         f.controls(allow='no'); f.call('theme','apply',f.plan('tokyo-night'),ok=False)
         assert f.snapshot()==before; f.controls()
-        passed('isolation before Apply: explicit fake display/workspace state and recording callbacks; private socket/core-theme registry; no Engine/settings/desktop APIs; list/check/plan/denial read-only; picked wide wallpapers ship at their own size as HEIC, source and unchecked licence named')
+        passed('isolation before Apply: explicit fake display/workspace state and recording callbacks; private socket/core-theme registry; no Engine/settings/desktop APIs; list/check/plan/denial read-only; the app ships its packs palette-only, their pictures in the catalogue')
         if seam_only: return
-        f.stop(); review_regressions(fixture, passed)
+        f.stop(); review_regressions(fixture, passed); shipped_pictures(passed)
         if fixes_only: return
         f.start()
 
@@ -191,7 +173,7 @@ def run(seam_only=False, fixes_only=False):
             for d in state['displays']:
                 original=next(x for x in f.desktop['displays'] if x['id']==d['id'])
                 if d['pinned']: assert d==original
-                else: assert d['image'].endswith(name+('-tall.png' if d['portrait'] else WIDE.get(name,'-wide.png')))
+                else: assert d['image'].endswith(name+('-tall.png' if d['portrait'] else ('-wide.heic' if name in life.HEIC_WIDE else '-wide.png')))
             ledger=own(f)
             assert ledger['wallpapers'][0]['original']=={'sources':{'_0':f.desktop['sources']}}
             f.checkpoint(name)
@@ -296,7 +278,7 @@ def run(seam_only=False, fixes_only=False):
                     elif kind=='image': state['displays'][0]['image']=str(f.root/'later.png'); f.write_wall(state)
                     elif kind=='preferences': state['preferences']['fitShape']=False; f.write_wall(state)
                     elif kind=='bindings': f.manifest.write_text(f.manifest.read_text()+' ')
-                    elif kind=='asset': (f.root/'factory/tokyo-night/wallpapers/tokyo-night-wide.png').write_bytes(life.WALLPAPER_A)
+                    elif kind=='asset': (f.root/'factory/tokyo-night/wallpapers/tokyo-night-wide.png').write_bytes(life.WALLPAPER_B)  # not the fixture's own picture
                     elif kind=='added': (f.root/'factory/tokyo-night/wallpapers/new.png').write_bytes(life.WALLPAPER_A)
                     else: (f.root/'factory/tokyo-night/wallpapers/tokyo-night-wide.png').unlink()
                 if during: held(f,edit,plan)
@@ -618,3 +600,77 @@ def review_regressions(fixture, passed):
         assert f.snapshot()==before;f.checkpoint('picker-'+accent[1:])
     f.restore();assert f.call('theme','fixture-colour','theme')==stock;f.stop()
     passed('R5 actual compiled picker resolver/segment selection seeds Custom from applied and edited same-ID pack, matching renderer; explicit custom and no-pack stock fallback survive; no view/settings/desktop construction')
+
+
+def shipped_pictures(passed):
+    """T35 and T20 review 3: Pilot.app's own packs ship palette-only (the repo's Packaging/ThemePacks as they are) and a
+    plan of one fetches its pictures from a local copy of the repo's catalogue/; with the catalogue gone, a pack never
+    fetched keeps every screen as it is with a plain note, and a second picture-less pack switching nothing else is
+    still applied and selected, its held claims carried, never answered "unchanged"."""
+    def host(label, factory, catalogue=None):
+        f=life.Fixture(label,ghostty=False);(f.root/'app').mkdir()   # Ghostty bound to a folder with no config of its own
+        shutil.copytree(life.REPO/'Packaging/ThemePacks',f.root/'factory') if factory is None else factory(f.root/'factory')
+        image=f.root/'baseline.png';image.write_bytes(life.WALLPAPER_A);f.wall=f.root/'desktop.json'
+        f.wall.write_text(json.dumps(dict(sources=[str(image)],preferences=dict(order='name',seed='816',fitShape=True),
+            displays=[dict(id='wide',workspace='1',portrait=False,image=str(image),pinned=False),dict(id='tall',workspace='2',portrait=True,image=str(image),pinned=False)])))
+        f.settings.update(factoryPacks=str(f.root/'factory'),wallpaperState=str(f.wall),wallpaperBindings=['wide','tall'])
+        if catalogue:
+            (f.root/'catalogue/themes').mkdir(parents=True);shutil.copy2(life.REPO/'catalogue/index.json',f.root/'catalogue/index.json')
+            for name in catalogue: shutil.copytree(life.REPO/'catalogue/themes'/name,f.root/'catalogue/themes'/name)
+            f.settings['catalogue']=str(f.root/'catalogue')
+        f.manifest.write_text(json.dumps(f.settings));f.start()
+        for app in ['zed','obsidian']: f.call('theme','opt-out',app)
+        return f
+    def screens(f): return {d['id']:d['image'] for d in json.loads(f.wall.read_text())['displays']}
+    def ledger(f): return json.loads((f.root/'state/ownership.json').read_text())
+
+    f=host('shipped',None,['akane'])
+    try:
+        answer=f.apply('akane');assert answer['status']=='applied' and 'Wallpaper on Display 1' in answer['changes'],answer
+        fetched=f.root/'wallpapers/akane/wallpapers'
+        assert sorted(x.name for x in fetched.iterdir())==sorted(x.name for x in (life.REPO/'catalogue/themes/akane/wallpapers').iterdir())
+        shown=screens(f);held=ledger(f)['wallpapers'];assert shown=={'wide':str(fetched/'akane-madder-sun.heic'),'tall':str(fetched/'akane-tall.heic')},shown
+        shutil.rmtree(f.root/'catalogue')   # offline: the catalogue can't be read
+        answer=f.apply('tokyo-night');note=answer['warning'][answer['warning'].find('Wallpaper kept'):]
+        assert answer['status']=='applied' and answer['wallpaper']=='unchanged' and screens(f)==shown,answer
+        assert note.startswith("Wallpaper kept; its colours apply: Tokyo Night's wallpapers could not be downloaded. Pilot's catalogue could not be reached:"),note
+        assert ledger(f)['selected']['id']=='tokyo-night' and ledger(f)['wallpapers']==held
+        assert not (f.root/'wallpapers/tokyo-night').exists()
+        print('NOTE '+note,flush=True)
+    finally: f.stop()
+    passed("shipped packs: the app's palette-only Akane fetches its catalogue pictures into ThemeSystem/wallpapers on Apply and shows them; offline, Tokyo Night (never fetched) applies its colours, every screen kept, with the plain note")
+
+    def unbound(folder):   # two shipped packs with no app to write, so a switch changes nothing but the selection
+        for name,pictures in [('akane',True),('tokyo-night',False)]:
+            shutil.copytree(life.REPO/'Packaging/ThemePacks'/name,folder/name);manifest=json.loads((folder/name/'manifest.json').read_text())
+            if pictures:
+                (folder/name/'wallpapers').mkdir();(folder/name/'wallpapers/wide.png').write_bytes(life.WALLPAPER_A)
+                (folder/name/'wallpapers/akane-tall.png').write_bytes(life.WALLPAPER_B);manifest['wallpapers']=['wallpapers']
+            (folder/name/'manifest.json').write_text(json.dumps(dict(manifest,adapters={})))
+    f=host('held',unbound)
+    try:
+        assert f.apply('akane')['status']=='applied' and ledger(f)['claims']==[]
+        held=ledger(f)['wallpapers'];shown=screens(f)
+        answer=f.apply('tokyo-night')
+        assert answer['status']=='applied',answer
+        assert ledger(f)['selected']['id']=='tokyo-night' and f.call('theme','status')['selected']['id']=='tokyo-night'
+        assert ledger(f)['wallpapers']==held and screens(f)==shown
+        assert f.restore()['status']=='restored' and set(screens(f).values())=={str(f.root/'baseline.png')}
+    finally: f.stop()
+    passed('T20 review 3: a second picture-less shipped pack with nothing else to change applies and is selected, its held wallpaper claims carried; Restore still puts the baseline back')
+
+    # Build 2388's field report: Retro 82 applied while the bundle held its gradients, so the screens point into the
+    # bundle; an update removes those files (the factory folder swapped for today's palette-only packs, as Sparkle swaps
+    # Pilot.app). Applying Retro 82 again fetches and shows the catalogue's pictures, never the missing bundle file.
+    f=host('updated',life.factory_packs,['retro-82'])
+    try:
+        assert f.apply('retro-82')['status']=='applied'
+        old=screens(f);assert all('/factory/retro-82/wallpapers/' in x for x in old.values()),old
+        f.stop();shutil.rmtree(f.root/'factory');shutil.copytree(life.REPO/'Packaging/ThemePacks',f.root/'factory')
+        assert not any(Path(x).exists() for x in old.values());f.start()
+        answer=f.apply('retro-82');assert answer['status']=='applied' and 'Wallpaper on Display 1' in answer['changes'],answer
+        fetched=f.root/'wallpapers/retro-82/wallpapers';shown=screens(f)
+        assert shown=={'wide':str(fetched/'retro-82-gateway.heic'),'tall':str(fetched/'retro-82-tall.heic')} and all(Path(x).exists() for x in shown.values()),shown
+        assert f.restore()['status']=='restored' and set(screens(f).values())=={str(f.root/'baseline.png')}
+    finally: f.stop()
+    passed('updated from a bundle with pictures: Retro 82 applied from the bundled files, those files gone with the update, applied again shows the catalogue copy fetched; Restore puts the baseline back')

@@ -1732,7 +1732,7 @@ final class ThemeCoordinator {
     /// ledger write after them run back on it.
     private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?) async throws -> JSONValue {
         let (oldFile, old) = try ledger()
-        if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
+        if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
         try validateComposition(plan.mutations, claims: old.claims)
         var next = old; next.epoch += 1; next.selected = plan.selection; next.appearance = ownership
         next.claims = plan.packID == nil ? [] : plan.mutations.filter { $0.release != true }.map { change in

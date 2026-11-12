@@ -97,10 +97,11 @@ extension ControlVerbs {
                        "from": "a word in where the file came from: the site (github.com), else the app that saved it (whatsapp)"]
         register(ControlVerb("files", help: "Finds files by name as the menu's Files view does, best first (at most 20); with no words, the index's state. "
                              + "copy, move, rename, trash and new-folder change files after Allow, and undo puts back the last of them (Pilot Files); "
-                             + "each is refused, changing nothing, when one item's undo would be too long to ask.",
+                             + "each is refused, changing nothing, when one item's undo would be too long to ask; "
+                             + "open shows pictures in Pilot's image viewer.",
                              usage: "pilot files <words…> [--kind <kind>] [--in <place>] [--when <when>] [--from <source>] [--hidden] | files"
                                  + " | files copy|move <item…> <folder> [--keep-both|--replace] | files rename <item> <name> | files trash <item…>"
-                                 + " | files new-folder <folder> [<name>] | files undo   (files -- <words…> searches for those words)",
+                                 + " | files new-folder <folder> [<name>] | files undo | files open <image…>   (files -- <words…> searches for those words)",
                              flags: [.init("kind", help: filters["kind"]!), .init("in", help: filters["in"]!), .init("when", help: filters["when"]!),
                                      .init("from", help: filters["from"]!),
                                      .init("hidden", help: "dot names and bundle insides too, as Show hidden and system files", takesValue: false),
@@ -114,7 +115,10 @@ extension ControlVerbs {
                              detail: { word in
                                  filters[word].map { "--\(word) (or \(word):<value> among the words): \($0)" }
                                      ?? Self.fileOperations[word].map { "files \(word): \($0)" }
+                                     ?? (word == "open" ? "files open: \(Self.openHelp)" : nil)
                              }) { call throws(ControlError) in
+            // Open shows a picture and writes nothing, so it never asks Allow (ADR 0013).
+            if call.words.first == "open" { return try await Self.openImage(call) }
             // An operation is the first word as typed; after -- it is a search word.
             if let first = call.words.first, Self.fileOperations[first] != nil {
                 return try await Self.operate(first, call, files)
@@ -148,6 +152,38 @@ extension ControlVerbs {
                          "edited": file.edited.map { .string($0.ISO8601Format()) } ?? .null, "from": file.from.map(JSONValue.string) ?? .null])
             })])
         })
+    }
+
+    static let openHelp = "pilot files open <image…>: shows PNG, JPEG, HEIC, GIF, WebP, TIFF or BMP pictures in Pilot's image viewer, "
+        + "as a Finder open with Pilot does: one window, stepping through the pictures given when there are several, else the "
+        + "folder's; answers the window count, the pictures it steps through and the size the first was read at; anything else is refused"
+
+    /// `pilot files open <image…>`: the pictures in one image viewer (Q158, Q161), listed and the first read before the
+    /// answer, which says how many viewers are open, the pictures it steps through, its size and the size it was read at
+    /// (the screen's, never the whole file).
+    private static func openImage(_ call: ControlCall) async throws(ControlError) -> JSONValue {
+        let words = Array(call.words.dropFirst())
+        guard !words.isEmpty else { throw ControlError(.badRequest, "usage: pilot files open <image…>") }
+        let cwd = call.cwd.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        var urls: [URL] = []
+        for word in words {
+            let url = URL(fileURLWithPath: (word as NSString).expandingTildeInPath, relativeTo: cwd).absoluteURL.standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else { throw ControlError(.badValue, "no file at \(url.path)") }
+            guard ViewerImages.viewable(url) else {
+                throw ControlError(.badValue, "\(url.lastPathComponent) is not a picture the viewer opens (PNG, JPEG, HEIC, GIF, WebP, TIFF or BMP)")
+            }
+            urls.append(url)
+        }
+        guard let model = ImageViewer.show(urls) else { throw ControlError(.badValue, "Pilot cannot read \(urls[0].lastPathComponent)") }
+        await model.settled()
+        if let problem = model.problem { throw ControlError(.badValue, problem) }
+        guard let image = model.image else { throw ControlError(.timeout, "\(model.file.lastPathComponent) was still being read") }
+        return .object(["windows": .number(Double(ImageViewer.openCount)), "opened": .string(model.file.path),
+                        "index": .number(Double(model.index + 1)), "of": .number(Double(model.files.count)),
+                        "steps": .array(model.files.map { .string($0.lastPathComponent) }),
+                        "pixels": .string("\(Int(model.pixels.width))x\(Int(model.pixels.height))"),
+                        "shown": .string("\(image.width)x\(image.height)"), "screenLongest": .number(Double(model.longest)),
+                        "frames": .number(Double(model.frames)), "zoom": .number((model.zoom * 100).rounded() / 100)])
     }
 
     /// The subcommands that write (Pilot Files' FileOps, spec pilot-1.1 T6), each with what it does.

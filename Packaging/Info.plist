@@ -31,6 +31,14 @@
     <key>LSHandlerRank</key><string>Alternate</string>
     <key>LSItemContentTypes</key><array><string>public.plain-text</string></array>
     <key>NSDocumentClass</key><string>PilotTextDocument</string>
+  </dict><dict>
+    <!-- Pilot's image viewer (Q158): a Viewer at Alternate rank, so it shows in Open With and Apps › Open with's Images
+         pickers and never takes a type by itself. No document class: AppDelegate routes the files to ImageViewer. -->
+    <key>CFBundleTypeName</key><string>Image</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>public.png</string><string>public.jpeg</string><string>public.heic</string>
+      <string>com.compuserve.gif</string><string>org.webmproject.webp</string><string>public.tiff</string><string>com.microsoft.bmp</string></array>
   </dict></array>
   <key>LSMinimumSystemVersion</key><string>27.0</string>
   <key>NSHighResolutionCapable</key><true/>

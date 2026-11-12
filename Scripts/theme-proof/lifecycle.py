@@ -30,6 +30,28 @@ def digest(path):
 # Two decodable image payloads: stale-asset cases must first be valid packs.
 WALLPAPER_A = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR42mOQdEwBIgAEowF9QIvmEgAAAABJRU5ErkJggg==')
 WALLPAPER_B = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAIAAAAW4yFwAAAADklEQVR42mMIEIliAGIABeQBfbSeD6oAAAAASUVORK5CYII=')
+# The packs whose wide picture Pilot.app bundled as HEIC until public-repo spec T35 (the rest were PNG).
+HEIC_WIDE = {'folio', 'wisteria', 'void', 'garnet', 'porcelain', 'toybox-night', 'toybox'}
+_HEIC = None
+
+
+def factory_packs(dest):
+    """Pilot.app's own packs as a fixture's built-in ones, pictures and all. The app ships them palette-only since T35
+    (Apply downloads their wallpapers from the catalogue), so each copy gets the two tiny pictures its bundle used to
+    hold, named as they were: <id>-wide (HEIC for HEIC_WIDE) and <id>-tall.png, its manifest naming the folder."""
+    global _HEIC
+    shutil.copytree(REPO / 'Packaging/ThemePacks', dest)
+    if _HEIC is None:   # WALLPAPER_A as HEIC, made once a run
+        scratch = dest / '.wide.png'; scratch.write_bytes(WALLPAPER_A)
+        subprocess.run(['sips', '-s', 'format', 'heic', str(scratch), '--out', str(scratch.with_suffix('.heic'))], check=True, capture_output=True)
+        _HEIC = scratch.with_suffix('.heic').read_bytes(); scratch.unlink(); scratch.with_suffix('.heic').unlink()
+    for manifest in sorted(dest.glob('*/manifest.json')):
+        pack, folder = json.loads(manifest.read_text()), manifest.parent / 'wallpapers'
+        folder.mkdir()
+        heic = pack['id'] in HEIC_WIDE
+        (folder / (pack['id'] + ('-wide.heic' if heic else '-wide.png'))).write_bytes(_HEIC if heic else WALLPAPER_A)
+        (folder / (pack['id'] + '-tall.png')).write_bytes(WALLPAPER_B)
+        manifest.write_text(json.dumps(dict(pack, wallpapers=['wallpapers']), indent=2) + '\n')
 
 
 class Fixture:
