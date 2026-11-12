@@ -119,15 +119,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pilot://import?pack=…|file=… opens Export and import with that file's binds to preview (story 58);
     /// pilot://bar?move=cpu&side=left&index=2, ?add=… or ?remove=… edits the top bar as the Menu bar page's strip does,
     /// ?edit=1 opens that page; no link token needed: it only changes bar.items (BarRoute, card agent-bo-95423017).
+    /// pilot://view?file=<path>&token=… opens a picture in the image viewer, as `pilot files open` does (the token always:
+    /// a page must not put Sven's pictures on his screen).
     /// A .txt or .md file (Finder's Open With, a default Sven picked, a drop on the Dock icon) opens in its own window
-    /// (TextWindows, T49).
+    /// (TextWindows, T49); a PNG, JPEG, HEIC, GIF, WebP, TIFF or BMP in the image viewer (ImageViewer, Q158).
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if url.isFileURL {
-                if TextWindows.open(url) == nil { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
+                let opened = ViewerImages.viewable(url) ? ImageViewer.show(url) != nil : TextWindows.open(url) != nil
+                if !opened { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
                 continue
             }
             switch url.host {
+            case "view":
+                guard LinkToken.standard.matches(url.queryValue("token")), let path = url.queryValue("file") else {
+                    log.error("view: no token or file in \(LinkToken.redact(url.absoluteString), privacy: .private)")
+                    continue
+                }
+                if ImageViewer.show(URL(fileURLWithPath: (path as NSString).expandingTildeInPath)) == nil { HUD.tip("Pilot cannot show that picture.") }
             // `&tab=page` with `extension=<id>` opens that extension's page (story 161).
             case "open" where url.queryValue("tab") == "page" && url.queryValue("extension") != nil:
                 AppWindowController.shared.openExtensionPage(url.queryValue("extension")!)

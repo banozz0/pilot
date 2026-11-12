@@ -486,6 +486,8 @@ struct StepBadge: View {
 struct EditorHint: View {
     @Environment(\.style) private var style
     let text: String
+    /// Undo after the line, as the image viewer's Move to Trash leaves it.
+    var undo: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -494,6 +496,7 @@ struct EditorHint: View {
                 else { InstrumentKey(text: "⌘"); InstrumentKey(text: "S") }
             }
             Text(text).styleText(\.strong).foregroundStyle(style.color(\.text)).padding(.leading, 4)
+            if let undo { Button("Undo", action: undo).buttonStyle(.pilot).help("Put it back  ⌘Z").padding(.leading, 6) }
         }
         .padding(.horizontal, 10).frame(height: style.kind == .toybox ? 38 : 32)
         .background { RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous).fill(style.color(\.panel)) }
@@ -625,16 +628,16 @@ extension View {
 /// The footer's zoom beside the size (Sven, Q281): zoom out, the capture's zoom in per cent of its actual size, zoom in,
 /// on the size chip's face. The buttons zoom about the middle of the view, as ⌘− and ⌘+ do; a click on the per cent is
 /// actual size, 100 % (Sven on build 67, P46).
-struct ZoomControl: View {
+struct ZoomControl<Model: ZoomSteps>: View {
     @Environment(\.style) private var style
-    let model: EditorModel
+    let model: Model
     let font: Font
 
     var body: some View {
         let percent = Int((model.zoom * 100).rounded())
         HStack(spacing: 0) {
             step("minus.magnifyingglass", label: "Zoom out", key: "⌘−", on: model.canZoomOut, run: model.zoomOut)
-            Button { model.zoom(to: 1) } label: {
+            Button { model.actualSize() } label: {
                 Text(verbatim: "\(percent) %").font(font).foregroundStyle(style.color(\.text2)).monospacedDigit()
                     .lineLimit(1).fixedSize().frame(minWidth: 38).frame(maxHeight: .infinity).contentShape(.rect)
             }
@@ -653,6 +656,48 @@ struct ZoomControl: View {
         .disabled(!on).opacity(on ? 1 : 0.35)
     }
 }
+
+/// What the footer's zoom, the keys and a pinch or scroll drive: the capture editor's and the image viewer's zoom, on one
+/// 25 % grid (EditorLayout.zoomStep) up to EditorLayout.zoomMost.
+@MainActor
+protocol ZoomSteps: AnyObject {
+    var zoom: CGFloat { get }
+    /// The room the picture sits on, in the window's points from its top left.
+    var room: CGRect { get }
+    var canZoomIn: Bool { get }
+    var canZoomOut: Bool { get }
+    /// Zooms to `z`, keeping what is under `anchor` (a point in the room; its centre when nil) where it is.
+    func zoom(to z: CGFloat, about anchor: CGPoint?)
+    func pan(by d: CGSize)
+}
+
+extension ZoomSteps {
+    /// The next 25 % up or down from any zoom: a fitted 18 % goes to 25 %, and 60 % down to 50 %.
+    func zoomIn() { zoom(to: (((zoom + 0.001) / EditorLayout.zoomStep).rounded(.down) + 1) * EditorLayout.zoomStep, about: nil) }
+    func zoomOut() { zoom(to: (((zoom - 0.001) / EditorLayout.zoomStep).rounded(.up) - 1) * EditorLayout.zoomStep, about: nil) }
+    /// Actual size, 100 %.
+    func actualSize() { zoom(to: 1, about: nil) }
+
+    /// A pinch or scroll at `at` (the window's points from its top left): a pinch and ⌘-scroll zoom about the pointer, a
+    /// plain scroll pans; false off the room, so the event goes on to the window.
+    func zoom(_ event: NSEvent, at: CGPoint) -> Bool {
+        let p = CGPoint(x: at.x - room.minX, y: at.y - room.minY)
+        guard CGRect(origin: .zero, size: room.size).contains(p) else { return false }
+        // A mouse wheel's deltas are lines, a trackpad's points.
+        let k: CGFloat = event.type == .scrollWheel && !event.hasPreciseScrollingDeltas ? 10 : 1
+        if event.type == .magnify {
+            zoom(to: zoom * (1 + event.magnification), about: p)
+        } else if event.modifierFlags.contains(.command) {
+            zoom(to: zoom * exp(event.scrollingDeltaY * k / 100), about: p)
+        } else {
+            pan(by: CGSize(width: event.scrollingDeltaX * k, height: event.scrollingDeltaY * k))
+        }
+        return true
+    }
+}
+
+extension EditorModel: ZoomSteps {}
+extension ImageViewerModel: ZoomSteps {}
 
 /// The top bar's Upscale: the shared settings, Upscale, and Cancel that stops a run.
 struct UpscalePopover: View {

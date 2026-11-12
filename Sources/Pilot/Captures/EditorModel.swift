@@ -1101,15 +1101,12 @@ final class EditorModel {
     /// The sunken ground the capture sits on, in the window's points from its top left; the view sets it.
     private(set) var room: CGRect = .zero
     /// Screen points a capture point: `fit` as the editor opens, then what ⌘+, ⌘−, ⌘0, the footer's buttons and its
-    /// per cent, a pinch or ⌘-scroll pick, from `fit` to `maxZoom`.
+    /// per cent, a pinch or ⌘-scroll pick, from `fit` to `EditorLayout.zoomMost`.
     private(set) var zoom: CGFloat = 1
     /// The capture's top left in the room: centred on an axis where it fits, else wherever scrolling or zooming put it.
     private(set) var origin: CGPoint = .zero
     /// The zoom follows the room while it is the fit.
     @ObservationIgnored private var fitted = true
-    static let maxZoom: CGFloat = 8
-    /// The keys' and buttons' grid, 25 % a step (Sven on build 67, P46); `fit` is the bottom step.
-    static let zoomStep: CGFloat = 0.25
 
     /// The zoom that shows the whole capture inside the room's margin and clear of the tool rail on either side (so it
     /// stays centred), never past actual size.
@@ -1125,7 +1122,7 @@ final class EditorModel {
         return min(fit, EditorLayout.fit(CGSize(width: w, height: h), inside: fitRoom))
     }
 
-    var canZoomIn: Bool { zoom < Self.maxZoom - 0.001 }
+    var canZoomIn: Bool { zoom < EditorLayout.zoomMost - 0.001 }
     var canZoomOut: Bool { zoom > least + 0.001 }
 
     func setRoom(_ frame: CGRect) {
@@ -1134,20 +1131,17 @@ final class EditorModel {
         zoom(to: fitted ? fit : zoom)
     }
 
-    /// Zooms to `z`, held between `fit` and `maxZoom`, keeping the capture under `anchor` (a point in the room) where it
+    /// Zooms to `z`, held between `fit` and `EditorLayout.zoomMost`, keeping the capture under `anchor` (a point in the room) where it
     /// is: the pointer for a pinch or ⌘-scroll, the room's centre for the keys and buttons.
     func zoom(to z: CGFloat, about anchor: CGPoint? = nil) {
         let a = anchor ?? CGPoint(x: room.width / 2, y: room.height / 2), low = least
-        let next = min(Self.maxZoom, max(low, z)), k = next / zoom
+        let next = min(EditorLayout.zoomMost, max(low, z)), k = next / zoom
         fitted = next < fit + 0.001
         // A pinch or scroll past either end writes nothing, so the canvas does not redraw for it.
         if next != zoom { zoom = next }
         move(to: CGPoint(x: a.x - (a.x - origin.x) * k, y: a.y - (a.y - origin.y) * k))
     }
 
-    /// The next 25 % up or down from any zoom: a fitted 18 % goes to 25 %, and 60 % down to 50 %.
-    func zoomIn() { zoom(to: (((zoom + 0.001) / Self.zoomStep).rounded(.down) + 1) * Self.zoomStep) }
-    func zoomOut() { zoom(to: (((zoom - 0.001) / Self.zoomStep).rounded(.up) - 1) * Self.zoomStep) }
 
     /// A plain scroll moves the capture by `d` while it is larger than the room; one that fits stays centred.
     func pan(by d: CGSize) { move(to: CGPoint(x: origin.x + d.width, y: origin.y + d.height)) }
@@ -1155,11 +1149,7 @@ final class EditorModel {
     /// The capture's top left to `o`, kept so the capture covers the room on each axis it is larger than and is centred
     /// on each it fits; a move that changes nothing writes nothing.
     private func move(to o: CGPoint) {
-        func axis(_ v: CGFloat, _ length: CGFloat, _ room: CGFloat) -> CGFloat {
-            length <= room ? (room - length) / 2 : min(0, max(room - length, v))
-        }
-        let s = stage.size
-        let next = CGPoint(x: axis(o.x, s.width * zoom, room.width), y: axis(o.y, s.height * zoom, room.height))
+        let next = EditorLayout.clamp(o, content: CGSize(width: stage.width * zoom, height: stage.height * zoom), room: room.size)
         if next != origin { origin = next }
     }
 

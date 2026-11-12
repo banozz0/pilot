@@ -30,8 +30,10 @@ enum CaptureEditor {
     nonisolated static let log = Logger(subsystem: "dev.banozz.pilot", category: "captures")
 
     /// Opens the editor on `image` (`scale` pixels a point), saved at `file`, centred on the screen under the pointer;
-    /// `backdrop` frames it from the start (Every capture's look, C11; Add a capture's, C8), one undo step.
-    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture, backdrop: Backdrop? = nil) {
+    /// `backdrop` frames it from the start (Every capture's look, C11; Add a capture's, C8), one undo step. `original`: the
+    /// file is a picture of Sven's the image viewer opened, not a capture: Done asks before writing over it, Save a copy
+    /// the default (Q158), and nothing it writes joins the capture history.
+    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture, backdrop: Backdrop? = nil, original: Bool = false) {
         let key = key(file: file, image: image)
         if let panel = open[key] {
             // That capture's editor is open already: it comes to the front, no second one.
@@ -66,7 +68,7 @@ enum CaptureEditor {
         // frees its model and, with it, the capture and its screen (P77).
         let finish: (EditorModel.Outcome) -> Void = { [weak panel, weak model] outcome in
             guard let panel, let model else { return }
-            Task { @MainActor in await act(outcome, model: model, file: file, capture: capture, panel: panel) }
+            Task { @MainActor in await act(outcome, model: model, file: file, capture: capture, panel: panel, original: original) }
         }
         model.finish = finish
         model.readText = { [weak model] in
@@ -131,8 +133,33 @@ enum CaptureEditor {
     /// A size the editor is dragged to is the one it opens at from then on.
     private static let sizeWatch = EditorLayout.watchSize(of: EditorPanel.self, key: sizeKey)
 
-    /// Does what the editor asked: copy, save a copy, Done (copy, write over the capture's file, close), or Cancel.
-    private static func act(_ outcome: EditorModel.Outcome, model: EditorModel, file: URL?, capture: PilotCapture, panel: EditorPanel) async {
+    /// How Done on a picture the viewer opened is answered: a copy beside it, the original replaced, or back to editing.
+    enum SaveChoice { case copy, replace, cancel }
+
+    /// Done's question on a picture the viewer opened (`replaceable`: its type can be written and it has one frame); a
+    /// test answers it instead.
+    static var askSave: (URL, _ replaceable: Bool) -> SaveChoice = { file, replaceable in
+        let alert = NSAlert()
+        alert.messageText = "Save your mark-up?"
+        alert.informativeText = replaceable ? "Save a Copy keeps \(file.lastPathComponent) as it is and saves the mark-up beside it."
+            : "\(file.lastPathComponent) can’t be replaced in its own format, so the mark-up is saved beside it."
+        alert.addButton(withTitle: "Save a Copy")
+        if replaceable { alert.addButton(withTitle: "Replace Original") }
+        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
+        NSApp.activate()
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .copy
+        case .alertSecondButtonReturn where replaceable: return .replace
+        default: return .cancel
+        }
+    }
+
+    /// Does what the editor asked: copy, save a copy, Done (copy, write over the capture's file, close), or Cancel. Done
+    /// writes in the file's own type (a JPEG stays JPEG bytes), PNG only where that type cannot be written. On a picture the
+    /// viewer opened (`original`), Done asks first: Save a Copy closes the editor with the mark-up beside it, Replace writes
+    /// over the file; nothing it writes joins the capture history.
+    private static func act(_ outcome: EditorModel.Outcome, model: EditorModel, file: URL?, capture: PilotCapture, panel: EditorPanel,
+                            original: Bool) async {
         if outcome == .cancel { return close(panel) }
         if outcome == .pin {
             // The pin takes the canvas's place: its top left where the capture's is.
@@ -142,7 +169,16 @@ enum CaptureEditor {
             Pins.pin(image, scale: model.scale, topLeft: top)
             return
         }
+        // Done answered Save a Copy: a copy beside the file, as ⌘S writes, then the editor closes as Done.
+        var copyInstead = false
         if outcome == .done {
+            if original, let file {
+                switch askSave(file, ViewerImages.replaceable(file)) {
+                case .cancel: return
+                case .copy: copyInstead = true
+                case .replace: break
+                }
+            }
             close(panel)
             // Written over below: the screen it was cut from and a thumbnail's picture are older than the file then, so
             // neither opens again (an uncrop would bring back what a redaction covered). Let go before the write, so nothing
@@ -154,25 +190,32 @@ enum CaptureEditor {
         }
         guard let image = await model.export() else { return capture.tell("The marked-up capture could not be drawn.", nil) }
         let scale = model.scale, folder = capture.store.folder(.capture), still = Unchecked(image)
+        let besides = outcome == .saveCopy || copyInstead
         let written: (png: Data?, url: URL?) = await Task.detached(priority: .userInitiated) {
             guard let png = PilotCapture.png(still.value, scale: scale) else { return (nil, nil) }
-            switch outcome {
-            case .saveCopy: return (png, PilotCapture.write(png, near: file, in: folder, suffix: " edited"))
-            case .done:
-                if let file, (try? png.write(to: file, options: .atomic)) != nil { return (png, file) }
-                return (png, PilotCapture.write(png, near: nil, in: folder, suffix: ""))
-            default: return (png, nil)
+            if besides { return (png, PilotCapture.write(png, near: file, in: folder, suffix: " edited")) }
+            guard outcome == .done else { return (png, nil) }
+            if let file {
+                let own = ViewerImages.replaceable(file) ? ViewerImages.encode(still.value, scale: scale, like: file) : nil
+                if let data = own ?? (original ? nil : png), (try? data.write(to: file, options: .atomic)) != nil { return (png, file) }
+                if original { return (png, nil) }
             }
+            return (png, PilotCapture.write(png, near: nil, in: folder, suffix: ""))
         }.value
         guard let png = written.png else { return capture.tell("The marked-up capture could not be encoded.", nil) }
-        if let url = written.url { CaptureHistoryStore.shared.note(url, madeFrom: file) }
+        if let url = written.url {
+            if !original { CaptureHistoryStore.shared.note(url, madeFrom: file) }
+            ImageViewer.changed(url)
+        }
         if outcome != .saveCopy {
             capture.pasteboard.clearContents()
             capture.pasteboard.setData(png, forType: .png)
         }
         if outcome == .done {
-            let url = written.url
-            capture.tell(url == nil ? "Copied, but not saved." : "Copied, and saved to \(PilotCapture.shortPath(folder))",
+            let url = written.url, name = (url ?? file)?.lastPathComponent ?? ""
+            let said = !original ? "Copied, and saved to \(PilotCapture.shortPath(folder))"
+                : copyInstead ? "Copied, and saved as \(name)" : "Copied, and saved over \(name)"
+            capture.tell(url == nil ? (copyInstead || !original ? "Copied, but not saved." : "Copied, but \(name) was not replaced.") : said,
                          url.map { url in HUD.TipAction(title: "Show") { NSWorkspace.shared.activateFileViewerSelecting([url]) } })
         } else if outcome == .saveCopy, written.url == nil {
             model.say("The copy was not saved")
@@ -309,6 +352,20 @@ enum EditorLayout {
         }
     }
 
+    /// The most a picture is zoomed, and the keys' and buttons' grid, 25 % a step (Sven on build 67, P46); the fit is the
+    /// bottom step.
+    static let zoomMost: CGFloat = 8
+    static let zoomStep: CGFloat = 0.25
+
+    /// `o`, a picture's top left in its room, kept so the picture (`content` big) covers the room on each axis it is larger
+    /// than and is centred on each it fits.
+    static func clamp(_ o: CGPoint, content: CGSize, room: CGSize) -> CGPoint {
+        func axis(_ v: CGFloat, _ length: CGFloat, _ room: CGFloat) -> CGFloat {
+            length <= room ? (room - length) / 2 : min(0, max(room - length, v))
+        }
+        return CGPoint(x: axis(o.x, content.width, room.width), y: axis(o.y, content.height, room.height))
+    }
+
     /// The zoom that shows all of `capture` inside `space`, from 10 % to actual size.
     static func fit(_ capture: CGSize, inside space: CGSize) -> CGFloat {
         max(0.1, min(1, space.width / max(capture.width, 1), space.height / max(capture.height, 1)))
@@ -347,25 +404,9 @@ final class EditorPanel: NSPanel, BorderedWindow {
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, let model, let key = Self.key(event), MainActor.assumeIsolated({ model.key(key) }) { return }
         if event.type == .scrollWheel || event.type == .magnify, let model, let height = contentView?.bounds.height,
-           MainActor.assumeIsolated({ Self.zoom(event, model, at: CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y)) }) { return }
+           MainActor.assumeIsolated({ model.zoom(event, at: CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y)) }) { return }
         super.sendEvent(event)
         if event.type == .leftMouseDown { raised() }
-    }
-
-    /// A pinch or scroll at `at` (the window's points from its top left); false off the capture's room.
-    private static func zoom(_ event: NSEvent, _ model: EditorModel, at: CGPoint) -> Bool {
-        let p = CGPoint(x: at.x - model.room.minX, y: at.y - model.room.minY)
-        guard CGRect(origin: .zero, size: model.room.size).contains(p) else { return false }
-        // A mouse wheel's deltas are lines, a trackpad's points.
-        let k: CGFloat = event.type == .scrollWheel && !event.hasPreciseScrollingDeltas ? 10 : 1
-        if event.type == .magnify {
-            model.zoom(to: model.zoom * (1 + event.magnification), about: p)
-        } else if event.modifierFlags.contains(.command) {
-            model.zoom(to: model.zoom * exp(event.scrollingDeltaY * k / 100), about: p)
-        } else {
-            model.pan(by: CGSize(width: event.scrollingDeltaX * k, height: event.scrollingDeltaY * k))
-        }
-        return true
     }
 
     static func key(_ event: NSEvent) -> EditorModel.Key? {
