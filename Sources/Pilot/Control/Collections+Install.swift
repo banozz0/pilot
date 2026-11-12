@@ -123,7 +123,9 @@ extension ControlVerbs {
         }
         return try await s.gate.allow(ask, peer: peer) { () throws(ControlError) in
             let trashed: URL
-            do { trashed = try s.trash(location) } catch { throw ControlError(.badValue, "\(row.name) could not go to the Trash: \(error.localizedDescription)") }
+            do { trashed = try await AdminTrash.trash(location, plain: s.trash) }
+            catch let cancelled as AdminTrash.Cancelled { throw ControlError(.denied, cancelled.localizedDescription) }
+            catch { throw ControlError(.badValue, "\(row.name) could not go to the Trash: \(error.localizedDescription)") }
             s.removable?.rows.removeAll { $0.key == key }
             return .object(["key": .string(key), "name": .string(row.name), "trashed": .string(trashed.path(percentEncoded: false))])
         }

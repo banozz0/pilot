@@ -192,10 +192,11 @@ public actor FileOps {
     }
 
     /// The Trash: macOS's, through NSWorkspace.recycle; in an isolated test run (the sandbox host) a folder in the run's
-    /// throwaway Pilot folder, so no agent run ever reaches ~/.Trash.
+    /// throwaway Pilot folder, so no agent run ever reaches ~/.Trash. An item root owns (an App Store app) is refused the
+    /// plain move: macOS asks for an administrator then, as Finder does (AdminTrash).
     public static let systemTrash: Trash = { url in
         if isIsolatedTestRun { return try throwawayTrash(url) }
-        return try await recycle(url)
+        do { return try await recycle(url) } catch where AdminTrash.refused(error) { return try await AdminTrash.move(url) }
     }
 
     /// The Trash for a caller that cannot wait (the catalogue's installers): FileManager's, or in an isolated test run the
