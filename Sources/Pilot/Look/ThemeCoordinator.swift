@@ -7,14 +7,27 @@ import Darwin
 @Observable @MainActor
 final class ThemeCoordinator {
     private static var live: ThemeCoordinator?
-    private static var support: URL { PilotFolder.support.appending(path: "ThemeSystem") }
+    /// An isolated test run's folder is under /var/folders, a link the pack store's no-follow walk refuses, and its real
+    /// /private/var is what ThemeFiles' link resolving (Foundation's) gives back as /var: no folder there serves both. So
+    /// the sandbox host takes PILOT_SANDBOX_THEMES=<a throwaway folder with no link in its path> for the theme system, and
+    /// the repo's Packaging/ThemePacks as the built-in packs a test bundle lacks.
+    private static let sandbox: (support: URL, factory: String)? = {
+        #if DEBUG
+        guard isIsolatedTestRun, let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_THEMES"], folder.hasPrefix("/") else { return nil }
+        let factory = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../../Packaging/ThemePacks").standardizedFileURL
+        return (URL(filePath: folder, directoryHint: .isDirectory), factory.path)
+        #else
+        return nil
+        #endif
+    }()
+    private static var support: URL { sandbox?.support ?? PilotFolder.support.appending(path: "ThemeSystem") }
 
     /// Supported Ghostty destination, locally bound and shown in every plan. Portable data cannot replace it.
     static func production() throws -> ThemeCoordinator {
         if let live { return live }
         let packs = support.appending(path: "packs"), state = support.appending(path: "state")
         for directory in [packs, state] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
+        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
                                                 appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() }), reload: { intent in

@@ -4,8 +4,8 @@ import Testing
 @testable import PilotCore
 
 /// The extension catalogue (2026-10-10): its index read and checked, versions and where an entry stands, GitHub with
-/// gh as the fallback, and install, update and remove in temporary folders. The fixture is banozz0/pilot-extensions'
-/// index.json on 2026-10-10 trimmed to three entries, with the Ports extension's two files it lists
+/// gh as the fallback, and install, update and remove in temporary folders. The fixture is the catalogue's
+/// index.json on 2026-10-10 (then in a repo of its own) trimmed to three entries, with the Ports extension's two files it lists
 /// (Fixtures/extension-catalogue); nothing reaches the network, runs gh or touches the real Trash.
 @Suite("Extension catalogue")
 struct ExtensionCatalogueTests {
@@ -130,8 +130,8 @@ struct ExtensionCatalogueTests {
             try ExtensionCatalogue.index(Data(count: ExtensionCatalogue.indexLimit + 1))
         }
         #expect(throws: ExtensionCatalogue.Problem.unreadable("does not read")) { try ExtensionCatalogue.index(Data("<html>".utf8)) }
-        #expect(throws: ExtensionCatalogue.Problem.newerSchema(2)) { try ExtensionCatalogue.index(Self.data([], schema: 2)) }
-        #expect(ExtensionCatalogue.Problem.newerSchema(2).reason == "The catalogue is in format 2, newer than this Pilot reads; update Pilot.")
+        #expect(throws: ExtensionCatalogue.Problem.newerSchema(3)) { try ExtensionCatalogue.index(Self.data([], schema: 3)) }
+        #expect(ExtensionCatalogue.Problem.newerSchema(3).reason == "The catalogue is in format 3, newer than this Pilot reads; update Pilot.")
     }
 
     @Test("A path stays inside its folder: subfolders yes; absolute, dot, dot-dot and empty parts no")
@@ -195,7 +195,7 @@ struct ExtensionCatalogueTests {
     static func github(status: Int, body: Data = Data("{}".utf8), gh: Result<Data, ChildProcess.Failure>? = nil, cli: String? = "/opt/homebrew/bin/gh",
                        calls: Calls = Calls()) -> ExtensionCatalogue.Source {
         .github(get: { url in
-            #expect(url.absoluteString.hasPrefix("https://raw.githubusercontent.com/banozz0/pilot-extensions/main/"))
+            #expect(url.absoluteString.hasPrefix("https://raw.githubusercontent.com/banozz0/pilot/main/catalogue/"))
             return (body, status)
         }, gh: { tool, arguments in
             calls.gh.withLock { $0.append([tool] + arguments) }
@@ -219,7 +219,7 @@ struct ExtensionCatalogueTests {
         let data = try await Self.github(status: status, gh: .success(Data([0, 255, 1])), calls: calls).fetch("extensions/ports/main.py", 100)
         #expect(data == Data([0, 255, 1]), "bytes as sent, not text")
         #expect(calls.gh.withLock { $0 } == [["/opt/homebrew/bin/gh", "api", "-H", "Accept: application/vnd.github.raw",
-                                               "repos/banozz0/pilot-extensions/contents/extensions/ports/main.py?ref=main"]])
+                                               "repos/banozz0/pilot/contents/catalogue/extensions/ports/main.py?ref=main"]])
     }
 
     @Test("Once raw refused the index, that read's files go straight to gh; the next index read asks raw again")

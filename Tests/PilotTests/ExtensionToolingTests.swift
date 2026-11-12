@@ -149,7 +149,7 @@ struct ExtensionToolingTests {
         #expect(await rig.ask("ext", "new", "Bad_ID").error?.message.contains("must be lowercase") == true)
     }
 
-    nonisolated static let catalogue = URL(filePath: String(cString: getpwuid(getuid())!.pointee.pw_dir)).appending(path: "code/pilot-extensions/extensions")
+    nonisolated static let catalogue = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../catalogue/extensions").standardizedFileURL
 
     @Test("ext test --check passes each catalogue extension (13 today), read in place, and asks nothing",
           .enabled(if: FileManager.default.fileExists(atPath: catalogue.path)))

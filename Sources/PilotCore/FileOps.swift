@@ -197,6 +197,13 @@ public actor FileOps {
         return try await recycle(url)
     }
 
+    /// The Trash for a caller that cannot wait (the catalogue's installers): FileManager's, or in an isolated test run the
+    /// throwaway folder `systemTrash` uses, so a sandbox remove never reaches ~/.Trash.
+    public static func trashNow(_ url: URL) throws {
+        if isIsolatedTestRun { _ = try throwawayTrash(url); return }
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
+
     /// Where `systemTrash` would put an item from `folder`, resolved as an undo reads it: the volume's Trash folder
     /// (`volumeTrash`), or in an isolated test run the throwaway folder on that volume with its eight-character subfolder;
     /// nil when the volume has no Trash Pilot can use.

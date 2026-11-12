@@ -13,7 +13,7 @@ public struct ExtensionInstaller: Sendable {
     let trash: @Sendable (URL) throws -> Void
 
     public init(extensions: URL = Extension.folder, staging: URL? = nil, source: ExtensionCatalogue.Source = .live,
-                trash: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) {
+                trash: @escaping @Sendable (URL) throws -> Void = FileOps.trashNow) {
         self.extensions = extensions
         self.staging = staging ?? extensions.deletingLastPathComponent()
         self.source = source
@@ -37,17 +37,8 @@ public struct ExtensionInstaller: Sendable {
         let temp = staging.appending(path: ".extension-\(entry.id)-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: temp) }
         try fm.createDirectory(at: temp, withIntermediateDirectories: true)
-        for (i, file) in entry.files.enumerated() {
-            try Task.checkCancellation()
-            let path = "extensions/\(entry.id)/\(file.path)"
-            let data = try await source.fetch(path, min(file.size, ExtensionCatalogue.fileLimit))
-            guard data.count == file.size, ExtensionCatalogue.sha256(data) == file.sha256 else { throw ExtensionCatalogue.Problem.mismatch(path: file.path) }
-            let url = temp.appending(path: file.path)
-            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url)
-            try fm.setAttributes([.posixPermissions: file.executable ? 0o755 : 0o644], ofItemAtPath: url.path)
-            progress(i + 1, entry.files.count)
-        }
+        try await source.download(entry.files, from: "extensions/\(entry.id)", limit: ExtensionCatalogue.fileLimit, into: temp,
+                                  mode: { $0.executable ? 0o755 : 0o644 }, progress: progress)
         let arrived: Extension
         do { arrived = try Extension(folder: temp) }
         catch let problem as Extension.Problem { throw ExtensionCatalogue.Problem.notAnExtension(problem.reason) }

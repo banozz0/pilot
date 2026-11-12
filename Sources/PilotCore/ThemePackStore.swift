@@ -233,11 +233,14 @@ extension ThemePackStore {
         return draft
     }
 
+    /// Whether `pack` names only the built-in adapters, each with no data of its own (`{}`).
+    public static func plainAdapters(_ pack: ThemePack) -> Bool {
+        Set(pack.adapters.keys).isSubset(of: ["ghostty", "zed", "obsidian"]) && pack.adapters.values.allSatisfy { $0 == .object([:]) }
+    }
+
     public static func validate(_ draft: Draft) throws {
         _ = try ThemePack.decode(ThemeDigest.encoded(draft.pack))
-        guard draft.format == 1,
-              Set(draft.pack.adapters.keys).isSubset(of: ["ghostty", "zed", "obsidian"]),
-              draft.pack.adapters.values.allSatisfy({ $0 == .object([:]) }) else { throw ThemeFailure("unsupported portable format or adapter payload; preserved source must be updated explicitly") }
+        guard draft.format == 1, plainAdapters(draft.pack) else { throw ThemeFailure("unsupported portable format or adapter payload; preserved source must be updated explicitly") }
         for (path, data) in draft.files {
             guard ThemeFiles.relative(path), path != "manifest.json",
                   path == "PROVENANCE.md" || draft.pack.wallpapers.contains(where: { path == $0 || path.hasPrefix($0 + "/") }),
