@@ -88,8 +88,8 @@ extension EnvironmentValues {
 
 extension View {
     /// A block on a More tab under `place`: the spot a link, the search and its index scroll to, and where the index
-    /// learns which block is in view.
-    func moreBlock(_ place: AppSection) -> some View { modifier(MoreBlockTag(place: place)) }
+    /// learns which block is in view. It flows into the page's columns (PageFlow): the modifier hides the block's own mark.
+    func moreBlock(_ place: AppSection) -> some View { modifier(MoreBlockTag(place: place)).pageFlows() }
 }
 
 private struct MoreBlockTag: ViewModifier {

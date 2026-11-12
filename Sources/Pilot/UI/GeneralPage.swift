@@ -18,10 +18,6 @@ struct GeneralPage: View {
     @State private var confirming: LayerKeyChange?
     /// Read when the page shows and when Pilot comes back to the front, not on every redraw (it lists a folder).
     @State private var fullDisk: Bool?
-    /// Whether the page is wide enough for two columns (`paired(width:)`), followed as the window resizes. It starts
-    /// narrow: one column never runs past the page, so its width is the page's; pairs that started first ran off the page
-    /// and measured themselves wide enough to stay (Instrument at 1000, C3's renders).
-    @State private var wide = false
     /// The acknowledgement whose licence the sheet shows.
     @State private var licence: Acknowledgement?
     /// About's Acknowledgements, Resources listed once per page shown, not on every redraw.
@@ -41,10 +37,6 @@ struct GeneralPage: View {
     /// Accessibility's ⓘ, on Needs you and on Permissions.
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
 
-    /// The front's short blocks sit in pairs from this width up (simplify-pages T8); narrower they stack (Moody: at 760
-    /// they ran off the right edge).
-    static func paired(width: CGFloat) -> Bool { width >= 820 }
-
     /// `acknowledgementsOpen` is for the renders; the app always opens the page with the list closed.
     init(acknowledgementsOpen: Bool = false) {
         _acknowledgementsOpen = State(initialValue: acknowledgementsOpen)
@@ -55,32 +47,19 @@ struct GeneralPage: View {
         KitLanding {
             KitPage {
                 header
-                if !granted { needsYou }
-                // Its rows run too wide for a column (Hold Hyper's).
+                if !granted { needsYou.pageWide() }
+                // The blocks flow into the page's columns (KitPage's PageFlow), each at its own height.
                 hyperKeys(focused: granted).id(AppSection.hyperKey)
-                if wide {
-                    // Two columns, each block at its own height, so none stretches to its neighbour's foot.
-                    columns { startup; status.id(AppSection.status) } right: { notifications.id(AppSection.notifications) }
-                } else {
-                    startup; status.id(AppSection.status); notifications.id(AppSection.notifications)
-                }
+                startup
+                status.id(AppSection.status)
+                notifications.id(AppSection.notifications)
                 permissions(granted).id(AppSection.permissions)
                 data.id(AppSection.data)
                 about.id(AppSection.about)
             }
-            .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
         }
         .layerKeyConfirm($confirming, settings: engine.settings, from: .settings)
         .task { updates.countOnce() }
-    }
-
-    /// Two columns of blocks the page's gap apart, each top-aligned at its own height; from `paired(width:)`, under
-    /// InstrumentPair's 880, so the front fits the window's first size in Instrument too (simplify-pages T8).
-    private func columns(@ViewBuilder left: () -> some View, @ViewBuilder right: () -> some View) -> some View {
-        HStack(alignment: .top, spacing: ink.isInstrument ? style.density.gap : 20) {
-            VStack(alignment: .leading, spacing: 0, content: left).frame(maxWidth: .infinity, alignment: .top)
-            VStack(alignment: .leading, spacing: 0, content: right).frame(maxWidth: .infinity, alignment: .top)
-        }
     }
 
     // MARK: Pilot

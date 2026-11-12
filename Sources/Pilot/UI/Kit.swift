@@ -207,10 +207,13 @@ struct KitPage<Content: View>: View {
 
     var body: some View {
         switch style.kind {
-        case .toybox: ToyPage(intro: intro, info: info) { content }
-        case .instrument: InstrumentPage(intro: intro, info: info) { content }
+        case .toybox: ToyPage(intro: intro, info: info, flow: true) { content }
+        case .instrument: InstrumentPage(intro: intro, info: info, flow: true) { content }
         }
     }
+
+    /// The least width of a page's column (PageFlow): Pilot's Hold Hyper row on one line, its label beside its controls.
+    static func column(_ kind: PilotStyle) -> CGFloat { kind == .toybox ? 500 : 460 }
 }
 
 /// A page's intro words, then its ⓘ when `info` says more: the one line every page opens on (simplify-pages T5).
@@ -254,12 +257,16 @@ struct KitBlock<Trailing: View, Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        if style.kind == .toybox {
-            ToyBlock(title: title, note: note, fill: fill, trailing: { trailing }, content: { content }).padding(.top, Toy.blockGap)
-        } else {
-            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
-                .padding(.top, style.density.padding)
+        // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`.
+        Group {
+            if style.kind == .toybox {
+                ToyBlock(title: title, note: note, fill: fill, trailing: { trailing }, content: { content }).padding(.top, Toy.blockGap)
+            } else {
+                InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
+                    .padding(.top, style.density.padding)
+            }
         }
+        .pageFlows()
     }
 }
 
@@ -268,6 +275,87 @@ extension KitBlock where Trailing == EmptyView {
          @ViewBuilder content: () -> Content) {
         self.init(title: title, symbol: symbol, focused: focused, fill: fill, note: note, trailing: { EmptyView() }, content: content)
     }
+}
+
+// MARK: - Page flow
+
+/// A page's blocks in columns once it is wide enough (page density, Sven 2026-11-12: "settings in the pages that are too
+/// wide for no reason and also empty spaces"): each block that flows (`pageFlows()`: KitBlock and a More block, unless `.pageWide()`) goes under
+/// the shortest column, so short blocks sit side by side and no column keeps a hole beside its neighbour; anything else
+/// (a header tile, a pair, a grid, a heading) takes the full width under all the columns above it. Columns are at least
+/// `column` wide, so a label and its control stay close; under two columns' width the page is one column, as a VStack.
+/// A Layout reads the width it is given, so it never measures itself into staying wide (GeneralPage's old trap).
+struct PageFlow: Layout {
+    /// The least width of a column, and the gap between columns.
+    var column: CGFloat
+    var gap: CGFloat
+    /// Between one child and the next, as the VStack's spacing it replaces.
+    var spacing: CGFloat = 0
+
+    /// How many columns `width` holds.
+    static func columns(_ width: CGFloat, column: CGFloat, gap: CGFloat) -> Int {
+        max(1, Int((width + gap) / (column + gap)))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+            ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        return CGSize(width: width, height: arrange(width, subviews).height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (i, frame) in arrange(bounds.width, subviews).frames.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                              proposal: ProposedViewSize(width: frame.width, height: frame.height))
+        }
+    }
+
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (frames: [CGRect], height: CGFloat) {
+        let count = Self.columns(width, column: column, gap: gap)
+        let flows = subviews.map { count > 1 && $0[PageFlowItem.self] && !$0[PageWideItem.self] }
+        var frames: [CGRect] = []
+        var top: CGFloat = 0
+        var i = 0
+        while i < subviews.count {
+            let lead = i == 0 ? 0 : spacing
+            guard flows[i] else {
+                let size = subviews[i].sizeThatFits(ProposedViewSize(width: width, height: nil))
+                frames.append(CGRect(x: 0, y: top + lead, width: min(width, size.width), height: size.height))
+                top += lead + size.height
+                i += 1
+                continue
+            }
+            // A run of flowing blocks. Above a full-width child, a run shorter than the columns shares the width, so no
+            // hole opens beside it mid-page (one block alone takes it all); the page's last run keeps the page's columns.
+            var end = i
+            while end < subviews.count && flows[end] { end += 1 }
+            let columns = end < subviews.count ? min(count, end - i) : count
+            let side = (width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+            var feet = Array(repeating: top + lead, count: columns)
+            for j in i..<end {
+                // The shortest column, the leftmost of equals.
+                let c = feet.indices.min { feet[$0] < feet[$1] }!
+                let y = feet[c] + (feet[c] > top + lead ? spacing : 0)
+                let height = subviews[j].sizeThatFits(ProposedViewSize(width: side, height: nil)).height
+                frames.append(CGRect(x: CGFloat(c) * (side + gap), y: y, width: side, height: height))
+                feet[c] = y + height
+            }
+            top = feet.max() ?? top
+            i = end
+        }
+        return (frames, top)
+    }
+}
+
+/// Whether a page child flows into PageFlow's columns (KitBlock's), and whether it is held at the page's width anyway.
+private struct PageFlowItem: LayoutValueKey { static let defaultValue = false }
+private struct PageWideItem: LayoutValueKey { static let defaultValue = false }
+
+extension View {
+    /// The child flows into the page's columns (PageFlow) rather than taking its full width.
+    func pageFlows() -> some View { layoutValue(key: PageFlowItem.self, value: true) }
+    /// A block that keeps the page's full width in PageFlow: a keyboard, a grid, two columns of its own.
+    func pageWide() -> some View { layoutValue(key: PageWideItem.self, value: true) }
 }
 
 /// A row in a block under a rule (none over the first).

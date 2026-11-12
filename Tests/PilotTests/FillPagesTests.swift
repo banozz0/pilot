@@ -266,8 +266,9 @@ struct FillPagesTests {
 
     @Test("The Pilot page's blocks sit in pairs only where two columns have room; narrower, one under the other")
     func pilotPairs() {
-        #expect(GeneralPage.paired(width: 980))
-        #expect(!GeneralPage.paired(width: 740))
+        // PageFlow's columns under KitPage, in Instrument (its gap is the density's padding, 18).
+        #expect(PageFlow.columns(980, column: KitPage<EmptyView>.column(.instrument), gap: 18) == 2)
+        #expect(PageFlow.columns(740, column: KitPage<EmptyView>.column(.instrument), gap: 18) == 1)
     }
 }
 #endif

@@ -77,6 +77,8 @@ private struct AISetupBody: View {
             }
             if let problem { BlockRow { FinePrint(text: problem, color: ink.red) } }
         }
+        // Its own two columns keep the page's width (PageFlow).
+        .pageWide()
     }
 
     private func column(_ routes: [AIProvider]) -> some View {

@@ -14,6 +14,8 @@ struct InstrumentPage<Content: View>: View {
     /// The intro's ⓘ: what its one line leaves out.
     var info: String?
     var spacing: CGFloat = 0
+    /// The blocks in columns once the page is wide (PageFlow); else one stack.
+    var flow = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -24,7 +26,11 @@ struct InstrumentPage<Content: View>: View {
                         Text(intro).styleText(\.body).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                content
+                if flow {
+                    PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing) { content }
+                } else {
+                    content
+                }
             }
             .padding(.horizontal, style.density.page).padding(.top, style.density.padding).padding(.bottom, style.density.page)
             .frame(maxWidth: .infinity, alignment: .leading)
