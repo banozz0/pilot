@@ -196,7 +196,7 @@ public actor FileOps {
     /// plain move: macOS asks for an administrator then, as Finder does (AdminTrash).
     public static let systemTrash: Trash = { url in
         if isIsolatedTestRun { return try throwawayTrash(url) }
-        do { return try await recycle(url) } catch where AdminTrash.refused(error) { return try await AdminTrash.move(url) }
+        do { return try await recycle(url) } catch where AdminTrash.asks(error) { return try await AdminTrash.move(url) }
     }
 
     /// The Trash for a caller that cannot wait (the catalogue's installers): FileManager's, or in an isolated test run the

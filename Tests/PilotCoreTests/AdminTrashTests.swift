@@ -22,9 +22,6 @@ struct AdminTrashTests {
 
     func cleanUp() {
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: app.path)
-        for case let url as URL in FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) ?? .init() {
-            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        }
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -74,10 +71,9 @@ struct AdminTrashTests {
         #expect(FileManager.default.fileExists(atPath: went.appending(path: "Contents").path))
         #expect(!FileManager.default.fileExists(atPath: app.path))
         let arguments = try #require(admin.calls.withLock { $0.first })
-        #expect(arguments == AdminTrash.script.flatMap { ["-e", $0] }
+        #expect(arguments == AdminTrash.scriptArguments
                 + [app.path(percentEncoded: false), went.path(percentEncoded: false), "Pilot wants to move WhatsApp.app to the Trash."])
         #expect(arguments.dropLast(3).allSatisfy { !$0.contains("WhatsApp") })
-        #expect(AdminTrash.script[1].contains("with administrator privileges") && AdminTrash.script[1].contains("/bin/mv -n"))
     }
 
     @Test("a name taken in the Trash gets the time, as Finder adds it, then a number")

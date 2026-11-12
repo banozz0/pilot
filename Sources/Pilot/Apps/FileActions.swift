@@ -40,7 +40,7 @@ enum FileActions {
                     flog.notice("trashed \(path, privacy: .public) to \(trashed.path, privacy: .public)")
                 case .failure(let error):
                     flog.error("\(path, privacy: .public) not trashed: \(error.localizedDescription, privacy: .public)")
-                    HUD.tip((error as? AdminTrash.Cancelled)?.localizedDescription ?? "\(url.lastPathComponent) could not go to the Trash")
+                    HUD.tip(AdminTrash.said(error) ?? "\(url.lastPathComponent) could not go to the Trash")
                 }
             }
         }

@@ -131,7 +131,7 @@ enum InstallModule {
                 case .success(let trashed): ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
                 case .failure(let error):
                     ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                    HUD.tip((error as? AdminTrash.Cancelled)?.localizedDescription ?? "\(name) could not go to the Trash")
+                    HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
                 }
                 then()
             }

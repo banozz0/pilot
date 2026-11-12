@@ -23,6 +23,8 @@ public enum AdminTrash {
                          "do shell script \"/bin/mv -n \" & quoted form of item 1 of argv & \" \" & quoted form of item 2 of argv "
                             + "with prompt (item 3 of argv) with administrator privileges",
                          "end run"]
+    /// osascript's arguments before argv.
+    static let scriptArguments = script.flatMap { ["-e", $0] }
 
     public static let osascript: Run = { arguments in
         try await ChildProcess.run("/usr/bin/osascript", arguments, timeout: .seconds(600))
@@ -43,16 +45,19 @@ public enum AdminTrash {
         return posix.map { $0 == Int(EACCES) } ?? cocoa
     }
 
-    /// The plain Trash first; refused for permission, the administrator's move. Never asks in an isolated test run.
+    /// Whether to ask for an administrator after `error`: a permission refusal, never in an isolated test run.
+    public static func asks(_ error: Error) -> Bool { refused(error) && !isIsolatedTestRun }
+
+    /// The plain Trash first; refused for permission, the administrator's move.
     @MainActor public static func trash(_ url: URL, plain: (URL) throws -> URL, run: Run = osascript) async throws -> URL {
-        do { return try plain(url) } catch where refused(error) && !isIsolatedTestRun { return try await move(url, run: run) }
+        do { return try plain(url) } catch where asks(error) { return try await move(url, run: run) }
     }
 
     /// `trash` for a caller that answers on the main thread: the plain Trash at once, as before; only a refusal waits, for
-    /// the prompt, off the tap's thread, then answers.
+    /// the prompt, then answers.
     @MainActor public static func trash(_ url: URL, plain: (URL) throws -> URL, run: @escaping Run = osascript,
                                         done: @escaping @MainActor (Result<URL, any Error>) -> Void) {
-        do { done(.success(try plain(url))) } catch where refused(error) && !isIsolatedTestRun {
+        do { done(.success(try plain(url))) } catch where asks(error) {
             Task {
                 do { done(.success(try await move(url, run: run))) } catch { done(.failure(error)) }
             }
@@ -60,47 +65,50 @@ public enum AdminTrash {
     }
 
     /// Moves `url` into its volume's Trash (`into`, else the Trash FileOps finds) after macOS's administrator prompt, and
-    /// answers where it went, checked by its inode: the source gone, the same item at the new name.
-    public static func move(_ url: URL, into trash: URL? = nil, run: Run = osascript, now: Date = .now) async throws -> URL {
-        let path = url.path(percentEncoded: false), name = url.lastPathComponent
+    /// answers where it went, checked by identity: the source gone, the same item at the new name. Off the main thread:
+    /// its stats may reach a slow volume.
+    @concurrent public static func move(_ url: URL, into trash: URL? = nil, run: Run = osascript, now: Date = .now) async throws -> URL {
+        let name = url.lastPathComponent
         guard let folder = trash ?? FileOps.volumeTrash(url.deletingLastPathComponent()) else {
             throw Problem("\(name) could not go to the Trash: its volume has no Trash")
         }
-        var before = Darwin.stat()
-        guard lstat(path, &before) == 0 else { throw Problem("\(name) is not there any more") }
-        let target = free(name, in: folder, now: now)
+        guard let before = FileOps.identity(of: url) else { throw Problem("\(name) is not there any more") }
+        let target = free(name, in: folder, now: now), targetPath = target.path(percentEncoded: false)
         do {
-            _ = try await run(script.map { ["-e", $0] }.flatMap(\.self)
-                              + [path, target.path(percentEncoded: false), "Pilot wants to move \(name) to the Trash."])
-        } catch let failure as ChildProcess.Failure where failure.message.contains("-128") {
+            _ = try await run(scriptArguments + [url.path(percentEncoded: false), targetPath, "Pilot wants to move \(name) to the Trash."])
+        } catch let failure as ChildProcess.Failure where failure.message.contains("(-128)") {
             throw Cancelled(name: name)
         } catch let failure as ChildProcess.Failure {
             throw Problem("\(name) could not go to the Trash: \(failure.message)")
         }
-        var after = Darwin.stat()
-        guard lstat(path, &after) != 0, lstat(target.path(percentEncoded: false), &after) == 0,
-              after.st_ino == before.st_ino, after.st_dev == before.st_dev else {
-            throw Problem("\(name) did not reach the Trash at \(target.path(percentEncoded: false))")
+        guard FileOps.identity(of: url) == nil, FileOps.identity(of: target) == before else {
+            throw Problem("\(name) did not reach the Trash at \(targetPath)")
         }
         return target
     }
 
-    /// A name not taken in `folder`: the item's own, else with the time as Finder adds it ("WhatsApp 17.33.05.app"),
-    /// else that and a number.
+    /// A name not taken in `folder` (lstat, which the Trash allows without Full Disk Access; it can't be listed): the
+    /// item's own, else with the time as Finder adds it ("WhatsApp 17.33.05.app"), else that and a number.
     static func free(_ name: String, in folder: URL, now: Date) -> URL {
+        func taken(_ name: String) -> Bool { FileOps.identity(of: folder.appending(path: name)) != nil }
+        guard taken(name) else { return folder.appending(path: name) }
         let file = URL(filePath: name), ext = file.pathExtension, base = file.deletingPathExtension().lastPathComponent
         let clock = DateFormatter()
         clock.locale = Locale(identifier: "en_US_POSIX")
         clock.dateFormat = "HH.mm.ss"
-        let dot = ext.isEmpty ? "" : ".\(ext)", time = clock.string(from: now)
-        let names = [name] + ([""] + (2...99).map { " \($0)" }).map { "\(base) \(time)\($0)\(dot)" }
-        var spot = Darwin.stat()
-        let pick = names.first { lstat(folder.appending(path: $0).path(percentEncoded: false), &spot) != 0 } ?? "\(base) \(UUID().uuidString)\(dot)"
+        let dot = ext.isEmpty ? "" : ".\(ext)", stamped = "\(base) \(clock.string(from: now))"
+        let pick = (1...).lazy.map { $0 == 1 ? "\(stamped)\(dot)" : "\(stamped) \($0)\(dot)" }.first { !taken($0) }!
         return folder.appending(path: pick)
     }
 
+    /// The words for a HUD when `error` came from the administrator's move (a cancel, or what stopped it after the
+    /// password); nil for a plain failure, whose caller says it its own way.
+    public static func said(_ error: Error) -> String? {
+        error is Cancelled || error is Problem ? error.localizedDescription : nil
+    }
+
     /// A failure in words: what stayed where.
-    public struct Problem: Error, LocalizedError, Equatable {
+    public struct Problem: Error, LocalizedError {
         public let message: String
         init(_ message: String) { self.message = message }
         public var errorDescription: String? { message }
