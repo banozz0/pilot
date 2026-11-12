@@ -182,7 +182,8 @@ extension TilingContainer {
     }
 
     /// Pilot (scrolling layout): each child a column on the strip (scrolling.swift), scrolled the least that shows the
-    /// focused one whole. A column the strip would put over another display hides in the hide corner, a jump, and comes
+    /// focused one whole. A column the strip would put over another display peeks cut back to its part on this one
+    /// (Rect.peek, ADR 0014 as amended 2026-11-12); with too little left it hides in the hide corner, a jump, and comes
     /// back with a jump, so a glide only runs between two frames clear of every other display and none ever crosses. On
     /// a space switch the columns on screen slide in from the display's edge (spaceSlide.swift), within the same rule.
     @MainActor
@@ -195,10 +196,11 @@ extension TilingContainer {
         let others = monitors.filter { $0.rect.topLeftCorner != monitor.rect.topLeftCorner }.map(\.rect)
         let corner = optimalHideCorner(of: monitor, among: monitors)
         for (child, frame) in zip(children, strip.frames(at: stripOffset, on: monitor.rect, sliver: config.scrollingSliver)) {
-            if others.contains(where: { $0.overlaps(frame) }) {
-                child.hideColumn(frame.size, in: corner, of: monitor, span: context.span)
+            let shown = others.contains(where: { $0.overlaps(frame) }) ? context.span.flatMap(frame.peek(within:)) : frame
+            if let shown, !others.contains(where: { $0.overlaps(shown) }) {
+                try await child.layoutColumn(shown, context)
             } else {
-                try await child.layoutColumn(frame, context)
+                child.hideColumn(frame.size, in: corner, of: monitor, span: context.span)
             }
         }
     }

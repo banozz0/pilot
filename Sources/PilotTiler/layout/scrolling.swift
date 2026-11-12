@@ -189,6 +189,20 @@ extension Window {
 }
 
 extension Rect {
+    /// The narrowest a column cut back at a bordered edge still peeks: narrower, most apps' minimum width would push the
+    /// window over its neighbour, so it hides instead.
+    static let narrowestPeek: CGFloat = 200
+
+    /// A column that would reach over the display beside a bordered edge, cut back to its part within `span` (ADR 0014 as
+    /// amended 2026-11-12, Sven: "show left half still even though i have my monitor on the left"), so it peeks as a
+    /// column past the open edge does without crossing; nil with less than `narrowestPeek` left. An app that refuses the
+    /// narrower width is kept inside `span` by FrameSteps' read-back.
+    func peek(within span: ClosedRange<CGFloat>) -> Rect? {
+        let left = max(minX, span.lowerBound), right = min(maxX, span.upperBound)
+        guard right - left >= Self.narrowestPeek else { return nil }
+        return Rect(topLeftX: left, topLeftY: minY, width: right - left, height: height)
+    }
+
     /// Whether the two share any area: a frame touching another display's edge does not reach onto it.
     func overlaps(_ other: Rect) -> Bool {
         min(maxX, other.maxX) - max(minX, other.minX) > 0.5 && min(maxY, other.maxY) - max(minY, other.minY) > 0.5

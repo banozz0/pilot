@@ -199,7 +199,10 @@ extension TilerTreeTests {
             try await opened.relayoutWindow(on: workspace, .nonCancellable, forceTile: true)
             try await pass(workspace, windows + [opened])
             #expect(try workspace.rootTilingContainer.children.map { ($0 as? Window)?.windowId } == [1, 2, 9, 3])
-            #expect((windows + [opened]).allSatisfy { Self.close($0.axRect?.width, Self.half) })
+            // Every column half again; column 1, partly past the portrait edge, peeks cut back to the ultrawide (ADR 0014
+            // as amended 2026-11-12), the rest show at their whole width.
+            #expect((windows + [opened]).allSatisfy { $0.columnWidth == Strip.automaticWidth })
+            #expect((windows + [opened]).allSatisfy { Self.close($0.axRect?.width, Self.half) || Self.close($0.axRect?.minX, Self.ultrawide.minX) })
             #expect(Self.close(opened.axRect?.minX, (windows[1].axRect?.maxX ?? 0) + Self.gap))
         }
 
