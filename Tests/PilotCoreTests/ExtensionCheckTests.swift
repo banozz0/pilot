@@ -74,6 +74,10 @@ struct ExtensionCheckTests {
         }),
         // Printable bytes: NULs would be check.py's hidden text too.
         ("file over 2 MB", { try Data(repeating: 0x61, count: ExtensionCheck.fileLimit + 1).write(to: $0.appending(path: "big.bin")) }),
+        // check.py's hidden-text rule (T18, ported in T36): a decoded string, a name, a byte order mark.
+        ("reordering text in a string", { try manifest($0) { $0["description"] = .string("Shows \u{202E}txt.exe") } }),
+        ("zero-width space in a name", { try Data("notes".utf8).write(to: $0.appending(path: "read\u{200B}me.txt")) }),
+        ("byte order mark", { try (Data([0xEF, 0xBB, 0xBF]) + Data("notes\n".utf8)).write(to: $0.appending(path: "notes.txt")) }),
     ]
 
     static func manifest(_ folder: URL, _ change: (inout [String: JSONValue]) -> Void) throws {
@@ -112,12 +116,8 @@ struct ExtensionCheckTests {
         #expect(byPage == 6, "the faults Pilot itself refuses: id, mode, program, no commands, dropdown, surface")
         guard Self.hasCatalogue else { return }
         for (i, theirs) in try await Self.python(folders).enumerated() {
-            // check.py's hidden-text rule (public-repo spec T18) has no Swift twin yet, so a CR in a file is check.py's
-            // alone: known until ExtensionCheck catches up, and this fails once it does.
-            withKnownIssue("ExtensionCheck lacks check.py's hidden-text rule") {
-                #expect(ExtensionCheck.catalogue(folders[i]) == theirs, "\(Self.faults[i].name)")
-                #expect(Set(theirs).isSubset(of: ExtensionCheck.problems(in: folders[i])), "\(Self.faults[i].name)")
-            } when: { Self.faults[i].name == "CRLF shebang" }
+            #expect(ExtensionCheck.catalogue(folders[i]) == theirs, "\(Self.faults[i].name)")
+            #expect(Set(theirs).isSubset(of: ExtensionCheck.problems(in: folders[i])), "\(Self.faults[i].name)")
         }
     }
 

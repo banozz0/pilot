@@ -24,13 +24,15 @@ public enum ExtensionCheck {
 
     /// check.py's `check(folder)`.
     static func catalogue(_ folder: URL) -> [String] {
+        var problems: [String] = []
+        names(folder, &problems)
         let manifest: JSONValue
         do { manifest = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: folder.appending(path: Extension.manifestName))) }
-        catch CocoaError.fileReadNoSuchFile { return ["no extension.json"] }
-        catch { return [Extension.Problem.unreadable("not JSON").reason] }
+        catch CocoaError.fileReadNoSuchFile { return problems + ["no extension.json"] }
+        catch { return problems + [Extension.Problem.unreadable("not JSON").reason] }
         typealias P = Extension.Problem
-        guard case .object(let m) = manifest else { return ["extension.json is not an object"] }
-        var problems: [String] = []
+        guard case .object(let m) = manifest else { return problems + ["extension.json is not an object"] }
+        strings(manifest, &problems)
         if case .string(let id)? = m["id"], Extension.isName(id) {
             if folder.lastPathComponent != id { problems.append("folder name \(folder.lastPathComponent) is not its id \(id)") }
         } else {
@@ -183,11 +185,114 @@ public enum ExtensionCheck {
         }
     }
 
+    /// check.py's `check_files`: the limits, and no hidden or reordering character on any line of a UTF-8 file (tabs
+    /// pass; extension.json's lines may join emoji, its icons' rule being `strings`).
     private static func files(_ folder: URL, _ problems: inout [String]) {
         let found = listing(folder)
         if found.count > mostFiles { problems.append("\(found.count) files, more than \(mostFiles)") }
-        for file in found where file.size > fileLimit { problems.append("\(file.path) is over \(fileLimit >> 20) MB") }
+        for file in found {
+            if file.size > fileLimit { problems.append("\(file.path) is over \(fileLimit >> 20) MB") }
+            // Strict UTF-8 that keeps a byte order mark, as Python's decode does (U+FEFF is hidden text).
+            guard let data = try? Data(contentsOf: file.url), let text = String(validating: data, as: UTF8.self) else { continue }
+            let allowed = file.path == Extension.manifestName ? manifestText : lineText
+            for (number, line) in text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                flag("\(file.path):\(number + 1)", line, allowed: allowed, &problems)
+            }
+        }
         if found.reduce(0, { $0 + $1.size }) > totalLimit { problems.append("over \(totalLimit >> 20) MB in all") }
+    }
+
+    // MARK: Hidden text (check.py's rule, public-repo spec T18; ported in T36)
+
+    /// check.py's HIDDEN_CATEGORIES and HIDDEN_RANGES, characters that hide or reorder text: every control, format
+    /// character, line and paragraph separator, surrogate and private-use character, plus Unicode's whole
+    /// Default_Ignorable_Code_Point set as fixed ranges, and U+2800, a blank that shows nothing.
+    private static let hiddenCategories: Set<Unicode.GeneralCategory> = [.control, .format, .lineSeparator, .paragraphSeparator, .surrogate, .privateUse]
+    private static let hiddenRanges: [ClosedRange<UInt32>] = [
+        0x00AD...0x00AD, 0x034F...0x034F, 0x061C...0x061C, 0x115F...0x1160, 0x17B4...0x17B5, 0x180B...0x180F, 0x200B...0x200F,
+        0x202A...0x202E, 0x2060...0x206F, 0x2800...0x2800, 0x3164...0x3164, 0xFE00...0xFE0F, 0xFEFF...0xFEFF, 0xFFA0...0xFFA0,
+        0xFFF0...0xFFF8, 0x1BCA0...0x1BCA3, 0x1D173...0x1D17A, 0xE0000...0xE0FFF,
+    ]
+    /// A tab in a text file; U+200D and U+FE0F joining an icon's emoji.
+    private static let lineText: Set<UInt32> = [0x09], emojiJoiners: Set<UInt32> = [0x200D, 0xFE0F], manifestText = lineText.union(emojiJoiners)
+
+    /// check.py's `hidden_chars`: the hiding or reordering code points in `text` as U+XXXX, each once, `allowed` aside.
+    static func hidden(_ text: some Sequence<Unicode.Scalar>, allowed: Set<UInt32> = []) -> [String] {
+        var found: [String] = []
+        for scalar in text where !(0x20..<0x7F).contains(scalar.value) && !allowed.contains(scalar.value) {
+            guard hiddenCategories.contains(scalar.properties.generalCategory) || hiddenRanges.contains(where: { $0.contains(scalar.value) }) else { continue }
+            let name = "U+" + String(format: "%04X", scalar.value)
+            if !found.contains(name) { found.append(name) }
+        }
+        return found
+    }
+
+    /// check.py's problem line for `text` at `place` when it holds a hidden character.
+    private static func flag(_ place: String, _ text: some Sequence<Unicode.Scalar>, allowed: Set<UInt32> = [], _ problems: inout [String]) {
+        let bad = hidden(text, allowed: allowed)
+        if !bad.isEmpty { problems.append("\(place) holds hidden or reordering characters (\(bad.joined(separator: ", ")))") }
+    }
+
+    /// Python's order for strings: by code point.
+    private static func byScalars(_ a: String, _ b: String) -> Bool { a.unicodeScalars.lexicographicallyPrecedes(b.unicodeScalars) }
+
+    /// check.py's `check_tree`, its hidden-text half: no hidden or reordering character in any name, hidden files' and
+    /// links' too; a folder's names in order, then each of its folders but hidden ones, `__pycache__` and links. Its
+    /// folders are walked by name, where check.py takes the order the disk lists them in.
+    private static func names(_ folder: URL, _ problems: inout [String]) {
+        func walk(_ dir: URL, _ prefix: String) {
+            let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).sorted(by: byScalars)
+            var folders: [String] = []
+            for name in names {
+                flag("\(ascii(prefix + name)): its name", name.unicodeScalars, &problems)
+                var info = stat()
+                if !name.hasPrefix("."), name != "__pycache__", lstat(dir.appending(path: name).path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR { folders.append(name) }
+            }
+            for name in folders { walk(dir.appending(path: name, directoryHint: .isDirectory), prefix + name + "/") }
+        }
+        walk(folder, "")
+    }
+
+    /// check.py's `check_strings` on extension.json: no hidden or reordering character in any decoded key or string (a
+    /// JSON escape like \u202e only shows once decoded); its own icon and its commands' icons may join emoji. An object's
+    /// keys are walked by name, where check.py follows the file's order, so two faults may list the other way round.
+    private static func strings(_ manifest: JSONValue, _ problems: inout [String]) {
+        func walk(_ value: JSONValue, _ path: [String?]) {   // nil: a list's index
+            switch value {
+            case .string(let s):
+                let icon = path == ["icon"] || path.count == 3 && path[0] == "commands" && path[1] == nil && path[2] == "icon"
+                flag("\(Extension.manifestName): \(ascii(s))", s.unicodeScalars, allowed: icon ? emojiJoiners : [], &problems)
+            case .object(let o):
+                for key in o.keys.sorted(by: byScalars) {
+                    walk(.string(key), [])   // a key is never an icon value
+                    walk(o[key]!, path + [key])
+                }
+            case .array(let a): for v in a { walk(v, path + [nil]) }
+            default: break
+            }
+        }
+        walk(manifest, [])
+    }
+
+    /// Python's `ascii(s)`, as check.py prints a name or value: quoted, everything but printable ASCII escaped.
+    static func ascii(_ s: String) -> String {
+        let quote: Character = s.contains("'") && !s.contains("\"") ? "\"" : "'"
+        var out = String(quote)
+        for scalar in s.unicodeScalars {
+            let v = scalar.value
+            switch v {
+            case _ where Character(scalar) == quote || scalar == "\\": out += "\\" + String(scalar)
+            case 0x09: out += "\\t"
+            case 0x0A: out += "\\n"
+            case 0x0D: out += "\\r"
+            case 0x20..<0x7F: out.unicodeScalars.append(scalar)
+            case ..<0x100: out += String(format: "\\x%02x", v)
+            case ..<0x10000: out += String(format: "\\u%04x", v)
+            default: out += String(format: "\\U%08x", v)
+            }
+        }
+        out.append(quote)
+        return out
     }
 
     /// One file an install copies: its path inside the folder, its size and whether it runs.
