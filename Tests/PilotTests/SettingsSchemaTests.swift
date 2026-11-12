@@ -90,6 +90,7 @@ struct SettingsSchemaTests {
         "dropdown.extensions": "weather,todo",
         "dropdown.hidden": "none", "dropdown.pinned": "status,commands",
         "pill.views": "controls,music,extensions,activity", "pill.hidden": "activity", "pill.extensions": "weather,todo",
+        "pill.pages": "calendar,media,Dev=github+ci",
         "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19", "fonts.ui": "Helvetica", "fonts.mono": "Menlo",
     ]
 

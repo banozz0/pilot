@@ -112,7 +112,7 @@ struct SettingsSchemaPart2Tests {
         try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
-        #expect(rig.schema.keys.count == 56)
+        #expect(rig.schema.keys.count == 58)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
