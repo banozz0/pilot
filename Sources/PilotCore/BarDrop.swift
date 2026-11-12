@@ -26,6 +26,17 @@ public enum BarDropPlacement {
     /// The most of the visible height a drop takes.
     public static let heightShare: CGFloat = 0.6
 
+    /// Which of a drop's item's layouts shows on `bar`: of the frames it was laid out at (`item`), each in its bar window
+    /// (`window`), all in screen points, the first whose centre lies on the bar and inside its own window. Three islands
+    /// draw the whole bar in each island's window, cropped, so an item is laid out in all three and shows in one: the
+    /// pill's key took the first, the left island's, and hung the drop at the screen's left edge (build 2379).
+    public static func shown(_ items: [(item: CGRect, window: CGRect)], on bar: CGRect) -> Int? {
+        items.firstIndex { drawn in
+            let centre = CGPoint(x: drawn.item.midX, y: drawn.item.midY)
+            return drawn.item.width > 0 && bar.contains(centre) && drawn.window.contains(centre)
+        }
+    }
+
     /// Each open drop's frame on a screen whose frame is `screen` and visible frame (under the menu bar, above the Dock)
     /// `visible`. A drop hangs from the bar's bottom edge, `bar` being the top bar's strip on this screen; with the bar
     /// off, from the visible frame's top. `items` is each drop's item's centre on this screen; a closed drop has no frame,

@@ -86,4 +86,25 @@ struct BarDropTests {
         let frames = BarDropPlacement.frames(open: [.askAI], screen: screen, visible: visible, bar: nil)
         #expect(frames[.askAI]?.height == 405)
     }
+
+    /// Three islands on a 3440 pt screen, as Sven's on build 2379: each island's window draws the whole bar, cropped, so
+    /// the pill is laid out in all three at one place and shows only in the centre island.
+    @Test("The pill's key hangs its drop under the pill's item, not under the first island that laid it out (build 2379)")
+    func pillKeyUnderItsItem() throws {
+        let visible = CGRect(x: 0, y: 0, width: 3440, height: 1440), bar = CGRect(x: 0, y: 1396, width: 3440, height: 44)
+        let left = CGRect(x: 8, y: 1400, width: 330, height: 32), centre = CGRect(x: 1360, y: 1400, width: 720, height: 32)
+        let right = CGRect(x: 2380, y: 1400, width: 1052, height: 32)
+        let pill = CGRect(x: 1370, y: 1404, width: 330, height: 24)
+        let i = try #require(BarDropPlacement.shown([(pill, left), (pill, centre), (pill, right)], on: bar))
+        #expect(i == 1)
+        let ground = PillPlacement.ground(window: [left, centre, right][i], radius: 10)
+        let frame = PillPlacement.frame(item: pill.midX, visible: visible, bar: bar, ground: ground)
+        #expect(frame == CGRect(x: 1370, y: 1396 - 300, width: 624, height: 300))
+        #expect(frame.minX <= pill.midX && pill.midX <= frame.maxX)
+        // The bug: the left island's ground pinned the drop to the screen's left edge.
+        #expect(PillPlacement.frame(item: pill.midX, visible: visible, bar: bar, ground: PillPlacement.ground(window: left, radius: 10)).minX == 8)
+        // No pill on the bar: none shows, and the drop centres under the bar.
+        #expect(BarDropPlacement.shown([(.zero, left)], on: bar) == nil)
+        #expect(PillPlacement.frame(item: nil, visible: visible, bar: bar).midX == visible.midX)
+    }
 }

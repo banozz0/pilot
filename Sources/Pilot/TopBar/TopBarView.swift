@@ -80,11 +80,19 @@ final class BarDropLights {
     func register(_ box: ScreenAnchor.Box, for drop: BarDropKind) { anchors[drop, default: []].append(box) }
     func unregister(_ box: ScreenAnchor.Box, for drop: BarDropKind) { anchors[drop]?.removeAll { $0 === box } }
 
-    /// The centre of each drop's item drawn inside `bar`: an item gone for room, or a preview strip's, does not count.
+    /// The centre of each drop's item showing on `bar`: an item gone for room, a preview strip's, or one an island's
+    /// window crops out does not count.
     func itemCentres(on bar: CGRect) -> [BarDropKind: CGFloat] {
-        anchors.compactMapValues { boxes in
-            boxes.lazy.compactMap { $0.view?.screenFrame }.first { $0.width > 0 && bar.contains(CGPoint(x: $0.midX, y: $0.midY)) }?.midX
+        Dictionary(uniqueKeysWithValues: anchors.keys.compactMap { drop in shown(drop, on: bar).map { (drop, $0.frame.midX) } })
+    }
+
+    /// The view drawing `drop`'s item where it shows on `bar`, and its frame (BarDropPlacement.shown).
+    private func shown(_ drop: BarDropKind, on bar: CGRect) -> (view: NSView, frame: CGRect)? {
+        let drawn = (anchors[drop] ?? []).compactMap { box -> (view: NSView, frame: CGRect, window: CGRect)? in
+            guard let view = box.view, let window = view.window, let frame = view.screenFrame else { return nil }
+            return (view, frame, window.frame)
         }
+        return BarDropPlacement.shown(drawn.map { ($0.frame, $0.window) }, on: bar).map { (drawn[$0].view, drawn[$0].frame) }
     }
 
     /// Where `drop` hangs when its item drawn by `box` is clicked (spec desktop-controls T5): that item's own screen, its
@@ -97,10 +105,7 @@ final class BarDropLights {
     }
 
     /// The flat foot of the bar window `drop`'s item stands on inside `bar` (its key opens it there too); nil when none.
-    func ground(of drop: BarDropKind, on bar: CGRect) -> CGRect? {
-        anchors[drop]?.lazy.compactMap(\.view).first { $0.screenFrame.map { bar.contains(CGPoint(x: $0.midX, y: $0.midY)) } == true }
-            .flatMap(Self.ground)
-    }
+    func ground(of drop: BarDropKind, on bar: CGRect) -> CGRect? { shown(drop, on: bar).flatMap { Self.ground($0.view) } }
 
     /// An item's bar window (an island, the floating strip or the whole bar) less its drawn rounded corners.
     private static func ground(_ view: NSView) -> CGRect? {

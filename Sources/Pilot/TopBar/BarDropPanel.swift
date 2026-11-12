@@ -77,9 +77,9 @@ final class BarDrops {
         NSWindow.Level(rawValue: (bar ?? .floating).rawValue + (bar == nil ? 1 : -1))
     }
 
-    /// The focused display (the one holding the focused window) and the top bar's strip on it.
+    /// The focused display (the one holding the focused window, else the pointer's) and the top bar's strip on it.
     static func focusedSpot() -> Spot {
-        guard let screen = Screens.focusedScreen ?? NSScreen.main else {
+        guard let screen = Screens.focusedOrPointerScreen ?? NSScreen.main else {
             let fallback = CGRect(x: 0, y: 0, width: BarDropPlacement.width, height: BarDropPlacement.height)
             return Spot(screen: fallback, visible: fallback, bar: nil)
         }

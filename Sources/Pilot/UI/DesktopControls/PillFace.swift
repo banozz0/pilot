@@ -445,8 +445,10 @@ struct PillDropFace: View {
 
     private var extensionsPage: some View {
         FaceColumns(items: Array(values.extensions.indices), columns: 3, spacing: 8) { row in
-                let item = values.extensions[row]
-                let shape = RoundedRectangle(cornerRadius: style.radii.card, style: .continuous)
+            let item = values.extensions[row]
+            let shape = RoundedRectangle(cornerRadius: style.radii.card, style: .continuous)
+            // A click opens the extension's page, as Return on the lit card does (Sven Q153).
+            Button { act(.extensionPage(row)) } label: {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 6) {
                         Image(systemName: item.symbol).font(.system(size: 11, weight: .medium)).foregroundStyle(style.color(\.text2))
@@ -460,8 +462,14 @@ struct PillDropFace: View {
                 .background(style.color(\.raised), in: shape)
                 .overlay { shape.strokeBorder(style.color(\.line)) }
                 .focusBorder(on: lit(row), radius: style.radii.card)
+                .contentShape(shape)
+            }
+            .buttonStyle(FacePress(reduceMotion: reduceMotion))
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens its page")
         }
     }
+
 
     /// Switch tiles on the left, sound and brightness on the right: reference 1794160682763's Controls.
     private var controlsPage: some View {

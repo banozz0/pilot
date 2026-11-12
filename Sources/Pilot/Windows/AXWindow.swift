@@ -154,6 +154,13 @@ enum Screens {
     /// The screen holding the focused window, as AppKit has it, for placing Pilot's own panels.
     static var focusedScreen: NSScreen? { NSScreen.screens.isEmpty ? nil : NSScreen.screens[mainIndex] }
 
+    /// The screen holding the focused window, else the pointer's: where a bar drop opened by key hangs.
+    static var focusedOrPointerScreen: NSScreen? {
+        if let i = AXWindow.focused()?.frame.flatMap(holding) { return NSScreen.screens[i] }
+        let pointer = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.screens.first
+    }
+
     /// The index of the screen holding a window's centre, else the main one.
     static func index(containing frame: CGRect) -> Int { holding(frame) ?? mainIndex }
 

@@ -2,8 +2,8 @@ import Foundation
 
 /// Pilot default (SPEC story 149): the preset a new install starts on. Since 1.0 it is Sven's own layout, his Arrows 2
 /// preset's keys as they were on 2026-10-28 (Sven, Q531: "Your binds exactly as they are"): My binds' table with the
-/// keys he set by hand, frozen here so a registry default that moves later never changes what a stranger gets; a key
-/// joins only by a dated line below. Keys that open an app the Mac lacks stay bound and do nothing but log "not installed".
+/// keys he set by hand, frozen here so a registry default that moves later never changes what a stranger gets. Keys
+/// that open an app the Mac lacks stay bound and do nothing but log "not installed".
 public enum PilotDefault {
     public static let binds: [String: Key] = {
         var b: [String: Key] = [
@@ -99,8 +99,6 @@ public enum PilotDefault {
         "workspaces.rescue": Key("escape", .shift),
         "workspaces.toggleGaps": Key("delete", .shift),
         ]
-        // The pill from the keyboard (Sven, 2026-11-12): added after the freeze, on a key the table left free.
-        b["system.pill"] = Key("u")
         for name in Workspaces.all {
             b["workspaces.go:\(name)"] = Key(name)
             b["workspaces.move:\(name)"] = Key(name, .shift)
