@@ -212,7 +212,8 @@ struct KitPage<Content: View>: View {
         }
     }
 
-    /// The least width of a page's column (PageFlow): Pilot's Hold Hyper row on one line, its label beside its controls.
+    /// The least width of a page's column (PageFlow): a row's label stays close to its control, and Pilot's Hold Hyper row
+    /// still fits (its label wraps to two lines at 460).
     static func column(_ kind: PilotStyle) -> CGFloat { kind == .toybox ? 500 : 460 }
 }
 
@@ -280,7 +281,7 @@ extension KitBlock where Trailing == EmptyView {
 // MARK: - Page flow
 
 /// A page's blocks in columns once it is wide enough (page density, Sven 2026-11-12: "settings in the pages that are too
-/// wide for no reason and also empty spaces"): each block that flows (`pageFlows()`: KitBlock and a More block, unless `.pageWide()`) goes under
+/// wide for no reason and also empty spaces"): each block that flows (`pageFlows()`: KitBlock, unless `.pageWide()`; a More tab's blocks stay one stack) goes under
 /// the shortest column, so short blocks sit side by side and no column keeps a hole beside its neighbour; anything else
 /// (a header tile, a pair, a grid, a heading) takes the full width under all the columns above it. Columns are at least
 /// `column` wide, so a label and its control stay close; under two columns' width the page is one column, as a VStack.

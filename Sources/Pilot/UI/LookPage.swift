@@ -158,8 +158,7 @@ struct LookPage: View {
         @Bindable var look = look
         return KitMore(entries: Self.entries) {
             headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
-            // Its three pictures keep the page's width (PageFlow).
-            headed(.menuLayout, Info.menuLayout) { MenuLayoutPicker(look: look).padding(14).blockSurface() }.pageWide()
+            headed(.menuLayout, Info.menuLayout) { MenuLayoutPicker(look: look).padding(14).blockSurface() }
             headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
             headed(.appsShowAs, Info.appsShowAs) { calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs } }
             errorLine.padding(.top, 12)
