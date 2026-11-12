@@ -153,10 +153,12 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
         case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font", "material", "glass", "light or dark"]
-        // The front's words; the input, the keyboard layout and the mouse moved with their parts to More (simplify-pages T17).
+        // The front's words; the input, the keyboard layout and the mouse have their own places. Each part's keys are in its
+        // card (pages round 5), so their words land here.
         case .system: ["setup", "sound", "volume", "mute", "output", "speakers", "keep awake", "caffeinate", "sleep",
                        "bluetooth", "headphones", "airpods", "connect", "wi-fi", "wifi", "network", "join", "display", "resolution", "monitor",
-                       "screen", "refresh rate"]
+                       "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
+                       "volume up", "volume down"]
         case .activity: ["activity monitor", "process", "running", "quit", "force quit", "kill", "task manager", "hog", "helper"]
         case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run", "login items",
                        "open at login", "startup", "launch agent", "launchd", "daemon", "background items"]
@@ -369,9 +371,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Wallpaper block on its front (Previous, Next, Change on its own), which a link and the desktop's Hyper +
     /// right-click › Wallpaper settings… scroll to.
     case wallpaper
-    /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts and the
-    /// glass's transparency and blur; how apps show, the cursor, and the folders and order the wallpaper cycles through are
-    /// places on the front (pages round 4, Sven's Q99).
+    /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts and how
+    /// apps show (back on More in pages round 5); the glass's transparency and blur (under Glass, pages round 5), the cursor,
+    /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
     case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
@@ -404,9 +406,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// What Install and Update list, Recommend apps and the self-updating casks: a place on Install's Catalogue (on its More,
     /// beside `helpers` and `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
-    /// System's places on its front: the sound input, the keyboard layout, the mouse's speeds and the keys of every part
-    /// (on a More tab from simplify-pages T17 until Sven, 2026-11-11, after 2276).
-    case soundInput, keyboardLayout, mouseSpeed, systemKeys
+    /// System's places on its front: the sound input, the keyboard layout and the mouse's speeds (on a More tab from
+    /// simplify-pages T17 until Sven, 2026-11-11, after 2276). Each part's keys sit in its own card (pages round 5).
+    case soundInput, keyboardLayout, mouseSpeed
     /// AI Setup's places, back from More with AI's More (pages round 4, Sven's Q105): the fallback provider, the AI's keys
     /// and when a chat starts over.
     case aiFallback, aiKeys, aiNewChat
@@ -426,7 +428,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .fileSearch, .duplicates, .folders: .files
         case .reports: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
-        case .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys: .system
+        case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data, .notifications: .general
         case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
@@ -472,7 +474,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .menuLayout, .windowLayout, .glassTuning]
+                                                     .lookStyle, .menuLayout, .windowLayout, .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -480,8 +482,8 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .keySwaps, .overlay, .menuExtras, .appsShowAs, .cursor, .wallpaperCycle,
-                                                     .soundInput, .keyboardLayout, .mouseSpeed, .systemKeys, .voiceDictation,
+                                                     .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
+                                                     .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
                                                      .voiceWords, .installLists]
 
     /// A block on its page's front that a link or the search scrolls to.
@@ -551,7 +553,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .soundInput: "Input"
         case .keyboardLayout: "Keyboard layout"
         case .mouseSpeed: "Mouse"
-        case .systemKeys: "Keys"
         case .installLists: "What Pilot lists"
         case .menuExtras: "More rows"
         case .translate: "Translate"
@@ -632,8 +633,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .soundInput: ["input", "microphone", "mic", "input volume", "input device"]
         case .keyboardLayout: ["keyboard layout", "input source", "layout", "typing in"]
         case .mouseSpeed: ["pointer speed", "tracking speed", "mouse speed", "cursor speed", "cycle speeds"]
-        case .systemKeys: ["sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys", "volume up",
-                           "volume down"]
         case .installLists: ["recommend apps", "recommendations", "picks", "self-updating", "casks", "update themselves"]
         case .menuExtras: ["more rows", "add a row", "extra rows", "rows to add", "rows you can add"]
         case .translate: ["translate", "translation", "language", "translate into"]

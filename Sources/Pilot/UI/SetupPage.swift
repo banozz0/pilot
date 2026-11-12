@@ -29,8 +29,8 @@ struct SetupDevices {
 }
 
 /// Setup (round 8, Sven 2026-10-05, plan card 6Kx5FuzW2DU; on the kit, card agent-bo-95422898, design round 4 section 7):
-/// the Mac's sound (its output and input), Wi-Fi, Bluetooth, displays, keep-awake, the keyboard layout (moved from Look),
-/// the mouse's speeds and every part's keys, each changed in place inside Pilot on its own card; no More tab (its parts
+/// the Mac's sound (its output and input), Wi-Fi, Bluetooth, displays, keep-awake, the keyboard layout (moved from Look)
+/// and the mouse's speeds, each changed in place inside Pilot on its own card with its keys; no More tab (its parts
 /// came back to the front, Sven 2026-11-11, after 2276). Where macOS refuses something to an app, an ⓘ says so instead of
 /// opening System Settings.
 struct SetupPage: View {
@@ -56,7 +56,7 @@ struct SetupPage: View {
 
     static let intro = "Sound, network, screens and sleep, changed inside Pilot."
 
-    /// The cards, in two columns once the page is wide; the keys' card closes the right (`keysCard`).
+    /// The cards, in two columns once the page is wide.
     static let left: [SetupSection] = [.sound, .wifi, .keyboard, .mouse]
     static let right: [SetupSection] = [.displays, .bluetooth, .keepAwake]
     /// Every part's card, top to bottom as a narrow page stacks them.
@@ -110,27 +110,34 @@ struct SetupPage: View {
         pointer?.refresh()
     }
 
-    /// Setup's actions (SystemModule): the three Omarchy control-panel keys, the media keys and the switches.
-    static let keys: [(action: String, label: String)] = [
-        ("system.soundSettings", "Sound in Pilot"), ("media.volumeUp", "Volume up"), ("media.volumeDown", "Volume down"),
-        ("media.mute", "Mute"), ("system.wifiSettings", "Wi-Fi in Pilot"), ("system.wifi", "Wi-Fi on or off"),
-        ("system.bluetoothSettings", "Bluetooth in Pilot"), ("system.bluetooth", "Bluetooth on or off"),
-        ("system.displaySettings", "Displays in Pilot"), ("system.keepAwake", "Keep awake on or off"),
-    ]
+    /// Each part's keys (SystemModule), in its own card (pages round 5, Sven on build 2354: "mute with sound bluetooth with
+    /// bluetooth"): the Omarchy control-panel key that opens it in Pilot, the media keys and its switch. The keyboard
+    /// layout has none; the mouse's cycle key is in its own rows.
+    static func keys(_ part: SetupSection) -> [(action: String, label: String)] {
+        switch part {
+        case .sound: [("system.soundSettings", "Sound in Pilot"), ("media.volumeUp", "Volume up"), ("media.volumeDown", "Volume down"),
+                      ("media.mute", "Mute")]
+        case .wifi: [("system.wifiSettings", "Wi-Fi in Pilot"), ("system.wifi", "Wi-Fi on or off")]
+        case .bluetooth: [("system.bluetoothSettings", "Bluetooth in Pilot"), ("system.bluetooth", "Bluetooth on or off")]
+        case .displays: [("system.displaySettings", "Displays in Pilot")]
+        case .keepAwake: [("system.keepAwake", "Keep awake on or off")]
+        case .keyboard, .mouse: []
+        }
+    }
 
     // MARK: The cards
 
-    /// Every part, each its own card with its controls showing (Sven, 2026-10-07: "fill them with whats needed"), then the
-    /// keys' card, in two columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
+    /// Every part, each its own card with its controls and keys showing (Sven, 2026-10-07: "fill them with whats needed"),
+    /// in two columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
     private var cards: some View {
         Group {
             if wide {
                 HStack(alignment: .top, spacing: 14) {
                     VStack(spacing: 14) { ForEach(Self.left, id: \.self) { card($0) } }
-                    VStack(spacing: 14) { ForEach(Self.right, id: \.self) { card($0) }; keysCard }
+                    VStack(spacing: 14) { ForEach(Self.right, id: \.self) { card($0) } }
                 }
             } else {
-                VStack(spacing: 14) { ForEach(Self.front, id: \.self) { card($0) }; keysCard }
+                VStack(spacing: 14) { ForEach(Self.front, id: \.self) { card($0) } }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -142,16 +149,19 @@ struct SetupPage: View {
     /// A part's card, under its place where it has one (the keyboard layout's and the mouse's, which a link or the
     /// search lands on), else its part, which a key lands on.
     @ViewBuilder private func card(_ part: SetupSection) -> some View {
-        let card = panel(part.title, symbol: part.symbol, colour: part.colour, info: info(part)) { summary(part) } content: { detail(part) }
+        let card = panel(part.title, symbol: part.symbol, colour: part.colour, info: info(part)) { summary(part) } content: {
+            detail(part)
+            keyRows(part)
+        }
         if let place = part.place.section { card.id(place) } else { card.id(part) }
     }
 
-    /// Every part's keys: the ones that open it in Pilot, the media keys and the switches.
-    private var keysCard: some View {
-        panel(AppSection.systemKeys.title, symbol: "command", colour: 2, info: "The keys that open each part in Pilot, the media keys and the switches.") {
-            EmptyView()
-        } content: {
-            ForEach(Array(Self.keys.enumerated()), id: \.element.action) { i, key in
+    /// A part's keys at its card's foot, under their heading: the one that opens it in Pilot, its media keys and its switch.
+    @ViewBuilder private func keyRows(_ part: SetupSection) -> some View {
+        let keys = Self.keys(part)
+        if !keys.isEmpty {
+            heading("Keys", info: "Set key binds one; Keys lists every bind.")
+            ForEach(Array(keys.enumerated()), id: \.element.action) { i, key in
                 BlockRow(first: i == 0) {
                     Text(key.label)
                     Spacer()
@@ -159,7 +169,6 @@ struct SetupPage: View {
                 }
             }
         }
-        .id(AppSection.systemKeys)
     }
 
     /// A card: its squircle, name, its rule as an ⓘ and how it stands, then its controls. Instrument's is its panel: the
