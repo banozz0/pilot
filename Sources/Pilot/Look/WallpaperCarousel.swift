@@ -198,17 +198,20 @@ enum WallpaperCarousel {
     /// and follows them (Q26); nil draws a generic window there.
     @MainActor static func apps(_ owner: ThemeCoordinator?) -> ThemePreview.Apps {
         guard let owner, let found = try? owner.appFollowing() else { return .init() }
-        func editor(_ kind: ThemeAppKind) -> Bool {
+        enum Role { case editor, terminal }
+        /// nil: an app that runs inside a terminal (btop), drawn as neither.
+        func role(_ kind: ThemeAppKind) -> Role? {
             switch kind {
-            case .vscode, .cursor, .windsurf: true
-            case .kitty, .alacritty, .wezterm, .iterm2, .btop: false
+            case .vscode, .cursor, .windsurf: .editor
+            case .kitty, .alacritty, .wezterm, .iterm2: .terminal
+            case .btop: nil
             }
         }
         let on = found.apps.filter(\.on).compactMap { app in ThemeAppKind(rawValue: app.kind).map { ($0, app.name) } }
         var folder: ObjCBool = false
         let ghostty = FileManager.default.fileExists(atPath: owner.binding.root, isDirectory: &folder) && folder.boolValue
-        let terminal = found.ghostexFound && found.ghostexOn ? "Ghostex" : ghostty ? "Ghostty" : on.first { !editor($0.0) && $0.0 != .btop }?.1  // btop runs inside a terminal, never as one
-        return .init(editor: found.zedFound && found.zedOn ? "Zed" : on.first { editor($0.0) }?.1, terminal: terminal,
+        let terminal = found.ghostexFound && found.ghostexOn ? "Ghostex" : ghostty ? "Ghostty" : on.first { role($0.0) == .terminal }?.1
+        return .init(editor: found.zedFound && found.zedOn ? "Zed" : on.first { role($0.0) == .editor }?.1, terminal: terminal,
                      notes: found.obsidianOn && found.vaults.contains(where: \.on) ? "Obsidian" : nil)
     }
 

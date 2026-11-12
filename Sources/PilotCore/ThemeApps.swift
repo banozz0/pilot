@@ -36,7 +36,7 @@ public enum ThemeApps {
             found.append(.init(kind: .wezterm, root: config + "/wezterm", config: nil, generated: "colors/\(schemeName).toml"))
         }
         // btop makes ~/.config/btop on its first start (XDG_CONFIG_HOME aside) and has no app bundle: the folder is the sign.
-        if folder(config + "/btop") { found.append(.init(kind: .btop, root: config + "/btop", config: "btop.conf", generated: "themes/pilot.theme")) }
+        if folder(config + "/btop") { found.append(.init(kind: .btop, root: config + "/btop", config: "btop.conf", generated: "themes/\(btopTheme).theme")) }
         let iterm = "\(support)/\(onDisk("iTerm2"))"
         if folder(iterm) || installed(.iterm2) { found.append(.init(kind: .iterm2, root: iterm, config: nil, generated: "DynamicProfiles/pilot-theme.json")) }
         return found
