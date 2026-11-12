@@ -282,7 +282,9 @@ extension BarSettings {
         case (.top, .both): set(extension: id, on: true, placement: .both)
         case (.menu, .menuBar): if !isOn(extension: id, in: .menuBar) { toggle(extension: id, in: .menuBar) }
         case (.menu, .both): set(extension: id, on: true, placement: .menuBar)
-        case (.top, .menuBar), (.menu, .topBar), (.group, _): return false
+        // Onto the Group's outline: it joins the Group (Q182), in the top bar where the Group gathers it.
+        case (.group, _): return group(.extension(id))
+        case (.top, .menuBar), (.menu, .topBar): return false
         }
         if case .top(let side, let index) = drop { place(.extension(id), on: side, at: index) }
         return true

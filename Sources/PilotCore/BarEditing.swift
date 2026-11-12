@@ -53,7 +53,7 @@ public struct BarDrop: Sendable {
     /// Whether a drop at `x` lands in the Group (the strip's own slots as drawn): inside its drawn slot, a little in from
     /// its edges so a drop at either edge still goes beside it, for an item that can join.
     public static func joinsGroup(x: Double, slots: [Slot], dragging: BarTrayItem?) -> Bool {
-        guard dragging?.kind?.groupable == true, let group = slots.first(where: { $0.item == .kind(.group) && $0.drawn }) else { return false }
+        guard dragging.map(BarSettings.groupable) == true, let group = slots.first(where: { $0.item == .kind(.group) && $0.drawn }) else { return false }
         return (group.minX + groupEdge...max(group.minX + groupEdge, group.maxX - groupEdge)).contains(x)
     }
 
@@ -118,7 +118,7 @@ extension BarSettings {
     public mutating func place(_ item: BarTrayItem, on side: TopBarSide, at index: Int) {
         guard item.kind?.pinned != true, self.index(of: item) != nil else { return }
         // Put at a place of its own, an item is out of the Group (Sven on build 2372: dragged out, it stays out).
-        if let kind = item.kind { set(kind, grouped: false) }
+        set(item, grouped: false)
         let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.item != item }
         // A link can name any index: below 0 is first.
         let index = max(index, 0)
@@ -139,26 +139,47 @@ extension BarSettings {
         place(kind, on: side, at: index)
     }
 
+    /// Whether `item` can sit in the Group: a groupable built-in item, or any extension's own item (Q182).
+    public static func groupable(_ item: BarTrayItem) -> Bool {
+        switch item {
+        case .kind(let kind): kind.groupable
+        case .extension: true
+        case .divider: false
+        }
+    }
+
     /// Puts a groupable item in the Group (a drop on its outline, `pilot bar group`): on, in every bar the Group is in.
     /// False for an item that cannot join, or while the Group is off.
-    @discardableResult public mutating func group(_ kind: BarKind) -> Bool {
+    @discardableResult public mutating func group(_ kind: BarKind) -> Bool { group(.kind(kind)) }
+
+    /// The same for any item: an extension's own item joins the top bar first, where the Group gathers it.
+    @discardableResult public mutating func group(_ item: BarTrayItem) -> Bool {
         let group = entry(.group)
-        guard kind.groupable, group.on else { return false }
-        set(kind, on: true)
-        set(kind, placement: group.placement)
-        set(kind, grouped: true)
+        guard Self.groupable(item), group.on else { return false }
+        switch item {
+        case .kind(let kind):
+            set(kind, on: true)
+            set(kind, placement: group.placement)
+        case .extension(let id):
+            if !isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
+        case .divider: return false
+        }
+        set(item, grouped: true)
         return true
     }
 
+    /// Takes one item out of the Group.
+    public mutating func ungroup(_ kind: BarKind) { ungroup(.kind(kind)) }
+
     /// Takes one item out of the Group, or every item (Ungroup): each comes out where the Group is, in the order it drew,
     /// on the Group's side, and the Group, empty, draws nothing until an item joins it again.
-    public mutating func ungroup(_ kind: BarKind? = nil) {
-        let members = entries.filter { $0.inGroup && (kind == nil || $0.kind == kind) }.map(\.kind)
+    public mutating func ungroup(_ item: BarTrayItem? = nil) {
+        let members = entries.filter { $0.inGroup && (item == nil || $0.item == item) }.map(\.item)
         let side = entry(.group).side
         for member in members {
             set(member, grouped: false)
             set(member, side: side)
-            move(member, to: entries.filter { $0.kind != member }.firstIndex { $0.kind == .group }!)
+            move(member, to: entries.filter { $0.item != member }.firstIndex { $0.kind == .group }!)
         }
     }
 

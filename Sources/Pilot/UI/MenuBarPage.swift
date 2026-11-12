@@ -396,7 +396,7 @@ struct MenuBarPage: View {
     /// Group it has no place of its own to step to: its menu takes it out of the Group, or splits the Group.
     private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, inGroup: Bool = false) -> some View {
         let kind = slot.kind, item = slot.item, screen = engine.topBar.connected.first?.name ?? ""
-        let grouped = inGroup ? [StripAction(title: "Take out of the Group", run: ungroup(kind, store)), StripAction(title: "Ungroup", run: ungroup(nil, store))] : []
+        let grouped = inGroup ? [StripAction(title: "Take out of the Group", run: ungroup(item, store)), StripAction(title: "Ungroup", run: ungroup(nil, store))] : []
         return StripPiece(item: item, title: kind.title, pinned: kind.pinned, dragged: $dragged,
                           remove: takeOff(item, store), step: inGroup ? nil : step(item, store, inTopBar: inTopBar), actions: grouped) {
             BarDragChip(kind: kind, slot: slot, screen: screen, sources: engine.barSources, store: store)
@@ -412,7 +412,8 @@ struct MenuBarPage: View {
         let shape = RoundedRectangle(cornerRadius: ink.corner(ink.radius(6), \.chip), style: .continuous)
         let group = BarTrayItem.kind(.group)
         return HStack(spacing: 10) {
-            ForEach(slot.entries, id: \.kind) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
+            // By item: several extensions' items share one kind.
+            ForEach(slot.entries, id: \.item) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
         }
         .padding(.horizontal, 5).padding(.vertical, 1)
         .background {
@@ -438,8 +439,8 @@ struct MenuBarPage: View {
     }
 
     /// Takes `kind` out of the Group, or every item (Ungroup).
-    private func ungroup(_ kind: BarKind?, _ store: BarItemsStore) -> () -> Void {
-        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(kind) } }
+    private func ungroup(_ item: BarTrayItem?, _ store: BarItemsStore) -> () -> Void {
+        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(item) } }
     }
 
     /// An extension's own item, its emoji and its answer, a piece of its own in either strip.

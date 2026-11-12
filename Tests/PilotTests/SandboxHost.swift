@@ -153,7 +153,12 @@ struct SandboxHost {
         defer { served.stop() }
         try Data().write(to: hold)
         let deadline = Date.now.addingTimeInterval(600)
+        // PILOT_SANDBOX_EXTBAR=1: the extensions' bar items listed as the app's loop lists them (an unlaunched Engine runs
+        // none), read again while none is listed, so ones installed with `pilot ext install` show in `pilot list
+        // bar-extensions`; once one is, no more rounds, so no bar command runs on an item placed after.
+        let listsBar = ProcessInfo.processInfo.environment["PILOT_SANDBOX_EXTBAR"] == "1"
         while FileManager.default.fileExists(atPath: hold.path(percentEncoded: false)) && Date.now < deadline {
+            if listsBar, ExtensionBar.shared.items.isEmpty { await ExtensionBar.shared.round() }
             try await Task.sleep(for: .milliseconds(200))
         }
         withExtendedLifetime(engine) {}

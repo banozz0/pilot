@@ -68,7 +68,7 @@ extension ControlVerbs {
             }))
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
-        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
+        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
                              usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
@@ -117,20 +117,22 @@ extension ControlVerbs {
                 }
                 return Self.change(kind, in: bar(), reach) { $0.set(kind, style: style) }
             case "group":
-                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
+                let word = try args.word(1, "item")
+                let item = try Self.groupItem(word, reach)
                 var joined = bar().settings
-                guard joined.group(kind) else {
-                    throw ControlError(.badValue, "\(kind.rawValue) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")), while the Group is on")
+                guard joined.group(item) else {
+                    throw ControlError(.badValue, "\(word) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")) and any extension's bar item by its id, while the Group is on")
                 }
-                return Self.change(kind, in: bar(), reach) { $0 = joined }
+                return Self.change(item, in: bar(), reach) { $0 = joined }
             case "ungroup":
                 guard args.positional.count > 1 else {
                     Self.write(bar()) { $0.ungroup() }
                     return Self.state(bar(), reach)
                 }
-                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
-                guard bar().settings.entry(kind).inGroup else { throw ControlError(.badValue, "\(kind.rawValue) is not in the Group") }
-                return Self.change(kind, in: bar(), reach) { $0.ungroup(kind) }
+                let word = try args.word(1, "item")
+                let item = try Self.groupItem(word, reach)
+                guard bar().settings.entry(for: item)?.inGroup == true else { throw ControlError(.badValue, "\(word) is not in the Group") }
+                return Self.change(item, in: bar(), reach) { $0.ungroup(item) }
             case "spacer":
                 let word = try args.word(1, "points or reset")
                 let points = word == "reset" ? nil : Double(word)
@@ -295,6 +297,12 @@ extension ControlVerbs {
     }
 
     /// One more divider (divider:<n>) named on the command line, on the top bar; nil for any other word.
+    /// What `pilot bar group` and `ungroup` name: a built-in item by its name, else an extension's bar item by its id (Q182).
+    private static func groupItem(_ word: String, _ reach: BarReach) throws(ControlError) -> BarTrayItem {
+        if let kind = BarKind(rawValue: word) { return .kind(kind) }
+        return .extension(try Self.extensionItem(word, reach).id)
+    }
+
     private static func moreDivider(_ word: String, on store: BarItemsStore) throws(ControlError) -> BarTrayItem? {
         guard word.hasPrefix("divider:") else { return nil }
         guard let item = BarTrayItem(rawValue: word), case .divider = item, store.settings.onStrip(item, placement: .topBar) else {
@@ -305,7 +313,7 @@ extension ControlVerbs {
     }
 
     private static func row(_ entry: BarEntry, lacking: Set<BarKind>) -> JSONValue {
-        .object(["item": .string(entry.dividerID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
+        .object(["item": .string(entry.dividerID == nil && entry.extensionID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
                  "styles": .array(entry.kind.styles.map { .string($0.rawValue) }),
                  "placement": .string(entry.placement.rawValue), "side": .string(entry.side.rawValue),
                  "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)), "inGroup": .bool(entry.inGroup),
