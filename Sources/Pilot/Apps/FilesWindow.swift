@@ -646,9 +646,19 @@ final class FilesModel {
     }
 
     /// A group opens every folder visibly; a single folder keeps navigating this window.
+    /// Several files open as one open per app, in the list's order, so an app that takes many (Pilot's image viewer)
+    /// gets them together: one by one, Pilot's viewer got single-picture opens and stepped through the whole folder
+    /// (Sven on build 2409). A file with no app opens alone, so macOS asks for one.
     func open(_ items: [FolderItem]) {
+        guard items.count > 1 else { return items.first.map(open) ?? () }
+        var batches: [(app: URL, files: [URL])] = []
         for item in items {
-            if items.count > 1, item.isFolder { newWindow(item.url) } else { open(item) }
+            if item.isFolder { newWindow(item.url); continue }
+            guard let app = NSWorkspace.shared.urlForApplication(toOpen: item.url) else { NSWorkspace.shared.open(item.url); continue }
+            if let i = batches.firstIndex(where: { $0.app == app }) { batches[i].files.append(item.url) } else { batches.append((app, [item.url])) }
+        }
+        for batch in batches {
+            NSWorkspace.shared.open(batch.files, withApplicationAt: batch.app, configuration: NSWorkspace.OpenConfiguration())
         }
     }
 
