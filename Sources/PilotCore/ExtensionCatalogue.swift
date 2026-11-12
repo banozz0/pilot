@@ -92,7 +92,7 @@ public enum ExtensionCatalogue {
         case unreachable(String), tooBig(path: String, limit: Int), unreadable(String), newerSchema(Int)
         case mismatch(path: String), notAnExtension(String), wrongID(found: String, expected: String), folderTaken(id: String, why: String)
         case notInstalled(String), notListed(String), failed(String)
-        case notATheme(String), themeTaken(id: String, why: String), themeNotListed(String), themeNotInstalled(String)
+        case notATheme(String), themeTaken(id: String, why: String), themeNotListed(String)
 
         public var reason: String {
             switch self {
@@ -110,7 +110,6 @@ public enum ExtensionCatalogue {
             case .notATheme(let why): "What arrived is not a theme pack Pilot takes (\(why)), so nothing was installed."
             case .themeTaken(let id, let why): "Pilot already has a theme pack \(id) \(why), so nothing was installed."
             case .themeNotListed(let id): "The catalogue has no theme \(id)."
-            case .themeNotInstalled(let id): "No theme pack \(id) is in your themes."
             }
         }
 

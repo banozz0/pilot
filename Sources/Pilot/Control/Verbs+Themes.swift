@@ -20,7 +20,6 @@ extension ControlVerbs {
                 case "catalogue" where words.count == 1 || words == ["catalogue", "refresh"]:
                     return try await Self.themeCatalogue(refresh: words.count == 2, owner)
                 case "get" where words.count == 2: return try await Self.getTheme(words[1], owner, peer: call.peer)
-                case "remove" where words.count == 2: return try await Self.removeTheme(words[1], owner, peer: call.peer)
                 case "new" where words.count == 2:
                     try owner.editorPath(words[1])
                     return try themeJSON(owner.saveDraft(ThemePackStore.readFolder(words[1])).pack)

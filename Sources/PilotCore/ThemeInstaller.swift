@@ -99,12 +99,6 @@ public struct ThemeInstaller: Sendable {
         return loaded
     }
 
-    /// Moves the pack `id` in the writable library to the Trash.
-    public func remove(_ id: String) throws {
-        guard let folder = folder(id) else { throw ExtensionCatalogue.Problem.themeNotInstalled(id) }
-        try locked { try trash(folder) }
-    }
-
     /// `loaded`, once it carries nothing a catalogue pack may not: custom mappings write pack text into a local config,
     /// and an adapter carries no data (ThemePackStore.plainAdapters, validate's rule).
     @discardableResult

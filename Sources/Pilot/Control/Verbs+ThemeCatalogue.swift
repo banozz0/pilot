@@ -1,9 +1,9 @@
 import Foundation
 import PilotCore
 
-/// `pilot theme catalogue|get|remove` (public-repo spec T20): the catalogue's theme packs, read through the model the
+/// `pilot theme catalogue|get` (public-repo spec T20): the catalogue's theme packs, read through the model the
 /// Extensions page shares (one index, kept ten minutes), installed into your themes by ThemeInstaller after Allow, every
-/// file held to the index's sha256. A pack is data: installing applies nothing.
+/// file held to the index's sha256. A pack is data: installing applies nothing; `theme delete` takes one out.
 extension ControlVerbs {
     /// `theme catalogue [refresh]`: each theme the catalogue offers, with where it stands in your themes.
     static func themeCatalogue(refresh: Bool, _ owner: ThemeCoordinator) async throws(ControlError) -> JSONValue {
@@ -55,23 +55,6 @@ extension ControlVerbs {
             log.notice("theme get: \(id, privacy: .public) from the catalogue, from the pilot command")
             return .object(["installed": .string(id), "title": .string(loaded.pack.title), "changed": .bool(true), "replaced": .bool(had != nil),
                             "folder": .string(loaded.folder), "revision": .string(loaded.revision), "images": .number(Double(loaded.images.count))])
-        }
-    }
-
-    /// `theme remove <id>`: a pack in your themes to the Trash after Allow; never the one applied now, whose files are in use.
-    static func removeTheme(_ id: String, _ owner: ThemeCoordinator, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
-        let installer = themeInstaller(owner)
-        guard let folder = installer.folder(id) else { throw ControlError(.badValue, ExtensionCatalogue.Problem.themeNotInstalled(id).reason) }
-        guard !isApplied(id, owner) else { throw ControlError(.badValue, "\(id) is the theme applied now: apply another or restore first. Nothing asked.") }
-        // Its manifest alone, for the title: a full load decodes every wallpaper.
-        let title = (try? ThemeFiles.read(root: owner.store.writableRoot, path: id + "/manifest.json").bytes).flatMap { try? ThemePack.decode($0) }?.title ?? id
-        let ask = ControlGate.Ask("Remove theme", lines: ["\(id) (\(title)) at \(folder.path) goes to the Trash"])
-            .summed("Remove theme \(id)?", ["Its folder goes to the Trash"])
-        return try await AllowPrompt.gate.allow(ask, peer: peer) { () throws(ControlError) in
-            let removed = await Task.detached { Result { try installer.remove(id) } }.value
-            if case .failure(let error) = removed { throw ControlError(.badValue, ExtensionCatalogue.Problem.reason(error)) }
-            log.notice("theme remove: \(id, privacy: .public), from the pilot command")
-            return .object(["removed": .string(id), "title": .string(title)])
         }
     }
 
