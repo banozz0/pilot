@@ -265,6 +265,40 @@ def checks(passed):
             assert f.restore()['status'] == 'restored' and tree() == before, (target.read_bytes() if target.exists() else None)
             assert (target.read_bytes() == conf) if conf else not target.exists()
             f.stop()
+        # Sven's shape, then btop's first quit: the btop.conf Pilot made has no version header, so btop rewrites it whole.
+        # Real btop when it is here (in a throwaway XDG_CONFIG_HOME), else the shape it writes. Other apps still follow.
+        f, home, roots, tree = setup('bts', apps=['btop', 'kitty'])
+        (roots['btop'] / 'themes').mkdir(); (roots['kitty'] / 'kitty.conf').write_bytes(b'font_size 13\n')
+        target = roots['btop'] / 'btop.conf'; f.start()
+        assert f.apply()['status'] == 'applied' and b'Pilot theme pack' in target.read_bytes()
+        btop = Path('/opt/homebrew/bin/btop')
+        if btop.exists():
+            import fcntl, pty, select, struct, termios, time
+            pid, fd = pty.fork()
+            if pid == 0:
+                os.environ.update(XDG_CONFIG_HOME=str(home / '.config'), TERM='xterm-256color'); os.execv(str(btop), ['btop'])
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))  # btop quits on a 0x0 terminal
+            def drain(t):
+                end = time.time() + t
+                while time.time() < end:
+                    if select.select([fd], [], [], .1)[0]:
+                        try: os.read(fd, 65536)
+                        except OSError: return
+            drain(2.5); os.write(fd, b'q'); drain(2); os.waitpid(pid, 0)
+        else:
+            target.write_bytes(b'#? Config file for btop v.1.4.8\n\ncolor_theme = "pilot"\n\ntheme_background = false\n')
+        rewritten = target.read_bytes()
+        assert rewritten.startswith(b'#? Config file for btop') and b'Pilot theme pack' not in rewritten, rewritten[:200]
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'btop.conf' in k], plan['review']
+        kitty = (roots['kitty'] / 'pilot-theme.conf').read_bytes()
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and target.read_bytes() == rewritten
+        assert (roots['kitty'] / 'pilot-theme.conf').read_bytes() != kitty and theme(roots['btop'] / 'themes/pilot.theme')['main_bg'] == f.packs[1]['palette']['background']
+        answer = f.restore(); assert answer['status'] == 'restored', answer
+        left = target.read_text()
+        assert not (roots['btop'] / 'themes/pilot.theme').exists() and (roots['kitty'] / 'kitty.conf').read_bytes() == b'font_size 13\n'
+        print(f"  btop sven-shape after btop's quit ({'real btop' if btop.exists() else 'its shape'}): kept {[k for k in answer.get('kept', []) if 'btop' in k]}; left "
+              + repr([l for l in left.splitlines() if l.startswith(('color_theme', 'theme_background'))]), flush=True)
+        f.stop()
         # A btop that rewrites btop.conf (an option changed, or the file had no header) keeps Pilot's values and drops its
         # markers: Pilot then counts the file as the person's, keeps following through pilot.theme, and Restore leaves it.
         f, home, roots, tree = setup('btr', apps=['btop'])
