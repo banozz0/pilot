@@ -25,6 +25,11 @@ struct CursorBlock: View {
     static let darkGround: UInt32 = 0x14161C
     static let previewHeight: CGFloat = 132
 
+    /// The preview's height: 132 pt up to Medium, taller with a bigger Size so the cursors along its foot stay whole.
+    private var previewHeight: CGFloat {
+        Self.previewHeight * max(1, (cursors.drawn || offered != nil ? cursors.size.scale(offered ?? cursors.shape) : 1) / 1.5)
+    }
+
     /// What each row does, the ⓘ's words.
     enum Info {
         static let drawn = "On, Pilot draws the pointer, I-beam, hands and the rest everywhere, in the shape, size and colours below. Off, macOS's own cursor is back; if any part stays, a restart clears it."
@@ -74,10 +79,17 @@ struct CursorBlock: View {
                 halo("Spotlight", isOn: $effects.spotlight)
                 if effects.spotlight { BindKey(action: CursorEffects.spotlightID) }
                 Spacer(minLength: 8)
-                ColourChoicePicker(choice: $effects.colour, theme: ColourChoicePicker.effectTheme(look.themeID, resolved: look.packAppearance),
-                                   label: "Effect colour")
+                if wide { effectColour }
             }
+            // Narrow, the halos' colour gets a row of its own, or the chips and Spotlight's key squeeze it.
+            if !wide { BlockRow { Spacer(); effectColour } }
         }
+    }
+
+    private var effectColour: some View {
+        @Bindable var effects = effects
+        return ColourChoicePicker(choice: $effects.colour, theme: ColourChoicePicker.effectTheme(look.themeID, resolved: look.packAppearance),
+                                  label: "Effect colour")
     }
 
     /// The wells sit beside Colours once the preview, the block's inner width, is this wide; narrower, on a line of their
@@ -136,7 +148,7 @@ struct CursorBlock: View {
     private var preview: some View {
         VStack(alignment: .leading, spacing: 6) {
             // The picture is an overlay on a flexible frame, so its width never feeds back into the layout.
-            Color.clear.frame(maxWidth: .infinity).frame(height: Self.previewHeight)
+            Color.clear.frame(maxWidth: .infinity).frame(height: previewHeight)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
                 .overlay { if width > 0, let image = stage(width: width) { Image(decorative: image, scale: 2) } }
                 .clipShape(.rect(cornerRadius: 10))
@@ -165,7 +177,7 @@ struct CursorBlock: View {
             : CursorPreview.macOS
         return CursorPreview.stage(shown, scale: scale, pixelated: drawn && shape == .classic,
                                    trail: effects.trail, ring: effects.ring, ripple: effects.ripple, effect: effect,
-                                   size: CGSize(width: width, height: Self.previewHeight))
+                                   size: CGSize(width: width, height: previewHeight))
     }
 
     // MARK: Shape
@@ -277,7 +289,7 @@ enum CursorPreview {
         ctx.setFillColor(CursorArt.colour(CursorBlock.lightGround)); ctx.fill(CGRect(x: 0, y: 0, width: w / 2, height: h))
         ctx.setFillColor(CursorArt.colour(CursorBlock.darkGround)); ctx.fill(CGRect(x: w / 2, y: 0, width: w / 2, height: h))
         // y counts up, as the painter draws.
-        let pointer = CGPoint(x: w * 0.58, y: h * 0.62), start = CGPoint(x: w * 0.14, y: pointer.y - 10)
+        let pointer = CGPoint(x: w * 0.55, y: h * 0.62), start = CGPoint(x: w * 0.14, y: pointer.y - 10)
         var state = CursorEffectState()
         state.trail = trail; state.ring = ring; state.ripple = ripple; state.ringScale = scale
         let n = 25, length = trail.length
@@ -288,7 +300,8 @@ enum CursorPreview {
         }
         state.pointer = pointer
         state.ringFade.go(1, 0, instant: true)
-        let spots = others.indices.map { CGPoint(x: w * (0.12 + 0.27 * CGFloat($0)), y: h * 0.32) }
+        // The I-beam and hand on the light window, the wheel far right on the dark one, clear of the arrow at any Size.
+        let spots = [0.12, 0.36, 0.84].map { CGPoint(x: w * $0, y: h * 0.32) }
         if ripple, let hand = others.firstIndex(of: "pointing-hand") {
             state.ripples = [.init(point: spots[hand], time: 1 - 0.15, right: false)]
         }

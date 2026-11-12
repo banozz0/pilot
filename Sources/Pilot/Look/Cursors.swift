@@ -552,9 +552,9 @@ enum CursorEngine {
     /// `com.apple.coregraphics.*` name the backup does not hold keeps macOS's cursor. Returns the page's line.
     static func apply(_ set: CursorSetID, colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil,
                       size: CursorSize = .small, system: (any CursorSystem)?, place: CursorPlace, folder: URL? = CursorCatalogue.folder) -> String {
-        guard let system else { return "This macOS lacks the private calls cursor sets need, so they are off." }
+        guard let system else { return "This macOS lacks the private calls Pilot needs to draw the cursor, so macOS keeps its own." }
         guard let folder, let catalogue = CursorCatalogue.load(folder), let art = catalogue.sets[set.rawValue] else {
-            return "The cursor sets are missing from Pilot's Resources."
+            return "The cursor shapes are missing from Pilot's Resources."
         }
         let held: Set<String>
         do { held = try backUp(system, place: place).held } catch { return error.line }
@@ -602,7 +602,7 @@ enum CursorEngine {
         cursorlog.notice("cursor: \(set.rawValue, privacy: .public) at \(Double(k))x applied, \(confirmed) of \(names) names confirmed, \(kept) kept macOS's")
         let keptLine = kept == 0 ? "" : " \(kept) stay macOS's: Pilot could not back them up first."
         return arrow ? "\(set.title) is on: \(confirmed) of \(names) cursor names confirmed.\(keptLine)"
-            : "\(set.title) went in, but macOS did not confirm the arrow.\(keptLine) Restore brings macOS's back."
+            : "\(set.title) went in, but macOS did not confirm the arrow.\(keptLine) Turn Pilot draws it off to bring macOS's back."
     }
 
     /// The backup `apply` registers against. While Pilot's art is registered in this boot session nothing new can be
