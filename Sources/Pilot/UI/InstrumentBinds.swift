@@ -7,7 +7,7 @@ import SwiftUI
 /// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
 /// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
 /// Change key, Unbind and Reset, the tab's free keys and the key on every tab; then Swap keys and what the overlay shows
-/// (pages round 4). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
+/// (pages round 4), under the board in its column while the inspector stands beside it (pages round 5). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
 /// presets and the list behave as in Toybox. Over 1100 pt the inspector stands beside the board while the board there
 /// holds every name whole, else under a board across the page, in two columns while it is 600 pt wide. The page
 /// scrolls; nothing in it scrolls on its own.
@@ -20,7 +20,8 @@ struct InstrumentBindsPage: View {
     let boards: KeyboardCaptions.Boards
     let refusal: String?
     let acts: BindsKeyboardPage.Acts
-    /// The blocks under the board and its inspector (Swap keys and the overlay, pages round 4).
+    /// The blocks under the board (Swap keys and the overlay, pages round 4): beside the inspector while it stands beside the
+    /// board (pages round 5), under both while it is under the board.
     var below: AnyView? = nil
     /// The module the board lights; nil for all six.
     @State var module: Int?
@@ -175,19 +176,22 @@ struct InstrumentBindsPage: View {
 
     // MARK: Layouts
 
-    /// The board, the inspector beside it; the page scrolls when either runs past the window's foot, so nothing in the
-    /// inspector is cut. The binds as a table are the List button's (simplify-pages T14).
+    /// The board with Swap keys and the overlay under it, the inspector beside them, so the board's column has no dead band
+    /// beside the taller inspector (pages round 5, Sven on build 2354: "big open space in keys"); the page scrolls when
+    /// either runs past the window's foot, so nothing in the inspector is cut. The binds as a table are the List button's
+    /// (simplify-pages T14).
     private func beside(_ marks: InstrumentBoardFit.Marks) -> some View {
         FillScroll {
-            VStack(spacing: 0) {
-                PinnedBeside {
-                    keyboard(marks).frame(maxWidth: .infinity, alignment: .top)
-                } side: {
-                    sideInspector
+            PinnedBeside {
+                VStack(spacing: 0) {
+                    keyboard(marks)
+                    below
                 }
-                .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
-                below?.padding(.horizontal, Self.side(width, style)).padding(.bottom, Self.pinInset)
+                .frame(maxWidth: .infinity, alignment: .top)
+            } side: {
+                sideInspector
             }
+            .padding(.horizontal, Self.side(width, style)).padding(.vertical, Self.pinInset)
         }
     }
 
