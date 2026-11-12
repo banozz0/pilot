@@ -234,8 +234,8 @@ def real_shape(passed):
 
 
 def factory(f):
-    """Pilot.app's own packs, as this Mac has them."""
-    life.shutil.copytree(life.REPO / 'Packaging/ThemePacks', f.root / 'factory')
+    """Pilot.app's own packs with their pictures, as this Mac had them before T35."""
+    life.factory_packs(f.root / 'factory')
     f.settings.update(factoryPacks=str(f.root / 'factory'))
     f.manifest.write_text(json.dumps(f.settings))
 

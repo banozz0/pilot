@@ -111,13 +111,13 @@ private enum Fixture {
     static let picked = "kiln"
 
     static let instrument: [Pack] = [
-        pack("kiln", "Kiln", "Banked embers, raw clay", base: "cinder", by: "tomasz-w", "1.0", .update("1.1")),
-        pack("lagoon", "Lagoon", "Cold light, deep water", base: "lagoon", by: nil, "1.2", .installed),
+        pack("kiln", "Kiln", "Banked embers, raw clay", base: "garnet", by: "tomasz-w", "1.0", .update("1.1")),
+        pack("lagoon", "Lagoon", "Cold light, deep water", base: "tokyo-night", by: nil, "1.2", .installed),
         pack("paper-lantern", "Paper Lantern", "Warm paper, a red seal", base: "folio", by: "hiro-n", "2.0", .installed),
-        pack("harbour-fog", "Harbour Fog", "Sea mist over steel", base: "cyanotype", by: "mira-k", "1.0", .get),
-        pack("orchid", "Orchid", "Violet after midnight", base: "orchid", by: nil, "1.1", .get),
-        pack("moss-station", "Moss Station", "Lichen on slate", base: "verdigris", by: "petrel", "0.3", .get),
-        pack("night-market", "Night Market", "Lanterns after rain", base: "dusk", by: "joon-p", "1.4", .get),
+        pack("harbour-fog", "Harbour Fog", "Sea mist over steel", base: "nord", by: "mira-k", "1.0", .get),
+        pack("orchid", "Orchid", "Violet after midnight", base: "wisteria", by: nil, "1.1", .get),
+        pack("moss-station", "Moss Station", "Lichen on slate", base: "jade", by: "petrel", "0.3", .get),
+        pack("night-market", "Night Market", "Lanterns after rain", base: "retro-82", by: "joon-p", "1.4", .get),
         pack("chalk-garden", "Chalk Garden", "Pale glaze, pine ink", base: "celadon", by: "lin-ha", "1.0", .get),
     ]
 
@@ -137,14 +137,9 @@ private enum Fixture {
         return Pack(theme: theme, base: base, author: author, version: version, state: state, toyboxOnly: toyboxOnly)
     }
 
-    /// The wide wallpaper of Pilot's own pack `base`, from the repo's Packaging.
+    /// The first wide wallpaper of Pilot's own pack `base`, from the repo's catalogue copy (the app ships it palette-only).
     static func wallpaper(_ base: String) -> Image? {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let folder = root.appending(path: "Packaging/ThemePacks/\(base)/wallpapers")
-        for ext in ["heic", "png"] {
-            if let image = NSImage(contentsOf: folder.appending(path: "\(base)-wide.\(ext)")) { return Image(nsImage: image) }
-        }
-        return nil
+        (try? SharedLook.LookRenders.shippedPicture(base)).flatMap(NSImage.init(contentsOf:)).map(Image.init(nsImage:))
     }
 
     static func counts(_ packs: [Pack]) -> (all: Int, installed: Int, updates: Int, others: Int) {

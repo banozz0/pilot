@@ -41,9 +41,7 @@
     "instrument",
     "toybox"
   ],
-  "wallpapers": [
-    "wallpapers"
-  ],
+  "wallpapers": [],
   "adapters": {
     "ghostty": {},
     "zed": {},

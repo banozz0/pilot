@@ -32,6 +32,7 @@ if args.case == 'all':
               *sorted((repo / 'Tests').rglob('*.swift')),
               repo / 'Package.swift', repo / 'Package.resolved', repo / 'Packaging/themes.json',
               *sorted(p for p in (repo / 'Packaging/ThemePacks').rglob('*') if p.is_file()),
+              *sorted(p for p in (repo / 'catalogue/themes').rglob('*') if p.is_file()), repo / 'catalogue/index.json',
               *sorted(p for p in (repo / 'Packaging/skills').rglob('*') if p.is_file()),
               repo / 'Packaging/pilot-agent.md', repo / 'Packaging/pilot-agent-shell',
               repo / '.build/debug/PilotCLI', repo / '.build/debug/PilotMCP',

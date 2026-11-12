@@ -62,9 +62,8 @@ struct LookRenders {
             var pack = ThemePack(id: "lagoon-copy", title: "Lagoon copy", dark: base.dark, palette: base.colors,
                                  adapters: ["ghostty": .object([:]), "zed": .object([:]), "obsidian": .object([:])])
             pack.material = .init(glass: true, transparency: 35, blur: "full")
-            let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            let wide = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-wide.png"))
-            let tall = try Data(contentsOf: root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-tall.png"))
+            let wide = try Data(contentsOf: try Self.shippedPicture("tokyo-night"))
+            let tall = try Data(contentsOf: try Self.shippedPicture("tokyo-night", tall: true))
             for style in PilotStyle.allCases {
                 for id in ["tokyo-night", "porcelain"] {
                     look.style = style; look.themeID = id; Self.mirror(look, spot: nil)
@@ -240,8 +239,7 @@ struct LookRenders {
     func renderWindow() throws {
         let (_, dir) = try Self.setUp()
         let engine = try SharedLook.HomeRenders.engine()
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let still = WallpaperScreen.thumbnail(root.appending(path: "Packaging/ThemePacks/tokyo-night/wallpapers/tokyo-night-wide.png"), size: 640)
+        let still = WallpaperScreen.thumbnail(try Self.shippedPicture("tokyo-night"), size: 640)
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)
             .environment(\.lookPreviewStill, still)))
@@ -292,11 +290,7 @@ struct LookRenders {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let packs = root.appending(path: "Packaging/ThemePacks")
         func pack(_ id: String) throws -> ThemePack { try ThemePack.decode(Data(contentsOf: packs.appending(path: "\(id)/manifest.json"))) }
-        func still(_ id: String) throws -> NSImage {
-            let folder = packs.appending(path: "\(id)/wallpapers")
-            let wide = try #require(try FileManager.default.contentsOfDirectory(atPath: folder.path).first { $0.hasPrefix("\(id)-wide") })
-            return try #require(WallpaperScreen.thumbnail(folder.appending(path: wide), size: 640))
-        }
+        func still(_ id: String) throws -> NSImage { try #require(WallpaperScreen.thumbnail(try Self.shippedPicture(id), size: 640)) }
         func wear(_ look: Look, _ id: String, dark: Bool) throws {
             look.style = .instrument; look.themeID = id; look.packChanged(try pack(id))
             try #require(look.theme.id == id && look.theme.dark == dark, "\(id) did not resolve from its pack")
@@ -337,6 +331,15 @@ struct LookRenders {
             try shot(id, picture)
             if id == "tokyo-night" { try shot("wide-tokyo-night", picture, width: 978, height: 344) }
         }
+    }
+
+    /// The first wide (or the tall) wallpaper of Pilot's own pack `id`, from the repo's catalogue copy: the app ships it
+    /// palette-only and downloads the pictures on Apply.
+    static func shippedPicture(_ id: String, tall: Bool = false) throws -> URL {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "catalogue/themes/\(id)/wallpapers")
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { !$0.hasPrefix(".") }.sorted()
+        return folder.appending(path: try #require(names.first { $0.hasPrefix("\(id)-tall.") == tall }, "\(id) has no \(tall ? "tall" : "wide") wallpaper"))
     }
 
     /// A Look of its own (a fake Ghostty, its own defaults), and the directory the renders go to; refuses unless the home
