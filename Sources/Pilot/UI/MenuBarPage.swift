@@ -69,11 +69,15 @@ struct MenuBarPage: View {
                     BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
                 }
             }
-            // Pilot's own menu, first after the bar it hangs from (Sven on build 2276: it sat too far down).
-            DropdownEditor(extensionBar: extensionBar)
-            PillEditor(extensionBar: extensionBar)
-            BarPresetControls(store: store)
-            barColour(store)
+            // The page reads top to bottom as the bar does (Sven, 2026-11-12, Q182: "too crowded and im getting confused"):
+            // the switch, the bar's items, how the bar looks, each item's style, the clock and the pill, then the screens.
+            // Pilot's own menu has its own page beside this one (PilotMenuPage).
+            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                GridRow(alignment: .top) {
+                    BarPresetControls(store: store)
+                    barColour(store)
+                }
+            }
             // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
             let columns = 2, groups = BarGroup.allCases
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
@@ -83,8 +87,9 @@ struct MenuBarPage: View {
                     }
                 }
             }
-            screenChoices(topBar)
             clock(store)
+            PillEditor(extensionBar: extensionBar)
+            screenChoices(topBar)
         }
         .disabled(store.loadError != nil)
         .onAppear { hold(previewed(store)) }

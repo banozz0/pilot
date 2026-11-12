@@ -338,7 +338,7 @@ struct SettingsSchemaTests {
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }
-        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "menuBar", "system", "tiling"].map(JSONValue.string))]))
+        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "pilotMenu", "system", "tiling"].map(JSONValue.string))]))
         #expect(await rig.ask("get", "look.glass", "--page", "look").error?.code == .unknownFlag)
         #expect(await rig.ask("set", "look.glass", "on", "--force").error?.code == .unknownFlag && !rig.look.glass)
     }

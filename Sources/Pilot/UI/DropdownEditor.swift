@@ -6,6 +6,14 @@ import SwiftUI
 /// scroll, and a switch that shows it; Reset brings the first arrangement back. Status always shows, so it has no switch.
 /// The optional blocks (sound, Wi-Fi and Bluetooth, brightness, now playing, the stats) start hidden. Instrument only:
 /// Toybox keeps today's menu.
+/// The Pilot menu page (Sven, 2026-11-12, Q182: "the menubar page is now too crowded"): the menu under Pilot's icon,
+/// its blocks and its Extensions card, beside Menu bar in Desktop.
+struct PilotMenuPage: View {
+    var body: some View {
+        PageBody { DropdownEditor() }
+    }
+}
+
 struct DropdownEditor: View {
     @Environment(\.ink) private var ink
     var store: DropdownLayoutStore = .shared
