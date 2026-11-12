@@ -160,7 +160,42 @@ struct SCScreenGrabber: ScreenGrabbing {
         config.ignoreShadowsSingleWindow = true
         config.backgroundColor = .clear
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        return try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
+        let alone = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
+        // Grabbed alone, a see-through window (blur, glass) has nothing behind it and comes out flat grey (Ghostex's,
+        // build 2363). So the window is taken as the screen shows it, its display's pixels over its frame with only the
+        // windows in front of it left out, and cut to its own shape; an opaque window comes out the same either way.
+        guard let display = content.displays.first(where: { $0.frame.contains(window.frame) }) else { return alone }
+        let front = CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, CGWindowID(id)) as? [[String: Any]] ?? []
+        var hidden = Set(front.compactMap { $0[kCGWindowNumber as String] as? UInt32 })
+        if await hidesIcons() { hidden.formUnion(content.desktopIcons().map(\.windowID)) }
+        let region = SCStreamConfiguration()
+        region.sourceRect = window.frame.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        region.width = config.width
+        region.height = config.height
+        region.showsCursor = false
+        region.pixelFormat = kCVPixelFormatType_32BGRA
+        let filter = SCContentFilter(display: display, excludingWindows: content.windows.filter { hidden.contains($0.windowID) })
+        guard let screen = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: region) else { return alone }
+        return Self.cut(screen, to: alone) ?? alone
+    }
+
+    /// `screen` cut to the shape of `window`, the same window grabbed alone at the same size: where the window covers
+    /// its frame fully the screen's pixel, elsewhere (its rounded corners and their edge) the window's own, so an opaque
+    /// window comes out exactly as grabbed alone. Nil when the sizes differ.
+    static func cut(_ screen: CGImage, to window: CGImage) -> CGImage? {
+        let w = window.width, h = window.height, stride = w * 4
+        guard screen.width == w, screen.height == h, w > 0, h > 0 else { return nil }
+        let space = screen.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!, info = CGImageAlphaInfo.premultipliedLast.rawValue
+        var own = [UInt8](repeating: 0, count: stride * h)
+        guard let alone = CGContext(data: &own, width: w, height: h, bitsPerComponent: 8, bytesPerRow: stride, space: space, bitmapInfo: info),
+              let out = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: stride, space: space, bitmapInfo: info),
+              let pixels = out.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        alone.draw(window, in: CGRect(x: 0, y: 0, width: w, height: h))
+        out.draw(screen, in: CGRect(x: 0, y: 0, width: w, height: h))
+        for p in Swift.stride(from: 0, to: stride * h, by: 4) where own[p + 3] < 255 {
+            for c in 0..<4 { pixels[p + c] = own[p + c] }
+        }
+        return out.makeImage()
     }
 }
 
