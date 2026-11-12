@@ -239,7 +239,8 @@ public enum Abilities {
         "apps.pastePlain": "Pastes what you copied as plain text, without its formatting.",
         "apps.terminal": "Opens a terminal.",
         "apps.webApp": "Makes a site into a Mac app of its own, in Install › Web apps.",
-        "notes.toggle": "Opens the quick notes panel; notes are Markdown files in your notes folder.",
+        "notes.toggle": "Opens the quick notes panel, on the note you left when you were on it a moment ago; notes are Markdown files in your notes folder.",
+        "notes.pin": "Pins the quick notes panel on screen, or unpins it: pinned, it floats over other windows and stays open on a click outside.",
         // Captures
         "captures.activeWindow": "Captures a window you click, without its shadow.",
         "captures.area": "Freezes the screen and captures an area you drag.",

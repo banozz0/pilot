@@ -61,7 +61,7 @@ struct NotesPanelRenders {
         let store = try Self.seed(folder)
         let hero = try #require(try store.load().first { $0.title == "Ship the notes panel" })
 
-        let all = ["1-writing", "2-scratch", "3-drawer", "4-search", "5-actions", "6-trash"]
+        let all = ["1-writing", "2-scratch", "3-drawer", "4-search", "5-actions", "6-trash", "7-pinned"]
         let passes: [(PilotStyle, String, [String])] = [(.instrument, "tokyo-night", all), (.instrument, "porcelain", ["1-writing"]),
                                                         (.toybox, "toybox-night", ["1-writing", "3-drawer"])]
         for (style, theme, states) in passes {
@@ -82,6 +82,8 @@ struct NotesPanelRenders {
                     try #require(model.rows.map(\.title).contains("Groceries"))
                 case "5-actions": model.openActions()
                 case "6-trash": model.askTrash()
+                // The head's pin filled: the panel pinned on screen.
+                case "7-pinned": model.pinnedOnScreen = true
                 default: break
                 }
                 let panel = HUD.makePanel(NotesPanelView(model: model).frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height),

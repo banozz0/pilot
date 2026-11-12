@@ -277,3 +277,18 @@ public enum Notes {
     /// What a note row does on Return: open that note in the panel, or add a line to Scratch.
     public enum Pick: Hashable, Sendable { case open(String), append(String) }
 }
+
+/// Where the notes key opens the panel (Sven, build 2363, 2026-11-12): back on the note left, while that note is still
+/// there and the panel was hidden at most `minutes` ago; else Scratch, as before. 0 minutes is always Scratch.
+public enum NotesReopen {
+    public static let standard = 15
+    public static let range = 0...240
+
+    public static func clamped(_ minutes: Int) -> Int { min(max(minutes, range.lowerBound), range.upperBound) }
+
+    public static func note(last: String, leftAt: Date?, now: Date, minutes: Int, exists: (String) -> Bool) -> String {
+        guard minutes > 0, let leftAt, exists(last) else { return NoteStore.scratch }
+        let away = now.timeIntervalSince(leftAt)
+        return away >= 0 && away <= Double(minutes) * 60 ? last : NoteStore.scratch
+    }
+}

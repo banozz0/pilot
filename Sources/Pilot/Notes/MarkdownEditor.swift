@@ -85,13 +85,28 @@ struct MarkdownEditor: NSViewRepresentable {
         guard view.style != style || view.string != text || view.folder != folder else { return }
         view.folder = folder
         if view.style != style { view.apply(style) }
+        var place: NotesPlace?
         if view.string != text {
             view.string = text
-            // A note opened puts the caret at its end; a preview reads from the top.
-            view.setSelectedRange(NSRange(location: editable ? (text as NSString).length : 0, length: 0))
+            // A note opened puts the caret at its end, or where it was when the panel hid on it; a preview reads from the top.
+            place = editable ? handle?.takePlace(for: text) : nil
+            view.setSelectedRange(place?.selection ?? NSRange(location: editable ? (text as NSString).length : 0, length: 0))
             if !editable { view.scroll(.zero) }
         }
         view.restyle()
+        if let place {
+            // Once the words up to the kept scroll are laid out, so the clip view has the height to scroll to.
+            RunLoop.main.perform(inModes: [.common]) {
+                MainActor.assumeIsolated {
+                    guard let clip = view.enclosingScrollView?.contentView else { return }
+                    if let container = view.textContainer {
+                        view.layoutManager?.ensureLayout(forBoundingRect: CGRect(origin: place.scroll, size: clip.bounds.size), in: container)
+                    }
+                    clip.scroll(to: place.scroll)
+                    view.enclosingScrollView?.reflectScrolledClipView(clip)
+                }
+            }
+        }
         handle?.settle(view)
     }
 
@@ -114,6 +129,13 @@ struct MarkdownEditor: NSViewRepresentable {
             (textView as? NotesTextView)?.style.plain ?? newTypingAttributes
         }
     }
+}
+
+/// An editor's caret and scroll on the words it held.
+struct NotesPlace: Equatable {
+    let text: String
+    let selection: NSRange
+    let scroll: CGPoint
 }
 
 /// A hold on the editors a format, Cmd+K's Rename or the format bar acts on. The model's holds the panel's editor and
@@ -145,6 +167,22 @@ final class NotesEditorHandle {
         titleFor = (text, view?.window ?? NSApp.keyWindow)
         if let view { settle(view) }
     }
+
+    /// The notes panel hides (NotesReopen): the caret and the scroll of its editor on `text`, which the next editor
+    /// given those very words takes back.
+    func keepPlace(in window: NSWindow?, text: String) {
+        guard let window, let view = views.allObjects.first(where: { $0.isEditable && $0.window === window }) else { return }
+        kept = NotesPlace(text: text, selection: view.selectedRange(), scroll: view.enclosingScrollView?.contentView.bounds.origin ?? .zero)
+    }
+
+    /// The place kept on `text`, handed over once.
+    func takePlace(for text: String) -> NotesPlace? {
+        guard let place = kept, place.text == text else { return nil }
+        kept = nil
+        return place
+    }
+
+    private var kept: NotesPlace?
 
     /// After an update: picks the waiting title once the editor in Rename's window holds its note.
     func settle(_ view: NotesTextView) {

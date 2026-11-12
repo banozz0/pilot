@@ -39,6 +39,8 @@ final class PilotSettings {
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? true
         translatePair = TranslatePair(defaults: defaults)
         // Notes written in Application Support before Pilot's own folder moved to Documents (task N1) stay where they are.
+        notesReopenMinutes = (defaults.object(forKey: Self.notesReopenKey) as? Int).map(NotesReopen.clamped) ?? NotesReopen.standard
+        notesPinned = defaults.bool(forKey: Self.notesPinnedKey)
         notesFolder = NotesFolder.kept(saved: defaults.string(forKey: "notes.folder"))
         if notesFolder != nil { defaults.set(notesFolder, forKey: "notes.folder") }
         if defaults.isApp { Self.live = self }
@@ -69,6 +71,17 @@ final class PilotSettings {
     var notesFolder: String? {
         didSet { defaults.set(notesFolder, forKey: "notes.folder") }
     }
+    /// How long after the notes panel hides its key opens it back on the note left, in minutes; 0 is always Scratch
+    /// (NotesReopen, Sven 2026-11-12).
+    var notesReopenMinutes: Int {
+        didSet { defaults.set(notesReopenMinutes, forKey: Self.notesReopenKey) }
+    }
+    static let notesReopenKey = "notes.reopenMinutes"
+    /// The notes panel pinned on screen (NotesPanel.pinned, Sven 2026-11-12).
+    var notesPinned: Bool {
+        didSet { defaults.set(notesPinned, forKey: Self.notesPinnedKey) }
+    }
+    static let notesPinnedKey = "notes.pinned"
     /// Translate's two languages, picked on Setup's Keyboard part and read by the menu on each translation (card
     /// agent-bo-95423002).
     var translatePair: TranslatePair {

@@ -57,6 +57,14 @@ extension SettingsSchema {
                       }
                       do { try changeNotes(new) } catch { throw ControlError(.badValue, "notes folder not changed: \(error.localizedDescription)") }
                   }),
+            .int(PilotSettings.notesReopenKey, "The notes key reopens the note left for this many minutes (0 always Scratch)", page: "notes",
+                 range: NotesReopen.range, standard: NotesReopen.standard,
+                 read: { settings.notesReopenMinutes }, write: { settings.notesReopenMinutes = $0 }),
+            .bool(PilotSettings.notesPinnedKey, "Quick notes pinned: stays on screen over other windows until unpinned", page: "notes",
+                  standard: false, read: { settings.notesPinned }, write: {
+                      settings.notesPinned = $0
+                      NotesPanel.shared.pinnedChanged()
+                  }),
             // Voice › Dictation's speech model; automatic is the first one on disk. One not on disk waits for its
             // download on the page.
             .choice(SpeechModels.key, "Speech model", page: "voice", ["automatic"] + SpeechChoice.offered.map(\.rawValue), standard: "automatic",

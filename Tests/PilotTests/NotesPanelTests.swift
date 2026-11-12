@@ -268,6 +268,49 @@ struct NotesPanelTests {
         #expect(!NotesPanel.isClick(from: nil, to: CGPoint(x: 100, y: 100)))
     }
 
+    @Test("The notes key reopens the note left within the reopen window (1 min: the note; 16 min: Scratch); 0 minutes, or the note gone, is Scratch")
+    func reopenLastNote() throws {
+        let model = NotesModel(store: NoteStore(folder: folder), defaults: defaults)
+        model.reload()
+        model.new(); model.text = "Plan\nstep one"; model.flush()
+        let plan = model.current
+        let left = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        model.left(at: left)
+        model.open(NoteStore.scratch)
+        model.open(plan)
+        #expect(model.reopening(now: left.addingTimeInterval(60), minutes: 15) == plan)
+        #expect(model.reopening(now: left.addingTimeInterval(15 * 60), minutes: 15) == plan)
+        #expect(model.reopening(now: left.addingTimeInterval(16 * 60), minutes: 15) == NoteStore.scratch)
+        #expect(model.reopening(now: left.addingTimeInterval(60), minutes: 0) == NoteStore.scratch)
+        // A clock that went back is no reason to reopen.
+        #expect(model.reopening(now: left.addingTimeInterval(-60), minutes: 15) == NoteStore.scratch)
+        // After a relaunch, the left time read back from the defaults.
+        let relaunched = NotesModel(store: NoteStore(folder: folder), defaults: defaults)
+        relaunched.reload()
+        #expect(relaunched.reopening(now: left.addingTimeInterval(60), minutes: 15) == plan)
+        try FileManager.default.removeItem(at: folder.appending(path: plan))
+        relaunched.reload()
+        #expect(relaunched.reopening(now: left.addingTimeInterval(60), minutes: 15) == NoteStore.scratch)
+    }
+
+    @Test("Pin quick notes is an action with no default key")
+    func pinAction() {
+        var registry = ActionRegistry()
+        NotesPanel.register(into: &registry)
+        #expect(registry.actions[NotesPanel.pinID]?.label == "Pin quick notes")
+        #expect(registry.defaults[NotesPanel.pinID] == nil)
+    }
+
+    @Test("A click in the panel's own windows (a child, the selection pill) is not outside it; in another window it is")
+    func keyWindowsKept() {
+        let panel = NSPanel(), child = NSPanel(), pill = NSPanel(), other = NSWindow()
+        panel.addChildWindow(child, ordered: .above)
+        defer { panel.removeChildWindow(child) }
+        pill.identifier = SelectionTools.panelID
+        #expect(NotesPanel.keeps(child, panel: panel) && NotesPanel.keeps(pill, panel: panel) && NotesPanel.keeps(panel, panel: panel))
+        #expect(!NotesPanel.keeps(other, panel: panel))
+    }
+
     func file(_ id: String) -> String? { try? String(contentsOf: folder.appending(path: id), encoding: .utf8) }
 
     @Test("Typing in Scratch makes a note of its own at once, with the caret staying in it; Scratch's file stays empty, and words left in the old Scratch move out on the next read")

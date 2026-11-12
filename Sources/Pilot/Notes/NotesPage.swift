@@ -113,6 +113,40 @@ final class NotesPageKeys {
     }
 }
 
+/// How long the notes key reopens the note left (NotesReopen, Sven 2026-11-12), over the folder's line: `pilot set
+/// notes.reopenMinutes` takes any count in its range, which the picker then lists too.
+struct NotesReopenLine: View {
+    @Environment(\.style) private var style
+    @Environment(Engine.self) private var engine
+
+    static let offered = [0, 5, 15, 30, 60]
+    static let info = "Open quick notes again within this time and they open on the note you left, caret and all. After it, or with Always Scratch, they open on Scratch."
+
+    static func title(_ minutes: Int) -> String {
+        switch minutes {
+        case 0: "Always Scratch"
+        case 60: "1 hour"
+        default: "\(minutes) min"
+        }
+    }
+
+    var body: some View {
+        let minutes = Binding(get: { engine.settings.notesReopenMinutes }, set: { engine.settings.notesReopenMinutes = $0 })
+        HStack(spacing: 6) {
+            Image(systemName: "clock.arrow.circlepath").font(.system(size: 11)).accessibilityHidden(true)
+            Text("Reopen the last note for").styleText(\.caption).lineLimit(1)
+            InfoMark(text: Self.info)
+            Spacer(minLength: 6)
+            Picker("Reopen the last note for", selection: minutes) {
+                ForEach(Set(Self.offered + [minutes.wrappedValue]).sorted(), id: \.self) { Text(Self.title($0)).tag($0) }
+            }
+            .labelsHidden().pickerStyle(.menu).controlSize(.small).fixedSize()
+        }
+        .foregroundStyle(style.color(\.text2))
+        .frame(height: 20)
+    }
+}
+
 /// Where the notes live (task N1), one line under the Notes page's list (direction B): the folder, which a click shows
 /// in Finder, Pilot's own when another is picked, and Change… with a picker; when the folder holds notes, a change asks
 /// over the line whether they move too (Move notes, Leave them, Cancel).
@@ -142,6 +176,7 @@ struct NotesFolderLine: View {
                 .controlSize(.small)
             }
             if let problem { FinePrint(text: problem, color: style.color(\.problem)) }
+            NotesReopenLine()
             HStack(spacing: 8) {
                 Image(systemName: "folder").font(.system(size: 11)).accessibilityHidden(true)
                 Button(tilde(folder)) { reveal() }.buttonStyle(.plain).focusable(false)

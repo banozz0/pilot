@@ -69,6 +69,11 @@ struct NotesHead: View {
             if let status = status(shown, preview: preview != nil) {
                 Text(status).font(mono).monospacedDigit().foregroundStyle(style.color(\.text3)).lineLimit(1).fixedSize()
             }
+            // The panel's own pin (Sven, build 2363): on screen over other windows; a note's pin to the list's top is ⌘P.
+            if listKey {
+                NotesHeadButton(symbol: model.pinnedOnScreen ? "pin.circle.fill" : "pin.circle",
+                                label: model.pinnedOnScreen ? "Unpin from screen" : "Pin on screen") { NotesPanel.shared.togglePinned() }
+            }
             NotesHeadButton(key: "⌘K", label: "Actions") { model.perform(.actions) }
             NotesHeadButton(symbol: "plus", label: "New note") { model.new() }
         }

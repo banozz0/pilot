@@ -33,6 +33,20 @@ final class NotesModel {
         didSet { defaults.set(current, forKey: Self.lastKey) }
     }
     private static let lastKey = "notes.last"
+    /// When the panel last hid, in the defaults, so a relaunch inside the reopen window still lands on the note.
+    private static let leftAtKey = "notes.leftAt"
+    /// The notes panel is pinned on screen: NotesPanel's state, held here for its head's button.
+    var pinnedOnScreen = false
+
+    /// The panel hid at `date` on the open note.
+    func left(at date: Date) { defaults.set(date, forKey: Self.leftAtKey) }
+
+    /// The note the notes key opens the panel on at `now` (NotesReopen): the one left, when it was left at most
+    /// `minutes` ago and is still in the folder (read by `reload` first), else Scratch.
+    func reopening(now: Date, minutes: Int) -> String {
+        NotesReopen.note(last: current, leftAt: defaults.object(forKey: Self.leftAtKey) as? Date, now: now, minutes: minutes,
+                         exists: { id in notes.contains { $0.id == id } })
+    }
     /// The open note's text as the editor has it.
     var text = "" {
         didSet { if text != oldValue, !loading { edited() } }
@@ -374,12 +388,22 @@ final class NotesPanel {
     /// Over full-screen apps and every workspace; the passing HUDs sit above it (HUD.level).
     static let level = NSWindow.Level.popUpMenu
 
+    /// Pinned on screen it floats over other windows rather than over menus, so the Hyper+Space menu and context menus
+    /// still open above it.
+    static let pinnedLevel = NSWindow.Level.floating
+    static let pinID = "notes.pin"
+
     private var model: NotesModel?
     private var panel: NSPanel?
     private var keyMonitor: Any?
     private var clickMonitors: [Any] = []
+    private var resignObserver: Any?
     /// Where a press outside the panel went down, in screen points; nil while none is held.
     private var outsideDown: CGPoint?
+    /// A look at a held press is waiting (resigned): one at a time.
+    private var awaitingRelease = false
+    /// The panel's clock: the reopen window is measured on it.
+    var now: () -> Date = { .now }
 
     /// The folder the Notes page picked, else Pilot's own.
     var folder: URL { NotesFolder.folder(Engine.shared?.settings.notesFolder) }
@@ -389,21 +413,56 @@ final class NotesPanel {
             try registry.register(Action(id: toggleID, label: "Quick notes", module: .apps, defaultKey: Key("n", .shift), tier: .v1) {
                 NotesPanel.shared.toggle()
             })
-        } catch { noteslog.error("\(toggleID, privacy: .public): \(String(describing: error), privacy: .public)") }
+            try registry.register(Action(id: pinID, label: "Pin quick notes", module: .apps, defaultKey: nil, tier: .v1) {
+                DispatchQueue.main.async { NotesPanel.shared.togglePinned() }
+            })
+        } catch { noteslog.error("notes actions: \(String(describing: error), privacy: .public)") }
     }
 
     var isShown: Bool { panel?.isVisible == true }
 
-    /// After the tap callback returns: reading the folder is too slow for it.
-    func toggle() {
-        DispatchQueue.main.async { self.isShown ? self.hide() : self.show() }
+    /// Pinned on screen (Sven, build 2363): the panel stays open on a click outside or another app taking the
+    /// keyboard, floats over other windows, and is moved and sized as ever, its frame kept; Escape still hides it.
+    /// A setting (`pilot get|set notes.pinned`), so it outlasts a relaunch.
+    var pinned: Bool { Engine.shared?.settings.notesPinned ?? false }
+
+    /// Pins or unpins the panel, shown or not.
+    func setPinned(_ on: Bool) {
+        Engine.shared?.settings.notesPinned = on
+        pinnedChanged()
     }
 
-    /// Shows the panel on `note`, else on Scratch, empty and ready to type in (Sven 2026-10-15: the key opens Scratch).
+    /// The setting changed: the shown panel takes its level and its head's pin follows.
+    func pinnedChanged() {
+        let on = pinned
+        model?.pinnedOnScreen = on
+        panel?.level = on ? Self.pinnedLevel : Self.level
+        noteslog.notice("notes panel \(on ? "pinned" : "unpinned", privacy: .public)")
+    }
+
+    /// The pin button and the "Pin quick notes" action, which shows the panel pinned when it is hidden.
+    func togglePinned() {
+        guard isShown else { setPinned(true); return show() }
+        setPinned(!pinned)
+    }
+
+    /// After the tap callback returns: reading the folder is too slow for it. A pinned panel another window has the
+    /// keyboard over takes it back rather than hiding.
+    func toggle() {
+        DispatchQueue.main.async {
+            if self.isShown, self.pinned, let panel = self.panel, !panel.isKeyWindow { return panel.makeKeyAndOrderFront(nil) }
+            self.isShown ? self.hide() : self.show()
+        }
+    }
+
+    /// Shows the panel on `note`; the key (no note) on the note left within the reopen window, else on Scratch, empty
+    /// and ready to type in (Sven 2026-10-15: the key opens Scratch; 2026-11-12: unless he was just on a note).
     func show(note: String? = nil) {
         let model = currentModel()
         model.reload()
-        model.open(note ?? NoteStore.scratch)
+        let id = note ?? model.reopening(now: now(), minutes: Engine.shared?.settings.notesReopenMinutes ?? NotesReopen.standard)
+        model.open(id)
+        model.pinnedOnScreen = pinned
         if panel == nil { panel = makePanel(model) }
         guard let panel else { return }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
@@ -413,7 +472,8 @@ final class NotesPanel {
                                          keepsSearch: { [weak model] in model?.listFocused == true && model?.actions == nil }, onlyPanel: true,
                                          log: { noteslog.debug("notes panel: \($0, privacy: .public)") })
         watchClicks()
-        noteslog.notice("notes panel shown on \(model.current, privacy: .public), \(model.notes.count) notes")
+        watchKeyboard(panel)
+        noteslog.notice("notes panel shown on \(model.current, privacy: .public), \(model.notes.count) notes\(self.pinned ? ", pinned" : "", privacy: .public)")
     }
 
     /// Shows the panel on a new note, as its own New note makes one: the desktop's Hyper + right-click › New note.
@@ -430,7 +490,14 @@ final class NotesPanel {
         keyMonitor = nil
         clickMonitors.forEach(NSEvent.removeMonitor)
         clickMonitors = []
-        model?.leaveList()
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        awaitingRelease = false
+        if let model {
+            model.leaveList()
+            model.left(at: now())
+            model.editor.keepPlace(in: panel, text: model.text)
+        }
         dropPanel()
         noteslog.notice("notes panel hidden")
     }
@@ -527,7 +594,7 @@ final class NotesPanel {
         let panel = HUD.makePanel(NotesPanelView(model: model).frame(minWidth: Self.minSize.width, minHeight: Self.minSize.height), surface: .notes)
         panel.resizesFromFace()
         panel.isMovableByWindowBackground = true
-        panel.level = Self.level
+        panel.level = pinned ? Self.pinnedLevel : Self.level
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.title = "Quick notes"
         // A restyled panel's window holds its shadow's margins round the face (PopSurface): the size and place kept are
@@ -589,8 +656,7 @@ final class NotesPanel {
             let (type, at, window) = (event.type, NSEvent.mouseLocation, event.window)
             MainActor.assumeIsolated {
                 guard let self, let panel = self.panel else { return }
-                self.click(type, at: at, outside: window != nil && window !== panel && window?.parent !== panel
-                    && window?.identifier != SelectionTools.panelID)
+                self.click(type, at: at, outside: window.map { !Self.keeps($0, panel: panel) } ?? false)
             }
             return event
         }
@@ -599,14 +665,65 @@ final class NotesPanel {
 
     private func click(_ type: NSEvent.EventType, at point: CGPoint, outside: Bool) {
         switch type {
-        case .leftMouseDown, .rightMouseDown: outsideDown = outside ? point : nil
+        case .leftMouseDown, .rightMouseDown:
+            outsideDown = outside ? point : nil
+            if outside { noteslog.debug("notes panel: press outside at \(Int(point.x)),\(Int(point.y))") }
         default:
             defer { outsideDown = nil }
-            guard outside, Self.isClick(from: outsideDown, to: point) else { return }
+            guard outside, Self.isClick(from: outsideDown, to: point) else {
+                if outside { noteslog.debug("notes panel: release outside, no click (pressed outside: \(self.outsideDown != nil))") }
+                return
+            }
+            guard !pinned else { return noteslog.debug("notes panel: a click outside, pinned so it stays") }
             noteslog.notice("notes panel: a click outside hides it")
             // After the event is handed on, so the click lands first.
             DispatchQueue.main.async { if self.isShown { self.hide() } }
         }
+    }
+
+    /// Another app taking the keyboard hides the panel too, as it does the menu and the clipboard (Sven, build 2363:
+    /// "if i click something else outside of notes it doesnt close"): the click monitors alone missed any way out that is
+    /// not a clean click they both see, such as Cmd+Tab, a Hyper switch or a press they never get the release of. Pilot's
+    /// own windows (the menu, the clipboard, the pill) are left to the click monitors, so Hyper+Space or Hyper+V over a
+    /// note keeps it; pinning keeps it too. A press still held (a picture dragged in from Finder) waits for its release:
+    /// dropped on the panel, it stays.
+    private func watchKeyboard(_ panel: NSPanel) {
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.resigned() }
+        }
+    }
+
+    private func resigned(afterPress: Bool = false) {
+        guard isShown, !pinned, let panel else { return }
+        guard NSEvent.pressedMouseButtons == 0 else {
+            guard afterPress || !awaitingRelease else { return }
+            if !afterPress { noteslog.debug("notes panel: lost the keyboard with a press held; waits for its release") }
+            awaitingRelease = true
+            // A look every 0.1 s while the press is held: the click monitors may never see its release.
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.resigned(afterPress: true) }
+        }
+        awaitingRelease = false
+        // On the run loop's next turn, once the window that took the keyboard is key.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isShown, !self.pinned, !panel.isKeyWindow else { return }
+            // Pilot's own window (the menu or the clipboard opened over the note, the pill): the click monitors decide,
+            // as before.
+            if let key = NSApp.keyWindow {
+                return noteslog.debug("notes panel: Pilot's \(String(describing: type(of: key)), privacy: .public) took the keyboard; stays")
+            }
+            if afterPress, panel.frame.contains(NSEvent.mouseLocation) {
+                return noteslog.debug("notes panel: a press from outside let go over it (a drop); stays")
+            }
+            noteslog.notice("notes panel: another app took the keyboard, it hides")
+            self.hide()
+        }
+    }
+
+    /// A click in `key` is in the panel: the panel, a child of it, or the selection pill and its Ask AI bubble, which work
+    /// on the note's selected text.
+    static func keeps(_ key: NSWindow, panel: NSWindow) -> Bool {
+        key === panel || key.parent === panel || key.identifier == SelectionTools.panelID
     }
 
     /// A press and its release within 4 points of each other: a click, not a drag.
