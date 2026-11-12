@@ -59,8 +59,8 @@ struct WhatsNewFilmRenders {
     func cursors() throws {
         let dir = try Self.prepare("cursors")
         let width = LookRenders.page(1200)
-        let pages: [(String, CursorSetID, CursorColours)] = [("quiet", .quiet, .theme), ("toybox", .toybox, .own), ("duo", .duo, .theme),
-                                                              ("classic", .classic, .own), ("custom", .classic, .custom)]
+        let pages: [(String, CursorSetID, CursorColours)] = [("quiet", .quiet, .theme), ("toybox", .toybox, .theme), ("duo", .duo, .theme),
+                                                              ("classic", .classic, .theme), ("custom", .classic, .custom)]
         for (name, set, colours) in pages {
             let (look, _) = try LookRenders.setUp()
             look.themeID = ExplainerFilmRenders.theme

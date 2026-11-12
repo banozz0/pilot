@@ -9,31 +9,56 @@ import PilotCore
 
 /// Cursor sets (P84; builder spec vault `Projects/Pilot/Cursors 1.1/spec/cursor-effects.md` §1 and §6, route from the
 /// research note `Research/Software/Custom cursors on macOS for Pilot.md`): Quiet, Toybox, Duo and Classic (T33, Q816)
-/// replace macOS's pointer, I-beam, hands and the rest everywhere, in the set's own colours, the theme's or a fill and
-/// outline the user picks (T33, recipe `Cursors 1.1/choices/cursor-designs.notes.md`). macOS has no public way to do
+/// replace macOS's pointer, I-beam, hands and the rest everywhere, in the theme's colours or a fill and outline the
+/// user picks, at one of four sizes (Q112) (T33, recipe `Cursors 1.1/choices/cursor-designs.notes.md`). macOS has no public way to do
 /// this, so every call is a private SkyLight one looked up with dlsym (as `WindowServerBlur` does), and the feature turns
 /// itself off when one is missing. Written fresh: Mousecape's code is non-commercial, MaCursor's and oldcursor's GPL-3.0.
 let cursorlog = Logger(subsystem: "dev.banozz.pilot", category: "cursor")
 
 /// Look › Cursor's set: macOS's own on a fresh install (Q735). Classic is T32's design C, the one Sven picked (Q816).
+/// Since Q112 the page shows the four drawn ones as Shape and macOS as its Pilot draws it switch off.
 enum CursorSetID: String, CaseIterable, Sendable {
     case macOS, quiet, toybox, duo, classic
 
     var title: String { self == .macOS ? "macOS" : rawValue.capitalized }
+
+    /// The shapes Pilot draws: every set but macOS's own.
+    static let shapes: [CursorSetID] = [.quiet, .toybox, .duo, .classic]
 }
 
-/// A set's colours: the theme's, re-applied on a theme change, the set's own (Q736), or the user's fill and outline
-/// (Q815).
+/// A set's colours: the theme's, re-applied on a theme change, or the user's fill and outline (Q815). The sets' own
+/// colours went with Q112; a saved `own` reads as the theme's.
 enum CursorColours: String, CaseIterable, Sendable {
-    case theme, own, custom
+    case theme, custom
 
-    var title: String {
+    var title: String { self == .theme ? "Theme" : "Custom" }
+
+    /// A saved value, `own` (before Q112) read as `theme`.
+    static func saved(_ raw: String?) -> CursorColours? { raw == "own" ? .theme : raw.flatMap(CursorColours.init(rawValue:)) }
+}
+
+/// Look › Cursor › Size (Q112): the 32 pt canvas registered k times larger, the hotspot and the Ring with it. macOS
+/// stores a registered cursor whole up to 256 pt at least (an offscreen register and read back on 27.2, 2026-11-12).
+/// The steps stop where the art stays sharp: the 5x atlas is 160 px, so a drawn shape goes to 2.5x (160 px on a
+/// Retina screen, no upscale); Classic is pixel-true on the 1 pt grid (Q816) and takes whole steps only, Medium drawing
+/// it Large.
+enum CursorSize: String, CaseIterable, Sendable {
+    case small, medium, large, huge
+
+    var title: String { rawValue.capitalized }
+
+    /// How many times 32 pt `set` is drawn.
+    func scale(_ set: CursorSetID) -> CGFloat {
         switch self {
-        case .theme: "Theme"
-        case .own: "Design's own"
-        case .custom: "Custom"
+        case .small: 1
+        case .medium: set == .classic ? 2 : 1.5
+        case .large: 2
+        case .huge: set == .classic ? 3 : 2.5
         }
     }
+
+    /// Whether `set` draws this step as itself: Classic has no Medium.
+    func fits(_ set: CursorSetID) -> Bool { !(self == .medium && set == .classic) }
 }
 
 /// Custom's two colours on one set: each `theme` while unpicked, which reads as the theme's own fill or outline for it.
@@ -184,11 +209,10 @@ struct CursorCatalogue: Decodable, Sendable {
         let cursors: [String: Cursor]
         let palettes: [String: [String: String]]
 
-        /// The set's own colours, the theme's (an unknown theme id falls back to `own`, spec §1), or Custom's two on
-        /// top of the theme's; Custom without its colours reads as the theme's.
+        /// The theme's colours (an unknown theme id falls back to the set's `own`, spec §1), or Custom's two on top of
+        /// the theme's; Custom without its colours reads as the theme's.
         func palette(_ colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil) -> [String: String] {
             let own = palettes["own"] ?? [:]
-            guard colours != .own else { return own }
             // A designed theme the set has no palette for (the line-up of 18's) is recoloured from its own roles.
             let resolved = resolved ?? (palettes[theme] == nil ? PilotTheme.named(theme) : nil)
             let themed: [String: String]
@@ -224,18 +248,28 @@ struct CursorCatalogue: Decodable, Sendable {
     }
 
     /// One cursor at one scale, every frame stacked top to bottom in one image: the shape each image in
-    /// `CGSRegisterCursorWithImages`' array takes (Mousecape's representations, one per scale).
-    static func strip(_ sheet: CursorArt.Sheet, cursor: Cursor, palette: [String: String], px: Int) -> CGImage? {
-        let colours = cursor.colours(palette)
-        guard let ctx = CGContext(data: nil, width: px, height: px * cursor.frames, bitsPerComponent: 8, bytesPerRow: 0,
+    /// `CGSRegisterCursorWithImages`' array takes (Mousecape's representations, one per scale). Each frame is built at the
+    /// sheet's `px` and drawn `side` px square: pixel for pixel when they match, else `pixelated` (Classic's whole steps)
+    /// or smoothly resampled.
+    static func strip(_ sheet: CursorArt.Sheet, cursor: Cursor, palette: [String: String], px: Int, side: Int? = nil, pixelated: Bool = false) -> CGImage? {
+        let colours = cursor.colours(palette), side = side ?? px
+        guard let ctx = CGContext(data: nil, width: side, height: side * cursor.frames, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
+        ctx.interpolationQuality = pixelated ? .none : .high
         for frame in 0..<cursor.frames {
             guard let image = CursorArt.image(sheet, colours: colours, row: cursor.row + frame, px: px) else { return nil }
             // Frame 0 on top: CoreGraphics counts up from the bottom.
-            ctx.draw(image, in: CGRect(x: 0, y: (cursor.frames - 1 - frame) * px, width: px, height: px))
+            ctx.draw(image, in: CGRect(x: 0, y: (cursor.frames - 1 - frame) * side, width: side, height: side))
         }
         return ctx.makeImage()
+    }
+
+    /// The atlas scale a `side` px picture of `set` is drawn from: Classic its own scale `scale`, blown up whole; another
+    /// set the smallest atlas at least that big, so it only ever scales down, else the largest.
+    func source(for set: CursorSetID, scale: Int, side: Int) -> Int {
+        if set == .classic { return scale }
+        return scales.sorted().first { canvasPoints * $0 >= side } ?? scales.max() ?? scale
     }
 }
 
@@ -516,8 +550,8 @@ enum CursorEngine {
     /// Registers `set` in `colours` (the theme `theme`'s when it follows the theme), each cursor under every name it
     /// stands for, read back to confirm; then the Dock override. macOS's own are backed up first, and a
     /// `com.apple.coregraphics.*` name the backup does not hold keeps macOS's cursor. Returns the page's line.
-    static func apply(_ set: CursorSetID, colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil, system: (any CursorSystem)?,
-                      place: CursorPlace, folder: URL? = CursorCatalogue.folder) -> String {
+    static func apply(_ set: CursorSetID, colours: CursorColours, theme: String, custom: CursorCustom? = nil, resolved: PilotTheme? = nil,
+                      size: CursorSize = .small, system: (any CursorSystem)?, place: CursorPlace, folder: URL? = CursorCatalogue.folder) -> String {
         guard let system else { return "This macOS lacks the private calls cursor sets need, so they are off." }
         guard let folder, let catalogue = CursorCatalogue.load(folder), let art = catalogue.sets[set.rawValue] else {
             return "The cursor sets are missing from Pilot's Resources."
@@ -525,23 +559,27 @@ enum CursorEngine {
         let held: Set<String>
         do { held = try backUp(system, place: place).held } catch { return error.line }
         let palette = art.palette(colours, theme: theme, custom: custom, resolved: resolved)
-        let points = CGFloat(catalogue.canvasPoints)
+        let k = size.scale(set), points = CGFloat(catalogue.canvasPoints) * k
+        // Each scale's picture `side` px square, drawn from the atlas `source` names (Size, Q112).
+        let sides = catalogue.scales.map { Int((points * CGFloat($0)).rounded()) }
+        let sources = zip(catalogue.scales, sides).map { catalogue.source(for: set, scale: $0, side: $1) }
         var sheets = [Int: CursorArt.Sheet]()
-        for scale in catalogue.scales { sheets[scale] = CursorArt.sheet(folder, set: set.rawValue, scale: scale) }
+        for scale in Set(sources) { sheets[scale] = CursorArt.sheet(folder, set: set.rawValue, scale: scale) }
         place.stamp(true)    // before the first register, so even a crash part-way leaves it set
         var names = 0, confirmed = 0, kept = 0, arrow = false
         // The arrow last: a register with `instantly` evidently also makes that cursor the current one of the connection that
         // registers it, Pilot's own, so over Pilot's windows the last one stayed up (a camera, a zoom, resize arrows: the
         // dictionary's order, new each launch) until AppKit next set a cursor (T31).
         for (id, cursor) in art.cursors.sorted(by: { ($0.key == "arrow" ? 1 : 0, $0.key) < ($1.key == "arrow" ? 1 : 0, $1.key) }) {
-            let images = catalogue.scales.compactMap { scale in
-                sheets[scale].flatMap { CursorCatalogue.strip($0, cursor: cursor, palette: palette, px: catalogue.canvasPoints * scale) }
+            let images = zip(sources, sides).compactMap { scale, side in
+                sheets[scale].flatMap { CursorCatalogue.strip($0, cursor: cursor, palette: palette, px: catalogue.canvasPoints * scale, side: side,
+                                                              pixelated: set == .classic) }
             }
             guard images.count == catalogue.scales.count, cursor.hotspot.count == 2 else {
                 cursorlog.error("cursor: \(set.rawValue, privacy: .public) \(id, privacy: .public) did not build")
                 continue
             }
-            let hotspot = CGPoint(x: cursor.hotspot[0], y: cursor.hotspot[1])
+            let hotspot = CGPoint(x: cursor.hotspot[0] * k, y: cursor.hotspot[1] * k)
             let ours = CursorCalls.Registered(size: CGSize(width: points, height: points), hotspot: hotspot, frames: cursor.frames,
                                               duration: cursor.frames > 1 ? catalogue.frameSeconds : 0, images: images)
             for name in CursorNames.byCursor[id] ?? [] {
@@ -561,7 +599,7 @@ enum CursorEngine {
             }
         }
         system.dockOverride(true)
-        cursorlog.notice("cursor: \(set.rawValue, privacy: .public) applied, \(confirmed) of \(names) names confirmed, \(kept) kept macOS's")
+        cursorlog.notice("cursor: \(set.rawValue, privacy: .public) at \(Double(k))x applied, \(confirmed) of \(names) names confirmed, \(kept) kept macOS's")
         let keptLine = kept == 0 ? "" : " \(kept) stay macOS's: Pilot could not back them up first."
         return arrow ? "\(set.title) is on: \(confirmed) of \(names) cursor names confirmed.\(keptLine)"
             : "\(set.title) went in, but macOS did not confirm the arrow.\(keptLine) Restore brings macOS's back."
@@ -616,22 +654,54 @@ enum CursorEngine {
 
 // MARK: - The setting
 
-/// Look › Cursor's store: the set, its colours and Custom's fill and outline, saved as they change, applied by the shared store in Pilot.app alone,
-/// never in a test run (the sandbox host is one), so no test and no agent run can change Sven's real cursor.
+/// Look › Cursor's store: whether Pilot draws the cursor, its shape, size and colours and Custom's fill and outline,
+/// saved as they change, applied by the shared store in Pilot.app alone, never in a test run (the sandbox host is one),
+/// so no test and no agent run can change Sven's real cursor. Before Q112 `look.cursor` held the set (macOS for none):
+/// read once, it carries over as the switch and Shape.
 @Observable @MainActor
 final class CursorSets {
     static let shared = CursorSets()
 
-    var set: CursorSetID {
+    /// Pilot draws it (Q112): on, `shape` replaces macOS's cursor; off, macOS's own is back.
+    var drawn: Bool {
         didSet {
-            defaults.set(set.rawValue, forKey: Key.set)
-            if set != oldValue { apply() }
+            save()
+            if drawn != oldValue { apply() }
         }
+    }
+    /// The shape Pilot draws, kept while the switch is off; never macOS.
+    var shape: CursorSetID {
+        didSet {
+            if shape == .macOS { shape = oldValue; return }
+            save()
+            if shape != oldValue && drawn { apply() }
+        }
+    }
+    var size: CursorSize {
+        didSet {
+            defaults.set(size.rawValue, forKey: Key.size)
+            if size != oldValue && drawn { apply() }
+        }
+    }
+    /// The set in force: the shape while Pilot draws it, else macOS. Setting it sets both.
+    var set: CursorSetID {
+        get { drawn ? shape : .macOS }
+        set {
+            if newValue != .macOS { shape = newValue }
+            drawn = newValue != .macOS
+        }
+    }
+    /// How many times 32 pt the cursor in force is drawn: what the Ring grows by.
+    var scale: CGFloat { drawn ? size.scale(shape) : 1 }
+
+    private func save() {
+        defaults.set(drawn, forKey: Key.drawn)
+        defaults.set(shape.rawValue, forKey: Key.shape)
     }
     var colours: CursorColours {
         didSet {
             defaults.set(colours.rawValue, forKey: Key.colours)
-            if colours != oldValue && set != .macOS { apply() }
+            if colours != oldValue && drawn { apply() }
         }
     }
     /// Custom's fill and outline, on any set (Q815): `theme` until picked. A well fires on every drag, so these settle
@@ -656,14 +726,19 @@ final class CursorSets {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     enum Key {
-        static let set = "look.cursor", colours = "look.cursorColours", fill = "look.cursorFill", outline = "look.cursorOutline"
+        static let drawn = "look.cursorDrawn", shape = "look.cursorShape", carried = "look.cursor", size = "look.cursorSize", colours = "look.cursorColours",
+                   fill = "look.cursorFill", outline = "look.cursorOutline"
     }
 
     /// A test run's store saves to a throwaway suite (`UserDefaults.pilot`).
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
-        set = defaults.string(forKey: Key.set).flatMap(CursorSetID.init(rawValue:)) ?? .macOS
-        colours = defaults.string(forKey: Key.colours).flatMap(CursorColours.init(rawValue:)) ?? .theme
+        let carried = defaults.string(forKey: Key.carried).flatMap(CursorSetID.init(rawValue:)) ?? .macOS
+        drawn = defaults.object(forKey: Key.drawn) as? Bool ?? (carried != .macOS)
+        shape = defaults.string(forKey: Key.shape).flatMap(CursorSetID.init(rawValue:)).flatMap { $0 == .macOS ? nil : $0 }
+            ?? (carried != .macOS ? carried : .quiet)
+        size = defaults.string(forKey: Key.size).flatMap(CursorSize.init(rawValue:)) ?? .small
+        colours = CursorColours.saved(defaults.string(forKey: Key.colours)) ?? .theme
         fill = defaults.string(forKey: Key.fill).flatMap(ColourChoice.init(rawValue:)) ?? .theme
         outline = defaults.string(forKey: Key.outline).flatMap(ColourChoice.init(rawValue:)) ?? .theme
     }
@@ -722,7 +797,7 @@ final class CursorSets {
         withObservationTracking { _ = Look.shared.paletteRevision } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if self.colours != .own { self.reapply(after: 0.2) }   // Custom stands on the theme's colours too
+                self.reapply(after: 0.2)   // Custom stands on the theme's colours too
                 self.followTheme()
             }
         }
@@ -731,14 +806,14 @@ final class CursorSets {
     /// The saved set onto the system, or macOS's back when it is macOS.
     func apply() {
         guard mayApply else { return }
+        CursorEffects.shared.ringScale = scale
         if set == .macOS { restore(); return }
-        let (set, colours, theme, custom, resolved) = (set, colours, Look.shared.themeID, custom(set), Look.shared.packAppearance)
-        run { CursorEngine.apply(set, colours: colours, theme: theme, custom: custom, resolved: resolved, system: LiveCursors(), place: $0) }
+        let (set, colours, theme, custom, resolved, size) = (set, colours, Look.shared.themeID, custom(set), Look.shared.packAppearance, size)
+        run { CursorEngine.apply(set, colours: colours, theme: theme, custom: custom, resolved: resolved, size: size, system: LiveCursors(), place: $0) }
     }
 
-    /// Look › Cursor › Restore: macOS's cursor saved first, so the next login does not bring Pilot's set back, then put back.
-    func restore() {
-        if set != .macOS { set = .macOS; return }    // set's didSet calls apply, which restores
+    /// macOS's cursor back, once Pilot draws it is off (saved first, so the next login does not bring Pilot's set back).
+    private func restore() {
         guard mayApply else { return }
         run { CursorEngine.restore(system: LiveCursors(), place: $0) }
     }
@@ -763,18 +838,18 @@ final class CursorSets {
 
 // MARK: - Samples for the page
 
-/// Look › Cursor's small pictures: a few cursors' first frames, copied out of the 2x atlases once while the page shows
-/// (so only those rows stay in memory) and drawn in a palette; each cursor keeps its last picture, and each set its last
-/// palette, so a well's drag redraws only what changed.
+/// Look › Cursor's pictures: a few cursors' first frames, copied out of an atlas once while the page shows (so only those
+/// rows stay in memory) and drawn in a palette; each cursor keeps its last picture, and each set its last palette, so a
+/// well's drag redraws only what changed. The Shape tiles take the 2x atlas, the preview the 5x, sharp up to Huge.
 @MainActor
 final class CursorSamples {
-    /// What the page draws: the tiles' arrow and hand, and Custom's sample.
+    /// What the page draws: the tiles' arrow and the preview's four.
     static let shown = ["arrow", "ibeam", "pointing-hand", "busy"]
 
     private let folder: URL?
     private lazy var catalogue = folder.flatMap(CursorCatalogue.load)
-    /// Per set, the shown cursors' first frames, one row each, and each one's row there.
-    private var rows: [CursorSetID: (sheet: CursorArt.Sheet, row: [String: Int])] = [:]
+    /// Per set and atlas scale, the shown cursors' first frames, one row each, and each one's row there.
+    private var rows: [String: (sheet: CursorArt.Sheet, row: [String: Int])] = [:]
     private var palettes: [CursorSetID: (key: String, palette: [String: String])] = [:]
     private var images: [String: (palette: [String], image: CGImage)] = [:]
 
@@ -792,23 +867,42 @@ final class CursorSamples {
         return palette
     }
 
-    /// `cursor` (one of `shown`) of `set` at 2x, its first frame, in `palette`.
-    func image(_ set: CursorSetID, _ cursor: String, palette: [String: String]) -> CGImage? {
-        guard let catalogue, let c = catalogue.sets[set.rawValue]?.cursors[cursor], let art = rows(set), let row = art.row[cursor] else { return nil }
-        let used = c.layers.map { palette[$0] ?? "" }, key = "\(set.rawValue) \(cursor)"
+    /// `cursor` (one of `shown`) of `set` from its `scale`x atlas, its first frame, in `palette`.
+    func image(_ set: CursorSetID, _ cursor: String, palette: [String: String], scale: Int = 2) -> CGImage? {
+        guard let catalogue, let c = catalogue.sets[set.rawValue]?.cursors[cursor], let art = rows(set, scale), let row = art.row[cursor] else { return nil }
+        let used = c.layers.map { palette[$0] ?? "" }, key = "\(set.rawValue) \(cursor) \(scale)"
         if let kept = images[key], kept.palette == used { return kept.image }
-        guard let image = CursorArt.image(art.sheet, colours: c.colours(palette), row: row, px: catalogue.canvasPoints * 2)
+        guard let image = CursorArt.image(art.sheet, colours: c.colours(palette), row: row, px: catalogue.canvasPoints * scale)
         else { return nil }
         images[key] = (used, image)
         return image
     }
 
-    /// The shown cursors' first frames of `set`, copied out of its 2x atlas on first use.
-    private func rows(_ set: CursorSetID) -> (sheet: CursorArt.Sheet, row: [String: Int])? {
-        if let kept = rows[set] { return kept }
+    /// `image` with its hotspot, for the preview, from the atlas the engine would draw a `side` px picture from: the
+    /// tiles' 2x until a bigger Size needs the 5x.
+    func picture(_ set: CursorSetID, _ cursor: String, palette: [String: String], side: Int) -> CursorPreview.Picture? {
+        guard let catalogue, let c = catalogue.sets[set.rawValue]?.cursors[cursor], c.hotspot.count == 2,
+              let image = image(set, cursor, palette: palette, scale: catalogue.source(for: set, scale: 2, side: side)) else { return nil }
+        let points = CGFloat(catalogue.canvasPoints)
+        return .init(image: image, hotspot: CGPoint(x: c.hotspot[0], y: c.hotspot[1]), size: CGSize(width: points, height: points))
+    }
+
+    /// The preview's last picture and what it was drawn from: a body that changed nothing it shows draws nothing.
+    private var drawn: (key: String, image: CGImage?)?
+    func preview(_ key: String, draw: () -> CGImage?) -> CGImage? {
+        if let drawn, drawn.key == key { return drawn.image }
+        let image = draw()
+        drawn = (key, image)
+        return image
+    }
+
+    /// The shown cursors' first frames of `set`, copied out of its `scale`x atlas on first use.
+    private func rows(_ set: CursorSetID, _ scale: Int) -> (sheet: CursorArt.Sheet, row: [String: Int])? {
+        let key = "\(set.rawValue) \(scale)"
+        if let kept = rows[key] { return kept }
         guard let folder, let catalogue, let art = catalogue.sets[set.rawValue],
-              let full = CursorArt.sheet(folder, set: set.rawValue, scale: 2) else { return nil }
-        let px = catalogue.canvasPoints * 2
+              let full = CursorArt.sheet(folder, set: set.rawValue, scale: scale) else { return nil }
+        let px = catalogue.canvasPoints * scale
         var grey = [UInt8](), row = [String: Int]()
         for name in Self.shown {
             guard let c = art.cursors[name] else { continue }
@@ -818,7 +912,7 @@ final class CursorSamples {
             grey += full.grey[start..<end]
         }
         let made = (CursorArt.Sheet(grey: grey, width: full.width, height: px * row.count, bytesPerRow: full.bytesPerRow), row)
-        rows[set] = made
+        rows[key] = made
         return made
     }
 }

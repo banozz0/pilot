@@ -5,8 +5,9 @@ import SwiftUI
 
 /// Look › Wallpaper (story 160, Sven 2026-10-10: "where do I even set which wallpapers cycle?"): each screen with its
 /// wallpaper now, its place in the cycle and Previous and Next; the folders and images that cycle as chips with Add and
-/// Reset, the same for every screen or each screen its own (Sven 2026-10-17), under its row; workspaces on their screen's
-/// folders or each its own (Sven 2026-10-19, Q333), a row per workspace; Browse as gallery (P90); By name or Shuffle; the screen in front or every screen; and Change on its own. Self-contained, so the layout
+/// Reset; own folders for nothing, each screen (Sven 2026-10-17) or each workspace (Sven 2026-10-19, Q333), merged into one
+/// row by Q113, a row per screen or workspace under it; Browse as gallery (P90); Shuffle; Screens, the screen in front or
+/// every screen; and Change on its own. Self-contained, so the layout
 /// rework can move it; it reads the screens on appear and after every step. Look's front draws the screens' Previous and
 /// Next and Change on its own; its More the rest, under Wallpaper folders (simplify-pages T20).
 struct WallpaperBlock: View {
@@ -46,15 +47,13 @@ struct WallpaperBlock: View {
     }
 
     enum Info {
-        static let images = "Folders cycle every image inside them and their subfolders; an image you add cycles on its own. Each screen only gets images of its own shape, unless none fit or Only images that fit the screen is off."
-        static let shared = "Screens without folders of their own cycle these. " + images
-        static let folders = "The same folders on every screen, or each screen its own, picked under its row. A screen without its own uses the shared ones."
-        static let fit = "On, a portrait screen steps through tall images and a wide screen through wide ones, all of them when none fit. Off, every screen steps through every image; a wide one shows its middle on a portrait screen."
+        static let images = "Folders cycle every image inside them and their subfolders; an image you add cycles on its own. Each screen only gets images of its own shape, unless none fit."
+        static let shared = "Screens and workspaces without folders of their own cycle these. " + images
+        static let ownFolders = "Nothing: every screen cycles the folders above. Each screen: each screen its own, added on its row below. Each workspace: each workspace its own, shown on its screen when you switch to it. A screen or workspace without its own uses the folders above."
         static let own = "This screen's own folders and images. With none, it uses the shared ones; Reset goes back to them."
-        static let workspaces = "Every workspace shows its screen's wallpaper, or each workspace its own, picked under Workspaces. Switching to a workspace with its own puts the image it last showed back on its screen; one without gets the screen's usual wallpaper back."
         static let workspaceOwn = "This workspace's own folders and images, cycled on its screen while it shows. With none, it uses its screen's; Reset goes back to them."
-        static let order = "By name steps in file-name order. Shuffle mixes them once and keeps that order, so Previous goes back; Shuffle again mixes anew."
-        static let scope = "Which screens Next wallpaper and Previous change: the one the window in front is on, or every screen at once."
+        static let shuffle = "On, the images go in a mixed order that stays put, so Previous goes back; Shuffle again mixes them anew. Off, they go by file name."
+        static let scope = "Which screens the Next wallpaper key and Previous change: only the screen the front window is on, or every screen at once, each to its own next image. Each screen's Next on the front always changes that screen alone."
         static let interval = "Steps every screen to its next image on its own. Waits while the screen is locked or asleep."
         static let screen = "This screen's wallpaper now and, dimmed, the one Next gives. Previous and Next step this screen alone."
     }
@@ -85,20 +84,16 @@ struct WallpaperBlock: View {
         }
     }
 
-    /// A row per screen: Previous and Next off More; on More only while each screen has its own folders.
-    private var screenRows: Bool { (part != .more || settings.folders == .perScreen) && !screens.isEmpty }
+    /// A row per screen with Previous and Next: off More.
+    private var screenRows: Bool { part != .more && !screens.isEmpty }
 
-    /// The part's rows: the screens with Previous and Next off More; on More, each screen's own folders while each has its
-    /// own; the folders, workspaces, fit, images, order and screens off the front; Change on its own off More.
+    /// The part's rows: the screens with Previous and Next off More; Images from, Own folders for with each screen's or
+    /// workspace's own under it, Shuffle and Screens off the front (Q113's four rows); Change on its own off More.
     @ViewBuilder private var rows: some View {
         if screenRows {
             ForEach(Array(screens.enumerated()), id: \.element.id) { i, screen in
                 BlockRow(first: i == 0) {
-                    switch part {
-                    case .all: screenRow(screen)
-                    case .front: screenLine(screen, label: screenLabel(screen), compact: true)
-                    case .more: ownRow(screen)
-                    }
+                    if part == .front { screenLine(screen, label: screenLabel(screen), compact: true) } else { screenRow(screen) }
                 }
                 .focusBorder(on: screen.displayUUID.map { lit == .screen($0) } ?? false, radius: ink.style.radii.control)
             }
@@ -115,34 +110,34 @@ struct WallpaperBlock: View {
         }
     }
 
-    /// What the wallpaper cycles through and how: More's rows.
+    /// What the wallpaper cycles through and how: More's four rows (Q113, Sven's pick A), each screen's or workspace's own
+    /// folders under Own folders for. Only images that fit the screen has no row: on, as it ships (`pilot set`
+    /// wallpaper.fitShape reaches it).
     @ViewBuilder private var cycleRows: some View {
-        BlockRow(first: !screenRows) {
-            label("Folders", Info.folders)
-            Segments(selection: $settings.folders, options: [(.shared, "Same for every screen"), (.perScreen, "Each screen its own")],
-                     label: "Folders")
-        }
+        BlockRow(first: !screenRows) { sourcesRow }
         BlockRow {
-            label("Workspaces", Info.workspaces)
-            Segments(selection: $settings.workspaces, options: [(.shared, "Same as global"), (.perWorkspace, "Per workspace")],
-                     label: "Workspaces")
+            label("Own folders for", Info.ownFolders)
+            Segments(selection: $settings.ownFolders, options: WallpaperCycle.OwnFolders.allCases.map { ($0, $0.title) }, label: "Own folders for")
         }
-        if settings.workspaces == .perWorkspace {
+        // The whole block draws each screen's own under its screen row.
+        if settings.ownFolders == .eachScreen && part == .more {
+            ForEach(screens, id: \.id) { screen in
+                BlockRow { ownRow(screen) }
+                    .focusBorder(on: screen.displayUUID.map { lit == .screen($0) } ?? false, radius: ink.style.radii.control)
+            }
+        }
+        if settings.ownFolders == .eachWorkspace {
             ForEach(workspaceNames, id: \.self) { workspace in
                 BlockRow { workspaceRow(workspace) }.focusBorder(on: lit == .workspace(workspace), radius: ink.style.radii.control)
             }
         }
         BlockRow {
-            label("Only images that fit the screen", Info.fit)
-            Toggle("Only images that fit the screen", isOn: $settings.fitShape).toggleStyle(.pilotSwitch).labelsHidden()
-        }
-        BlockRow { sourcesRow }
-        BlockRow {
-            label("Order", Info.order)
+            label("Shuffle", Info.shuffle)
             if settings.order == .shuffle {
                 Button("Shuffle again") { settings.shuffleAgain() }.buttonStyle(.pilot)
             }
-            Segments(selection: $settings.order, options: [(.name, "By name"), (.shuffle, "Shuffle")], label: "Order")
+            Toggle("Shuffle", isOn: Binding(get: { settings.order == .shuffle }, set: { settings.order = $0 ? .shuffle : .name }))
+                .toggleStyle(.pilotSwitch).labelsHidden()
         }
         BlockRow {
             label("Screens", Info.scope)
@@ -293,7 +288,7 @@ struct WallpaperBlock: View {
     private var sourcesRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                if settings.folders == .shared { label("Images from", Info.images) } else { label("Shared folders", Info.shared) }
+                if settings.ownFolders == .nothing { label("Images from", Info.images) } else { label("Shared folders", Info.shared) }
                 if let count { Text(count == 1 ? "1 image" : "\(count) images").font(ink.ui(12)).foregroundStyle(ink.muted) }
                 if !settings.isStandard { Button("Reset") { withAnimation(Kit.change) { settings.reset() } }.buttonStyle(.pilot) }
                 Button("Browse as gallery") { GalleryWindow.shared.openWallpapers(display: focus?.display) }.buttonStyle(.pilot)

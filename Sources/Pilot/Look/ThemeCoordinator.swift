@@ -42,7 +42,7 @@ final class ThemeCoordinator {
                 if let bar = value.bar, BarItemsStore.shared.settings.preset != bar.configuration {
                     BarItemsStore.shared.settings.preset = bar.configuration
                 }
-                if let colours = value.cursor.flatMap(CursorColours.init(rawValue:)), CursorSets.shared.colours != colours { CursorSets.shared.colours = colours }
+                if let colours = CursorColours.saved(value.cursor), CursorSets.shared.colours != colours { CursorSets.shared.colours = colours }
             }, baseline: { Look.shared.nativeBaseline }, mode: { try await MacAppearance.switchTo(dark: $0) }), gate: AllowPrompt.gate, style: { Look.shared.style.rawValue }, wallpaper: WallpaperSwitch.themeEffects(),
             detect: isTestRun ? nil : { ThemeCoordinator.detectApps(home: NSHomeDirectory()) },  // A test host never reaches real configs.
             cursorIsSystem: { CursorSets.shared.set == .macOS },

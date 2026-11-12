@@ -22,6 +22,20 @@ public enum WallpaperCycle {
     /// screen's (Sven 2026-10-19, Q333).
     public enum Workspaces: String, CaseIterable, Sendable { case shared, perWorkspace }
 
+    /// Look › Wallpaper folders › Own folders for (Q113): one choice for both, as each screen and each workspace their own
+    /// at once is gone; nothing, every screen and workspace on the shared folders.
+    public enum OwnFolders: String, CaseIterable, Sendable {
+        case nothing, eachScreen, eachWorkspace
+
+        public var title: String {
+            switch self {
+            case .nothing: "Nothing"
+            case .eachScreen: "Each screen"
+            case .eachWorkspace: "Each workspace"
+            }
+        }
+    }
+
     /// Change on its own: minutes between steps, 0 for never.
     public static let intervals = [0, 15, 30, 60, 180, 1440]
 

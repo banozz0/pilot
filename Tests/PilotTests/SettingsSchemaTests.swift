@@ -278,7 +278,8 @@ struct SettingsSchemaTests {
         #expect(await allowing.ask("set", "layerKey", "capsLock,leftControl").ok && allowing.settings.layerKeys == [.capsLock, .leftControl])
         #expect(Rig().schema.sorted.filter(\.confirms).map(\.key)
                 == ["ai.baseURL.ollama", "ai.baseURL.openAICompatible", "ai.fallback", "ai.key.anthropicAPI", "ai.key.openAI", "ai.key.openAICompatible", "ai.provider",
-                   "giphy.key", "keySwaps", "layerKey", "look.cursor", "look.cursorColours", "look.cursorFill", "look.cursorOutline"])
+                   "giphy.key", "keySwaps", "layerKey", "look.cursorColours", "look.cursorDrawn", "look.cursorFill", "look.cursorOutline",
+                   "look.cursorShape", "look.cursorSize"])
     }
 
     @Test("Until the Allow prompt is wired, the app's own decider denies a confirmed setting")
@@ -297,7 +298,7 @@ struct SettingsSchemaTests {
               case .array(let look)? = await rig.ask("settings", "--page", "look").result else { Issue.record("no list"); return }
         guard case .object(let first) = look[0] else { Issue.record("not an object"); return }
         #expect(first["page"] == .string("look") && first["type"] != nil && first["label"] != nil && first["default"] != nil)
-        #expect(all.count == rig.schema.keys.count && look.count == 17)
+        #expect(all.count == rig.schema.keys.count && look.count == 19)
         let nowhere = await rig.ask("settings", "--page", "nowhere")
         #expect(nowhere.error?.code == .unknownPage && nowhere.error?.message.contains("look") == true)
         guard case .object(let schema) = rig.verbs.schema, case .array(let verbs)? = schema["verbs"] else { Issue.record("no schema"); return }
@@ -333,7 +334,7 @@ struct SettingsSchemaTests {
                 + "Takes its value from stdin alone, never a word; get says only set or unset; default unset.\nAsks Allow first.")
         #expect(throws: ControlError.self) { try get("no.such.key") }
         let look = try #require(try settings("look"))
-        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.windowLayout") && look.split(separator: "\n").count == 18)
+        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.windowLayout") && look.split(separator: "\n").count == 20)
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }

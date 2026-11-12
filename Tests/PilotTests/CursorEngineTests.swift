@@ -70,7 +70,7 @@ struct CursorEngineTests {
         var stamp: String? { defaults.string(forKey: CursorPlace.appliedKey) }
 
         func apply(_ fake: FakeCursors, _ url: URL? = nil) -> String {
-            CursorEngine.apply(.quiet, colours: .own, theme: "", system: fake, place: place(url), folder: CursorRenders.packaging)
+            CursorEngine.apply(.quiet, colours: .theme, theme: "", system: fake, place: place(url), folder: CursorRenders.packaging)
         }
         func restore(_ fake: FakeCursors) -> String { CursorEngine.restore(system: fake, place: place()) }
 

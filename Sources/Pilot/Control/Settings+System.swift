@@ -28,17 +28,16 @@ extension SettingsSchema {
     func registerSystem(settings: PilotSettings, wallpaper: WallpaperSettings, recommendations: Recommendations, pilotSwitch: any PilotSwitching,
                         dictation: PilotDictation, notesIn: @escaping @MainActor (URL) -> Int, changeNotes: @escaping @MainActor (URL) throws -> Void) {
         register([
-            .choice("wallpaper.order", "Wallpapers go", page: "look", WallpaperCycle.Order.allCases, standard: .name,
+            .choice("wallpaper.order", "Wallpapers go by name, or shuffled (the page's Shuffle switch)", page: "look", WallpaperCycle.Order.allCases, standard: .name,
                     read: { wallpaper.order }, write: { wallpaper.order = $0 }),
-            .choice("wallpaper.scope", "Next wallpaper changes", page: "look", WallpaperCycle.Scope.allCases, standard: .focusedScreen,
-                    read: { wallpaper.scope }, write: { wallpaper.scope = $0 }),
-            // A screen's own folders are `pilot add wallpaper-sources --screen`.
-            .choice("wallpaper.folders", "Wallpaper folders: the same on every screen, or each screen its own", page: "look",
-                    WallpaperCycle.Folders.allCases, standard: .shared, read: { wallpaper.folders }, write: { wallpaper.folders = $0 }),
-            // A workspace's own folders are `pilot add wallpaper-sources --workspace`.
-            .choice("wallpaper.workspaces", "Wallpaper per workspace: every workspace its screen's, or each workspace its own", page: "look",
-                    WallpaperCycle.Workspaces.allCases, standard: .shared, read: { wallpaper.workspaces }, write: { wallpaper.workspaces = $0 }),
-            .bool("wallpaper.fitShape", "Only images that fit the screen: off, every screen steps through every image", page: "look",
+            .choice("wallpaper.scope", "Screens: which screens the Next wallpaper key and Previous change, the one in front or every screen", page: "look",
+                    WallpaperCycle.Scope.allCases, standard: .focusedScreen, read: { wallpaper.scope }, write: { wallpaper.scope = $0 }),
+            // Q113 merged wallpaper.folders and wallpaper.workspaces. A screen's own folders are `pilot add wallpaper-sources
+            // --screen`, a workspace's `--workspace`.
+            .choice("wallpaper.ownFolders", "Wallpaper own folders for: nothing (every screen the shared folders), each screen, or each workspace", page: "look",
+                    WallpaperCycle.OwnFolders.allCases, standard: .nothing, read: { wallpaper.ownFolders }, write: { wallpaper.ownFolders = $0 }),
+            // No page row since Q113: on, as it ships.
+            .bool("wallpaper.fitShape", "Only images that fit the screen, on unless set here: off, every screen steps through every image", page: "look",
                   standard: true, read: { wallpaper.fitShape }, write: { wallpaper.fitShape = $0 }),
             // The page's picker: a minute count it does not list would show as no pick.
             .choice("wallpaper.interval", "Change on their own, every minutes (0 never)", page: "look",

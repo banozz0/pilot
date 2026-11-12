@@ -112,7 +112,7 @@ struct SettingsSchemaPart2Tests {
         try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
-        #expect(rig.schema.keys.count == 55)
+        #expect(rig.schema.keys.count == 54)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -134,7 +134,7 @@ struct SettingsSchemaPart2Tests {
         _ = await rig.ask("set", "windows.dragModifier", "cmd")
         _ = await rig.ask("set", "topBar.on", "on")
         _ = await rig.ask("set", "wallpaper.interval", "60")
-        _ = await rig.ask("set", "wallpaper.folders", "perScreen")
+        _ = await rig.ask("set", "wallpaper.ownFolders", "eachScreen")
         #expect(rig.list.count == 4 && rig.list.names == ["1", "2", "3", "4"])
         #expect(rig.block.block.gaps.inner == 12 && !rig.block.block.gapsOn)
         // The tiler was handed the gap changes, as the page's slider hands them.
@@ -223,7 +223,7 @@ struct SettingsSchemaPart2Tests {
         "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
         "look.windowBorderColour", "look.defocusStrength", "look.defocusDim", "look.defocusShake", "look.defocusShakeSwings",
         "look.defocusShakeWithin", "look.appsShowAs", "look.windowLayout", "look.strength", "look.material",
-        "look.cursor", "look.cursorColours", "look.cursorFill", "look.cursorOutline", "look.cursorEffectColour", "look.cursorApplied", "look.cursorTrail", "look.cursorRing", "look.cursorRipple",
+        "look.cursor", "look.cursorDrawn", "look.cursorShape", "look.cursorSize", "look.cursorColours", "look.cursorFill", "look.cursorOutline", "look.cursorEffectColour", "look.cursorApplied", "look.cursorTrail", "look.cursorRing", "look.cursorRipple",
         "look.cursorSpotlight",
         "clipboard.keepCount", "clipboard.keepDays", "clipboard.saveImages", "clipboard.returnAction", "clipboard.sort",
         "clipboard.sortReversed", "clipboard.ignoredApps",
@@ -235,7 +235,7 @@ struct SettingsSchemaPart2Tests {
         "bar.items", "bar.pagePlacement", "bar.background", "bar.colour", "bar.itemColours",
         "topBar.switch", "topBar.leftOut", "topBar.strips", "menuBar.stats", "topBar.settings", "pomodoro.countdown",
         "wallpaper.sources", "wallpaper.order", "wallpaper.seed", "wallpaper.scope", "wallpaper.interval",
-        "wallpaper.folders", "wallpaper.screenSources", "wallpaper.fitShape", "wallpaper.workspaces", "wallpaper.workspaceSources",
+        "wallpaper.ownFolders", "wallpaper.folders", "wallpaper.screenSources", "wallpaper.fitShape", "wallpaper.workspaces", "wallpaper.workspaceSources",
         "wallpaper.workspaceImages",
         "recommendations.show", "switch.on",
         "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.showIn", "dictation.barSide", "dictation.waveColour", "dictation.copy", "dictation.pauseMedia", "home.blocks", "stats.views", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
@@ -260,7 +260,7 @@ struct SettingsSchemaPart2Tests {
                                      "setup.wifi.shown", "setup.bluetooth.shown", "pilot.notifications.decision",
                                      "pilot.notifications.macOSOffSaid", "look.cursorApplied"]
     /// Read once to carry a setting over, never written.
-    static let carriedOver: Set = ["look.strength", "look.material", "menuBar.stats", "topBar.settings", "pomodoro.countdown"]
+    static let carriedOver: Set = ["look.cursor", "wallpaper.folders", "wallpaper.workspaces", "look.strength", "look.material", "menuBar.stats", "topBar.settings", "pomodoro.countdown"]
     /// macOS's own, read only.
     static let macOS: Set = ["AppleInterfaceStyle"]
 

@@ -679,9 +679,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
-        case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "restore cursor", "classic cursor"]
-        case .wallpaperCycle: ["wallpaper folders", "per workspace wallpaper", "cycle wallpaper", "shuffle", "wallpaper order",
-                               "fit the screen", "every screen", "browse as gallery", "next wallpaper key"]
+        case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
+                       "pilot draws it", "restore cursor", "classic cursor"]
+        case .wallpaperCycle: ["wallpaper folders", "own folders", "per workspace wallpaper", "per screen wallpaper", "cycle wallpaper", "shuffle",
+                               "wallpaper order", "screens", "every screen", "browse as gallery", "next wallpaper key"]
         }
     }
 }

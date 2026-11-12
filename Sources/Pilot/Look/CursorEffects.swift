@@ -44,6 +44,8 @@ struct CursorEffectState {
     var trail: CursorTrail = .off
     var ring = false, ripple = false
     var reduceMotion = false
+    /// The cursor's Size (Q112): the Ring grows with it.
+    var ringScale: CGFloat = 1
 
     var pointer = CGPoint.zero
     /// The trail's points: every pointer event for Thread and Comet, a point every 13 pt of travel for Dots.
@@ -175,7 +177,7 @@ enum CursorEffectPainter {
         var box = CGRect.null
         if s.trail == .dots || trailShown(s) { for p in s.samples { box = box.union(CGRect(origin: p.point, size: .zero)) } }
         box = box.insetBy(dx: -6, dy: -6)
-        if ring && s.ring && s.ringFade.level(now) > 0 { box = box.union(square(s.pointer, ringBox)) }
+        if ring && s.ring && s.ringFade.level(now) > 0 { box = box.union(square(s.pointer, ringBox(s))) }
         for r in s.ripples { box = box.union(square(r.point, 36)) }
         return box.integral
     }
@@ -231,14 +233,14 @@ enum CursorEffectPainter {
         ctx.setAlpha(1)
     }
 
-    /// The Ring's radius at `now`: 17 pt, less up to 4 pt while a click squeezes it.
+    /// The Ring's radius at `now`: 17 pt, less up to 4 pt while a click squeezes it, times the cursor's Size.
     static func ringRadius(_ s: CursorEffectState, _ now: TimeInterval) -> CGFloat {
-        guard let start = s.squeeze else { return ringRadius }
-        return ringRadius - ringSqueeze * sin(.pi * CGFloat(min(1, (now - start) / CursorEffectState.squeezeSeconds)))
+        guard let start = s.squeeze else { return ringRadius * s.ringScale }
+        return (ringRadius - ringSqueeze * sin(.pi * CGFloat(min(1, (now - start) / CursorEffectState.squeezeSeconds)))) * s.ringScale
     }
 
     /// The Ring's half-side with its edge: what its layer and the bounds hold.
-    static let ringBox = ringRadius + 4
+    static func ringBox(_ s: CursorEffectState) -> CGFloat { ringRadius * s.ringScale + 4 }
 
     static func ring(radius r: CGFloat, level: CGFloat, _ c: CursorEffectColours, at centre: CGPoint, in ctx: CGContext) {
         let circle = square(centre, r)
@@ -343,6 +345,9 @@ final class CursorEffects {
     var spotlight: Bool { didSet { defaults.set(spotlight, forKey: Key.spotlight); if !spotlight { held = false }; refresh() } }
     /// The trail's, ring's and ripple's colour: the theme's, or one picked (T33, Q815).
     var colour: ColourChoice { didSet { defaults.set(colour.rawValue, forKey: Key.colour); refresh() } }
+    /// The cursor's Size as Look › Cursor applied it (Q112): the Ring grows with it. Not saved: the cursor's store sets
+    /// it on each apply.
+    var ringScale: CGFloat = 1 { didSet { if ringScale != oldValue { refresh() } } }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var overlays: CursorOverlays?
@@ -401,9 +406,9 @@ final class CursorEffects {
         if wanted {
             let overlays = overlays ?? CursorOverlays { [weak self] in self?.closeIfDone() }
             self.overlays = overlays
-            overlays.configure(trail: trail, ring: ring, ripple: ripple, spotlight: held, colour: colour)
+            overlays.configure(trail: trail, ring: ring, ripple: ripple, spotlight: held, colour: colour, ringScale: ringScale)
         } else {
-            overlays?.configure(trail: .off, ring: false, ripple: false, spotlight: false, colour: colour)
+            overlays?.configure(trail: .off, ring: false, ripple: false, spotlight: false, colour: colour, ringScale: ringScale)
             closeIfDone()
         }
     }
@@ -464,9 +469,10 @@ final class CursorOverlays: NSObject {
     /// Something still fades: closing now would cut it.
     var busy: Bool { state.alive(CACurrentMediaTime()) }
 
-    func configure(trail: CursorTrail, ring: Bool, ripple: Bool, spotlight: Bool, colour: ColourChoice) {
+    func configure(trail: CursorTrail, ring: Bool, ripple: Bool, spotlight: Bool, colour: ColourChoice, ringScale: CGFloat) {
         let now = CACurrentMediaTime()
         self.colour = colour
+        state.ringScale = ringScale
         // A trail turned on starts where the pointer is: with only Ripple on, no move was watched to keep it current.
         if trail != state.trail { state.samples = []; state.travel = 0; state.pointer = NSEvent.mouseLocation }
         state.trail = trail
@@ -622,9 +628,10 @@ final class CursorOverlays: NSObject {
     /// alone just moves it.
     private func placeRing(_ screen: Screen, _ now: TimeInterval) {
         let level = state.ring ? state.ringFade.level(now) : 0
-        let box = CursorEffectPainter.square(state.pointer, CursorEffectPainter.ringBox)
+        let half = CursorEffectPainter.ringBox(state), box = CursorEffectPainter.square(state.pointer, half)
         screen.ring.isHidden = level <= 0 || !box.intersects(screen.frame)
         guard !screen.ring.isHidden else { return }
+        if screen.ring.bounds.width != 2 * half { screen.ring.bounds = CGRect(x: 0, y: 0, width: 2 * half, height: 2 * half) }
         let scale = screen.ring.contentsScale
         screen.ring.position = CGPoint(x: ((state.pointer.x - screen.frame.minX) * scale).rounded() / scale,
                                        y: ((state.pointer.y - screen.frame.minY) * scale).rounded() / scale)
@@ -676,7 +683,8 @@ final class CursorOverlays: NSObject {
         let ring = CALayer()
         ring.delegate = ringPainter
         ring.contentsScale = screen.backingScaleFactor
-        ring.bounds = CGRect(x: 0, y: 0, width: 2 * CursorEffectPainter.ringBox, height: 2 * CursorEffectPainter.ringBox)
+        let half = CursorEffectPainter.ringBox(state)
+        ring.bounds = CGRect(x: 0, y: 0, width: 2 * half, height: 2 * half)
         ring.isHidden = true
         let spot = CALayer()
         spot.isHidden = true

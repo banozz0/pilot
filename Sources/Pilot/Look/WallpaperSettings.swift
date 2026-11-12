@@ -15,13 +15,23 @@ final class WallpaperSettings: ScreenPausing {
     /// The folders and image files, as paths; an empty list falls back to ~/Pictures/Wallpapers. With each screen its
     /// own, the shared ones a screen without folders of its own takes.
     private(set) var sources: [String] { didSet { defaults.set(sources, forKey: Self.sourcesKey) } }
-    /// The same folders on every screen, or each screen its own (Sven 2026-10-17); shared until changed.
-    var folders: WallpaperCycle.Folders { didSet { defaults.set(folders.rawValue, forKey: Self.foldersKey) } }
+    /// Own folders for nothing, each screen or each workspace (Q113, which merged Folders and Workspaces): nothing until
+    /// changed.
+    var ownFolders: WallpaperCycle.OwnFolders { didSet { defaults.set(ownFolders.rawValue, forKey: Self.ownFoldersKey) } }
+    /// The same folders on every screen, or each screen its own (Sven 2026-10-17): `ownFolders` read for screens.
+    var folders: WallpaperCycle.Folders {
+        get { ownFolders == .eachScreen ? .perScreen : .shared }
+        set { if newValue == .perScreen { ownFolders = .eachScreen } else if ownFolders == .eachScreen { ownFolders = .nothing } }
+    }
     /// Each screen's own folders and images by its display UUID (DisplayIdentity, as Monitors keys its pins), read
     /// only while `folders` is perScreen; a screen not here takes `sources`.
     private(set) var screenSources: [String: [String]] { didSet { defaults.set(screenSources, forKey: Self.screenSourcesKey) } }
-    /// Workspaces share the screen's folders, or each can have its own (Sven 2026-10-19, Q333); shared until changed.
-    var workspaces: WallpaperCycle.Workspaces { didSet { defaults.set(workspaces.rawValue, forKey: Self.workspacesKey) } }
+    /// Workspaces share the screen's folders, or each can have its own (Sven 2026-10-19, Q333): `ownFolders` read for
+    /// workspaces.
+    var workspaces: WallpaperCycle.Workspaces {
+        get { ownFolders == .eachWorkspace ? .perWorkspace : .shared }
+        set { if newValue == .perWorkspace { ownFolders = .eachWorkspace } else if ownFolders == .eachWorkspace { ownFolders = .nothing } }
+    }
     /// Each workspace's own folders and images by its number, read only while `workspaces` is perWorkspace; a workspace
     /// not here takes its screen's.
     private(set) var workspaceSources: [String: [String]] { didSet { defaults.set(workspaceSources, forKey: Self.workspaceSourcesKey) } }
@@ -53,7 +63,8 @@ final class WallpaperSettings: ScreenPausing {
     /// The workspace the screen with this display UUID shows; the engine reads its tiler's, nil without one.
     @ObservationIgnored var shownWorkspace: @MainActor (String) -> String? = { _ in nil }
     private static let sourcesKey = "wallpaper.sources", orderKey = "wallpaper.order", seedKey = "wallpaper.seed",
-                       scopeKey = "wallpaper.scope", intervalKey = "wallpaper.interval", foldersKey = "wallpaper.folders",
+                       scopeKey = "wallpaper.scope", intervalKey = "wallpaper.interval", ownFoldersKey = "wallpaper.ownFolders",
+                       foldersKey = "wallpaper.folders",
                        screenSourcesKey = "wallpaper.screenSources", fitShapeKey = "wallpaper.fitShape",
                        workspacesKey = "wallpaper.workspaces", workspaceSourcesKey = "wallpaper.workspaceSources",
                        workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites"
@@ -61,9 +72,12 @@ final class WallpaperSettings: ScreenPausing {
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         sources = defaults.stringArray(forKey: Self.sourcesKey) ?? [WallpaperCycle.standardFolder.path]
-        folders = defaults.string(forKey: Self.foldersKey).flatMap(WallpaperCycle.Folders.init) ?? .shared
+        // Before Q113 two keys; both on carries over as each workspace's, as the round said.
+        let screens = defaults.string(forKey: Self.foldersKey).flatMap(WallpaperCycle.Folders.init) == .perScreen
+        let workspaces = defaults.string(forKey: Self.workspacesKey).flatMap(WallpaperCycle.Workspaces.init) == .perWorkspace
+        ownFolders = defaults.string(forKey: Self.ownFoldersKey).flatMap(WallpaperCycle.OwnFolders.init)
+            ?? (workspaces ? .eachWorkspace : screens ? .eachScreen : .nothing)
         screenSources = (defaults.dictionary(forKey: Self.screenSourcesKey) as? [String: [String]]) ?? [:]
-        workspaces = defaults.string(forKey: Self.workspacesKey).flatMap(WallpaperCycle.Workspaces.init) ?? .shared
         workspaceSources = (defaults.dictionary(forKey: Self.workspaceSourcesKey) as? [String: [String]]) ?? [:]
         workspaceImages = (defaults.dictionary(forKey: Self.workspaceImagesKey) as? [String: String]) ?? [:]
         favourites = defaults.stringArray(forKey: Self.favouritesKey) ?? []

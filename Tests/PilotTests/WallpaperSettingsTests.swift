@@ -91,20 +91,16 @@ struct WallpaperSettingsTests {
         #expect(WallpaperSettings(defaults: store).interval == 0)
     }
 
-    @Test("The block shows each screen's wallpaper, the one Next gives dimmed beside it, and its place, the folders and images as chips, order, screens and interval; each screen its own folders under its row",
-          arguments: WallpaperCycle.Folders.allCases)
-    func renders(_ folders: WallpaperCycle.Folders) throws {
+    @Test("The block shows each screen's wallpaper, the one Next gives dimmed beside it, and its place, the folders and images as chips, own folders for, shuffle, screens and interval; each screen's or workspace's own folders under its row",
+          arguments: WallpaperCycle.OwnFolders.allCases)
+    func renders(_ folders: WallpaperCycle.OwnFolders) throws {
         let settings = WallpaperSettings(defaults: Self.defaults())
         settings.add([URL(filePath: NSHomeDirectory() + "/Pictures/Omarchy"), URL(filePath: "/Users/ada/Desktop/dunes.jpg")])
         settings.add([URL(filePath: NSHomeDirectory() + "/Pictures/Portraits")], display: "LG")
         settings.order = .shuffle
         settings.interval = 60
-        settings.folders = folders
-        // Each screen its own renders the workspace rows too (Q333): one with its own folder, one on its screen's.
-        if folders == .perScreen {
-            settings.workspaces = .perWorkspace
-            settings.add([URL(filePath: NSHomeDirectory() + "/Pictures/Forest")], workspace: "2")
-        }
+        settings.add([URL(filePath: NSHomeDirectory() + "/Pictures/Forest")], workspace: "2")
+        settings.ownFolders = folders
         defer { settings.interval = 0 }
         let screens = [
             WallpaperScreen(id: 1, name: "LG HDR WQHD", portrait: false, detail: "kanagawa.png · 3 of 12", thumb: Self.picture(.systemTeal),
@@ -119,7 +115,7 @@ struct WallpaperSettingsTests {
             let view = WallpaperBlock(settings: settings, screens: screens, count: 12, workspaces: ["1", "2"]).padding(10).frame(width: 760)
                 .styled(.page(.look)).background(Theme.background).pilotTheme(look: look)
             var text = ""
-            let height: CGFloat = folders == .perScreen ? 820 : 640
+            let height: CGFloat = folders == .nothing ? 640 : 820
             try LookPageTests().hosted(view.frame(width: 1000, height: height), height: height) { host in
                 let rep = try #require(snapshot(host, scale: 2))
                 if let dir = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"] {
@@ -128,13 +124,18 @@ struct WallpaperSettingsTests {
                 text = try recognisedText(in: rep).map(\.text).joined(separator: "\n")
             }
             // "12 ima": OCR reads the muted count as "12 imaaes" once the next pictures show; the render has it whole.
-            let own = folders == .perScreen ? ["Shared folders", "Pictures/Portraits", "The shared folders", "Workspace 2", "Pictures/Forest",
-                                               "screen's folders"] : ["Images from"]
+            // Each workspace its own (Q333): one with its own folder, one on its screen's.
+            let own = switch folders {
+            case .nothing: ["Images from"]
+            case .eachScreen: ["Shared folders", "Pictures/Portraits", "The shared folders"]
+            case .eachWorkspace: ["Shared folders", "Workspace 2", "Pictures/Forest", "screen's folders"]
+            }
             for line in ["Wallpaper", "LG HDR WQHD", "3 of 12", "not in the cycle", "12 ima", "Pictures/Omarchy", "dunes.jpg", "Shuffle again",
-                         "Every screen", "Every hour", "Same for every screen", "Each screen its own", "Same as global", "Per workspace"] + own {
+                         "Every screen", "Every hour", "Own folders for", "Nothing", "Each screen", "Each workspace", "Screens"] + own {
                 #expect(text.localizedCaseInsensitiveContains(line), "\(name): \(line) missing, read: \(text)")
             }
-            if folders == .shared { #expect(!text.contains("Portraits"), "\(name): a screen's own folders show only while each has its own") }
+            if folders != .eachScreen { #expect(!text.contains("Portraits"), "\(name): a screen's own folders show only while each has its own") }
+            if folders != .eachWorkspace { #expect(!text.contains("Forest"), "\(name): a workspace's own folders show only while each has its own") }
         }
     }
 

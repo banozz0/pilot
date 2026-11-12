@@ -361,7 +361,8 @@ public struct ThemeNativeAppearance: Codable, Equatable, Sendable {
     public var palette: ThemeNativePalette
     public var material: ThemeMaterial
     public var bar: ThemeBarPresetState?
-    /// Look › Cursor › Colours: theme, own or custom. Nil where a host has no cursor settings.
+    /// Look › Cursor › Colours: theme or custom (a ledger from before Q112 may hold own, read as theme). Nil where a host
+    /// has no cursor settings.
     public var cursor: String?
     /// macOS's Dark mode, on or off. Nil where a host can't read or set it.
     public var dark: Bool? = nil

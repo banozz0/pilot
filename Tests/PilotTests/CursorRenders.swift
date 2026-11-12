@@ -51,7 +51,7 @@ struct CursorRenders {
             for (r, palette) in Self.drawn.enumerated() {
                 let row = try #require(Self.qaRows.firstIndex(of: palette))
                 let ground = qa.pixel(2, row * Self.rowHeight + 2)
-                let colours = palette == "own" ? set.palette(.own, theme: "") : set.palette(.theme, theme: palette)
+                let colours = palette == "own" ? (set.palettes["own"] ?? [:]) : set.palette(.theme, theme: palette)
                 ours.fill(y: r * Self.rowHeight, height: Self.rowHeight, ground)
                 for (i, cursor) in cursors.enumerated() {
                     let image = try #require(CursorCatalogue.strip(sheet, cursor: cursor, palette: colours, px: Self.cell))
@@ -147,15 +147,18 @@ struct CursorRenders {
         print("cursor renders: classic masks pixel-true at 1x, 2x, 5x; duo shade \(duo["shade"]!); toybox candies \(["lilac", "mint", "coral", "sky"].map { toy[$0]! })")
     }
 
-    @Test("Look › Cursor lists the designs, Custom's wells and sample, and the effect colour", .enabled(if: env["PILOT_RENDER_DIR"] != nil))
+    @Test("Look › Cursor shows the preview, Shape, Size, Custom's wells and contrast, Effects and the halos with their colour (Q112)",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil))
     func page() throws {
         for (name, fill, outline) in Self.pairs {
             let (look, dir) = try SharedLook.LookRenders.setUp()
             let cursors = CursorSets.of(look), effects = CursorEffects.of(look)
-            cursors.set = .classic     // a render's store never applies (`mayApply`)
+            cursors.set = .quiet       // a render's store never applies (`mayApply`)
+            cursors.size = .medium
             cursors.colours = .custom
             (cursors.fill, cursors.outline) = (.custom(fill), .custom(outline))
             effects.trail = .thread
+            (effects.ring, effects.ripple) = (true, true)
             effects.colour = .custom(0xFF5C8A)
             let out = dir.deletingLastPathComponent().appending(path: "cursors/look-cursor-\(name).png")
             try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -152,8 +152,8 @@ extension ControlVerbs {
             "wallpaper-sources", help: "The folders and images Next wallpaper cycles (Look › Wallpaper), each with its image count; "
                 + "with none, ~/Pictures/Wallpapers cycles. add asks Allow unless the path, links resolved, is inside ~/Pictures. "
                 + "pilot wallpaper reset puts ~/Pictures/Wallpapers back alone. --screen <name or id> adds and removes that "
-                + "screen's own, which it cycles while wallpaper.folders is perScreen; wallpaper-screens lists them. --workspace <number> "
-                + "adds and removes that workspace's own, shown on its screen while wallpaper.workspaces is perWorkspace.",
+                + "screen's own, which it cycles while wallpaper.ownFolders is eachScreen; wallpaper-screens lists them. --workspace <number> "
+                + "adds and removes that workspace's own, shown on its screen while wallpaper.ownFolders is eachWorkspace.",
             fields: [.init("path", help: "a folder (its images and its subfolders' cycle) or one image, full path or ~/…"),
                      .init("screen", help: "a screen by name or id (pilot list wallpaper-screens): its own folders, not the shared ones", required: false),
                      .init("workspace", help: "a workspace by number: its own folders, not the shared ones", required: false)],
