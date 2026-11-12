@@ -431,8 +431,12 @@ public struct BarSettings: Codable, Equatable, Sendable {
 
     public func entry(_ kind: BarKind) -> BarEntry { entries.first { $0.item == .kind(kind) }! }
 
-    /// Where `item` is in the order: a built-in item always is; an extension's once it was put in the top bar.
+    /// Where `item` is in the order: a built-in item always is; an extension's once it was put in the top bar, one more
+    /// divider while it is there.
     func index(of item: BarTrayItem) -> Int? { entries.firstIndex { $0.item == item } }
+
+    /// `item`'s entry while it has one.
+    public func entry(for item: BarTrayItem) -> BarEntry? { index(of: item).map { entries[$0] } }
 
     public mutating func set(_ kind: BarKind, on: Bool) { edit(kind) { $0.on = on } }
 
@@ -479,8 +483,8 @@ public struct BarSettings: Codable, Equatable, Sendable {
     /// One more divider, number `id`, last in the order on the top bar's `side` until it is placed.
     mutating func addDivider(_ id: Int, side: TopBarSide) { entries.append(BarEntry(divider: id, side: side)) }
 
-    /// Takes one more divider off the top bar: it has no place but there, so its entry goes.
-    mutating func removeDivider(_ item: BarTrayItem) { entries.removeAll { $0.dividerID != nil && $0.item == item } }
+    /// Takes one more divider (a `.divider` item) off the top bar: it has no place but there, so its entry goes.
+    mutating func removeDivider(_ item: BarTrayItem) { entries.removeAll { $0.item == item } }
 
     /// Takes every divider past the first off the top bar.
     mutating func removeMoreDividers() { entries.removeAll { $0.dividerID != nil } }

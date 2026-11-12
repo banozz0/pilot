@@ -188,6 +188,14 @@ struct MenuBarRenders {
         #expect(plan.x[.right] == [nil, nil, nil] && plan.x[.left] == [0, nil] && plan.x[.centre] == [46])
         plan = row.arrange(widths, room: 90)
         #expect(plan.x[.left] == [nil, nil] && plan.x[.centre] == [0])
+        // The natural width (the Menu bar page's preview, Sven on build 2363) drops nothing, plain, in islands or packed.
+        let islands = BarPreset.threeIslands.configuration
+        let wide: [TopBarSide: [CGFloat]] = [.left: [30, 20], .centre: [100], .right: [0, 200, 40, 300, 90]]
+        for each in [row, TopBarRow(spacing: 6, gap: 12, islands: islands), TopBarRow(spacing: 6, gap: 12, islands: islands, packed: true)] {
+            let natural = each.natural(wide), x = each.arrange(wide, room: natural).x
+            // Every item drawing something has its place; an empty one has none in an island bar.
+            #expect(TopBarSide.allCases.allSatisfy { s in zip(wide[s]!, x[s]!).allSatisfy { $0 == 0 || $1 != nil } }, "dropped at \(natural)")
+        }
     }
 
     @Test("Short of room the row first shrinks the item that folds toward its least, then drops whole items, the right side's innermost first; the folding item never goes below its least (card agent-bo-95423016, AC 2)")

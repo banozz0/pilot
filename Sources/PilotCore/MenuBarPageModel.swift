@@ -219,14 +219,18 @@ extension BarSettings {
                 $0.group == group && !$0.pinned && $0 != .extensions && !(placement == .menuBar && $0.topBarOnly)
                     && (!onStrip($0, placement: placement) || $0 == .divider && placement != .menuBar)
             }
-            let items = kinds.map { $0 == .divider && onStrip($0, placement: placement) ? newDivider : .kind($0) }
+            let items = kinds.map { $0 == .divider ? dividerToAdd(placement) : .kind($0) }
                 + (group == .extensions ? extensions.filter { !onStrip(extension: $0, placement: placement) }.map(BarTrayItem.extension) : [])
             return items.isEmpty ? nil : (group, items)
         }
     }
 
-    /// The next divider the tray offers once one is on the top bar: a number no divider has.
-    public var newDivider: BarTrayItem { .divider((entries.compactMap(\.dividerID).max() ?? 0) + 1) }
+    /// The divider the tray and `pilot add bar-items` add for `placement`: the divider item until it is on the strip,
+    /// then one more on the top bar, a number no divider has.
+    public func dividerToAdd(_ placement: BarPlacement) -> BarTrayItem {
+        guard placement != .menuBar, onStrip(.divider, placement: placement) else { return .kind(.divider) }
+        return .divider((entries.compactMap(\.dividerID).max() ?? 0) + 1)
+    }
 
     /// A drop of `item` on the strip for `placement` at `drop`; false where it cannot land (Pilot, which never moves; an
     /// item of the top bar alone on the menu bar). On Top bar the item joins the top bar and keeps the menu bar; on Menu

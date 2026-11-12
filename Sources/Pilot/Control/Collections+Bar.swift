@@ -43,9 +43,8 @@ extension ControlVerbs {
                 let kind = try Self.movable(args.value("item") ?? "")
                 let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
                 // Once a divider is on the top bar, each add is one more there (Sven on build 2363), as the page's tray does.
-                if kind == .divider, args.value("placement") == nil, bar().settings.isOn(.divider, in: .topBar) {
-                    let item = bar().settings.newDivider
-                    return Self.changeDivider(item, in: bar()) { s in s.drop(item, on: .top(side ?? s.entry(.divider).side, index: index ?? .max), placement: .topBar) }
+                if kind == .divider, args.value("placement") == nil, case let item = bar().settings.dividerToAdd(.topBar), item != .kind(.divider) {
+                    return Self.change(item, in: bar(), reach) { s in s.drop(item, on: .top(side ?? s.entry(.divider).side, index: index ?? .max), placement: .topBar) }
                 }
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
                 let placement = try Self.placement(word, for: kind)
@@ -59,7 +58,7 @@ extension ControlVerbs {
                 try bar().requireWritable()
                 if let refusal = ControlVerb.unknownFlag(args.flags, known: ["placement"], in: "pilot remove bar-items") { throw refusal }
                 if let item = try Self.moreDivider(try args.word(0, "item"), on: bar()) {
-                    return Self.changeDivider(item, in: bar()) { $0.takeOff(item, placement: .topBar) }
+                    return Self.change(item, in: bar(), reach) { $0.takeOff(item, placement: .topBar) }
                 }
                 let kind = try Self.movable(try args.word(0, "item"))
                 guard bar().settings.entry(kind).on else { throw ControlError(.badValue, "\(kind.rawValue) is not on the bar") }
@@ -97,7 +96,7 @@ extension ControlVerbs {
                 if let item = try Self.moreDivider(try args.word(1, "item"), on: bar()) {
                     guard args.value("onto") == nil else { throw ControlError(.badValue, "move a divider with --side and --index") }
                     let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
-                    return Self.changeDivider(item, in: bar()) { s in
+                    return Self.change(item, in: bar(), reach) { s in
                         s.place(item, on: side ?? s.topBarPlace(item)?.side ?? .right, at: index ?? .max)
                     }
                 }
@@ -261,8 +260,14 @@ extension ControlVerbs {
 
     /// A page edit, written only when it changes something; answers `kind`'s item as it now stands.
     private static func change(_ kind: BarKind, in store: BarItemsStore, _ reach: BarReach, _ edit: (inout BarSettings) -> Void) -> JSONValue {
+        change(.kind(kind), in: store, reach, edit)
+    }
+
+    /// The same for any item: one more divider taken off answers off, as it has no entry then.
+    private static func change(_ item: BarTrayItem, in store: BarItemsStore, _ reach: BarReach, _ edit: (inout BarSettings) -> Void) -> JSONValue {
         write(store, edit)
-        return row(store.settings.entry(kind), lacking: reach.lacking())
+        guard let entry = store.settings.entry(for: item) else { return .object(["item": .string(item.rawValue), "on": .bool(false)]) }
+        return row(entry, lacking: reach.lacking())
     }
 
     /// The edit on a copy of the settings, saved only when it changes them; true when it did.
@@ -278,17 +283,10 @@ extension ControlVerbs {
     private static func moreDivider(_ word: String, on store: BarItemsStore) throws(ControlError) -> BarTrayItem? {
         guard word.hasPrefix("divider:") else { return nil }
         guard let item = BarTrayItem(rawValue: word), case .divider = item, store.settings.onStrip(item, placement: .topBar) else {
-            let on = store.settings.entries.compactMap { $0.dividerID.map { "divider:\($0)" } }
+            let on = store.settings.entries.filter { $0.dividerID != nil }.map(\.item.rawValue)
             throw ControlError(.badValue, "no \(word) on the top bar; \(on.isEmpty ? "there is no other divider" : "there are \(on.joined(separator: ", "))")")
         }
         return item
-    }
-
-    /// One more divider made, moved or taken off; answers its row, off once it is gone.
-    private static func changeDivider(_ item: BarTrayItem, in store: BarItemsStore, _ edit: (inout BarSettings) -> Void) -> JSONValue {
-        write(store, edit)
-        guard let entry = store.settings.entries.first(where: { $0.item == item }) else { return .object(["item": .string(item.rawValue), "on": .bool(false)]) }
-        return row(entry, lacking: [])
     }
 
     private static func row(_ entry: BarEntry, lacking: Set<BarKind>) -> JSONValue {

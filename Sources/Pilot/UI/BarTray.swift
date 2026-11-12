@@ -84,14 +84,12 @@ struct BarTray: View {
     }
 
     private func label(_ item: BarTrayItem) -> TrayChip.Label {
-        let label = { (kind: BarKind) in TrayChip.Label(symbol: kind.symbol, emoji: nil, title: kind.title, colour: BarGroup.allCases.firstIndex(of: kind.group) ?? 0) }
-        switch item {
-        case .kind(let kind): return label(kind)
-        case .divider: return label(.divider)
-        case .extension(let id):
-            let found = extensions.first { $0.id == id }
-            return TrayChip.Label(symbol: nil, emoji: found?.icon ?? "🧩", title: found?.title ?? id, colour: BarGroup.allCases.firstIndex(of: .extensions) ?? 0)
+        guard case .extension(let id) = item else {
+            let kind = item.drawnKind ?? .divider
+            return TrayChip.Label(symbol: kind.symbol, emoji: nil, title: kind.title, colour: BarGroup.allCases.firstIndex(of: kind.group) ?? 0)
         }
+        let found = extensions.first { $0.id == id }
+        return TrayChip.Label(symbol: nil, emoji: found?.icon ?? "🧩", title: found?.title ?? id, colour: BarGroup.allCases.firstIndex(of: .extensions) ?? 0)
     }
 }
 

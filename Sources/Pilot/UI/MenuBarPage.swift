@@ -32,8 +32,6 @@ struct MenuBarPage: View {
     @State private var overMenu: CGFloat?
     /// Clear all or Restore defaults, asked before it goes through.
     @State private var asking: BarReset?
-    /// The width the page gives the bars' preview: they fill it, or scroll past it (StripRoom).
-    @State private var stripRoom: CGFloat = 0
     var nicknames: DisplayNicknames = .shared
     /// The extensions' bar items the page lists and places: the app's, or a render's.
     var extensionBar: ExtensionBar = .shared
@@ -241,7 +239,9 @@ struct MenuBarPage: View {
         let radius = ink.corner(10, \.control)
         ScrollView(.horizontal) {
             // The drops, their marks and the strips' frames all sit inside the scrolled bars, so they share its places.
-            StripRoom(least: stripRoom) {
+            StripRoom {
+                // The page's width, the least the bars take.
+                Color.clear.frame(height: 0).containerRelativeFrame(.horizontal)
                 VStack(spacing: 0) {
                     if let top = preview.top { topStrip(top, store: store) }
                     if let menu = preview.menu { menuStrip(menu, store: store) }
@@ -250,7 +250,6 @@ struct MenuBarPage: View {
             }
         }
         .scrollIndicators(.visible)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stripRoom = $0 }
         .frame(maxWidth: .infinity)
         // A strip of the theme's desk under the bars; Instrument's sunk well.
         .background(Desk(ink: ink))
@@ -770,25 +769,26 @@ extension BarKind {
     }
 }
 
-/// A strip of the theme's desk, under the preview's bars and the style thumbnails' bars; Instrument's sunk well, since its
-/// colours are the theme's roles and its one signal is not decoration.
 /// The bars' preview at the width the page gives it, or wider when the bars need more with nothing going for room (Sven on
-/// build 2363): a ScrollView proposes no width, so this asks the bars' own (TopBarRow's natural width, every menu bar item)
-/// and lays them out at the wider of the two.
+/// build 2363): a ScrollView proposes no width, so this takes the page's width from its first view (sized to the scroll
+/// view) and the bars' own from the second (TopBarRow's natural width, every menu bar item), and lays the bars out at the
+/// wider of the two.
 private struct StripRoom: Layout {
-    let least: CGFloat
-
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard let bars = subviews.first else { return .zero }
-        let width = max(least, bars.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height)).width)
-        return CGSize(width: width, height: bars.sizeThatFits(ProposedViewSize(width: width, height: proposal.height)).height)
+        guard subviews.count == 2 else { return .zero }
+        let bars = subviews[1].sizeThatFits(ProposedViewSize(width: nil, height: proposal.height))
+        return CGSize(width: max(subviews[0].sizeThatFits(.unspecified).width, bars.width), height: bars.height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        guard subviews.count == 2 else { return }
+        subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: 0))
+        subviews[1].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
     }
 }
 
+/// A strip of the theme's desk, under the preview's bars and the style thumbnails' bars; Instrument's sunk well, since its
+/// colours are the theme's roles and its one signal is not decoration.
 private struct Desk: View {
     let ink: Ink
 

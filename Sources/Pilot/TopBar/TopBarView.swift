@@ -545,10 +545,10 @@ struct TopBarRow: Layout {
     /// on the middle unless packed, so it needs as much room each side of it as the wider side takes.
     func natural(_ widths: [TopBarSide: [CGFloat]]) -> CGFloat {
         let padding = CGFloat(islands?.padding ?? 0)
-        let sides = TopBarSide.allCases.map { s -> CGFloat in let w = side(widths[s] ?? []); return w > 0 ? w + 2 * padding : 0 }
-        let (l, c, r) = (sides[0], sides[1], sides[2])
+        func padded(_ s: TopBarSide) -> CGFloat { let w = side(widths[s] ?? []); return w > 0 ? w + 2 * padding : 0 }
+        let (l, c, r) = (padded(.left), padded(.centre), padded(.right))
         if islands != nil, !packed, c > 0 { return (c + 2 * max(l > 0 ? l + gap : 0, r > 0 ? r + gap : 0)).rounded(.up) }
-        let drawn = sides.filter { $0 > 0 }
+        let drawn = [l, c, r].filter { $0 > 0 }
         return (drawn.reduce(0, +) + gap * CGFloat(max(0, drawn.count - 1))).rounded(.up)
     }
 
