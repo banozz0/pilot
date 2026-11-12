@@ -98,6 +98,60 @@ struct MenuBarRenders {
         }
     }
 
+    /// Sven's crowded top bar on build 2363 (three islands; on the right other apps, the status lights, eight extensions,
+    /// the readings and more): the Top bar page at the default 1000 × 660 window and at 1920 wide, every item on the strip,
+    /// which scrolls sideways where the page is narrower than the bar; three dividers, one per side. Written to
+    /// PILOT_RENDER_DIR/menubar:
+    /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-crowded PILOT_RENDER_DIR=/tmp/pilot-renders-crowded swift test --filter MenuBarRenders/crowded`
+    @Test("Top bar page: a crowded bar shows every item at 1000 and full width, with three dividers", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func crowded() async throws {
+        let dir = try ClockRenders.dir("menubar")
+        testApp()
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        let toml = (home as NSString).appendingPathComponent(".aerospace.toml")
+        if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
+        let engine = Engine()
+        StatsRenders.seed(SystemSampler.shared)
+        let store = BarItemsStore.shared, look = Look.shared
+        let saved = (store.settings, look.style, look.themeID, look.glass, store.background)
+        defer { (store.settings, look.style, look.themeID, look.glass, store.background) = saved }
+        (look.style, look.themeID, look.glass, store.background) = (.instrument, "tokyo-night", false, .solid)
+        // Made-up extensions in the shape of Sven's eight.
+        let (folder, exts, storage) = try SurfacesV2Tests.fixtureFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let faces: KeyValuePairs = ["ai-usage": ("AI usage", "✳ 59% 93%"), "ghostex": ("Ghostex", "👻"), "now-playing": ("Now Playing", "♫"),
+                                    "summarise": ("Summarise", "📝"), "tailscale": ("Tailscale", "🛜 1"), "todo": ("To-do", "☑️ 2"),
+                                    "video-downloader": ("Video", "📥"), "weather": ("Weather", "☁ 24°")]
+        let answers = Dictionary(uniqueKeysWithValues: faces.map { ($0.key, $0.value.1) })
+        for (id, face) in faces { try ExtensionSurfaceTests.write(id, title: face.0, in: exts) }
+        let bar = ExtensionBar(folder: exts, storage: storage, run: { surface, _ in .bar(Extension.BarAnswer(text: answers[surface.command.id.extension] ?? "")) })
+        await bar.round()
+        // The bar, side by side, as Sven's `pilot bar` read it, with a divider more in the centre and on the left.
+        try store.choosePreset("threeIslands")
+        store.settings.clearAll(in: .topBar, extensions: [])
+        let layout: [(TopBarSide, [BarTrayItem])] = [
+            (.left, [.kind(.workspaces), .kind(.focusedApp), .kind(.appMenus), .divider(1)]),
+            (.centre, [.kind(.pill), .kind(.askAI), .kind(.terminal), .divider(2), .kind(.clock), .kind(.capture), .kind(.power)]),
+            (.right, [.kind(.otherApps), .kind(.modes)] + faces.map { .extension($0.key) }
+                + [.kind(.cpu), .kind(.memory), .kind(.heat), .kind(.storage), .kind(.divider), .kind(.battery), .kind(.volume), .kind(.displays), .kind(.keyboardLayout)]),
+        ]
+        for (side, items) in layout {
+            for item in items {
+                let landed = store.settings.drop(item, on: .top(side, index: .max), placement: .topBar)
+                #expect(landed, "\(item.rawValue) did not land")
+            }
+        }
+        let names = (store.settings.preview(.topBar).top?[.right] ?? []).map(\.name)
+        #expect(names.first == "otherApps" && names.contains("extension:weather"), "the right side is \(names)")
+        // The page as wide as each window leaves it beside the sidebar, the window's default height.
+        for width in [1000, 1920] {
+            let pageWidth = CGFloat(width) - Self.pageLeft(look.style, width: CGFloat(width))
+            let page = ScrollView { MenuBarPage(onScreen: false, placement: .topBar, extensionBar: bar).environment(engine) }.pilotTheme()
+            _ = try ClockRenders.write(page, size: NSSize(width: pageWidth, height: 660), settle: 0.8,
+                                       to: dir.appendingPathComponent("page-crowded-\(width).png"))
+        }
+    }
+
     /// Each item's frame in the strip, by side and place, as the strip lays them out.
     typealias Frames = StripStyleTests.Frames
 

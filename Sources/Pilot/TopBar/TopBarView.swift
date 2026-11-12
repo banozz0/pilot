@@ -230,6 +230,8 @@ struct TopBarStrip<Slot: View>: View {
     /// Holds the slots that go for room, placed by TopBarRow only while any does (TopBarOverflow); the Menu bar page's
     /// preview has none.
     var overflow: AnyView? = nil
+    /// The Menu bar page's preview: the centre island may leave the middle (TopBarRow.packed).
+    var packed = false
     @ViewBuilder let slot: (BarSlot) -> Slot
 
     var body: some View {
@@ -245,7 +247,7 @@ struct TopBarStrip<Slot: View>: View {
         let (inked, tone): (StyleTokens, TopBarColour.Toned?) = if let look {
             TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: look)
         } else { (TopBarColour.tokens(colour, style: style, background: background), nil) }
-        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil) {
+        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil, packed: packed) {
             if islands, let configuration {
                 ForEach(TopBarSide.allCases, id: \.self) { side in
                     GeometryReader { proxy in
@@ -525,6 +527,9 @@ struct TopBarRow: Layout {
     /// The least room between two sides.
     var gap: CGFloat
     var islands: BarPresetConfiguration? = nil
+    /// The Menu bar page's preview: an island bar's centre may leave the middle for the room between the sides, as the
+    /// Strip's does, so the preview's bar is no wider than its items need (StripRoom). The bar keeps it on the middle.
+    var packed = false
     /// How far left of the row a subview that goes is placed.
     static let offstage: CGFloat = 10_000
 
@@ -532,8 +537,19 @@ struct TopBarRow: Layout {
         // The bar and the preview both propose a size; only an unsized proposal measures.
         if let width = proposal.width, let height = proposal.height { return CGSize(width: width, height: height) }
         let height = proposal.height ?? subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-        let sides = measure(subviews, height: height).widths.values.map(side).filter { $0 > 0 }
-        return CGSize(width: proposal.width ?? sides.reduce(0, +) + gap * CGFloat(max(0, sides.count - 1)), height: height)
+        return CGSize(width: proposal.width ?? natural(measure(subviews, height: height).widths), height: height)
+    }
+
+    /// The least room where nothing goes and nothing folds, by `arrange`'s own rules (the Menu bar page's preview, Sven on
+    /// build 2363: every item, whatever the window): the sides a gap apart, each island padded, and an island bar's centre
+    /// on the middle unless packed, so it needs as much room each side of it as the wider side takes.
+    func natural(_ widths: [TopBarSide: [CGFloat]]) -> CGFloat {
+        let padding = CGFloat(islands?.padding ?? 0)
+        let sides = TopBarSide.allCases.map { s -> CGFloat in let w = side(widths[s] ?? []); return w > 0 ? w + 2 * padding : 0 }
+        let (l, c, r) = (sides[0], sides[1], sides[2])
+        if islands != nil, !packed, c > 0 { return (c + 2 * max(l > 0 ? l + gap : 0, r > 0 ? r + gap : 0)).rounded(.up) }
+        let drawn = sides.filter { $0 > 0 }
+        return (drawn.reduce(0, +) + gap * CGFloat(max(0, drawn.count - 1))).rounded(.up)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -577,7 +593,7 @@ struct TopBarRow: Layout {
     /// (an item missing from it, or all of them, does not shrink). While an item drawing something goes, the overflow
     /// item, `more` wide, sits first on the right side; none (0) leaves the row as it was.
     func arrange(_ widths: [TopBarSide: [CGFloat]], least: [TopBarSide: [CGFloat]] = [:], room: CGFloat, more: CGFloat = 0, height: CGFloat = 0) -> Plan {
-        let island = islands != nil
+        let island = islands != nil, onMiddle = island && !packed
         let padding: CGFloat = island ? min(CGFloat(islands!.padding), max(0, (room - min(room, more)) / 2)) : 0
         let measuredMore = island ? min(more, max(0, room - 2 * padding)) : more
         func padded(_ width: CGFloat) -> CGFloat { width > 0 ? width + 2 * padding : 0 }
@@ -605,7 +621,7 @@ struct TopBarRow: Layout {
         // The centre's least and most x, clear of both sides; with no centre (the Menu's) the sides are one gap apart.
         func span() -> (lo: CGFloat, hi: CGFloat) {
             let l = padded(side(sized[.left, default: []][kept(.left)])), r = rightSide()
-            if island {
+            if onMiddle {
                 if c() > 0 { return (max(l > 0 ? l + gap : 0, r > 0 ? r + gap : 0), (room - c()) / 2) }
                 return (l + (l > 0 && r > 0 ? gap : 0), room - r)
             }
@@ -633,7 +649,7 @@ struct TopBarRow: Layout {
         // Centred on the row while that clears both sides, else in the middle of the room between them, so it never reads
         // as one of a side's items.
         let (lo, hi) = span(), centred = (room - c()) / 2
-        let centreX = island ? centred : (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
+        let centreX = onMiddle ? centred : (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
         var x: [TopBarSide: [CGFloat?]] = [:]
         let more = overflows() ? room - rightSide() + padding : nil
         for (s, start) in [(TopBarSide.left, padding), (.centre, centreX + padding), (.right, room - padding - side(sized[.right, default: []][kept(.right)]))] {

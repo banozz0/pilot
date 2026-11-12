@@ -79,12 +79,15 @@ struct BarTray: View {
     /// A click's place: last on the item's own side of the top bar, or last in the menu bar.
     private func end(_ item: BarTrayItem) -> BarStripDrop {
         guard placement != .menuBar else { return .menu(index: .max) }
-        return .top(item.kind.map { store.settings.entry($0).side } ?? .right, index: .max)
+        // One more divider goes on the first one's side.
+        return .top(item.drawnKind.map { store.settings.entry($0).side } ?? .right, index: .max)
     }
 
     private func label(_ item: BarTrayItem) -> TrayChip.Label {
+        let label = { (kind: BarKind) in TrayChip.Label(symbol: kind.symbol, emoji: nil, title: kind.title, colour: BarGroup.allCases.firstIndex(of: kind.group) ?? 0) }
         switch item {
-        case .kind(let kind): return TrayChip.Label(symbol: kind.symbol, emoji: nil, title: kind.title, colour: BarGroup.allCases.firstIndex(of: kind.group) ?? 0)
+        case .kind(let kind): return label(kind)
+        case .divider: return label(.divider)
         case .extension(let id):
             let found = extensions.first { $0.id == id }
             return TrayChip.Label(symbol: nil, emoji: found?.icon ?? "🧩", title: found?.title ?? id, colour: BarGroup.allCases.firstIndex(of: .extensions) ?? 0)
@@ -134,7 +137,7 @@ struct TrayChip: View {
             dragged = item
             return NSItemProvider(object: item.rawValue as NSString)
         } preview: {
-            BarDragChip(kind: item.kind ?? .extensions, slot: nil, screen: "", sources: engine.barSources, store: .shared,
+            BarDragChip(kind: item.drawnKind ?? .extensions, slot: nil, screen: "", sources: engine.barSources, store: .shared,
                         extensionItem: label.emoji.map { ($0, label.title) })
                 .environment(\.style, style)
         }

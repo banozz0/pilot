@@ -37,7 +37,7 @@ extension BarSettings {
     /// Items on in the top bar only, which show nowhere while it is off (card agent-bo-95422993, G1): the page offers to
     /// put them in the menu bar too. Other apps are not among them: their items are the menu bar's own.
     public var onlyInTopBar: [BarKind] {
-        entries.filter { $0.on && $0.placement == .topBar && !$0.kind.topBarOnly }.map(\.kind)
+        entries.filter { $0.on && $0.placement == .topBar && !$0.kind.topBarOnly && $0.dividerID == nil }.map(\.kind)
     }
 
     /// Puts each item in the macOS menu bar as well, keeping the top bar it is in.
@@ -70,6 +70,7 @@ extension BarSettings {
             if placement == .both { set(extension: id, on: false, placement: extensionEntry(id).placement) }
             else if isOn(extension: id, in: placement) { toggle(extension: id, in: placement) }
         }
+        if placement != .menuBar { removeMoreDividers() }
     }
 
     /// Whether Clear all in `placement` would change nothing.
@@ -81,7 +82,7 @@ extension BarSettings {
 
     /// The order the page drags into: `kind` lands where `target` is.
     public mutating func move(_ kind: BarKind, onto target: BarKind) {
-        guard kind != target, let index = entries.firstIndex(where: { $0.kind == target }) else { return }
+        guard kind != target, let index = index(of: .kind(target)) else { return }
         set(kind, side: entry(target).side)
         move(kind, to: index)
     }
@@ -137,22 +138,38 @@ extension BarSettings {
 public enum BarTrayItem: Hashable, Sendable {
     case kind(BarKind)
     case `extension`(String)
+    /// One more divider past the first, by its number (BarEntry.dividerID): the top bar's alone.
+    case divider(Int)
 
     public var rawValue: String {
         switch self {
         case .kind(let kind): "kind:" + kind.rawValue
         case .extension(let id): "extension:" + id
+        case .divider(let id): "divider:\(id)"
         }
     }
 
     public init?(rawValue: String) {
         if rawValue.hasPrefix("kind:"), let kind = BarKind(rawValue: String(rawValue.dropFirst(5))) { self = .kind(kind) }
         else if rawValue.hasPrefix("extension:"), rawValue.count > 10 { self = .extension(String(rawValue.dropFirst(10))) }
+        else if rawValue.hasPrefix("divider:"), let id = Int(rawValue.dropFirst(8)), id > 0 { self = .divider(id) }
         else { return nil }
     }
 
-    /// The built-in item it is, nil for an extension's.
+    /// The built-in item it is, nil for an extension's or one more divider.
     public var kind: BarKind? { if case .kind(let kind) = self { kind } else { nil } }
+
+    /// The built-in item it draws as: one more divider is a divider; nil for an extension's.
+    public var drawnKind: BarKind? { if case .divider = self { .divider } else { kind } }
+
+    /// Whether it lives in the top bar alone, so the macOS menu bar's strip takes no drop of it.
+    public var topBarOnly: Bool {
+        switch self {
+        case .kind(let kind): kind.topBarOnly
+        case .extension: false
+        case .divider: true
+        }
+    }
 }
 
 /// Where a drop on the page's strip lands: a side of the top bar and the place on it, as BarDrop.Target, or the place
@@ -187,23 +204,29 @@ extension BarSettings {
         switch item {
         case .kind(let kind): onStrip(kind, placement: placement)
         case .extension(let id): onStrip(extension: id, placement: placement)
+        case .divider: placement != .menuBar && index(of: item) != nil
         }
     }
 
     /// The tray for `placement`: each group with its items not on the strip, groups with none left out, one item a chip
     /// (Sven on build 54: one by one, not by sections). Pilot is never there (it is pinned); items of the top bar alone
     /// are not offered for the menu bar. The old Extensions item is not either: `extensions` (their ids) offer each
-    /// extension's own item, one by one.
+    /// extension's own item, one by one. The divider is always there for the top bar: once one is on it, the chip is
+    /// one more (Sven on build 2363: any number of dividers).
     public func tray(_ placement: BarPlacement, extensions: [String] = []) -> [(group: BarGroup, items: [BarTrayItem])] {
         BarGroup.allCases.compactMap { group in
             let kinds = BarKind.allCases.filter {
-                $0.group == group && !$0.pinned && $0 != .extensions && !(placement == .menuBar && $0.topBarOnly) && !onStrip($0, placement: placement)
+                $0.group == group && !$0.pinned && $0 != .extensions && !(placement == .menuBar && $0.topBarOnly)
+                    && (!onStrip($0, placement: placement) || $0 == .divider && placement != .menuBar)
             }
-            let items = kinds.map(BarTrayItem.kind)
+            let items = kinds.map { $0 == .divider && onStrip($0, placement: placement) ? newDivider : .kind($0) }
                 + (group == .extensions ? extensions.filter { !onStrip(extension: $0, placement: placement) }.map(BarTrayItem.extension) : [])
             return items.isEmpty ? nil : (group, items)
         }
     }
+
+    /// The next divider the tray offers once one is on the top bar: a number no divider has.
+    public var newDivider: BarTrayItem { .divider((entries.compactMap(\.dividerID).max() ?? 0) + 1) }
 
     /// A drop of `item` on the strip for `placement` at `drop`; false where it cannot land (Pilot, which never moves; an
     /// item of the top bar alone on the menu bar). On Top bar the item joins the top bar and keeps the menu bar; on Menu
@@ -212,6 +235,7 @@ extension BarSettings {
     @discardableResult public mutating func drop(_ item: BarTrayItem, on drop: BarStripDrop, placement: BarPlacement) -> Bool {
         guard case .kind(let kind) = item else {
             if case .extension(let id) = item { return self.drop(extension: id, on: drop, placement: placement) }
+            if case .divider(let id) = item { return self.drop(divider: id, on: drop, placement: placement) }
             return false
         }
         guard !kind.pinned else { return false }
@@ -255,6 +279,15 @@ extension BarSettings {
         return true
     }
 
+    /// One more divider dropped on the top bar's strip: new from the tray, it is made there; one already there moves. The
+    /// macOS menu bar holds only the first.
+    private mutating func drop(divider id: Int, on drop: BarStripDrop, placement: BarPlacement) -> Bool {
+        guard case .top(let side, let index) = drop, placement != .menuBar else { return false }
+        if self.index(of: .divider(id)) == nil { addDivider(id, side: side) }
+        place(.divider(id), on: side, at: index)
+        return true
+    }
+
     /// A drop on the tray: the item leaves the strip for `placement`. On Menu bar or Top bar it leaves that bar and stays
     /// in the other; on Both it goes off. The Group takes the readings it gathers with it, so its slot goes whole. Pilot
     /// never goes.
@@ -270,6 +303,9 @@ extension BarSettings {
             guard onStrip(extension: id, placement: placement) else { return false }
             if placement == .both { set(extension: id, on: false, placement: extensionEntry(id).placement) }
             else if isOn(extension: id, in: placement) { toggle(extension: id, in: placement) }
+        case .divider:
+            guard onStrip(item, placement: placement) else { return false }
+            removeDivider(item)
         }
         return true
     }
@@ -280,7 +316,7 @@ extension BarSettings {
         guard !kind.pinned else { return }
         if inTopBar { return nudge(.kind(kind), by: step) }
         let slots = slots(in: .menuBar, topBarOn: topBarOn)
-        guard let at = slots.firstIndex(where: { $0.kind == kind }) else { return }
+        guard let at = slots.firstIndex(where: { $0.item == .kind(kind) }) else { return }
         let to = at + step
         guard slots.indices.contains(to) else { return }
         placeInMenuBar(kind, at: to, topBarOn: topBarOn)
@@ -291,22 +327,23 @@ extension BarSettings {
     public mutating func step(_ item: BarTrayItem, by step: Int, inTopBar: Bool, topBarOn: Bool) {
         switch item {
         case .kind(let kind): self.step(kind, by: step, inTopBar: inTopBar, topBarOn: topBarOn)
-        case .extension: if inTopBar { nudge(item, by: step) }
+        case .extension, .divider: if inTopBar { nudge(item, by: step) }
         }
     }
 
     /// The menu bar's order: `kind` goes before the slot now at `index` of the menu bar's slots without it, or after the
     /// last past the end.
     public mutating func placeInMenuBar(_ kind: BarKind, at index: Int, topBarOn: Bool) {
-        let others = slots(in: .menuBar, topBarOn: topBarOn).filter { $0.kind != kind }
+        // By item, not kind: the top bar's more dividers are dividers too.
+        let others = slots(in: .menuBar, topBarOn: topBarOn).filter { $0.item != .kind(kind) }
         guard let last = others.last else { return }
-        let rest = entries.filter { $0.kind != kind }
+        let rest = entries.filter { $0.item != .kind(kind) }
         if index >= 0, index < others.count {
-            move(kind, to: rest.firstIndex { $0.kind == others[index].kind }!)
+            move(kind, to: rest.firstIndex { $0.item == others[index].item }!)
         } else if index < 0, let first = others.first {
-            move(kind, to: rest.firstIndex { $0.kind == first.kind }!)
+            move(kind, to: rest.firstIndex { $0.item == first.item }!)
         } else {
-            move(kind, to: rest.firstIndex { $0.kind == last.kind }! + 1)
+            move(kind, to: rest.firstIndex { $0.item == last.item }! + 1)
         }
     }
 

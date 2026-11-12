@@ -32,6 +32,8 @@ struct MenuBarPage: View {
     @State private var overMenu: CGFloat?
     /// Clear all or Restore defaults, asked before it goes through.
     @State private var asking: BarReset?
+    /// The width the page gives the bars' preview: they fill it, or scroll past it (StripRoom).
+    @State private var stripRoom: CGFloat = 0
     var nicknames: DisplayNicknames = .shared
     /// The extensions' bar items the page lists and places: the app's, or a render's.
     var extensionBar: ExtensionBar = .shared
@@ -229,14 +231,26 @@ struct MenuBarPage: View {
     /// The bars over a strip of desk, as design round 4's preview: Pilot's top bar as it draws (in its style, the Strip
     /// or the Menu), the macOS menu bar with Pilot's items on the right. Each takes the tray's and its own items' drops
     /// (Q185): the top bar's sides as BarDrop zones, the menu bar's row before the slot under the pointer.
+    ///
+    /// Every item shows, whatever the window's width (Sven on build 2363: other apps' items and the extensions were
+    /// missing unless Pilot was full screen): the bars lay out at least as wide as they need with nothing going for room
+    /// (StripRoom), and a page narrower than that scrolls them sideways. Scrolled, not scaled: a bar twice the page's
+    /// width would draw its words at half size, too small to read or grab; wrapped, it would not be the bar.
     @ViewBuilder private func preview(_ store: BarItemsStore) -> some View {
         let preview = store.settings.preview(placement)
         let radius = ink.corner(10, \.control)
-        VStack(spacing: 0) {
-            if let top = preview.top { topStrip(top, store: store) }
-            if let menu = preview.menu { menuStrip(menu, store: store) }
-            Spacer(minLength: 28)
+        ScrollView(.horizontal) {
+            // The drops, their marks and the strips' frames all sit inside the scrolled bars, so they share its places.
+            StripRoom(least: stripRoom) {
+                VStack(spacing: 0) {
+                    if let top = preview.top { topStrip(top, store: store) }
+                    if let menu = preview.menu { menuStrip(menu, store: store) }
+                    Spacer(minLength: 28)
+                }
+            }
         }
+        .scrollIndicators(.visible)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stripRoom = $0 }
         .frame(maxWidth: .infinity)
         // A strip of the theme's desk under the bars; Instrument's sunk well.
         .background(Desk(ink: ink))
@@ -249,7 +263,7 @@ struct MenuBarPage: View {
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
         let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
         return TopBarStrip(sides: top, configuration: store.settings.preset, background: background, colour: store.colour, glassPreview: true, itemColours: store.itemColours,
-                           report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }) {
+                           report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }, packed: true) {
             stripSlot($0, store, inTopBar: true)
         }
         .frame(height: store.settings.preset?.height ?? 30)
@@ -276,7 +290,7 @@ struct MenuBarPage: View {
     static func menuDrop(_ slots: [BarDrop.Slot], store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, animation: Animation?,
                          over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            item.kind?.topBarOnly == true ? nil : .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
+            item.topBarOnly ? nil : .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -292,8 +306,7 @@ struct MenuBarPage: View {
     }
 
     /// The macOS menu bar: Pilot's items on the right, beside the system's own; with Both, only what stays there. Short of
-    /// room (at 760), Finder goes first (the items are what this page drags), then the leftmost items whole, as on Stats'
-    /// strip and a crowded menu bar; the strip is never wider than the page. Extensions' own items sit before Pilot's.
+    /// room the preview scrolls sideways (StripRoom), so no item goes. Extensions' own items sit before Pilot's.
     private func menuStrip(_ menu: [BarSlot], store: BarItemsStore) -> some View {
         let extensions = extensionBar.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
         let slots = menuSlots(menu)
@@ -359,11 +372,11 @@ struct MenuBarPage: View {
         }
     }
 
-    /// An item as the bar draws it, one piece.
+    /// An item as the bar draws it, one piece, dragged and taken off as its own item: each divider is its own.
     private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool) -> some View {
-        let kind = slot.kind, screen = engine.topBar.connected.first?.name ?? ""
-        return StripPiece(item: .kind(kind), title: kind.title, pinned: kind.pinned, dragged: $dragged,
-                          remove: takeOff(.kind(kind), store), step: step(kind, store, inTopBar: inTopBar)) {
+        let kind = slot.kind, item = slot.item, screen = engine.topBar.connected.first?.name ?? ""
+        return StripPiece(item: item, title: kind.title, pinned: kind.pinned, dragged: $dragged,
+                          remove: takeOff(item, store), step: step(item, store, inTopBar: inTopBar)) {
             BarDragChip(kind: kind, slot: slot, screen: screen, sources: engine.barSources, store: store)
         } content: {
             TopBarSlotView(slot: slot, screen: screen, sources: engine.barSources, store: store).environment(\.barPreview, true)
@@ -412,8 +425,6 @@ struct MenuBarPage: View {
     private func takeOff(_ item: BarTrayItem, _ store: BarItemsStore) -> () -> Void {
         { [placement, reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { _ = store.settings.takeOff(item, placement: placement) } }
     }
-
-    private func step(_ kind: BarKind, _ store: BarItemsStore, inTopBar: Bool) -> (Int) -> Void { step(.kind(kind), store, inTopBar: inTopBar) }
 
     private func step(_ item: BarTrayItem, _ store: BarItemsStore, inTopBar: Bool) -> (Int) -> Void {
         { [placement, reduceMotion] by in
@@ -761,6 +772,23 @@ extension BarKind {
 
 /// A strip of the theme's desk, under the preview's bars and the style thumbnails' bars; Instrument's sunk well, since its
 /// colours are the theme's roles and its one signal is not decoration.
+/// The bars' preview at the width the page gives it, or wider when the bars need more with nothing going for room (Sven on
+/// build 2363): a ScrollView proposes no width, so this asks the bars' own (TopBarRow's natural width, every menu bar item)
+/// and lays them out at the wider of the two.
+private struct StripRoom: Layout {
+    let least: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let bars = subviews.first else { return .zero }
+        let width = max(least, bars.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height)).width)
+        return CGSize(width: width, height: bars.sizeThatFits(ProposedViewSize(width: width, height: proposal.height)).height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
 private struct Desk: View {
     let ink: Ink
 

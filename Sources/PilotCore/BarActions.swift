@@ -148,14 +148,18 @@ extension BarSettings {
         }
     }
 
-    /// The same from a slot's menu, an extension's own included (spec pilot-1.1 T50): Move to puts it last on that side,
-    /// Remove from bar takes it out of the top bar alone, as its menu hangs there; it has no style.
+    /// The same from a slot's menu, an extension's own and one more divider included (spec pilot-1.1 T50): Move to puts
+    /// it last on that side, Remove from bar takes it out of the top bar alone, as its menu hangs there; it has no style.
     public mutating func apply(_ edit: BarEdit, on item: BarTrayItem) {
         switch (item, edit) {
         case (.kind(let kind), _): apply(edit, on: kind)
         case (.extension, .style): break
         case (.extension, .move(let side)): move(item, to: side)
         case (.extension(let id), .remove): if isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
+        // One more divider has one look; Remove from bar takes it off, as the page's tray does.
+        case (.divider, .style): break
+        case (.divider, .move(let side)): move(item, to: side)
+        case (.divider, .remove): takeOff(item, placement: .topBar)
         }
     }
 

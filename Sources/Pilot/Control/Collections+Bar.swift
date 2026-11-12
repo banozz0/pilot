@@ -31,8 +31,8 @@ extension ControlVerbs {
     /// goes to the store both bars and the page draw from.
     func registerBar(_ bar: @escaping @Sendable @MainActor () -> BarItemsStore, reach: BarReach = BarReach()) {
         register(ControlCollection(
-            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both.",
-            fields: [.init("item", help: "one of \(Self.cases(BarKind.self))"),
+            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both. The top bar holds any number of dividers: add divider while one is there adds one more, listed as divider:<n>, which remove and bar move name.",
+            fields: [.init("item", help: "one of \(Self.cases(BarKind.self)), or divider:<n> for one more divider"),
                      .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)); other apps, app menus and extensions are top bar only", required: false),
                      .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (the item's own)", required: false),
                      .init("index", help: "before the item now at this place on that side, from 0 (last)", required: false)],
@@ -42,6 +42,11 @@ extension ControlVerbs {
                 try bar().requireWritable()
                 let kind = try Self.movable(args.value("item") ?? "")
                 let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
+                // Once a divider is on the top bar, each add is one more there (Sven on build 2363), as the page's tray does.
+                if kind == .divider, args.value("placement") == nil, bar().settings.isOn(.divider, in: .topBar) {
+                    let item = bar().settings.newDivider
+                    return Self.changeDivider(item, in: bar()) { s in s.drop(item, on: .top(side ?? s.entry(.divider).side, index: index ?? .max), placement: .topBar) }
+                }
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
                 let placement = try Self.placement(word, for: kind)
                 try Self.refuseMenuBarPlace(placement, side: side, index: index)
@@ -53,6 +58,9 @@ extension ControlVerbs {
             remove: { args throws(ControlError) in
                 try bar().requireWritable()
                 if let refusal = ControlVerb.unknownFlag(args.flags, known: ["placement"], in: "pilot remove bar-items") { throw refusal }
+                if let item = try Self.moreDivider(try args.word(0, "item"), on: bar()) {
+                    return Self.changeDivider(item, in: bar()) { $0.takeOff(item, placement: .topBar) }
+                }
                 let kind = try Self.movable(try args.word(0, "item"))
                 guard bar().settings.entry(kind).on else { throw ControlError(.badValue, "\(kind.rawValue) is not on the bar") }
                 guard let word = args.value("placement") else { return Self.apply(.remove(kind), kind, to: bar(), reach) }
@@ -86,6 +94,13 @@ extension ControlVerbs {
                 else { throw ControlError(.badValue, "bar geometry <field> <points>, or bar geometry <JSON>") }
                 return Self.state(bar(), reach)
             case "move":
+                if let item = try Self.moreDivider(try args.word(1, "item"), on: bar()) {
+                    guard args.value("onto") == nil else { throw ControlError(.badValue, "move a divider with --side and --index") }
+                    let side = try Self.side(args.value("side")), index = try Self.index(args.value("index"))
+                    return Self.changeDivider(item, in: bar()) { s in
+                        s.place(item, on: side ?? s.topBarPlace(item)?.side ?? .right, at: index ?? .max)
+                    }
+                }
                 let kind = try Self.movable(try args.word(1, "item"))
                 if let onto = args.value("onto") {
                     guard args.value("side") == nil, args.value("index") == nil else {
@@ -259,8 +274,25 @@ extension ControlVerbs {
         return true
     }
 
+    /// One more divider (divider:<n>) named on the command line, on the top bar; nil for any other word.
+    private static func moreDivider(_ word: String, on store: BarItemsStore) throws(ControlError) -> BarTrayItem? {
+        guard word.hasPrefix("divider:") else { return nil }
+        guard let item = BarTrayItem(rawValue: word), case .divider = item, store.settings.onStrip(item, placement: .topBar) else {
+            let on = store.settings.entries.compactMap { $0.dividerID.map { "divider:\($0)" } }
+            throw ControlError(.badValue, "no \(word) on the top bar; \(on.isEmpty ? "there is no other divider" : "there are \(on.joined(separator: ", "))")")
+        }
+        return item
+    }
+
+    /// One more divider made, moved or taken off; answers its row, off once it is gone.
+    private static func changeDivider(_ item: BarTrayItem, in store: BarItemsStore, _ edit: (inout BarSettings) -> Void) -> JSONValue {
+        write(store, edit)
+        guard let entry = store.settings.entries.first(where: { $0.item == item }) else { return .object(["item": .string(item.rawValue), "on": .bool(false)]) }
+        return row(entry, lacking: [])
+    }
+
     private static func row(_ entry: BarEntry, lacking: Set<BarKind>) -> JSONValue {
-        .object(["item": .string(entry.kind.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
+        .object(["item": .string(entry.dividerID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
                  "styles": .array(entry.kind.styles.map { .string($0.rawValue) }),
                  "placement": .string(entry.placement.rawValue), "side": .string(entry.side.rawValue),
                  "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)),

@@ -129,7 +129,8 @@ struct TopBarSlotView: View {
     var body: some View {
         let entry = slot.entries.first
         let shows: Shows = switch (slot, entry?.kind, entry?.style) {
-        case (.item, .otherApps, let style): sources.readings.menuApps.list.isEmpty && style != .oneButton ? .nothing : .otherApps(oneButton: style == .oneButton)
+        // The Menu bar page's strip keeps the drawer's chevron with no app listed yet, so it is there to grab.
+        case (.item, .otherApps, let style): !preview && sources.readings.menuApps.list.isEmpty && style != .oneButton ? .nothing : .otherApps(oneButton: style == .oneButton)
         case (.item, .appMenus, _): sources.readings.appMenus.list.isEmpty ? .nothing : .appMenus
         case (.item, .workspaces, let style?) where [.numbers, .withApp, .icons].contains(style): .workspaces(style)
         // Status lights: nothing at all while none is lit (Q205); the Menu bar page's strip keeps its unlit dots

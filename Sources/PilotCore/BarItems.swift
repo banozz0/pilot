@@ -262,14 +262,24 @@ public struct BarEntry: Codable, Equatable, Sendable {
     /// The extension whose bar item this is, its place in the top bar's order (spec pilot-1.1 T50); nil for a built-in
     /// item. Whether it shows is its ExtensionBarEntry's on and placement; this entry holds only its side and place.
     public internal(set) var extensionID: String?
+    /// One more divider past the first, by its number (Sven on build 2363: any number of dividers): the first divider is
+    /// the `.divider` item, every other one an entry of its own in the top bar, there while it is on the bar. Nil for
+    /// every other entry.
+    public internal(set) var dividerID: Int?
 
-    /// What it is in a drag and in the order: a built-in item, or an extension's.
-    public var item: BarTrayItem { extensionID.map(BarTrayItem.extension) ?? .kind(kind) }
+    /// What it is in a drag and in the order: a built-in item, one more divider, or an extension's.
+    public var item: BarTrayItem { extensionID.map(BarTrayItem.extension) ?? dividerID.map(BarTrayItem.divider) ?? .kind(kind) }
 
     /// An extension's item's place in the top bar, on `side`.
     init(extension id: String, side: TopBarSide) {
         self.init(.extensions, on: true, placement: .topBar)
         (extensionID, self.side) = (id, side)
+    }
+
+    /// One more divider, number `id`, on the top bar's `side`.
+    init(divider id: Int, side: TopBarSide) {
+        self.init(.divider, on: true, placement: .topBar)
+        (dividerID, self.side) = (id, side)
     }
 
     init(_ kind: BarKind, on: Bool = false, style: BarStyle? = nil, placement: BarPlacement = .both) {
@@ -303,17 +313,25 @@ extension BarEntry {
     enum CodingKeys: String, CodingKey {
         case kind, on, style, placement, side, width
         case extensionID = "extension"
+        case dividerID = "divider"
     }
 
     /// An extension's item saves its kind as `extension`, which a Pilot from before T50 lacks, so it skips the entry
     /// rather than drawing its old Extensions slot once per extension.
     static let extensionKind = "extension"
+    /// One more divider saves its kind as `dividers`, which an older Pilot lacks, so it skips the entry rather than
+    /// refusing the whole bar for two dividers.
+    static let dividerKind = "dividers"
 
     /// Saved by another Pilot: a style the item lacks takes its first; an item this Pilot lacks fails, and the list skips it.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let id = try? c.decode(String.self, forKey: .extensionID), try c.decode(String.self, forKey: .kind) == Self.extensionKind {
             self.init(extension: id, side: (try? c.decode(TopBarSide.self, forKey: .side)) ?? .right)
+            return
+        }
+        if let id = try? c.decode(Int.self, forKey: .dividerID), try c.decode(String.self, forKey: .kind) == Self.dividerKind {
+            self.init(divider: id, side: (try? c.decode(TopBarSide.self, forKey: .side)) ?? .right)
             return
         }
         let kind = try c.decode(BarKind.self, forKey: .kind)
@@ -330,6 +348,12 @@ extension BarEntry {
         if let extensionID {
             try c.encode(Self.extensionKind, forKey: .kind)
             try c.encode(extensionID, forKey: .extensionID)
+            try c.encode(side, forKey: .side)
+            return
+        }
+        if let dividerID {
+            try c.encode(Self.dividerKind, forKey: .kind)
+            try c.encode(dividerID, forKey: .dividerID)
             try c.encode(side, forKey: .side)
             return
         }
@@ -361,10 +385,11 @@ public enum BarSlot: Equatable, Sendable {
     public var kind: BarKind { isGroup ? .group : kinds[0] }
     /// What a drag of it moves: the Group, a built-in item or an extension's own item.
     public var item: BarTrayItem { isGroup ? .kind(.group) : entries[0].item }
-    /// Its name in `pilot bar` and the observers dump: its items joined by +, an extension's as extension:<id>.
+    /// Its name in `pilot bar` and the observers dump: its items joined by +, an extension's as extension:<id>, one more
+    /// divider as divider:<n>.
     public var name: String {
-        if case .extension = item { return item.rawValue }
-        return kinds.map(\.rawValue).joined(separator: "+")
+        if case .kind = item { return kinds.map(\.rawValue).joined(separator: "+") }
+        return item.rawValue
     }
 }
 
@@ -447,7 +472,18 @@ public struct BarSettings: Codable, Equatable, Sendable {
         for item in extensionItems where isOn(extension: item.id, in: placement) != Self.defaults.isOn(extension: item.id, in: placement) {
             toggle(extension: item.id, in: placement)
         }
+        // The default bar has no divider, so the more dividers go with the top bar's items.
+        if placement == .topBar { removeMoreDividers() }
     }
+
+    /// One more divider, number `id`, last in the order on the top bar's `side` until it is placed.
+    mutating func addDivider(_ id: Int, side: TopBarSide) { entries.append(BarEntry(divider: id, side: side)) }
+
+    /// Takes one more divider off the top bar: it has no place but there, so its entry goes.
+    mutating func removeDivider(_ item: BarTrayItem) { entries.removeAll { $0.dividerID != nil && $0.item == item } }
+
+    /// Takes every divider past the first off the top bar.
+    mutating func removeMoreDividers() { entries.removeAll { $0.dividerID != nil } }
 
     /// Moves the item to `index` in the order.
     public mutating func move(_ kind: BarKind, to index: Int) { move(.kind(kind), to: index) }
@@ -603,13 +639,14 @@ extension BarSettings {
                 throw ThemeFailure("invalid saved bar item")
             }
             // Future item kinds remain skippable; a malformed known item must never become a default item.
-            guard BarKind(rawValue: kind) != nil || kind == BarEntry.extensionKind else { continue }
+            guard BarKind(rawValue: kind) != nil || kind == BarEntry.extensionKind || kind == BarEntry.dividerKind else { continue }
             try check(Bool.self, fields, "on")
             try check(String.self, fields, "style") // A future style name still falls back to the item's first style.
             try check(BarPlacement.self, fields, "placement")
             try check(TopBarSide.self, fields, "side")
             try check(Double.self, fields, "width", nullable: true)
             try check(String.self, fields, "extension", nullable: true)
+            if kind == BarEntry.dividerKind { try check(Int.self, fields, "divider") }
             _ = try decoder.decode(BarEntry.self, from: ThemeDigest.encoded(entry))
         }
         try check(TopBarClockFormat.self, fields, "clock")
