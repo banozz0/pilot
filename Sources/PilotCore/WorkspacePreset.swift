@@ -160,11 +160,13 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     }
 
     /// What an autosave writes for `workspace` (Sven 2026-10-17, no Save button): the draft under its name, or
-    /// "Workspace 3" while it has none; a named one with no app yet keeps its name. Nil while there is nothing a preset
-    /// would hold (no app and no name), or while own sizes do not add up to 100.
+    /// "Workspace 3" while it has none; a named one with no app yet keeps its name, and so does own sizes: a layout row
+    /// without a preset reads back as Columns (`fresh`), so Your widths picked on an empty workspace jumped to Columns
+    /// (Sven, build 2410). Nil while there is nothing a preset would hold (no app, no name, a ready layout), or while own
+    /// sizes do not add up to 100.
     public func autosaved(workspace: String) -> WorkspacePreset? {
         let named = !WorkspacePreset.isUnnamed(name)
-        guard named || !apps.isEmpty, sizesProblem == nil else { return nil }
+        guard named || !apps.isEmpty || layout == nil, sizesProblem == nil else { return nil }
         var preset = WorkspacePreset(name: named ? trimmedName : WorkspacePreset.unnamed(workspace), apps: apps, layout: layout)
         preset.openMissing = openMissing
         return preset
