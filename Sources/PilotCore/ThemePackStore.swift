@@ -19,6 +19,12 @@ public struct ThemePackStore: Sendable {
         public let portraits: Set<String>
         /// The pack's own picture, resolved inside its folder; nil when it names none.
         public let preview: String?
+
+        /// This pack with `other`'s wallpapers: a shipped pack with the pictures its catalogue copy brought
+        /// (ShippedWallpapers). Its revision stays its own, which Apply checks the shipped pack against.
+        public func picturing(_ other: Loaded) -> Loaded {
+            Loaded(folder: folder, pack: pack, revision: revision, factory: factory, images: other.images, portraits: other.portraits, preview: preview)
+        }
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
 

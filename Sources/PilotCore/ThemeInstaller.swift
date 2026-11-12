@@ -31,12 +31,16 @@ public struct ThemeInstaller: Sendable {
         var found: [String: String] = [:]
         for id in ids {
             guard let folder = folder(id) else { continue }
-            let files = ExtensionCheck.listing(folder).compactMap { listed in
-                (try? Data(contentsOf: listed.url)).map { ExtensionCatalogue.File(path: listed.path, sha256: ExtensionCatalogue.sha256($0), size: $0.count) }
-            }
-            found[id] = ExtensionCatalogue.digest(files)
+            found[id] = Self.digest(of: folder)
         }
         return found
+    }
+
+    /// `folder`'s digest as build-index.py makes a pack entry's, from the files it lists the same way.
+    public static func digest(of folder: URL) -> String {
+        ExtensionCatalogue.digest(ExtensionCheck.listing(folder).compactMap { listed in
+            (try? Data(contentsOf: listed.url)).map { ExtensionCatalogue.File(path: listed.path, sha256: ExtensionCatalogue.sha256($0), size: $0.count) }
+        })
     }
 
     /// Installs `theme`, or replaces the pack with its id in the writable library, and returns it as the store loads it.
@@ -126,6 +130,11 @@ public struct ThemeInstaller: Sendable {
                 throw ExtensionCatalogue.Problem.themeTaken(id: id, why: other == store.factoryRoot ? "built in" : "in \(other)")
             }
         }
+    }
+
+    /// Whether `id` is one of the packs Pilot ships (its folder in the built-in root).
+    public func isBuiltIn(_ id: String) -> Bool {
+        ThemePack.validID(id) && store.factoryRoot.map { FileManager.default.fileExists(atPath: $0 + "/" + id) } == true
     }
 
     /// `work` while holding the library's lock, the one ThemePackStore.save takes, so an install never interleaves a save.

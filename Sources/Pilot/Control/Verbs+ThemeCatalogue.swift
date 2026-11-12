@@ -12,11 +12,13 @@ extension ControlVerbs {
         let themes = model.index?.themes ?? []
         let installer = themeInstaller(owner), ids = themes.map(\.id)
         let installed = await Task.detached { installer.installed(ids) }.value
+        // A shipped theme's catalogue copy only brings its pictures, on Apply (ShippedWallpapers): never installed.
+        let builtIn = Set(ids.filter(installer.isBuiltIn))
         return .object(["count": .number(Double(themes.count)), "themes": .array(themes.map { theme in
-            let standing = ExtensionCatalogue.standing(of: theme, installed: installed)
+            let standing = ExtensionCatalogue.standing(of: theme, installed: installed), shipped = builtIn.contains(theme.id)
             var o: [String: JSONValue] = [
                 "id": .string(theme.id), "title": .string(theme.title), "dark": .bool(theme.dark), "styles": .array(theme.styles.map(JSONValue.string)),
-                "standing": .string(standing.word), "button": .string(standing.label),
+                "standing": .string(shipped ? "built-in" : standing.word), "button": .string(shipped ? "Built in: apply it for its wallpapers" : standing.label),
                 "files": .number(Double(theme.files.count)), "size": .number(Double(theme.size)), "digest": .string(theme.digest),
             ]
             o["preview"] = theme.preview.map(JSONValue.string)
@@ -39,7 +41,9 @@ extension ControlVerbs {
             throw ControlError(.badValue, "\(id) is the theme applied now: apply another or restore first, then update it. Nothing asked.")
         }
         // An id Pilot's own themes or another pack root hold is refused before asking, so Allow never starts an install bound to fail.
-        do { try installer.refuseTaken(id) } catch { throw ControlError(.badValue, ExtensionCatalogue.Problem.reason(error) + " Nothing asked.") }
+        do { try installer.refuseTaken(id) } catch {
+            throw ControlError(.badValue, ExtensionCatalogue.Problem.reason(error) + (installer.isBuiltIn(id) ? " Apply it to download its wallpapers." : "") + " Nothing asked.")
+        }
         let folder = owner.store.writableRoot + "/" + id
         return try await AllowPrompt.gate.allow(themeAsk(theme, replacing: had != nil, into: folder), peer: peer) { () throws(ControlError) in
             let loaded: ThemePackStore.Loaded
