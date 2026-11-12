@@ -59,7 +59,7 @@ struct MenuScan {
         steps: [
             Step(icon: read, title: "Pilot reads what is installed", detail: "brew info --installed, the Applications folders, npm and web apps; nothing is removed"),
             Step(icon: list, title: "You read the list", detail: "Apps, Command-line tools and Web apps, each with its size; Tab sorts"),
-            Step(icon: .glyph("trash", .problem), title: "Remove asks first", detail: "↵ on a row, then a confirm; an app goes to the Trash, a tool is uninstalled"),
+            Step(icon: .glyph("trash", .problem), title: "Remove asks first", detail: "↵ on a row, then a confirm; an app is quit, goes to the Trash and offers its leftovers, a tool is uninstalled"),
         ],
         kinds: brew + [Kind(title: "Apps", icon: .app), Kind(title: "App Store apps", icon: .appStore),
                        Kind(title: "npm globals", icon: .npm, needs: ["npm"]), Kind(title: "Web apps", icon: .webApp)])
