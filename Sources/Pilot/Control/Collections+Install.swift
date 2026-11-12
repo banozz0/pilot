@@ -144,7 +144,8 @@ extension ControlVerbs {
 
     private static func removeRun(_ row: RemoveRow, _ command: String, _ s: ControlInstall, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         try await s.gate.allow(.remove(.package, command), peer: peer) { () throws(ControlError) in
-            InstallModule.remove(row, confirm: ControlInstall.confirmed, run: s.run)
+            // A cask's app that runs is quit with a normal quit only: Force quit stays the menu's, asked on screen.
+            InstallModule.remove(row, confirm: ControlInstall.confirmed, run: s.run, askForce: { _ in false })
             // Gone once the command ends: the next list reads it so.
             s.removable = nil
             return .object(["key": .string(row.key), "name": .string(row.name), "ran": .string(command),

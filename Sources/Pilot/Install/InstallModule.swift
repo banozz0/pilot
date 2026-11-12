@@ -94,18 +94,23 @@ enum InstallModule {
 
     /// Return on a Remove row (story 84): a package asks with its exact command, then runs it in the visible terminal;
     /// an npm tool through its own tree's npm (card agent-bo-95422989); a web app, or an app Homebrew did not install
-    /// (card agent-bo-95422979), asks, then goes to the Trash, where Finder can put it back.
+    /// (card agent-bo-95422979), asks, then goes to the Trash, where Finder can put it back. An app, a cask's app included,
+    /// is quit first, and its leftovers offered once it is gone; a web app's too (Q181).
     static func remove(_ row: RemoveRow, confirm: Confirm = confirm, run: @escaping Run = visibleRun,
-                       trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash) {
+                       trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash,
+                       askForce: @escaping RemoveApp.AskForce = RemoveApp.menuAskForce) {
         guard !row.system else { return HUD.tip("\(row.name) is part of macOS and can't be removed") }
         let location: URL
         switch row.source {
+        case .package(let package) where package.kind == .cask && row.app != nil:
+            return RemoveApp.removeCask(row.name, command: package.remove, key: package.key, app: URL(filePath: row.app!), confirm: confirm,
+                                        run: run, askForce: askForce)
         case .package(let package):
             return confirmRun("Remove \(row.name)", package.remove, hook: "removed", key: package.key, confirm: confirm, run: run)
         case .npm(let name, let prefix):
             return confirmRun("Remove \(name)", "\(UpdateList.npm("uninstall", prefix: prefix)) \(name)", hook: "removed", key: row.recordKey,
                               confirm: confirm, run: run)
-        case .app(let path): return RemoveApp.remove(row.name, at: URL(filePath: path), confirm: confirm, trash: trash)
+        case .app(let path): return RemoveApp.remove(row.name, at: URL(filePath: path), confirm: confirm, trash: trash, askForce: askForce)
         case .webApp(let id):
             guard let app = WebAppDirectory.list().first(where: { $0.bundleID == id }) else {
                 return ilog.error("remove: no web app \(id, privacy: .public)")
@@ -118,17 +123,23 @@ enum InstallModule {
     /// Remove on Install › Web apps (card agent-bo-95422994): the same ask as the menu's Remove; `then` refreshes the
     /// page's list once the app is in the Trash.
     static func remove(_ app: InstalledWebApp, confirm: Confirm = confirm,
-                       trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash, then: @escaping @MainActor () -> Void) {
-        trashAfterYes(app.name, app.location, confirm: confirm, trash: trash, then: then)
+                       trash: @escaping @MainActor (URL) throws -> URL = WebAppDirectory.trash, then: @escaping @MainActor () -> Void,
+                       leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = RemoveApp.offerLeftovers) {
+        trashAfterYes(app.name, app.location, confirm: confirm, trash: trash, then: then, leftovers: leftovers)
     }
 
+    /// A web app to the Trash after the ask, then its leftovers (its WebKit store, which holds its logins, and its
+    /// preferences) offered (Q181).
     private static func trashAfterYes(_ name: String, _ location: URL, confirm: Confirm, trash: @escaping @MainActor (URL) throws -> URL,
-                                      then: @escaping @MainActor () -> Void = {}) {
-        // An App Store app is root's: the plain move is refused, so macOS asks for an administrator as Finder does (AdminTrash).
+                                      then: @escaping @MainActor () -> Void = {},
+                                      leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = RemoveApp.offerLeftovers) {
+        let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
         confirm("Remove \(name)", "Move \(location.lastPathComponent) to the Trash") {
             AdminTrash.trash(location, plain: trash) { result in
                 switch result {
-                case .success(let trashed): ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
+                case .success(let trashed):
+                    ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
+                    Task { if let app = await reading.value { leftovers(app) } }
                 case .failure(let error):
                     ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
                     HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
@@ -388,7 +399,11 @@ enum InstallModule {
     /// pilot://installed?package=<key> and pilot://removed?package=<key>: the visible terminal's success hooks record
     /// the install or forget it.
     static func recordInstalled(_ url: URL) { updateRecord(url, "installed") { try InstalledStore.standard.record($0, at: .now) } }
-    static func recordRemoved(_ url: URL) { updateRecord(url, "removed") { try InstalledStore.standard.forget($0) } }
+    static func recordRemoved(_ url: URL) {
+        updateRecord(url, "removed") { try InstalledStore.standard.forget($0) }
+        // A cask Remove quit and uninstalled: its leftovers now it is gone.
+        if let key = url.queryValue("package") { RemoveApp.removed(key) }
+    }
 
     private static func updateRecord(_ url: URL, _ what: String, _ change: (Package) throws -> Void) {
         guard let package = url.queryValue("package").flatMap(Package.init(key:)) else {

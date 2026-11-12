@@ -53,6 +53,39 @@ enum RemoveApp {
         }
     }
 
+    /// Remove on a cask with an app (Q181): the ask shows the exact command, quitting first when the app runs; at the yes
+    /// the app is quit, then the command runs in the visible terminal, and its leftovers wait for its `removed` hook.
+    static func removeCask(_ name: String, command: String, key: String, app location: URL, confirm: InstallModule.Confirm,
+                           run: @escaping InstallModule.Run, running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce) {
+        let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
+        let open = !copies(of: location, running: running).isEmpty, title = "\(open ? "Quit and remove" : "Remove") \(name)"
+        confirm(title, open ? "Quit \(name), then \(command)" : command) {
+            @MainActor func go() {
+                pending[key] = reading
+                run(command, title, InstallModule.hook("removed", key: key))
+            }
+            let copies = copies(of: location, running: running)
+            guard !copies.isEmpty else { return go() }
+            Task {
+                guard await quit(copies, name: name, askForce: askForce) else {
+                    ilog.notice("\(name, privacy: .public) not removed: still running")
+                    return HUD.tip("\(name) is still open, so nothing ran")
+                }
+                go()
+            }
+        }
+    }
+
+    /// The casks whose command runs in the terminal, each with its app as read before, by package key: their leftovers
+    /// are offered once the command's `removed` hook comes back.
+    static var pending: [String: Task<AppLeftovers.App?, Never>] = [:]
+
+    /// The `removed` hook for `key`: a cask Remove ran offers its leftovers; any other key nothing.
+    static func removed(_ key: String, leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = offerLeftovers) {
+        guard let reading = pending.removeValue(forKey: key) else { return }
+        Task { if let app = await reading.value { leftovers(app) } }
+    }
+
     /// The app to the Trash (an administrator's prompt for one root owns), then its leftovers offered.
     private static func toTrash(_ name: String, _ location: URL, trash: @MainActor (URL) throws -> URL, reading: Task<AppLeftovers.App?, Never>,
                                 leftovers: @escaping @MainActor (AppLeftovers.App) -> Void) {
@@ -109,7 +142,9 @@ enum RemoveApp {
 
     /// `app`'s leftovers, checked against every other app the Apps list scans (its id and name), each measured.
     @concurrent nonisolated static func leftovers(of app: AppLeftovers.App, library: URL = AppLeftovers.library) async -> [AppLeftovers.Item] {
-        let others = AppsModule.installedAppFiles().map { AppLeftovers.App(bundleID: $0.bundle, name: $0.name, path: $0.url.path(percentEncoded: false)) }
+        // Never Pilot: it stamps every web app under its own id (dev.banozz.pilot.webapp.…), but reads none of their files.
+        let others = AppsModule.installedAppFiles().filter { $0.bundle != UninstallPlaces.bundleID }
+            .map { AppLeftovers.App(bundleID: $0.bundle, name: $0.name, path: $0.url.path(percentEncoded: false)) }
         return AppLeftovers.find(app, others: others, library: library, size: Uninstall.bytes)
     }
 }

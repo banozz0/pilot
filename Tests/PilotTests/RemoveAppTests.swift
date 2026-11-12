@@ -44,6 +44,20 @@ struct RemoveAppTests {
         #expect(refreshed == 1)
     }
 
+    @Test("A web app's leftovers are offered once it is in the Trash (Q181)")
+    func webAppLeftovers() async throws {
+        let location = try Self.fixtureApp("dev.banozz.pilot.webapp.x-com"), record = Record()
+        defer { try? FileManager.default.removeItem(at: location.deletingLastPathComponent()) }
+        var offered: [String] = []
+        let app = InstalledWebApp(spec: try WebAppSpec(name: "X", url: "https://x.com"), bundleID: "dev.banozz.pilot.webapp.x-com", location: location)
+        InstallModule.remove(app, confirm: { title, command, yes in record.asked.append((title, command)); record.yes = yes },
+                             trash: { record.trashed.append($0); return $0 }, then: {}, leftovers: { offered.append($0.bundleID) })
+        #expect(offered.isEmpty)
+        record.yes?()
+        for _ in 0..<100 where offered.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(record.trashed == [location] && offered == ["dev.banozz.pilot.webapp.x-com"])
+    }
+
     @Test("Remove finds the app bundles at the top of a folder, never a link or anything else")
     func bundles() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "apps-\(UUID().uuidString)")
@@ -102,6 +116,44 @@ struct RemoveAppTests {
         #expect(copy.isTerminated && !copy.forced)
         #expect(record.trashed == [app])
         #expect(offered == ["dev.example.quitfixture"])
+    }
+
+    @Test("Remove on a cask whose app runs asks to quit it, runs brew only once it quit, and offers its leftovers at the removed hook (Q181)")
+    func caskQuitsFirst() async throws {
+        let app = try Self.fixtureApp("dev.example.caskfixture"), copy = Copy(quits: true), record = Record()
+        defer { try? FileManager.default.removeItem(at: app.deletingLastPathComponent()) }
+        var ran: [(command: String, onSuccess: String)] = [], offered: [String] = []
+        RemoveApp.removeCask("Zed", command: "brew uninstall --cask zed", key: "cask:caskfixture", app: app,
+                             confirm: { title, command, yes in record.asked.append((title, command)); record.yes = yes },
+                             run: { command, _, onSuccess in ran.append((command, onSuccess)) }, running: { _ in copy.isTerminated ? [] : [copy] },
+                             askForce: { _ in false })
+        #expect(record.asked.map(\.title) == ["Quit and remove Zed"])
+        #expect(record.asked.map(\.command) == ["Quit Zed, then brew uninstall --cask zed"])
+        record.yes?()
+        for _ in 0..<100 where ran.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(copy.isTerminated && ran.map(\.command) == ["brew uninstall --cask zed"])
+        #expect(ran.first?.onSuccess == InstallModule.hook("removed", key: "cask:caskfixture"))
+        RemoveApp.removed("cask:formula-not-asked") { offered.append($0.bundleID) }
+        RemoveApp.removed("cask:caskfixture") { offered.append($0.bundleID) }
+        for _ in 0..<100 where offered.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(offered == ["dev.example.caskfixture"])
+        RemoveApp.removed("cask:caskfixture") { offered.append($0.bundleID) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(offered.count == 1, "a second removed hook offers nothing: \(offered)")
+    }
+
+    @Test("A cask's app that won't quit runs nothing")
+    func caskStaysWhenStillOpen() async throws {
+        let app = try Self.fixtureApp("dev.example.caskfixture"), copy = Copy(quits: false), record = Record()
+        defer { try? FileManager.default.removeItem(at: app.deletingLastPathComponent()) }
+        var ran: [String] = []
+        RemoveApp.removeCask("Zed", command: "brew uninstall --cask zed", key: "cask:caskfixture2", app: app,
+                             confirm: { title, command, yes in record.asked.append((title, command)); record.yes = yes },
+                             run: { command, _, _ in ran.append(command) }, running: { _ in [copy] }, askForce: { _ in false })
+        record.yes?()
+        try await Task.sleep(for: .seconds(6))
+        #expect(ran.isEmpty && !copy.isTerminated)
+        #expect(RemoveApp.pending["cask:caskfixture2"] == nil)
     }
 
     @Test("An app that won't quit is offered Force quit; no to it leaves the app running and where it was")
