@@ -302,6 +302,8 @@ final class PillDrop {
         if let page, first != nil { select(page) }
         dropOpen = true
         hold()
+        // The compact face already holds the pill, so this hold starts nothing: follow again, so Calendar may now ask.
+        follow()
         highlight = byKey ? 0 : nil
         drops.open(.pill, face: face(), at: spot)
     }
@@ -336,6 +338,7 @@ final class PillDrop {
             self?.dropOpen = false
             self?.showingLive = false
             self?.release()
+            self?.follow()
         })
     }
 
