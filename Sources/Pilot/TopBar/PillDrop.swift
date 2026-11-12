@@ -47,45 +47,96 @@ final class PillLayoutStore {
 /// the Pilot menu, and theirs close it (DropKeys). Four views (T7): Music, Extensions, Activity and Controls, switched by
 /// the drop's tabs or on Menu bar › Pill. Only the view showing reads, and only while a face shows it (a pill on a bar or
 /// the open drop): Music NowPlaying's watcher, Extensions the pill's extensions' bar items, Controls sound and brightness.
+///
+/// On the pill-first bar (PillFirst, Q160 to Q165) it shows that bar's pages instead, Calendar and Stats among them, and a
+/// recording or a running timer takes its compact face over (Q164); today's views stay saved as they were.
 @MainActor @Observable
 final class PillDrop {
     static let shared = PillDrop()
 
     @ObservationIgnored let layout: PillLayoutStore
+    /// The bar's store, which keeps the pill-first bar's settings.
+    @ObservationIgnored let bar: BarItemsStore
     @ObservationIgnored private var holds = 0
     @ObservationIgnored private var watch: Task<Void, Never>?
-    /// The view the watch is for; nil while nothing shows or the view showing reads nothing.
-    @ObservationIgnored private var watching: Pill.View?
+    /// What the watch is for; nil while nothing shows or the page showing reads nothing.
+    @ObservationIgnored private var watching: Watch?
     /// The focused screen as Controls opened on it: its brightness is read from here, never an Accessibility read per draw.
     @ObservationIgnored private var screen: (screen: NSScreen, id: UInt32)?
+    /// The drop is open: only then may Calendar ask for access (macOS's prompt), never for the compact face.
+    @ObservationIgnored private var dropOpen = false
     /// The open drop's row the keys lit, its focus ring; nil while none is (a click opened it, or no key moved yet).
     private var highlight: Int?
+    /// Opened on the live face: the drop shows the live Activity tab until another tab is picked or it closes.
+    private var showingLive = false
 
-    init(layout: PillLayoutStore = .shared) {
-        self.layout = layout
-        layout.changed = { [weak self] in self?.follow() }
+    private struct Watch: Equatable {
+        var page: PillValues.Page
+        /// Calendar's read may ask for access.
+        var ask = false
     }
 
-    /// The view the compact face and the drop show.
-    var page: PillValues.Page { .init(layout.layout.current) }
-    /// The views offered, in order: the drop's tabs.
-    var pages: [PillValues.Page] { layout.layout.shown.map(PillValues.Page.init) }
+    /// What shows now, on either pill: the tabs, the one showing, its kind and an extensions page's extensions.
+    private struct Showing {
+        var tabs: [PillValues.Tab]
+        var index: Int
+        var page: PillValues.Page
+        var extensions: [String]
+    }
 
-    /// What the faces draw now: the view showing, read alone.
+    init(layout: PillLayoutStore = .shared, bar: BarItemsStore = .shared) {
+        self.layout = layout
+        self.bar = bar
+        layout.changed = { [weak self] in self?.follow() }
+        bar.pillFirstChanged = { [weak self] in self?.follow() }
+    }
+
+    /// The pill-first bar's settings while it draws; nil on today's pill.
+    private var first: PillFirst.Settings? { bar.pillFirst.on ? bar.pillFirst : nil }
+
+    private var showing: Showing {
+        guard let first else {
+            let saved = layout.layout, shown = saved.shown
+            return Showing(tabs: shown.map { PillValues.Tab(.init($0)) }, index: shown.firstIndex(of: saved.current) ?? 0,
+                           page: .init(saved.current), extensions: saved.extensions)
+        }
+        var tabs = first.pages.map { PillValues.Tab(.init($0.kind), title: $0.title) }
+        // Something live and no Activity page: an Activity tab joins while it runs, so the live face's click lands on it.
+        if live != nil, !first.pages.contains(where: { $0.kind == .activity }) {
+            tabs.append(PillValues.Tab(.activity))
+            if showingLive { return Showing(tabs: tabs, index: tabs.count - 1, page: .activity, extensions: []) }
+        }
+        let page = first.pages[first.current]
+        return Showing(tabs: tabs, index: first.current, page: .init(page.kind), extensions: page.extensions)
+    }
+
+    /// The page the compact face and the drop show.
+    var page: PillValues.Page { showing.page }
+
+    /// The recording or running timer that takes the pill-first bar's compact face over (Q164); downloads never do, nor
+    /// anything on today's pill.
+    var live: DropdownPanelValues.Running? { bar.pillFirst.on ? DropdownNow.live : nil }
+
+    /// What the faces draw now: the page showing, read alone.
     var values: PillValues {
-        let current = layout.layout.current
+        let showing = showing
         var values = PillValues()
-        values.page = .init(current)
-        values.pages = pages
-        switch current {
+        values.page = showing.page
+        values.tabs = showing.tabs
+        values.tab = showing.index
+        values.live = live
+        let readings = Engine.shared?.barSources.readings
+        switch showing.page {
         case .music: values.music = Self.music(NowPlaying.shared)
-        case .extensions: values.extensions = Self.extensions(layout.layout.extensions, bar: .shared)
+        case .extensions: values.extensions = Self.extensions(showing.extensions, bar: .shared)
         case .activity: values.running = DropdownNow.rows
         case .controls:
             guard let engine = Engine.shared else { break }
             values.controls = Self.controls(engine)
             values.sound = DropdownBlocks.sound(engine.barSources.readings)
             values.display = screen.flatMap(DropdownBlocks.display)
+        case .calendar: values.calendar = readings.map { Self.calendar($0.calendar, now: $0.now) }
+        case .stats: values.stats = readings.map { Self.stats($0) } ?? []
         }
         return values
     }
@@ -98,13 +149,14 @@ final class PillDrop {
         return values
     }
 
-    /// Whether the view showing moves once a second on its own: a playing track's clock, a recording's time. A timer's
-    /// countdown and a download's share are observed, so they redraw without a tick.
+    /// Whether the page showing moves once a second on its own: a playing track's clock, a recording's time (on the live
+    /// face too). A timer's countdown and a download's share are observed, so they redraw without a tick.
     var ticks: Bool {
-        switch layout.layout.current {
-        case .music: NowPlaying.shared.track?.playing == true
-        case .activity: Recorder.shared.isActive
-        case .extensions, .controls: false
+        if live != nil, Recorder.shared.isActive { return true }
+        switch page {
+        case .music: return NowPlaying.shared.track?.playing == true
+        case .activity: return Recorder.shared.isActive
+        case .extensions, .controls, .calendar, .stats: return false
         }
     }
 
@@ -134,6 +186,57 @@ final class PillDrop {
         }
     }
 
+    /// What is left of today and tomorrow in the clock's events (ClockCalendar, the clock popover's own read), all-day
+    /// ones first each day: the Calendar page's rows.
+    static func upcoming(_ events: [ClockEvent], now: Date, calendar: Calendar = .current) -> [ClockEvent] {
+        let today = calendar.startOfDay(for: now)
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today), let after = calendar.date(byAdding: .day, value: 2, to: today) else { return [] }
+        return events.filter { $0.end > now && $0.start < after }
+            .sorted { a, b in
+                let dayA = a.start < tomorrow ? 0 : 1, dayB = b.start < tomorrow ? 0 : 1
+                if dayA != dayB { return dayA < dayB }
+                if a.allDay != b.allDay { return a.allDay }
+                return a.start < b.start
+            }
+    }
+
+    /// The Calendar page from the clock's events: asking until access is given or refused.
+    static func calendar(_ source: ClockCalendar, now: Date, calendar: Calendar = .current) -> PillValues.Calendar {
+        let access: PillValues.Calendar.Access = source.refused ? .refused : source.events == nil ? .asking : .granted
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+        let events = upcoming(source.events ?? [], now: now, calendar: calendar).map { event in
+            PillValues.Calendar.Event(time: event.allDay ? "All day" : "\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))",
+                                      title: event.title, colour: event.colour.map { Color($0) }, day: event.start >= tomorrow ? "Tomorrow" : nil,
+                                      now: !event.allDay && event.start <= now)
+        }
+        return .init(access: access, weekday: now.formatted(.dateTime.weekday(.wide)), day: now.formatted(.dateTime.day()),
+                     month: now.formatted(.dateTime.month(.wide).year()), short: now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
+                     events: events)
+    }
+
+    /// The Stats page: the Pilot menu's Stats card's readings (DropdownBlocks.stats), then the free disk and, on a Mac
+    /// with one, the battery, else the temperature.
+    static func stats(_ readings: BarReadings, sampler: SystemSampler = .shared) -> [PillValues.Stat] {
+        guard let base = DropdownBlocks.stats(readings, sampler: sampler) else { return [] }
+        var stats: [PillValues.Stat] = [
+            .init(symbol: "cpu", title: "CPU", number: "\(base.cpu)", unit: "%", detail: "In use", share: Double(base.cpu) / 100),
+            .init(symbol: "memorychip", title: "Memory", number: String(format: "%.1f", base.memoryUsed), unit: "GB",
+                  detail: "of \(Int(base.memoryTotal)) GB", share: base.memoryTotal > 0 ? base.memoryUsed / base.memoryTotal : nil),
+        ]
+        if let disk = sampler.latest?.slow.disk, disk.total > 0 {
+            let free = SystemStats.decimal(Double(disk.available)).split(separator: " ")
+            stats.append(.init(symbol: "internaldrive", title: "Disk", number: String(free.first ?? ""), unit: String(free.last ?? ""),
+                               detail: "free of \(SystemStats.decimal(Double(disk.total)))", share: 1 - Double(disk.available) / Double(disk.total)))
+        }
+        if let battery = base.battery {
+            stats.append(.init(symbol: base.charging ? "battery.100.bolt" : "battery.75", title: "Battery", number: "\(battery)", unit: "%",
+                               detail: base.charging ? "Charging" : "On battery", share: Double(battery) / 100))
+        } else if let heat = sampler.latestValues?.heat {
+            stats.append(.init(symbol: "thermometer.medium", title: "Temperature", number: StatsFormat.whole(heat), unit: "°C", detail: "Hottest sensor"))
+        }
+        return stats
+    }
+
     static func clock(_ seconds: Double) -> String {
         let s = max(0, Int(seconds.rounded(.down)))
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
@@ -150,22 +253,29 @@ final class PillDrop {
         if holds == 0 { follow() }
     }
 
-    /// Points the readers at the view showing now, or stops them while no face shows the pill. The extensions asked on
-    /// the pill's account follow at once; a view's reader restarts only when the view changed.
+    /// Points the readers at the page showing now, or stops them while no face shows the pill. The extensions asked on
+    /// the pill's account follow at once; a page's reader restarts only when the page changed, or Calendar may now ask.
     private func follow() {
-        let asked = holds > 0 ? layout.layout.asked : []
+        let showing = showing
+        let asked = holds > 0 && showing.page == .extensions ? showing.extensions : []
         ExtensionBar.shared.hold(Set(asked), for: "pill")
         // Extensions with none held reads nothing: no extension round scans the folder for it.
-        let view: Pill.View? = holds == 0 || layout.layout.current == .extensions && asked.isEmpty ? nil : layout.layout.current
-        guard view != watching else { return }
+        let next: Watch? = holds == 0 || showing.page == .extensions && asked.isEmpty ? nil
+            : Watch(page: showing.page, ask: showing.page == .calendar && dropOpen)
+        guard next != watching else { return }
         watch?.cancel()
-        watching = view
-        screen = view == .controls ? DropdownBlocks.focused : nil
+        watching = next
+        screen = next?.page == .controls ? DropdownBlocks.focused : nil
         let readings = Engine.shared?.barSources.readings
-        watch = switch view {
+        watch = switch next?.page {
         case .music: Task { await NowPlaying.shared.watch() }
         case .extensions: readings.map { readings in Task { await Self.holding([.extensions], readings) } }
         case .controls: readings.map { readings in Task { await DropdownBlocks.hold([.sound, .display], readings: readings) } }
+        // The clock's own read, asking for access only once the drop is open on Calendar; it follows changes itself.
+        case .calendar: readings.map { readings in
+            Task { [ask = next?.ask ?? false] in await readings.calendar.load(showing: readings.now, now: readings.now, timeZone: .current, ask: ask) }
+        }
+        case .stats: readings.map { readings in Task { await Self.holding([.cpu, .memory, .storage, .heat, .battery], readings) } }
         case .activity, nil: nil
         }
     }
@@ -179,14 +289,40 @@ final class PillDrop {
     }
 
     /// The pill's click or its key: closes the drop when open, else opens it under the item clicked (`spot`), or on the
-    /// focused display. Opened `byKey`, its first row is lit, so Return works at once; a click lights none.
-    func toggle(at spot: BarDrops.Spot? = nil, byKey: Bool = false, drops: BarDrops = .shared) {
-        if drops.isOpen(.pill) { return drops.close(.pill) }
+    /// focused display. Opened `byKey`, its first row is lit, so Return works at once; a click lights none. `page` opens
+    /// the pill-first bar's page at that place (the clock's click opens Calendar), or picks it when the drop is open on
+    /// another. Opened on the live face, it shows the live Activity tab.
+    func toggle(at spot: BarDrops.Spot? = nil, byKey: Bool = false, page: Int? = nil, drops: BarDrops = .shared) {
+        if drops.isOpen(.pill) {
+            if let page, first != nil, page != showing.index { return select(page) }
+            return drops.close(.pill)
+        }
         // One open at a time: the Pilot menu goes too.
         BarPanel.shared.close()
+        showingLive = page == nil && live != nil
+        if let page, first != nil { select(page) }
+        dropOpen = true
         hold()
         highlight = byKey ? 0 : nil
         drops.open(.pill, face: face(), at: spot)
+    }
+
+    /// A tab picked by its place: today's view, or the pill-first bar's page, saved either way. The live Activity tab is
+    /// not a page: picking it keeps it showing while something runs.
+    func select(_ i: Int) {
+        guard let first else {
+            let shown = layout.layout.shown
+            if shown.indices.contains(i) { try? layout.select(shown[i]) }
+            return
+        }
+        showingLive = i >= first.pages.count && live != nil
+        if first.pages.indices.contains(i) { bar.pillFirst.selected = i } else { follow() }
+    }
+
+    /// The next tab, wrapping: the Next pill view key.
+    func next() {
+        let showing = showing
+        select((showing.index + 1) % max(showing.tabs.count, 1))
     }
 
     private func face() -> BarDropFace {
@@ -197,20 +333,26 @@ final class PillDrop {
             host.frame.size = size
             return BarDrops.panel(host, title: "Pill", appearance: look.appearance(for: .barPopovers))
         }, keys: { [weak self] code, flags, chars in self?.key(code, flags, chars) ?? false },
-           keepsField: false, closed: { [weak self] in self?.release() })
+           keepsField: false, closed: { [weak self] in
+            self?.dropOpen = false
+            self?.showingLive = false
+            self?.release()
+        })
     }
 
-    /// A key in the open drop (Pill.Press): true when taken. A view picked by key is saved as `pill.view`, as a click's
-    /// is, and lights its first row.
+    /// A key in the open drop (Pill.Press): true when taken. A view picked by key is saved as `pill.view` (or the
+    /// pill-first bar's page), as a click's is, and lights its first row.
     private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ chars: String?) -> Bool {
-        let values = dropValues
+        let values = dropValues, showing = showing
         guard let what = Pill.Press.of(code: code, shift: flags.contains(.shift), chord: !flags.isDisjoint(with: [.control, .option, .command]),
-                                        chars: chars, layout: layout.layout, rows: values.rows, highlight: values.highlight)
+                                        chars: chars, tabs: showing.tabs.count, current: showing.index, music: showing.page == .music,
+                                        activity: showing.page == .activity, rows: values.rows, highlight: values.highlight)
         else { return false }
         switch what {
-        case .view(let view):
-            try? layout.select(view)
+        case .page(let i):
+            select(i)
             highlight = 0
+        case .view: break   // the index form answers pages
         case .row(let row): highlight = row
         case .act(let row): press(row, in: values)
         case .stop(let row): act(.stop(row))
@@ -230,13 +372,15 @@ final class PillDrop {
             let item = values.running[row]
             if item.canPause { act(.pause(row)) } else if item.canStop { act(.stop(row)) }
         case .controls: act(.toggle(values.controls[row].title))
+        case .calendar: act(values.calendar?.access == .granted ? .event(row) : .empty(.calendar))
+        case .stats: act(.stats)
         }
     }
 
     /// A press in the drop.
     func act(_ action: PillDropFace.Action) {
         switch action {
-        case .select(let page): try? layout.select(page.view)
+        case .select(let i): select(i)
         case .transport(.previous): NowPlaying.shared.send(.previous)
         case .transport(.playPause): NowPlaying.shared.send(.toggle)
         case .transport(.next): NowPlaying.shared.send(.next)
@@ -252,9 +396,22 @@ final class PillDrop {
             DropdownBlocks.act(.level(kind, level), readings: readings)
         case .extensionPage(let i):
             BarDrops.shared.close(.pill)
-            DropdownBlocks.openPage(layout.layout.extensions, at: i)
+            DropdownBlocks.openPage(showing.extensions, at: i)
         case .pause(let i): DropdownNow.press(i, pause: true)
         case .stop(let i): DropdownNow.press(i, pause: false)
+        case .event(let i):
+            guard let readings = Engine.shared?.barSources.readings else { return }
+            let events = Self.upcoming(readings.calendar.events ?? [], now: readings.now)
+            guard events.indices.contains(i) else { return }
+            BarDrops.shared.close(.pill)
+            readings.calendar.open(events[i].url ?? URL(filePath: "/System/Applications/Calendar.app"))
+        case .stats:
+            BarDrops.shared.close(.pill)
+            AppWindowController.shared.open(AppPlace(.stats))
+        case .empty(.calendar):
+            guard let readings = Engine.shared?.barSources.readings else { return }
+            if readings.calendar.refused { return readings.calendar.open(ClockCalendar.privacy) }
+            Task { await readings.calendar.load(showing: readings.now, now: readings.now, timeZone: .current, ask: true) }
         case .empty(.music): NSWorkspace.shared.open(URL(filePath: "/System/Applications/Music.app"))
         // Choosing views and the pill's extensions is Menu bar › Pill.
         case .choosePages, .empty:
@@ -265,14 +422,23 @@ final class PillDrop {
 }
 
 extension PillValues.Page {
-    init(_ view: Pill.View) { self = Self.allCases.first { $0.view == view }! }
+    init(_ view: Pill.View) {
+        switch view {
+        case .music: self = .music
+        case .extensions: self = .extensions
+        case .activity: self = .activity
+        case .controls: self = .controls
+        }
+    }
 
-    var view: Pill.View {
-        switch self {
-        case .music: .music
-        case .extensions: .extensions
-        case .activity: .activity
-        case .controls: .controls
+    init(_ kind: PillFirst.Kind) {
+        switch kind {
+        case .media: self = .music
+        case .calendar: self = .calendar
+        case .stats: self = .stats
+        case .controls: self = .controls
+        case .activity: self = .activity
+        case .extensions: self = .extensions
         }
     }
 }
@@ -300,11 +466,11 @@ struct TopBarPillItem: View {
 
     var body: some View {
         Button { pill.toggle(at: lights.spot(of: .pill, from: anchor)) } label: {
-            // A recording's time moves on the bar too; Music's compact face has no clock.
-            Ticking(pill.ticks && pill.page == .activity) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill)) }
+            // A recording's time moves on the bar too, on the live face as well; Music's compact face has no clock.
+            Ticking(pill.ticks && (pill.page == .activity || pill.live != nil)) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill)) }
         }
         .buttonStyle(.kitPress)
-        .accessibilityLabel("Pill, \(pill.page.title)")
+        .accessibilityLabel("Pill, \(pill.live?.title ?? pill.values.title)")
         .frame(maxHeight: .infinity)
         .toyIsland(.pill)
         .onAppear { lights.register(anchor, for: .pill); pill.hold() }

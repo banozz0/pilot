@@ -74,6 +74,18 @@ final class BarItemsStore {
         didSet { guard loadError == nil else { _itemColours = oldValue; return }; defaults.set(itemColours, forKey: Self.itemColoursKey) }
     }
     static let itemColoursKey = "bar.itemColours"
+    /// The pill-first bar (PillFirst, Q160 to Q165): whether it draws and the pill's pages. Its own key, apart from the
+    /// saved bar, so turning it off gives the bar back exactly and a Pilot without it never reads it. Writes are
+    /// refused while the saved bar is malformed, as every bar writer is.
+    var pillFirst: PillFirst.Settings {
+        didSet {
+            guard loadError == nil else { _pillFirst = oldValue; return }
+            if let data = try? JSONEncoder().encode(pillFirst) { defaults.set(data, forKey: PillFirst.key) }
+            pillFirstChanged?()
+        }
+    }
+    /// Told after each change to `pillFirst`: the pill follows to the page that now shows.
+    @ObservationIgnored var pillFirstChanged: (() -> Void)?
     /// Whether Pilot's top bar is on, so items placed in both leave the macOS menu bar; Engine points it at the top
     /// bar's switch, which is observed through it.
     @ObservationIgnored var isTopBarOn: @MainActor () -> Bool = { false }
@@ -81,6 +93,7 @@ final class BarItemsStore {
     init(defaults: UserDefaults = .pilot(), statsPrefs: () -> [String: Any] = BarItemsStore.statsPrefs,
          extensionOrder: @escaping @Sendable () -> [String] = { ExtensionBar.withBar(in: Extension.folder).map(\.id) }) {
         self.defaults = defaults
+        pillFirst = defaults.data(forKey: PillFirst.key).flatMap { try? JSONDecoder().decode(PillFirst.Settings.self, from: $0) } ?? .standard
         pagePlacement = defaults.string(forKey: Self.pagePlacementKey).flatMap(BarPlacement.init(rawValue:)) ?? .menuBar
         background = defaults.string(forKey: Self.backgroundKey).flatMap(TopBarBackground.init(rawValue:)) ?? .solid
         colour = defaults.string(forKey: Self.colourKey).flatMap(ColourChoice.init(rawValue:)) ?? .theme

@@ -38,6 +38,26 @@ extension SettingsSchema {
             .bool("bar.clockEvents", "The clock's popover lists Calendar's events", page: "menuBar", standard: false,
                   read: { bar.settings.clockEvents }, write: { value throws(ControlError) in try bar.requireWritable(); bar.settings.clockEvents = value }),
         ])
+        registerPillFirst(bar)
+    }
+
+    /// The pill-first bar (PillFirst, Q160 to Q165): `bar.preset` is the Look and Menu bar picker's preset, pillFirst
+    /// beside the saved ones, as `pilot bar preset` chooses it; leaving pillFirst for the preset under it restores the bar
+    /// exactly. `pill.pages` is its pill's pages in order: media, calendar, stats, controls, activity, and extensions
+    /// pages as Name=id+id+id (up to three; Name= holds none).
+    func registerPillFirst(_ bar: BarItemsStore) {
+        let presets = ["legacy"] + BarPreset.allCases.map(\.rawValue) + [BarItemsStore.pillFirstPreset]
+        register([
+            .choice("bar.preset", "The top bar's preset: the saved layout's, or the pill-first bar drawn over it", page: "menuBar", presets,
+                    standard: "legacy", read: { bar.presetID }, write: { id throws(ControlError) in try bar.choosePreset(id) }),
+            .text("pill.pages", "The pill-first bar's pages, comma-separated: \(PillFirst.Kind.allCases.filter { $0 != .extensions }.map(\.rawValue).joined(separator: ", ")), or Name=id+id+id for up to three extensions",
+                  page: "menuBar", standard: PillFirst.words(PillFirst.Page.standard), read: { PillFirst.words(bar.pillFirst.pages) },
+                  write: { typed throws(ControlError) in
+                      try bar.requireWritable()
+                      let pages = try PillFirst.pages(typed)
+                      bar.pillFirst.pages = pages
+                  }),
+        ])
     }
 
     /// The pill's views (spec desktop-controls T7), as Menu bar › Pill edits them: `pill.views` names the views to lead,

@@ -3,11 +3,23 @@ import PilotCore
 
 /// Native controls, settings handlers and the private host share these writers on the existing item store.
 extension BarItemsStore {
+    /// The pill-first bar's id beside BarPreset's: drawn over the saved bar, never saved in it (PillFirst).
+    static let pillFirstPreset = "pillFirst"
+
+    /// The preset drawing now: pill-first while it is on, else the saved one, `legacy` for none.
+    var presetID: String { pillFirst.on ? Self.pillFirstPreset : settings.preset?.preset.rawValue ?? "legacy" }
+
+    /// Pill-first only switches its own flag. Leaving it for the preset under it keeps that preset's geometry as it was,
+    /// so switching back restores the bar exactly; another preset is chosen as ever.
     func choosePreset(_ id: String) throws(ControlError) {
         try requireWritable()
+        if id == Self.pillFirstPreset { pillFirst.on = true; return }
+        guard id == "legacy" || BarPreset(rawValue: id) != nil else { throw ControlError(.badValue, "unknown bar preset") }
+        let was = pillFirst.on
+        if was { pillFirst.on = false }
+        if was, id == settings.preset?.preset.rawValue ?? "legacy" { return }
         if id == "legacy" { settings.preset = nil; return }
-        guard let preset = BarPreset(rawValue: id) else { throw ControlError(.badValue, "unknown bar preset") }
-        settings.preset = preset.configuration
+        settings.preset = BarPreset(rawValue: id)!.configuration
     }
 
     func applyGeometry(_ json: String) throws(ControlError) {

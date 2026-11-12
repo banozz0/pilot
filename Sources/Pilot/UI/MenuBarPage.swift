@@ -869,13 +869,18 @@ struct BarPresetControls: View {
     @State private var problem = ""
     var body: some View {
         Tile(title: "Bar layout", symbol: "menubar.rectangle") {
-            Picker("Preset", selection: Binding(get: { store.settings.preset?.preset.rawValue ?? "legacy" }, set: { value in
+            Picker("Preset", selection: Binding(get: { store.presetID }, set: { value in
                 do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
             })) {
                 Text("Current layout (before presets)").tag("legacy")
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                Text("Pill first").tag(BarItemsStore.pillFirstPreset)
             }
-            if let config = store.settings.preset {
+            if store.pillFirst.on {
+                // Drawn over the saved bar: its items and geometry wait, untouched, for the switch back.
+                Text("Pilot and the workspaces, the pill, the status lights and the clock; the clock opens Calendar in the pill. Your bar stays saved as it was: pick \(store.settings.preset?.preset.title ?? "Current layout") to get it back.")
+            }
+            if let config = store.settings.preset, !store.pillFirst.on {
                 Button("Reset geometry") {
                     do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
                 }.buttonStyle(.pilot)

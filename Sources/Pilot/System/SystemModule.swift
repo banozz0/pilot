@@ -131,7 +131,7 @@ enum SystemModule {
         add(&registry, "pill", "Open the pill", nil, .system, keywords: "pill music now playing top bar drop") { PillDrop.shared.toggle(byKey: true) }
         // The compact pill's next view, without opening it; no key until Sven binds one.
         add(&registry, "nextPillView", "Next pill view", nil, .system, keywords: "pill view music extensions activity controls cycle") {
-            PillDrop.shared.layout.next()
+            PillDrop.shared.next()
         }
 
         // Omarchy's Super+Ctrl+Alt+T, which flashes the time (story 188): the time, date, battery and weather, read on the press.

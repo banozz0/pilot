@@ -6,8 +6,12 @@ import SwiftUI
 /// T5 fills Music from NowPlaying, T7 the rest from ExtensionBar, the Dropdown's Now block and the Controls blocks. A nil
 /// or empty part draws that view's empty state.
 struct PillValues {
+    /// What a page shows. Calendar and Stats are the pill-first bar's alone (PillFirst); today's pill has the first four.
     enum Page: CaseIterable, Hashable {
-        case music, extensions, activity, controls
+        case music, extensions, activity, controls, calendar, stats
+
+        /// Today's pill's views, in their first order.
+        static let classic: [Page] = [.music, .extensions, .activity, .controls]
 
         var title: String {
             switch self {
@@ -15,6 +19,8 @@ struct PillValues {
             case .extensions: "Extensions"
             case .activity: "Activity"
             case .controls: "Controls"
+            case .calendar: "Calendar"
+            case .stats: "Stats"
             }
         }
 
@@ -24,8 +30,50 @@ struct PillValues {
             case .extensions: "puzzlepiece.extension"
             case .activity: "waveform.path.ecg"
             case .controls: "switch.2"
+            case .calendar: "calendar"
+            case .stats: "gauge.with.dots.needle.33percent"
             }
         }
+    }
+
+    /// One of the drop's tabs: its page and its name (an extensions page's own, on the pill-first bar).
+    struct Tab: Hashable {
+        var page: Page
+        var title: String
+        init(_ page: Page, title: String? = nil) { self.page = page; self.title = title ?? page.title }
+    }
+
+    /// The Calendar page: today, and what is left of it and tomorrow; or why it has none (not allowed yet, refused).
+    struct Calendar: Hashable {
+        enum Access: Hashable { case asking, granted, refused }
+        struct Event: Hashable {
+            var time: String
+            var title: String
+            var colour: Color?
+            /// "Tomorrow" for one past today; nil today.
+            var day: String?
+            /// On now.
+            var now = false
+        }
+        var access: Access
+        var weekday: String
+        var day: String
+        var month: String
+        /// The compact face's date, "Thu 12 Nov".
+        var short: String
+        var events: [Event] = []
+        /// The page's most rows.
+        static let most = 4
+    }
+
+    /// One Stats reading as a tile (FaceReading).
+    struct Stat: Hashable {
+        var symbol: String
+        var title: String
+        var number: String
+        var unit: String
+        var detail: String
+        var share: Double?
     }
 
     struct Music: Hashable {
@@ -56,8 +104,15 @@ struct PillValues {
     }
 
     var page = Page.music
-    /// The views the user keeps, in order (T7's list); the tabs show these.
-    var pages = Page.allCases
+    /// The views the user keeps, in order (T7's list), or the pill-first bar's pages; the drop's tabs.
+    var tabs: [Tab] = Page.classic.map { Tab($0) }
+    /// The tab showing, by place; nil takes the first of `page`'s.
+    var tab: Int?
+    var calendar: Calendar?
+    var stats: [Stat] = []
+    /// A recording or a running timer, which takes the compact face over on the pill-first bar (Q164); nil leaves it the
+    /// page's.
+    var live: DropdownPanelValues.Running?
     var music: Music?
     var extensions: [Extension] = []
     var running: [DropdownPanelValues.Running] = []
@@ -67,6 +122,11 @@ struct PillValues {
     /// The row the keys lit in the open drop, wearing the focus ring; nil draws none.
     var highlight: Int?
 
+    /// The tab showing, by place.
+    var selected: Int { tab ?? tabs.firstIndex { $0.page == page } ?? 0 }
+    /// The page's name: its tab's.
+    var title: String { tabs.indices.contains(selected) ? tabs[selected].title : page.title }
+
     /// How many rows the view showing can light: its items, or an empty state's button.
     var rows: Int {
         switch page {
@@ -74,6 +134,8 @@ struct PillValues {
         case .extensions: extensions.isEmpty ? 1 : extensions.count
         case .activity: running.count
         case .controls: controls.count
+        case .calendar: calendar.map { $0.access == .granted ? min($0.events.count, Calendar.most) : 1 } ?? 0
+        case .stats: stats.count
         }
     }
 }
@@ -103,7 +165,7 @@ struct PillCompactFace: View {
         .background(style.color(open ? \.raised : \.sunken), in: Capsule(style: .circular))
         .overlay { Capsule(style: .circular).strokeBorder(style.color(open ? \.line2 : \.line)) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Pill, \(values.page.title)")
+        .accessibilityLabel("Pill, \(values.live == nil ? values.title : "live")")
         .accessibilityValue(Self.summary(values))
         .accessibilityAddTraits(.isButton)
         .help(Self.summary(values))
@@ -111,6 +173,7 @@ struct PillCompactFace: View {
 
     /// What the compact face says, in words: VoiceOver's value and the tooltip, so a truncated title stays reachable.
     static func summary(_ values: PillValues) -> String {
+        if let live = values.live { return "\(live.title)\(live.reading.map { " \($0)" } ?? "")" }
         switch values.page {
         case .music:
             guard let music = values.music else { return "Nothing playing" }
@@ -127,10 +190,30 @@ struct PillCompactFace: View {
             if let display = values.display { parts.append("Brightness \(Int(display.level * 100)) percent") }
             parts += values.controls.prefix(2).map { "\($0.title) \($0.on ? "on" : "off")" }
             return parts.joined(separator: ", ")
+        case .calendar:
+            guard let calendar = values.calendar else { return "Calendar" }
+            guard let next = calendar.events.first, next.day == nil else { return calendar.short }
+            return next.now ? "Now, \(next.title)" : "\(next.time), \(next.title)"
+        case .stats:
+            return values.stats.prefix(3).map { "\($0.title) \($0.number) \($0.unit)" }.joined(separator: ", ")
         }
     }
 
     @ViewBuilder private var content: some View {
+        if let live = values.live {
+            HStack(spacing: 6) {
+                FaceLiveDot(size: 7).padding(.leading, 4)
+                Text(live.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                if let reading = live.reading {
+                    Text(reading).font(style.font(\.mono, size: 11.5)).monospacedDigit().foregroundStyle(style.color(\.text2))
+                }
+            }
+        } else {
+            page
+        }
+    }
+
+    @ViewBuilder private var page: some View {
         switch values.page {
         case .music:
             if let music = values.music {
@@ -188,6 +271,26 @@ struct PillCompactFace: View {
                 }
             }
             .padding(.leading, 4)
+        case .calendar:
+            if let calendar = values.calendar, let next = calendar.events.first, next.day == nil {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar").font(.system(size: 10.5, weight: .medium)).foregroundStyle(style.color(\.text2))
+                    if next.now { FaceLiveDot(size: 6) } else {
+                        Text(next.time).font(style.font(\.mono, size: 11.5)).monospacedDigit().foregroundStyle(style.color(\.text2))
+                    }
+                    Text(next.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                }
+                .padding(.leading, 4)
+            } else {
+                quiet(.calendar, values.calendar?.short ?? "Calendar")
+            }
+        case .stats:
+            if values.stats.isEmpty { quiet(.stats, "Reading…") } else {
+                HStack(spacing: 11) {
+                    ForEach(values.stats.prefix(3), id: \.self) { stat in reading(stat.symbol, stat.unit == "%" ? "\(stat.number)%" : "\(stat.number) \(stat.unit)") }
+                }
+                .padding(.leading, 4)
+            }
         }
     }
 
@@ -239,10 +342,13 @@ struct PillDropFace: View {
     /// What a press asks for; the builder (T5, T7) runs it. A control is named by its title; running items by index.
     enum Action: Hashable {
         enum Transport: Hashable { case previous, playPause, next }
-        case select(PillValues.Page), choosePages, transport(Transport), toggle(String)
+        /// A tab, by its place.
+        case select(Int), choosePages, transport(Transport), toggle(String)
         case level(DropdownPanelFace.Action.Level, Double), pause(Int), stop(Int), empty(PillValues.Page)
         /// An extension's item by its place: its page (Return on the lit item).
         case extensionPage(Int)
+        /// Calendar's event by its place (Calendar opens at it); Stats' tiles open Pilot's Stats page.
+        case event(Int), stats
     }
 
     @Environment(\.style) private var style
@@ -279,7 +385,7 @@ struct PillDropFace: View {
             .clipped()
             .opacity(reduceMotion ? openness : 1)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Pill, \(values.page.title)")
+            .accessibilityLabel("Pill, \(values.title)")
     }
 
     /// Whether `row` wears the focus ring.
@@ -309,6 +415,8 @@ struct PillDropFace: View {
         case .extensions: values.extensions.isEmpty ? "Choose" : "Open page"
         case .activity: running?.canPause == true ? "Pause" : "Stop"
         case .controls: "Switch"
+        case .calendar: values.calendar?.access == .granted ? "Open" : values.calendar?.access == .refused ? "Settings" : "Allow"
+        case .stats: "Open Stats"
         }
     }
 
@@ -324,12 +432,12 @@ struct PillDropFace: View {
 
     private var tabs: some View {
         HStack(spacing: 4) {
-            ForEach(values.pages, id: \.self) { page in
-                let selected = page == values.page
-                Button { act(.select(page)) } label: {
+            ForEach(Array(values.tabs.enumerated()), id: \.offset) { i, tab in
+                let selected = i == values.selected
+                Button { act(.select(i)) } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: page.symbol).font(.system(size: 11, weight: .medium))
-                        Text(page.title).styleText(selected ? \.strong : \.caption)
+                        Image(systemName: tab.page.symbol).font(.system(size: 11, weight: .medium))
+                        Text(tab.title).styleText(selected ? \.strong : \.caption)
                     }
                     .foregroundStyle(style.color(selected ? \.text : \.text2))
                     .padding(.horizontal, 10).frame(height: 28)
@@ -380,6 +488,78 @@ struct PillDropFace: View {
                 }
             }
         case .controls: controlsPage
+        case .calendar: calendarPage
+        case .stats:
+            if values.stats.isEmpty {
+                FaceEmpty(symbol: "gauge.with.dots.needle.33percent", title: "Reading this Mac", detail: "CPU, memory, disk and heat show here in a moment.").padding(.top, 26)
+            } else { statsPage }
+        }
+    }
+
+    /// Today large on the left, what is left of today and tomorrow on the right; macOS's Calendar prompt first, or the
+    /// way to Privacy & Security when it was refused.
+    @ViewBuilder private var calendarPage: some View {
+        if let calendar = values.calendar, calendar.access == .granted {
+            HStack(alignment: .top, spacing: 20) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(calendar.weekday.uppercased()).styleText(\.eyebrow).foregroundStyle(style.color(\.accent))
+                    Text(calendar.day).font(style.font(\.title, size: 46)).monospacedDigit().foregroundStyle(style.color(\.text))
+                    Text(calendar.month).styleText(\.body).foregroundStyle(style.color(\.text2))
+                }
+                .frame(width: 120, alignment: .leading)
+                VStack(alignment: .leading, spacing: 6) {
+                    if calendar.events.isEmpty {
+                        Text("Nothing else today or tomorrow").styleText(\.body).foregroundStyle(style.color(\.text2)).padding(.top, 8)
+                    }
+                    ForEach(Array(calendar.events.prefix(PillValues.Calendar.most).enumerated()), id: \.offset) { i, event in eventRow(event, i) }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        } else {
+            let refused = values.calendar?.access == .refused
+            FaceEmpty(symbol: "calendar", title: refused ? "No Calendar access" : "Today's events",
+                      detail: refused ? "Allow Pilot in Privacy & Security › Calendars to see them here." : "Pilot reads today's events once you allow Calendar in macOS's prompt.",
+                      button: refused ? "Open Privacy & Security" : "Allow Calendar", lit: lit(0), action: { act(.empty(.calendar)) }).padding(.top, 14)
+        }
+    }
+
+    private func eventRow(_ event: PillValues.Calendar.Event, _ i: Int) -> some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        return Button { act(.event(i)) } label: {
+            HStack(spacing: 10) {
+                Capsule(style: .circular).fill(event.colour ?? style.color(\.accent)).frame(width: 3, height: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(event.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                    Text([event.day, event.time].compactMap { $0 }.joined(separator: " · "))
+                        .font(style.font(\.mono, size: 10.5)).monospacedDigit().foregroundStyle(style.color(\.text2)).lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                if event.now {
+                    HStack(spacing: 4) { FaceLiveDot(size: 6); Text("Now").styleText(\.small) }.foregroundStyle(style.color(\.text))
+                }
+            }
+            .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .background(style.color(event.now ? \.raised : \.sunken), in: shape)
+            .overlay { shape.strokeBorder(style.color(event.now ? \.line2 : \.line)) }
+            .focusBorder(on: lit(i), radius: style.radii.control + 2)
+            .contentShape(shape)
+        }
+        .buttonStyle(FacePress(reduceMotion: reduceMotion))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens it in Calendar")
+    }
+
+    /// The Pilot menu's reading tiles (FaceReading), larger, with a bar for a share; a click opens Pilot's Stats page.
+    private var statsPage: some View {
+        FaceColumns(items: Array(values.stats.indices), columns: min(4, values.stats.count), spacing: 8) { row in
+            let stat = values.stats[row]
+            Button { act(.stats) } label: {
+                FaceReading(symbol: stat.symbol, title: stat.title, number: stat.number, unit: stat.unit, detail: stat.detail,
+                            share: stat.share, reservesBar: true, size: 24, lit: lit(row))
+            }
+            .buttonStyle(FacePress(reduceMotion: reduceMotion))
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens Stats")
         }
     }
 

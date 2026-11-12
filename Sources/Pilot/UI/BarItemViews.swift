@@ -221,6 +221,10 @@ struct TopBarSlotView: View {
             return BarPanel.shared.toggle(extension: id, under: anchor.view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }
         if click == .menu { return showMenu(sources.clickMenu(one ?? slot.kind, store: store)) }
+        // On the pill-first bar the clock is a reading of the Calendar page: its click opens the pill there.
+        if inBar, one == .clock, click == .popover, store.pillFirst.on, let page = store.pillFirst.pages.firstIndex(where: { $0.kind == .calendar }) {
+            return PillDrop.shared.toggle(page: page)
+        }
         guard click == .popover else { return sources.perform(click) }
         BarPanel.shared.toggle(kinds, under: anchor.view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
     }

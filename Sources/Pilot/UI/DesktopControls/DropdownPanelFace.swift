@@ -558,23 +558,7 @@ struct DropdownPanelFace: View {
     }
 
     private func reading(_ symbol: String, _ title: String, _ number: String, _ unit: String, _ detail: String) -> some View {
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .medium))
-                Text(title).styleText(\.small)
-            }
-            .foregroundStyle(style.color(\.text2))
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(number).font(style.font(\.mono, size: 20)).monospacedDigit().foregroundStyle(style.color(\.text))
-                Text(unit).styleText(\.small).foregroundStyle(style.color(\.text2))
-            }
-            Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(style.color(\.panel), in: shape)
-        .overlay { shape.strokeBorder(style.color(\.line)) }
+        FaceReading(symbol: symbol, title: title, number: number, unit: unit, detail: detail)
     }
 
     /// The commands with their keys under one head. With some pinned, those lead and the rest wait behind All commands;

@@ -61,6 +61,12 @@ enum DropdownNow {
         return items
     }
 
+    /// The first recording or running timer, as its row: what takes the pill-first bar's compact face over (Q164).
+    /// Downloads never do.
+    static var live: DropdownPanelValues.Running? {
+        zip(items, rows).first { item, _ in if case .download = item { false } else { true } }?.1
+    }
+
     /// The running rows as the Pilot menu's Now block and the pill's Activity view draw them.
     static var rows: [DropdownPanelValues.Running] {
         items.map { item in

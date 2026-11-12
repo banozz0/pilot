@@ -217,3 +217,51 @@ struct FaceColumns<Item: Hashable, Cell: View>: View {
         }
     }
 }
+
+/// One reading as a tile: its symbol and name, the number in mono digits with its unit, a line under it and, given a
+/// share, a bar of it. The Pilot menu's Stats card and the pill's Stats page.
+struct FaceReading: View {
+    @Environment(\.style) private var style
+    let symbol: String
+    let title: String
+    let number: String
+    let unit: String
+    let detail: String
+    var share: Double? = nil
+    /// Keeps the bar's room with no share, so a row of tiles lines up (the pill's Stats page).
+    var reservesBar = false
+    var size: CGFloat = 20
+    var lit = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 10, weight: .medium))
+                Text(title).styleText(\.small)
+            }
+            .foregroundStyle(style.color(\.text2))
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(number).font(style.font(\.mono, size: size)).monospacedDigit().foregroundStyle(style.color(\.text))
+                Text(unit).styleText(\.small).foregroundStyle(style.color(\.text2))
+            }
+            if let share {
+                GeometryReader { space in
+                    ZStack(alignment: .leading) {
+                        Capsule(style: .circular).fill(style.color(\.sunken))
+                        Capsule(style: .circular).fill(style.color(\.text2)).frame(width: space.size.width * min(max(share, 0), 1))
+                    }
+                }
+                .frame(height: 3).padding(.vertical, 2)
+            } else if reservesBar {
+                Color.clear.frame(height: 3).padding(.vertical, 2)
+            }
+            Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(style.color(\.panel), in: shape)
+        .overlay { shape.strokeBorder(style.color(\.line)) }
+        .focusBorder(on: lit, radius: style.radii.control + 2)
+    }
+}

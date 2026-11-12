@@ -58,9 +58,9 @@ final class ClockCalendar {
     }
 
     /// Show events is on and the popover shows `shown`'s month: asks for access if never asked, then reads the month's
-    /// and the listed days' events.
-    func load(showing shown: Date, now: Date, timeZone: TimeZone) async {
-        let store = await granted()
+    /// and the listed days' events. Without `ask` (the pill-first bar's compact face) access never asked reads nothing.
+    func load(showing shown: Date, now: Date, timeZone: TimeZone, ask: Bool = true) async {
+        let store = await granted(ask: ask)
         let read = ClockMonth.reading(showing: shown, now: now, timeZone: timeZone)
         self.read = read
         guard let store else { events = nil; return }
@@ -107,11 +107,12 @@ final class ClockCalendar {
         return "Added “\(event.title)” to \(calendar), \(event.when())"
     }
 
-    /// The store once access is given, asked for if never asked; nil when refused.
-    private func granted() async -> CalendarStore? {
+    /// The store once access is given, asked for if never asked and `ask`; nil when refused or not asked.
+    private func granted(ask: Bool = true) async -> CalendarStore? {
         let store = store ?? make()
         self.store = store
         var access = store.access
+        if access == .undetermined, !ask { return nil }
         if access == .undetermined { access = await store.requestAccess() ? .granted : .denied }
         refused = access == .denied
         guard access == .granted else { return nil }
