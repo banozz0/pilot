@@ -250,10 +250,11 @@ def checks(passed):
             before = tree(); f.start()
             plan = f.call('theme', 'plan', 'apply', 'fx-jade')
             assert [c for c in plan['review']['changes'] if c.startswith('btop')], plan['review']
-            assert [n for n in plan['review']['next'] if 'Ctrl+R' in n], plan['review']['next']
+            assert not [n for n in plan['review']['next'] if 'btop' in n], plan['review']['next']  # Pilot reloads it itself
             assert tree() == before, 'Preview wrote'
             for name in ['jade', 'porcelain']:
-                assert f.apply('fx-' + name)['status'] == 'applied'
+                answer = f.apply('fx-' + name)
+                assert answer['status'] == 'applied' and answer['btop'] == 'reloaded 1 running', answer
                 palette = json.loads((life.REPO / 'Packaging/ThemePacks' / name / 'manifest.json').read_text())['palette']
                 got = theme(generated)
                 assert list(got) == keys, sorted(set(keys) ^ set(got))
@@ -262,7 +263,10 @@ def checks(passed):
                 assert re.findall(r'^color_theme = "(.*)"$', text, re.M)[-1] == 'pilot' and re.findall(r'^theme_background = (\w+)$', text, re.M)[-1] == 'false', text
                 print(f'  btop {label} {name}: main_bg {got["main_bg"]} main_fg {got["main_fg"]} hi_fg {got["hi_fg"]} boxes {got["cpu_box"]} selected_bg {got["selected_bg"]}', flush=True)
             print(f'  btop {label} btop.conf after: ' + repr(target.read_bytes()[-120:]), flush=True)
-            assert f.restore()['status'] == 'restored' and tree() == before, (target.read_bytes() if target.exists() else None)
+            f.controls(btop='0'); answer = f.restore()
+            assert answer['status'] == 'restored' and answer['btop'].startswith('not running') and tree() == before, (answer, target.read_bytes() if target.exists() else None)
+            assert (f.root / 'state/btop-reloads.log').read_text() == 'btop SIGUSR2 ×1\n' * 2, 'Apply did not signal btop once each'
+            f.controls()
             assert (target.read_bytes() == conf) if conf else not target.exists()
             f.stop()
         # Sven's shape, then btop's first quit: the btop.conf Pilot made has no version header, so btop rewrites it whole.

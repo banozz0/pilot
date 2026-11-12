@@ -32,7 +32,8 @@ final class ThemeCoordinator {
         let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
-                                                appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() }), reload: { intent in
+                                                appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() },
+                                                btop: { isTestRun ? 0 : ThemeCoordinator.reloadBtop() }), reload: { intent in
                 try await Task.detached {
                     try intent.launch { command in
                         let process = Process(); process.executableURL = URL(fileURLWithPath: command.executable); process.arguments = command.arguments
@@ -95,6 +96,8 @@ final class ThemeCoordinator {
         let appearance: (ThemePack?) -> Void
         /// Ghostty › Reload Configuration once its files changed: true pressed, false no such item, nil not running.
         var ghostty: () async -> Bool? = { nil }
+        /// SIGUSR2 to the person's running btop once its files changed: how many took it.
+        var btop: () async -> Int = { 0 }
     }
     /// A real adapter and a recording adapter use this same seam. No singleton/default desktop dependency.
     struct WallpaperEffects {
@@ -318,6 +321,24 @@ final class ThemeCoordinator {
             }
         } catch let error as ControlError { throw error }
         catch { throw ControlError(.badValue, String(describing: error)) }
+    }
+    /// SIGUSR2 to each process named btop this user owns: btop re-reads btop.conf and its theme on it (its source, v1.4.8;
+    /// Omarchy's omarchy-restart-btop does the same), so an open one follows without Ctrl+R. Another user's btop, a root one
+    /// included, is never listed. Returns how many took the signal.
+    nonisolated static func reloadBtop() -> Int {
+        let uid = getuid(), width = MemoryLayout<pid_t>.size
+        let size = proc_listpids(UInt32(PROC_UID_ONLY), uid, nil, 0)
+        guard size > 0 else { return 0 }
+        var pids = [pid_t](repeating: 0, count: Int(size) / width + 16)
+        let bytes = proc_listpids(UInt32(PROC_UID_ONLY), uid, &pids, Int32(pids.count * width))
+        guard bytes > 0 else { return 0 }
+        var signalled = 0
+        for pid in pids.prefix(Int(bytes) / width) where pid > 0 {
+            var name = [CChar](repeating: 0, count: 256)
+            guard proc_name(pid, &name, UInt32(name.count)) > 0, String(cString: name) == "btop" else { continue }
+            if kill(pid, SIGUSR2) == 0 { signalled += 1 }
+        }
+        return signalled
     }
     struct DetectedApps: Equatable {
         var zed: ThemeBinding?
@@ -1692,6 +1713,10 @@ final class ThemeCoordinator {
                 result["next"] = .array([.string("Reload Ghostty's configuration (Cmd+Shift+,) to see it: Pilot couldn't find its menu item.")] + (result["next"].flatMap { if case .array(let rows) = $0 { rows } else { nil } } ?? []))
             }
         }
+        if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
+            let count = await effects.btop()
+            result["btop"] = .string(count > 0 ? "reloaded \(count) running" : "not running; it reads the theme when it starts")
+        }
         guard result["status"] == .string("applied") else { return .object(result) }
         var outcomes: [JSONValue] = []
         for intent in plan.reloads {
@@ -2267,6 +2292,13 @@ struct ThemeFixture: Decodable {
                     _ = try? ThemeFiles.write((file.bytes ?? Data()) + Data("Ghostty › Reload Configuration\n".utf8), over: file)
                 }
                 return true
+            }, btop: {
+                // Recorded only: a fixture never signals a real process. The control file says how many are running.
+                let running = (try? controls())?["btop"].flatMap { Int($0) } ?? 1
+                if running > 0, let file = try? ThemeFiles.read(root: config.state, path: "btop-reloads.log") {
+                    _ = try? ThemeFiles.write((file.bytes ?? Data()) + Data("btop SIGUSR2 ×\(running)\n".utf8), over: file)
+                }
+                return running
             }), reload: { intent in
                 // Pause after the asynchronous handoff, before the same final validation as production.
                 try await Task.detached {
