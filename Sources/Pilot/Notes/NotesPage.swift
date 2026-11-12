@@ -134,13 +134,13 @@ struct NotesReopenLine: View {
         let minutes = Binding(get: { engine.settings.notesReopenMinutes }, set: { engine.settings.notesReopenMinutes = $0 })
         HStack(spacing: 6) {
             Image(systemName: "clock.arrow.circlepath").font(.system(size: 11)).accessibilityHidden(true)
-            Text("Reopen the last note for").styleText(\.caption).lineLimit(1)
+            Text("Reopen last note").styleText(\.caption).lineLimit(1).fixedSize()
             InfoMark(text: Self.info)
             Spacer(minLength: 6)
-            Picker("Reopen the last note for", selection: minutes) {
+            Picker("Reopen last note", selection: minutes) {
                 ForEach(Set(Self.offered + [minutes.wrappedValue]).sorted(), id: \.self) { Text(Self.title($0)).tag($0) }
             }
-            .labelsHidden().pickerStyle(.menu).controlSize(.small).fixedSize()
+            .labelsHidden().pickerStyle(.menu).controlSize(.small).frame(maxWidth: 120)
         }
         .foregroundStyle(style.color(\.text2))
         .frame(height: 20)
