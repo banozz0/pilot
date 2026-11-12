@@ -140,6 +140,36 @@ struct RestyledRenders {
         Look.shared.themeID = PilotTheme.defaultID
     }
 
+    /// Open with with All kinds folded out (Sven 2026-11-12, "open with isnt well aligned"): the page alone beside the
+    /// window's sidebar at the first window width (1000) and a wide one (1440), in Instrument and Toybox, on fake defaults
+    /// that pick QuickTime Player for video, the longest app name the cards show. Output: `open-with/<style>-<width>.png`.
+    @Test("Open with renders with All kinds open in Instrument and Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderOpenWith() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's files")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("open-with")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let engine = Engine()
+        let suite = "pilot.renders.open-with"
+        UserDefaults().removePersistentDomain(forName: suite)
+        let editor = EditorChoice(defaults: UserDefaults(suiteName: suite)!, installed: { _ in true }, handler: { _ in "com.microsoft.VSCode" })
+        let look = Look.shared
+        let saved = (look.themeID, look.style)
+        defer { (look.themeID, look.style) = saved }
+        look.themeID = "nightwatch"
+        for style in [PilotStyle.instrument, .toybox] {
+            look.style = style
+            for width in [1000, 1440] {
+                let page = OpenWithPage(allKinds: true, kinds: DefaultAppsModel(system: RenderDefaultApps(), forget: { _ in }), editor: editor)
+                    .environment(engine).frame(width: CGFloat(width - 207), height: 2400).pilotTheme(look: look).background(Theme.background)
+                try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("\(style.rawValue)-\(width).png"))
+            }
+        }
+    }
+
     /// `rep` cut 16 pt under the last row whose pixels right of `x` (in points) differ from the bottom row's: the page's end.
     /// A page that reaches the bottom was cut by the render's height, which fails.
     static func writeTrimmed(_ rep: NSBitmapImageRep, from x: Int, to url: URL) throws {

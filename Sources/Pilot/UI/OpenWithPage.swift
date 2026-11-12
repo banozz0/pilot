@@ -12,6 +12,8 @@ struct OpenWithPage: View {
     @State private var kinds: DefaultAppsModel
     /// All kinds, folded until asked for.
     @State private var allKinds: Bool
+    /// The widest kind name under All kinds, which every name there takes (NameWidth); nil until measured.
+    @State private var nameWidth: CGFloat?
     private let editor: EditorChoice
 
     /// A render or a test may fold All kinds out and pass its own defaults and editor.
@@ -23,14 +25,13 @@ struct OpenWithPage: View {
 
     static let intro = "The app each kind of file and link opens in."
     static let introInfo = "Pilot changes nothing until you pick."
-    /// Browser, text and Markdown: the kinds with a card of their own after the editor, with each card's tile and ⓘ, and
-    /// the file or link of that kind Opens in shows.
-    private static let mainCards: [(kind: FileKind, symbol: String, colour: TileColour, info: String, sample: String)] = [
-        ("web", "globe", TileColour.third, "Every link you click outside a browser opens in this one.", "banozz.dev"),
-        ("public.plain-text", "doc.text", .neutral, "A .txt file you double-click in Finder opens in this app.", "notes.txt"),
-        ("net.daringfireball.markdown", "number", .second, "A .md file you double-click in Finder opens in this app.", "README.md"),
-    ].compactMap { id, symbol, colour, info, sample in
-        FileKinds.groups.flatMap(\.kinds).first { $0.id == id }.map { ($0, symbol, colour, info, sample) }
+    /// Browser, text and Markdown: the kinds with a card of their own after the editor, with each card's tile and ⓘ.
+    private static let mainCards: [(kind: FileKind, symbol: String, colour: TileColour, info: String)] = [
+        ("web", "globe", TileColour.third, "Every link you click outside a browser opens in this one."),
+        ("public.plain-text", "doc.text", .neutral, "A .txt file you double-click in Finder opens in this app."),
+        ("net.daringfireball.markdown", "number", .second, "A .md file you double-click in Finder opens in this app."),
+    ].compactMap { id, symbol, colour, info in
+        FileKinds.groups.flatMap(\.kinds).first { $0.id == id }.map { ($0, symbol, colour, info) }
     }
     /// Every other kind, by group.
     private static let otherGroups = FileKinds.groups.map { group in
@@ -58,7 +59,6 @@ struct OpenWithPage: View {
                 FinePrint(text: "Web links: macOS asks you once to confirm a new browser.").padding(.top, 8)
                 if allKinds { others.padding(.top, 10) }
             }
-            opensIn
             // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
             AppRolesBlock().id(AppSection.appsForKeys)
         }
@@ -87,63 +87,31 @@ struct OpenWithPage: View {
         }
     }
 
-    /// The preview (simplify-pages T26, the prototype's Opens in): a file or link of each card's kind and the app it opens
-    /// in now, read from the cards' own picks, so a pick changes it at once; source code last, in the editor.
-    private var opensIn: some View {
-        let cards: [(name: String, bundle: String?, app: String)] = Self.mainCards.map { card in
-            let row = kinds.rows[card.kind.id]
-            return (card.sample, row?.current, row?.currentName ?? "None")
-        }
-        let samples = cards + [("main.swift", editor.app, AppsModule.appName(editor.app) ?? editor.app)]
-        // Two to a row while they fit, so the block stays short enough for the window's first size (660 tall).
-        return KitBlock(title: "Opens in", symbol: "arrow.up.forward.app") {
-            CardGrid(minimum: 240, spacing: 28, most: 2, fit: true) {
-                ForEach(samples, id: \.name) { opens($0.name, in: $0.bundle, app: $0.app) }
-            }
-            .padding(.vertical, 8)
-        }
-        .animation(Kit.change, value: samples.map(\.bundle))
-    }
-
-    /// A sample, then the app it opens in.
-    private func opens(_ name: String, in bundle: String?, app: String) -> some View {
-        HStack(spacing: 8) {
-            Text(name).font(ink.mono(11.5)).foregroundStyle(ink.text2).lineLimit(1)
-            Spacer(minLength: 8)
-            Image(systemName: "arrow.right").font(ink.ui(10)).foregroundStyle(ink.muted).accessibilityHidden(true)
-            AppLabel(name: app, bundle: bundle, size: 16).font(ink.ui(12.5)).foregroundStyle(ink.text).lineLimit(1).layoutPriority(1)
-        }
-        .frame(minHeight: 30)
-    }
-
     /// Every other kind, a block per group packed as many across as fit (Sven 2026-10-30: one long column left the
-    /// window's right half empty): each kind's name, then its picker filling the rest of its row, the pickers lined up within a block.
+    /// window's right half empty): each kind's name, then its picker filling the rest of its row. Every block's names take
+    /// the widest name's width, so the pickers start at one x in every block of a row, and the blocks are wide enough for
+    /// a picker to show "QuickTime Player" whole, and as tall as the tallest in their row (Sven 2026-11-12, "open with
+    /// isnt well aligned").
     private var others: some View {
-        CardGrid(minimum: 300) {
+        CardGrid(minimum: 340, stretch: true, balance: true) {
             ForEach(Self.otherGroups, id: \.name) { group in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(group.name).font(ink.ui(11.5, .semibold)).foregroundStyle(ink.muted)
                         .accessibilityAddTraits(.isHeader)
                         .padding(.bottom, 2)
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                        ForEach(group.kinds, id: \.id) { kind in
-                            GridRow {
-                                KindName(kind: kind, model: kinds)
-                                KindPicker(kind: kind, model: kinds, compact: true)
-                            }
-                        }
-                    }
+                    ForEach(group.kinds, id: \.id) { KindRow(kind: $0, model: kinds, nameWidth: nameWidth) }
                 }
                 .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 12)
+                .frame(maxHeight: .infinity, alignment: .top)
                 .blockSurface()
             }
         }
+        .onPreferenceChange(NameWidth.self) { width in MainActor.assumeIsolated { nameWidth = width } }
     }
 }
 
 @MainActor extension DefaultAppsModel.Row {
-    /// The app it opens in now, by the name its choices give, else the app's own; nil for none. Its picker and Opens in
-    /// both show it.
+    /// The app it opens in now, by the name its choices give, else the app's own; nil for none. Its picker shows it.
     var currentName: String? { current.map { bundle in choices.first { $0.bundle == bundle }?.name ?? AppsModule.appName(bundle) ?? bundle } }
 }
 
@@ -262,19 +230,34 @@ private struct KindPicker: View {
     }
 }
 
-/// One kind under All kinds: its name, and what macOS will ask or why the last change did not take.
-private struct KindName: View {
+/// One kind under All kinds: its name at `nameWidth`, its picker filling the rest, and under both what macOS will ask
+/// or why the last change did not take, across the block's width so it never squeezes the picker.
+private struct KindRow: View {
     @Environment(\.ink) private var ink
     let kind: FileKind
     let model: DefaultAppsModel
+    let nameWidth: CGFloat?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(kind.name).lineLimit(1).fixedSize()
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                Text(kind.name).lineLimit(1).fixedSize()
+                    .background { GeometryReader { Color.clear.preference(key: NameWidth.self, value: $0.size.width) } }
+                    .frame(width: nameWidth, alignment: .leading)
+                KindPicker(kind: kind, model: model, compact: true)
+            }
             if let note = model.rows[kind.id]?.message ?? kind.confirmNote {
                 Text(note).font(ink.ui(11)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// The widest of the kind names that report it.
+private struct NameWidth: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        if let next = nextValue() { value = max(value ?? 0, next) }
     }
 }
 
