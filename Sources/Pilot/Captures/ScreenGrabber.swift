@@ -90,14 +90,61 @@ struct SCScreenGrabber: ScreenGrabbing {
     func windows() async throws -> [CaptureSelection.Window] {
         // The window server's front-to-back order; ScreenCaptureKit's list has none. Frames and ids need no permission.
         // Pilot's own windows (its app window, the editor, a pin) can be picked like any other (Sven, build 52).
+        // A see-through window clicks pass through is not one Sven means, and it captures as nothing: Pilot's own window
+        // border sits just outside the focused window, an agent's cursor overlay covers a whole display (build 2354's
+        // blank window capture). Pilot's are known by their flag; another app's are measured below.
+        let clickThrough = await MainActor.run { Set(NSApp.windows.filter(\.ignoresMouseEvents).map { UInt32($0.windowNumber) }) }
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        return info.compactMap { w in
+        let windows: [CaptureSelection.Window] = info.compactMap { w in
             guard (w[kCGWindowLayer as String] as? Int) == 0,
-                  let id = w[kCGWindowNumber as String] as? UInt32,
+                  let id = w[kCGWindowNumber as String] as? UInt32, !clickThrough.contains(id),
                   let bounds = w[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bounds), (w[kCGWindowAlpha as String] as? Double ?? 1) > 0 else { return nil }
             return CaptureSelection.Window(id: id, frame: frame, owner: w[kCGWindowOwnerPID as String] as? Int32 ?? 0)
         }
+        let seeThrough = await Self.seeThrough(windows)
+        return seeThrough.isEmpty ? windows : windows.filter { !seeThrough.contains($0.id) }
+    }
+
+    /// The windows of background apps (not in the Dock, not Pilot) that are almost all transparent: overlays such as a
+    /// cursor layer or a border. Each is grabbed once, small, at the press; an ordinary app's windows are never grabbed.
+    private static func seeThrough(_ windows: [CaptureSelection.Window]) async -> Set<UInt32> {
+        let me = getpid()
+        let suspects = Set(windows.filter { w in
+            w.owner > 0 && w.owner != me && NSRunningApplication(processIdentifier: w.owner)?.activationPolicy != .regular
+        }.map(\.id))
+        guard !suspects.isEmpty, let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else { return [] }
+        let found = Unchecked(content.windows.filter { suspects.contains($0.windowID) })
+        return await withTaskGroup(of: UInt32?.self) { group in
+            for index in found.value.indices {
+                group.addTask {
+                    let window = found.value[index]
+                    let config = SCStreamConfiguration()
+                    // About 128 pixels across: enough to tell a filled window from a line round its edge.
+                    let scale = min(1, 128 / max(window.frame.width, 1))
+                    config.width = max(Int(window.frame.width * scale), 1)
+                    config.height = max(Int(window.frame.height * scale), 1)
+                    config.showsCursor = false
+                    config.backgroundColor = .clear
+                    config.pixelFormat = kCVPixelFormatType_32BGRA
+                    let image = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                                                                           configuration: config)
+                    return image.map(coverage).map { $0 < 0.05 } == true ? window.windowID : nil
+                }
+            }
+            return await group.reduce(into: []) { if let id = $1 { $0.insert(id) } }
+        }
+    }
+
+    /// How much of `image` is covered, 0 to 1: its alpha summed over every pixel.
+    static func coverage(_ image: CGImage) -> Double {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0 else { return 0 }
+        var alpha = [UInt8](repeating: 0, count: w * h)
+        guard let ctx = CGContext(data: &alpha, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                  bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue) else { return 1 }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return Double(alpha.reduce(0) { $0 + Int($1) }) / Double(w * h * 255)
     }
 
     func window(_ id: UInt32, scale: CGFloat) async throws -> CGImage {

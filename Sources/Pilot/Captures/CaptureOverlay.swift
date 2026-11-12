@@ -3,8 +3,9 @@ import PilotCore
 import SwiftUI
 
 /// The capture overlay (spec `capture.html` CP3): one panel per display over the stills grabbed at the press, so the
-/// screen holds still while Sven picks. A crosshair and a loupe (8x, the point and the pixel's hex) follow the pointer;
-/// a drag takes an area on release, a click or Space then a click takes a window, Tab copies the pixel's colour, Return
+/// screen holds still while Sven picks. Picking an area, a crosshair and a loupe (8x, the point and the pixel's hex) follow
+/// the pointer; picking a window, the plain arrow does and the window under it is ringed. A drag takes an area on release,
+/// a click or Space then a click takes a window, Tab copies the pixel's colour, Return
 /// takes the whole display, and Escape closes. It also closes the moment another app takes the keys (Cmd+Tab) or a
 /// display comes, goes or changes, so it can never hold them or cover the wrong screen. Nothing is posted to another app: arrows move the pointer over the overlay itself.
 @MainActor
@@ -85,7 +86,7 @@ final class CaptureOverlay {
         guard visible else { return }
         first.makeKey()
         first.makeFirstResponder(first.contentView)
-        NSCursor.crosshair.set()
+        (first.contentView as? CaptureOverlayView)?.cursor.set()
         // Capture a UI element rings the one under the pointer before it moves.
         if smart { (first.contentView as? CaptureOverlayView)?.lookUpElement() }
         let center = NotificationCenter.default
@@ -212,14 +213,23 @@ final class CaptureOverlayView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
+
+    /// A window is picked with the plain arrow, an area or a colour with the crosshair (Sven, 2026-11-12).
+    var cursor: NSCursor { selection.mode == .window && purpose != .colour ? .arrow : .crosshair }
+
+    /// The loupe and the crosshair are for picking a point: an area or a colour, never a window.
+    private var pointing: Bool { selection.mode == .area || purpose == .colour }
 
     private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
     /// The pointer came onto this display; the overlay gives its panel the keys.
     var entered: ((CaptureOverlayView) -> Void)?
 
-    override func mouseEntered(with event: NSEvent) { entered?(self) }
+    override func mouseEntered(with event: NSEvent) {
+        entered?(self)
+        cursor.set()
+    }
 
     /// Capture markup under way on this display (P72): the pointer and the keys draw marks in its area.
     var markup: CaptureMarkup? {
@@ -287,8 +297,14 @@ final class CaptureOverlayView: NSView {
         }
         guard let key else { return }
         if key == .smart { elements = [] }
+        let mode = selection.mode
         finish { $0.key(key, shift: event.modifierFlags.contains(.shift)) }
         if key == .smart { lookUpElement() }
+        // Space or A switched between area and window: the pointer changes with it.
+        if selection.mode != mode {
+            window?.invalidateCursorRects(for: self)
+            cursor.set()
+        }
     }
 
     /// Applies a release or a key and reports its outcome, a dragged area snapped first when smart is on.
@@ -417,8 +433,10 @@ final class CaptureOverlayView: NSView {
             ring.stroke()
             if selection.mode == .area, let area = selection.area { label("\(Int(area.width * grab.scale)) × \(Int(area.height * grab.scale))", below: area) }
         }
-        if !selection.isDragging { crosshair() }
-        loupe()
+        if pointing {
+            if !selection.isDragging { crosshair() }
+            loupe()
+        }
         hint(hintText)
     }
 
@@ -511,7 +529,7 @@ final class CaptureOverlayView: NSView {
         case (.colour, _): "Pick a colour: click copies its hex, Shift-click its rgb   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Esc"
         case (_, .area) where selection.smart: "Smart: drag loosely, it snaps to the content   Click a UI element   Scroll  bigger or smaller   A  off   Esc"
         case (.capture, .area): "Drag an area   A  smart   Click or Space  window   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Return  whole screen   Esc"
-        case (.capture, .window): "Click a window   Space  area   Tab  hex   Shift-Tab  rgb   Esc"
+        case (.capture, .window): "Click a window   Space  area   Esc"
         case (.record, .area): "Record: drag an area   Click a window for its app   Return  this screen   Esc"
         case (.record, .window): "Record: click a window for its app   Space  area   Esc"
         case (.scroll, .area): "Scrolling capture: drag the part that scrolls   Click a window for all of it   Esc"
