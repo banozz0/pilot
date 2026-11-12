@@ -153,11 +153,11 @@ extension BarSettings {
     public mutating func apply(_ edit: BarEdit, on item: BarTrayItem) {
         switch (item, edit) {
         case (.kind(let kind), _): apply(edit, on: kind)
-        case (.extension, .style), (.divider, .style): break
-        case (.extension, .move(let side)), (.divider, .move(let side)): move(item, to: side)
+        case (.extension, .style), (.divider, .style), (.group, .style): break
+        case (.extension, .move(let side)), (.divider, .move(let side)), (.group, .move(let side)): move(item, to: side)
         case (.extension(let id), .remove): if isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
         // One more divider: Remove from bar takes it off, as the page's tray does.
-        case (.divider, .remove): takeOff(item, placement: .topBar)
+        case (.divider, .remove), (.group, .remove): takeOff(item, placement: .topBar)
         }
     }
 

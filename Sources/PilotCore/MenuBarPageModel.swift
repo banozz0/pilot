@@ -142,12 +142,15 @@ public enum BarTrayItem: Hashable, Sendable {
     case `extension`(String)
     /// One more divider past the first, by its number (BarEntry.dividerID): the top bar's alone.
     case divider(Int)
+    /// One more group past the first, by its number (BarEntry.groupID, Q182): the top bar's alone.
+    case group(Int)
 
     public var rawValue: String {
         switch self {
         case .kind(let kind): "kind:" + kind.rawValue
         case .extension(let id): "extension:" + id
         case .divider(let id): "divider:\(id)"
+        case .group(let id): "group:\(id)"
         }
     }
 
@@ -155,6 +158,7 @@ public enum BarTrayItem: Hashable, Sendable {
         if rawValue.hasPrefix("kind:"), let kind = BarKind(rawValue: String(rawValue.dropFirst(5))) { self = .kind(kind) }
         else if rawValue.hasPrefix("extension:"), rawValue.count > 10 { self = .extension(String(rawValue.dropFirst(10))) }
         else if rawValue.hasPrefix("divider:"), let id = Int(rawValue.dropFirst(8)), id > 0 { self = .divider(id) }
+        else if rawValue.hasPrefix("group:"), let id = Int(rawValue.dropFirst(6)), id > 1 { self = .group(id) }
         else { return nil }
     }
 
@@ -162,14 +166,20 @@ public enum BarTrayItem: Hashable, Sendable {
     public var kind: BarKind? { if case .kind(let kind) = self { kind } else { nil } }
 
     /// The built-in item it draws as: one more divider is a divider; nil for an extension's.
-    public var drawnKind: BarKind? { if case .divider = self { .divider } else { kind } }
+    public var drawnKind: BarKind? {
+        switch self {
+        case .divider: .divider
+        case .group: .group
+        default: kind
+        }
+    }
 
     /// Whether it lives in the top bar alone, so the macOS menu bar's strip takes no drop of it.
     public var topBarOnly: Bool {
         switch self {
         case .kind(let kind): kind.topBarOnly
         case .extension: false
-        case .divider: true
+        case .divider, .group: true
         }
     }
 }
@@ -179,8 +189,8 @@ public enum BarTrayItem: Hashable, Sendable {
 public enum BarStripDrop: Equatable, Sendable {
     case top(TopBarSide, index: Int)
     case menu(index: Int)
-    /// Onto the Group's outline: the item joins the Group (Sven on build 2372).
-    case group
+    /// Onto a group's outline: the item joins that group, 1 the Group (Sven on build 2372, Q182).
+    case group(Int)
 }
 
 /// The Menu bar page's strip and tray (Sven, Q185, 2026-10-16): the strip is the bar the page shows (Menu bar, Top bar,
@@ -209,6 +219,8 @@ extension BarSettings {
         case .kind(let kind): onStrip(kind, placement: placement)
         case .extension(let id): onStrip(extension: id, placement: placement)
         case .divider: placement != .menuBar && index(of: item) != nil
+        // One more group: drawn while it holds an item in the top bar.
+        case .group: placement != .menuBar && stripSlots(placement).contains { $0.item == item }
         }
     }
 
@@ -244,11 +256,12 @@ extension BarSettings {
         guard case .kind(let kind) = item else {
             if case .extension(let id) = item { return self.drop(extension: id, on: drop, placement: placement) }
             if case .divider(let id) = item { return self.drop(divider: id, on: drop, placement: placement) }
+            if case .group(let id) = item { return self.drop(group: id, on: drop, placement: placement) }
             return false
         }
         guard !kind.pinned else { return false }
         switch (drop, placement) {
-        case (.group, _): return group(kind)
+        case (.group(let number), _): return group(.kind(kind), into: number)
         case (.top(let side, let index), .topBar):
             set(kind, in: .topBar, on: true)
             fillGroup(kind, in: .topBar)
@@ -283,7 +296,7 @@ extension BarSettings {
         case (.menu, .menuBar): if !isOn(extension: id, in: .menuBar) { toggle(extension: id, in: .menuBar) }
         case (.menu, .both): set(extension: id, on: true, placement: .menuBar)
         // Onto the Group's outline: it joins the Group (Q182), in the top bar where the Group gathers it.
-        case (.group, _): return group(.extension(id))
+        case (.group(let number), _): return group(.extension(id), into: number)
         case (.top, .menuBar), (.menu, .topBar): return false
         }
         if case .top(let side, let index) = drop { place(.extension(id), on: side, at: index) }
@@ -296,6 +309,13 @@ extension BarSettings {
         guard case .top(let side, let index) = drop, placement != .menuBar else { return false }
         if self.index(of: .divider(id)) == nil { addDivider(id, side: side) }
         place(.divider(id), on: side, at: index)
+        return true
+    }
+
+    /// One more group dragged along the top bar's strip by its outline: it moves; it is made only by grouping an item.
+    private mutating func drop(group id: Int, on drop: BarStripDrop, placement: BarPlacement) -> Bool {
+        guard case .top(let side, let index) = drop, placement != .menuBar, self.index(of: .group(id)) != nil else { return false }
+        place(.group(id), on: side, at: index)
         return true
     }
 
@@ -317,6 +337,16 @@ extension BarSettings {
         case .divider:
             guard onStrip(item, placement: placement) else { return false }
             removeDivider(item)
+        case .group(let id):
+            // One more group off the bar: its items go with it, as the Group's do, and it goes.
+            guard index(of: item) != nil else { return false }
+            for member in entries.filter({ $0.groupNumber == id }) {
+                if let id = member.extensionID {
+                    if isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
+                } else if placement == .both { set(member.kind, on: false) } else { set(member.kind, in: .topBar, on: false) }
+                set(member.item, group: nil)
+            }
+            removeEmptyGroups()
         }
         return true
     }
@@ -338,7 +368,7 @@ extension BarSettings {
     public mutating func step(_ item: BarTrayItem, by step: Int, inTopBar: Bool, topBarOn: Bool) {
         switch item {
         case .kind(let kind): self.step(kind, by: step, inTopBar: inTopBar, topBarOn: topBarOn)
-        case .extension, .divider: if inTopBar { nudge(item, by: step) }
+        case .extension, .divider, .group: if inTopBar { nudge(item, by: step) }
         }
     }
 

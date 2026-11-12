@@ -68,9 +68,10 @@ extension ControlVerbs {
             }))
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
-        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits every group, --group one; --group puts it in a group of its own number, each its own pill), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
+                                     .init("group", help: "group: the group it joins, 1 the Group (the default), 2 and on one more, each its own pill, made where the item is if new; new is the next free number. ungroup: the group it splits"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
                                      .init("placement", help: "clear, restore: the bar it acts on, \(Self.cases(BarPlacement.self)) (the one the Menu bar page shows)")],
@@ -120,13 +121,15 @@ extension ControlVerbs {
                 let word = try args.word(1, "item")
                 let item = try Self.groupItem(word, reach)
                 var joined = bar().settings
-                guard joined.group(item) else {
+                let number = try Self.groupNumber(args.value("group"), next: joined.nextGroup) ?? 1
+                guard joined.group(item, into: number) else {
                     throw ControlError(.badValue, "\(word) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")) and any extension's bar item by its id, while the Group is on")
                 }
                 return Self.change(item, in: bar(), reach) { $0 = joined }
             case "ungroup":
+                let number = try Self.groupNumber(args.value("group"), next: nil)
                 guard args.positional.count > 1 else {
-                    Self.write(bar()) { $0.ungroup() }
+                    Self.write(bar()) { $0.ungroup(group: number) }
                     return Self.state(bar(), reach)
                 }
                 let word = try args.word(1, "item")
@@ -297,6 +300,14 @@ extension ControlVerbs {
     }
 
     /// One more divider (divider:<n>) named on the command line, on the top bar; nil for any other word.
+    /// `--group`'s number: 1 and on, or new (the next free number, when `next` is given); nil when not given.
+    private static func groupNumber(_ word: String?, next: Int?) throws(ControlError) -> Int? {
+        guard let word else { return nil }
+        if word == "new", let next { return next }
+        guard let number = Int(word), number >= 1 else { throw ControlError(.badValue, "--group is a group's number from 1\(next == nil ? "" : ", or new"), not \(word)") }
+        return number
+    }
+
     /// What `pilot bar group` and `ungroup` name: a built-in item by its name, else an extension's bar item by its id (Q182).
     private static func groupItem(_ word: String, _ reach: BarReach) throws(ControlError) -> BarTrayItem {
         if let kind = BarKind(rawValue: word) { return .kind(kind) }

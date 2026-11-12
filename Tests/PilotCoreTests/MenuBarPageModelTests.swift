@@ -120,7 +120,7 @@ struct MenuBarPageModelTests {
         // stays out); dropped on the Group's outline it joins it.
         let alone = s.drop(.kind(.heat), on: .top(.left, index: 0), placement: .topBar)
         #expect(alone && Self.kinds(s, .left).contains(.heat) && !s.entry(.heat).inGroup)
-        let joined = s.drop(.kind(.heat), on: .group, placement: .topBar)
+        let joined = s.drop(.kind(.heat), on: .group(1), placement: .topBar)
         #expect(joined && s.slots(in: .topBar, topBarOn: true).first(where: \.isGroup)?.kinds.contains(.heat) == true)
     }
 

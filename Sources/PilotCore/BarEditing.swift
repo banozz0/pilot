@@ -53,8 +53,25 @@ public struct BarDrop: Sendable {
     /// Whether a drop at `x` lands in the Group (the strip's own slots as drawn): inside its drawn slot, a little in from
     /// its edges so a drop at either edge still goes beside it, for an item that can join.
     public static func joinsGroup(x: Double, slots: [Slot], dragging: BarTrayItem?) -> Bool {
-        guard dragging.map(BarSettings.groupable) == true, let group = slots.first(where: { $0.item == .kind(.group) && $0.drawn }) else { return false }
-        return (group.minX + groupEdge...max(group.minX + groupEdge, group.maxX - groupEdge)).contains(x)
+        group(x: x, slots: slots, dragging: dragging) != nil
+    }
+
+    /// The group a drop at `x` joins, 1 the Group, 2 and on one more (Q182); nil for none.
+    public static func group(x: Double, slots: [Slot], dragging: BarTrayItem?) -> Int? {
+        guard dragging.map(BarSettings.groupable) == true else { return nil }
+        let hit = slots.first { slot in
+            guard slot.drawn, slot.item.drawnKind == .group else { return false }
+            return (slot.minX + groupEdge...max(slot.minX + groupEdge, slot.maxX - groupEdge)).contains(x)
+        }
+        guard let hit else { return nil }
+        if case .group(let number) = hit.item { return number }
+        return 1
+    }
+
+    /// The same on the bar: a drop at `x`, `y` down from the bar's top edge.
+    public func group(x: Double, y: Double, dragging: BarTrayItem?) -> Int? {
+        guard (0...height + Self.below).contains(y) else { return nil }
+        return Self.group(x: x, slots: TopBarSide.allCases.flatMap { sides[$0] ?? [] }, dragging: dragging)
     }
 
     public init(sides: [TopBarSide: [Slot]], width: Double, height: Double) {
@@ -119,6 +136,7 @@ extension BarSettings {
         guard item.kind?.pinned != true, self.index(of: item) != nil else { return }
         // Put at a place of its own, an item is out of the Group (Sven on build 2372: dragged out, it stays out).
         set(item, grouped: false)
+        removeEmptyGroups()
         let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.item != item }
         // A link can name any index: below 0 is first.
         let index = max(index, 0)
@@ -144,7 +162,7 @@ extension BarSettings {
         switch item {
         case .kind(let kind): kind.groupable
         case .extension: true
-        case .divider: false
+        case .divider, .group: false
         }
     }
 
@@ -152,35 +170,54 @@ extension BarSettings {
     /// False for an item that cannot join, or while the Group is off.
     @discardableResult public mutating func group(_ kind: BarKind) -> Bool { group(.kind(kind)) }
 
-    /// The same for any item: an extension's own item joins the top bar first, where the Group gathers it.
-    @discardableResult public mutating func group(_ item: BarTrayItem) -> Bool {
-        let group = entry(.group)
-        guard Self.groupable(item), group.on else { return false }
+    /// The same for any item into group `number` (1 the Group, while it is on): an extension's own item joins the top
+    /// bar first, where its group gathers it. A group past the first not there yet is made where the item is, in the top
+    /// bar (Q182: extensions in one pill, the readings in another), as one more divider is.
+    @discardableResult public mutating func group(_ item: BarTrayItem, into number: Int = 1) -> Bool {
+        guard Self.groupable(item), number >= 1 else { return false }
+        if number == 1 {
+            guard entry(.group).on else { return false }
+        }
         switch item {
         case .kind(let kind):
             set(kind, on: true)
-            set(kind, placement: group.placement)
+            if number == 1 { set(kind, placement: entry(.group).placement) }
+            else if entry(kind).placement == .menuBar { set(kind, placement: .both) }
         case .extension(let id):
             if !isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
-        case .divider: return false
+        case .divider, .group: return false
         }
-        set(item, grouped: true)
+        if number > 1, index(of: .group(number)) == nil, let at = index(of: item) {
+            addGroup(number, side: entries[at].side)
+            move(.group(number), to: at)
+        }
+        set(item, group: number)
+        removeEmptyGroups()
         return true
     }
+
+    /// The next free group number past the first: a new pill.
+    public var nextGroup: Int { (moreGroups.max() ?? 1) + 1 }
 
     /// Takes one item out of the Group.
     public mutating func ungroup(_ kind: BarKind) { ungroup(.kind(kind)) }
 
-    /// Takes one item out of the Group, or every item (Ungroup): each comes out where the Group is, in the order it drew,
-    /// on the Group's side, and the Group, empty, draws nothing until an item joins it again.
-    public mutating func ungroup(_ item: BarTrayItem? = nil) {
-        let members = entries.filter { $0.inGroup && (item == nil || $0.item == item) }.map(\.item)
-        let side = entry(.group).side
-        for member in members {
-            set(member, grouped: false)
-            set(member, side: side)
-            move(member, to: entries.filter { $0.item != member }.firstIndex { $0.kind == .group }!)
+    /// Takes one item out of its group, or every item of group `number` (Ungroup; nil every group): each comes out
+    /// where its group is, in the order it drew, on its group's side. The Group, empty, draws nothing until an item joins
+    /// it again; one more group, empty, goes.
+    public mutating func ungroup(_ item: BarTrayItem? = nil, group number: Int? = nil) {
+        let members = entries.filter { entry in
+            guard let n = entry.groupNumber else { return false }
+            return item.map { entry.item == $0 } ?? (number.map { n == $0 } ?? true)
         }
+        for member in members {
+            let group: BarTrayItem = member.groupNumber! > 1 ? .group(member.groupNumber!) : .kind(.group)
+            set(member.item, group: nil)
+            guard let at = index(of: group) else { continue }
+            set(member.item, side: entries[at].side)
+            move(member.item, to: entries.filter { $0.item != member.item }.firstIndex { $0.item == group }!)
+        }
+        removeEmptyGroups()
     }
 
     /// The item on, in the top bar: one in the macOS menu bar alone is put in both.
