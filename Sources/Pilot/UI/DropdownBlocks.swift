@@ -170,10 +170,10 @@ enum DropdownBlocks {
                      battery: readings.battery.map(\.percent), charging: readings.battery?.charging ?? false)
     }
 
-    /// The Extensions card's rows: the picked extensions' bar items as they last answered.
+    /// The Extensions card's rows: the picked extensions' bar items as they last answered, gauges in words (AI usage's).
     static func extensions(_ ids: [String], bar: ExtensionBar = .shared) -> [DropdownPanelValues.Extension] {
         bar.items(ids).map { item in
-            .init(emoji: item.icon ?? "🧩", title: item.title, text: item.answer.map { $0.text.isEmpty ? "–" : $0.text } ?? "…",
+            .init(emoji: item.icon ?? "🧩", title: item.title, text: item.answer.map { $0.line.isEmpty ? "–" : $0.line } ?? "…",
                   detail: item.answer == nil && item.problem == nil ? "Asking…" : nil, problem: item.problem)
         }
     }

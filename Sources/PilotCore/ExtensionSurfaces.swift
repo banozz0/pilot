@@ -324,6 +324,10 @@ extension Extension {
         /// Whether the item draws: a text or a gauge to show.
         public var shows: Bool { !text.isEmpty || !gauges.isEmpty }
 
+        /// One line of words for where gauges are not drawn (the menu's Extensions card): its text, else its gauges as
+        /// "Claude 97% · OpenAI 100%"; empty when it shows neither.
+        public var line: String { text.isEmpty ? gauges.map(\.words).joined(separator: " · ") : text }
+
         /// The strongest tone it carries, its own or a gauge's: alert over warn over fine.
         public var loudest: Tone? {
             ([tone] + gauges.map(\.tone)).compactMap { $0 }.max { $0.rank < $1.rank }
@@ -354,6 +358,11 @@ extension Extension {
 
         /// Whether it draws: a meter, a glyph or a text.
         public var shows: Bool { !meters.isEmpty || icon != nil || !text.isEmpty }
+
+        /// It in words: its glyph's name, label, meters and text, "C 34% 25%" or "Claude 66%".
+        public var words: String {
+            ([icon?.title ?? "", label] + meters.map { "\(Int($0.rounded()))%" } + [text]).filter { !$0.isEmpty }.joined(separator: " ")
+        }
 
         /// A gauge line: nil without a meter, a known glyph or a text to draw.
         init?(_ value: JSONValue) {

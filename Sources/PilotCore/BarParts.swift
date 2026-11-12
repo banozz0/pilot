@@ -377,9 +377,6 @@ extension SystemStats.BluetoothDevice {
 extension ExtensionBarFace {
     /// Its tooltip: the extension's title, then its text, then each gauge as "C 34% · 25%" or "Claude 66%".
     public var tooltip: String {
-        let gauges = gauges.map { g in
-            ([g.icon?.title ?? "", g.label] + g.meters.map { "\(Int($0.rounded()))%" } + [g.text]).filter { !$0.isEmpty }.joined(separator: " ")
-        }
-        return ([title, text] + gauges).filter { !$0.isEmpty }.joined(separator: " · ")
+        ([title, text] + gauges.map(\.words)).filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
