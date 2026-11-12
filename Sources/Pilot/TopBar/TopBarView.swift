@@ -230,8 +230,9 @@ struct TopBarStrip<Slot: View>: View {
     /// Holds the slots that go for room, placed by TopBarRow only while any does (TopBarOverflow); the Menu bar page's
     /// preview has none.
     var overflow: AnyView? = nil
-    /// The Menu bar page's preview: the centre island may leave the middle (TopBarRow.packed).
-    var packed = false
+    /// The Menu bar page's preview: the centre island may leave the middle (TopBarRow.packed), and only the bar's ground
+    /// is cut to its shape, so each piece's − above it shows whole (Sven on build 2372).
+    var preview = false
     @ViewBuilder let slot: (BarSlot) -> Slot
 
     var body: some View {
@@ -247,7 +248,7 @@ struct TopBarStrip<Slot: View>: View {
         let (inked, tone): (StyleTokens, TopBarColour.Toned?) = if let look {
             TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: look)
         } else { (TopBarColour.tokens(colour, style: style, background: background), nil) }
-        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil, packed: packed) {
+        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil, packed: preview) {
             if islands, let configuration {
                 ForEach(TopBarSide.allCases, id: \.self) { side in
                     GeometryReader { proxy in
@@ -292,14 +293,14 @@ struct TopBarStrip<Slot: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(.named(BarFrames.space))
         .background {
-            if !islands { islandGround(ground: ground, tone: tone) }
+            if !islands { islandGround(ground: ground, tone: tone).clipShape(.rect(cornerRadius: configuration?.radius ?? 0)) }
         }
         // One rule along the Strip's foot on a solid bar; none on Glass, whose own edge is the line there (Sven, 2026-10-10:
         // the two drew a double line where the AI chat meets the bar).
         .overlay(alignment: .bottom) {
             if configuration == nil, background == .solid, instrument { InstrumentRule().style(inked).footGap(foot) }
         }
-        .clipShape(.rect(cornerRadius: configuration?.radius ?? 0))
+        .modifier(BarClip(radius: configuration?.radius ?? 0, on: !preview))
         .overlay {
             if let configuration, !islands {
                 RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
@@ -480,6 +481,16 @@ enum BarMetrics {
     /// Every glyph's colour in `style`'s ink (the bar's, inked for its colour): its quieter text2.
     static func glyphInk(_ style: StyleTokens) -> Color {
         style.color(\.text2)
+    }
+}
+
+/// The bar cut to its shape, items and all; off in the Menu bar page's preview, where the pieces' − sit above it.
+private struct BarClip: ViewModifier {
+    let radius: Double
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on { content.clipShape(.rect(cornerRadius: radius)) } else { content }
     }
 }
 

@@ -99,7 +99,7 @@ struct MenuBarRenders {
     }
 
     /// Sven's crowded top bar on build 2363 (three islands; on the right other apps, the status lights, eight extensions,
-    /// the readings and more): the Top bar page at the default 1000 × 660 window and at 1920 wide, every item on the strip,
+    /// the Group with readings and Volume in it, and more): the Top bar page at the default 1000 × 660 window and at 1920 wide, every item on the strip,
     /// which scrolls sideways where the page is narrower than the bar; three dividers, one per side. Written to
     /// PILOT_RENDER_DIR/menubar:
     /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-crowded PILOT_RENDER_DIR=/tmp/pilot-renders-crowded swift test --filter MenuBarRenders/crowded`
@@ -133,7 +133,7 @@ struct MenuBarRenders {
             (.left, [.kind(.workspaces), .kind(.focusedApp), .kind(.appMenus), .divider(1)]),
             (.centre, [.kind(.pill), .kind(.askAI), .kind(.terminal), .divider(2), .kind(.clock), .kind(.capture), .kind(.power)]),
             (.right, [.kind(.otherApps), .kind(.modes)] + faces.map { .extension($0.key) }
-                + [.kind(.cpu), .kind(.memory), .kind(.heat), .kind(.storage), .kind(.divider), .kind(.battery), .kind(.volume), .kind(.displays), .kind(.keyboardLayout)]),
+                + [.kind(.group), .kind(.divider), .kind(.battery), .kind(.volume), .kind(.displays), .kind(.keyboardLayout)]),
         ]
         for (side, items) in layout {
             for item in items {
@@ -141,8 +141,10 @@ struct MenuBarRenders {
                 #expect(landed, "\(item.rawValue) did not land")
             }
         }
+        // The Group holds readings and an item that is not one (Sven on build 2372).
+        for kind in [BarKind.heat, .storage, .volume] { store.settings.group(kind) }
         let names = (store.settings.preview(.topBar).top?[.right] ?? []).map(\.name)
-        #expect(names.first == "otherApps" && names.contains("extension:weather"), "the right side is \(names)")
+        #expect(names.first == "otherApps" && names.contains("extension:weather") && names.contains { Set($0.split(separator: "+")) == ["cpu", "memory", "network", "heat", "storage", "volume"] }, "the right side is \(names)")
         // The page as wide as each window leaves it beside the sidebar, the window's default height.
         for width in [1000, 1920] {
             let pageWidth = CGFloat(width) - Self.pageLeft(look.style, width: CGFloat(width))

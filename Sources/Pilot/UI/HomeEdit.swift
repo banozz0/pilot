@@ -574,7 +574,9 @@ struct HomeEditBar: View {
 
 /// Over its frame, a scroll that is more up-down than sideways (a mouse wheel, an up-down swipe) goes on as the same
 /// scroll sideways, momentum and all, so the edit bar's Hidden tray scrolls with either (Sven on 1.0.2 build 6: "i cant
-/// scroll horizontally for 'hidden'"). Clicks and drags pass through.
+/// scroll horizontally for 'hidden'"), and so does the Menu bar page's top bar (Sven on build 2372). Clicks and drags
+/// pass through. A gesture belongs where it starts: one begun elsewhere scrolls the page on as the frame passes under
+/// the pointer; and with nothing to scroll sideways the scroll goes to the page too.
 struct SidewaysWheel: NSViewRepresentable {
     func makeNSView(context: Context) -> Catcher { Catcher() }
     func updateNSView(_ view: Catcher, context: Context) {}
@@ -582,6 +584,11 @@ struct SidewaysWheel: NSViewRepresentable {
 
     final class Catcher: NSView {
         private var monitor: Any?
+        /// Whether the gesture under way began over this frame, and when its last event came (a plain wheel has no phases).
+        private var owned = false
+        private var last = Date.distantPast
+        /// A plain wheel's notches this close together are one gesture.
+        static let gap: TimeInterval = 0.3
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -597,10 +604,24 @@ struct SidewaysWheel: NSViewRepresentable {
 
         /// Hands an up-down scroll over this frame sideways to the view under it; false leaves the event as it is.
         func turn(_ event: NSEvent) -> Bool {
-            guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX), bounds.contains(convert(event.locationInWindow, from: nil)),
-                  let under = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+            let starts = event.phase == .began || event.phase == .mayBegin
+                || event.phase.isEmpty && event.momentumPhase.isEmpty && Date().timeIntervalSince(last) > Self.gap
+            last = Date()
+            if starts { owned = bounds.contains(convert(event.locationInWindow, from: nil)) }
+            guard owned, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX),
+                  let under = window?.contentView?.hitTest(event.locationInWindow), Self.scrollsSideways(under) else { return false }
             under.scrollWheel(with: Self.sideways(event))
             return true
+        }
+
+        /// Whether the sideways scroll holding `view` has more than it shows; one that fits leaves the page its scroll.
+        static func scrollsSideways(_ view: NSView) -> Bool {
+            var scroll = view.enclosingScrollView
+            while let each = scroll {
+                if let document = each.documentView, document.frame.width > each.contentView.bounds.width + 0.5 { return true }
+                scroll = each.enclosingScrollView
+            }
+            return false
         }
 
         func stop() {

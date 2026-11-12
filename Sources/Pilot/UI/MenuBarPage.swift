@@ -57,7 +57,7 @@ struct MenuBarPage: View {
                 onlyInTopBar(store, topBarOn: topBar.isOn)
             }
             HStack(alignment: .bottom) {
-                Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off.")
+                Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
                     .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 12)
                 resets(store)
@@ -223,8 +223,10 @@ struct MenuBarPage: View {
 
     /// The menu bar strip's coordinate space, its whole row.
     static let menuSpace = "pilot.page.menu"
-    /// The desk above each strip, where its pieces' − sit (StripPiece): inside the strip's hit area, so they take clicks.
-    static let room: CGFloat = 14
+    /// The desk above each strip, where its pieces' − sit (StripPiece): inside the strip's hit area, so they take clicks,
+    /// and wholly inside the desk (Sven on build 2372: they were cut at the bar's top edge). The top bar has as much
+    /// each side, so the last item's − is inside too.
+    static let room: CGFloat = 18
 
     /// The bars over a strip of desk, as design round 4's preview: Pilot's top bar as it draws (in its style, the Strip
     /// or the Menu), the macOS menu bar with Pilot's items on the right. Each takes the tray's and its own items' drops
@@ -249,6 +251,9 @@ struct MenuBarPage: View {
                     }
                 }
                 .scrollIndicators(.visible)
+                // A wheel or a trackpad's up and down over the bar moves it sideways (Sven on build 2372); elsewhere they
+                // scroll the page.
+                .background(SidewaysWheel())
             }
             if let menu = preview.menu { menuStrip(menu, store: store) }
             Spacer(minLength: 28)
@@ -264,27 +269,32 @@ struct MenuBarPage: View {
     /// while a drag is over it.
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
         let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
+        let joining = overTop.map { BarDrop.joinsGroup(x: $0.x, slots: drop.sides.values.flatMap { $0 }, dragging: dragged) } ?? false
         return TopBarStrip(sides: top, configuration: store.settings.preset, background: background, colour: store.colour, glassPreview: true, itemColours: store.itemColours,
-                           report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }, packed: true) {
-            stripSlot($0, store, inTopBar: true)
+                           report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }, preview: true) {
+            stripSlot($0, store, inTopBar: true, joining: joining)
         }
         .frame(height: store.settings.preset?.height ?? 30)
         .background { if background == .glass, store.settings.preset?.preset != .threeIslands { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
-        .overlay { if let overTop { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
+        // Over the Group the outline lights in place of the caret: the drop joins it.
+        .overlay { if let overTop, !joining { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
         .padding(.top, Self.room)
         // The whole strip takes the drop, its clear gaps too (a Glass bar draws no ground of its own).
         .contentShape(Rectangle())
         .onDrop(of: [.plainText], delegate: Self.topDrop(drop, store: store, placement: placement, dragged: dragged, room: Self.room,
                                                          animation: reduceMotion ? nil : Kit.change,
                                                          over: { overTop = $0.map { CGPoint(x: $0.x, y: $0.y - Self.room) } }, finish: { dragged = nil }))
+        .padding(.horizontal, Self.room)
     }
 
     /// The top bar strip's drop: where BarDrop says, as BarSettings.drop places it; `room` is the desk above the bar.
     static func topDrop(_ drop: BarDrop, store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, room: CGFloat = 0,
                         animation: Animation?, over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            drop.target(x: at.x, y: at.y - room, dragging: item).map { BarStripDrop.top($0.side, index: $0.index) }
+            let target = drop.target(x: at.x, y: at.y - room, dragging: item)
+            if target != nil, BarDrop.joinsGroup(x: at.x, slots: drop.sides.values.flatMap { $0 }, dragging: item) { return .group }
+            return target.map { BarStripDrop.top($0.side, index: $0.index) }
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -292,7 +302,9 @@ struct MenuBarPage: View {
     static func menuDrop(_ slots: [BarDrop.Slot], store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, animation: Animation?,
                          over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            item.topBarOnly ? nil : .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
+            if item.topBarOnly { return nil }
+            if BarDrop.joinsGroup(x: at.x, slots: slots, dragging: item) { return .group }
+            return .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
 
@@ -313,6 +325,7 @@ struct MenuBarPage: View {
     private func menuStrip(_ menu: [BarSlot], store: BarItemsStore) -> some View {
         let extensions = extensionBar.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
         let slots = menuSlots(menu)
+        let joining = overMenu.map { BarDrop.joinsGroup(x: $0, slots: slots, dragging: dragged) } ?? false
         return HStack(spacing: 13) {
             Image(systemName: "apple.logo")
             ViewThatFits(in: .horizontal) { Text("Finder").fontWeight(.bold).fixedSize(); Color.clear.frame(width: 0) }
@@ -321,7 +334,7 @@ struct MenuBarPage: View {
             TrailingRow(spacing: 13) {
                 ForEach(extensions) { item in extensionPiece(item, store: store, inTopBar: false) }
                 ForEach(Array(menu.enumerated()), id: \.offset) { i, slot in
-                    stripSlot(slot, store, inTopBar: false)
+                    stripSlot(slot, store, inTopBar: false, joining: joining)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.menuSpace)) } action: { menuFrames[i] = $0 }
                 }
             }
@@ -341,7 +354,7 @@ struct MenuBarPage: View {
         .background(ink.style.kind == .instrument ? ink.selected : ink.style.dark ? Color.black.opacity(0.42) : Color.white.opacity(0.45))
         .coordinateSpace(.named(Self.menuSpace))
         .overlay {
-            if let overMenu {
+            if let overMenu, !joining {
                 GeometryReader { BarCaret(x: BarDrop.menuTarget(x: overMenu, slots: slots, dragging: dragged).caret, height: $0.size.height) }
             }
         }
@@ -365,9 +378,9 @@ struct MenuBarPage: View {
     /// One slot of a strip, piece by piece (Sven on build 54: one by one, not by sections): an item is one piece; the
     /// Group's readings are a piece each inside its outline, the outline itself dragging the whole Group; an extension's
     /// item placed in the top bar is a slot and a piece of its own (spec pilot-1.1 T50), drawn while it is installed.
-    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool) -> some View {
+    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool = false) -> some View {
         if slot.isGroup {
-            groupSlot(slot, store, inTopBar: inTopBar)
+            groupSlot(slot, store, inTopBar: inTopBar, joining: joining)
         } else if case .extension(let id) = slot.item {
             if let item = extensionBar.items.first(where: { $0.id == id }) { extensionPiece(item, store: store, inTopBar: true) }
         } else {
@@ -375,11 +388,13 @@ struct MenuBarPage: View {
         }
     }
 
-    /// An item as the bar draws it, one piece, dragged and taken off as its own item: each divider is its own.
-    private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool) -> some View {
+    /// An item as the bar draws it, one piece, dragged and taken off as its own item: each divider is its own. In the
+    /// Group it has no place of its own to step to: its menu takes it out of the Group, or splits the Group.
+    private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, inGroup: Bool = false) -> some View {
         let kind = slot.kind, item = slot.item, screen = engine.topBar.connected.first?.name ?? ""
+        let grouped = inGroup ? [StripAction(title: "Take out of the Group", run: ungroup(kind, store)), StripAction(title: "Ungroup", run: ungroup(nil, store))] : []
         return StripPiece(item: item, title: kind.title, pinned: kind.pinned, dragged: $dragged,
-                          remove: takeOff(item, store), step: step(item, store, inTopBar: inTopBar)) {
+                          remove: takeOff(item, store), step: inGroup ? nil : step(item, store, inTopBar: inTopBar), actions: grouped) {
             BarDragChip(kind: kind, slot: slot, screen: screen, sources: engine.barSources, store: store)
         } content: {
             TopBarSlotView(slot: slot, screen: screen, sources: engine.barSources, store: store).environment(\.barPreview, true)
@@ -387,29 +402,40 @@ struct MenuBarPage: View {
         .onPage(ink.style)
     }
 
-    /// The Group: its readings a piece each, inside a hairline outline whose gaps and edge drag the whole Group.
-    private func groupSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool) -> some View {
+    /// The Group: its items a piece each, inside a hairline outline whose gaps and edge drag the whole Group; the outline
+    /// lights while a drop would join it (`joining`).
+    private func groupSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: ink.corner(ink.radius(6), \.chip), style: .continuous)
         let group = BarTrayItem.kind(.group)
         return HStack(spacing: 10) {
-            ForEach(slot.entries, id: \.kind) { entry in piece(.item(entry), store, inTopBar: inTopBar) }
+            ForEach(slot.entries, id: \.kind) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
         }
         .padding(.horizontal, 5).padding(.vertical, 1)
         .background {
-            shape.strokeBorder(ink.line2, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            shape.fill(joining ? ink.accent.opacity(0.14) : .clear)
+                .overlay { shape.strokeBorder(joining ? ink.accent : ink.line2, style: StrokeStyle(lineWidth: joining ? 1.5 : 1, dash: [3, 2])) }
                 .contentShape(shape)
-                .help("The Group: drag its edge to move it whole, or a reading out of it")
+                .help("The Group: drag its edge to move it whole, drop an item on it to group it, or drag one out")
                 .onDrag {
                     dragged = group
                     return NSItemProvider(object: group.rawValue as NSString)
                 } preview: {
                     BarDragChip(kind: .group, slot: slot, screen: engine.topBar.connected.first?.name ?? "", sources: engine.barSources, store: store)
                 }
-                .contextMenu { Button("Take the Group off the bar", action: takeOff(group, store)) }
+                .contextMenu {
+                    Button("Ungroup", action: ungroup(nil, store))
+                    Button("Take the Group off the bar", action: takeOff(group, store))
+                }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Group")
+        .accessibilityAction(named: "Ungroup", ungroup(nil, store))
         .accessibilityAction(named: "Take the Group off the bar", takeOff(group, store))
+    }
+
+    /// Takes `kind` out of the Group, or every item (Ungroup).
+    private func ungroup(_ kind: BarKind?, _ store: BarItemsStore) -> () -> Void {
+        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(kind) } }
     }
 
     /// An extension's own item, its emoji and its answer, a piece of its own in either strip.
@@ -870,3 +896,4 @@ struct BarPresetControls: View {
         .disabled(Look.shared.themePressing)  // A theme owns the layout: it waits while Look's Apply or Restore runs.
     }
 }
+

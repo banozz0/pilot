@@ -319,6 +319,27 @@ public enum BarParts {
         return targets
     }
 
+    /// The Group's hit targets (Sven on build 2372: a group holds any groupable item): each run of its readings one
+    /// target opening their popover together, as the Group's click did, every other item its own targets with its own
+    /// click, each with the items its click is for.
+    public static func groupTargets(_ entries: [BarEntry], _ i: BarInputs) -> [(target: BarTarget, kinds: [BarKind])] {
+        var targets: [(target: BarTarget, kinds: [BarKind])] = []
+        for entry in entries {
+            guard let parts = parts(entry, i) else { continue }
+            guard entry.kind.stat != nil else {
+                targets += Self.targets([parts], click: entry.kind.click).map { ($0, [entry.kind]) }
+                continue
+            }
+            if let last = targets.last, last.kinds.allSatisfy({ $0.stat != nil }) {
+                targets[targets.count - 1].target.parts.append(parts)
+                targets[targets.count - 1].kinds.append(entry.kind)
+            } else {
+                targets.append((BarTarget(parts: [parts], click: .popover), [entry.kind]))
+            }
+        }
+        return targets
+    }
+
     /// The second zone's name as round 3 labels it, its city ("New York"); macOS's abbreviation reads "GMT-4" in most
     /// languages.
     public static func city(_ zone: TimeZone) -> String {

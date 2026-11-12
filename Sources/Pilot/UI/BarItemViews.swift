@@ -166,10 +166,13 @@ struct TopBarSlotView: View {
         case .workspaces(let style): TopBarWorkspacesView(screen: screen, tiler: sources.observers.tiler, style: style)
         case .modes: TopBarStatusLights(lights: sources.readings.statusLights) { perform(slot.click) }
         case .parts(let parts, _):
-            // An extension's own item is its own target; every other item is one. The top bar's targets are apart by
-            // their insets.
+            // An extension's own item is its own target; every other item is one; in the Group the readings are one and
+            // each other item its own (BarParts.groupTargets). The top bar's targets are apart by their insets.
+            let targets = slot.isGroup ? BarParts.groupTargets(slot.entries, sources.inputs(for: slot.entries))
+                : BarParts.targets(parts, click: slot.click).map { ($0, slot.kinds) }
             HStack(spacing: inBar ? 0 : 6) {
-                ForEach(Array(BarParts.targets(parts, click: slot.click).enumerated()), id: \.offset) { _, target in
+                ForEach(Array(targets.enumerated()), id: \.offset) { _, each in
+                    let target = each.target
                     let kind = slot.entries.first?.kind, instrument = style.kind == .instrument
                     // Instrument's alone read the window's title and the timer's title, so no other style redraws for them.
                     let parts = BarPartsView(items: target.parts, capsule: slot.isGroup && !inBar,
@@ -177,10 +180,10 @@ struct TopBarSlotView: View {
                                              windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
                                              focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
                     if inBar {
-                        Button { perform(target.click) } label: { parts.barTarget(tooltip(shows)) }
+                        Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
                             .buttonStyle(.kitPress)
                     } else {
-                        Button { perform(target.click) } label: { parts }.buttonStyle(.plain)
+                        Button { perform(target.click, kinds: each.kinds) } label: { parts }.buttonStyle(.plain)
                     }
                 }
             }
@@ -207,17 +210,19 @@ struct TopBarSlotView: View {
         }
     }
 
-    private func perform(_ click: BarClick) {
+    /// A click on a target for `kinds`: the slot's items, or in the Group the one item (or run of readings) clicked.
+    private func perform(_ click: BarClick, kinds: [BarKind]? = nil) {
+        let kinds = kinds ?? slot.kinds, one = kinds.count == 1 ? kinds.first : nil
         // Option on the item's own click does its Option-click (Volume mutes); a part with a click of its own keeps it.
-        if click == slot.click, NSEvent.modifierFlags.contains(.option), !slot.isGroup, let option = slot.kind.optionClick {
+        if let one, click == one.click, NSEvent.modifierFlags.contains(.option), let option = one.optionClick {
             return sources.perform(option)
         }
         if case .extension(let id) = click {
             return BarPanel.shared.toggle(extension: id, under: anchor.view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }
-        if click == .menu { return showMenu(sources.clickMenu(slot.kind, store: store)) }
+        if click == .menu { return showMenu(sources.clickMenu(one ?? slot.kind, store: store)) }
         guard click == .popover else { return sources.perform(click) }
-        BarPanel.shared.toggle(slot.kinds, under: anchor.view, AnyView(BarPopover(kinds: slot.kinds, sources: sources, store: store)))
+        BarPanel.shared.toggle(kinds, under: anchor.view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
     }
 
     /// The right-click menu, or `rows` in its place (Capture's click menu).

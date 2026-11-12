@@ -68,8 +68,8 @@ extension ControlVerbs {
             }))
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
-        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
@@ -116,6 +116,21 @@ extension ControlVerbs {
                     throw ControlError(.badValue, "\(kind.rawValue)'s style is one of \(kind.styles.map(\.rawValue).joined(separator: ", ")), not \(word)")
                 }
                 return Self.change(kind, in: bar(), reach) { $0.set(kind, style: style) }
+            case "group":
+                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
+                guard kind.groupable else {
+                    throw ControlError(.badValue, "\(kind.rawValue) cannot be in the Group; these can: \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", "))")
+                }
+                guard bar().settings.entry(.group).on else { throw ControlError(.badValue, "the Group is off: pilot add bar-items --item group") }
+                return Self.change(kind, in: bar(), reach) { $0.group(kind) }
+            case "ungroup":
+                guard args.positional.count > 1 else {
+                    Self.write(bar()) { $0.ungroup() }
+                    return Self.state(bar(), reach)
+                }
+                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
+                guard bar().settings.entry(kind).inGroup else { throw ControlError(.badValue, "\(kind.rawValue) is not in the Group") }
+                return Self.change(kind, in: bar(), reach) { $0.ungroup(kind) }
             case "spacer":
                 let word = try args.word(1, "points or reset")
                 let points = word == "reset" ? nil : Double(word)
@@ -140,7 +155,7 @@ extension ControlVerbs {
                 let store = bar()
                 guard on, !store.settings.exactMenuItems else { return Self.exact(on, store, reach) }
                 return try await reach.gate().allow(Self.exactAsk, peer: call.peer) { Self.exact(on, store, reach) }
-            case let other: throw ControlError(.badRequest, "pilot bar, or bar move, style, spacer, clear, restore, edit or exact, not \(other)")
+            case let other: throw ControlError(.badRequest, "pilot bar, or bar move, style, group, ungroup, spacer, clear, restore, edit or exact, not \(other)")
             }
         })
     }
@@ -293,7 +308,7 @@ extension ControlVerbs {
         .object(["item": .string(entry.dividerID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
                  "styles": .array(entry.kind.styles.map { .string($0.rawValue) }),
                  "placement": .string(entry.placement.rawValue), "side": .string(entry.side.rawValue),
-                 "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)),
+                 "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)), "inGroup": .bool(entry.inGroup),
                  "width": entry.width.map(JSONValue.number) ?? .null])
     }
 

@@ -127,7 +127,9 @@ extension BarSettings {
     /// style where not; One item puts the Group in.
     public mutating func setReadingsLook(_ look: ReadingsLook) {
         if (look == .oneItem) != isOn(.group, in: .menuBar) { toggle(.group, in: .menuBar) }
-        guard look != .oneItem else { return }
+        // One item puts the menu bar's readings in the Group; Text and Graph only take the Group out of the menu bar, so
+        // the top bar's Group keeps its items.
+        guard look != .oneItem else { return Self.readingKinds.filter { isOn($0, in: .menuBar) }.forEach { set($0, grouped: true) } }
         let style: BarStyle = look == .graph ? .graph : .text
         for kind in Self.readingKinds { set(kind, style: kind.styles.contains(style) ? style : kind.styles[0]) }
     }
@@ -177,6 +179,8 @@ public enum BarTrayItem: Hashable, Sendable {
 public enum BarStripDrop: Equatable, Sendable {
     case top(TopBarSide, index: Int)
     case menu(index: Int)
+    /// Onto the Group's outline: the item joins the Group (Sven on build 2372).
+    case group
 }
 
 /// The Menu bar page's strip and tray (Sven, Q185, 2026-10-16): the strip is the bar the page shows (Menu bar, Top bar,
@@ -243,6 +247,9 @@ extension BarSettings {
             return false
         }
         guard !kind.pinned else { return false }
+        if drop == .group { return group(kind) }
+        // Put at a place of its own, an item is out of the Group: dragged out, it stays out (Sven on build 2372).
+        if kind != .group { set(kind, grouped: false) }
         switch (drop, placement) {
         case (.top(let side, let index), .topBar):
             set(kind, in: .topBar, on: true)
@@ -263,7 +270,7 @@ extension BarSettings {
             }
             fillGroup(kind, in: .menuBar)
             placeInMenuBar(kind, at: index, topBarOn: placement == .both)
-        case (.top, .menuBar), (.menu, .topBar): return false
+        case (.top, .menuBar), (.menu, .topBar), (.group, _): return false
         }
         return true
     }
@@ -277,7 +284,7 @@ extension BarSettings {
         case (.top, .both): set(extension: id, on: true, placement: .both)
         case (.menu, .menuBar): if !isOn(extension: id, in: .menuBar) { toggle(extension: id, in: .menuBar) }
         case (.menu, .both): set(extension: id, on: true, placement: .menuBar)
-        case (.top, .menuBar), (.menu, .topBar): return false
+        case (.top, .menuBar), (.menu, .topBar), (.group, _): return false
         }
         if case .top(let side, let index) = drop { place(.extension(id), on: side, at: index) }
         return true
@@ -356,6 +363,7 @@ extension BarSettings {
         guard kind == .group, !slots(in: place, topBarOn: place == .topBar).contains(where: \.isGroup) else { return }
         for reading in [BarKind.cpu, .memory, .network] {
             if place == .topBar { set(reading, in: .topBar, on: true) } else { set(reading, in: .menuBar, on: true) }
+            set(reading, grouped: true)
         }
     }
 

@@ -116,8 +116,11 @@ struct MenuBarPageModelTests {
         #expect(Self.kinds(s, .left) == Array(left.prefix(2)) + [.wifi] + left.dropFirst(2))
         #expect(s.entry(.wifi).on && s.entry(.wifi).placement == .topBar && !s.isOn(.wifi, in: .menuBar))
         #expect(!s.tray(.topBar).flatMap(\.items).contains(.kind(.wifi)))
-            // A reading lands in the Group while the Group is on that bar: its slot gathers every reading there.
-        let joined = s.drop(.kind(.heat), on: .top(.left, index: 0), placement: .topBar)
+        // A reading dropped at a place of its own lands there, out of the Group (Sven on build 2372: dragged out, it
+        // stays out); dropped on the Group's outline it joins it.
+        let alone = s.drop(.kind(.heat), on: .top(.left, index: 0), placement: .topBar)
+        #expect(alone && Self.kinds(s, .left).contains(.heat) && !s.entry(.heat).inGroup)
+        let joined = s.drop(.kind(.heat), on: .group, placement: .topBar)
         #expect(joined && s.slots(in: .topBar, topBarOn: true).first(where: \.isGroup)?.kinds.contains(.heat) == true)
     }
 

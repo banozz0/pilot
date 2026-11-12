@@ -198,8 +198,10 @@ struct StripPiece<Content: View, Preview: View>: View {
     let pinned: Bool
     @Binding var dragged: BarTrayItem?
     let remove: () -> Void
-    /// One place along the bar; nil where the piece has no place of its own (an extension's item).
+    /// One place along the bar; nil where the piece has no place of its own (an extension's item, an item in the Group).
     let step: ((Int) -> Void)?
+    /// More of its menu before Take off the bar: an item in the Group's Take out of the Group and Ungroup.
+    var actions: [StripAction] = []
     @ViewBuilder let preview: () -> Preview
     @ViewBuilder let content: () -> Content
     @State private var hovered = false
@@ -238,6 +240,8 @@ struct StripPiece<Content: View, Preview: View>: View {
                                 Button("Move right") { step(1) }
                                 Divider()
                             }
+                            ForEach(actions) { Button($0.title, action: $0.run) }
+                            if !actions.isEmpty { Divider() }
                             Button("Take off the bar", action: remove)
                         }
                 }
@@ -245,7 +249,7 @@ struct StripPiece<Content: View, Preview: View>: View {
             .onGeometryChange(for: Bool.self) { $0.size.width < 1 } action: { blank = $0 }
             .overlay(alignment: .topTrailing) {
                 if !pinned, !blank {
-                    Button(action: remove) { StripBadge(symbol: "minus", lit: hovered).environment(\.style, pageStyle ?? style) }
+                    Button(action: remove) { StripBadge(symbol: "minus", lit: hovered, strong: true).environment(\.style, pageStyle ?? style) }
                         .buttonStyle(.kitPress)
                         .help("Take \(title) off the bar")
                         .accessibilityLabel("Take \(title) off the bar")
@@ -263,25 +267,35 @@ struct StripPiece<Content: View, Preview: View>: View {
                         Button("Move left") { step(-1) }
                         Button("Move right") { step(1) }
                     }
+                    ForEach(actions) { Button($0.title, action: $0.run) }
                     Button("Take off the bar", action: remove)
                 }
             }
     }
 }
 
+/// One more line of a strip piece's menu.
+struct StripAction: Identifiable {
+    let title: String
+    let run: () -> Void
+    var id: String { title }
+}
+
 /// The + on a tray chip and the − on a strip piece: a small round button face, quiet until its item is under the pointer,
-/// with a target bigger than its disc.
+/// with a target bigger than its disc. The strip's − is `strong` (Sven on build 2372: dark on the dark bar, it was hard
+/// to see): at rest the theme's quiet text on the page's ground, ringed in it; lit, the text's own colour.
 struct StripBadge: View {
     @Environment(\.ink) private var ink
     let symbol: String
     let lit: Bool
+    var strong = false
 
     var body: some View {
         Image(systemName: symbol).font(.system(size: 8, weight: .heavy))
-            .foregroundStyle(lit ? ink.background : ink.text)
+            .foregroundStyle(lit ? ink.background : strong ? ink.text2 : ink.text)
             .frame(width: 16, height: 16)
-            .background(lit ? ink.text : ink.selected, in: Circle())
-            .overlay { Circle().strokeBorder(lit ? .clear : ink.line2) }
+            .background(lit ? ink.text : strong ? ink.background : ink.selected, in: Circle())
+            .overlay { Circle().strokeBorder(lit ? .clear : strong ? ink.text2 : ink.line2, lineWidth: strong ? 1.25 : 1) }
             .frame(width: 20, height: 20)
             .contentShape(Circle())
             .accessibilityHidden(true)

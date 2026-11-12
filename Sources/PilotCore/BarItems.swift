@@ -153,6 +153,16 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// Shrinks in a crowded top bar before any item goes (card agent-bo-95423016): the app's menus fold behind a chevron.
     public var folds: Bool { self == .appMenus }
 
+    /// Can sit in the Group (Sven on build 2372: a group holds any number of items): an item drawn from its parts alone,
+    /// with no view, menu or pattern of its own the Group would lose. The readings are in it until taken out.
+    public var groupable: Bool {
+        switch self {
+        case .cpu, .memory, .network, .graphics, .storage, .heat, .battery, .bluetoothBatteries, .keepAwake, .power,
+             .volume, .keyboardLayout, .wifi, .displays, .timer: true
+        default: false
+        }
+    }
+
     /// Pilot's own icon: always on, always in the macOS menu bar, and while the top bar is on its first left item, whatever
     /// its placement (card agent-bo-95423009: the macOS menu bar hides under the top bar).
     public var pinned: Bool { self == .pilot }
@@ -266,6 +276,9 @@ public struct BarEntry: Codable, Equatable, Sendable {
     /// the `.divider` item, every other one an entry of its own in the top bar, there while it is on the bar. Nil for
     /// every other entry.
     public internal(set) var dividerID: Int?
+    /// In the Group (Sven on build 2372): drawn in the Group's slot while the Group shows in that bar, its own slot
+    /// otherwise. A reading is in it until taken out; any other groupable item once put in.
+    public internal(set) var inGroup = false
 
     /// What it is in a drag and in the order: a built-in item, one more divider, or an extension's.
     public var item: BarTrayItem { extensionID.map(BarTrayItem.extension) ?? dividerID.map(BarTrayItem.divider) ?? .kind(kind) }
@@ -288,13 +301,16 @@ public struct BarEntry: Codable, Equatable, Sendable {
         self.style = style ?? kind.styles[0]
         self.placement = placement
         side = kind.side
+        inGroup = kind.group == .readings
         keepRules()
     }
 
-    /// The rules no setting can break: a pinned item stays on and on the left, a top-bar-only item stays in the top bar.
+    /// The rules no setting can break: a pinned item stays on and on the left, a top-bar-only item stays in the top bar,
+    /// only a groupable built-in item is in the Group.
     mutating func keepRules() {
         if kind.pinned { (on, side) = (true, .left) }
         if kind.topBarOnly { placement = .topBar }
+        if !kind.groupable || extensionID != nil || dividerID != nil { inGroup = false }
     }
 
     /// Whether it shows in `place`, the top bar being on or off; Pilot's own icon is in the macOS menu bar always and in
@@ -311,7 +327,7 @@ public struct BarEntry: Codable, Equatable, Sendable {
 
 extension BarEntry {
     enum CodingKeys: String, CodingKey {
-        case kind, on, style, placement, side, width
+        case kind, on, style, placement, side, width, inGroup
         case extensionID = "extension"
         case dividerID = "divider"
     }
@@ -340,6 +356,8 @@ extension BarEntry {
                   placement: (try? c.decode(BarPlacement.self, forKey: .placement)) ?? .both)
         side = (try? c.decode(TopBarSide.self, forKey: .side)) ?? kind.side
         width = kind == .spacer ? (try? c.decodeIfPresent(Double.self, forKey: .width)).flatMap { $0 } : nil
+        // Saved before membership, a reading is in the Group, as the Group gathered every reading then.
+        if let grouped = try? c.decode(Bool.self, forKey: .inGroup) { inGroup = grouped }
         keepRules()
     }
 
@@ -363,6 +381,7 @@ extension BarEntry {
         try c.encode(placement, forKey: .placement)
         try c.encode(side, forKey: .side)
         try c.encodeIfPresent(width, forKey: .width)
+        if kind.groupable { try c.encode(inGroup, forKey: .inGroup) }
     }
 }
 
@@ -440,6 +459,9 @@ public struct BarSettings: Codable, Equatable, Sendable {
 
     public mutating func set(_ kind: BarKind, on: Bool) { edit(kind) { $0.on = on } }
 
+    /// Puts a groupable item in the Group or takes it out; any other item stays out.
+    public mutating func set(_ kind: BarKind, grouped: Bool) { edit(kind) { $0.inGroup = grouped } }
+
     /// A style the item lacks changes nothing; a style picked for the spacer drops its stretched width.
     public mutating func set(_ kind: BarKind, style: BarStyle) {
         edit(kind) { if kind.styles.contains(style) { ($0.style, $0.width) = (style, nil) } }
@@ -472,6 +494,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
         for entry in Self.defaults.entries {
             set(entry.kind, in: placement, on: Self.defaults.isOn(entry.kind, in: placement))
             if placement == .topBar { set(entry.kind, side: entry.side) }
+            set(entry.kind, grouped: entry.inGroup)
         }
         for item in extensionItems where isOn(extension: item.id, in: placement) != Self.defaults.isOn(extension: item.id, in: placement) {
             toggle(extension: item.id, in: placement)
@@ -506,7 +529,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
     }
 
     /// What `place` draws, in order (one side of the top bar when `side` is given). With the Group shown there, every
-    /// reading shown there joins one slot at the Group's place; without it each reading is its own. Each extension's item
+    /// item in the Group shown there joins one slot at the Group's place; without it each is its own. Each extension's item
     /// placed in the top bar is a slot of its own there, drawn once it has something to show (BarParts); the old
     /// Extensions slot draws nowhere.
     public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil) -> [BarSlot] {
@@ -518,12 +541,12 @@ public struct BarSettings: Codable, Equatable, Sendable {
             return entry.kind != .extensions && entry.shows(in: place, topBarOn: topBarOn)
         }
             .sorted { place == .topBar && $0.kind.pinned && !$1.kind.pinned }
-        // The group gathers its readings from the whole bar, wherever their own side is.
+        // The group gathers its items from the whole bar, wherever their own side is.
         let grouped = entry(.group).shows(in: place, topBarOn: topBarOn)
-        let readings = grouped ? entries.filter { $0.kind.group == .readings && $0.shows(in: place, topBarOn: topBarOn) } : []
+        let members = grouped ? entries.filter { $0.inGroup && $0.shows(in: place, topBarOn: topBarOn) } : []
         return shown.compactMap { entry in
-            if entry.kind == .group { return readings.isEmpty ? nil : .group(readings) }
-            return grouped && entry.kind.group == .readings ? nil : .item(entry)
+            if entry.kind == .group { return members.isEmpty ? nil : .group(members) }
+            return grouped && entry.inGroup ? nil : .item(entry)
         }
     }
 
@@ -649,6 +672,7 @@ extension BarSettings {
             try check(BarPlacement.self, fields, "placement")
             try check(TopBarSide.self, fields, "side")
             try check(Double.self, fields, "width", nullable: true)
+            try check(Bool.self, fields, "inGroup")
             try check(String.self, fields, "extension", nullable: true)
             if kind == BarEntry.dividerKind { try check(Int.self, fields, "divider") }
             _ = try decoder.decode(BarEntry.self, from: ThemeDigest.encoded(entry))

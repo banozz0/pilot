@@ -42,6 +42,15 @@ public struct BarDrop: Sendable {
     static let pad = 3.0, below = 8.0
     /// The caret past a side's first or last slot: just outside its zone's edge, never on it.
     static let caretGap = 6.0
+    /// How far in from the Group's edges a drop joins it rather than landing beside it.
+    static let groupEdge = 8.0
+
+    /// Whether a drop at `x` lands in the Group (the strip's own slots as drawn): inside its drawn slot, a little in from
+    /// its edges so a drop at either edge still goes beside it, for an item that can join.
+    public static func joinsGroup(x: Double, slots: [Slot], dragging: BarTrayItem?) -> Bool {
+        guard dragging?.kind?.groupable == true, let group = slots.first(where: { $0.item == .kind(.group) && $0.drawn }) else { return false }
+        return (group.minX + groupEdge...max(group.minX + groupEdge, group.maxX - groupEdge)).contains(x)
+    }
 
     public init(sides: [TopBarSide: [Slot]], width: Double, height: Double) {
         (self.sides, self.width, self.height) = (sides, width, height)
@@ -108,7 +117,8 @@ extension BarSettings {
         let index = max(index, 0)
         guard index < others.count else { return move(item, to: side) }
         set(item, side: side)
-        let target = others[index].entries[0].item
+        // The slot's own item: the Group's is the Group, never its first member (which may be the item moved).
+        let target = others[index].item
         move(item, to: entries.filter { $0.item != item }.firstIndex { $0.item == target }!)
     }
 
@@ -117,9 +127,34 @@ extension BarSettings {
     public mutating func add(_ kind: BarKind, on side: TopBarSide, at index: Int) {
         guard !kind.pinned else { return }
         // The Group draws nothing without a reading: one put back after it went with its readings brings round 4's three.
-        if kind == .group, gathered.isEmpty { for reading in [BarKind.cpu, .memory, .network] { join(reading) } }
+        if kind == .group, gathered.isEmpty { for reading in [BarKind.cpu, .memory, .network] { join(reading); set(reading, grouped: true) } }
         join(kind)
+        // Put on the bar at a place of its own, it is out of the Group (Sven on build 2372: dragged out, it stays out).
+        if kind != .group { set(kind, grouped: false) }
         place(kind, on: side, at: index)
+    }
+
+    /// Puts a groupable item in the Group (a drop on its outline, `pilot bar group`): on, in every bar the Group is in.
+    /// False for an item that cannot join, or while the Group is off.
+    @discardableResult public mutating func group(_ kind: BarKind) -> Bool {
+        let group = entry(.group)
+        guard kind.groupable, group.on else { return false }
+        set(kind, on: true)
+        set(kind, placement: group.placement)
+        set(kind, grouped: true)
+        return true
+    }
+
+    /// Takes one item out of the Group, or every item (Ungroup): each comes out where the Group is, in the order it drew,
+    /// on the Group's side, and the Group, empty, draws nothing until an item joins it again.
+    public mutating func ungroup(_ kind: BarKind? = nil) {
+        let members = entries.filter { $0.inGroup && (kind == nil || $0.kind == kind) }.map(\.kind)
+        let side = entry(.group).side
+        for member in members {
+            set(member, grouped: false)
+            set(member, side: side)
+            move(member, to: entries.filter { $0.kind != member }.firstIndex { $0.kind == .group }!)
+        }
     }
 
     /// The item on, in the top bar: one in the macOS menu bar alone is put in both.
