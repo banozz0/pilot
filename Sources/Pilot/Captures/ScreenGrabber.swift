@@ -92,8 +92,11 @@ struct SCScreenGrabber: ScreenGrabbing {
         // Pilot's own windows (its app window, the editor, a pin) can be picked like any other (Sven, build 52).
         // A see-through window clicks pass through is not one Sven means, and it captures as nothing: Pilot's own window
         // border sits just outside the focused window, an agent's cursor overlay covers a whole display (build 2354's
-        // blank window capture). Pilot's are known by their flag; another app's are measured below.
-        let clickThrough = await MainActor.run { Set(NSApp.windows.filter(\.ignoresMouseEvents).map { UInt32($0.windowNumber) }) }
+        // blank window capture). Pilot's are known by their flag; another app's are measured below. A window never shown
+        // has no number (-1), which UInt32 traps on (build 2359's crash), so only real numbers count.
+        let clickThrough = await MainActor.run {
+            Set(NSApp.windows.filter(\.ignoresMouseEvents).compactMap { UInt32(exactly: $0.windowNumber) })
+        }
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         let windows: [CaptureSelection.Window] = info.compactMap { w in
             guard (w[kCGWindowLayer as String] as? Int) == 0,
