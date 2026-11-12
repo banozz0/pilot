@@ -105,7 +105,7 @@ enum InstallModule {
         case .npm(let name, let prefix):
             return confirmRun("Remove \(name)", "\(UpdateList.npm("uninstall", prefix: prefix)) \(name)", hook: "removed", key: row.recordKey,
                               confirm: confirm, run: run)
-        case .app(let path): location = URL(filePath: path)
+        case .app(let path): return RemoveApp.remove(row.name, at: URL(filePath: path), confirm: confirm, trash: trash)
         case .webApp(let id):
             guard let app = WebAppDirectory.list().first(where: { $0.bundleID == id }) else {
                 return ilog.error("remove: no web app \(id, privacy: .public)")
@@ -232,6 +232,8 @@ enum InstallModule {
             return bytes
         }
         let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+        // A plain file (a leftover's preferences plist) is its own size: a walk of it finds nothing.
+        if let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true { return Int64(values.totalFileAllocatedSize ?? 0) }
         guard let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: Array(keys)) else { return nil }
         var total: Int64 = 0
         for case let file as URL in walk {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import PilotCore
@@ -65,5 +66,65 @@ struct RemoveAppTests {
         #expect(ran.isEmpty, "nothing runs before the yes")
         record.yes?()
         #expect(ran == ["brew unpin beads"])
+    }
+
+    /// A stand-in running copy: quits on a normal quit only when `quits`, always on a force quit.
+    @MainActor final class Copy: RunningCopy {
+        var isTerminated = false, quits: Bool, forced = false
+        init(quits: Bool) { self.quits = quits }
+        func terminate() -> Bool { if quits { isTerminated = true }; return true }
+        func forceTerminate() -> Bool { forced = true; isTerminated = true; return true }
+    }
+
+    /// An app bundle with only its Info.plist, in a folder of the test's own.
+    static func fixtureApp(_ id: String) throws -> URL {
+        let app = FileManager.default.temporaryDirectory.appending(path: "remove-\(UUID().uuidString)/Fixture.app")
+        try FileManager.default.createDirectory(at: app.appending(path: "Contents"), withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": id, "CFBundleName": "Fixture"], format: .xml, options: 0)
+            .write(to: app.appending(path: "Contents/Info.plist"))
+        return app
+    }
+
+    @Test("Remove on a running app asks to quit and remove it, quits it at the yes, and only then moves it; its leftovers are offered after (Q181)")
+    func quitsFirst() async throws {
+        let app = try Self.fixtureApp("dev.example.quitfixture"), copy = Copy(quits: true), record = Record()
+        defer { try? FileManager.default.removeItem(at: app.deletingLastPathComponent()) }
+        var offered: [String] = []
+        RemoveApp.remove("Fixture", at: app, confirm: { title, command, yes in record.asked.append((title, command)); record.yes = yes },
+                         trash: { record.trashed.append($0); return $0 }, running: { _ in copy.isTerminated ? [] : [copy] },
+                         askForce: { _ in Issue.record("a copy that quits is never force quit"); return false },
+                         leftovers: { offered.append($0.bundleID) })
+        #expect(record.asked.map(\.title) == ["Quit and remove Fixture"])
+        #expect(record.asked.map(\.command) == ["Quit Fixture, then move Fixture.app to the Trash"])
+        record.yes?()
+        for _ in 0..<50 where record.trashed.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(copy.isTerminated && !copy.forced)
+        #expect(record.trashed == [app])
+        #expect(offered == ["dev.example.quitfixture"])
+    }
+
+    @Test("An app that won't quit is offered Force quit; no to it leaves the app running and where it was")
+    func forceQuitRefused() async throws {
+        let copy = Copy(quits: false)
+        var asked = 0
+        let quit = await RemoveApp.quit([copy], name: "Fixture", wait: .milliseconds(200)) { _ in asked += 1; return false }
+        #expect(!quit && asked == 1 && !copy.isTerminated && !copy.forced)
+    }
+
+    /// HungAppFixture's main thread stops answering, so a normal quit never reaches it: the real NSRunningApplication
+    /// path to Force quit.
+    @Test("A hung app's normal quit times out, and Force quit's yes ends it")
+    func forceQuitsAHungApp() async throws {
+        let hung = Process(), out = Pipe()
+        hung.executableURL = AXTimeoutTests.fixture
+        hung.arguments = ["30"]
+        hung.standardOutput = out
+        try hung.run()
+        defer { if hung.isRunning { hung.terminate() } }
+        _ = out.fileHandleForReading.availableData   // "hung"
+        let running = try #require(NSRunningApplication(processIdentifier: hung.processIdentifier))
+        var asked = 0
+        let quit = await RemoveApp.quit([running], name: "HungAppFixture", wait: .seconds(1)) { _ in asked += 1; return true }
+        #expect(quit && asked == 1 && running.isTerminated)
     }
 }

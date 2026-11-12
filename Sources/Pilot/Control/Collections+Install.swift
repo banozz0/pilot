@@ -20,6 +20,11 @@ final class ControlInstall {
     /// The visible terminal Install runs its command in.
     var run: InstallModule.Run = InstallModule.visibleRun
     var trash: @MainActor (URL) throws -> URL = WebAppDirectory.trash
+    /// Remove's leftovers: where they are looked for, and the Trash they go to (a test run's throwaway one).
+    var library = AppLeftovers.library
+    var leftoversTrash: FileOps.Trash = FileOps.systemTrash
+    /// An app's running copies: one that runs is refused, as the menu's Remove quits it first.
+    var running: RemoveApp.Running = RemoveApp.running
     /// A vendor's or a search result's page: the App Store's in the App Store, anything else in Zen.
     var open: @MainActor (URL) -> Void = InstallModule.openPage
     var webApps = WebAppStamper.applicationsFolder
@@ -113,6 +118,9 @@ extension ControlVerbs {
         case .npm(let name, let prefix): return try await removeRun(row, "\(UpdateList.npm("uninstall", prefix: prefix)) \(name)", s, peer: peer)
         case .app(let path):
             location = URL(filePath: path)
+            if let id = AppLeftovers.App.read(location)?.bundleID, !s.running(id).isEmpty {
+                throw ControlError(.badValue, "\(row.name) is open; quit it first (the menu's Remove quits it for you)")
+            }
             ask = ControlGate.Ask("Remove app", "\(row.name): move \(location.lastPathComponent) to the Trash")
         case .webApp(let id):
             guard let app = WebAppDirectory.list(in: s.webApps).first(where: { $0.bundleID == id }) else {

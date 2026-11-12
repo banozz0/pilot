@@ -6,15 +6,17 @@ extension ControlVerbs {
     /// pick acts on a catalogue entry or a search row as Return there does, with Allow standing in for the confirm step;
     /// helper installs one of General's helpers as its Install button does.
     func registerInstallVerb(_ s: ControlInstall) {
-        let subcommands = ["search <text>", "pick <key>", "helper <id>"]
+        let subcommands = ["search <text>", "pick <key>", "helper <id>", "leftovers <app> [--trash]"]
         register(ControlVerb("install", help: "Install's search over every source (the catalogue, Homebrew, the App Store, GitHub, the package tools, the web), Get on a catalogue entry or a search row, and a helper's install.",
-                             usage: "pilot install search <text> | install pick <key> | install helper <id>", flags: [],
+                             usage: "pilot install search <text> | install pick <key> | install helper <id> | install leftovers <app> [--trash]",
+                             flags: [.init("trash", help: "install leftovers: move the ticked ones to the Trash, after Allow", takesValue: false)],
                              schema: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
                              index: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
                              detail: { word in
                                  switch word {
                                  case "search": "pilot install search <text>: the catalogue's matches (none while Recommend apps is off), then each source's results with its key, how it installs and the command it runs, or why the source has none; waits for every source (up to about 30 s)"
                                  case "pick": "pilot install pick <key>: a key from pilot list catalogue or a search. An installed entry says so; a vendor's https page opens in the browser; a package, a GitHub release file or an install script asks Allow with its exact command, then runs it in a terminal window; a page that is not https asks first"
+                                 case "leftovers": "pilot install leftovers <app>: what Remove offers once that .app is in the Trash: its files in ~/Library (Application Support, Caches, Preferences, Containers, Group Containers, Saved Application State, Logs, HTTPStorages, WebKit, its LaunchAgents), each with its size and ticked, but for one another installed app may share. --trash asks Allow, then moves the ticked ones to the Trash"
                                  case "helper": "pilot install helper <id>: an id from pilot list helpers. An installed helper says so; Homebrew's installer asks Allow, then runs in a terminal window, which asks for your password; the others are Homebrew formulae, refused until Homebrew is installed"
                                  default: nil
                                  }
@@ -24,10 +26,36 @@ extension ControlVerbs {
             case "search": return try await Self.search(args.positional.dropFirst().joined(separator: " "), s)
             case "pick": return try await Self.pick(try args.word(1, "key; pilot list catalogue or pilot install search lists them"), s, peer: call.peer)
             case "helper": return try await Self.helper(try args.word(1, "helper id; pilot list helpers lists them"), s, peer: call.peer)
-            case let other?: throw ControlError(.badValue, "no install \(other); there are search, pick and helper")
-            case nil: throw ControlError(.badRequest, "say search, pick or helper")
+            case "leftovers":
+                return try await Self.leftovers(try args.word(1, "an app's path, such as /Applications/Name.app"), trash: args.has("trash"), s, peer: call.peer)
+            case let other?: throw ControlError(.badValue, "no install \(other); there are search, pick, helper and leftovers")
+            case nil: throw ControlError(.badRequest, "say search, pick, helper or leftovers")
             }
         })
+    }
+
+    /// Remove's leftovers for the app at `path` (Q181), as its panel lists them; with `trash`, the ticked ones to the
+    /// Trash after Allow, as Move to Trash there moves them.
+    private static func leftovers(_ path: String, trash: Bool, _ s: ControlInstall, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        guard path.hasSuffix(".app"), let app = AppLeftovers.App.read(URL(filePath: path)) else {
+            throw ControlError(.badValue, "\(path) is not an app with a bundle id")
+        }
+        let items = await RemoveApp.leftovers(of: app, library: s.library)
+        let rows: [JSONValue] = items.map { item in
+            var row: [String: JSONValue] = ["path": .string(item.id), "place": .string(item.place), "ticked": .bool(item.tickedFirst)]
+            row["size"] = item.bytes.map { .number(Double($0)) }
+            row["sharedWith"] = item.sharedWith.map(JSONValue.string)
+            return .object(row)
+        }
+        var answer: [String: JSONValue] = ["app": .string(app.name), "bundleID": .string(app.bundleID), "leftovers": .array(rows)]
+        guard trash else { return .object(answer) }
+        let model = LeftoversModel(app: app.name, items: items, trash: s.leftoversTrash)
+        guard !model.chosen.isEmpty else { throw ControlError(.badValue, "nothing of \(app.name)'s is ticked to go") }
+        return try await s.gate.allow(ControlGate.Ask("Remove leftovers", lines: ["\(app.name)'s, to the Trash:"] + model.chosen.map(\.shown)), peer: peer) {
+            () throws(ControlError) in
+            answer["said"] = .string(await model.moveToTrash())
+            return .object(answer)
+        }
     }
 
     private static func search(_ text: String, _ s: ControlInstall) async throws(ControlError) -> JSONValue {
