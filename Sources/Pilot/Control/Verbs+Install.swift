@@ -45,6 +45,7 @@ extension ControlVerbs {
             var row: [String: JSONValue] = ["path": .string(item.id), "place": .string(item.place), "ticked": .bool(item.tickedFirst)]
             row["size"] = item.bytes.map { .number(Double($0)) }
             row["sharedWith"] = item.sharedWith.map(JSONValue.string)
+            if item.logins { row["logins"] = .bool(true) }
             return .object(row)
         }
         var answer: [String: JSONValue] = ["app": .string(app.name), "bundleID": .string(app.bundleID), "leftovers": .array(rows)]

@@ -43,8 +43,10 @@ public enum AppLeftovers {
         public var bytes: Int64?
         /// Another installed app that matches it too: listed unticked.
         public let sharedWith: String?
+        /// A web app's WebKit store, which holds its saved logins: listed unticked, so they stay unless Sven ticks it.
+        public var logins = false
         public var id: String { url.path(percentEncoded: false) }
-        public var tickedFirst: Bool { sharedWith == nil }
+        public var tickedFirst: Bool { sharedWith == nil && !logins }
         /// Where it is, short: "Library/Caches/<name>".
         public var shown: String { "Library/\(place)/\(url.lastPathComponent)" }
     }
@@ -73,8 +75,8 @@ public enum AppLeftovers {
     public static let library = PilotFolder.home.appending(path: "Library", directoryHint: .isDirectory)
 
     /// `app`'s leftovers under `library`, in the places' order, each matched against `others` (every other installed app,
-    /// its id and name enough). `size` measures each; nil leaves it unread.
-    public static func find(_ app: App, others: [App], library: URL = library, size: ((URL) -> Int64?)? = nil) -> [Item] {
+    /// its id and name enough). `size` measures each; nil leaves it unread. `webApp`: its WebKit store is its logins.
+    public static func find(_ app: App, others: [App], library: URL = library, size: ((URL) -> Int64?)? = nil, webApp: Bool = false) -> [Item] {
         let others = others.filter { $0.bundleID.lowercased() != app.bundleID.lowercased() }
         return places.flatMap { place -> [Item] in
             let folder = library.appending(path: place.path, directoryHint: .isDirectory)
@@ -84,7 +86,7 @@ public enum AppLeftovers {
                 let job = place.rule.isLaunchAgent ? launchJob(url) : nil
                 guard owns(app, name, place, job: job), FileOps.identity(of: url) != nil, !isLink(url) else { return nil }
                 let other = others.first { owns($0, name, place, job: job) || related($0, app) }
-                return Item(url: url, place: place.path, bytes: size?(url), sharedWith: other?.name)
+                return Item(url: url, place: place.path, bytes: size?(url), sharedWith: other?.name, logins: webApp && place.path == "WebKit")
             }
         }
     }

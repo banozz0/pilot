@@ -1,6 +1,7 @@
 import AppKit
 import PilotCore
 import SwiftUI
+import WebApps
 
 /// A running copy of an app, as Remove's quit step needs it: NSRunningApplication, or a test's stand-in.
 @MainActor
@@ -143,7 +144,7 @@ enum RemoveApp {
         // Never Pilot: it stamps every web app under its own id (dev.banozz.pilot.webapp.…), but reads none of their files.
         let others = AppsModule.installedAppFiles().filter { $0.bundle != UninstallPlaces.bundleID }
             .map { AppLeftovers.App(bundleID: $0.bundle, name: $0.name, path: $0.url.path(percentEncoded: false)) }
-        return AppLeftovers.find(app, others: others, library: library, size: Uninstall.bytes)
+        return AppLeftovers.find(app, others: others, library: library, size: Uninstall.bytes, webApp: app.bundleID.hasPrefix(WebAppSpec.bundleIDPrefix))
     }
 }
 
@@ -211,7 +212,7 @@ struct LeftoversView: View {
     }
 
     private func row(_ item: AppLeftovers.Item) -> some View {
-        TickRow(title: item.url.lastPathComponent, detail: item.sharedWith.map { "\($0) may use it too" },
+        TickRow(title: item.url.lastPathComponent, detail: item.logins ? "Its saved logins" : item.sharedWith.map { "\($0) may use it too" },
                 size: item.bytes.map(RemoveList.size) ?? "—", ticked: model.ticked.contains(item.id)) { model.toggle(item.id) }
     }
 
