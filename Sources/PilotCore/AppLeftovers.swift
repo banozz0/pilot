@@ -90,7 +90,7 @@ public enum AppLeftovers {
     }
 
     /// Whether the item called `name` in `place` is `app`'s; `job` is a LaunchAgent's plist, read once.
-    static func owns(_ app: App, _ name: String, _ place: Place, job: LoginItems.Item?) -> Bool {
+    static func owns(_ app: App, _ name: String, _ place: Place, job: Job?) -> Bool {
         let lower = name.lowercased(), ids = app.ids
         switch place.rule {
         case .endings(let endings):
@@ -101,7 +101,7 @@ public enum AppLeftovers {
             guard lower.hasSuffix(".plist") else { return false }
             if ids.contains(where: { isID(String(lower.dropLast(6)), of: $0) }) { return true }
             guard let job else { return false }
-            return ids.contains { isID(job.label, of: $0) || job.bundleID?.lowercased() == $0 } || (!app.path.isEmpty && job.appPath == app.path)
+            return ids.contains { id in isID(job.label, of: id) || job.associated.contains(id) } || (!app.path.isEmpty && job.appPath == app.path)
         }
     }
 
@@ -114,8 +114,15 @@ public enum AppLeftovers {
     /// Two apps of one family (`com.x.App` and `com.x.App.beta`): what one leaves, the other may read.
     static func related(_ a: App, _ b: App) -> Bool { isID(a.bundleID, of: b.bundleID) || isID(b.bundleID, of: a.bundleID) }
 
-    private static func launchJob(_ url: URL) -> LoginItems.Item? {
-        read(url).flatMap { LoginItems.job($0, path: url.path(percentEncoded: false), kind: .agent) }
+    /// A LaunchAgent as ownership reads it: its label, every app it names (AssociatedBundleIdentifiers, lowercased: one
+    /// agent may serve several apps, so each is checked), and the .app its program runs from.
+    struct Job: Sendable { let label: String, associated: [String], appPath: String? }
+
+    private static func launchJob(_ url: URL) -> Job? {
+        guard let job = plist(url), let label = job["Label"] as? String else { return nil }
+        let associated = (job["AssociatedBundleIdentifiers"] as? [String]) ?? (job["AssociatedBundleIdentifiers"] as? String).map { [$0] } ?? []
+        let program = job["Program"] as? String ?? (job["ProgramArguments"] as? [String])?.first
+        return Job(label: label, associated: associated.map { $0.lowercased() }, appPath: program.flatMap(LoginItems.app))
     }
 
     private static func isLink(_ url: URL) -> Bool {

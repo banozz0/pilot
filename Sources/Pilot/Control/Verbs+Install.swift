@@ -16,7 +16,7 @@ extension ControlVerbs {
                                  switch word {
                                  case "search": "pilot install search <text>: the catalogue's matches (none while Recommend apps is off), then each source's results with its key, how it installs and the command it runs, or why the source has none; waits for every source (up to about 30 s)"
                                  case "pick": "pilot install pick <key>: a key from pilot list catalogue or a search. An installed entry says so; a vendor's https page opens in the browser; a package, a GitHub release file or an install script asks Allow with its exact command, then runs it in a terminal window; a page that is not https asks first"
-                                 case "leftovers": "pilot install leftovers <app>: what Remove offers once that .app is in the Trash: its files at the top of ~/Library's \(AppLeftovers.placeNames.joined(separator: ", ")), each with its size and ticked, but for one another installed app may share. --trash asks Allow, then moves the ticked ones to the Trash"
+                                 case "leftovers": "pilot install leftovers <app>: what Remove will offer once that .app is in the Trash, read from the app where it is now, so before pilot remove: its files at the top of ~/Library's \(AppLeftovers.placeNames.joined(separator: ", ")), each with its size and ticked, but for one another installed app may share. --trash asks Allow, then moves the ticked ones to the Trash"
                                  case "helper": "pilot install helper <id>: an id from pilot list helpers. An installed helper says so; Homebrew's installer asks Allow, then runs in a terminal window, which asks for your password; the others are Homebrew formulae, refused until Homebrew is installed"
                                  default: nil
                                  }
@@ -49,6 +49,9 @@ extension ControlVerbs {
         }
         var answer: [String: JSONValue] = ["app": .string(app.name), "bundleID": .string(app.bundleID), "leftovers": .array(rows)]
         guard trash else { return .object(answer) }
+        guard RemoveApp.copies(of: URL(filePath: path), running: s.running).isEmpty else {
+            throw ControlError(.badValue, "\(app.name) is open: its files are in use, so quit it first")
+        }
         let model = LeftoversModel(app: app.name, items: items, trash: s.leftoversTrash)
         guard !model.chosen.isEmpty else { throw ControlError(.badValue, "nothing of \(app.name)'s is ticked to go") }
         return try await s.gate.allow(ControlGate.Ask("Remove leftovers", lines: ["\(app.name)'s, to the Trash:"] + model.chosen.map(\.shown)), peer: peer) {
