@@ -122,12 +122,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pilot://view?file=<path>&token=… opens a picture in the image viewer, as `pilot files open` does (the token always:
     /// a page must not put Sven's pictures on his screen).
     /// A .txt or .md file (Finder's Open With, a default Sven picked, a drop on the Dock icon) opens in its own window
-    /// (TextWindows, T49); a PNG, JPEG, HEIC, GIF, WebP, TIFF or BMP in the image viewer (ImageViewer, Q158).
+    /// (TextWindows, T49); PNG, JPEG, HEIC, GIF, WebP, TIFF and BMP files in the image viewer, one window for the open's
+    /// pictures (ImageViewer, Q158, Q161).
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
+        // The pictures of one open, together: one viewer steps through them (Q161), never a window a picture.
+        let pictures = urls.filter { $0.isFileURL && ViewerImages.viewable($0) }
+        if !pictures.isEmpty, ImageViewer.show(pictures) == nil { log.error("not opened: \(pictures.count) picture(s)") }
+        for url in urls where !pictures.contains(url) {
             if url.isFileURL {
-                let opened = ViewerImages.viewable(url) ? ImageViewer.show(url) != nil : TextWindows.open(url) != nil
-                if !opened { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
+                if TextWindows.open(url) == nil { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
                 continue
             }
             switch url.host {

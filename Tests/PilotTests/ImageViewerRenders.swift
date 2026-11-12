@@ -85,13 +85,23 @@ struct ImageViewerRenders {
             look.glass = false
             let tokens = StyleTokens.of(look.style, theme: look.theme)
             let size = CGSize(width: 1200, height: 800)
-            func write(_ name: String) throws {
+            @discardableResult func write(_ name: String) throws -> NSBitmapImageRep {
                 let rep = try CaptureEditorRenders.draw(ImageViewerView(model: model), tokens: tokens, size: size, scale: 2)
                 try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("viewer-\(name)-\(pass.tag).png"))
+                return rep
+            }
+            // A point in the room left of the portrait, inside the landscape picture: the ground after a step from one to
+            // the other (Q161: the picture before stayed under the next, and the desktop showed through the ground).
+            let ground = tokens.colors.canvas.rgb
+            func isGround(_ rep: NSBitmapImageRep) throws -> Bool {
+                let c = try #require(rep.colorAt(x: 480, y: 800)?.usingColorSpace(.sRGB))
+                let want = [CGFloat((ground >> 16) & 0xFF), CGFloat((ground >> 8) & 0xFF), CGFloat(ground & 0xFF)].map { $0 / 255 }
+                return c.alphaComponent > 0.99 && abs(c.redComponent - want[0]) < 0.03 && abs(c.greenComponent - want[1]) < 0.03
+                    && abs(c.blueComponent - want[2]) < 0.03
             }
             while model.index != 0 { model.step(1); try await Self.settle(model) }
             model.fitToWindow()
-            try write("1-fit")
+            #expect(try !isGround(write("1-fit")), "the landscape picture should cover the probe point")
             model.zoom(to: 1)
             try await Task.sleep(for: .milliseconds(400))
             try write("2-actual-size")
@@ -101,8 +111,32 @@ struct ImageViewerRenders {
             model.step(1)
             try await Self.settle(model)
             #expect(model.file.lastPathComponent == "portrait.jpg" && model.pixels == CGSize(width: 2000, height: 3000))
-            try write("4-portrait")
+            #expect(try isGround(write("4-portrait")), "after the step the ground beside the portrait is not the solid theme ground")
         }
+
+        // Q161: one open of several pictures is ONE window stepping through just those, in Finder's name order.
+        ImageViewer.closeAll()
+        // Through the route a Finder open of three picked pictures takes: AppDelegate's application(_:open:).
+        AppDelegate().application(NSApplication.shared, open: [png, beach, gif])
+        let t0 = Date()
+        let batch = try #require(ImageViewer.model(showing: png))
+        await batch.settled()
+        #expect(ImageViewer.openCount == 1)
+        #expect(batch.files.map(\.lastPathComponent) == ["beach.jpg", "screen.png", "wave.gif"], "\(batch.files.map(\.lastPathComponent))")
+        #expect(batch.file.lastPathComponent == "screen.png" && batch.index == 1)
+        var seen = [batch.file.lastPathComponent]
+        for _ in 0..<3 { batch.step(1); await batch.settled(); seen.append(batch.file.lastPathComponent) }
+        #expect(seen == ["screen.png", "wave.gif", "beach.jpg", "screen.png"])
+        // The same open handed over in parts joins that window; a later open of a picture not shown gets its own.
+        let joined = try #require(ImageViewer.show([turned], now: t0.addingTimeInterval(0.2)))
+        await joined.settled()
+        #expect(joined === batch && ImageViewer.openCount == 1 && batch.files.count == 4)
+        let later = try #require(ImageViewer.show([heic], now: t0.addingTimeInterval(5)))
+        await later.settled()
+        #expect(later !== batch && ImageViewer.openCount == 2 && later.files == [heic])
+        // A picture already shown, opened again on its own: that window comes forward, no new one.
+        #expect(ImageViewer.show([heic], now: t0.addingTimeInterval(10)) === later && ImageViewer.openCount == 2)
+        ImageViewer.closeAll()
     }
 
     /// Mark-up's Done on a picture the viewer opened, each answer to its question.

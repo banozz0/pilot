@@ -9,7 +9,6 @@ import SwiftUI
 struct ImageViewerView: View {
     @Environment(\.style) private var style
     let model: ImageViewerModel
-    var glass = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
@@ -22,11 +21,12 @@ struct ImageViewerView: View {
             Color.clear.frame(height: 1)
             ImageViewerFooter(model: model).padding(.horizontal, 12).frame(height: EditorLayout.foot(style))
         }
-        .background { if !glass { style.color(\.sunken) } }
+        // Solid, never Glass: nothing behind the window shows round a picture (Q161).
+        .background { style.color(\.canvas) }
         .clipShape(shape)
         .overlay {
             if style.kind == .toybox { shape.strokeBorder(style.color(\.outline), lineWidth: 2) }
-            else if !glass { shape.strokeBorder(style.color(\.line2)) }
+            else { shape.strokeBorder(style.color(\.line2)) }
         }
     }
 
