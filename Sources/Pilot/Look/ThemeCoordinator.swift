@@ -805,30 +805,7 @@ final class ThemeCoordinator {
         guard !busy else { throw ThemeFailure("theme mutation already waiting/running") }
         busy = true; defer { busy = false }
         if revision != nil, try store.draft(draft.pack.id).files.filter({ $0.key != "PROVENANCE.md" }) != draft.files.filter({ $0.key != "PROVENANCE.md" }) {
-            let record = try ledger().1, loaded = try store.load(draft.pack.id)
-            var paths: [String] = []
-            for claim in record.wallpapers ?? [] {
-                for value in [claim.original, claim.last] {
-                    switch value { case .sources(let values): paths += values; case .image(let path): if let path { paths.append(path) } }
-                }
-            }
-            func strings(_ value: JSONValue) -> [String] {
-                switch value {
-                case .string(let value): [value]
-                case .array(let values): values.flatMap(strings)
-                case .object(let values): values.values.flatMap(strings)
-                default: []
-                }
-            }
-            if let current = try wallpaper?.read() {
-                try current.validate()
-                paths += current.sources + current.displays.compactMap(\.image) + current.preferences.values.flatMap(strings)
-            }
-            let inUse = paths.filter { $0.hasPrefix("/") }.contains { path in
-                // A missing, broken or unreadable reference cannot establish that its bytes are safe to replace.
-                (try? Self.pathContains(loaded.folder, path) || Self.pathContains(path, loaded.folder)) ?? true
-            }
-            if inUse {
+            if try wallpaperUses(store.load(draft.pack.id).folder) {
                 let previous = try store.draft(draft.pack.id)
                 guard previous.files.filter({ $0.key != "PROVENANCE.md" }) == draft.files.filter({ $0.key != "PROVENANCE.md" }) else {
                     throw ThemeFailure("Wallpaper files are in use by current appearance or Restore. Start with Duplicate before changing images, or Restore and choose other wallpaper first. Draft not saved; nothing applied.")
@@ -837,6 +814,48 @@ final class ThemeCoordinator {
         }
         // No plan is regenerated here. Existing plans detect changed exact content before/after Allow.
         return try store.save(draft, replacing: revision, fault: fault)
+    }
+
+    /// Whether the wallpaper on screen, or one Restore puts back, is in this folder. `missing` locates a file since removed
+    /// by the folder that held it; without it a missing, broken or unreadable reference counts as in use, as nothing proves
+    /// its bytes are safe to replace.
+    private func wallpaperUses(_ folder: String, missing: Bool = false) throws -> Bool {
+        var paths: [String] = []
+        for claim in try ledger().1.wallpapers ?? [] {
+            for value in [claim.original, claim.last] {
+                switch value { case .sources(let values): paths += values; case .image(let path): if let path { paths.append(path) } }
+            }
+        }
+        func strings(_ value: JSONValue) -> [String] {
+            switch value {
+            case .string(let value): [value]
+            case .array(let values): values.flatMap(strings)
+            case .object(let values): values.values.flatMap(strings)
+            default: []
+            }
+        }
+        if let current = try wallpaper?.read() {
+            try current.validate()
+            paths += current.sources + current.displays.compactMap(\.image) + current.preferences.values.flatMap(strings)
+        }
+        return paths.filter { $0.hasPrefix("/") }.contains { path in
+            (try? Self.pathContains(folder, path, missing: missing) || Self.pathContains(path, folder, missing: missing)) ?? true
+        }
+    }
+
+    /// Deletes a pack a person made. The applied pack, and one holding a wallpaper on screen or one Restore puts back, stay:
+    /// Restore needs nothing else from a pack's folder, as the ledger keeps every colour it sets (ThemeLedger.selected,
+    /// ThemeNativePalette.pack).
+    func delete(_ id: String) throws {
+        guard !busy else { throw ThemeFailure("theme mutation already waiting/running") }
+        busy = true; defer { busy = false }
+        guard !store.isPilots(id) else { throw ThemePackStore.pilotsOwn(id) }
+        guard let loaded = try? store.load(id) else { throw ThemeFailure("No theme pack is named \(id); pilot theme list-all shows them.") }
+        guard try ledger().1.selected?.id != id else { throw ThemeFailure("\(loaded.pack.title) is the theme applied now. Apply another theme or Restore default first, then delete it.") }
+        guard try !wallpaperUses(loaded.folder, missing: true) else {
+            throw ThemeFailure("\(loaded.pack.title)'s wallpaper is on screen or is what Restore puts back. Pick another wallpaper or Restore default first, then delete it.")
+        }
+        try store.delete(id)
     }
 
     /// Compare filesystem identities along resolved ancestry, including aliases of any ancestor.
@@ -1268,7 +1287,8 @@ final class ThemeCoordinator {
         if !plan.ghostex.isEmpty {
             let colour = plan.ghostex.first { $0.key == "customSidebarTitlebarBackgroundTintColor" }?.after
             let settings = plan.ghostex.compactMap { GhostexInterface.names[$0.key] }.joined(separator: ", ")
-            let to = colour.flatMap { $0 == plan.selection.flatMap { try? GhostexInterface.tint($0) } ? " to \($0)" : nil } ?? ""
+            // Named by the ground Ghostex draws, not the tint it is given, which no palette holds.
+            let to = plan.selection.flatMap { pack in colour == (try? GhostexInterface.tint(pack)) ? pack.palette["background"].map { " to \($0)" } : nil } ?? ""
             entries.append(.init(name: "Ghostex window and sidebar\(to)", note: ": \(settings). Terminal colours stay Ghostex's own"))
             short.append("Ghostex")
         }

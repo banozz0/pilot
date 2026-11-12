@@ -26,7 +26,7 @@ public struct ThemePackStore: Sendable {
         guard ThemePack.validID(id) else { throw ThemeFailure("invalid pack id") }
         let fm = FileManager.default
         let userRoots = Array(Set([root, writableRoot])).sorted().filter { fm.fileExists(atPath: $0 + "/" + id) }
-        let factory = factoryRoot.map { fm.fileExists(atPath: $0 + "/" + id) } ?? false
+        let factory = isFactory(id)
         guard userRoots.count + (factory ? 1 : 0) <= 1 else { throw ThemeFailure("user/factory pack ID collision: \(id); rename the user pack") }
         guard factory || PilotTheme.named(id) == nil else { throw ThemeFailure("reserved stock theme ID: \(id); give the user pack its own ID") }
         let source = factory ? factoryRoot! : userRoots.first ?? root
@@ -96,6 +96,13 @@ public struct ThemePackStore: Sendable {
         }
         ready.wait()
         return try result.withLock { try $0!.get() }
+    }
+    /// Whether a pack ships with Pilot (its factory library).
+    public func isFactory(_ id: String) -> Bool { factoryRoot.map { FileManager.default.fileExists(atPath: $0 + "/" + id) } ?? false }
+    /// Pilot's own: a stock theme or a factory pack, which can't be deleted.
+    public func isPilots(_ id: String) -> Bool { PilotTheme.named(id) != nil || isFactory(id) }
+    public static func pilotsOwn(_ name: String) -> ThemeFailure {
+        ThemeFailure("\(name) is one of Pilot's own themes, so it can't be deleted. Only packs you made or imported can.")
     }
     public func list() throws -> [ThemePack] {
         let roots = Set([root, writableRoot] + [factoryRoot].compactMap { $0 })
@@ -343,6 +350,23 @@ extension ThemePackStore {
             } catch { throw ThemeFailure("rollback verification conflict; recovery retained at \(stage)") }
             throw error
         }
+    }
+
+    /// Removes a pack a person made from the writable library: Pilot's own packs and stock themes are refused. The folder is
+    /// first renamed out of the library under the lock, so it is never listed half removed, then removed with what it holds.
+    public func delete(_ id: String) throws {
+        guard ThemePack.validID(id) else { throw ThemeFailure("invalid pack id") }
+        guard !isPilots(id) else { throw Self.pilotsOwn(id) }
+        let directory = try PackDirectory(writableRoot)
+        guard flock(directory.fd, LOCK_EX) == 0 else { throw ThemeFailure("cannot lock user library") }
+        defer { flock(directory.fd, LOCK_UN) }
+        var info = stat()
+        guard fstatat(directory.fd, id, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ThemeFailure("no pack named \(id) in your themes") }
+        guard info.st_mode & S_IFMT == S_IFDIR else { throw ThemeFailure("\(id) is not a pack folder; nothing deleted") }
+        let gone = ".pilot-deleted-" + UUID().uuidString
+        guard renameatx_np(directory.fd, id, directory.fd, gone, UInt32(RENAME_EXCL)) == 0, fsync(directory.fd) == 0 else { throw ThemeFailure("could not delete \(id)") }
+        // A leftover hidden folder is never listed, so a failed removal only leaves disk space behind.
+        try? FileManager.default.removeItem(atPath: writableRoot + "/" + gone)
     }
 
     public func export(_ id: String, to path: String, fault: (String) throws -> Void = { _ in }) throws {

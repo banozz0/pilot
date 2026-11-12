@@ -254,6 +254,11 @@ private struct ThemePackControls: View {
     @Environment(\.ink) private var ink
     @State private var packs: [ThemePack] = []
     @State private var selected = ""
+    /// The pack the Delete confirmation asks about.
+    @State private var deleting: ThemePack?
+    /// Pilot's own packs and stock themes can't be deleted; the applied one is refused with its reason.
+    @State private var store: ThemePackStore?
+    private var deletable: Bool { packs.contains { $0.id == selected } && store?.isPilots(selected) == false }
     @State private var plan: ThemePlan?
     @State private var outcome = ""
     @State private var outcomeDetails = ""
@@ -289,7 +294,7 @@ private struct ThemePackControls: View {
         .task {
             do {
                 let owner = try ThemeCoordinator.production(), store = owner.store
-                packs = try await Task.detached { try store.list() }.value
+                packs = try await Task.detached { try store.list() }.value; self.store = store
                 apps = try owner.appFollowing(); following = try owner.following()
                 let now = try owner.appliedTheme()
                 applied = now.any
@@ -312,7 +317,11 @@ private struct ThemePackControls: View {
                 Button("Import…") { importPack() }
                 Button("Edit") { edit(copy: false) }.disabled(selected.isEmpty)
                 Button("Export…") { exportPack() }.disabled(selected.isEmpty)
+                Button("Delete…") { deleting = packs.first { $0.id == selected } }.disabled(!deletable)
             }
+            .confirmationDialog("Delete \(deleting?.title ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+                Button("Delete", role: .destructive) { deletePack() }
+            } message: { Text("Its folder and pictures are removed. This can't be undone.") }
             if let apps {
                 if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
                 if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
@@ -387,6 +396,18 @@ private struct ThemePackControls: View {
                 outcome = "Pack imported. Nothing applied."
             } catch { outcome = String(describing: error) }
         }
+    }
+    private func deletePack() {
+        guard let pack = deleting else { return }
+        deleting = nil
+        do {
+            let owner = try ThemeCoordinator.production()
+            try owner.delete(pack.id)
+            packs = try owner.store.list()
+            if selected == pack.id { selected = look.themeID }
+            plan = nil; draft = nil; outcomeDetails = ""
+            outcome = "\(pack.title) deleted."
+        } catch { outcome = String(describing: error) }
     }
     private func exportPack() {
         let panel = NSSavePanel(); panel.nameFieldStringValue = selected + ".pilot-theme.json"
