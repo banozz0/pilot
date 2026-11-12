@@ -58,7 +58,7 @@ struct LauncherFilmRenders {
         let commands = try LineMenuRenders.withCommands(built)
         let ports = MenuEntry(title: "Open ports", target: .action("ext.open-ports.list"), home: nil, detail: "Open ports",
                               keywords: "ports listen network", icon: .command(emoji: "🔌"))
-        // Summarise from the catalogue, installed: its list command at the root (pilot-extensions, summarise 1.1.0).
+        // Summarise from the catalogue, installed: its list command at the root (catalogue, summarise 1.1.0).
         let summarise = MenuEntry(title: "Summarise", target: .action("ext.summarise.summarise"), home: nil, detail: "Summarise",
                                   keywords: "summary youtube page document", icon: .command(emoji: "📝"))
         let sampler = SystemSampler()
@@ -298,7 +298,7 @@ struct LauncherFilmRenders {
     }
 
     /// Summarise opened from the menu (Sven's cut 4 note: show the link going in): empty, it offers the copied link; with the
-    /// link pasted in its search, the row its program prints for a typed page (pilot-extensions, summarise main.py, summarise).
+    /// link pasted in its search, the row its program prints for a typed page (catalogue, summarise main.py, summarise).
     static func summariseList(in dir: URL) async throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-film-summarise")

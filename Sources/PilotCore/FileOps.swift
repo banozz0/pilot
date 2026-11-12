@@ -68,17 +68,18 @@ public actor FileOps {
     public static func relocated(_ url: URL, by moves: [URL: URL]) -> URL {
         guard !moves.isEmpty else { return url }
         let origins = moves.keys.sorted { $0.path.count > $1.path.count }
-        var parent = url, suffix = ""
-        // Foundation leaves a missing path unresolved after rename. Walk up until its existing alias resolves.
+        var parent = url.path, suffix = ""
+        // Foundation leaves a missing path unresolved after rename. Walk up until its existing alias resolves. The walk is
+        // on the path string and stops at "/": a URL from a listing (NSURL-backed) steps from / to /.. and on forever,
+        // which hung the Files window after a paste (build 2379).
         while true {
-            let path = parent.resolvingSymlinksInPath().path + suffix
+            let path = URL(filePath: parent).resolvingSymlinksInPath().path + suffix
             if let from = origins.first(where: { path == $0.path || path.hasPrefix($0.path + "/") }), let to = moves[from] {
                 return URL(filePath: to.path + path.dropFirst(from.path.count), directoryHint: url.hasDirectoryPath ? .isDirectory : .notDirectory)
             }
-            let above = parent.deletingLastPathComponent()
-            guard above.path != parent.path else { return url }
-            suffix = "/" + parent.lastPathComponent + suffix
-            parent = above
+            if parent == "/" || parent.isEmpty { return url }
+            suffix = "/" + (parent as NSString).lastPathComponent + suffix
+            parent = (parent as NSString).deletingLastPathComponent
         }
     }
 
@@ -195,6 +196,13 @@ public actor FileOps {
     public static let systemTrash: Trash = { url in
         if isIsolatedTestRun { return try throwawayTrash(url) }
         return try await recycle(url)
+    }
+
+    /// The Trash for a caller that cannot wait (the catalogue's installers): FileManager's, or in an isolated test run the
+    /// throwaway folder `systemTrash` uses, so a sandbox remove never reaches ~/.Trash.
+    public static func trashNow(_ url: URL) throws {
+        if isIsolatedTestRun { _ = try throwawayTrash(url); return }
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
     }
 
     /// Where `systemTrash` would put an item from `folder`, resolved as an undo reads it: the volume's Trash folder

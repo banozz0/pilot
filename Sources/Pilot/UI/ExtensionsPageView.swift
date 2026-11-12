@@ -199,7 +199,7 @@ struct ExtensionsPageView: View {
                 Text(query.isEmpty ? "You have every extension it lists." : "Nothing in the catalogue matches.")
                     .font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
             }
-            FinePrint(text: "Read from github.com/\(ExtensionCatalogue.repo) only while this page shows.")
+            FinePrint(text: "Read from \(ExtensionCatalogue.home) only while this page shows.")
                 .padding(.horizontal, 10).padding(.top, 10)
         }
     }

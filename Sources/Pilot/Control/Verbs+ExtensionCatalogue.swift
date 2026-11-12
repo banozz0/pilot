@@ -65,7 +65,7 @@ extension ControlVerbs {
     }
 
     /// The index read as the page reads it (kept ten minutes, read again with `refresh`), or not-ready with why it was not.
-    private static func readCatalogue(_ model: ExtensionCatalogueModel, refresh: Bool) async throws(ControlError) {
+    static func readCatalogue(_ model: ExtensionCatalogueModel, refresh: Bool) async throws(ControlError) {
         if refresh { await model.refresh() } else { await model.open() }
         if case .failed(let why) = model.load {
             throw ControlError(.notReady, "\(why) Try again: pilot ext catalogue --refresh")
@@ -128,10 +128,10 @@ extension ExtensionTools {
         } else {
             headline = "Install extension \(ExtensionTools.titled(entry.id, to))?"
         }
-        let from = (had == nil ? "" : ExtensionTools.trashes(1) + " ") + "From Pilot's catalogue: github.com/\(ExtensionCatalogue.repo)"
+        let from = (had == nil ? "" : ExtensionTools.trashes(1) + " ") + "From Pilot's catalogue: \(ExtensionCatalogue.home)"
         // A line each, raw, as ext install's question (ExtensionTools.installAsk).
         return ControlGate.Ask.install(.extension, lines: [
-            "\(entry.id) (\(entry.title) \(entry.version)) from Pilot's catalogue, github.com/\(ExtensionCatalogue.repo)",
+            "\(entry.id) (\(entry.title) \(entry.version)) from Pilot's catalogue, \(ExtensionCatalogue.home)",
             "into \(extensions.appending(path: entry.id).path)",
             "programs: \(programs.isEmpty ? "none marked executable" : programs.joined(separator: ", "))",
             "other files: \(others.isEmpty ? "none" : others.joined(separator: ", ")); \(entry.files.count) files in all, \(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))",
@@ -139,6 +139,26 @@ extension ExtensionTools {
             replaces,
         ]).summed(headline, [ExtensionTools.runs(entry.files.filter(\.executable).map(\.path), commands: commands.count), from])
     }
+}
+
+/// Where the catalogue's files come from: GitHub, or in a debug build the folder the setting `catalogue.source` names (a
+/// clone's catalogue/, public-repo spec T20's proof seam, Open question 1), read at each fetch, so a set counts from the
+/// next Refresh. A release build has no setting and reads GitHub only.
+enum CatalogueSource {
+    static let key = "catalogue.source"
+    nonisolated(unsafe) static let defaults = UserDefaults.pilot()
+    static var folder: String { defaults.string(forKey: key) ?? "" }
+
+    static let live: ExtensionCatalogue.Source = {
+        #if DEBUG
+        ExtensionCatalogue.Source { path, limit in
+            let folder = folder
+            return try await (folder.isEmpty ? ExtensionCatalogue.Source.live : .folder(URL(filePath: folder, directoryHint: .isDirectory))).fetch(path, limit)
+        }
+        #else
+        .live
+        #endif
+    }()
 }
 
 extension ExtensionCatalogue.Standing {

@@ -7,14 +7,29 @@ import Darwin
 @Observable @MainActor
 final class ThemeCoordinator {
     private static var live: ThemeCoordinator?
-    private static var support: URL { PilotFolder.support.appending(path: "ThemeSystem") }
+    /// An isolated test run's folder is under /var/folders, a link the pack store's no-follow walk refuses, and its real
+    /// /private/var is what ThemeFiles' link resolving (Foundation's) gives back as /var: no folder there serves both. So
+    /// the sandbox host takes PILOT_SANDBOX_THEMES=<a throwaway folder with no link in its path> for the theme system, and
+    /// as the built-in packs a test bundle lacks its `factory` folder when there is one, else the repo's Packaging/ThemePacks.
+    private static let sandbox: (support: URL, factory: String)? = {
+        #if DEBUG
+        guard isIsolatedTestRun, let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_THEMES"], folder.hasPrefix("/") else { return nil }
+        let own = folder + "/factory"
+        let factory = FileManager.default.fileExists(atPath: own) ? own
+            : URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../../Packaging/ThemePacks").standardizedFileURL.path
+        return (URL(filePath: folder, directoryHint: .isDirectory), factory)
+        #else
+        return nil
+        #endif
+    }()
+    private static var support: URL { sandbox?.support ?? PilotFolder.support.appending(path: "ThemeSystem") }
 
     /// Supported Ghostty destination, locally bound and shown in every plan. Portable data cannot replace it.
     static func production() throws -> ThemeCoordinator {
         if let live { return live }
         let packs = support.appending(path: "packs"), state = support.appending(path: "state")
         for directory in [packs, state] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
+        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
                                                 appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() }), reload: { intent in
@@ -47,6 +62,13 @@ final class ThemeCoordinator {
             detect: isTestRun ? nil : { ThemeCoordinator.detectApps(home: NSHomeDirectory()) },  // A test host never reaches real configs.
             cursorIsSystem: { CursorSets.shared.set == .macOS },
             ghostexColours: isTestRun ? nil : GhostexColours.effects(), appsHome: isTestRun ? nil : NSHomeDirectory())
+        owner.shipped = Shipped(wallpapers: ShippedWallpapers(root: support.appending(path: "wallpapers").path, source: CatalogueSource.live), index: {
+            let model = ExtensionCatalogueModel.shared
+            await model.open()
+            if case .failed(let why) = model.load { throw ThemeFailure(why) }
+            guard let index = model.index else { throw ThemeFailure("the catalogue did not read") }
+            return index
+        })
         _ = try owner.recoverAtLaunch()
         live = owner
         return owner
@@ -144,6 +166,13 @@ final class ThemeCoordinator {
     private let appsHome: String?
     private let fixtureRoot: String?
     private var fixtureEditor: ThemeDraftSession?
+    /// Where a shipped pack's pictures come from (ShippedWallpapers, Sven Q119): the catalogue's copy, fetched by a plan
+    /// of that pack; nil in tests and fixtures, which never reach the network.
+    struct Shipped {
+        let wallpapers: ShippedWallpapers
+        let index: @MainActor () async throws -> ExtensionCatalogue.Index
+    }
+    var shipped: Shipped?
     /// What the ledger and recovery may name: stored bindings plus the detected destinations an Apply took on.
     private func selection() throws -> LocalSelection {
         var local = try stored()
@@ -1136,10 +1165,12 @@ final class ThemeCoordinator {
         }
     }
 
-    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget]) {
+    /// `keep`: a shipped pack whose pictures are not here (ShippedWallpapers) leaves every screen as it is: the claims
+    /// still the theme's are held as the ledger has them, with no mutation, so Restore still puts each original back.
+    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?, keep: Bool = false) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget], held: [ThemeWallpaperClaim]) {
         let claims = record.wallpapers ?? []
         guard let state else {
-            guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [])
+            guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [], [])
         }
         // What the person changed since (another image, their own collection, a pin) stays theirs and only its claim
         // goes, so one changed screen never stops the rest of an Apply or Restore.
@@ -1166,10 +1197,11 @@ final class ThemeCoordinator {
             }
         }
         // Zero images releases previous wallpaper ownership, or leaves an unmanaged wallpaper unchanged.
+        if keep { return (changes, kept, claims.filter { claim in owned.contains { $0.target == claim.target } }) }
         for claim in owned where !changes.contains(where: { $0.target == claim.target }) {
             changes.append(.init(target: claim.target, before: claim.last, after: claim.original, release: true))
         }
-        return (changes, kept)
+        return (changes, kept, [])
     }
 
     private func writeWallpaper(_ change: ThemeWallpaperMutation) throws {
@@ -1412,12 +1444,32 @@ final class ThemeCoordinator {
     func plan(_ id: String?) async throws -> ThemePlan {
         // Ghostex answers through a child process, awaited before anything else is read, so the rest plans in one main-actor turn.
         let ghostex = try await ghostexColours?.read()
-        return try plan(id, ghostex: ghostex)
+        var note: String?
+        if let id { note = await fetchShipped(id) }
+        return try plan(id, ghostex: ghostex, shippedNote: note)
     }
-    private func plan(_ id: String?, ghostex ghostexState: [String: String]?) throws -> ThemePlan {
+
+    /// A shipped pack's pictures fetched from the catalogue before its plan reads them; why there are none to use, else nil.
+    private func fetchShipped(_ id: String) async -> String? {
+        guard let shipped, let loaded = try? store.load(id), ShippedWallpapers.wants(loaded) else { return nil }
+        // A copy fetched before is used offline; none leaves the wallpaper as it is.
+        func had() -> Bool { !shipped.wallpapers.picturing(loaded).images.isEmpty }
+        do {
+            guard let theme = try await shipped.index().theme(id) else {
+                return had() ? nil : "\(loaded.pack.title)'s wallpapers are not in Pilot's catalogue yet."
+            }
+            let wallpapers = shipped.wallpapers
+            try await Task.detached { try await wallpapers.fetch(theme, for: loaded) }.value
+            return nil
+        } catch {
+            log.notice("theme: \(id, privacy: .public)'s wallpapers not fetched: \(ExtensionCatalogue.Problem.reason(error), privacy: .public)")
+            return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded. \(ExtensionCatalogue.Problem.reason(error))"
+        }
+    }
+    private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil) throws -> ThemePlan {
         guard try state("pending").bytes == nil else { throw ThemeFailure("pending recovery; restart/recover before planning") }
         let (recordFile, kept) = try ledger()
-        let loaded = try id.map(store.load), (local, notes) = try effective(for: loaded?.pack)
+        let loaded = try id.map { try shipped?.wallpapers.picturing(store.load($0)) ?? store.load($0) }, (local, notes) = try effective(for: loaded?.pack)
         let gone = goneRoots(try stored(), claims: kept.claims)
         var record = kept
         record.claims.removeAll { gone.contains($0.root) }
@@ -1558,7 +1610,8 @@ final class ThemeCoordinator {
         guard wallpaperState?.preferences["cycling"] != .bool(true) else { throw ThemeFailure("wallpaper cycle in progress; plan again") }
         let components = try following()
         let nativePlan = try appearancePlan(loaded?.pack, old: appearanceOwnership(record, current: native?.read()), following: components)
-        let (wallpapers, keptWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState)
+        let unpictured = loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false
+        let (wallpapers, keptWallpapers, heldWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured)
         if loaded != nil, cursorIsSystem(), components.cursor != false, nativePlan.1?.cursor != true {
             warnings.append(Self.cursorSkipped)
         }
@@ -1568,10 +1621,13 @@ final class ThemeCoordinator {
         }
         let ghostexPlan = try ghostexPlan(loaded?.pack, record: record, off: local.ghostexInterfaceOff == true, state: ghostexState, warnings: &warnings)
         if loaded?.images.isEmpty == false, wallpaper == nil { warnings.append("Wallpaper skipped: Pilot can't set it here") }
+        if let loaded, unpictured, components.wallpapers {
+            warnings.append("Wallpaper kept; its colours apply: \(shippedNote ?? "\(loaded.pack.title)'s wallpapers are not downloaded.")")
+        }
         let appObservations = try custom.map { try ThemeFiles.read(root: $0.app, path: "Contents/Info.plist") }
         let plan = ThemePlan(id: UUID().uuidString, packID: id, revision: loaded?.revision, binding: binding, style: style(),
                              ledger: recordFile, protectedLegacy: legacy, zed: local.zed, zedOptOut: local.zedOptOut, observations: targets + appObservations + [try state("bindings"), try state("components")],
-                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, keptWallpapers: keptWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
+                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
         if plans.count >= 32 { plans.removeAll() }
         plans[plan.id] = (plan, try context(), nativePlan.0, nativePlan.1)
         return plan
@@ -1691,7 +1747,8 @@ final class ThemeCoordinator {
         let wallpaperClaims = plan.wallpapers.filter { !$0.release }.map { change in
             ThemeWallpaperClaim(target: change.target, original: old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
         }
-        next.wallpapers = wallpaperClaims.isEmpty ? nil : wallpaperClaims
+        let claimed = wallpaperClaims + plan.heldWallpapers
+        next.wallpapers = claimed.isEmpty ? nil : claimed
         next.ghostexSettings = plan.ghostexClaims.isEmpty ? nil : plan.ghostexClaims
         if next.claims.isEmpty && next.wallpapers == nil && next.appearance == nil { next.selected = nil }  // Everything it owned has gone.
         let nextBytes = try ThemeDigest.encoded(next)
@@ -1976,6 +2033,9 @@ struct ThemeFixture: Decodable {
     let wallpaperBindings: [String]?
     let nativeBaseline: ThemeNativeAppearance?
     let custom: [ThemeMappingBinding]?
+    /// A catalogue/ folder inside the root a shipped pack's pictures are fetched from (ShippedWallpapers), into
+    /// <root>/wallpapers; nil fetches none.
+    let catalogue: String?
 
     @MainActor static func serve(_ manifest: String) async throws {
         let env = ProcessInfo.processInfo.environment
@@ -2004,7 +2064,7 @@ struct ThemeFixture: Decodable {
         for directory in [config.packs, config.writablePacks, config.state, config.binding.root] + [config.zed?.root, config.detectHome].compactMap({ $0 }) + (config.obsidian ?? []).map(\.root) {
             guard URL(fileURLWithPath: directory).resolvingSymlinksInPath().path == directory else { throw ThemeFailure("fixture root symlink") }
         }
-        for path in [config.factoryPacks, config.wallpaperState, config.cursorRoot, config.nativeState].compactMap({ $0 }) {
+        for path in [config.factoryPacks, config.wallpaperState, config.cursorRoot, config.nativeState, config.catalogue].compactMap({ $0 }) {
             guard path.hasPrefix(config.root + "/"), URL(fileURLWithPath: path).resolvingSymlinksInPath().path == path,
                   !config.socket.hasPrefix(path + "/"), path != config.socket else { throw ThemeFailure("unsafe fixture wallpaper/factory/cursor path") }
         }
@@ -2247,6 +2307,11 @@ struct ThemeFixture: Decodable {
             detect: config.detectHome.map { home in { ThemeCoordinator.detectApps(home: home, within: config.root) } },
             cursorIsSystem: { config.cursorIsMacOS == true }, ghostexColours: ghostexColours, appsHome: config.detectHome)
         _ = try coordinator.zedSelection // Validate every explicit fixture binding before exposing a socket.
+        if let catalogue = config.catalogue.map({ URL(filePath: $0, directoryHint: .isDirectory) }) {
+            let source = ExtensionCatalogue.Source.folder(catalogue)
+            coordinator.shipped = ThemeCoordinator.Shipped(wallpapers: ShippedWallpapers(root: config.root + "/wallpapers", source: source),
+                                          index: { try ExtensionCatalogue.index(await source.fetch(ExtensionCatalogue.indexPath, ExtensionCatalogue.indexLimit)) })
+        }
         let verbs = ControlVerbs(); verbs.registerCore(); verbs.registerThemes { coordinator }
         if env["PILOT_THEME_CAROUSEL"] == "1" { verbs.registerCarousel(.fixture(coordinator, root: config.root)) }  // T8's proof only.
         if let agentSkills { verbs.registerGuides(skills: { agentSkills }) }

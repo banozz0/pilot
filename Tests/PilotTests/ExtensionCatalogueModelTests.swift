@@ -6,7 +6,7 @@ import Testing
 
 /// The extension catalogue in Pilot (2026-10-10): its shared state read only when asked and kept ten minutes, an install
 /// and a remove through it, the menu's Extension catalogue (its loading row, rows, Return and Cmd+K), and a push reaching
-/// a hidden view. Files come from the PilotCore fixture (banozz0/pilot-extensions' index trimmed, Ports' files); the
+/// a hidden view. Files come from the PilotCore fixture (the catalogue's index trimmed, Ports' files); the
 /// Extensions folder and the Trash are temporary folders; nothing reaches GitHub.
 @MainActor
 @Suite("Extension catalogue model")
@@ -27,7 +27,7 @@ struct ExtensionCatalogueModelTests {
                 if down { throw ExtensionCatalogue.Problem.unreachable("the catalogue is private; sign in to GitHub with gh auth login") }
                 // A file the fixture lacks answers as gh does for one the repo lacks.
                 guard let data = try? Data(contentsOf: ExtensionCatalogueModelTests.fixture.appending(path: path)) else {
-                    throw ExtensionCatalogue.Problem.unreachable("gh can't see banozz0/pilot-extensions with the account it is signed in to")
+                    throw ExtensionCatalogue.Problem.unreachable("gh can't see banozz0/pilot with the account it is signed in to")
                 }
                 return data
             }
@@ -109,7 +109,7 @@ struct ExtensionCatalogueModelTests {
         let pomodoro = try #require(model.index?.entry("pomodoro"))
         // The fixture holds only Ports' files.
         #expect(await model.install(pomodoro)
-                == "Pomodoro was not installed: Pilot's catalogue could not be reached: gh can't see banozz0/pilot-extensions with the account it is signed in to.")
+                == "Pomodoro was not installed: Pilot's catalogue could not be reached: gh can't see banozz0/pilot with the account it is signed in to.")
         #expect(model.failures["pomodoro"] != nil && model.standing(of: pomodoro) == .install && model.busy.isEmpty)
     }
 

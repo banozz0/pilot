@@ -2,7 +2,7 @@
   "id": "github",
   "title": "GitHub",
   "icon": "🐙",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "See what on GitHub needs you: pull requests waiting on your review, your own with their checks, issues given to you and CI runs that failed.",
   "examples": ["Type pull: PRs waiting on your review first, then yours, each with its checks passing or failing; Return opens it on github.com", "Type failing: CI runs that failed in your repos this week; Cmd+K re-runs only the failed jobs"],
   "runtime": "process",

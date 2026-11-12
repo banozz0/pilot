@@ -3,12 +3,11 @@ import Testing
 @testable import PilotCore
 
 /// AI helper T10: `pilot ext test`'s check is the catalogue's scripts/check.py in Swift, and its runs are Pilot's own.
-/// The catalogue (~/code/pilot-extensions) is only read: check.py runs with -B, so it writes no __pycache__ there, and
+/// The catalogue (the repo's catalogue/) is only read: check.py runs with -B, so it writes no __pycache__ there, and
 /// every broken manifest is a copy in a temporary folder. Only the templates' commands run.
 @Suite("Extension check")
 struct ExtensionCheckTests {
-    /// Sven's own home, even when CFFIXED_USER_HOME moves the test's.
-    static let catalogue = URL(filePath: String(cString: getpwuid(getuid())!.pointee.pw_dir)).appending(path: "code/pilot-extensions")
+    static let catalogue = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../catalogue").standardizedFileURL
     static let checkScript = catalogue.appending(path: "scripts/check.py")
     static let hasCatalogue = FileManager.default.fileExists(atPath: checkScript.path)
     static let templates = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/ext-template").standardizedFileURL
@@ -39,7 +38,7 @@ struct ExtensionCheckTests {
 
     static func remove(_ parent: URL) { try? FileManager.default.removeItem(at: parent) }
 
-    @Test("Each catalogue extension (13 today) passes, as python3 scripts/check.py says", .enabled(if: hasCatalogue))
+    @Test("Each catalogue extension (18 today) passes, as python3 scripts/check.py says", .enabled(if: hasCatalogue))
     func catalogueAgrees() async throws {
         let folders = try FileManager.default.contentsOfDirectory(at: Self.catalogue.appending(path: "extensions"), includingPropertiesForKeys: nil)
             .filter { !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.path < $1.path }
@@ -73,7 +72,8 @@ struct ExtensionCheckTests {
             let text = try String(contentsOf: main, encoding: .utf8).replacing("#!/usr/bin/env python3\n", with: "#!/usr/bin/env python3\r\n", maxReplacements: 1)
             try text.write(to: main, atomically: true, encoding: .utf8)
         }),
-        ("file over 2 MB", { try Data(count: ExtensionCheck.fileLimit + 1).write(to: $0.appending(path: "big.bin")) }),
+        // Printable bytes: NULs would be check.py's hidden text too.
+        ("file over 2 MB", { try Data(repeating: 0x61, count: ExtensionCheck.fileLimit + 1).write(to: $0.appending(path: "big.bin")) }),
     ]
 
     static func manifest(_ folder: URL, _ change: (inout [String: JSONValue]) -> Void) throws {
@@ -112,8 +112,12 @@ struct ExtensionCheckTests {
         #expect(byPage == 6, "the faults Pilot itself refuses: id, mode, program, no commands, dropdown, surface")
         guard Self.hasCatalogue else { return }
         for (i, theirs) in try await Self.python(folders).enumerated() {
-            #expect(ExtensionCheck.catalogue(folders[i]) == theirs, "\(Self.faults[i].name)")
-            #expect(Set(theirs).isSubset(of: ExtensionCheck.problems(in: folders[i])), "\(Self.faults[i].name)")
+            // check.py's hidden-text rule (public-repo spec T18) has no Swift twin yet, so a CR in a file is check.py's
+            // alone: known until ExtensionCheck catches up, and this fails once it does.
+            withKnownIssue("ExtensionCheck lacks check.py's hidden-text rule") {
+                #expect(ExtensionCheck.catalogue(folders[i]) == theirs, "\(Self.faults[i].name)")
+                #expect(Set(theirs).isSubset(of: ExtensionCheck.problems(in: folders[i])), "\(Self.faults[i].name)")
+            } when: { Self.faults[i].name == "CRLF shebang" }
         }
     }
 

@@ -19,6 +19,12 @@ public struct ThemePackStore: Sendable {
         public let portraits: Set<String>
         /// The pack's own picture, resolved inside its folder; nil when it names none.
         public let preview: String?
+
+        /// This pack with `other`'s wallpapers: a shipped pack with the pictures its catalogue copy brought
+        /// (ShippedWallpapers). Its revision stays its own, which Apply checks the shipped pack against.
+        public func picturing(_ other: Loaded) -> Loaded {
+            Loaded(folder: folder, pack: pack, revision: revision, factory: factory, images: other.images, portraits: other.portraits, preview: preview)
+        }
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
 
@@ -233,11 +239,14 @@ extension ThemePackStore {
         return draft
     }
 
+    /// Whether `pack` names only the built-in adapters, each with no data of its own (`{}`).
+    public static func plainAdapters(_ pack: ThemePack) -> Bool {
+        Set(pack.adapters.keys).isSubset(of: ["ghostty", "zed", "obsidian"]) && pack.adapters.values.allSatisfy { $0 == .object([:]) }
+    }
+
     public static func validate(_ draft: Draft) throws {
         _ = try ThemePack.decode(ThemeDigest.encoded(draft.pack))
-        guard draft.format == 1,
-              Set(draft.pack.adapters.keys).isSubset(of: ["ghostty", "zed", "obsidian"]),
-              draft.pack.adapters.values.allSatisfy({ $0 == .object([:]) }) else { throw ThemeFailure("unsupported portable format or adapter payload; preserved source must be updated explicitly") }
+        guard draft.format == 1, plainAdapters(draft.pack) else { throw ThemeFailure("unsupported portable format or adapter payload; preserved source must be updated explicitly") }
         for (path, data) in draft.files {
             guard ThemeFiles.relative(path), path != "manifest.json",
                   path == "PROVENANCE.md" || draft.pack.wallpapers.contains(where: { path == $0 || path.hasPrefix($0 + "/") }),

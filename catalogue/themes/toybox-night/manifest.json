@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "toybox-night",
+  "title": "Toybox Night",
+  "dark": true,
+  "palette": {
+    "background": "#15132A",
+    "dark_background": "#1A1834",
+    "darker_background": "#221F3E",
+    "lighter_background": "#2B2850",
+    "foreground": "#FFF4E2",
+    "dark_foreground": "#9690B4",
+    "light_foreground": "#C2BBDB",
+    "bright_foreground": "#FFF4E2",
+    "accent": "#FFC933",
+    "selection": "#2B2850",
+    "muted": "#9690B4",
+    "red": "#FF7F6E",
+    "yellow": "#FF9F4A",
+    "green": "#46E0A6",
+    "cyan": "#A98BFF",
+    "blue": "#FFC933",
+    "magenta": "#3FD7A0",
+    "bright_red": "#FF7F6E",
+    "bright_yellow": "#FF9F4A",
+    "bright_green": "#46E0A6",
+    "bright_cyan": "#A98BFF",
+    "bright_blue": "#FFC933",
+    "bright_magenta": "#3FD7A0",
+    "native_line": "#312E40",
+    "native_line2": "#3F3C4B",
+    "native_text3": "#9690B4",
+    "native_second": "#A98BFF",
+    "native_third": "#3FD7A0",
+    "native_graph1": "#5BC0FF",
+    "native_graph2": "#A98BFF",
+    "native_graph3": "#3FD7A0",
+    "native_selection": "#FFC933"
+  },
+  "styles": [
+    "toybox"
+  ],
+  "wallpapers": [
+    "wallpapers"
+  ],
+  "adapters": {
+    "ghostty": {},
+    "zed": {},
+    "obsidian": {}
+  }
+}

@@ -8,7 +8,7 @@ import PilotCore
 /// update or remove while it runs, with why it failed.
 @MainActor @Observable
 final class ExtensionCatalogueModel {
-    static let shared = ExtensionCatalogueModel()
+    static let shared = ExtensionCatalogueModel(installer: ExtensionInstaller(source: CatalogueSource.live))
 
     /// Where the index stands: not asked yet, being read, read, or why it could not be.
     enum Load: Equatable { case idle, loading, loaded, failed(String) }

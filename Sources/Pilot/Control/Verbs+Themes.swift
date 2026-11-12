@@ -6,8 +6,8 @@ extension ControlVerbs {
 
     /// Native controls call this coordinator too. There is no caller approval switch or executor verb.
     func registerThemes(_ coordinator: @escaping @MainActor @Sendable () throws -> ThemeCoordinator) {
-        register(ControlVerb("theme", help: "Create, edit, duplicate, delete or transfer data-only local packs (delete takes only a pack you made or imported, never Pilot's own or the applied one); review exact changes before Apply/Restore. Zed, every Obsidian vault, Ghostex's window colour, VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm and iTerm2 follow when found, with switches to turn each off; custom mappings need local bindings and optional reloads ask separately. A theme changes everything it carries and Restore undoes it; follow mode personal keeps macOS Light or Dark as it is. Toybox colours stay scoped. Use pilot guide theme or /theme in Ask Pilot. Installed-app refresh and CSS precedence need checking in the target app.",
-                             usage: "pilot theme list | list-all | colours | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> | plan restore | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>", flags: []) { call throws(ControlError) in
+        register(ControlVerb("theme", help: "Create, edit, duplicate, delete or transfer data-only local packs (delete takes only a pack you made or imported, never Pilot's own or the applied one), or install them from Pilot's catalogue (theme catalogue, get; every file checked against its sha256; a built-in theme's plan downloads its wallpapers from there); review exact changes before Apply/Restore. Zed, every Obsidian vault, Ghostex's window colour, VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm and iTerm2 follow when found, with switches to turn each off; custom mappings need local bindings and optional reloads ask separately. A theme changes everything it carries and Restore undoes it; follow mode personal keeps macOS Light or Dark as it is. Toybox colours stay scoped. Use pilot guide theme or /theme in Ask Pilot. Installed-app refresh and CSS precedence need checking in the target app.",
+                             usage: "pilot theme list | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> | plan restore | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>", flags: []) { call throws(ControlError) in
             do {
                 let owner = try coordinator(), words = call.words
                 switch words.first {
@@ -17,6 +17,9 @@ extension ControlVerbs {
                         .object(["id": .string($0.id), "title": .string($0.name)])
                     })
                 case "list-all" where words.count == 1: return try themeJSON(owner.store.list())
+                case "catalogue" where words.count == 1 || words == ["catalogue", "refresh"]:
+                    return try await Self.themeCatalogue(refresh: words.count == 2, owner)
+                case "get" where words.count == 2: return try await Self.getTheme(words[1], owner, peer: call.peer)
                 case "new" where words.count == 2:
                     try owner.editorPath(words[1])
                     return try themeJSON(owner.saveDraft(ThemePackStore.readFolder(words[1])).pack)
@@ -59,7 +62,8 @@ extension ControlVerbs {
                     return try themeJSON(owner.stageMode(follow: words[2] == "pack"))
                 case "show" where words.count == 2, "check" where words.count == 2:
                     let loaded = try owner.store.load(words[1])
-                    // Check includes adapter validation and ownership without changing files.
+                    // Check includes adapter validation and ownership without changing files, but for a shipped pack's
+                    // pictures, which its plan fetches from the catalogue (ShippedWallpapers).
                     if words[0] == "check" { _ = try await owner.plan(words[1]) }
                     return .object(["pack": try themeJSON(loaded.pack), "revision": .string(loaded.revision), "factory": .bool(loaded.factory), "images": try themeJSON(loaded.images), "valid": .bool(true)])
                 case "plan" where words.count == 3 && words[1] == "apply":

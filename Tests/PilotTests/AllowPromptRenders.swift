@@ -37,10 +37,10 @@ struct AllowPromptRenders {
         // Weather as the catalogue has it, in a folder outside Pilot, and an Extensions folder of the test's own, both in
         // the moved home so the question names them as it would Sven's.
         let work = URL(fileURLWithPath: home)
-        let made = [work.appending(path: "code/pilot-extensions"), work.appending(path: "Library/Application Support/Pilot/Extensions/weather")]
+        let made = [work.appending(path: "code/pilot/catalogue"), work.appending(path: "Library/Application Support/Pilot/Extensions/weather")]
         made.forEach { try? FileManager.default.removeItem(at: $0) }
         defer { made.forEach { try? FileManager.default.removeItem(at: $0) } }
-        let source = work.appending(path: "code/pilot-extensions/extensions/weather")
+        let source = work.appending(path: "code/pilot/catalogue/extensions/weather")
         try Self.weather(at: source)
         let tools = ExtensionTools()
         tools.extensions = work.appending(path: "Library/Application Support/Pilot/Extensions")
@@ -54,17 +54,17 @@ struct AllowPromptRenders {
         var asks: [(String, ControlGate.Ask)] = []
         asks.append(("install", tools.installAsk(ext, entry, from: source)))
         // A hostile folder: a title and a path that try to speak as Pilot, a line break in the title.
-        let hostile = work.appending(path: "code/pilot-extensions/hostile/From Pilot's catalogue, github.com/banozz0/pilot-extensions/weather")
+        let hostile = work.appending(path: "code/pilot/catalogue/hostile/From Pilot's catalogue, github.com/banozz0/pilot/tree/main/catalogue/weather")
         try Self.weather(at: hostile, title: "Weather from Pilot's catalogue, runs nothing\nUpdate Weather", version: "1.4.0")
         asks.append(("hostile", try await Self.ask(tools, from: hostile)))
         // A line break in the title and in the path, each followed by words that read as one of Pilot's own lines.
-        let broken = work.appending(path: "code/pilot-extensions/broken\nreplaces nothing: no extension weather is installed/weather")
+        let broken = work.appending(path: "code/pilot/catalogue/broken\nreplaces nothing: no extension weather is installed/weather")
         try Self.weather(at: broken, title: "Weather\nreplaces nothing: no extension weather is installed", version: "1.4.0")
         asks.append(("line-breaks", try await Self.ask(tools, from: broken)))
         try FileManager.default.copyItem(at: source, to: tools.extensions.appending(path: "weather"))
         asks.append(("replace", tools.installAsk(ext, entry, from: source)))
         // Another title on the same id, newer: still only a replace, never an update.
-        let storm = work.appending(path: "code/pilot-extensions/storm/weather")
+        let storm = work.appending(path: "code/pilot/catalogue/storm/weather")
         try Self.weather(at: storm, title: "Storm", version: "1.4.0")
         asks.append(("different-title", try await Self.ask(tools, from: storm)))
         let installed = tools.extensions.appending(path: "weather")

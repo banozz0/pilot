@@ -2,10 +2,11 @@ import Foundation
 import PilotCore
 
 /// `pilot ext publish <id>` (P49, Sven Q297, "now, for your own extensions"): an installed extension, made with /extension,
-/// sent to the catalogue as a pull request on its repo (banozz0/pilot-extensions), from a clone of it on this Mac whose
-/// folder is the setting `extensions.catalogueClone`, empty until set. One Allow names the extension, the branch and the
-/// repo; then a new branch off the clone's origin/main gets the folder under extensions/<id>, the index rebuilt
-/// (scripts/build-index.py) and checked (scripts/check.py), one commit, a push of that branch alone and `gh pr create`.
+/// sent to the catalogue as a pull request on its repo (banozz0/pilot, its catalogue/ folder), from a clone of it on this
+/// Mac whose folder is the setting `extensions.catalogueClone`, empty until set. One Allow names the extension, the branch
+/// and the repo; then a new branch off the clone's origin/main gets the folder under catalogue/extensions/<id>, the index
+/// rebuilt (catalogue/scripts/build-index.py) and checked (catalogue/scripts/check.py), one commit, a push of that branch
+/// alone and `gh pr create`. Forking for a person who cannot push to the repo is public-repo spec T23.
 /// Nothing reaches the catalogue's main until its owner merges. A clone whose origin is not on GitHub is pushed to and no
 /// pull request opens. A failed step puts the clone back on the branch it was on, the new branch gone.
 @MainActor
@@ -35,7 +36,7 @@ enum CataloguePublish {
     /// Read before the Allow, so it asks only for a publish that can run: a clean clone without the branch yet.
     static func plan(_ ext: Extension) async throws(ControlError) -> Plan {
         guard !clone.isEmpty else {
-            throw ControlError(.notReady, "no catalogue clone set: clone the catalogue's repo, then pilot set \(key) <its folder>")
+            throw ControlError(.notReady, "no catalogue clone set: clone \(ExtensionCatalogue.repo), then pilot set \(key) <its folder>")
         }
         let folder = URL(filePath: clone, directoryHint: .isDirectory)
         let origin = try await git(folder, "remote", "get-url", "origin")
@@ -62,16 +63,16 @@ enum CataloguePublish {
         _ = try await git(clone, "fetch", "origin", "main")
         _ = try await git(clone, "switch", "-q", "-c", plan.branch, "origin/main")
         do throws(ControlError) {
-            let target = clone.appending(path: "extensions/\(plan.id)", directoryHint: .isDirectory)
+            let target = clone.appending(path: "\(ExtensionCatalogue.root)/extensions/\(plan.id)", directoryHint: .isDirectory)
             do {
                 try? FileManager.default.removeItem(at: target)
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try FileManager.default.copyItem(at: plan.folder, to: target)
                 try? FileManager.default.removeItem(at: target.appending(path: "__pycache__"))
             } catch { throw ControlError(.badValue, "could not copy \(plan.id) into the clone: \(error.localizedDescription)") }
-            _ = try await run(clone, "/usr/bin/python3", ["scripts/build-index.py"], step: "build-index.py")
-            _ = try await run(clone, "/usr/bin/python3", ["scripts/check.py"], step: "check.py")
-            _ = try await git(clone, "add", "-A", "--", "extensions/\(plan.id)", "index.json")
+            _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/build-index.py"], step: "build-index.py")
+            _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/check.py"], step: "check.py")
+            _ = try await git(clone, "add", "-A", "--", "\(ExtensionCatalogue.root)/extensions/\(plan.id)", "\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
             guard try await !git(clone, "diff", "--cached", "--name-only").isEmpty else {
                 throw ControlError(.badValue, "\(plan.id) \(plan.version) is already in the catalogue as it is")
             }
@@ -80,7 +81,7 @@ enum CataloguePublish {
         } catch {
             // Back as it was: this run's changes and its unpushed branch go, nothing else.
             _ = try? await git(clone, "reset", "-q", "--hard")
-            _ = try? await git(clone, "clean", "-fdq", "--", "extensions/\(plan.id)")
+            _ = try? await git(clone, "clean", "-fdq", "--", "\(ExtensionCatalogue.root)/extensions/\(plan.id)")
             _ = try? await git(clone, "switch", "-q", plan.back)
             _ = try? await git(clone, "branch", "-q", "-D", plan.branch)
             throw error
@@ -95,7 +96,7 @@ enum CataloguePublish {
         guard let gh = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"].first(where: FileManager.default.isExecutableFile(atPath:)) else {
             throw ControlError(.notReady, "the branch \(plan.branch) is pushed, but gh is not installed to open its pull request")
         }
-        let body = "\(plan.title) \(plan.version), sent from Pilot with pilot ext publish. scripts/check.py passed and index.json is rebuilt."
+        let body = "\(plan.title) \(plan.version), sent from Pilot with pilot ext publish. catalogue/scripts/check.py passed and catalogue/index.json is rebuilt."
         let pr = try await run(clone, gh, ["pr", "create", "--repo", plan.repo, "--base", "main", "--head", plan.branch,
                                            "--title", "\(plan.id): \(plan.version)", "--body", body], step: "gh pr create")
         answer["pullRequest"] = .string(pr.split(separator: "\n").last.map(String.init) ?? pr)
@@ -123,18 +124,28 @@ enum CataloguePublish {
 }
 
 extension SettingsSchema {
-    /// Extensions › the catalogue clone `pilot ext publish` sends from (P49): empty until set; a folder holding the
-    /// catalogue's scripts/check.py.
+    /// Extensions › the catalogue clone `pilot ext publish` sends from (P49): empty until set; a clone of banozz0/pilot,
+    /// holding catalogue/scripts/check.py. And the catalogue folder a debug build reads instead of GitHub
+    /// (CatalogueSource): empty for GitHub; a folder holding index.json.
     func registerExtensionPublish() {
         register([
             .text(CataloguePublish.key, "Catalogue clone to publish from", page: "extensions", standard: "",
                   read: { CataloguePublish.clone }, write: { path throws(ControlError) in
                       guard !path.isEmpty else { return CataloguePublish.defaults.removeObject(forKey: CataloguePublish.key) }
                       let folder = try Self.folder(path)
-                      guard FileManager.default.fileExists(atPath: folder + "/scripts/check.py") else {
-                          throw ControlError(.badValue, "\(path) is no clone of the catalogue: it has no scripts/check.py")
+                      guard FileManager.default.fileExists(atPath: folder + "/\(ExtensionCatalogue.root)/scripts/check.py") else {
+                          throw ControlError(.badValue, "\(path) is no clone of \(ExtensionCatalogue.repo): it has no \(ExtensionCatalogue.root)/scripts/check.py")
                       }
                       CataloguePublish.defaults.set(folder, forKey: CataloguePublish.key)
+                  }),
+            .text(CatalogueSource.key, "Catalogue folder to read instead of GitHub", page: "extensions", standard: "",
+                  read: { CatalogueSource.folder }, write: { path throws(ControlError) in
+                      guard !path.isEmpty else { return CatalogueSource.defaults.removeObject(forKey: CatalogueSource.key) }
+                      let folder = try Self.folder(path)
+                      guard FileManager.default.fileExists(atPath: folder + "/" + ExtensionCatalogue.indexPath) else {
+                          throw ControlError(.badValue, "\(path) is no catalogue folder: it has no \(ExtensionCatalogue.indexPath)")
+                      }
+                      CatalogueSource.defaults.set(folder, forKey: CatalogueSource.key)
                   }),
         ])
     }

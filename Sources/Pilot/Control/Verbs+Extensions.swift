@@ -9,7 +9,7 @@ final class ExtensionTools {
     var extensions = Extension.folder
     /// ExtensionData: what a remove leaves.
     var data = ExtensionStorage.dataFolder
-    var trash: @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    var trash: @Sendable (URL) throws -> Void = FileOps.trashNow
     var gate = AllowPrompt.gate
     /// Where a run's cache folder is made and where its passwords are kept (CLI W15).
     var cache = ExtensionStorage.cacheFolder

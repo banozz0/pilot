@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "retro-82",
+  "title": "Retro 82",
+  "dark": true,
+  "palette": {
+    "background": "#05182E",
+    "dark_background": "#031222",
+    "darker_background": "#071E36",
+    "lighter_background": "#0A2540",
+    "foreground": "#F6DCAC",
+    "dark_foreground": "#3F8F8A",
+    "light_foreground": "#A7C9C6",
+    "bright_foreground": "#F6DCAC",
+    "accent": "#FAA968",
+    "selection": "#134E5A",
+    "muted": "#2A6B78",
+    "red": "#F85525",
+    "yellow": "#E97B3C",
+    "green": "#028391",
+    "cyan": "#8CBFB8",
+    "blue": "#3F8F8A",
+    "magenta": "#3F8F8A",
+    "bright_red": "#F85525",
+    "bright_yellow": "#E97B3C",
+    "bright_green": "#028391",
+    "bright_cyan": "#8CBFB8",
+    "bright_blue": "#FAA968",
+    "bright_magenta": "#3F8F8A",
+    "native_line": "#183046",
+    "native_line2": "#304251",
+    "native_text3": "#3F8F8A",
+    "native_second": "#8CBFB8",
+    "native_third": "#3F8F8A",
+    "native_graph1": "#FAA968",
+    "native_graph2": "#8CBFB8",
+    "native_graph3": "#028391",
+    "native_selection": "#FAA968"
+  },
+  "styles": [
+    "instrument",
+    "toybox"
+  ],
+  "wallpapers": [
+    "wallpapers"
+  ],
+  "adapters": {
+    "ghostty": {},
+    "zed": {},
+    "obsidian": {}
+  }
+}

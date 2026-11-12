@@ -47,7 +47,7 @@ final class SelectionTools {
     var tip: (String) -> Void = { HUD.tip($0, seconds: 3, top: true) }
     /// Translate: the Pilot menu on its Translate branch with the text typed, its engine, pair and Return-copies row.
     var translate: (String) -> Void = { PilotMenu.shared.open(typing: $0, in: .translate) }
-    /// The Summarise extension's keyword command (pilot-extensions `summarise`), which takes a link, a path or text as input.
+    /// The Summarise extension's keyword command (the catalogue's `summarise`), which takes a link, a path or text as input.
     static let summariser = Extension.CommandID(extension: "summarise", command: "fetch")
     /// Whether the Summarise extension is installed, read as the pill shows: one file's presence, no folder read.
     var summarises: () -> Bool = {

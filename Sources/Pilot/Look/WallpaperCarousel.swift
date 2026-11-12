@@ -29,6 +29,8 @@ enum WallpaperCarousel {
         var current: String?
         /// Themes mode: the pack library, the style packs must take, the applied pack and the apps the previews draw.
         var store: ThemePackStore?
+        /// Where a shipped pack's fetched pictures are, so its card shows them once Apply brought them.
+        var shipped: ShippedWallpapers?
         var style = ""
         var applied: String?
         var apps = ThemePreview.Apps()
@@ -95,7 +97,7 @@ enum WallpaperCarousel {
         let ids = Set(([store.root, store.writableRoot] + [store.factoryRoot].compactMap { $0 }).flatMap {
             ((try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? []).filter(ThemePack.validID)
         })
-        listed.cards = ids.compactMap { try? store.load($0) }.filter { $0.pack.compatible(with: inputs.style) }.map { loaded in
+        listed.cards = ids.compactMap { try? store.load($0) }.filter { $0.pack.compatible(with: inputs.style) }.map { inputs.shipped?.picturing($0) ?? $0 }.map { loaded in
             let first = WallpaperCycle.step(loaded.images.map { URL(fileURLWithPath: $0) }, shape: { loaded.portraits.contains($0.path) ? .portrait : .landscape },
                                             screen: screen, fit: inputs.fit, current: nil, forward: true)
             return Card(pack: loaded.pack, image: first?.url.path, palette: dots(loaded.pack), preview: loaded.preview)
@@ -134,7 +136,7 @@ enum WallpaperCarousel {
             return (display, Inputs(theme: theme(owner, folders: folders), folders: folders,
                                     portrait: screen.map { WallpaperSwitch.shape(of: $0) == .portrait } ?? false,
                                     fit: settings.fitShape, current: screen.flatMap(WallpaperSwitch.current(on:))?.path,
-                                    store: owner?.store, style: owner?.style() ?? "", applied: owner.flatMap { try? $0.selected() }?.id))
+                                    store: owner?.store, shipped: owner?.shipped?.wallpapers, style: owner?.style() ?? "", applied: owner.flatMap { try? $0.selected() }?.id))
         }
 
         /// The screen `--screen` names, as `pilot wallpaper` resolves it, else the focused one.

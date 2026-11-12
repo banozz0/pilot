@@ -2,17 +2,23 @@ import CryptoKit
 import Foundation
 import Synchronization
 
-/// Pilot's extension catalogue (2026-10-10, ADR 0010): `index.json` at the root of banozz0/pilot-extensions, made by its
-/// `scripts/build-index.py`, lists each extension with its version, words, commands, what it says it touches and every
-/// file with its size and sha256. Pilot reads it only while the person looks at it (the Extensions page's one list, Q601,
-/// the menu's Extension catalogue, or Refresh), never at launch or in the background, and installs an entry's files
-/// only when each one hashes as listed (ExtensionInstaller).
+/// Pilot's catalogue (2026-10-10, ADR 0010; public-repo spec T20): `catalogue/index.json` in banozz0/pilot, made by its
+/// `catalogue/scripts/build-index.py`, lists each extension with its version, words, commands, what it says it touches
+/// and every file with its size and sha256, and each theme pack with its palette, its files and their digest. Pilot reads
+/// it only while the person looks at it (the Extensions page's one list, Q601, the menu's Extension catalogue, or
+/// Refresh), never at launch or in the background, and installs an entry's files only when each one hashes as listed
+/// (ExtensionInstaller, ThemeInstaller).
 public enum ExtensionCatalogue {
-    public static let repo = "banozz0/pilot-extensions", branch = "main", indexPath = "index.json"
-    /// The index format this Pilot reads.
-    public static let schema = 1
+    /// The repo, and the folder in it the catalogue is: every path a Source fetches is inside `root`.
+    public static let repo = "banozz0/pilot", branch = "main", root = "catalogue", indexPath = "index.json"
+    /// Where a person finds the catalogue on the web, as a question names it.
+    public static let home = "github.com/\(repo)/tree/\(branch)/\(root)"
+    /// The index format this Pilot reads: 2 lists themes beside the extensions.
+    public static let schema = 2
     /// The most the index, one file and one extension may weigh, and the most files an extension may hold.
     public static let indexLimit = 1_000_000, fileLimit = 2_000_000, extensionLimit = 10_000_000, mostFiles = 200
+    /// A theme pack's, as catalogue/scripts/check.py's THEME_LIMITS: one file, the pack, and its files.
+    public static let themeFileLimit = 8 * 1024 * 1024, themeLimit = 40 * 1024 * 1024, themeMostFiles = 300
     /// How long an index read is kept in memory before the next look reads it again.
     public static let keptFor: TimeInterval = 600
 
@@ -53,12 +59,27 @@ public enum ExtensionCatalogue {
         }
     }
 
-    /// What the catalogue holds: its entries by title, and the ones Pilot left out, each with why (in the log only).
+    /// One theme pack the catalogue offers (schema 2): what its card shows before anything is fetched, every file in
+    /// `themes/<id>/`, and `digest`, the sha256 of its file list, which an installed copy is compared with, since a pack's
+    /// manifest has no version.
+    public struct Theme: Equatable, Sendable, Identifiable {
+        public let id: String, title: String, dark: Bool, styles: [String], palette: [String: String], preview: String?
+        public let digest: String, files: [File]
+
+        /// What every file weighs together.
+        public var size: Int { files.reduce(0) { $0 + $1.size } }
+    }
+
+    /// What the catalogue holds: its extensions and themes by title, and the entries Pilot left out, each with why (in
+    /// the log only).
     public struct Index: Equatable, Sendable {
-        public let entries: [Entry], skipped: [Skipped]
-        public init(entries: [Entry], skipped: [Skipped] = []) { self.entries = entries; self.skipped = skipped }
+        public let entries: [Entry], themes: [Theme], skipped: [Skipped]
+        public init(entries: [Entry], themes: [Theme] = [], skipped: [Skipped] = []) {
+            self.entries = entries; self.themes = themes; self.skipped = skipped
+        }
 
         public func entry(_ id: String) -> Entry? { entries.first { $0.id == id } }
+        public func theme(_ id: String) -> Theme? { themes.first { $0.id == id } }
     }
 
     public struct Skipped: Equatable, Sendable {
@@ -71,6 +92,7 @@ public enum ExtensionCatalogue {
         case unreachable(String), tooBig(path: String, limit: Int), unreadable(String), newerSchema(Int)
         case mismatch(path: String), notAnExtension(String), wrongID(found: String, expected: String), folderTaken(id: String, why: String)
         case notInstalled(String), notListed(String), failed(String)
+        case notATheme(String), themeTaken(id: String, why: String), themeNotListed(String)
 
         public var reason: String {
             switch self {
@@ -85,6 +107,9 @@ public enum ExtensionCatalogue {
             case .notInstalled(let id): "No extension \(id) is installed."
             case .notListed(let id): "The catalogue has no extension \(id)."
             case .failed(let why): why
+            case .notATheme(let why): "What arrived is not a theme pack Pilot takes (\(why)), so nothing was installed."
+            case .themeTaken(let id, let why): "Pilot already has a theme pack \(id) \(why), so nothing was installed."
+            case .themeNotListed(let id): "The catalogue has no theme \(id)."
             }
         }
 
@@ -96,33 +121,35 @@ public enum ExtensionCatalogue {
 
     private struct Raw: Decodable {
         let schema: Int
-        let extensions: [Lenient]
+        let extensions: [Lenient<Line>]
+        /// Schema 2's; a schema 1 index has none.
+        let themes: [Lenient<ThemeLine>]?
     }
 
     /// An entry that may not decode: a newer or broken one is skipped, never the whole catalogue.
-    private struct Lenient: Decodable {
-        let line: Line?, id: String, why: String?
+    private struct Lenient<Read: Decodable>: Decodable {
+        let line: Read?, id: String, why: String?
 
         private struct Named: Decodable { let id: String? }
 
         init(from decoder: any Decoder) throws {
             id = (try? Named(from: decoder))?.id ?? "?"
-            do { line = try Line(from: decoder); why = nil } catch { line = nil; why = Self.describe(error) }
+            do { line = try Read(from: decoder); why = nil } catch { line = nil; why = describe(error) }
         }
+    }
 
-        static func describe(_ error: any Error) -> String {
-            switch error as? DecodingError {
-            case .keyNotFound(let key, _)?: "\(key.stringValue) is missing"
-            case .typeMismatch(_, let c)?, .valueNotFound(_, let c)?: "\(field(c.codingPath)) has the wrong type"
-            default: "does not read"
-            }
+    private static func describe(_ error: any Error) -> String {
+        switch error as? DecodingError {
+        case .keyNotFound(let key, _)?: "\(key.stringValue) is missing"
+        case .typeMismatch(_, let c)?, .valueNotFound(_, let c)?: "\(field(c.codingPath)) has the wrong type"
+        default: "does not read"
         }
+    }
 
-        /// A field's name inside its entry ("files.size"), the index's own key and the array places left out.
-        private static func field(_ path: [any CodingKey]) -> String {
-            let names = path.filter { $0.intValue == nil }.map(\.stringValue)
-            return (names.first == "extensions" && names.count > 1 ? names.dropFirst() : names[...]).joined(separator: ".")
-        }
+    /// A field's name inside its entry ("files.size"), the index's own key and the array places left out.
+    private static func field(_ path: [any CodingKey]) -> String {
+        let names = path.filter { $0.intValue == nil }.map(\.stringValue)
+        return (["extensions", "themes"].contains(names.first) && names.count > 1 ? names.dropFirst() : names[...]).joined(separator: ".")
     }
 
     /// What an entry says, checked by `entry(_:)`.
@@ -135,25 +162,38 @@ public enum ExtensionCatalogue {
         let examples: JSONValue?
     }
 
+    /// What a theme entry says, checked by `theme(_:)`.
+    private struct ThemeLine: Decodable {
+        let id: String, title: String, dark: Bool, styles: [String]?, palette: [String: String]?, preview: String?, digest: String
+        let files: [Line.File]
+    }
+
     /// The index `data` holds: entries whose id, version or files break a rule are skipped with why, and of two with one
     /// id the first is kept. Throws when it is too large, not JSON or in a newer format.
     public static func index(_ data: Data) throws -> Index {
         guard data.count <= indexLimit else { throw Problem.tooBig(path: indexPath, limit: indexLimit) }
         let raw: Raw
-        do { raw = try JSONDecoder().decode(Raw.self, from: data) } catch { throw Problem.unreadable(Lenient.describe(error)) }
+        do { raw = try JSONDecoder().decode(Raw.self, from: data) } catch { throw Problem.unreadable(describe(error)) }
         guard raw.schema <= schema else { throw Problem.newerSchema(raw.schema) }
-        var entries: [Entry] = [], skipped: [Skipped] = [], ids = Set<String>()
-        for item in raw.extensions {
-            do {
-                guard let line = item.line else { throw Problem.failed(item.why ?? "does not read") }
-                let entry = try entry(line)
-                guard ids.insert(entry.id).inserted else { throw Problem.failed("listed twice") }
-                entries.append(entry)
-            } catch {
-                skipped.append(Skipped(id: item.id, reason: (error as? Problem)?.reason ?? "\(error)"))
+        var skipped: [Skipped] = []
+        /// Each kind's entries that hold every rule, the first of two with one id kept.
+        func kept<Read, Made: Identifiable>(_ items: [Lenient<Read>], _ make: (Read) throws -> Made) -> [Made] where Made.ID == String {
+            var made: [Made] = [], ids = Set<String>()
+            for item in items {
+                do {
+                    guard let line = item.line else { throw Problem.failed(item.why ?? "does not read") }
+                    let entry = try make(line)
+                    guard ids.insert(entry.id).inserted else { throw Problem.failed("listed twice") }
+                    made.append(entry)
+                } catch {
+                    skipped.append(Skipped(id: item.id, reason: (error as? Problem)?.reason ?? "\(error)"))
+                }
             }
+            return made
         }
-        return Index(entries: entries.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, skipped: skipped)
+        let entries = kept(raw.extensions, entry), themes = kept(raw.themes ?? [], theme)
+        return Index(entries: entries.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending },
+                     themes: themes.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, skipped: skipped)
     }
 
     /// `line` as an entry once every rule holds: an extension name for its id, a dotted version, at most 200 files
@@ -162,22 +202,50 @@ public enum ExtensionCatalogue {
         func no(_ why: String) -> Problem { .failed(why) }
         guard Extension.isName(line.id) else { throw no("id must be lowercase letters, digits and hyphens") }
         guard Version(line.version) != nil else { throw no("version \"\(line.version)\" is not like 1.2.0") }
-        guard !line.files.isEmpty, line.files.count <= mostFiles else { throw no("it must have 1 to \(mostFiles) files") }
-        var paths = Set<String>(), total = 0
-        let files = try line.files.map { f in
-            guard isSafe(f.path) else { throw no("file path \"\(f.path)\" leaves its folder") }
-            guard paths.insert(f.path).inserted else { throw no("\(f.path) is listed twice") }
-            guard f.sha256.wholeMatch(of: /[0-9a-f]{64}/) != nil else { throw no("\(f.path) has no sha256") }
-            guard (0...fileLimit).contains(f.size) else { throw no("\(f.path) is larger than the \(fileLimit / 1_000_000) MB a file may be") }
-            total += f.size
-            return File(path: f.path, sha256: f.sha256, size: f.size, executable: f.executable ?? false)
-        }
-        guard paths.contains(Extension.manifestName) else { throw no("it has no \(Extension.manifestName)") }
-        guard total <= extensionLimit else { throw no("it is larger than the \(extensionLimit / 1_000_000) MB an extension may be") }
+        let files = try checked(line.files, most: mostFiles, manifest: Extension.manifestName,
+                                file: (fileLimit, "\(fileLimit / 1_000_000) MB a file"), total: (extensionLimit, "\(extensionLimit / 1_000_000) MB an extension"))
         let commands = (line.commands ?? []).compactMap { c in Extension.Mode(rawValue: c.mode).map { Command(name: c.name, title: c.title, mode: $0) } }
         return Entry(id: line.id, title: line.title, icon: line.icon.flatMap { ScriptCommand.isEmoji($0) ? $0 : nil }, version: line.version,
                      description: line.description ?? "", examples: Extension.examples(line.examples), requires: line.requires ?? [], commands: commands,
                      permissions: line.permissions ?? .init(), files: files)
+    }
+
+    /// `line` as a theme once every rule holds: a pack id, a title, 1 to 300 files with a manifest.json among them, each a
+    /// safe path with a sha256 and a size under the theme limits, and a digest that is its files' own.
+    private static func theme(_ line: ThemeLine) throws -> Theme {
+        func no(_ why: String) -> Problem { .failed(why) }
+        guard ThemePack.validID(line.id) else { throw no("id must be lowercase letters, digits and hyphens") }
+        guard !line.title.isEmpty else { throw no("it has no title") }
+        // A theme's files are data: none is installed as a program.
+        let files = try checked(line.files, most: themeMostFiles, manifest: "manifest.json", file: (themeFileLimit, "\(themeFileLimit >> 20) MB a theme's file"),
+                                total: (themeLimit, "\(themeLimit >> 20) MB a theme")).map { File(path: $0.path, sha256: $0.sha256, size: $0.size) }
+        guard line.digest == digest(files) else { throw no("its digest is not its files'") }
+        return Theme(id: line.id, title: line.title, dark: line.dark, styles: line.styles ?? [], palette: line.palette ?? [:],
+                     preview: line.preview, digest: line.digest, files: files)
+    }
+
+    /// An entry's file list once each file is a safe path, listed once, with a sha256 and a size under `file`'s limit,
+    /// 1 to `most` of them with `manifest` among them and `total`'s limit in all; each limit with the words its refusal says.
+    private static func checked(_ lines: [Line.File], most: Int, manifest: String, file: (Int, String), total: (Int, String)) throws -> [File] {
+        func no(_ why: String) -> Problem { .failed(why) }
+        guard !lines.isEmpty, lines.count <= most else { throw no("it must have 1 to \(most) files") }
+        var paths = Set<String>(), sum = 0
+        let files = try lines.map { f in
+            guard isSafe(f.path) else { throw no("file path \"\(f.path)\" leaves its folder") }
+            guard paths.insert(f.path).inserted else { throw no("\(f.path) is listed twice") }
+            guard f.sha256.wholeMatch(of: /[0-9a-f]{64}/) != nil else { throw no("\(f.path) has no sha256") }
+            guard (0...file.0).contains(f.size) else { throw no("\(f.path) is larger than the \(file.1) may be") }
+            sum += f.size
+            return File(path: f.path, sha256: f.sha256, size: f.size, executable: f.executable ?? false)
+        }
+        guard paths.contains(manifest) else { throw no("it has no \(manifest)") }
+        guard sum <= total.0 else { throw no("it is larger than the \(total.1) may be") }
+        return files
+    }
+
+    /// A pack's digest as build-index.py writes it: the sha256 of "<path> <sha256>\n" for each file, by path.
+    public static func digest(_ files: [File]) -> String {
+        sha256(Data(files.sorted { $0.path < $1.path }.map { "\($0.path) \($0.sha256)\n" }.joined().utf8))
     }
 
     /// A path inside an extension's folder: relative, subfolders allowed, never `.` or `..` or an empty part.
@@ -226,7 +294,18 @@ public enum ExtensionCatalogue {
 
     /// Where an entry stands: not in the Extensions folder, there at this version or newer, or older there (a missing or
     /// unreadable version counts as older).
-    public enum Standing: Equatable, Sendable { case install, installed, update }
+    public enum Standing: Equatable, Sendable {
+        case install, installed, update
+
+        /// Its button's word: "Install", "Installed", "Update".
+        public var label: String {
+            switch self {
+            case .install: "Install"
+            case .installed: "Installed"
+            case .update: "Update"
+            }
+        }
+    }
 
     public static func standing(of entry: Entry, installed: [String: Installed]) -> Standing {
         guard let have = installed[entry.id] else { return .install }
@@ -234,13 +313,16 @@ public enum ExtensionCatalogue {
         return .installed
     }
 
-    /// Its button's words: "Install", "Update to 1.1", "Installed".
+    /// Where a theme stands, by the digest of the installed pack with its id: none there, the catalogue's files as they
+    /// are, or other files (an older catalogue copy, or one the person edited).
+    public static func standing(of theme: Theme, installed: [String: String]) -> Standing {
+        guard let have = installed[theme.id] else { return .install }
+        return have == theme.digest ? .installed : .update
+    }
+
+    /// Its button's words: "Install", "Update to 1.1", "Installed"; a theme's says "Update" (`standing.label`).
     public static func button(_ entry: Entry, _ standing: Standing) -> String {
-        switch standing {
-        case .install: "Install"
-        case .update: "Update to \(entry.version)"
-        case .installed: "Installed"
-        }
+        standing == .update ? "Update to \(entry.version)" : standing.label
     }
 
     /// A menu row's muted line: "Focus blocks and breaks… · Update to 1.1".
@@ -306,7 +388,8 @@ public enum ExtensionCatalogue {
 // MARK: - Where the files come from
 
 extension ExtensionCatalogue {
-    /// How a file of the repo reaches Pilot: GitHub in Pilot, a folder or a table in tests, which never touch the network.
+    /// How a file of the catalogue (a path inside `root`) reaches Pilot: GitHub in Pilot, a folder in a debug build's
+    /// `catalogue.source` and in tests, or a table in tests, which never touch the network.
     public struct Source: Sendable {
         /// The bytes at `path` in the repo, at most `limit` of them; throws a Problem.
         public let fetch: @Sendable (_ path: String, _ limit: Int) async throws -> Data
@@ -325,7 +408,7 @@ extension ExtensionCatalogue {
                 let encoded = path.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
                     .joined(separator: "/")
                 if path == indexPath || !rawRefused.on.withLock({ $0 }) {
-                    guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/\(branch)/\(encoded)") else { throw Problem.unreachable("bad path \(path)") }
+                    guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/\(branch)/\(root)/\(encoded)") else { throw Problem.unreachable("bad path \(path)") }
                     let status: Int
                     do {
                         let (data, code) = try await get(url)
@@ -344,7 +427,7 @@ extension ExtensionCatalogue {
                 guard let tool = cli() else { throw Problem.unreachable("the catalogue is private; install gh and sign in to GitHub with gh auth login") }
                 let data: Data
                 do {
-                    data = try await gh(tool, ["api", "-H", "Accept: application/vnd.github.raw", "repos/\(repo)/contents/\(encoded)?ref=\(branch)"])
+                    data = try await gh(tool, ["api", "-H", "Accept: application/vnd.github.raw", "repos/\(repo)/contents/\(root)/\(encoded)?ref=\(branch)"])
                 } catch let failure as ChildProcess.Failure { throw Problem.unreachable(ghReason(failure.message)) }
                 catch is ChildProcess.TimedOut { throw Problem.unreachable("gh took too long") }
                 catch is CancellationError { throw CancellationError() }
@@ -392,5 +475,37 @@ extension ExtensionCatalogue {
 
         /// Pilot's own: GitHub.
         public static let live = github()
+
+        /// Fetches each of `files` from `folder` in the catalogue into `into`, each held to its listed size and sha256 (at
+        /// most `limit` bytes asked), written with `mode`'s permissions; `progress` hears each one (done, of all). Throws
+        /// mismatch at the first file that differs: the installers' one integrity gate.
+        func download(_ files: [File], from folder: String, limit: Int, into: URL, mode: (File) -> Int,
+                      progress: (Int, Int) -> Void) async throws {
+            let fm = FileManager.default
+            for (i, file) in files.enumerated() {
+                try Task.checkCancellation()
+                let data = try await fetch("\(folder)/\(file.path)", min(file.size, limit))
+                guard data.count == file.size, sha256(data) == file.sha256 else { throw Problem.mismatch(path: file.path) }
+                let url = into.appending(path: file.path)
+                try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url)
+                try fm.setAttributes([.posixPermissions: mode(file)], ofItemAtPath: url.path)
+                progress(i + 1, files.count)
+            }
+        }
+
+        /// The catalogue folder `root` on this Mac (a clone's `catalogue/`): each path read inside it, at most `limit` bytes.
+        public static func folder(_ root: URL) -> Source {
+            Source { path, limit in
+                guard isSafe(path) else { throw Problem.unreachable("bad path \(path)") }
+                let handle: FileHandle
+                do { handle = try FileHandle(forReadingFrom: root.appending(path: path)) }
+                catch { throw Problem.unreachable("\(root.path) has no \(path)") }
+                defer { try? handle.close() }
+                let data = try handle.read(upToCount: limit + 1) ?? Data()
+                guard data.count <= limit else { throw Problem.tooBig(path: path, limit: limit) }
+                return data
+            }
+        }
     }
 }

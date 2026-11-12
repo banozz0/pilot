@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "garnet",
+  "title": "Garnet",
+  "dark": true,
+  "palette": {
+    "background": "#100A0E",
+    "dark_background": "#0B070A",
+    "darker_background": "#181015",
+    "lighter_background": "#22171E",
+    "foreground": "#F4E9EE",
+    "dark_foreground": "#937D88",
+    "light_foreground": "#C9B5BF",
+    "bright_foreground": "#F4E9EE",
+    "accent": "#FF4775",
+    "selection": "#22171E",
+    "muted": "#937D88",
+    "red": "#FF6B5E",
+    "yellow": "#F2B266",
+    "green": "#86D9A8",
+    "cyan": "#B58CFF",
+    "blue": "#FF4775",
+    "magenta": "#FFB3C6",
+    "bright_red": "#FF6B5E",
+    "bright_yellow": "#F2B266",
+    "bright_green": "#86D9A8",
+    "bright_cyan": "#B58CFF",
+    "bright_blue": "#FF4775",
+    "bright_magenta": "#FFB3C6",
+    "native_line": "#281A23",
+    "native_line2": "#3B2733",
+    "native_text3": "#937D88",
+    "native_second": "#B58CFF",
+    "native_third": "#FFB3C6",
+    "native_graph1": "#FF4775",
+    "native_graph2": "#B58CFF",
+    "native_graph3": "#86D9A8",
+    "native_selection": "#FF4775"
+  },
+  "styles": [
+    "instrument",
+    "toybox"
+  ],
+  "wallpapers": [
+    "wallpapers"
+  ],
+  "adapters": {
+    "ghostty": {},
+    "zed": {},
+    "obsidian": {}
+  }
+}
