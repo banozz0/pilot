@@ -232,8 +232,6 @@ enum InstallModule {
             return bytes
         }
         let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey, .isRegularFileKey]
-        // A plain file (a leftover's preferences plist) is its own size: a walk of it finds nothing.
-        if let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true { return Int64(values.totalFileAllocatedSize ?? 0) }
         guard let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: Array(keys)) else { return nil }
         var total: Int64 = 0
         for case let file as URL in walk {

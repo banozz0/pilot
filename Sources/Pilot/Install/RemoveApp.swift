@@ -26,33 +26,44 @@ enum RemoveApp {
         isIsolatedTestRun ? [] : NSRunningApplication.runningApplications(withBundleIdentifier: id).filter { $0 != .current }
     }
 
+    /// The running copies of the app at `location`, by the bundle id in its Info.plist (one file read).
+    static func copies(of location: URL, running: Running = running) -> [any RunningCopy] {
+        AppLeftovers.App.bundleID(at: location).map(running) ?? []
+    }
+
     static func remove(_ name: String, at location: URL, confirm: InstallModule.Confirm, trash: @escaping @MainActor (URL) throws -> URL,
                        running: @escaping Running = running, askForce: @escaping AskForce = menuAskForce,
                        leftovers: @escaping @MainActor (AppLeftovers.App) -> Void = offerLeftovers) {
-        let app = AppLeftovers.App.read(location), file = location.lastPathComponent
-        let open = !(app.map { running($0.bundleID) } ?? []).isEmpty
-        confirm(open ? "Quit and remove \(name)" : "Remove \(name)", open ? "Quit \(name), then move \(file) to the Trash" : "Move \(file) to the Trash") {
-            @MainActor func toTrash() {
-                AdminTrash.trash(location, plain: trash) { result in
-                    switch result {
-                    case .success(let trashed):
-                        ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
-                        if let app { leftovers(app) }
-                    case .failure(let error):
-                        ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                        HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
-                    }
-                }
-            }
+        // Its helpers' and extensions' ids are read while the ask is up, off the main thread: it is gone once trashed.
+        let reading = Task.detached(priority: .userInitiated) { AppLeftovers.App.read(location) }
+        let file = location.lastPathComponent
+        let (title, detail) = copies(of: location, running: running).isEmpty ? ("Remove \(name)", "Move \(file) to the Trash")
+            : ("Quit and remove \(name)", "Quit \(name), then move \(file) to the Trash")
+        confirm(title, detail) {
             // Read again at the yes: it may have quit, or opened, while the ask was up.
-            let copies = app.map { running($0.bundleID) } ?? []
-            guard !copies.isEmpty else { return toTrash() }
+            let open = copies(of: location, running: running)
+            guard !open.isEmpty else { return toTrash(name, location, trash: trash, reading: reading, leftovers: leftovers) }
             Task {
-                guard await quit(copies, name: name, askForce: askForce) else {
+                guard await quit(open, name: name, askForce: askForce) else {
                     ilog.notice("\(name, privacy: .public) not removed: still running")
                     return HUD.tip("\(name) is still open, so it stays where it is")
                 }
-                toTrash()
+                toTrash(name, location, trash: trash, reading: reading, leftovers: leftovers)
+            }
+        }
+    }
+
+    /// The app to the Trash (an administrator's prompt for one root owns), then its leftovers offered.
+    private static func toTrash(_ name: String, _ location: URL, trash: @MainActor (URL) throws -> URL, reading: Task<AppLeftovers.App?, Never>,
+                                leftovers: @escaping @MainActor (AppLeftovers.App) -> Void) {
+        AdminTrash.trash(location, plain: trash) { result in
+            switch result {
+            case .success(let trashed):
+                ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
+                Task { if let app = await reading.value { leftovers(app) } }
+            case .failure(let error):
+                ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
+                HUD.tip(AdminTrash.said(error) ?? "\(name) could not go to the Trash")
             }
         }
     }
@@ -96,10 +107,10 @@ enum RemoveApp {
         }
     }
 
+    /// `app`'s leftovers, checked against every other app the Apps list scans (its id and name), each measured.
     @concurrent nonisolated static func leftovers(of app: AppLeftovers.App, library: URL = AppLeftovers.library) async -> [AppLeftovers.Item] {
-        let others = (InstallModule.appBundles() + InstallModule.homeAppBundles() + InstallModule.systemAppBundles())
-            .filter { $0 != app.path }.compactMap { AppLeftovers.App.read(URL(filePath: $0)) }
-        return AppLeftovers.find(app, others: others, library: library, size: { InstallModule.diskSize($0.path(percentEncoded: false)) })
+        let others = AppsModule.installedAppFiles().map { AppLeftovers.App(bundleID: $0.bundle, name: $0.name, path: $0.url.path(percentEncoded: false)) }
+        return AppLeftovers.find(app, others: others, library: library, size: Uninstall.bytes)
     }
 }
 
@@ -120,7 +131,7 @@ final class LeftoversModel {
 
     var chosen: [AppLeftovers.Item] { items.filter { ticked.contains($0.id) } }
     var total: Int64 { chosen.compactMap(\.bytes).reduce(0, +) }
-    func toggle(_ id: String) { if ticked.contains(id) { ticked.remove(id) } else { ticked.insert(id) } }
+    func toggle(_ id: String) { ticked.formSymmetricDifference([id]) }
 
     /// The chosen to the Trash, one at a time; what it says after: how many went, and each that did not with why.
     func moveToTrash() async -> String {
@@ -167,19 +178,8 @@ struct LeftoversView: View {
     }
 
     private func row(_ item: AppLeftovers.Item) -> some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: Binding(get: { model.ticked.contains(item.id) }, set: { _ in model.toggle(item.id) }))
-                .toggleStyle(.checkbox).labelsHidden()
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
-                if let other = item.sharedWith { Text("\(other) may use it too").font(ink.ui(11)).foregroundStyle(ink.muted) }
-            }
-            Spacer()
-            Text(item.bytes.map(RemoveList.size) ?? "—").font(ink.ui(12).monospacedDigit()).foregroundStyle(ink.muted)
-        }
-        .padding(.vertical, 6)
-        .contentShape(.rect)
-        .onTapGesture { model.toggle(item.id) }
+        TickRow(title: item.url.lastPathComponent, detail: item.sharedWith.map { "\($0) may use it too" },
+                size: item.bytes.map(RemoveList.size) ?? "—", ticked: model.ticked.contains(item.id)) { model.toggle(item.id) }
     }
 
     private var footer: some View {

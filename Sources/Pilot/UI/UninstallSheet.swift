@@ -37,19 +37,9 @@ struct UninstallSheet: View {
     }
 
     private func row(_ item: UninstallItem) -> some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: Binding(get: { model.ticked.contains(item.id) }, set: { _ in model.toggle(item.id) }))
-                .toggleStyle(.checkbox).labelsHidden()
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
-                if let detail = item.detail { Text(detail).font(ink.ui(11)).foregroundStyle(ink.muted) }
-            }
-            Spacer()
-            Text(RemoveList.size(item.bytes)).font(ink.ui(12).monospacedDigit()).foregroundStyle(ink.muted)
+        TickRow(title: item.title, detail: item.detail, size: RemoveList.size(item.bytes), ticked: model.ticked.contains(item.id)) {
+            model.toggle(item.id)
         }
-        .padding(.vertical, 6)
-        .contentShape(.rect)
-        .onTapGesture { model.toggle(item.id) }
     }
 
     @ViewBuilder private var footer: some View {
@@ -85,5 +75,28 @@ struct UninstallSheet: View {
         if chosen.contains(where: { $0.group == .pilot }) { return "Pilot goes to the Trash and quits. Sure?" }
         let lost = chosen.filter(\.asks).map { $0.title.lowercased() }.joined(separator: ", ")
         return chosen.contains(where: \.relaunches) ? "Removes \(lost); Pilot opens again after. Sure?" : "Removes \(lost). Sure?"
+    }
+}
+
+/// A ticked list's row (Uninstall Pilot, an app's leftovers): its tick, title, detail and size; a click anywhere ticks it.
+struct TickRow: View {
+    @Environment(\.ink) private var ink
+    let title: String, detail: String?, size: String
+    let ticked: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(get: { ticked }, set: { _ in toggle() })).toggleStyle(.checkbox).labelsHidden()
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).lineLimit(1).truncationMode(.middle)
+                if let detail { Text(detail).font(ink.ui(11)).foregroundStyle(ink.muted) }
+            }
+            Spacer()
+            Text(size).font(ink.ui(12).monospacedDigit()).foregroundStyle(ink.muted)
+        }
+        .padding(.vertical, 6)
+        .contentShape(.rect)
+        .onTapGesture(perform: toggle)
     }
 }

@@ -124,9 +124,7 @@ public struct FontPlaces: Sendable {
 
     /// The real home and Pilot's folder; in a test run a home inside the run's throwaway folder, so a sandbox host or a test
     /// never reaches Sven's configs.
-    public static let standard = FontPlaces(home: isIsolatedTestRun ? PilotFolder.support.appending(path: "home", directoryHint: .isDirectory)
-                                                : URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory),
-                                            support: PilotFolder.support)
+    public static let standard = FontPlaces(home: PilotFolder.home, support: PilotFolder.support)
 
     public func file(_ place: FontPlace) -> URL { home.appending(path: place.path) }
 

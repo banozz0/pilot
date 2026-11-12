@@ -70,7 +70,8 @@ struct RemoveAppTests {
 
     /// A stand-in running copy: quits on a normal quit only when `quits`, always on a force quit.
     @MainActor final class Copy: RunningCopy {
-        var isTerminated = false, quits: Bool, forced = false
+        var isTerminated = false, forced = false
+        let quits: Bool
         init(quits: Bool) { self.quits = quits }
         func terminate() -> Bool { if quits { isTerminated = true }; return true }
         func forceTerminate() -> Bool { forced = true; isTerminated = true; return true }
@@ -97,7 +98,7 @@ struct RemoveAppTests {
         #expect(record.asked.map(\.title) == ["Quit and remove Fixture"])
         #expect(record.asked.map(\.command) == ["Quit Fixture, then move Fixture.app to the Trash"])
         record.yes?()
-        for _ in 0..<50 where record.trashed.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<100 where record.trashed.isEmpty || offered.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
         #expect(copy.isTerminated && !copy.forced)
         #expect(record.trashed == [app])
         #expect(offered == ["dev.example.quitfixture"])

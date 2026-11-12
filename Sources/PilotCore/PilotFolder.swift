@@ -13,4 +13,9 @@ public enum PilotFolder {
     public static let support = isIsolatedTestRun
         ? FileManager.default.temporaryDirectory.appending(path: "dev.banozz.pilot.test.\(UUID().uuidString)", directoryHint: .isDirectory)
         : URL.applicationSupportDirectory.appending(path: "Pilot", directoryHint: .isDirectory)
+
+    /// The home Pilot reads others' files under: the real one, and in a test run a home inside the run's throwaway
+    /// folder, so a sandbox host or a test never reaches Sven's configs or ~/Library.
+    public static let home = isIsolatedTestRun ? support.appending(path: "home", directoryHint: .isDirectory)
+        : URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory)
 }

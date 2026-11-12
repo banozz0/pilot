@@ -113,15 +113,14 @@ extension ControlVerbs {
         }
         guard !row.system else { throw ControlError(.badValue, "\(row.name) is part of macOS and can't be removed") }
         let location: URL, ask: ControlGate.Ask
+        var open: [any RunningCopy] = []
         switch row.source {
         case .package(let p): return try await removeRun(row, p.remove, s, peer: peer)
         case .npm(let name, let prefix): return try await removeRun(row, "\(UpdateList.npm("uninstall", prefix: prefix)) \(name)", s, peer: peer)
         case .app(let path):
             location = URL(filePath: path)
-            if let id = AppLeftovers.App.read(location)?.bundleID, !s.running(id).isEmpty {
-                throw ControlError(.badValue, "\(row.name) is open; quit it first (the menu's Remove quits it for you)")
-            }
-            ask = ControlGate.Ask("Remove app", "\(row.name): move \(location.lastPathComponent) to the Trash")
+            open = RemoveApp.copies(of: location, running: s.running)
+            ask = ControlGate.Ask("Remove app", "\(row.name): \(open.isEmpty ? "" : "quit it, then ")move \(location.lastPathComponent) to the Trash")
         case .webApp(let id):
             guard let app = WebAppDirectory.list(in: s.webApps).first(where: { $0.bundleID == id }) else {
                 throw ControlError(.badValue, "no web app \(id) any more; pilot list removable reads them again")
@@ -130,6 +129,10 @@ extension ControlVerbs {
             ask = .remove(.webApp, "\(app.name): move \(location.lastPathComponent) to the Trash")
         }
         return try await s.gate.allow(ask, peer: peer) { () throws(ControlError) in
+            // A normal quit only: Force quit loses unsaved work, so it stays the menu's, asked on screen.
+            guard await RemoveApp.quit(open, name: row.name, askForce: { _ in false }) else {
+                throw ControlError(.badValue, "\(row.name) did not quit, so it stays where it is; quit or force quit it, then remove again")
+            }
             let trashed: URL
             do { trashed = try await AdminTrash.trash(location, plain: s.trash) }
             catch let cancelled as AdminTrash.Cancelled { throw ControlError(.denied, cancelled.localizedDescription) }
