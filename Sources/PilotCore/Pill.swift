@@ -6,6 +6,8 @@ import CoreGraphics
 public enum PillPlacement {
     /// The drop's size: T2's face, 600 wide and a 12 pt shoulder each side, tall enough for a view's tabs and body.
     public static let size = CGSize(width: 624, height: 300)
+    /// The pill-first bar's drop (Sven, 2026-11-12, Q171 C): the pages a rail beside the page, 680 wide and the shoulders.
+    public static let railSize = CGSize(width: 704, height: 300)
     /// The room kept to the visible frame's sides and foot.
     public static let edge: CGFloat = 8
 

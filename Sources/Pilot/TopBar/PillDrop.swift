@@ -91,6 +91,10 @@ final class PillDrop {
 
     /// The pill-first bar's settings while it draws; nil on today's pill.
     private var first: PillFirst.Settings? { bar.pillFirst.on ? bar.pillFirst : nil }
+    /// The pill-first bar in Instrument draws the notch and the rail drop (Q170 B, Q171 C); Toybox keeps its capsule.
+    var notched: Bool { bar.pillFirst.on && Look.shared.style == .instrument }
+    /// The drop's size: the rail's on the pill-first bar.
+    var dropSize: CGSize { notched ? PillPlacement.railSize : PillPlacement.size }
 
     private var showing: Showing { showing(live: live) }
 
@@ -453,7 +457,8 @@ private struct PillDropHost: View {
     }
 
     private var face: some View {
-        PillDropFace(values: pill.dropValues, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) { pill.act($0) }
+        PillDropFace(values: pill.dropValues, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, rail: pill.notched) { pill.act($0) }
+            .modifier(Notched(on: pill.notched))
     }
 }
 
@@ -468,7 +473,7 @@ struct TopBarPillItem: View {
         // Read once a draw: the face, its tick and its label.
         let values = pill.values
         Button { pill.toggle(at: lights.spot(of: .pill, from: anchor)) } label: {
-            Ticking(PillDrop.compactTicks(values)) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill)) }
+            Ticking(PillDrop.compactTicks(values)) { PillCompactFace(values: pill.values, open: lights.open.contains(.pill), notch: pill.notched) }
         }
         .buttonStyle(.kitPress)
         .accessibilityLabel("Pill, \(values.live?.title ?? values.title)")
@@ -477,6 +482,14 @@ struct TopBarPillItem: View {
         .onAppear { lights.register(anchor, for: .pill); pill.hold() }
         .onDisappear { lights.unregister(anchor, for: .pill); pill.release() }
         .background { ScreenAnchor(box: anchor) }
+    }
+}
+
+/// The notch's tokens on the pill-first bar's drop (PillNotched); as it is elsewhere.
+private struct Notched: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.modifier(PillNotched()) } else { content }
     }
 }
 

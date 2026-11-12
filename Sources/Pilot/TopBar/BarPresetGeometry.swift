@@ -16,6 +16,10 @@ extension BarItemsStore {
     /// What the top bar draws: the pill-first bar while it is on, else the saved items.
     var topBarSides: [TopBarSide: [BarSlot]] { pillFirst.on ? PillFirst.sides(settings) : settings.preview(.topBar).top ?? [:] }
 
+    /// The geometry the top bar draws: none (the full bar, flush with the screen's top edge) while pill-first is on, so its
+    /// pill and drop grow down from the very top (Sven, 2026-11-12, Q171); else the saved preset's.
+    var topBarConfiguration: BarPresetConfiguration? { pillFirst.on ? nil : settings.preset }
+
     /// Pill-first only switches its own flag. Leaving it for the preset under it keeps that preset's geometry as it was,
     /// so switching back restores the bar exactly; another preset is chosen as ever.
     func choosePreset(_ id: String) throws(ControlError) {

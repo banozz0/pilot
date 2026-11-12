@@ -149,7 +149,8 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the rest moved with their controls to Tiling's More places (simplify-pages T9).
         case .tiling: ["gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim", "blur",
                        "dim other windows"]
-        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item"]
+        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
+                        "bar preset", "full bar", "floating strip", "three islands", "pills", "pill first", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
         case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font", "material", "glass", "light or dark"]

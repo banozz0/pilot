@@ -47,7 +47,7 @@ extension SettingsSchema {
     /// pages as Name=id+id+id (up to three; Name= holds none).
     func registerPillFirst(_ bar: BarItemsStore) {
         register([
-            .choice("bar.preset", "The top bar's preset: the saved layout's, or the pill-first bar drawn over it", page: "menuBar", BarItemsStore.presetIDs,
+            .choice("bar.preset", "The top bar's preset: legacy is the Full bar, then Floating strip, Three islands and Pills, or the pill-first bar drawn over the saved one", page: "menuBar", BarItemsStore.presetIDs,
                     standard: BarItemsStore.legacyPreset, read: { bar.presetID }, write: { id throws(ControlError) in try bar.choosePreset(id) }),
             .text("pill.pages", "The pill-first bar's pages, comma-separated: \(PillFirst.Kind.allCases.filter { $0 != .extensions }.map(\.rawValue).joined(separator: ", ")), or Name=id+id+id for up to three extensions",
                   page: "menuBar", standard: PillFirst.words(PillFirst.Page.standard), read: { PillFirst.words(bar.pillFirst.pages) },

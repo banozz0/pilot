@@ -57,6 +57,8 @@ final class BarItemsStore {
     static let markAloneKey = "bar.pilotMarkAlone"
     /// Set at the first start, or once a saved bar's extensions' items have their own places (spec pilot-1.1 T50).
     static let extensionsApartKey = "bar.extensionsApart"
+    /// Set once a saved bar's untouched preset geometry has moved to the presets' 2026-11-12 defaults.
+    static let geometryDefaultsKey = "bar.geometryDefaults2"
     /// The top bar switched on or off: the page shows the bar the items now sit in, Top bar or Menu bar; a pick by hand
     /// after it stays until the next switch (Sven, 2026-10-11).
     func topBarSwitched(_ on: Bool) { pagePlacement = on ? .topBar : .menuBar }
@@ -127,6 +129,15 @@ final class BarItemsStore {
                 defaults.set(try? JSONEncoder().encode(saved), forKey: Self.key)
                 defaults.set(true, forKey: Self.extensionsApartKey)
             }
+            // The presets' new defaults (Sven, 2026-11-12), once: a floating strip still at the first defaults was never
+            // adjusted, so it takes the new ones; one adjusted keeps its own.
+            if !defaults.bool(forKey: Self.geometryDefaultsKey) {
+                if saved.preset == BarPresetConfiguration.firstDefaults {
+                    saved.preset = BarPreset.floatingStrip.configuration
+                    defaults.set(try? JSONEncoder().encode(saved), forKey: Self.key)
+                }
+                defaults.set(true, forKey: Self.geometryDefaultsKey)
+            }
             settings = saved
             return
         }
@@ -144,6 +155,7 @@ final class BarItemsStore {
         defaults.set(try? JSONEncoder().encode(settings), forKey: Self.key)
         defaults.set(true, forKey: Self.markAloneKey)
         defaults.set(true, forKey: Self.extensionsApartKey)
+        defaults.set(true, forKey: Self.geometryDefaultsKey)
         let on = settings.entries.filter(\.on).map { "\($0.kind.rawValue) \($0.placement.rawValue)" }.joined(separator: ", ")
         log.notice("bar items carried over: \(on, privacy: .public)")
     }

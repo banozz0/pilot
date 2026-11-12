@@ -68,4 +68,24 @@ extension StyleTokens {
         tokens.inked = true
         return tokens
     }
+
+    /// The pill's notch on the pill-first bar and the drop it grows into (Sven, 2026-11-12, Q170 B and Q171 C): in a dark
+    /// theme the bar's ground a deep step down (62 % toward black), in a light one the theme's inverse; inked for it, with
+    /// its own raised and sunken fills. A light theme's accent on the inverse measured 3.3:1 (Porcelain), so accent words
+    /// take the ink there; the accent's dots and fills stay.
+    public func notched() -> StyleTokens {
+        func toward(_ a: UInt32, _ b: UInt32, _ share: Double) -> UInt32 { Contrast.hex(Contrast.mix(Contrast.rgb(b), Contrast.rgb(a), share)) }
+        let ground = dark ? toward(colors.canvas.rgb, 0x000000, 0.62) : colors.inverse.rgb
+        var tokens = inked(on: ground)
+        var c = tokens.colors
+        let ink = c.text.rgb
+        (c.canvas, c.panel, c.sidebar) = (Paint(ground), Paint(ground), Paint(ground))
+        (c.raised, c.sunken) = (Paint(toward(ground, ink, 0.1)), Paint(toward(ground, 0x000000, 0.3)))
+        if Contrast.ratio(c.accentText.rgb, ground) < 4.5 { c.accentText = Paint(ink) }
+        let scale = tokens.scale
+        tokens = StyleTokens(kind: kind, dark: true, colors: c, type: type, radii: radii, depth: depth, density: density)
+        tokens.scale = scale
+        tokens.inked = true
+        return tokens
+    }
 }

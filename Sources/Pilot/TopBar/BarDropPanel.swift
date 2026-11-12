@@ -165,7 +165,7 @@ final class BarDrops {
         self.spot = spot
         var frames = BarDropPlacement.frames(open: keys.open, screen: spot.screen, visible: spot.visible, bar: spot.bar, items: spot.items)
         if keys.open.contains(.pill) {
-            frames[.pill] = PillPlacement.frame(item: spot.items[.pill], visible: spot.visible, bar: spot.bar, ground: spot.ground)
+            frames[.pill] = PillPlacement.frame(size: PillDrop.shared.dropSize, item: spot.items[.pill], visible: spot.visible, bar: spot.bar, ground: spot.ground)
         }
         let motion = mode
         for (drop, frame) in frames {

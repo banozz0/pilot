@@ -150,10 +150,25 @@ struct PillCompactFace: View {
     @Environment(\.style) private var style
     let values: PillValues
     var open = false
+    /// The pill-first bar's notch (PillNotch) in place of the capsule.
+    var notch = false
 
     static let height: CGFloat = 24
 
     var body: some View {
+        if notch {
+            PillNotch(values: values, open: open).modifier(PillNotched())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Pill, \(values.live == nil ? values.title : "live")")
+                .accessibilityValue(Self.summary(values))
+                .accessibilityAddTraits(.isButton)
+                .help(Self.summary(values))
+        } else {
+            capsule
+        }
+    }
+
+    private var capsule: some View {
         HStack(spacing: 8) {
             content
             Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
@@ -357,12 +372,70 @@ struct PillDropFace: View {
     let values: PillValues
     var openness: CGFloat = 1
     var reduceMotion = false
+    /// The pill-first bar's drop (Sven, 2026-11-12, Q171 C): the pages a rail on the left, the page beside it, in the
+    /// notch's own fill (PillNotched, applied by the caller) so notch and drop are one shape grown from the screen's top.
+    var rail = false
     var act: (Action) -> Void = { _ in }
 
     static let width: CGFloat = 600
     static let shoulder: CGFloat = 12
+    /// The rail drop's width less its shoulders (PillPlacement.railSize), the notch's while it is open.
+    static let railWidth: CGFloat = 680
 
     var body: some View {
+        if rail { railBody } else { tabsBody }
+    }
+
+    /// The rail, then the page; no key line (the rail is the tabs, ← → still move along it).
+    private var railBody: some View {
+        let inset = Self.shoulder
+        let content = HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(values.tabs.enumerated()), id: \.offset) { i, tab in
+                    let selected = i == values.selected
+                    Button { act(.select(i)) } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: tab.page.symbol).font(.system(size: 12, weight: .regular)).frame(width: 16)
+                            Text(tab.title).styleText(selected ? \.strong : \.caption).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(style.color(selected ? \.text : \.text2))
+                        .padding(.horizontal, 8).frame(height: 28)
+                        .background { if selected { RoundedRectangle(cornerRadius: style.radii.control + 1, style: .continuous).fill(style.color(\.raised)) } }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(FacePress(reduceMotion: reduceMotion))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+                Button { act(.choosePages) } label: {
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 11, weight: .medium)).foregroundStyle(style.color(\.text2))
+                        .frame(width: 28, height: 28).contentShape(.rect)
+                }
+                .buttonStyle(FacePress(reduceMotion: reduceMotion))
+                .help("Choose the pill's pages")
+                .accessibilityLabel("Choose the pill's pages")
+                .padding(.leading, 2).padding(.top, 4)
+            }
+            .frame(width: 128)
+            page.frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(14)
+        .frame(width: Self.railWidth, alignment: .topLeading)
+        .padding(.horizontal, inset)
+
+        return content
+            .background { ShoulderShape(shoulder: inset, corner: style.radii.pop).fill(style.color(\.canvas)) }
+            .clipShape(ShoulderShape(shoulder: inset, corner: style.radii.pop))
+            .visualEffect { [openness, reduceMotion] face, proxy in
+                face.offset(y: reduceMotion ? 0 : -(1 - openness) * proxy.size.height)
+            }
+            .clipped()
+            .opacity(reduceMotion ? openness : 1)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Pill, \(values.title)")
+    }
+
+    @ViewBuilder private var tabsBody: some View {
         let inset = Self.shoulder
         let content = VStack(alignment: .leading, spacing: 0) {
             tabs.padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 10)
@@ -567,7 +640,7 @@ struct PillDropFace: View {
 
     private func musicPage(_ music: PillValues.Music) -> some View {
         HStack(alignment: .top, spacing: 18) {
-            FaceArt(image: music.art, size: CGSize(width: 148, height: 148), radius: style.radii.card)
+            FaceArt(image: music.art, size: CGSize(width: rail ? 120 : 148, height: rail ? 120 : 148), radius: style.radii.card)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
                     if music.playing { Equaliser(playing: true) }
@@ -612,7 +685,7 @@ struct PillDropFace: View {
                 }
                 .padding(.top, 10)
             }
-            .frame(height: 148)
+            .frame(height: rail ? 120 : 148)
         }
     }
 
@@ -704,6 +777,129 @@ struct PillDropFace: View {
             Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
         }
     }
+}
+
+/// The pill-first bar's notch (Sven, 2026-11-12, Q170 B, after DynamicNotch): a deep shape flush with the screen's top
+/// edge, square above and rounded below, the art or the page's mark at its left end, the reading at its right and the
+/// title between. Open, it widens to the drop (PillDropFace's rail) and runs down through the bar's foot into it, one
+/// shape. Drawn in PillNotched's tokens.
+struct PillNotch: View {
+    @Environment(\.style) private var style
+    let values: PillValues
+    let open: Bool
+
+    static let width: CGFloat = 340
+    /// The strip's own inset above and below its items (TopBarStrip), which the notch runs through to the screen's edge.
+    static let stripInset: CGFloat = 3
+
+    var body: some View {
+        HStack(spacing: 10) {
+            lead.frame(width: 22, alignment: .leading)
+            middle.frame(maxWidth: .infinity)
+            trail.frame(width: 48, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .frame(width: open ? PillDropFace.railWidth : Self.width)
+        .frame(maxHeight: .infinity)
+        .background {
+            UnevenRoundedRectangle(bottomLeadingRadius: open ? 0 : 11, bottomTrailingRadius: open ? 0 : 11, style: .continuous)
+                .fill(style.color(\.canvas))
+                .padding(.top, -Self.stripInset).padding(.bottom, open ? -(Self.stripInset + 1) : 0)
+        }
+    }
+
+    @ViewBuilder private var lead: some View {
+        if values.live != nil {
+            FaceLiveDot(size: 8)
+        } else {
+            switch values.page {
+            case .music: FaceArt(image: values.music?.art, size: CGSize(width: 20, height: 20), radius: 5)
+            default: Image(systemName: values.page.symbol).font(style.font(\.barIcon)).foregroundStyle(style.color(\.text2))
+            }
+        }
+    }
+
+    @ViewBuilder private var middle: some View {
+        if let live = values.live {
+            Text(live.title).styleText(\.barStrong).foregroundStyle(style.color(\.text)).lineLimit(1)
+        } else {
+            switch values.page {
+            case .music:
+                if let music = values.music {
+                    HStack(spacing: 6) {
+                        Text(music.title).styleText(\.barStrong).foregroundStyle(style.color(\.text))
+                        Text(music.artist).styleText(\.caption).foregroundStyle(style.color(\.text2))
+                    }
+                    .lineLimit(1)
+                } else { quiet("Nothing playing") }
+            case .calendar:
+                if let next = values.calendar?.events.first, next.day == nil {
+                    Text(next.title).styleText(\.barStrong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                } else { quiet(values.calendar?.short ?? "Calendar") }
+            case .stats:
+                if values.stats.isEmpty { quiet("Reading…") } else {
+                    readings(values.stats.prefix(3).map { ($0.symbol, $0.unit == "%" ? "\($0.number)%" : "\($0.number) \($0.unit)") })
+                }
+            case .extensions:
+                if values.extensions.isEmpty { quiet("No extensions") } else { readings(values.extensions.prefix(3).map { ($0.symbol, $0.value) }) }
+            case .controls: readings(controls)
+            case .activity:
+                if let first = values.running.first {
+                    Text(first.title).styleText(\.barStrong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                } else { quiet("Nothing running") }
+            }
+        }
+    }
+
+    @ViewBuilder private var trail: some View {
+        if let live = values.live, let reading = live.reading {
+            time(reading, live: true)
+        } else {
+            switch values.page {
+            case .music: if let music = values.music { Equaliser(playing: music.playing) }
+            case .calendar:
+                if let next = values.calendar?.events.first, next.day == nil {
+                    if next.now { FaceLiveDot(size: 6) } else { time(next.time.components(separatedBy: " ").first ?? next.time, live: false) }
+                }
+            case .activity:
+                if let reading = values.running.first?.reading { time(reading, live: true) }
+            default: EmptyView()
+            }
+        }
+    }
+
+    /// Controls' face: sound and brightness.
+    private var controls: [(String, String)] {
+        var parts: [(String, String)] = []
+        if let sound = values.sound { parts.append((sound.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", sound.muted ? "Muted" : "\(Int(sound.level * 100))")) }
+        if let display = values.display { parts.append(("sun.max.fill", "\(Int(display.level * 100))")) }
+        return parts
+    }
+
+    private func time(_ s: String, live: Bool) -> some View {
+        Text(s).styleText(\.barTime).monospacedDigit().foregroundStyle(style.color(live ? \.accentText : \.text2)).lineLimit(1).fixedSize()
+    }
+
+    private func quiet(_ words: String) -> some View {
+        Text(words).styleText(\.caption).foregroundStyle(style.color(\.text2)).lineLimit(1)
+    }
+
+    private func readings(_ parts: [(String, String)]) -> some View {
+        HStack(spacing: 14) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, r in
+                HStack(spacing: 5) {
+                    Image(systemName: r.0).font(style.font(\.barIcon)).foregroundStyle(style.color(\.text2))
+                    Text(r.1).styleText(\.barTime).monospacedDigit().foregroundStyle(style.color(\.text))
+                }
+            }
+        }
+    }
+}
+
+/// The notch's tokens (StyleTokens.notched) on what it wraps: the notch and the rail drop draw in them.
+struct PillNotched: ViewModifier {
+    @Environment(\.style) private var style
+    func body(content: Content) -> some View { content.style(style.notched()) }
 }
 
 /// The shoulders join: concave quarter-curves at the top that flare `shoulder` points into the bar, straight sides, the

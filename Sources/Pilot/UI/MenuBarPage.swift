@@ -275,7 +275,7 @@ struct MenuBarPage: View {
             stripSlot($0, store, inTopBar: true, joining: joining)
         }
         .frame(height: store.settings.preset?.height ?? 30)
-        .background { if background == .glass, store.settings.preset?.preset != .threeIslands { BarGlassGround(colour: store.colour) } }
+        .background { if background == .glass, store.settings.preset?.preset.islands != true { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
         // Over the Group the outline lights in place of the caret: the drop joins it.
         .overlay { if let overTop, !joining { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
@@ -872,26 +872,29 @@ struct BarPresetControls: View {
             Picker("Preset", selection: Binding(get: { store.presetID }, set: { value in
                 do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
             })) {
-                Text("Current layout (before presets)").tag(BarItemsStore.legacyPreset)
+                Text("Full bar").tag(BarItemsStore.legacyPreset)
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
                 Text("Pill first").tag(BarItemsStore.pillFirstPreset)
             }
             if store.pillFirst.on {
                 // Drawn over the saved bar: its items and geometry wait, untouched, for the switch back.
-                Text("Pilot and the workspaces, the pill, the status lights and the clock; the clock opens Calendar in the pill. Your bar stays saved as it was: pick \(store.settings.preset?.preset.title ?? "Current layout") to get it back.")
+                Text("Pilot and the workspaces, the pill, the status lights and the clock; the clock opens Calendar in the pill. Your bar stays saved as it was: pick \(store.settings.preset?.preset.title ?? "Full bar") to get it back.")
             }
             if let config = store.settings.preset, !store.pillFirst.on {
-                Button("Reset geometry") {
-                    do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
-                }.buttonStyle(.pilot)
-                // Each row reads the preset again, never with `!`: picking Current layout clears it, and a row can redraw
-                // before this branch goes (build 2276 trapped there).
-                ForEach(BarItemsStore.geometryFields, id: \.0) { field in
-                    Stepper(field.1 + " · " + String(format: "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
-                        store.settings.preset?[keyPath: field.2] ?? 0
-                    }, set: { value in
-                        do { try store.setGeometry(field.0, value: value); problem = "" } catch { problem = String(describing: error) }
-                    }), in: BarPresetConfiguration.ranges[field.0]!)
+                // The sizes behind one fold, closed until opened (Sven, 2026-11-12): the preset's defaults are the bar.
+                KitFold(title: "Adjust sizes") {
+                    // Each row reads the preset again, never with `!`: picking Full bar clears it, and a row can redraw
+                    // before this branch goes (build 2276 trapped there).
+                    ForEach(BarItemsStore.geometryFields, id: \.0) { field in
+                        Stepper(field.1 + " · " + String(format: field.0 == "border" ? "%.1f pt" : "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
+                            store.settings.preset?[keyPath: field.2] ?? 0
+                        }, set: { value in
+                            do { try store.setGeometry(field.0, value: value); problem = "" } catch { problem = String(describing: error) }
+                        }), in: BarPresetConfiguration.ranges[field.0]!, step: field.0 == "border" ? 0.5 : 1)
+                    }
+                    Button("Reset sizes") {
+                        do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
+                    }.buttonStyle(.pilot)
                 }
             }
             Text("Items and their order stay personal. Pack defaults and Restore are reviewed in Look.")
