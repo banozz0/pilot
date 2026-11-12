@@ -64,6 +64,18 @@ struct PillValues {
     var controls: [Control] = []
     var sound: DropdownPanelValues.Sound?
     var display: DropdownPanelValues.Display?
+    /// The row the keys lit in the open drop, wearing the focus ring; nil draws none.
+    var highlight: Int?
+
+    /// How many rows the view showing can light: its items, or an empty state's button.
+    var rows: Int {
+        switch page {
+        case .music: music == nil ? 1 : 0
+        case .extensions: extensions.isEmpty ? 1 : extensions.count
+        case .activity: running.count
+        case .controls: controls.count
+        }
+    }
 }
 
 // MARK: Compact
@@ -229,6 +241,8 @@ struct PillDropFace: View {
         enum Transport: Hashable { case previous, playPause, next }
         case select(PillValues.Page), choosePages, transport(Transport), toggle(String)
         case level(DropdownPanelFace.Action.Level, Double), pause(Int), stop(Int), empty(PillValues.Page)
+        /// An extension's item by its place: its page (Return on the lit item).
+        case extensionPage(Int)
     }
 
     @Environment(\.style) private var style
@@ -246,6 +260,7 @@ struct PillDropFace: View {
             tabs.padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 10)
             InstrumentRule().padding(.horizontal, 14)
             page.padding(16).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+            hints.padding(.horizontal, 16).padding(.bottom, 12)
         }
         .padding(.horizontal, inset)
         .frame(width: Self.width + 2 * inset, alignment: .topLeading)
@@ -266,6 +281,39 @@ struct PillDropFace: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Pill, \(values.page.title)")
     }
+
+    /// Whether `row` wears the focus ring.
+    private func lit(_ row: Int) -> Bool { values.highlight == row }
+
+    /// One line of keys at the drop's foot, for the view showing.
+    private var hints: some View {
+        HStack(spacing: 13) {
+            FaceHint(keys: ["←", "→"], label: "Views")
+            if values.page == .music, values.music != nil {
+                FaceHint(keys: ["Space"], label: "Play")
+                FaceHint(keys: ["⇧", "←", "→"], label: "Skip")
+            } else if values.rows > 0 {
+                FaceHint(keys: ["↑", "↓"], label: "Move")
+                FaceHint(keys: ["↵"], label: returns)
+            }
+            if values.page == .activity, let item = running, item.canPause, item.canStop { FaceHint(keys: ["Delete"], label: "Stop") }
+            Spacer(minLength: 0)
+            FaceHint(keys: ["Esc"], label: "Close")
+        }
+    }
+
+    /// What Return does on the view showing.
+    private var returns: String {
+        switch values.page {
+        case .music: "Open"
+        case .extensions: values.extensions.isEmpty ? "Choose" : "Open page"
+        case .activity: running?.canPause == true ? "Pause" : "Stop"
+        case .controls: "Switch"
+        }
+    }
+
+    /// The Activity entry Return acts on: the lit one, else the first. It pauses one that can pause, else stops it.
+    private var running: DropdownPanelValues.Running? { values.highlight.map { values.running[$0] } ?? values.running.first }
 
     private var shape: ShoulderShape { ShoulderShape(shoulder: Self.shoulder, corner: style.radii.pop) }
 
@@ -310,12 +358,14 @@ struct PillDropFace: View {
         case .music:
             if let music = values.music { musicPage(music) } else {
                 FaceEmpty(symbol: "music.note", title: "Nothing playing",
-                          detail: "Play something in Music, Spotify or a browser and it shows here.", button: "Open Music", action: { act(.empty(.music)) }).padding(.top, 14)
+                          detail: "Play something in Music, Spotify or a browser and it shows here.", button: "Open Music", lit: lit(0),
+                          action: { act(.empty(.music)) }).padding(.top, 14)
             }
         case .extensions:
             if values.extensions.isEmpty {
                 FaceEmpty(symbol: "puzzlepiece.extension", title: "No extensions in the pill",
-                          detail: "Pick the extensions you want here in Menu bar.", button: "Choose extensions", action: { act(.empty(.extensions)) }).padding(.top, 14)
+                          detail: "Pick the extensions you want here in Menu bar.", button: "Choose extensions", lit: lit(0),
+                          action: { act(.empty(.extensions)) }).padding(.top, 14)
             } else { extensionsPage }
         case .activity:
             if values.running.isEmpty {
@@ -325,6 +375,7 @@ struct PillDropFace: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(values.running.enumerated()), id: \.offset) { i, item in
                         RunningRow(item: item, reduceMotion: reduceMotion, onPause: { act(.pause(i)) }, onStop: { act(.stop(i)) })
+                            .padding(6).focusBorder(on: lit(i), radius: style.radii.control + 2).padding(-6)
                     }
                 }
             }
@@ -393,7 +444,8 @@ struct PillDropFace: View {
     }
 
     private var extensionsPage: some View {
-        FaceColumns(items: values.extensions, columns: 3, spacing: 8) { item in
+        FaceColumns(items: Array(values.extensions.indices), columns: 3, spacing: 8) { row in
+                let item = values.extensions[row]
                 let shape = RoundedRectangle(cornerRadius: style.radii.card, style: .continuous)
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 6) {
@@ -407,13 +459,15 @@ struct PillDropFace: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(style.color(\.raised), in: shape)
                 .overlay { shape.strokeBorder(style.color(\.line)) }
+                .focusBorder(on: lit(row), radius: style.radii.card)
         }
     }
 
     /// Switch tiles on the left, sound and brightness on the right: reference 1794160682763's Controls.
     private var controlsPage: some View {
         HStack(alignment: .top, spacing: 16) {
-            FaceColumns(items: values.controls, columns: 2) { control in
+            FaceColumns(items: Array(values.controls.indices), columns: 2) { row in
+                    let control = values.controls[row]
                     let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
                     Button { act(.toggle(control.title)) } label: {
                     HStack(spacing: 9) {
@@ -427,6 +481,7 @@ struct PillDropFace: View {
                     .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                     .background(style.color(control.on ? \.raised : \.sunken), in: shape)
                     .overlay { shape.strokeBorder(style.color(control.on ? \.line2 : \.line)) }
+                    .focusBorder(on: lit(row), radius: style.radii.control + 2)
                     .contentShape(shape)
                     }
                     .buttonStyle(FacePress(reduceMotion: reduceMotion))

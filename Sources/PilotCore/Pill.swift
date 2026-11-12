@@ -112,3 +112,48 @@ public enum Pill {
         public static func names(_ views: [View]) -> String { views.map(\.rawValue).joined(separator: ",") }
     }
 }
+
+extension Pill.Layout {
+    /// The view `by` steps from the one showing, through the shown views in order, wrapping: the drop's arrows and Tab,
+    /// and the Next pill view key.
+    public func step(_ by: Int) -> Pill.View {
+        let shown = shown
+        guard let i = shown.firstIndex(of: current) else { return current }
+        return shown[((i + by) % shown.count + shown.count) % shown.count]
+    }
+}
+
+extension Pill {
+    /// What a key does in the open drop (the pill from the keyboard, Sven 2026-11-12): nil passes it on. `rows` is how
+    /// many rows the view showing can light, `highlight` the lit one.
+    public enum Press: Equatable, Sendable {
+        case view(View), row(Int), act(Int), stop(Int), playPause, previous, next
+
+        /// ← → and Tab, Shift-Tab step through the views, 1 to 4 jump to one, ↑ ↓ move the lit row, Return acts on it
+        /// (Space too, outside Music), Delete stops a lit Activity row. In Music, Space plays or pauses and Shift-← →
+        /// skip: plain arrows are the views', and Control, Option or Command can be the layer key, where an arrow is a
+        /// Hyper bind (the tiler's). Any key held with Control, Option or Command passes on.
+        public static func of(code: UInt16, shift: Bool, chord: Bool, chars: String?, layout: Layout, rows: Int, highlight: Int?) -> Press? {
+            guard !chord else { return nil }
+            let music = layout.current == .music
+            switch Int64(code) {
+            case KeyCode.tab: return .view(layout.step(shift ? -1 : 1))
+            case KeyCode.leftArrow, KeyCode.rightArrow:
+                let forward = Int64(code) == KeyCode.rightArrow
+                if shift { return music ? (forward ? .next : .previous) : nil }
+                return .view(layout.step(forward ? 1 : -1))
+            case KeyCode.downArrow, KeyCode.upArrow:
+                guard rows > 0 else { return nil }
+                let down = Int64(code) == KeyCode.downArrow
+                guard let highlight else { return .row(down ? 0 : rows - 1) }
+                return .row(min(max(highlight + (down ? 1 : -1), 0), rows - 1))
+            case KeyCode.returnKey, KeyCode.keypadEnter: return highlight.map(Press.act) ?? (music ? .playPause : nil)
+            case KeyCode.space: return music ? .playPause : highlight.map(Press.act)
+            case KeyCode.delete, KeyCode.forwardDelete: return layout.current == .activity ? highlight.map(Press.stop) : nil
+            default:
+                guard !shift, let digit = chars.flatMap(Int.init), layout.shown.indices.contains(digit - 1) else { return nil }
+                return .view(layout.shown[digit - 1])
+            }
+        }
+    }
+}

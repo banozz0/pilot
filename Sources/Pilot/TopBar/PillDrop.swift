@@ -25,6 +25,8 @@ final class PillLayoutStore {
     func setOrder(_ views: [Pill.View]) throws(ControlError) { layout.order = try Pill.Layout.order(views) }
     func setHidden(_ views: Set<Pill.View>) throws(ControlError) { layout.hidden = try Pill.Layout.hide(views) }
     func select(_ view: Pill.View) throws(ControlError) { layout.selected = try layout.select(view) }
+    /// The next shown view, wrapping: the Next pill view key.
+    func next() { layout.selected = layout.step(1) }
     func setExtensions(_ ids: [String]) throws(ControlError) { layout.extensions = try Pill.Layout.extensions(ids) }
 
     /// The edit list's moves and switches; hiding the last view shown is refused, as `pill.hidden` refuses it.
@@ -56,6 +58,8 @@ final class PillDrop {
     @ObservationIgnored private var watching: Pill.View?
     /// The focused screen as Controls opened on it: its brightness is read from here, never an Accessibility read per draw.
     @ObservationIgnored private var screen: (screen: NSScreen, id: UInt32)?
+    /// The open drop's row the keys lit, its focus ring; nil while none is (a click opened it, or no key moved yet).
+    private var highlight: Int?
 
     init(layout: PillLayoutStore = .shared) {
         self.layout = layout
@@ -83,6 +87,14 @@ final class PillDrop {
             values.sound = DropdownBlocks.sound(engine.barSources.readings)
             values.display = screen.flatMap(DropdownBlocks.display)
         }
+        return values
+    }
+
+    /// What the open drop draws: `values` with the lit row, read here alone so the compact face never redraws for a key.
+    /// A row gone since it was lit (a timer ended) moves the ring to the last one left.
+    var dropValues: PillValues {
+        var values = values
+        values.highlight = values.rows == 0 ? nil : highlight.map { min($0, values.rows - 1) }
         return values
     }
 
@@ -167,12 +179,13 @@ final class PillDrop {
     }
 
     /// The pill's click or its key: closes the drop when open, else opens it under the item clicked (`spot`), or on the
-    /// focused display.
-    func toggle(at spot: BarDrops.Spot? = nil, drops: BarDrops = .shared) {
+    /// focused display. Opened `byKey`, its first row is lit, so Return works at once; a click lights none.
+    func toggle(at spot: BarDrops.Spot? = nil, byKey: Bool = false, drops: BarDrops = .shared) {
         if drops.isOpen(.pill) { return drops.close(.pill) }
         // One open at a time: the Pilot menu goes too.
         BarPanel.shared.close()
         hold()
+        highlight = byKey ? 0 : nil
         drops.open(.pill, face: face(), at: spot)
     }
 
@@ -183,7 +196,41 @@ final class PillDrop {
             host.sizingOptions = []   // the drop's frame is BarDrops', from PillPlacement
             host.frame.size = size
             return BarDrops.panel(host, title: "Pill", appearance: look.appearance(for: .barPopovers))
-        }, keepsField: false, closed: { [weak self] in self?.release() })
+        }, keys: { [weak self] code, flags, chars in self?.key(code, flags, chars) ?? false },
+           keepsField: false, closed: { [weak self] in self?.release() })
+    }
+
+    /// A key in the open drop (Pill.Press): true when taken. A view picked by key is saved as `pill.view`, as a click's
+    /// is, and lights its first row.
+    private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ chars: String?) -> Bool {
+        let values = dropValues
+        guard let what = Pill.Press.of(code: code, shift: flags.contains(.shift), chord: !flags.isDisjoint(with: [.control, .option, .command]),
+                                        chars: chars, layout: layout.layout, rows: values.rows, highlight: values.highlight)
+        else { return false }
+        switch what {
+        case .view(let view):
+            try? layout.select(view)
+            highlight = 0
+        case .row(let row): highlight = row
+        case .act(let row): press(row, in: values)
+        case .stop(let row): act(.stop(row))
+        case .playPause: act(.transport(.playPause))
+        case .previous: act(.transport(.previous))
+        case .next: act(.transport(.next))
+        }
+        return true
+    }
+
+    /// Return on the lit row: what a click on it does; an extension's item opens its page, as the Pilot menu's card does.
+    private func press(_ row: Int, in values: PillValues) {
+        switch values.page {
+        case .music: act(.empty(.music))
+        case .extensions: act(values.extensions.isEmpty ? .empty(.extensions) : .extensionPage(row))
+        case .activity:
+            let item = values.running[row]
+            if item.canPause { act(.pause(row)) } else if item.canStop { act(.stop(row)) }
+        case .controls: act(.toggle(values.controls[row].title))
+        }
     }
 
     /// A press in the drop.
@@ -203,6 +250,9 @@ final class PillDrop {
         case .level(let kind, let level):
             guard let readings = Engine.shared?.barSources.readings else { return }
             DropdownBlocks.act(.level(kind, level), readings: readings)
+        case .extensionPage(let i):
+            BarDrops.shared.close(.pill)
+            DropdownBlocks.openPage(layout.layout.extensions, at: i)
         case .pause(let i): DropdownNow.press(i, pause: true)
         case .stop(let i): DropdownNow.press(i, pause: false)
         case .empty(.music): NSWorkspace.shared.open(URL(filePath: "/System/Applications/Music.app"))
@@ -237,7 +287,7 @@ private struct PillDropHost: View {
     }
 
     private var face: some View {
-        PillDropFace(values: pill.values, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) { pill.act($0) }
+        PillDropFace(values: pill.dropValues, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) { pill.act($0) }
     }
 }
 

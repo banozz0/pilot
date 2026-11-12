@@ -170,6 +170,7 @@ public enum KeyCode {
     public static let forwardDelete: Int64 = 117
     public static let downArrow: Int64 = 125
     public static let upArrow: Int64 = 126
+    public static let space: Int64 = 49
 }
 
 /// Where a layer-key change came from, for its log line (card agent-bo-95422775). No pilot:// route sets the key.

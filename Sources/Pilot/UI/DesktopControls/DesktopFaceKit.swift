@@ -173,6 +173,8 @@ struct FaceEmpty: View {
     let detail: String
     var button: String?
     var compact = false
+    /// The button wears the keyboard's focus ring (the pill's lit row).
+    var lit = false
     var action: () -> Void = {}
 
     var body: some View {
@@ -183,7 +185,12 @@ struct FaceEmpty: View {
                 Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text2))
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
-            if let button { Button(button, action: action).buttonStyle(InstrumentButtonStyle(kind: .raised)).padding(.top, 2) }
+            if let button {
+                Button(button, action: action).buttonStyle(InstrumentButtonStyle(kind: .raised))
+                    // focusBorder draws rounded rectangles only; the button is a capsule.
+                    .overlay { if lit { Capsule(style: .circular).strokeBorder(style.color(\.accent), lineWidth: InstrumentBar.ring).padding(-3) } }
+                    .padding(.top, 2)
+            }
         }
         .frame(maxWidth: 300)
         .frame(maxWidth: .infinity)

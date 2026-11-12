@@ -127,6 +127,17 @@ struct DesktopControlsRenders {
             }
             try shot(PillStage(values: pill, openness: 0.5, backdrop: backdrop), "pill-motion-half-open")
             try shot(PillStage(values: pill, openness: 0.5, reduceMotion: true, backdrop: backdrop), "pill-motion-half-open-reduce-motion")
+            // From the keyboard: the lit row's focus ring in each view with rows, and on an empty state's button.
+            for page in [PillValues.Page.extensions, .activity, .controls] {
+                var keyed = pill
+                keyed.page = page
+                keyed.highlight = min(1, keyed.rows - 1)
+                try shot(PillStage(values: keyed, backdrop: backdrop), "pill-keys-\(page.title.lowercased())")
+            }
+            var keyedEmpty = empty
+            keyedEmpty.page = .music
+            keyedEmpty.highlight = 0
+            try shot(PillStage(values: keyedEmpty, backdrop: backdrop), "pill-keys-music-empty")
 
             // The Carousel.
             let wallpapers = Self.wallpapers(walls, palette: Self.palette(look.theme), source: "\(look.theme.name)'s wallpapers")
