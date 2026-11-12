@@ -38,12 +38,9 @@ enum FileActions {
                     // A recording's copy with its pointer drawn in goes with it (Q821), off the main thread: it is large.
                     Task.detached(priority: .utility) { RecordingHandout.forget([url]) }
                     flog.notice("trashed \(path, privacy: .public) to \(trashed.path, privacy: .public)")
-                case .failure(let cancelled as AdminTrash.Cancelled):
-                    flog.notice("\(path, privacy: .public) not trashed: the password was cancelled")
-                    HUD.tip(cancelled.localizedDescription)
                 case .failure(let error):
                     flog.error("\(path, privacy: .public) not trashed: \(error.localizedDescription, privacy: .public)")
-                    HUD.tip("\(url.lastPathComponent) could not go to the Trash")
+                    HUD.tip((error as? AdminTrash.Cancelled)?.localizedDescription ?? "\(url.lastPathComponent) could not go to the Trash")
                 }
             }
         }

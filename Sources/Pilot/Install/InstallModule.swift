@@ -129,12 +129,9 @@ enum InstallModule {
             AdminTrash.trash(location, plain: trash) { result in
                 switch result {
                 case .success(let trashed): ilog.notice("removed \(name, privacy: .public) to \(trashed.path, privacy: .public)")
-                case .failure(let cancelled as AdminTrash.Cancelled):
-                    ilog.notice("\(name, privacy: .public) not removed: the password was cancelled")
-                    HUD.tip(cancelled.localizedDescription)
                 case .failure(let error):
                     ilog.error("\(name, privacy: .public) not removed: \(error.localizedDescription, privacy: .public)")
-                    HUD.tip("\(name) could not go to the Trash")
+                    HUD.tip((error as? AdminTrash.Cancelled)?.localizedDescription ?? "\(name) could not go to the Trash")
                 }
                 then()
             }
