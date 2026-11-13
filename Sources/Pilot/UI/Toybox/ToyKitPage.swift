@@ -11,6 +11,8 @@ struct ToyPage<Content: View>: View {
     var intro: String?
     /// The intro's ⓘ: what its one line leaves out.
     var info: String?
+    /// The blocks in columns once the page is wide (PageFlow); else one stack.
+    var flow = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -23,7 +25,11 @@ struct ToyPage<Content: View>: View {
                     }
                     .padding(.bottom, 2)
                 }
-                content
+                if flow {
+                    PageFlow(column: KitPage<EmptyView>.column(.toybox), gap: Toy.blockGap) { content }
+                } else {
+                    content
+                }
             }
             .padding(.horizontal, Toy.gutter).padding(.bottom, 32)
         }

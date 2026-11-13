@@ -76,7 +76,7 @@ struct TilingBody: View {
                 if let tip = MouseDragSection.tips[settings.dragModifier] { InfoMark(text: tip) }
             }
             let label = HStack(spacing: 6) { Text(MouseDragSection.label); InfoMark(text: MouseDragSection.dragTip) }
-            BlockRow(first: true) { label; Spacer(); choices }
+            BlockRow(first: true) { LabelledControls { label } controls: { choices } }
             BlockRow {
                 Toggle("Animate windows", isOn: block.binding(\.glide))
                     .toggleStyle(.pilotSwitchRow(info: "Tiled windows slide to their new place in under a fifth of a second. Reduce Motion and Low Power Mode always jump."))

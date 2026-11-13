@@ -86,6 +86,8 @@ struct CataloguePage: View {
                         .padding(.vertical, 10)
                     }
                 }
+                // A category's cards keep the page's width (PageFlow).
+                .pageWide()
             }
             if let searched { results(searched) }
             else if !recommend {
@@ -133,6 +135,7 @@ struct CataloguePage: View {
                     .padding(.vertical, 10)
                 }
             }
+            .pageWide()
         }
         if !progress.done {
             KitBlock(title: "Searching", symbol: "magnifyingglass") {
