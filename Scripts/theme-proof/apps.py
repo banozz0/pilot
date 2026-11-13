@@ -433,12 +433,18 @@ def checks(passed):
         print('  Preview next: ' + json.dumps([n for n in steps if 'fish' in n or 'Vesktop' in n]), flush=True)
         assert [n for n in steps if 'exec fish' in n] and [n for n in steps if n.startswith('Vesktop: quit it (Cmd+Q)')], steps
         assert tree() == before, 'Preview wrote'
-        assert f.apply()['status'] == 'applied'
+        # Sven on build 2454: Vesktop was open, read its enabled themes before Apply, and never switched the theme on.
+        f.controls(vesktop='open'); answer = f.apply(); f.controls()
+        assert answer['status'] == 'applied' and answer['vesktop'].startswith('open') and answer['next'][0].startswith('Vesktop is open, so it hasn'), answer
+        print(f"  Apply with Vesktop open: vesktop {answer['vesktop']!r}; next[0] {answer['next'][0]!r}", flush=True)
         palette = f.packs[0]['palette']
         assert f'set -g fish_color_command {palette["blue"][1:]}\n' in fish.read_text() and '#' not in fish.read_text().split('\n', 1)[1], fish.read_text()
         got = json.loads(settings.read_text())
         assert got['enabledThemes'] == ['pilot.theme.css'] and {k: v for k, v in got.items() if k != 'enabledThemes'} == {k: v for k, v in mine.items() if k != 'enabledThemes'}, got
         assert css.read_text().startswith('/**\n * @name Pilot\n') and f'--background-primary: {palette["background"]};' in css.read_text()
+        # Discord sets its colours on .theme-dark with a second class: Pilot's scope is midnight-discord's, which wins.
+        scope = 'body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme) {'
+        assert scope in css.read_text() and f'--app-frame-background: {palette["dark_background"]};' in css.read_text(), css.read_text()[:400]
         for path in [fish, settings]: show('applied', path)
         print('  applied pilot.theme.css: ' + repr(css.read_text()[:260]) + f' … {len(css.read_text().splitlines())} lines', flush=True)
         shell = shutil.which('fish')
@@ -453,7 +459,10 @@ def checks(passed):
         # Vencord saving a setting writes the whole file from memory: the entry is still Pilot's, the person's change stays.
         got['autoUpdate'] = False; settings.write_text(json.dumps(got, indent=4))
         plan = f.call('theme', 'plan', 'apply', 'b'); assert plan['review']['kept'] == [], plan['review']
-        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and f.packs[1]['palette']['background'] in css.read_text()
+        f.controls(vesktop='open'); answer = f.call('theme', 'apply', plan['id']); f.controls()
+        # Only the theme file changed, which an open Vesktop takes live: no restart line.
+        assert answer['status'] == 'applied' and 'vesktop' not in answer and not [n for n in answer.get('next', []) if 'Vesktop is open' in n], answer
+        assert f.packs[1]['palette']['background'] in css.read_text()
         answer = f.restore(); assert answer['status'] == 'restored' and answer['kept'] == [], answer
         assert json.loads(settings.read_text()) == dict(mine, autoUpdate=False) and not css.exists() and not fish.exists(), settings.read_text()
         for path in [fish, settings, css]: show('restored', path)

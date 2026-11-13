@@ -274,23 +274,30 @@ public enum ThemeApps {
         return text(lines)
     }
 
-    /// A Vencord theme for Discord in Vesktop: its header, then Discord's colour variables from the pack's roles, in
-    /// both the names Discord's refreshed look reads and the older ones. Which names this Discord build reads is unverified.
+    /// What a Vesktop theme's colours are set on. Discord sets its own on .theme-dark and .theme-light with a second class,
+    /// so a single class loses; refact0r/midnight-discord (src/colors.css, maintained) sets them here, and so does Pilot.
+    static let vesktopScope = "body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme)"
+
+    /// A Vencord theme for Discord in Vesktop: its header, then Discord's colour variables from the pack's roles, by the
+    /// names midnight-discord sets today (Discord's refreshed look) and the older ones.
     static func vesktop(_ pack: ThemePack) -> Data {
         let p = pack.palette
         let roles: [(String, String)] = [
+            ("app-frame-background", "dark_background"), ("background-accent", "lighter_background"), ("background-brand", "accent"),
             ("background-base-lowest", "darker_background"), ("background-base-lower", "dark_background"), ("background-base-low", "dark_background"),
             ("background-surface-high", "background"), ("background-surface-higher", "lighter_background"), ("background-surface-highest", "lighter_background"),
+            ("background-mod-subtle", "lighter_background"), ("background-mod-muted", "lighter_background"),
+            ("background-mod-normal", "lighter_background"), ("background-mod-strong", "selection"),
             ("background-primary", "background"), ("background-secondary", "dark_background"), ("background-secondary-alt", "dark_background"),
             ("background-tertiary", "darker_background"), ("background-floating", "darker_background"), ("channeltextarea-background", "lighter_background"),
             ("background-modifier-hover", "lighter_background"), ("background-modifier-active", "selection"), ("background-modifier-selected", "selection"),
-            ("chat-background-default", "background"), ("input-background", "lighter_background"),
+            ("chat-background-default", "background"), ("input-background-default", "lighter_background"),
             ("text-default", "foreground"), ("text-normal", "foreground"), ("text-strong", "bright_foreground"), ("text-muted", "muted"),
             ("header-primary", "bright_foreground"), ("header-secondary", "light_foreground"), ("channels-default", "light_foreground"),
             ("interactive-normal", "light_foreground"), ("interactive-hover", "foreground"), ("interactive-active", "bright_foreground"),
             ("interactive-muted", "muted"), ("text-link", "blue"), ("brand-500", "accent"), ("brand-experiment", "accent"), ("border-subtle", "lighter_background")]
         let lines = ["/**", " * @name Pilot", header(pack, " * @description"), " * @author Pilot", "*/", "",
-                     ":root, .theme-dark, .theme-light, .theme-darker, .theme-midnight {"] + roles.map { "  --\($0.0): \(p[$0.1]!);" } + ["}"]
+                     vesktopScope + " {"] + roles.map { "  --\($0.0): \(p[$0.1]!);" } + ["}"]
         return text(lines)
     }
 
