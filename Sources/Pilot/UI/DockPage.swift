@@ -184,6 +184,7 @@ struct DockWidgetSettings: View {
     let slot: DockSlot
     let dock: DockController
     let prefs: ExtensionsSettings
+    @State private var zonesDraft: String?
 
     var body: some View {
         switch slot.widget {
@@ -253,9 +254,15 @@ struct DockWidgetSettings: View {
                 Text("World clocks").foregroundStyle(ink.text)
                 InfoMark(text: "Up to three time zones, by their ids: Asia/Tokyo, America/New_York.")
                 Spacer()
-                TextField("Asia/Tokyo, America/New_York", text: Binding(get: { dock.settings.options.zones.joined(separator: ", ") }, set: { text in
-                    try? dock.settings.options.set("zones", [text])
-                })).textFieldStyle(.roundedBorder).frame(width: 220)
+                // Typed into a draft, applied on Return, so a half-typed zone ("Asia/Tok") is never dropped mid-word.
+                TextField("Asia/Tokyo, America/New_York", text: Binding(get: { zonesDraft ?? dock.settings.options.zones.joined(separator: ", ") },
+                                                                        set: { zonesDraft = $0 }))
+                    .textFieldStyle(.roundedBorder).frame(width: 220)
+                    .onSubmit {
+                        guard let draft = zonesDraft else { return }
+                        try? dock.settings.options.set("zones", [draft])
+                        zonesDraft = nil
+                    }
             }
             BlockRow {
                 Toggle(isOn: options.sun) { Text("Sunrise and sunset").foregroundStyle(ink.text) }.toggleStyle(.pilotSwitchRow)
