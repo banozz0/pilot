@@ -12,7 +12,20 @@ extension BarItemsStore {
         // Each preset keeps its own layout (BarSettings.choose); the same one again resets its geometry alone.
         if id == "legacy" { settings.choose(nil); return }
         guard let preset = BarPreset(rawValue: id) else { throw ControlError(.badValue, "unknown bar preset") }
-        settings.choose(preset.configuration)
+        // Attached is the bar's, not a size: it stays through Reset sizes and a move between the island presets.
+        var configuration = preset.configuration
+        if preset.islands, settings.preset?.attached == true { configuration.attached = true }
+        settings.choose(configuration)
+    }
+
+    /// Attached or Floating (Sven, 2026-11-13, Q224): the island presets alone, as the Menu bar page offers it.
+    func setAttached(_ on: Bool) throws(ControlError) {
+        try requireWritable()
+        guard var config = settings.preset, config.preset.islands else {
+            throw ControlError(.badValue, "Attached is for Three islands and Pills: choose one of them first")
+        }
+        config.attached = on ? true : nil
+        settings.preset = config
     }
 
     func applyGeometry(_ json: String) throws(ControlError) {
