@@ -3,8 +3,8 @@ import PilotCore
 import SwiftUI
 
 // Mockup E's preview and app picker (card agent-bo-95422980): the workspace drawn as a screen, each placed app a tile
-// with its icon and name, the dashed spot where the next app goes; under own sizes an accent line between two apps that
-// drags their percents. A spot clicked opens the picker hung off it.
+// with its icon and name, the dashed spot where the next app goes; under own sizes an accent line between two spots,
+// empty ones too, that drags their percents. A spot clicked opens the picker hung off it.
 
 /// The workspace as a screen: a menu bar strip, then the placed apps where the layout puts them, 6 pt apart. Until the
 /// layout's spots are full its empty ones show as dashed spots (Sven 2026-10-30: main + stack draws the main and the
@@ -28,7 +28,8 @@ struct WorkspacePreview: View {
             // Laid out half a gap past each edge, then each tile inset by half a gap: 6 pt between, flush at the edges.
             let half = Self.gap / 2
             let area = CGRect(origin: .zero, size: g.size).insetBy(dx: -half, dy: -half)
-            let preview = draft.shape(in: area) ?? {
+            let shape = draft.shape(in: area)
+            let preview = shape ?? {
                 let full = draft.preview(in: area, strip: Self.strip + Self.gap)
                 return (full.apps, [full.next])
             }()
@@ -54,9 +55,11 @@ struct WorkspacePreview: View {
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[spot] = $0 }
                         .position(x: r.midX, y: r.midY)
                 }
+                // Your widths: a line between every two spots, empty ones too, so widths are set before any app is placed.
                 if draft.layout == nil {
-                    ForEach(0..<max(0, draft.apps.count - 1), id: \.self) { i in
-                        SizeDivider(draft: $draft, divider: i, tiles: preview.apps, height: g.size.height)
+                    let spots = shape.map { $0.apps + $0.open } ?? preview.apps
+                    ForEach(0..<max(0, spots.count - 1), id: \.self) { i in
+                        SizeDivider(draft: $draft, divider: i, tiles: spots, height: g.size.height)
                     }
                 }
             }
@@ -269,21 +272,22 @@ struct DashedFace<Content: View>: View {
     }
 }
 
-/// Own sizes' line between app `divider` and the next: an accent handle that drags the two apps' percents, as the
-/// mockup's; VoiceOver adjusts it 5 % a step.
+/// Own sizes' line between spot `divider` and the next, an app's or an empty one's: an accent handle that drags the two
+/// spots' percents, as the mockup's; VoiceOver adjusts it 5 % a step.
 private struct SizeDivider: View {
     @Environment(\.ink) private var ink
     nonisolated static let space = "workspacePreview"
     @Binding var draft: WorkspacePresetDraft
     let divider: Int
-    /// The placed apps' tiles in the preview's space, half a gap past its edges.
+    /// The spots' tiles in the preview's space, half a gap past its edges.
     let tiles: [CGRect]
     let height: CGFloat
 
     var body: some View {
         let x = tiles[divider].maxX
         let width = (tiles.last?.maxX ?? 0) - (tiles.first?.minX ?? 0)
-        let (left, right) = (draft.apps[divider], draft.apps[divider + 1])
+        let widths = draft.spotWidths
+        let (left, right) = (widths[divider], widths[divider + 1])
         Capsule().fill(ink.accent).frame(width: 6, height: 44)
             .overlay { Capsule().strokeBorder(ink.sidebar, lineWidth: 2).padding(-2) }
             .shadow(color: .black.opacity(0.35), radius: 3, y: 2)
@@ -292,17 +296,17 @@ private struct SizeDivider: View {
             .pointerStyle(.columnResize)
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space)).onChanged { drag in
                 guard width > 0 else { return }
-                let share = (drag.location.x - tiles[divider].minX) / width * CGFloat(draft.total)
+                let share = (drag.location.x - tiles[divider].minX) / width * CGFloat(widths.reduce(0, +))
                 draft.resize(divider: divider, to: Int(share.rounded()))
             })
             .position(x: x, y: height / 2)
             .accessibilityElement()
-            .accessibilityLabel("Size of \(left.name) and \(right.name)")
-            .accessibilityValue("\(left.percent) % and \(right.percent) %")
+            .accessibilityLabel("Size of \(draft.spotName(divider)) and \(draft.spotName(divider + 1))")
+            .accessibilityValue("\(left) % and \(right) %")
             .accessibilityAdjustableAction { direction in
                 switch direction {
-                case .increment: draft.resize(divider: divider, to: left.percent + 5)
-                case .decrement: draft.resize(divider: divider, to: left.percent - 5)
+                case .increment: draft.resize(divider: divider, to: left + 5)
+                case .decrement: draft.resize(divider: divider, to: left - 5)
                 @unknown default: break
                 }
             }

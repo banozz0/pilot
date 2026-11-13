@@ -13,6 +13,8 @@ struct WorkspaceEditorModelTests {
 
     static func draft(_ apps: [String], layout: LayoutPreset? = nil) -> WorkspacePresetDraft {
         var draft = WorkspacePresetDraft(nil, workspace: "1")
+        // Placed under a ready layout first: under Your widths each app would take one of the three empty spots.
+        draft.layout = .columns
         for app in apps { draft.add(bundleId: "com.apple.\(app.lowercased())", name: app) }
         draft.layout = layout
         return draft

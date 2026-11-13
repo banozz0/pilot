@@ -123,11 +123,11 @@ extension ControlVerbs {
             help: "The apps each workspace opens and lays out when switched to (Workspaces). add changes the workspace's preset as the editor does: "
                 + "what is left out stays. Presets are kept by name, so saving under the name another workspace's preset has changes that one too (sharedWith).",
             fields: [.init("workspace", help: "the workspace, as 3"),
-                     .init("apps", help: "bundle ids, comma separated, in order: the whole list; sizes split evenly again when an app comes or goes (the preset's apps)", required: false),
+                     .init("apps", help: "bundle ids, comma separated, in order: the whole list; under own sizes an app added takes the next empty spot's width, otherwise sizes split evenly again when an app comes or goes (the preset's apps)", required: false),
                      .init("preset", help: "start from this saved preset, as From a preset… does (pilot list saved-presets)", required: false),
                      .init("name", help: "the preset's name (the preset's; Workspace <n> for a new one)", required: false),
                      .init("layout", help: "\(Self.cases(LayoutPreset.self)) or own (side by side at --percents) (the preset's; the workspace's own layout, else columns, for a new one)", required: false),
-                     .init("percents", help: "own sizes, comma separated, adding up to 100", required: false),
+                     .init("percents", help: "own sizes, comma separated, adding up to 100: one per app, then any more are empty spots the next apps added take; with no app, the spots alone", required: false),
                      .init("open-missing", help: "on opens apps with no window yet, off only pulls running ones in (the preset's; on)", required: false),
                      .init("keep-layout", help: "on lays the workspace out again as windows come and go; own sizes never do (the workspace's)", required: false),
                      .init("at-login", help: "the apps opened once per login, comma separated, the rest off; none for no app (the preset's)", required: false)],
@@ -155,7 +155,7 @@ extension ControlVerbs {
                 if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { draft.name = "Workspace \(workspace)" }
                 if let apps = args.value("apps") {
                     try Self.place(Self.items(apps), in: &draft)
-                } else if draft.apps.isEmpty {
+                } else if draft.apps.isEmpty && !(args.value("layout") == "own" && args.value("percents") != nil) && draft.openWidths.isEmpty {
                     throw ControlError(.badValue, "workspace \(workspace) has no preset yet, so add needs --apps: bundle ids, comma separated, in order")
                 }
                 switch args.value("layout") {
@@ -165,10 +165,11 @@ extension ControlVerbs {
                 }
                 if let percents = args.value("percents") {
                     let parts = Self.items(percents).compactMap(Int.init)
-                    guard draft.layout == nil, parts.count == draft.apps.count, parts.allSatisfy((1...100).contains) else {
-                        throw ControlError(.badValue, "--percents is one size from 1 to 100 per app, with --layout own")
+                    guard draft.layout == nil, parts.count == Self.items(percents).count, parts.count >= max(draft.apps.count, 1),
+                          parts.allSatisfy((1...100).contains) else {
+                        throw ControlError(.badValue, "--percents is one size from 1 to 100 per app, then any empty spots, with --layout own")
                     }
-                    for (i, percent) in parts.enumerated() { draft.setPercent(percent, at: i) }
+                    draft.setWidths(parts)
                 }
                 if let open = args.value("open-missing") { draft.openMissing = try Self.onOff(open, "--open-missing") }
                 if let keep = args.value("keep-layout") { draft.keepLayout = try Self.onOff(keep, "--keep-layout") }
@@ -424,6 +425,7 @@ extension ControlVerbs {
 
     private static func fields(_ preset: WorkspacePreset) -> [String: JSONValue] {
         ["name": .string(preset.name), "layout": .string(preset.layout?.rawValue ?? "own"), "openMissing": .bool(preset.openMissing),
+         "openWidths": .array(preset.openWidths.map { .number(Double($0)) }),
          "apps": .array(preset.apps.map { .object(["app": .string($0.bundleId), "name": .string($0.name),
                                                    "percent": .number(Double($0.percent)), "atLogin": .bool($0.atLogin)]) })]
     }

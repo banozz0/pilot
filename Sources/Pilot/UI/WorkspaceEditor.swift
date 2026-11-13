@@ -401,13 +401,35 @@ struct WorkspaceEditorPanel: View {
 
     private var previewColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
-            PartLabel(title: "Preview", line: draft.layout == nil && draft.apps.count > 1 ? "drag a line between two apps to set their widths"
-                                                                                          : "click a spot to add or swap an app",
-                      info: Self.previewInfo)
+            HStack(spacing: 6) {
+                PartLabel(title: "Preview", line: draft.layout == nil && draft.spotWidths.count > 1 ? "drag a line between two spots to set their widths"
+                                                                                                   : "click a spot to add or swap an app",
+                          info: Self.previewInfo)
+                if draft.layout == nil {
+                    Spacer(minLength: 0)
+                    spotsStepper
+                }
+            }
             WorkspacePreview(draft: $draft, hovered: $hovered, picking: picking, spots: $spots, open: open)
                 .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Your widths' spots, one more or one fewer: a new one halves the widest, an empty one going gives its width to the
+    /// spot left of it (WorkspacePresetDraft.addSpot, removeSpot).
+    private var spotsStepper: some View {
+        HStack(spacing: 2) {
+            Button("One spot fewer", systemImage: "minus") { withAnimation(Kit.change) { draft.removeSpot() } }
+                .disabled(!draft.canRemoveSpot)
+            Text("\(draft.spotWidths.count) spots").monospacedDigit().foregroundStyle(ink.text2)
+            Button("One spot more", systemImage: "plus") { withAnimation(Kit.change) { draft.addSpot() } }
+                .disabled(!draft.canAddSpot)
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(PilotButtonStyle(ghost: true))
+        .controlSize(.small)
+        .font(ink.ui(11))
     }
 
     private var layoutColumn: some View {
@@ -491,8 +513,8 @@ struct WorkspaceEditorPanel: View {
     static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off. Restore is different: it puts back a window snapshot."
     static let keepLayoutInfo = "On (the default): Pilot lays this workspace out again in this layout every time a window opens or closes on it. Off: a new window goes wherever the tiler puts it."
     static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Home's keys. It saves when you press Return or click elsewhere."
-    static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two apps to set how wide each is. Every change saves at once."
-    static let layoutInfo = "How the apps share the screen. Your widths puts them side by side, each at the width you set: drag the lines on the preview. The others lay the apps out for you."
+    static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two spots to set how wide each is, before or after apps are in them, and − and + take a spot away or add one. Every change saves at once."
+    static let layoutInfo = "How the apps share the screen. Your widths puts them side by side in spots at the widths you set: drag the lines on the preview, and each app you add takes the next spot's width. The others lay the apps out for you."
     static let opensHereInfo = "The apps this workspace opens with, in order: the first fills the first spot. At login opens that app once each time you log in."
     static let presetInfo = "A saved set of apps and a layout. Picking one fills this workspace with it; every change saves at once."
 

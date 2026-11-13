@@ -31,6 +31,9 @@ public struct WorkspacePreset: Codable, Equatable, Sendable {
     public var layout: LayoutPreset?
     /// A switch here opens the apps that have no window yet; off, it only pulls running windows in and lays them out.
     public var openMissing = true
+    /// Your widths' empty spots right of the apps, each one's percent: the next apps added take them in order (Sven,
+    /// build 2425: widths set before any app is placed). Empty under a ready layout.
+    public var openWidths: [Int] = []
 
     public init(name: String, apps: [App], layout: LayoutPreset?) { self.name = name; self.apps = apps; self.layout = layout }
 
@@ -50,6 +53,7 @@ public struct WorkspacePreset: Codable, Equatable, Sendable {
         apps = try c.decode([App].self, forKey: .apps)
         layout = try c.decodeIfPresent(LayoutPreset.self, forKey: .layout)
         openMissing = try c.decodeIfPresent(Bool.self, forKey: .openMissing) ?? true
+        openWidths = try c.decodeIfPresent([Int].self, forKey: .openWidths) ?? []
     }
 }
 
@@ -122,6 +126,8 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     public var openMissing: Bool
     /// The workspace's auto as the editor shows it: Keep this layout as windows come and go.
     public var keepLayout: Bool
+    /// Your widths' empty spots right of the apps, each one's percent (WorkspacePreset.openWidths).
+    public private(set) var openWidths: [Int]
 
     /// A saved preset as it was, or a new one named after the workspace, empty, at own sizes; Keep this layout starts
     /// from the workspace's layout row.
@@ -131,6 +137,7 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
         layout = preset?.layout
         openMissing = preset?.openMissing ?? true
         keepLayout = row?.auto ?? true
+        openWidths = preset?.layout == nil ? preset?.openWidths ?? [] : []
     }
 
     /// What saving gives the workspace's auto: own sizes are always off, since a rebuild would undo the sizes.
@@ -142,20 +149,39 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
-    /// Why Save is refused, in the words the editor shows; nil when the draft saves.
+    /// Your widths' spots, left to right, in percent: each app's, then the empty spots kept for apps added later; three
+    /// even ones while nothing is placed or kept, as the preview draws them.
+    public var spotWidths: [Int] {
+        apps.isEmpty && openWidths.isEmpty ? Self.even(LayoutPreset.spots(nil)) : apps.map(\.percent) + openWidths
+    }
+
+    /// What a spot is called to VoiceOver: its app, else "empty spot 3".
+    public func spotName(_ index: Int) -> String { apps.indices.contains(index) ? apps[index].name : "empty spot \(index + 1)" }
+
+    /// Why Save is refused, in the words the editor shows; nil when the draft saves. Your widths with its spots set
+    /// saves with no app yet.
     public var problem: String? {
         if trimmedName.isEmpty { return "Name the preset" }
-        if apps.isEmpty { return "Add at least one app" }
+        if apps.isEmpty && (layout != nil || openWidths.isEmpty) { return "Add at least one app" }
         return sizesProblem
     }
 
-    /// Own sizes that do not add up to 100, the one draft an autosave refuses; nil with no app, or under a ready layout.
-    public var sizesProblem: String? { apps.isEmpty || layout != nil || total == 100 ? nil : "Sizes add up to \(total) %, not 100 %" }
+    /// Own sizes that do not add up to 100, the one draft an autosave refuses; nil with nothing placed or kept, or under
+    /// a ready layout.
+    public var sizesProblem: String? {
+        let sum = total + openWidths.reduce(0, +)
+        return apps.isEmpty && openWidths.isEmpty || layout != nil || sum == 100 ? nil : "Sizes add up to \(sum) %, not 100 %"
+    }
 
     public var preset: WorkspacePreset? {
         guard problem == nil else { return nil }
-        var preset = WorkspacePreset(name: trimmedName, apps: apps, layout: layout)
+        return saved(as: trimmedName)
+    }
+
+    private func saved(as name: String) -> WorkspacePreset {
+        var preset = WorkspacePreset(name: name, apps: apps, layout: layout)
         preset.openMissing = openMissing
+        if layout == nil { preset.openWidths = openWidths }
         return preset
     }
 
@@ -167,22 +193,68 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     public func autosaved(workspace: String) -> WorkspacePreset? {
         let named = !WorkspacePreset.isUnnamed(name)
         guard named || !apps.isEmpty || layout == nil, sizesProblem == nil else { return nil }
-        var preset = WorkspacePreset(name: named ? trimmedName : WorkspacePreset.unnamed(workspace), apps: apps, layout: layout)
-        preset.openMissing = openMissing
-        return preset
+        return saved(as: named ? trimmedName : WorkspacePreset.unnamed(workspace))
     }
 
-    /// Adds an app not in the list yet; the sizes split evenly again.
+    /// Adds an app not in the list yet. Under Your widths it takes the first empty spot at that spot's width (the three
+    /// even spots the preview shows count, once nothing is placed); past the last spot, or under a ready layout, the
+    /// sizes split evenly again.
     public mutating func add(bundleId: String, name: String) {
         guard !contains(bundleId) else { return }
+        if layout == nil, apps.isEmpty, openWidths.isEmpty { openWidths = spotWidths }
+        if layout == nil, !openWidths.isEmpty {
+            apps.append(.init(bundleId: bundleId, name: name, percent: openWidths.removeFirst()))
+            return
+        }
         apps.append(.init(bundleId: bundleId, name: name, percent: 0))
+        openWidths = []
         splitEvenly()
     }
 
+    /// Takes an app off. Under Your widths with empty spots kept the spots keep their widths, the apps after it each
+    /// moving one spot left; otherwise the sizes split evenly again.
     public mutating func remove(at index: Int) {
+        guard layout == nil, !openWidths.isEmpty else {
+            apps.remove(at: index)
+            openWidths = []
+            splitEvenly()
+            return
+        }
+        let widths = spotWidths
         apps.remove(at: index)
-        splitEvenly()
+        setWidths(widths)
     }
+
+    /// Your widths' spots set at once, left to right: the apps take the first, in order, and the rest stay empty for the
+    /// apps added later. Needs a width per app at least.
+    public mutating func setWidths(_ widths: [Int]) {
+        guard widths.count >= apps.count else { return }
+        for i in apps.indices { apps[i].percent = widths[i] }
+        openWidths = Array(widths.dropFirst(apps.count))
+    }
+
+    /// One more empty spot at the right under Your widths, half of the widest spot; none once that half is under 5 %.
+    public mutating func addSpot() {
+        var widths = spotWidths
+        guard let widest = widths.indices.max(by: { widths[$0] < widths[$1] }) else { return }
+        let half = widths[widest] / 2
+        guard half >= Self.minPercent else { return }
+        widths[widest] -= half
+        setWidths(widths + [half])
+    }
+
+    /// The last empty spot gone, its width to the spot left of it; a spot holding an app, or the last spot, stays.
+    public mutating func removeSpot() {
+        var widths = spotWidths
+        guard widths.count > max(apps.count, 1) else { return }
+        let freed = widths.removeLast()
+        widths[widths.count - 1] += freed
+        setWidths(widths)
+    }
+
+    /// Whether a spot can come or go: a new one needs a spot wide enough to halve, one going an empty one, not the last.
+    public var canAddSpot: Bool { (spotWidths.max() ?? 0) / 2 >= Self.minPercent }
+    public var canRemoveSpot: Bool { spotWidths.count > max(apps.count, 1) }
 
     public mutating func setPercent(_ percent: Int, at index: Int) { apps[index].percent = min(max(percent, 1), 100) }
 
@@ -207,15 +279,17 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
         apps.insert(apps.remove(at: from), at: to)
     }
 
-    /// The line between app `divider` and the next dragged so the first holds `percent`: only those two change, the
-    /// total stays, and neither goes under 5 %.
+    /// The line between spot `divider` and the next dragged so the first holds `percent`, an app's or an empty one's:
+    /// only those two change, the total stays, and neither goes under 5 %.
     public mutating func resize(divider: Int, to percent: Int) {
-        guard apps.indices.contains(divider), apps.indices.contains(divider + 1) else { return }
-        let pair = apps[divider].percent + apps[divider + 1].percent
+        var widths = spotWidths
+        guard widths.indices.contains(divider), widths.indices.contains(divider + 1) else { return }
+        let pair = widths[divider] + widths[divider + 1]
         let first = min(max(percent, Self.minPercent), pair - Self.minPercent)
         guard first >= Self.minPercent else { return }
-        apps[divider].percent = first
-        apps[divider + 1].percent = pair - first
+        widths[divider] = first
+        widths[divider + 1] = pair - first
+        setWidths(widths)
     }
 
     static let minPercent = 5
@@ -224,10 +298,11 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     /// Own sizes are columns at their percents, the next spot an even share.
     public func tiles(in area: CGRect, next: Bool = false) -> [CGRect] { tiles(in: area, adding: next ? 1 : 0) }
 
-    /// The same with `open` empty spots after the apps, each an even share under own sizes.
+    /// The same with `open` empty spots after the apps: under own sizes each kept spot at its width, any more an even share.
     private func tiles(in area: CGRect, adding open: Int) -> [CGRect] {
         if let layout { return layout.tiles(apps.count + open, in: area) }
-        let shares = apps.map { CGFloat($0.percent) / CGFloat(max(total, 1)) * CGFloat(apps.count) } + Array(repeating: 1, count: open)
+        let widths = spotWidths.map(CGFloat.init), even = widths.reduce(0, +) / CGFloat(max(widths.count, 1))
+        let shares = (0..<(apps.count + open)).map { $0 < widths.count ? widths[$0] : even }
         let sum = shares.reduce(0, +)
         var x = area.minX
         return shares.map { share in
@@ -240,7 +315,8 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     /// stack's stacked pair under the main), each of which takes the next app. Nil once the apps fill them; `preview`
     /// then draws the next app's strip.
     public func shape(in area: CGRect) -> (apps: [CGRect], open: [CGRect])? {
-        let spots = LayoutPreset.spots(layout)
+        // Your widths draws its spots as kept, three even ones before anything is placed.
+        let spots = layout == nil ? spotWidths.count : LayoutPreset.spots(layout)
         guard apps.count < spots else { return nil }
         let all = tiles(in: area, adding: spots - apps.count)
         return (Array(all.prefix(apps.count)), Array(all.dropFirst(apps.count)))
@@ -314,8 +390,10 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     /// 100 shared out, the remainder to the first apps: 34, 33, 33.
     private mutating func splitEvenly() {
         guard !apps.isEmpty else { return }
-        for i in apps.indices { apps[i].percent = 100 / apps.count + (i < 100 % apps.count ? 1 : 0) }
+        for (i, percent) in Self.even(apps.count).enumerated() { apps[i].percent = percent }
     }
+
+    private static func even(_ count: Int) -> [Int] { (0..<count).map { 100 / count + ($0 < 100 % count ? 1 : 0) } }
 }
 
 extension WorkspaceLayout {
