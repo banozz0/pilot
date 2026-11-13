@@ -326,6 +326,7 @@ final class TopBarWindows: TopBarPanels {
                 panel.contentView?.wantsLayer = true
                 // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners.
                 panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills ? 0 : $0.radius } ?? 0
+                panel.contentView?.layer?.maskedCorners = BarIslandShape.corners(configuration)
                 panel.contentView?.layer?.masksToBounds = true
                 if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
                     clip.canvas = frame

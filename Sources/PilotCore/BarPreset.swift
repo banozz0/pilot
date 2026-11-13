@@ -28,6 +28,14 @@ public struct BarPresetConfiguration: Codable, Equatable, Sendable {
     public var padding: Double = 8
     public var radius: Double = 10
     public var border: Double = 1
+    /// Attached (Sven, 2026-11-13, Q224, after a Hyprland bar: "how its attatched flush to the the very top of the screen"):
+    /// each island, or each pill, hangs from the screen's top edge with square top corners and rounded bottom ones, as
+    /// the dock's Attached sits on the bottom edge. Nil or false is Floating, the look before: `topMargin` below the top.
+    /// Only the island presets (Three islands, Pills) take it; the floating strip stays one floating strip.
+    public var attached: Bool?
+
+    /// Whether this bar hangs from the top edge now.
+    public var isAttached: Bool { attached == true && preset.islands }
 
     /// Each preset's own defaults (Sven, 2026-11-12, on the bar look round: the floating strip "a bit too big", Three
     /// islands as it is). For Pills `height` is a pill's, `padding` the room inside one, `radius` its corners.
@@ -66,10 +74,11 @@ public struct BarPresetConfiguration: Codable, Equatable, Sendable {
         }
     }
 
-    /// Supplied screen geometry, no desktop lookup. A notched menu strip stays entirely above the floating bar.
+    /// Supplied screen geometry, no desktop lookup. A notched menu strip stays entirely above the bar, attached or floating.
     public func frame(screen: CGRect, notchHeight: Double = 0) -> CGRect {
         let margin = min(horizontalMargin, max(0, (screen.width - 1) / 2))
-        let top = min(max(0, notchHeight) + topMargin, max(0, screen.height - 1))
+        // Attached keeps no top margin; on a notched display it hangs from the menu strip's foot, clear of the notch.
+        let top = min(max(0, notchHeight) + (isAttached ? 0 : topMargin), max(0, screen.height - 1))
         let h = min(height, max(1, screen.height - top))
         return CGRect(x: screen.minX + margin, y: screen.maxY - top - h,
                       width: max(1, screen.width - 2 * margin), height: h)
