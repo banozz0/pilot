@@ -88,6 +88,8 @@ extension TilerTreeTests {
                 ]
             }
             gcMonitors()
+            // Displays have separate Spaces off, as the frames below assume: a column over the portrait edge is cut back.
+            screensHaveSeparateSpaces = { false }
             config.gaps = Gaps(inner: .init(vertical: 10, horizontal: 10),
                                outer: .init(left: .constant(10), bottom: .constant(10), top: .constant(10), right: .constant(10)))
             let workspace = Workspace.get(byName: name)

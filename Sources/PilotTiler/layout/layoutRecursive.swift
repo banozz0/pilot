@@ -84,8 +84,9 @@ private struct LayoutContext {
     /// The workspace's screen, whose refresh paces its glides; nil when nothing glides.
     let glideScreen: GlideScreen?
     let unhidingColumns: Bool
-    /// A scrolling strip's or a stage's: the x its windows keep within, clear of the displays beside its monitor (FrameSteps).
-    let span: ClosedRange<CGFloat>?
+    /// A scrolling strip's or a stage's: the x its windows keep within, clear of the displays beside its monitor (FrameSteps);
+    /// wider for a column that straddles a bordered edge under separate Spaces (layoutScrolling).
+    var span: ClosedRange<CGFloat>?
     /// Pilot (space-switch slide): the display just switched to this workspace; its windows out of a hide corner slide in.
     let slide: SpaceSlide?
 
@@ -182,9 +183,11 @@ extension TilingContainer {
     }
 
     /// Pilot (scrolling layout): each child a column on the strip (scrolling.swift), scrolled the least that shows the
-    /// focused one whole. A column the strip would put over another display peeks cut back to its part on this one
-    /// (Rect.peek, ADR 0014 as amended 2026-11-12); with too little left it hides in the hide corner, a jump, and comes
-    /// back with a jump, so a glide only runs between two frames clear of every other display and none ever crosses. On
+    /// focused one whole. A column the strip would put over another display peeks at its whole width when Displays have
+    /// separate Spaces is on and its centre is on this display, since macOS then draws it here alone (Rect.straddle);
+    /// otherwise cut back to its part on this one (Rect.peek, ADR 0014 as amended 2026-11-12 and 2026-11-13); with too
+    /// little left it hides in the hide corner, a jump, and comes back with a jump, so a glide only runs between two
+    /// frames that each show on this display alone and none ever crosses. On
     /// a space switch the columns on screen slide in from the display's edge (spaceSlide.swift), within the same rule.
     @MainActor
     fileprivate func layoutScrolling(_ point: CGPoint, width: CGFloat, height: CGFloat, _ context: LayoutContext) async throws {
@@ -196,9 +199,14 @@ extension TilingContainer {
         let others = monitors.filter { $0.rect.topLeftCorner != monitor.rect.topLeftCorner }.map(\.rect)
         let corner = optimalHideCorner(of: monitor, among: monitors)
         for (child, frame) in zip(children, strip.frames(at: stripOffset, on: monitor.rect, sliver: config.scrollingSliver)) {
-            let shown = others.contains(where: { $0.overlaps(frame) }) ? context.span.flatMap(frame.peek(within:)) : frame
-            if let shown, !others.contains(where: { $0.overlaps(shown) }) {
-                try await child.layoutColumn(shown, context)
+            if !others.contains(where: { $0.overlaps(frame) }) {
+                try await child.layoutColumn(frame, context)
+            } else if screensHaveSeparateSpaces(), let wide = context.span.flatMap(frame.straddle(within:)) {
+                var straddling = context
+                straddling.span = wide
+                try await child.layoutColumn(frame, straddling)
+            } else if let peek = context.span.flatMap(frame.peek(within:)), !others.contains(where: { $0.overlaps(peek) }) {
+                try await child.layoutColumn(peek, context)
             } else {
                 child.hideColumn(frame.size, in: corner, of: monitor, span: context.span)
             }

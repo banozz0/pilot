@@ -188,14 +188,28 @@ extension Window {
     }
 }
 
+/// Whether Displays have separate Spaces is on (macOS's default; Sven's Mac, `spans-displays` unset, read 2026-11-13):
+/// macOS then draws a window across two displays on the one holding its centre alone. Tests swap it.
+@MainActor var screensHaveSeparateSpaces: () -> Bool = { NSScreen.screensHaveSeparateSpaces }
+
 extension Rect {
+    /// Under separate Spaces, a column over a bordered edge with its centre within `span`: macOS draws it on this display
+    /// alone, so it peeks at its whole width, half off the edge as one past the open edge does (Sven, build 2433: "half
+    /// off screen like right side"). The span its window keeps within, so FrameSteps keeps the centre on this side; nil
+    /// once the centre is past the edge, where the whole window would show on the other display.
+    func straddle(within span: ClosedRange<CGFloat>) -> ClosedRange<CGFloat>? {
+        guard center.x > span.lowerBound + 1, center.x < span.upperBound - 1 else { return nil }
+        return span.lowerBound - width / 2 + 1 ... span.upperBound + width / 2 - 1
+    }
+
     /// The narrowest a column cut back at a bordered edge still peeks: narrower, most apps' minimum width would push the
     /// window over its neighbour, so it hides instead.
     static let narrowestPeek: CGFloat = 200
 
     /// A column that would reach over the display beside a bordered edge, cut back to its part within `span` (ADR 0014 as
-    /// amended 2026-11-12, Sven: "show left half still even though i have my monitor on the left"), so it peeks as a
-    /// column past the open edge does without crossing; nil with less than `narrowestPeek` left. An app that refuses the
+    /// amended 2026-11-12, Sven: "show left half still even though i have my monitor on the left"), so it peeks without
+    /// crossing where `straddle` cannot (separate Spaces off, or its centre past the edge); nil with less than
+    /// `narrowestPeek` left. An app that refuses the
     /// narrower width is kept inside `span` by FrameSteps' read-back.
     func peek(within span: ClosedRange<CGFloat>) -> Rect? {
         let left = max(minX, span.lowerBound), right = min(maxX, span.upperBound)
