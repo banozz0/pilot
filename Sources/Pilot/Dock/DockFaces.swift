@@ -32,6 +32,14 @@ struct DockWidgetView: View {
             .buttonStyle(.plain)
             .background(ScreenAnchor(box: anchor, rightClick: { showMenu() }))
             .help(help(shown))
+            // Today's events again as the day turns: read in the Calendar widgets alone, so the clock's tick (each second
+            // with seconds shown) redraws them, never the pill.
+            .onChange(of: day) { reader.calendar.follow(now: reader.sources.readings.now) }
+    }
+
+    /// Today, for a Calendar widget only; nil for the rest, which never read the clock here.
+    private var day: Date? {
+        widget == .nextEvent || widget == .timeline ? Calendar.autoupdatingCurrent.startOfDay(for: reader.sources.readings.now) : nil
     }
 
     private func help(_ body: DockWidgetBody) -> String {

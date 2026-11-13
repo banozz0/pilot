@@ -59,8 +59,6 @@ struct DockView: View {
             .pilotTheme()
             .onAppear { hold(kinds, asked, widgets) }
             .onChange(of: widgets) { hold(kinds, asked, widgets) }
-            // Today's events again as the day turns.
-            .onChange(of: Calendar.autoupdatingCurrent.startOfDay(for: sources.readings.now)) { follow(widgets) }
             .onDisappear {
                 sources.readings.hold([], replacing: &held)
                 extensionBar.hold([], for: Self.holder)
