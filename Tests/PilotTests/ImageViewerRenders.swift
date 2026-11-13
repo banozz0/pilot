@@ -114,7 +114,7 @@ struct ImageViewerRenders {
             #expect(try isGround(write("4-portrait")), "after the step the ground beside the portrait is not the solid theme ground")
         }
 
-        // Q161: one open of several pictures is ONE window stepping through just those, in Finder's name order.
+        // Q161: one open of several pictures is ONE window stepping through just those, in the order handed over.
         ImageViewer.closeAll()
         // Through the route a Finder open of three picked pictures takes: AppDelegate's application(_:open:).
         AppDelegate().application(NSApplication.shared, open: [png, beach, gif])
@@ -122,11 +122,11 @@ struct ImageViewerRenders {
         let batch = try #require(ImageViewer.model(showing: png))
         await batch.settled()
         #expect(ImageViewer.openCount == 1)
-        #expect(batch.files.map(\.lastPathComponent) == ["beach.jpg", "screen.png", "wave.gif"], "\(batch.files.map(\.lastPathComponent))")
-        #expect(batch.file.lastPathComponent == "screen.png" && batch.index == 1)
+        #expect(batch.files.map(\.lastPathComponent) == ["screen.png", "beach.jpg", "wave.gif"], "\(batch.files.map(\.lastPathComponent))")
+        #expect(batch.file.lastPathComponent == "screen.png" && batch.index == 0)
         var seen = [batch.file.lastPathComponent]
         for _ in 0..<3 { batch.step(1); await batch.settled(); seen.append(batch.file.lastPathComponent) }
-        #expect(seen == ["screen.png", "wave.gif", "beach.jpg", "screen.png"])
+        #expect(seen == ["screen.png", "beach.jpg", "wave.gif", "screen.png"])
         // The same open handed over in parts joins that window; a later open of a picture not shown gets its own.
         let joined = try #require(ImageViewer.show([turned], now: t0.addingTimeInterval(0.2)))
         await joined.settled()
@@ -136,6 +136,19 @@ struct ImageViewerRenders {
         #expect(later !== batch && ImageViewer.openCount == 2 && later.files == [heic])
         // A picture already shown, opened again on its own: that window comes forward, no new one.
         #expect(ImageViewer.show([heic], now: t0.addingTimeInterval(10)) === later && ImageViewer.openCount == 2)
+        ImageViewer.closeAll()
+
+        // Sven on build 2409: one open handed over a picture at a time (Pilot Files did, one per selected file). The first
+        // opens alone and starts its folder's listing; the rest join before it lands. The viewer steps through exactly
+        // those three, in that order, each once, never the folder's four.
+        let t1 = Date()
+        let parts = try #require(ImageViewer.show([png], now: t1))
+        #expect(ImageViewer.show([beach], now: t1.addingTimeInterval(0.05)) === parts)
+        #expect(ImageViewer.show([gif, beach], now: t1.addingTimeInterval(0.1)) === parts)
+        try await Task.sleep(for: .milliseconds(300))
+        await parts.settled()
+        #expect(ImageViewer.openCount == 1)
+        #expect(parts.files.map(\.lastPathComponent) == ["screen.png", "beach.jpg", "wave.gif"], "\(parts.files.map(\.lastPathComponent))")
         ImageViewer.closeAll()
     }
 
