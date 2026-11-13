@@ -172,13 +172,15 @@ struct GeneralPage: View {
                 Toggle("Show the bind when I use the mouse or the menu", isOn: $settings.bindNudges).toggleStyle(.pilotSwitch)
             }
             BlockRow {
-                Text("Hold Hyper to see your binds")
-                InfoMark(text: "Hold the Hyper key this long to see that layer's binds; Shift or Ctrl turns the page.")
-                Spacer()
-                // Off: the stepper dims, as the delay waits for the switch.
-                overlayDelay.disabled(!settings.overlayEnabled)
-                Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
-                Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
+                LabelledControls {
+                    Text("Hold Hyper to see your binds")
+                    InfoMark(text: "Hold the Hyper key this long to see that layer's binds; Shift or Ctrl turns the page.")
+                } controls: {
+                    // Off: the stepper dims, as the delay waits for the switch.
+                    overlayDelay.disabled(!settings.overlayEnabled)
+                    Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
+                    Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
+                }
             }
         }
     }
@@ -325,17 +327,20 @@ struct GeneralPage: View {
     private var about: some View {
         KitBlock(title: "About", symbol: "info.circle") {
             // Send feedback (card agent-bo-95423195): the browser on a new issue, prefilled.
+            // Two or three buttons: under the label in a page column (LabelledControls).
             BlockRow(first: true) {
-                TitledText(title: "Send feedback", detail: "A GitHub issue with this Mac's facts filled in").padding(.vertical, 4)
-                InfoMark(text: "Opens a new GitHub issue in your browser with this Mac's facts filled in; nothing is sent until you submit it.")
-                Spacer()
-                ForEach(Feedback.Kind.allCases, id: \.self) { kind in
-                    Button(kind.label) { SendFeedback.open(kind, layerKeys: engine.settings.layerKeys) }.buttonStyle(.pilot)
-                }
-                // SH12 (Sven Q315): the report stays on this Mac; Finder shows it for the person to attach.
-                if let crash {
-                    Button("Reveal crash reports") { NSWorkspace.shared.activateFileViewerSelecting([crash.url]) }.buttonStyle(.pilot)
-                        .help("\(crash.process) left a crash report on \(crash.date.formatted(date: .abbreviated, time: .shortened)). Attaching \(crash.name) to a bug report is your choice; it may hold paths from this Mac.")
+                LabelledControls {
+                    TitledText(title: "Send feedback", detail: "A GitHub issue with this Mac's facts filled in").padding(.vertical, 4)
+                    InfoMark(text: "Opens a new GitHub issue in your browser with this Mac's facts filled in; nothing is sent until you submit it.")
+                } controls: {
+                    ForEach(Feedback.Kind.allCases, id: \.self) { kind in
+                        Button(kind.label) { SendFeedback.open(kind, layerKeys: engine.settings.layerKeys) }.buttonStyle(.pilot)
+                    }
+                    // SH12 (Sven Q315): the report stays on this Mac; Finder shows it for the person to attach.
+                    if let crash {
+                        Button("Reveal crash reports") { NSWorkspace.shared.activateFileViewerSelecting([crash.url]) }.buttonStyle(.pilot)
+                            .help("\(crash.process) left a crash report on \(crash.date.formatted(date: .abbreviated, time: .shortened)). Attaching \(crash.name) to a bug report is your choice; it may hold paths from this Mac.")
+                    }
                 }
             }
             .task { crash = await Task.detached { CrashReports.newest() }.value }

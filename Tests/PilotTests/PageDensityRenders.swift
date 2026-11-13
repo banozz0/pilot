@@ -46,6 +46,15 @@ struct PageDensityRenders {
         let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
+        // A crash report from today in the test run's own folder, so About shows its third button, Reveal crash reports
+        // (build 2425: three buttons squeezed Send feedback's label out of a column).
+        try FileManager.default.createDirectory(at: CrashReports.folder, withIntermediateDirectories: true)
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyy-MM-dd-HHmmss"
+        let crash = CrashReports.folder.appending(path: "Pilot-\(stamp.string(from: Date().addingTimeInterval(-3600))).ips")
+        FileManager.default.createFile(atPath: crash.path(percentEncoded: false), contents: Data())
+        defer { try? FileManager.default.removeItem(at: crash) }
         let fixture = URL(fileURLWithPath: home).appending(path: "extensions-fixture-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: fixture) }
         let extensions = try await ExtensionsPageViewTests.fixture(in: fixture)

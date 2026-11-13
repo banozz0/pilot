@@ -378,6 +378,37 @@ struct BlockRow<Content: View>: View {
     }
 }
 
+/// A block row's label with its controls beside it while the label keeps `least` points; narrower (a page column, PageFlow),
+/// the controls go on a line of their own under the label, at the trailing edge, and wrap (Flow) when even that line is
+/// too short. A plain BlockRow squeezes its label to nothing instead, and the label's wrapped detail stretches the row
+/// tall (build 2425: About's three buttons).
+struct LabelledControls<Label: View, Controls: View>: View {
+    @Environment(\.style) private var style
+    var least: CGFloat = 150
+    @ViewBuilder var label: Label
+    @ViewBuilder var controls: Controls
+
+    var body: some View {
+        let spacing: CGFloat = style.kind == .toybox ? 12 : 10
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: spacing) {
+                HStack(spacing: spacing) { label }.frame(minWidth: 0, idealWidth: least, maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: spacing) { controls }.fixedSize()
+            }
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: spacing) { label }.frame(minWidth: 0, idealWidth: least, maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: spacing) { controls }.fixedSize()
+            }
+            .padding(.vertical, 6)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: spacing) { label }.frame(maxWidth: .infinity, alignment: .leading)
+                Flow(spacing: 8, lineSpacing: 6) { controls }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+}
+
 /// A module's tile: Toybox's candy tile in `colour`, Instrument's app-icon tile.
 struct Squircle: View {
     @Environment(\.style) private var style
