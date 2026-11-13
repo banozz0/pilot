@@ -125,7 +125,11 @@ struct ThemeCatalogueGallery: View {
         }
         .confirmationDialog("Remove \(removing?.theme.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Remove", role: .destructive) { if let id = removing?.id { actions.remove(id) }; removing = nil }
-        } message: { Text("Its folder and pictures leave your themes. Get brings it back from the catalogue.") }
+        } message: {
+            // An Update tile's pack differs from the catalogue's (an older copy, or one you edited): Get brings back only theirs.
+            Text(removing?.standing == .update ? "Its folder and pictures leave your themes, with any change you made to it. This can't be undone."
+                 : "Its folder and pictures leave your themes. Get brings it back from the catalogue.")
+        }
     }
 
     private var shown: [ThemeCatalogueTile] {
