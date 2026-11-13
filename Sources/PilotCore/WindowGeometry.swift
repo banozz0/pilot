@@ -120,6 +120,21 @@ public enum WindowGeometry {
         return r.integral
     }
 
+    /// A frame moved one step in a direction, a twentieth of the visible frame's width or height (Q195), kept inside it.
+    /// A window bigger than the visible frame keeps its top-left corner on the visible frame's.
+    public static func nudged(_ frame: CGRect, _ direction: Direction, within visible: CGRect, steps: CGFloat = 20) -> CGRect {
+        var r = frame
+        switch direction {
+        case .left: r.origin.x -= visible.width / steps
+        case .right: r.origin.x += visible.width / steps
+        case .up: r.origin.y -= visible.height / steps
+        case .down: r.origin.y += visible.height / steps
+        }
+        r.origin.x = max(min(r.minX, visible.maxX - r.width), visible.minX)
+        r.origin.y = max(min(r.minY, visible.maxY - r.height), visible.minY)
+        return r.integral
+    }
+
     /// The same placement on another screen: a left half stays a left half.
     public static func moved(_ frame: CGRect, from: CGRect, to: CGRect) -> CGRect {
         Placement(of: frame, in: from).frame(in: to)

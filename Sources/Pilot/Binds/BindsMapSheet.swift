@@ -120,7 +120,8 @@ struct BindsMapModel {
         if id.hasPrefix("workspaces.moveFollow:"), let n = Int(id.dropFirst("workspaces.moveFollow:".count)), (0...50).contains(n) { return "\(n).circle.fill" }
         if id.hasPrefix("apps.private:") { return "eye.slash" }
         if id.hasPrefix("drive.pick:") { return "list.bullet.rectangle" }
-        for (prefix, symbol) in [("windows.join", "arrow.%@.square"), ("windows.sendToDisplay", "arrowshape.%@")] where id.hasPrefix(prefix) {
+        for (prefix, symbol) in [("windows.join", "arrow.%@.square"), ("windows.sendToDisplay", "arrowshape.%@"),
+                                 ("windows.nudge", "arrowtriangle.%@")] where id.hasPrefix(prefix) {
             let side = id.dropFirst(prefix.count).lowercased()
             if ["left", "right", "up", "down"].contains(side) { return String(format: symbol, side) }
         }

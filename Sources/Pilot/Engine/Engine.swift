@@ -357,6 +357,8 @@ final class Engine {
                 action(id) != nil && (Extension.command(inAction: id) == nil || Extension.command(inAction: id, in: installed) != nil)
             }
         }
+        // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194).
+        if rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
         for id in Set(PilotDefault.binds.keys).union(MyBinds.extras.keys) where action(id) == nil {
             log.error("binds: a preset names \(LinkToken.redact(id), privacy: .public), which no action has")
         }

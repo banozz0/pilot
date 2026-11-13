@@ -39,6 +39,12 @@ struct SandboxHost {
         let engine = Engine()
         // PILOT_SANDBOX_DOCK=<folder>: a fake macOS Dock (DockFixture); without it every dock switch refuses, and the dock never draws.
         DockFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DOCK"], on: engine.dock)
+        // PILOT_SANDBOX_BINDS=<file>: a copy of a bind file as this run's bind file, loaded again so the engine's load (and
+        // its migrations) runs on it; the given file is only read.
+        if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_BINDS"] {
+            try Data(contentsOf: URL(filePath: file)).write(to: engine.binds.fileURL)
+            engine.binds.load()
+        }
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores
         // without a prompt on Sven's screen (P49's publish, against a local bare remote).
         if ProcessInfo.processInfo.environment["PILOT_SANDBOX_ALLOW"] == "1" {

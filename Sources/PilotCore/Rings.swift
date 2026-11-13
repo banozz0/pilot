@@ -96,8 +96,9 @@ public struct RingSlice: Equatable, Sendable {
 public struct Rings: Equatable, Sendable {
     /// The file's schema version. A change of shape adds a case to `init(json:)`, never a second format. 2 (2026-10-20):
     /// groups in groups, a group filled from a menu branch, a ring of the menu's branches (the Pilot ring). 3 (2026-10-22):
-    /// the This window ring, first.
-    public static let version = 3
+    /// the This window ring, first. 4 (2026-11-13): This window gains Arrange and is first again, and Mouse 4's hold
+    /// opens it (Q194; `upgrades`).
+    public static let version = 4
     /// `rings.open:<ring id>`: the held action a key or a mouse hold binds.
     public static let openPrefix = "rings.open:"
 
@@ -136,9 +137,19 @@ public struct Rings: Equatable, Sendable {
     static let typing: Set<String> = ["ai.ask", "ai.chat", "ai.selection", "apps.emoji", "system.killProcess", "notes.toggle",
                                       "apps.bitwardenSearch", "system.translationLanguages", "apps.passwords", "captures.makeQR"]
 
-    /// The rings a scroll steps through with `app` in front: that app's own first, then every app's, in their order.
-    public func wheel(front app: String?) -> [Ring] {
-        rings.filter { $0.app != nil && $0.app == app } + rings.filter { $0.app == nil }
+    /// The rings a scroll steps through with `app` in front: that app's own first, then every app's, in their order. A ring
+    /// with nothing on it is left out, unless it is the one `opening` (Q194: a New ring not filled yet stays in Launcher ›
+    /// Rings, off the scroll).
+    public func wheel(front app: String?, opening: String? = nil) -> [Ring] {
+        let shown = rings.filter { $0.menu || $0.count > 0 || $0.id == opening }
+        return shown.filter { $0.app != nil && $0.app == app } + shown.filter { $0.app == nil }
+    }
+
+    /// Whether `json` (nil: no file yet) is from before version 4, so this launch gives Mouse 4's hold to This window
+    /// (BindStore.addRingHold). The file is written back at version 4 as it is read, so it happens once.
+    public static func upgrades(_ json: Data?) -> Bool {
+        guard let json else { return true }
+        return ((try? JSONDecoder().decode(Version.self, from: json))?.version ?? 0) < 4
     }
 
     /// A ring id for `name` that no ring has: its words lowercased and joined, a number after it when taken.
@@ -155,11 +166,23 @@ public struct Rings: Equatable, Sendable {
     /// The Pilot ring (Sven, 2026-10-20): the Hyper+Space menu's top branches, each entered as its own ring.
     public static let pilot = Ring(id: "pilot", name: "Pilot", menu: true, slices: [])
 
-    /// This window (Sven's pick, Q415, direction A of the Home and Ring round): one ring with one job, the window under the
-    /// pointer, which each wedge focuses first (RingController). No group, so every wedge is one flick, and each points
-    /// where the keyboard already does: Maximise north as Hyper ↑, the snaps west and east as Hyper ← and →; the corners
-    /// above send the window a workspace on or back, the ones below float it or close it.
+    /// This window (Sven's pick, Q415, direction A of the Home and Ring round; A again in the mouse ring round, Q194): one
+    /// ring with one job, the window under the pointer, which each wedge focuses first (RingController). Each points where
+    /// the keyboard already does: Maximise north as Hyper ↑, the snaps west and east as Hyper ← and →; the corners above
+    /// send the window a workspace on or back, the ones below float it or close it. South is Arrange, the one group
+    /// (Q194): the thirds where Hyper+Shift ← ↑ → put them, two thirds above them, Fullscreen, Centre and Minimise. Float is
+    /// a plain wedge: Pilot reads no window's float state, so a switch there never showed on or off.
     public static let window = Ring(id: "window", name: "This window", slices: [
+        RingSlice("windows.maximise"), RingSlice("windows.sendToNextWorkspace", label: "To next workspace"), RingSlice("windows.snapRight"),
+        RingSlice("windows.toggleFloat", label: "Float or tile"),
+        .group("Arrange", [RingSlice("windows.middleThird"), RingSlice("windows.lastTwoThirds"), RingSlice("windows.lastThird"),
+                           RingSlice("windows.fullscreen", label: "Fullscreen"), RingSlice("windows.centre"), RingSlice("windows.minimise"),
+                           RingSlice("windows.firstThird"), RingSlice("windows.firstTwoThirds")]),
+        RingSlice("windows.close"), RingSlice("windows.snapLeft"), RingSlice("windows.sendToPreviousWorkspace", label: "To previous workspace"),
+    ])
+
+    /// This window as version 3 shipped it (Q415): a file still holding it, untouched, gets `window` in its place.
+    static let windowV3 = Ring(id: "window", name: "This window", slices: [
         RingSlice("windows.maximise"), RingSlice("windows.sendToNextWorkspace"), RingSlice("windows.snapRight"),
         RingSlice("windows.toggleFloat", kind: .switch, label: "Float"), RingSlice("windows.minimise"), RingSlice("windows.close"),
         RingSlice("windows.snapLeft"), RingSlice("windows.sendToPreviousWorkspace"),
@@ -208,7 +231,8 @@ public struct Rings: Equatable, Sendable {
 
     /// Reads a file of any version up to this one; an empty or missing ring list keeps the defaults' rings. Version 1 is
     /// version 2 with groups one level deep and no Pilot ring, which it gains, first. Version 2 is version 3 without the
-    /// This window ring, which it gains, first (Sven's pick, Q415).
+    /// This window ring, which it gains, first (Sven's pick, Q415). Version 3 is version 4 with This window anywhere and
+    /// Q415's eight on it: it moves first, and those eight, if untouched, become today's (Q194).
     public init(json: Data) throws(LoadError) {
         let file: File
         do {
@@ -227,6 +251,12 @@ public struct Rings: Equatable, Sendable {
         }
         if file.version < 2, file.rings != nil, !seen.contains(Self.pilot.id) { rings.insert(Self.pilot, at: 0) }
         if file.version < 3, file.rings != nil, !seen.contains(Self.window.id) { rings.insert(Self.window, at: 0) }
+        // Version 4 (Q194): This window first, as Mouse 4's hold opens it; Q415's eight, untouched, become Arrange's ring.
+        if file.version < 4, let i = rings.firstIndex(where: { $0.id == Self.window.id }) {
+            var window = rings.remove(at: i)
+            if window.slices == Self.windowV3.slices, window.app == nil, !window.menu { window.slices = Self.window.slices }
+            rings.insert(window, at: 0)
+        }
         let standard = Self.standard
         self.init(rings: file.rings == nil ? standard.rings : rings,
                   holdAfter: min(max(file.holdAfter ?? standard.holdAfter, Self.holdRange.lowerBound), Self.holdRange.upperBound),

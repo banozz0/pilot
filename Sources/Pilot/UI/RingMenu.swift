@@ -18,12 +18,15 @@ final class RingStore {
     private(set) var lastError: String?
     /// After every load and change: Engine hands the tap the new Hold after.
     @ObservationIgnored var onChange: () -> Void = {}
+    /// The last load read no file or one before version 4: Engine gives Mouse 4's hold to This window, once (Q194).
+    private(set) var upgraded = false
 
     init() { load() }
 
     func load() {
         lastError = nil
         let file = try? Data(contentsOf: fileURL)
+        upgraded = Rings.upgrades(file)
         do { rings = try file.map { data throws(Rings.LoadError) in try Rings(json: data) } ?? .standard }
         catch {
             rings = .standard
@@ -170,7 +173,7 @@ final class RingController {
     private func show(ring id: String) {
         let rings = store.rings
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let wheel = rings.wheel(front: front)
+        let wheel = rings.wheel(front: front, opening: id)
         // A ring of the app in front opens first (per-app rings, Q366); else the one the trigger names.
         let index = wheel.first?.app != nil ? 0 : wheel.firstIndex { $0.id == id } ?? 0
         guard !wheel.isEmpty else { return ringLog.notice("rings: no ring to open") }
