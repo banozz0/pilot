@@ -42,7 +42,7 @@ extension SettingsSchema {
                   standard: false, read: { nudges.aiLimit }, write: { nudges.aiLimit = $0 }),
             .int(SmartNudgeCenter.thresholdKey, "The AI limit warning's share used, in percent", page: "general", range: SmartNudges.thresholds,
                  standard: SmartNudges.standardThreshold, read: { nudges.threshold }, write: { nudges.threshold = $0 }),
-            .bool(SmartNudgeCenter.quietKey, "Quiet hours: hold Pilot's own notifications and nudges, one summary after; macOS Focus is left alone",
+            .bool(SmartNudgeCenter.quietKey, "Quiet hours: hold Pilot's own alerts (smart nudges, low battery), one summary after; reminders still arrive, macOS Focus is left alone",
                   page: "general", standard: false, read: { nudges.quietHours }, write: { nudges.quietHours = $0 }),
             .text(SmartNudgeCenter.fromKey, "Quiet hours start, a time like 22:00", page: "general", standard: SmartNudges.standardFrom,
                   read: { nudges.quietFrom }, write: { value throws(ControlError) in nudges.quietFrom = try Self.quietClock(SmartNudgeCenter.fromKey, value) }),

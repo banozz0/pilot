@@ -10,7 +10,8 @@ private let nudgeLog = Logger(subsystem: "dev.banozz.pilot", category: "smart-nu
 /// Pilot's own alerts go through (`post`), which quiet hours hold. While every switch is off nothing here runs: no
 /// Calendar store, no timer. Pause music reads Calendar the clock's way (CalendarStore), asked only as its switch goes on,
 /// and sleeps until the next event's lead, not polling; the AI limit warning reads the AI usage extension's bar answer as
-/// ExtensionBar receives it, so it hears nothing while that item is on no bar.
+/// ExtensionBar receives it, so it hears nothing while that item is on no bar. Note reminders and quick reminders are
+/// times Sven set himself, so they arrive in quiet hours too (spec smart-nudges).
 @Observable @MainActor
 final class SmartNudgeCenter {
     static let shared = SmartNudgeCenter()
@@ -45,19 +46,20 @@ final class SmartNudgeCenter {
     }
     var quietFrom: String { didSet { defaults.set(quietFrom, forKey: Self.fromKey); followQuiet() } }
     var quietTo: String { didSet { defaults.set(quietTo, forKey: Self.toKey); followQuiet() } }
-    /// Calendar access was asked and refused: the row says so and links Privacy & Security.
-    private(set) var calendarRefused = false
+    /// Calendar access as Pause music last read it, once off the main thread; nil until its watch first ran. Refused,
+    /// the row says so and links Privacy & Security.
+    private(set) var calendarAccess: CalendarAccess?
     /// The notifications held in quiet hours, released as one summary as they end.
     private(set) var held: [HeldNudge] = []
-    /// The AI windows as the last AI usage bar answer showed them.
-    private(set) var aiWindows: [AIWindow] = []
 
-    /// The seams: Calendar, what plays, where a post goes and the clock. The app's are real; the sandbox's are files.
+    /// The seams: Calendar, what plays, where a post goes, and AI usage's last bar answer. The app's are real; the
+    /// sandbox's are files.
     @ObservationIgnored var makeCalendar: @MainActor () -> CalendarStore = { EventKitCalendar() }
     @ObservationIgnored var media: MediaControlling = BundledMediaControl()
     @ObservationIgnored var deliver: @MainActor (Post) -> Void = SmartNudgeCenter.show
-    @ObservationIgnored var now: () -> Date = Date.init
-    @ObservationIgnored var calendar = Calendar.autoupdatingCurrent
+    @ObservationIgnored var lastAIAnswer: @MainActor () -> Extension.BarAnswer? = {
+        ExtensionBar.shared.items.first { $0.id == AILimit.extensionID }?.answer
+    }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var store: CalendarStore?
@@ -66,16 +68,17 @@ final class SmartNudgeCenter {
     @ObservationIgnored private var paused: [String: Date] = [:]
     @ObservationIgnored private var meetingLoop: Task<Void, Never>?
     @ObservationIgnored private var nap: Task<Void, Never>?
+    /// A burst of Calendar changes is read once, after it settles.
+    @ObservationIgnored private var settling: Task<Void, Never>?
     @ObservationIgnored private var release: Task<Void, Never>?
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         pauseMusic = defaults.bool(forKey: Self.pauseKey)
-        minutes = (defaults.object(forKey: Self.minutesKey) as? Int).map { min(max($0, SmartNudges.minutes.lowerBound), SmartNudges.minutes.upperBound) }
-            ?? SmartNudges.standardMinutes
+        minutes = (defaults.object(forKey: Self.minutesKey) as? Int).map { SmartNudges.clamped($0, to: SmartNudges.minutes) } ?? SmartNudges.standardMinutes
         anyEvent = defaults.bool(forKey: Self.anyKey)
         aiLimit = defaults.bool(forKey: Self.aiKey)
-        threshold = (defaults.object(forKey: Self.thresholdKey) as? Int).map { min(max($0, SmartNudges.thresholds.lowerBound), SmartNudges.thresholds.upperBound) }
+        threshold = (defaults.object(forKey: Self.thresholdKey) as? Int).map { SmartNudges.clamped($0, to: SmartNudges.thresholds) }
             ?? SmartNudges.standardThreshold
         quietHours = defaults.bool(forKey: Self.quietKey)
         quietFrom = defaults.string(forKey: Self.fromKey) ?? SmartNudges.standardFrom
@@ -86,8 +89,10 @@ final class SmartNudgeCenter {
         paused = defaults.data(forKey: Self.pausedKey).flatMap { try? decoder.decode([String: Date].self, from: $0) } ?? [:]
     }
 
-    /// At launch: Pause music's watch when on (never asking for Calendar), and anything held released or waited for.
+    /// At launch: AI usage's bar answers heard, Pause music's watch when on (never asking for Calendar), and anything held
+    /// released or waited for.
     func start() {
+        ExtensionBar.shared.answered = { [weak self] id, answer in self?.barAnswered(id, answer) }
         followCalendar(asking: false)
         followQuiet()
     }
@@ -98,11 +103,11 @@ final class SmartNudgeCenter {
     var quiet: QuietHours? { quietHours ? QuietHours(from: quietFrom, to: quietTo) : nil }
 
     /// Whether Pilot keeps quiet at `date`.
-    func isQuiet(at date: Date) -> Bool { quiet?.contains(date, calendar: calendar) ?? false }
+    func isQuiet(at date: Date) -> Bool { quiet?.contains(date) ?? false }
 
     /// Every one of Pilot's own alerts: shown now, or held while quiet hours hold and summed up as they end.
     func post(_ post: Post, at date: Date? = nil) {
-        let at = date ?? now()
+        let at = date ?? Date()
         guard isQuiet(at: at) else { return deliver(post) }
         held.append(HeldNudge(title: post.title, body: post.body, at: at))
         save(held, Self.heldKey)
@@ -113,7 +118,7 @@ final class SmartNudgeCenter {
     /// Releases what is held once quiet hours are over (or off): one notification sums it up. True when it did.
     @discardableResult
     func releaseIfDue(at date: Date? = nil) -> Bool {
-        let at = date ?? now()
+        let at = date ?? Date()
         guard !held.isEmpty, !isQuiet(at: at) else { return false }
         let summary = HeldNudge.summary(held)
         held = []
@@ -124,12 +129,8 @@ final class SmartNudgeCenter {
 
     /// Quiet hours' settings changed, or Pilot launched: what is held goes out if they are over, else waits for their end.
     private func followQuiet() {
-        if releaseIfDue() || held.isEmpty {
-            release?.cancel()
-            release = nil
-            return
-        }
-        wakeAtQuietEnd(after: now())
+        guard !releaseIfDue(), !held.isEmpty else { release?.cancel(); return }
+        wakeAtQuietEnd(after: Date())
     }
 
     /// One wake at the end of the quiet hours `date` falls in, to release what is held.
@@ -137,7 +138,7 @@ final class SmartNudgeCenter {
         release?.cancel()
         release = nil
         guard let quiet else { return }
-        let wait = max(1, quiet.end(after: date, calendar: calendar).timeIntervalSince(date))
+        let wait = max(1, quiet.end(after: date).timeIntervalSince(date))
         release = Task { [weak self] in
             try? await Task.sleep(for: .seconds(wait), tolerance: .seconds(30))
             guard !Task.isCancelled else { return }
@@ -183,42 +184,48 @@ final class SmartNudgeCenter {
     /// A setting the watch reads changed: it looks again now.
     private func wake() { nap?.cancel() }
 
+    /// Calendar changed, here or anywhere (a sync posts a burst): one look once it has been quiet for 2 s.
+    private func calendarChanged() {
+        settling?.cancel()
+        settling = Task { [weak self] in
+            guard (try? await Task.sleep(for: .seconds(2))) != nil else { return }
+            self?.wake()
+        }
+    }
+
     /// Calendar's store once access is given; asked only when `asking`, so a launch never shows macOS's prompt.
     private func granted(asking: Bool) async -> Bool {
         let store = store ?? makeCalendar()
         if self.store == nil {
             self.store = store
-            store.observe { [weak self] in self?.wake() }
+            store.observe { [weak self] in self?.calendarChanged() }
         }
-        var access = store.access
+        var access = await store.readAccess()
         if access == .undetermined && asking { access = await store.requestAccess() ? .granted : .denied }
-        calendarRefused = access == .denied
+        calendarAccess = access
         if access != .granted { nudgeLog.notice("pause music: no Calendar access (\(String(describing: access), privacy: .public))") }
         return access == .granted
     }
 
-    /// Whether Pause music can read Calendar now: not asked, given or refused.
-    var calendarAccess: CalendarAccess? { store?.access }
-
     /// One look at Calendar at `date`: pauses what plays for an event coming due; says what it did, and how long until
-    /// the next look (at most an hour, so a new day's events are read).
+    /// the next look (at most an hour, so only the coming hour and the lead are read).
     @discardableResult
     func checkMeetings(at date: Date? = nil) async -> (said: String?, wait: TimeInterval) {
-        let at = date ?? now()
+        let at = date ?? Date()
         guard pauseMusic else { return (nil, 3600) }
         // A check just after the switch went on can come before the watch has made the store.
         if store == nil { _ = await granted(asking: false) }
-        guard let store, store.access == .granted else { return (nil, 3600) }
+        guard let store, calendarAccess == .granted else { return (nil, 3600) }
         paused = paused.filter { $0.value > at.addingTimeInterval(-86400) }
-        let events = store.meetings(in: DateInterval(start: at, duration: 86400))
+        let events = store.meetings(in: DateInterval(start: at, duration: 3600 + Double(minutes * 60)))
+        let plan = MusicPause.plan(events, at: at, minutes: minutes, anyEvent: anyEvent, done: Set(paused.keys))
         var said: String?
-        if let event = MusicPause.due(events, at: at, minutes: minutes, anyEvent: anyEvent, done: Set(paused.keys)) {
+        if let event = plan.due {
             paused[event.occurrence] = event.start
             save(paused, Self.pausedKey)
             said = await pause(for: event, at: at)
         }
-        let next = MusicPause.next(events, after: at, minutes: minutes, anyEvent: anyEvent, done: Set(paused.keys))
-        return (said, min(max(next.map { $0.timeIntervalSince(at) } ?? 3600, 1), 3600))
+        return (said, min(max(plan.next.map { $0.timeIntervalSince(at) } ?? 3600, 1), 3600))
     }
 
     /// Pauses what plays, if anything does, and tips why: held in quiet hours like any other.
@@ -237,12 +244,11 @@ final class SmartNudgeCenter {
     /// the threshold in a window not warned about yet posts one notification. Says what it warned.
     @discardableResult
     func barAnswered(_ id: String, _ answer: Extension.BarAnswer, at date: Date? = nil) -> [String] {
-        guard id == AILimit.extensionID else { return [] }
-        aiWindows = AILimit.windows(in: answer)
-        guard aiLimit else { return [] }
-        let at = date ?? now()
-        let fresh = watch.record(aiWindows, threshold: threshold)
-        save(watch, Self.warnedKey)
+        guard aiLimit, id == AILimit.extensionID else { return [] }
+        let at = date ?? Date()
+        let before = watch
+        let fresh = watch.record(AILimit.windows(in: answer), threshold: threshold)
+        if watch != before { save(watch, Self.warnedKey) }
         return fresh.map { window in
             let text = AILimit.text(window, now: at)
             post(Post(id: "smartNudges.aiLimit.\(window.key)", title: "AI limit", body: text), at: at)
@@ -250,10 +256,8 @@ final class SmartNudgeCenter {
         }
     }
 
-    /// AI usage's bar answer as it last came, for `pilot nudges check`: ExtensionBar's in the app, a file in the sandbox.
-    @ObservationIgnored var lastAIAnswer: @MainActor () -> Extension.BarAnswer? = {
-        ExtensionBar.shared.items.first { $0.id == AILimit.extensionID }?.answer
-    }
+    /// The AI windows as AI usage's last bar answer shows them.
+    var aiWindows: [AIWindow] { lastAIAnswer().map(AILimit.windows) ?? [] }
 
     /// The AI windows warned about in their current window.
     var warned: [String] { watch.warned.keys.sorted() }

@@ -24,6 +24,8 @@ enum CalendarAccess { case undetermined, granted, denied }
     func observe(_ changed: @escaping @MainActor () -> Void)
     /// Smart nudges' Pause music: the events in `range`, each with whether it links to a video call; none in a fake.
     func meetings(in range: DateInterval) -> [MeetingEvent]
+    /// `access` read off the main thread (EventKit's is a synchronous call to the calendar daemon).
+    func readAccess() async -> CalendarAccess
 }
 
 extension CalendarStore {
@@ -31,6 +33,7 @@ extension CalendarStore {
     func reminders(in range: DateInterval) async -> [ClockEvent] { [] }
     func observe(_ changed: @escaping @MainActor () -> Void) {}
     func meetings(in range: DateInterval) -> [MeetingEvent] { [] }
+    func readAccess() async -> CalendarAccess { access }
 }
 
 /// The clock's popover's events (card agent-bo-95423011, SPEC story 168): the store is made, and access asked, only
@@ -146,8 +149,21 @@ final class ClockCalendar {
         (try? await store.requestFullAccessToEvents()) ?? false
     }
 
+    func readAccess() async -> CalendarAccess {
+        switch await Task.detached(operation: { EKEventStore.authorizationStatus(for: .event) }).value {
+        case .notDetermined: .undetermined
+        case .fullAccess: .granted
+        default: .denied
+        }
+    }
+
+    /// Every calendar's events in `range`.
+    private func fetch(_ range: DateInterval) -> [EKEvent] {
+        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil))
+    }
+
     func events(in range: DateInterval) -> [ClockEvent] {
-        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil)).map { event in
+        fetch(range).map { event in
             let holiday = event.calendar.map { ClockEvent.isHolidays(calendar: $0.title, readOnly: !$0.allowsContentModifications, birthdays: $0.type == .birthday) }
             return ClockEvent(title: event.title ?? "", start: event.startDate, end: event.endDate, allDay: event.isAllDay,
                               colour: Self.paint(event.calendar),
@@ -209,11 +225,13 @@ final class ClockCalendar {
 
     var newEventsCalendar: String? { store.defaultCalendarForNewEvents?.title }
 
-    /// A video call is a Zoom, Meet, Teams … link in the event's URL, location or notes (MeetingLink).
+    /// A video call is a Zoom, Meet, Teams … link in the event's URL, location or notes (MeetingLink); an all-day event,
+    /// never paused for, is not searched.
     func meetings(in range: DateInterval) -> [MeetingEvent] {
-        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil)).map { event in
+        fetch(range).map { event in
             MeetingEvent(id: event.eventIdentifier ?? event.calendarItemIdentifier, title: event.title ?? "", start: event.startDate,
-                         allDay: event.isAllDay, video: MeetingLink.find(in: [event.url?.absoluteString, event.location, event.notes]) != nil)
+                         allDay: event.isAllDay,
+                         video: !event.isAllDay && MeetingLink.find(in: [event.url?.absoluteString, event.location, event.notes]) != nil)
         }
     }
 

@@ -10,6 +10,9 @@ public enum SmartNudges {
     public static let thresholds = 50...99, standardThreshold = 80
     /// Quiet hours' range as the settings first hold it.
     public static let standardFrom = "22:00", standardTo = "08:00"
+
+    /// A stored figure kept inside its range.
+    public static func clamped(_ value: Int, to range: ClosedRange<Int>) -> Int { min(max(value, range.lowerBound), range.upperBound) }
 }
 
 // MARK: Pause music
@@ -32,7 +35,7 @@ public enum MeetingLink {
 }
 
 /// One calendar event as Pause music reads it.
-public struct MeetingEvent: Codable, Equatable, Sendable {
+public struct MeetingEvent: Equatable, Sendable {
     public let id: String, title: String, start: Date, allDay: Bool
     /// Whether it links to a video call.
     public let video: Bool
@@ -51,23 +54,15 @@ public enum MusicPause {
         events.filter { !$0.allDay && ($0.video || anyEvent) }
     }
 
-    /// The event to pause for at `now`: one not started yet that starts within `minutes`, not paused for already; the
-    /// soonest first.
-    public static func due(_ events: [MeetingEvent], at now: Date, minutes: Int, anyEvent: Bool, done: Set<String>) -> MeetingEvent? {
+    /// At `now`: the event to pause for (one not started yet that starts within `minutes`, not paused for already, the
+    /// soonest), and when the next after it comes due (its start less `minutes`; nil when none is ahead).
+    public static func plan(_ events: [MeetingEvent], at now: Date, minutes: Int, anyEvent: Bool, done: Set<String>)
+        -> (due: MeetingEvent?, next: Date?) {
         let lead = TimeInterval(minutes * 60)
-        return counted(events, anyEvent: anyEvent)
-            .filter { $0.start > now && $0.start.timeIntervalSince(now) <= lead && !done.contains($0.occurrence) }
-            .min { $0.start < $1.start }
-    }
-
-    /// When the next one comes due after `now`: its start less `minutes`; nil when none is ahead.
-    public static func next(_ events: [MeetingEvent], after now: Date, minutes: Int, anyEvent: Bool, done: Set<String>) -> Date? {
-        let lead = TimeInterval(minutes * 60)
-        return counted(events, anyEvent: anyEvent)
-            .filter { !done.contains($0.occurrence) }
-            .map { $0.start.addingTimeInterval(-lead) }
-            .filter { $0 > now }
-            .min()
+        let open = counted(events, anyEvent: anyEvent).filter { !done.contains($0.occurrence) }.sorted { $0.start < $1.start }
+        let due = open.first { $0.start > now && $0.start.timeIntervalSince(now) <= lead }
+        let next = open.filter { $0.occurrence != due?.occurrence }.map { $0.start.addingTimeInterval(-lead) }.first { $0 > now }
+        return (due, next)
     }
 
     /// The tip once it paused: "Paused for “Standup”, in 2 min".
@@ -94,7 +89,8 @@ public enum AILimit {
     /// The AI usage extension's id, whose bar answer is read.
     public static let extensionID = "ai-usage"
 
-    /// Its windows in a bar answer's dropdown blocks: each card's meters, whose percent is the share left.
+    /// Its windows in a bar answer's dropdown blocks: each card's meters, whose percent is the share left. This reads
+    /// what ai-usage draws (main.py's `section` and `meter`): a card or meter renamed there re-keys the warning.
     public static func windows(in answer: Extension.BarAnswer) -> [AIWindow] {
         answer.blocks.flatMap { block -> [AIWindow] in
             guard case .section(let title, _, let aside, _, let blocks, _, _) = block else { return [] }
@@ -104,15 +100,6 @@ public enum AILimit {
                 return AIWindow(key: card.isEmpty ? meter.label : "\(card) · \(meter.label)",
                                 used: min(max(100 - meter.percent, 0), 100), resetsAt: meter.resetsAt)
             }
-        }
-    }
-
-    /// The answer in what a bar command printed (its JSON lines), read as the bar round reads it, or why not.
-    public static func answer(printed output: String) -> (answer: Extension.BarAnswer?, problem: String?) {
-        switch ExtensionRun.surfaceAnswer(output, kind: .bar) {
-        case .bar(let answer): (answer, nil)
-        case .error(let why): (nil, why)
-        case .blocks: (nil, ExtensionRun.unreadable)
         }
     }
 

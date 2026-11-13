@@ -1,6 +1,6 @@
 import Foundation
 @testable import Pilot
-import PilotCore
+@testable import PilotCore
 
 /// The sandbox's smart nudges (a harness, not a test; spec smart-nudges), from a throwaway folder:
 /// - `events.json`: Calendar, `[{"id", "title", "start" (ISO 8601), "allDay"?, "url"?, "location"?, "notes"?}]`, read at
@@ -22,9 +22,12 @@ enum NudgeFixture {
         }
         center.lastAIAnswer = {
             guard let printed = try? String(contentsOf: dir.appending(path: "ai-usage.jsonl"), encoding: .utf8) else { return nil }
-            let read = AILimit.answer(printed: printed)
-            if let problem = read.problem { log.write(["kind": "ai-usage", "problem": problem]) }
-            return read.answer
+            switch ExtensionRun.surfaceAnswer(printed, kind: .bar) {
+            case .bar(let answer): return answer
+            case .error(let why): log.write(["kind": "ai-usage", "problem": why])
+            case .blocks: log.write(["kind": "ai-usage", "problem": ExtensionRun.unreadable])
+            }
+            return nil
         }
         print("smart nudges sandbox: \(dir.path)")
         fflush(stdout)

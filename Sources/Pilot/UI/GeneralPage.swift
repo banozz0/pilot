@@ -366,7 +366,7 @@ struct GeneralPage: View {
                     Toggle("Any event, not only video calls", isOn: $nudges.anyEvent)
                         .toggleStyle(.pilotSwitchRow(info: "Pauses before every timed event in Calendar; all-day events never."))
                 }
-                if nudges.calendarRefused {
+                if nudges.calendarAccess == .denied {
                     BlockRow {
                         FinePrint(text: "Pilot has no Calendar access, so it can't see your meetings.").frame(maxWidth: .infinity, alignment: .leading)
                         Button("Open Privacy & Security") { NSWorkspace.shared.open(ClockCalendar.privacy) }.buttonStyle(.pilot)
@@ -388,7 +388,7 @@ struct GeneralPage: View {
             }
             BlockRow {
                 Toggle("Quiet hours", isOn: $nudges.quietHours)
-                    .toggleStyle(.pilotSwitchRow(info: "Between these times Pilot holds its own notifications and nudges, low battery included, and sends one summary as they end. Music still pauses. macOS Focus is left alone."))
+                    .toggleStyle(.pilotSwitchRow(info: "Between these times Pilot holds its own alerts (smart nudges and low battery) and sends one summary as they end. Reminders you set still arrive, and music still pauses. macOS Focus is left alone."))
             }
             if nudges.quietHours {
                 BlockRow {
