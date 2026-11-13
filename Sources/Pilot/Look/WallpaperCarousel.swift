@@ -199,12 +199,12 @@ enum WallpaperCarousel {
     @MainActor static func apps(_ owner: ThemeCoordinator?) -> ThemePreview.Apps {
         guard let owner, let found = try? owner.appFollowing() else { return .init() }
         enum Role { case editor, terminal }
-        /// nil: an app that runs inside a terminal (btop, lazygit, Neovim), drawn as neither.
+        /// nil: an app that runs inside a terminal (btop, lazygit, Neovim, fish) or a chat app (Vesktop), drawn as neither.
         func role(_ kind: ThemeAppKind) -> Role? {
             switch kind {
             case .vscode, .cursor, .windsurf: .editor
             case .kitty, .alacritty, .wezterm, .iterm2: .terminal
-            case .btop, .lazygit, .neovim: nil
+            case .btop, .lazygit, .neovim, .fish, .vesktop: nil
             }
         }
         let on = found.apps.filter(\.on).compactMap { app in ThemeAppKind(rawValue: app.kind).map { ($0, app.name) } }

@@ -1,5 +1,5 @@
-"""VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2, btop, lazygit and Neovim through a real Allow, in fixtures shaped like each app's
-documented files: links out of the folder, comments, trailing commas and missing files. btop, lazygit and Neovim, when on
+"""VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2, btop, lazygit, Neovim, fish and Vesktop through a real Allow, in fixtures shaped like each app's
+documented files: links out of the folder, comments, trailing commas and missing files. btop, lazygit, Neovim and fish, when on
 this Mac, also read what Pilot wrote, each in a throwaway config folder."""
 import importlib.util, json, os, re, shutil, subprocess, tomllib
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('lifecycle', HERE / 'lifecycle.py'); life = importlib.util.module_from_spec(spec); spec.loader.exec_module(life)
 SUPPORT = 'Library/Application Support'
-NAMES = ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2', 'btop', 'lazygit', 'Neovim']
+NAMES = ['VS Code', 'Cursor', 'Windsurf', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2', 'btop', 'lazygit', 'Neovim', 'fish', 'Vesktop']
 JSONC = b'// mine\n{\n  "editor.fontSize": 14, /* keep */\n  "files.autoSave": "off",\n}\n'
 
 
@@ -21,7 +21,7 @@ def setup(label, **options):
     for pack in f.packs: pack['adapters'] = {'ghostty': {}}; f.save_pack(pack)
     roots = dict(vscode=home / SUPPORT / 'Code/User', cursor=home / SUPPORT / 'Cursor/User', windsurf=home / SUPPORT / 'Windsurf/User',
                  kitty=home / '.config/kitty', alacritty=home / '.config/alacritty', wezterm=home / '.config/wezterm', iterm2=home / SUPPORT / 'iTerm2', btop=home / '.config/btop',
-                 lazygit=home / SUPPORT / 'lazygit', neovim=home / '.config/nvim')
+                 lazygit=home / SUPPORT / 'lazygit', neovim=home / '.config/nvim', fish=home / '.config/fish', vesktop=home / SUPPORT / 'vesktop')
     for kind in options.get('apps', roots):
         roots[kind].mkdir(parents=True, exist_ok=True)
     f.settings['detectHome'] = str(home); f.manifest.write_text(json.dumps(f.settings))
@@ -178,20 +178,21 @@ def checks(passed):
         # Review blocker 2: installed with no config folder yet, and WezTerm configured by ~/.wezterm.lua alone.
         f, home, roots, tree = setup('in', apps=[])
         (home / SUPPORT).mkdir(parents=True)
-        for bundle in ['Visual Studio Code.app', 'kitty.app', 'Alacritty.app', 'iTerm.app']: (home / 'Applications' / bundle).mkdir(parents=True)
+        for bundle in ['Visual Studio Code.app', 'kitty.app', 'Alacritty.app', 'iTerm.app', 'vesktop.app']: (home / 'Applications' / bundle).mkdir(parents=True)
         lua = home / '.wezterm.lua'; lua.write_text('local wezterm = require "wezterm"\nreturn {}\n')
         before = tree(); f.start()
         plan = f.call('theme', 'plan', 'apply', 'a'); shown = '\n'.join(plan['review']['changes'])
-        for name in ['VS Code', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2']: assert name in shown, (name, plan['review'])
+        for name in ['VS Code', 'Kitty', 'Alacritty', 'WezTerm', 'iTerm2', 'Vesktop']: assert name in shown, (name, plan['review'])
         assert 'Cursor' not in shown and 'Windsurf' not in shown, shown
         assert tree() == before and not (home / '.config').exists() and not (home / SUPPORT / 'Code').exists(), 'Preview made a folder'
         assert f.call('theme', 'apply', plan['id'])['status'] == 'applied'
         for path in [roots['kitty'] / 'kitty.conf', roots['kitty'] / 'pilot-theme.conf', roots['alacritty'] / 'alacritty.toml', roots['wezterm'] / 'colors/Pilot Theme.toml',
-                     roots['vscode'] / 'settings.json', roots['iterm2'] / 'DynamicProfiles/pilot-theme.json']: assert path.exists(), path
+                     roots['vscode'] / 'settings.json', roots['iterm2'] / 'DynamicProfiles/pilot-theme.json', roots['vesktop'] / 'settings/settings.json',
+                     roots['vesktop'] / 'themes/pilot.theme.css']: assert path.exists(), path
         assert tomllib.loads((roots['alacritty'] / 'alacritty.toml').read_text())['general']['import'] == [str(roots['alacritty'] / 'pilot-theme.toml')]
         assert lua.read_text() == 'local wezterm = require "wezterm"\nreturn {}\n', 'wrote the Lua config'
         assert f.restore()['status'] == 'restored' and tree() == before, 'Restore was not exact'
-        assert not (home / '.config').exists() and not (home / SUPPORT / 'Code').exists() and not (home / SUPPORT / 'iTerm2').exists(), 'a made folder stayed'
+        assert not (home / '.config').exists() and not (home / SUPPORT / 'Code').exists() and not (home / SUPPORT / 'iTerm2').exists() and not (home / SUPPORT / 'vesktop').exists(), 'a made folder stayed'
         f.stop()
         # Alacritty reading ~/.alacritty.toml: a new ~/.config one would hide it, so it skips and says why.
         f, home, roots, tree = setup('ah', apps=[])
@@ -413,6 +414,61 @@ def checks(passed):
         else: print('  nvim not on PATH: not run', flush=True)
         lazygit_reads(home, roots, palette['accent'])
 
+    def fish_vesktop():
+        # Sven's shapes: fish's default config.fish and an empty conf.d; Vesktop's Vencord settings.json as Vencord writes it
+        # (JSON.stringify, four spaces) with an empty enabledThemes, and a themes folder holding another theme.
+        def show(label, path):
+            print(f'  {label} {path.relative_to(path.parents[1])}: ' + (repr(path.read_bytes()) if path.exists() else 'absent'), flush=True)
+        f, home, roots, tree = setup('fsvk', apps=['fish', 'vesktop'])
+        config = roots['fish'] / 'config.fish'
+        config.write_text('if status is-interactive\n    # Commands to run in interactive sessions can go here\nend\n'); (roots['fish'] / 'conf.d').mkdir()
+        mine = {'autoUpdate': True, 'enabledThemes': [], 'themeLinks': [], 'useQuickCss': True, 'plugins': {'NoTrack': {'enabled': True}}}
+        settings = roots['vesktop'] / 'settings/settings.json'; settings.parent.mkdir(); settings.write_text(json.dumps(mine, indent=4))
+        (roots['vesktop'] / 'themes').mkdir(); (roots['vesktop'] / 'themes/Other.theme.css').write_text('/**\n * @name Other\n*/\n')
+        fish, css = roots['fish'] / 'conf.d/pilot-theme.fish', roots['vesktop'] / 'themes/pilot.theme.css'
+        for path in [fish, settings, css]: show('before', path)
+        before = tree(); f.start()
+        plan = f.call('theme', 'plan', 'apply', 'a'); changes, steps = '\n'.join(plan['review']['changes']), plan['review']['next']
+        assert 'fish' in changes and 'Vesktop' in changes and str(fish) in changes and str(settings) in changes, plan['review']
+        print('  Preview next: ' + json.dumps([n for n in steps if 'fish' in n or 'Vesktop' in n]), flush=True)
+        assert [n for n in steps if 'exec fish' in n] and [n for n in steps if n.startswith('Vesktop: quit it (Cmd+Q)')], steps
+        assert tree() == before, 'Preview wrote'
+        assert f.apply()['status'] == 'applied'
+        palette = f.packs[0]['palette']
+        assert f'set -g fish_color_command {palette["blue"][1:]}\n' in fish.read_text() and '#' not in fish.read_text().split('\n', 1)[1], fish.read_text()
+        got = json.loads(settings.read_text())
+        assert got['enabledThemes'] == ['pilot.theme.css'] and {k: v for k, v in got.items() if k != 'enabledThemes'} == {k: v for k, v in mine.items() if k != 'enabledThemes'}, got
+        assert css.read_text().startswith('/**\n * @name Pilot\n') and f'--background-primary: {palette["background"]};' in css.read_text()
+        for path in [fish, settings]: show('applied', path)
+        print('  applied pilot.theme.css: ' + repr(css.read_text()[:260]) + f' … {len(css.read_text().splitlines())} lines', flush=True)
+        shell = shutil.which('fish')
+        if shell:
+            env = dict(os.environ, XDG_CONFIG_HOME=str(home / '.config'), XDG_DATA_HOME=str(home / '.local/share'), XDG_CACHE_HOME=str(home / '.cache'))
+            out = subprocess.run([shell, '-c', 'echo $fish_color_command $fish_color_comment'], env=env, capture_output=True, text=True, timeout=30)
+            print(f'  real fish ({shell}) with XDG_CONFIG_HOME=fixture: {out.stdout.strip()!r}', flush=True)
+            assert out.stdout.split() == [palette['blue'][1:], palette['muted'][1:]], (out.stdout, out.stderr)
+            (roots['fish'] / 'fish_variables').unlink(missing_ok=True)
+            for d in ['.local', '.cache']: shutil.rmtree(home / d, ignore_errors=True)
+        else: print('  fish not on PATH: not run', flush=True)
+        # Vencord saving a setting writes the whole file from memory: the entry is still Pilot's, the person's change stays.
+        got['autoUpdate'] = False; settings.write_text(json.dumps(got, indent=4))
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert plan['review']['kept'] == [], plan['review']
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and f.packs[1]['palette']['background'] in css.read_text()
+        answer = f.restore(); assert answer['status'] == 'restored' and answer['kept'] == [], answer
+        assert json.loads(settings.read_text()) == dict(mine, autoUpdate=False) and not css.exists() and not fish.exists(), settings.read_text()
+        for path in [fish, settings, css]: show('restored', path)
+        f.stop()
+        f, home, roots, tree = setup('fsvk2', apps=['fish', 'vesktop'])
+        (roots['fish'] / 'conf.d').mkdir(); settings = roots['vesktop'] / 'settings/settings.json'; settings.parent.mkdir(); settings.write_text(json.dumps(mine, indent=4))
+        before = tree(); f.start(); assert f.apply()['status'] == 'applied' and f.restore()['status'] == 'restored'
+        assert tree() == before, 'Restore was not byte exact'
+        # Turned off in Vesktop's own Themes tab: that stays the person's, and Pilot's file still follows.
+        assert f.apply()['status'] == 'applied'; off = json.loads(settings.read_text()); off['enabledThemes'] = []; settings.write_text(json.dumps(off, indent=4))
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'stays off in Vesktop' in k], plan['review']
+        print('  Vesktop turned off, Preview kept: ' + json.dumps(plan['review']['kept']), flush=True)
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and json.loads(settings.read_text())['enabledThemes'] == []
+        assert f.restore()['status'] == 'restored' and json.loads(settings.read_text())['enabledThemes'] == []; f.stop()
+
     def lazygit_reads(home, roots, accent):
         # lazygit in a pty with CONFIG_DIR at the fixture (it keeps state.yml there too): it starts, draws its panels, and
         # draws the theme's accent as its active border, so it read the file's YAML and its gui.theme.
@@ -443,7 +499,7 @@ def checks(passed):
         print(f'  real lazygit ({lazygit}) with CONFIG_DIR=fixture: started, no config error, active border drawn in {accent} (38;2;{rgb})', flush=True)
         (roots['lazygit'] / 'state.yml').unlink(); shutil.rmtree(repo)
 
-    for label, check in [('all ten follow together, Preview names real files, links stay, Restore byte exact', everything),
+    for label, check in [('all twelve follow together, Preview names real files, links stay, Restore byte exact', everything),
                          ('Alacritty inside an existing [general], with no file, and skipped with its own import list', alacritty_general),
                          ('a settings file Pilot made survives the editor rewriting it', made_settings_survive_the_editor),
                          ('an absent app gets nothing; each switch persists and releases', absent_and_switches),
@@ -453,8 +509,9 @@ def checks(passed):
                          ('Apply and Restore reload Ghostty through its menu; a missing item or a closed Ghostty says so plainly', ghostty_reloads),
                          ('a broken link and a link for the generated file skip the app and write nothing', refuses),
                          ("lazygit and Neovim: Sven's shapes set and put back byte for byte and read by the real apps; under a gui of the person's; skips with why; init.vim, an own line, a return, no init", lazygit_neovim),
+                         ("fish and Vesktop: Sven's shapes set and put back byte for byte, real fish reads its colours; Vencord's whole-file rewrite keeps the entry Pilot's; turned off in Vesktop stays off", fish_vesktop),
                          ('btop: every theme key, its config set and put back byte for byte, with a config and without; a btop rewrite keeps it the person\'s', btop),
-                         ('Allow names all ten', many)]:
+                         ('Allow names all twelve', many)]:
         check(); passed('apps ' + label)
 
 

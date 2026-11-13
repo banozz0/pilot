@@ -1279,6 +1279,8 @@ final class ThemeCoordinator {
             if case .jsonMembership = claim.selector, vaults.contains(claim.root) {
                 let vault = Self.vaultLabel(claim.root, among: vaults)
                 line = done ? "Kept the Pilot snippet off in Obsidian vault \(vault)." : "The Pilot snippet stays off in Obsidian vault \(vault): you turned it off. Turn it on under CSS snippets in Obsidian's Appearance settings to see the theme there."
+            } else if case .jsonMembership = claim.selector, plan.apps.contains(where: { $0.kind == .vesktop && $0.root == claim.root }) {
+                line = done ? "Kept the Pilot theme off in Vesktop." : "The Pilot theme stays off in Vesktop: you turned it off. Turn it on under Themes in Vesktop's settings to see it there."
             } else {
                 let file = AppConfigs.tilde(claim.resolved, home: NSHomeDirectory())
                 line = done ? "Kept your change to \(file)." : "Your change to \(file) stays: you edited Pilot's part after the theme, so Pilot leaves it alone."

@@ -134,13 +134,13 @@ public struct ThemeWallpaperMutation: Codable, Equatable, Sendable {
 /// The apps a theme follows besides Ghostty, Zed and Obsidian. Paths and folder names are taken from each app's own
 /// documentation; none of these apps has been run against this code, so what each one does with the file is unverified.
 public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
-    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2, btop, lazygit, neovim
+    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2, btop, lazygit, neovim, fish, vesktop
     public static let schemeName = "Pilot Theme"
     public var name: String {
         switch self {
         case .vscode: "VS Code"; case .cursor: "Cursor"; case .windsurf: "Windsurf"
         case .kitty: "Kitty"; case .alacritty: "Alacritty"; case .wezterm: "WezTerm"; case .iterm2: "iTerm2"; case .btop: "btop"
-        case .lazygit: "lazygit"; case .neovim: "Neovim"
+        case .lazygit: "lazygit"; case .neovim: "Neovim"; case .fish: "fish"; case .vesktop: "Vesktop"
         }
     }
     /// What the app does with the theme, when a person has to do something for it to show.
@@ -152,6 +152,9 @@ public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
         case .lazygit: "lazygit takes the theme the next time it starts: quit an open one (q) and start it again."
         // Pilot never reaches into a running nvim: nothing outside it can reload its colours safely.
         case .neovim: "Neovim takes the theme the next time it starts; in one already open, run :colorscheme pilot."
+        case .fish: "fish takes the theme in each new shell; in one already open, run exec fish."
+        // Vesktop reads its settings once at start, and follows its themes folder live after that (Vencord's source).
+        case .vesktop: "Vesktop: quit it (Cmd+Q) and open it again once to turn the theme on; after that it follows each theme live."
         default: nil
         }
     }
