@@ -19,16 +19,19 @@ enum DockFaceMetrics {
 /// popover, the timer's, Calendar, Activity Monitor) or, on Set up, where it is set up; a right click lists Open page,
 /// Remove from Dock and Edit widgets.
 struct DockWidgetView: View {
-    let widget: DockWidget
+    let slot: DockSlot
     let reader: DockWidgetSources
     let store: BarItemsStore
     /// Remove from Dock edits these; nil in a render.
     var dock: DockController?
     @State private var anchor = ScreenAnchor.Box()
 
+    /// The built-in widget it is; an extension slot reads as the extension's own (Set up's words, the popover).
+    private var widget: DockWidget? { slot.widget }
+
     var body: some View {
-        let shown = reader.body(widget)
-        Button { click(shown) } label: { DockWidgetBodyView(widget: widget, shown: shown).contentShape(Rectangle()) }
+        let shown = reader.body(slot)
+        Button { click(shown) } label: { DockWidgetBodyView(title: title, symbol: slot.symbol, shown: shown).contentShape(Rectangle()) }
             .buttonStyle(.plain)
             .background(ScreenAnchor(box: anchor, rightClick: { showMenu() }))
             .help(help(shown))
@@ -42,14 +45,29 @@ struct DockWidgetView: View {
         widget == .nextEvent || widget == .timeline ? Calendar.autoupdatingCurrent.startOfDay(for: reader.sources.readings.now) : nil
     }
 
+    private var title: String { DockWidgetView.title(slot, bar: reader.extensionBar) }
+
+    /// A slot's name in the dock and on the Dock page: a widget's title, an extension's own.
+    static func title(_ slot: DockSlot, bar: ExtensionBar = .shared) -> String {
+        switch slot {
+        case .widget(let widget): widget.title
+        case .extensionItem(let id): bar.items.first { $0.id == id }?.title ?? id
+        }
+    }
+
     private func help(_ body: DockWidgetBody) -> String {
-        guard case .setUp(let why) = body else { return widget.title }
-        return "\(widget.title): " + DockWidgetBodyView.setUpWords(why)
+        guard case .setUp(let why) = body else { return title }
+        return "\(title): " + DockWidgetBodyView.setUpWords(why)
     }
 
     private func click(_ body: DockWidgetBody) {
         if case .setUp(let why) = body { return setUp(why) }
         let view = anchor.view
+        guard let widget else {
+            // An extension's bar answer: its popover, as the top bar opens it.
+            guard let id = slot.extensionID else { return }
+            return BarPanel.shared.toggle(extension: id, under: view, AnyView(ExtensionItemPopover(id: id, bar: reader.extensionBar)))
+        }
         switch widget {
         case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets:
             let id = widget.extensionID ?? widget.rawValue
@@ -82,16 +100,20 @@ struct DockWidgetView: View {
         }
     }
 
-    /// The right-click menu: the extension's page where it has one, Remove from Dock, Edit widgets (Menu bar's Dock card).
+    /// The right-click menu: the extension's page where it has one, its settings where it has some (round 4), Remove
+    /// from Dock, Edit widgets (the Dock page).
     private func showMenu() {
         guard let view = anchor.view else { return }
         BarPanel.shared.close()
         var rows: [BarMenu.Row] = []
-        if let id = widget.extensionID, reader.extensionBar.items.first(where: { $0.id == id })?.hasPage == true {
-            rows += [.pick("Open \(widget.title) page") { AppWindowController.shared.openExtensionPage(id) }, .separator]
+        if let id = slot.extensionID, reader.extensionBar.items.first(where: { $0.id == id })?.hasPage == true {
+            rows += [.pick("Open \(title) page") { AppWindowController.shared.openExtensionPage(id) }, .separator]
         }
-        rows += [.pick("Remove from Dock") { [dock, widget] in try? dock?.settings.remove(widget) },
-                 .pick("Edit widgets…") { AppWindowController.shared.open(.menuBar) }]
+        if DockPageFocus.hasSettings(slot) {
+            rows.append(.pick("Widget settings…") { [slot] in DockPageFocus.shared.open(slot) })
+        }
+        rows += [.pick("Remove from Dock") { [dock, slot] in try? dock?.settings.remove(slot) },
+                 .pick("Edit widgets…") { DockPageFocus.shared.open(nil) }]
         BarMenu.show(rows, under: view)
     }
 
@@ -103,7 +125,9 @@ struct DockWidgetView: View {
 /// A widget's body as drawn: its faces side by side, its timeline, or a Set up face.
 struct DockWidgetBodyView: View {
     @Environment(\.ink) private var ink
-    let widget: DockWidget
+    /// Its name and symbol, drawn on its Set up face.
+    let title: String
+    let symbol: String
     let shown: DockWidgetBody
 
     var body: some View {
@@ -114,7 +138,7 @@ struct DockWidgetBodyView: View {
             }
         case .timeline(let timeline): DockTimelineView(timeline: timeline)
         case .setUp:
-            DockFaceView(face: DockFace(glyph: .symbol(widget.symbol), label: widget.title, value: "Set up"), setUp: true)
+            DockFaceView(face: DockFace(glyph: .symbol(symbol), label: title, value: "Set up"), setUp: true)
         }
     }
 
@@ -127,6 +151,10 @@ struct DockWidgetBodyView: View {
         case .bluetooth: "no battery and no Bluetooth device reporting one"
         }
     }
+}
+
+extension DockWidgetBodyView {
+    init(widget: DockWidget, shown: DockWidgetBody) { self.init(title: widget.title, symbol: widget.symbol, shown: shown) }
 }
 
 /// One face: its glyph beside small capitals over the value (treatment B).
@@ -186,6 +214,8 @@ struct DockFaceView: View {
             }
             .frame(width: g + 8, height: g + 8)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        case .emoji(let text):
+            Text(text).font(.system(size: g * 0.82)).frame(width: g, height: g)
         case .ring(let share):
             ZStack {
                 Circle().stroke(ink.text.opacity(0.18), lineWidth: 2.5)

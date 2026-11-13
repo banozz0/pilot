@@ -13,22 +13,36 @@ struct DockWidgetSources {
     /// Whether the pomodoro extension, which starts the focus timer, is installed; read from its folder.
     var installed: (String) -> Bool = { DockWidgetSources.isInstalled($0) }
 
-    /// The readers `widgets` hold while the dock shows them.
-    static func kinds(_ widgets: [DockWidget]) -> Set<BarKind> {
-        Set(widgets.flatMap { widget -> [BarKind] in
+    /// The System stats widget's picks (DockWidgetOptions.stats).
+    var stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats
+
+    /// The readers `widgets` hold while the dock shows them: System stats' the stats it shows (the sampler reads only
+    /// those), an extension slot the extensions' loop.
+    static func kinds(_ widgets: [DockSlot], stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats) -> Set<BarKind> {
+        Set(widgets.flatMap { slot -> [BarKind] in
+            guard case .widget(let widget) = slot else { return [.extensions] }
             switch widget {
-            case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets: [.extensions]
-            case .system: [.cpu, .memory]
-            case .battery: [.battery, .bluetoothBatteries]
-            case .nextEvent, .timeline: [.clock]
-            case .focus: [.timer]
+            case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets: return [.extensions]
+            case .system: return stats.map(BarKind.init)
+            case .battery: return [.battery, .bluetoothBatteries]
+            case .nextEvent, .timeline: return [.clock]
+            case .focus: return [.timer]
             }
         })
     }
 
     /// The extensions whose bar answers `widgets` read: asked for the dock (ExtensionBar.hold).
-    static func extensions(_ widgets: [DockWidget]) -> Set<String> {
-        Set(widgets.filter { $0 != .focus }.compactMap(\.extensionID))
+    static func extensions(_ widgets: [DockSlot]) -> Set<String> {
+        Set(widgets.compactMap(\.extensionID))
+    }
+
+    /// What `slot` draws now.
+    func body(_ slot: DockSlot) -> DockWidgetBody {
+        switch slot {
+        case .widget(let widget): body(widget)
+        // Drawn from its answer alone: its faces, gauges or text (answered).
+        case .extensionItem(let id): answered(id, waiting: DockFace(glyph: .symbol(slot.symbol), label: id, value: "…")) { Self.generic($0, $1) }
+        }
     }
 
     /// What `widget` draws now.
@@ -51,11 +65,13 @@ struct DockWidgetSources {
             let timer = sources.timer
             if timer.countdown == nil, let id = widget.extensionID, !installed(id) { return .setUp(.install(id)) }
             return .faces([DockFaces.focus(countdown: timer.countdown, left: timer.left, title: timer.title, paused: timer.isPaused)])
-        case .system: return .faces(DockFaces.system(sources.sampler.latestValues, raw: sources.sampler.latest))
+        case .system: return .faces(DockFaces.system(stats, values: sources.sampler.latestValues, raw: sources.sampler.latest))
         case .battery:
-            // Nothing read yet: no Set up before the sampler has looked.
-            if sources.readings.battery == nil, sources.sampler.latest == nil { return .faces([waiting(widget)]) }
-            return DockFaces.battery(sources.readings.battery, bluetooth: sources.sampler.latest?.slow.bluetooth ?? []).map(DockWidgetBody.faces) ?? .setUp(.bluetooth)
+            let readings = sources.readings
+            // Nothing read yet: no Set up before the battery, the draw or the sampler was looked at.
+            if readings.battery == nil, readings.watts == nil, sources.sampler.latest == nil { return .faces([waiting(widget)]) }
+            return DockFaces.battery(readings.battery, watts: readings.watts, bluetooth: sources.sampler.latest?.slow.bluetooth ?? []).map(DockWidgetBody.faces)
+                ?? .setUp(.bluetooth)
         case .nextEvent, .timeline:
             switch calendar.access {
             case .undetermined: return .setUp(.askCalendar)
@@ -70,16 +86,33 @@ struct DockWidgetSources {
     /// An extension widget: Set up while its extension is missing or answers with a problem; a quiet face while it is
     /// asked for the first time; else `faces` of its answer.
     private func answered(_ widget: DockWidget, _ faces: (Extension.BarAnswer) -> DockWidgetBody) -> DockWidgetBody {
-        let id = widget.extensionID ?? widget.rawValue
+        answered(widget.extensionID ?? widget.rawValue, waiting: waiting(widget)) { answer, _ in faces(answer) }
+    }
+
+    /// An answer carrying faces for the dock (ADR 0010, 2026-11-13) draws them, whichever widget reads it; one without
+    /// goes through the widget's own mapping (`faces`), and an extension slot's through its gauges or text.
+    private func answered(_ id: String, waiting: DockFace, _ faces: (Extension.BarAnswer, ExtensionBar.Item) -> DockWidgetBody) -> DockWidgetBody {
         guard let item = extensionBar.items.first(where: { $0.id == id }) else {
-            return extensionBar.listed ? .setUp(.install(id)) : .faces([waiting(widget)])
+            return extensionBar.listed ? .setUp(.install(id)) : .faces([waiting])
         }
         if item.problem != nil { return .setUp(.settings(id)) }
-        guard let answer = item.answer else { return .faces([waiting(widget)]) }
-        return faces(answer)
+        guard let answer = item.answer else { return .faces([waiting]) }
+        return answer.faces.isEmpty ? faces(answer, item) : Self.generic(answer, item)
+    }
+
+    private static func generic(_ answer: Extension.BarAnswer, _ item: ExtensionBar.Item) -> DockWidgetBody {
+        .faces(DockFaces.extensionItem(answer, title: item.title, icon: item.icon))
     }
 
     private func waiting(_ widget: DockWidget) -> DockFace { DockFace(glyph: .symbol(widget.symbol), label: widget.title, value: "…") }
+
+    /// The installed extensions with a top bar item that no built-in widget reads: the Dock page's From extensions, and
+    /// what `pilot add dock-widgets --item extension:<id>` takes. Read from the manifests, so an extension no bar shows
+    /// is offered too.
+    nonisolated static func barExtensions(in folder: URL = Extension.folder) -> [Extension] {
+        Extension.find(in: folder).extensions.filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
 
     /// Whether extension `id` is installed: its folder holds a manifest.
     nonisolated static func isInstalled(_ id: String) -> Bool {

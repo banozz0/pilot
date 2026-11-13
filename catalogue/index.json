@@ -344,7 +344,7 @@
       "id": "markets",
       "title": "Markets",
       "icon": "📈",
-      "version": "1.4.1",
+      "version": "1.5.0",
       "description": "Stocks, ETFs and coins and their day's change in the menu bar, as text, with the day's line or as mini bars, one symbol, several side by side or in turn; click it for every symbol you follow with its price, its change and its line, each a click from its page on TradingView. Search TradingView as on its site (BTC, AAPL, EURUSD, SPX) to add stocks, funds, coin and currency pairs, indices and futures, and order or remove them on the page. Free data from TradingView, or Nasdaq and CoinGecko, in euros or your currency, no account or key.",
       "examples": [
         "The menu bar shows SPY ▲0.28% · BTC ▲1.4%: click it for every symbol with its price and the day's line",
@@ -381,14 +381,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "caeba62a6682a2a8c4a165d6fd04a5307c3c1cef49507fe6d3b259bba87d3983",
-          "size": 5236,
+          "sha256": "af5d1bee37ca1f9900c8325378cb476e2cd149e771704a6b18339ecffa551543",
+          "size": 5311,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "45a0231467bd7fe6282b4516268f385a399f29a701abb9bf630060c53b79a21e",
-          "size": 77166,
+          "sha256": "034916fd3e5aecbb125c82f26c20615f19b556112320617925e9e237a8ba02dc",
+          "size": 78024,
           "executable": true
         }
       ]

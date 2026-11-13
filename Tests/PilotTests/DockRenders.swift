@@ -50,28 +50,61 @@ struct DockRenders {
         DisplayFaces.register()
         let wall = Self.env["PILOT_DOCK_WALL"].flatMap(NSImage.init(contentsOfFile:))
         let look = Look.shared
-        let was = (look.style, look.themeID, look.glass)
-        defer { (look.style, look.themeID, look.glass) = was }
-        look.style = .instrument
+        let was = (look.style, look.themeID, look.glass, look.transparency)
+        defer { (look.style, look.themeID, look.glass, look.transparency) = was }
+        (look.style, look.transparency) = (.instrument, 33)
 
         for theme in ["dracula", "porcelain"] {
             look.themeID = theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)
             let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
-            let cases: [(String, CGSize, Int, Int?, Bool)] = theme == "dracula"
-                ? [("ultrawide", Self.ultrawide, 16, nil, true), ("ultrawide-hover", Self.ultrawide, 16, 6, true), ("ultrawide-solid", Self.ultrawide, 16, nil, false),
-                   ("laptop", Self.laptop, 16, nil, true), ("laptop-forty", Self.laptop, 40, nil, true)]
-                : [("ultrawide", Self.ultrawide, 16, nil, true), ("ultrawide-solid", Self.ultrawide, 16, nil, false)]
-            for (name, screen, count, hover, glass) in cases {
-                look.glass = glass
+            // Round 4: the dock's own Style, the top bar's three (Sven on build 2467), each over the wallpaper.
+            let cases: [(String, CGSize, Int, Int?, TopBarBackground)] = theme == "dracula"
+                ? [("ultrawide", Self.ultrawide, 16, nil, .glass), ("ultrawide-hover", Self.ultrawide, 16, 6, .glass), ("ultrawide-solid", Self.ultrawide, 16, nil, .solid),
+                   ("ultrawide-clear", Self.ultrawide, 16, nil, .clear), ("laptop", Self.laptop, 16, nil, .glass), ("laptop-solid", Self.laptop, 16, nil, .solid),
+                   ("laptop-clear", Self.laptop, 16, nil, .clear), ("laptop-forty", Self.laptop, 40, nil, .glass)]
+                : [("ultrawide", Self.ultrawide, 16, nil, .glass), ("ultrawide-solid", Self.ultrawide, 16, nil, .solid), ("ultrawide-clear", Self.ultrawide, 16, nil, .clear)]
+            for (name, screen, count, hover, style) in cases {
                 let desk = Desk(wall: wall, screen: screen, size: CGSize(width: min(screen.width, 1640), height: 150))
-                let strip = DockStrip(size: .medium, apps: Self.apps(count), hasWidgets: true, maxWidth: screen.width - 2 * DockPill.sideMargin,
-                                      backing: glass ? { AnyView($0.modifier(GlassStandIn(desk: desk, tint: tint))) } : nil, hoverApp: hover) {
+                let strip = DockStrip(size: .medium, apps: Self.apps(count), hasWidgets: true, maxWidth: screen.width - 2 * DockPill.sideMargin, style: style,
+                                      backing: { AnyView($0.modifier(GlassStandIn(desk: desk, tint: tint))) }, hoverApp: hover) {
                     ForEach(Array(Self.widgets.enumerated()), id: \.offset) { _, pair in DockWidgetBodyView(widget: pair.0, shown: pair.1) }
+                    DockWidgetBodyView(title: "Tailscale", symbol: "puzzlepiece.extension", shown: DockWidgetRenders.tailscale())
                 }
                 // Item colours on, the bar's default (Q251): the alert gauge in the theme's red, as DockView passes it.
                 try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look), to: dir.appendingPathComponent("dock-\(theme)-\(name).png"), wait: 1.2)
             }
+        }
+    }
+
+    /// The Dock page (round 4) with the markets extension and Tailscale installed in a throwaway folder: as it opens, and
+    /// with Stocks and crypto's settings open under its row (the extension's own, shared with its top bar item), at the
+    /// window's default width beside the sidebar.
+    @Test("The Dock page and a widget's settings", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func page() async throws {
+        let dir = try ClockRenders.dir("dock")
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let was = (look.style, look.themeID)
+        defer { (look.style, look.themeID) = was }
+        (look.style, look.themeID) = (.instrument, "dracula")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "dock-page-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let catalogue = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(path: "catalogue/extensions")
+        for id in ["markets", "tailscale"] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: catalogue.appending(path: id), to: folder.appending(path: id))
+        }
+        let engine = Engine()
+        engine.dock.settings.widgets = DockSlot.defaults + [.widget(.markets)]
+        let prefs = ExtensionsSettings(folder: folder)
+        await prefs.load()
+        for (name, editing) in [("page", nil), ("page-markets", DockSlot.widget(.markets)), ("page-system", .widget(.system))] as [(String, DockSlot?)] {
+            let focus = DockPageFocus()
+            focus.editing = editing
+            let page = ScrollView { DockPage(folder: folder, focus: focus, prefs: prefs).environment(engine) }.pilotTheme()
+            try writeRender(page.frame(width: 1000 - 232, height: editing == nil ? 1100 : 1500), to: dir.appendingPathComponent("dock-\(name).png"), wait: 1.5)
         }
     }
 

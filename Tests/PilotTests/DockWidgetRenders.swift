@@ -46,12 +46,18 @@ struct DockWidgetRenders {
         ClockEvent(title: "Malta holiday", start: at(0, 0), end: at(23, 59), allDay: true, holiday: true),
     ]
 
+    /// An installed extension's top bar answer as a widget (round 4): Tailscale's, its icon beside its title over its text.
+    static func tailscale() -> DockWidgetBody {
+        .faces(DockFaces.extensionItem(answer(#"{"type":"bar","text":"🛜 2 online"}"#), title: "Tailscale", icon: "🛜"))
+    }
+
     /// All eleven, in DockWidget's order, as the dock draws them.
     static func bodies() -> [(DockWidget, DockWidgetBody)] {
         let ai = answer(#"{"type":"bar","text":"","tone":"warn","gauges":[{"icon":"claude","text":"72%","tone":"fine"},{"icon":"openai","text":"64%","tone":"warn"}]}"#)
         let music = answer(#"{"type":"bar","text":"♫ Caribou – Can't Do Without You","blocks":[{"type":"section","aside":"Music","blocks":[{"type":"list","items":[{"id":"t","title":"Can't Do Without You","subtitle":"Caribou","icon":"🎵","image":"\#(cover())"}]}]}]}"#)
-        let markets = answer(#"{"type":"bar","text":"SPY $512","blocks":[{"type":"list","items":[{"title":"SPY · $512.30","badges":[{"text":"+0.4%","tone":"fine"}]},{"title":"BTC · $97,120","badges":[{"text":"−1.2%","tone":"alert"}]}]}]}"#)
-        let values = SystemStats.Values(cpu: 0.23, ram: 0.61, gpu: nil, down: nil, up: nil, cores: nil, diskRead: nil, diskWrite: nil)
+        // Markets 1.5's line: its faces, from its own settings (price and change shown, two symbols).
+        let markets = answer(#"{"type":"bar","text":"SPY ▲0.4% · BTC ▼1.2%","faces":[{"label":"SPY","value":"$512 ▲0.4%","tone":"fine","symbol":"chart.line.uptrend.xyaxis"},{"label":"BTC","value":"€97.1k ▼1.2%","tone":"alert","symbol":"chart.line.downtrend.xyaxis"}]}"#)
+        let values = SystemStats.Values(cpu: 0.23, ram: 0.61, gpu: nil, down: 1_240_000, up: 42_000, cores: nil, diskRead: nil, diskWrite: nil)
         let devices = [SystemStats.BluetoothDevice(name: "Magic Mouse", level: "64 %"),
                        SystemStats.BluetoothDevice(name: "AirPods Pro", level: "L 90 % · R 85 % · case 40 %", fromProfiler: true)]
         return [
@@ -59,13 +65,15 @@ struct DockWidgetRenders {
             (.nextEvent, .faces([DockFaces.nextEvent(events, now: now, calendar: calendar, locale: Locale(identifier: "en_GB"))])),
             (.nowPlaying, .faces([DockFaces.nowPlaying(music)!])),
             (.focus, .faces([DockFaces.focus(countdown: "18:42", left: 0.62, title: "Focus 2 of 4", paused: false)])),
-            (.system, .faces(DockFaces.system(values, raw: nil))),
+            (.system, .faces(DockFaces.system([.cpu, .ram, .network], values: values, raw: nil))),
             (.weather, .faces([DockFaces.weather(answer(#"{"type":"bar","text":"☀️ 24°"}"#))])),
             (.todo, .faces([DockFaces.todo(answer(#"{"type":"bar","text":"☑️ 5 · 2"}"#))])),
             (.github, .faces([DockFaces.github(answer(#"{"type":"bar","text":"2 to review","tone":"warn"}"#))])),
-            (.markets, .faces(DockFaces.markets(markets)!)),
+            // Its faces, drawn as any answer's faces are (DockWidgetSources.answered).
+            (.markets, .faces(DockFaces.extensionItem(markets, title: "Markets", icon: "📈"))),
             (.timeline, .timeline(DockFaces.timeline(events, now: now, calendar: calendar))),
-            (.battery, .faces(DockFaces.battery(nil, bluetooth: devices)!)),
+            // A Mac mini: no battery, the power it draws (Sven on build 2467).
+            (.battery, .faces(DockFaces.battery(nil, watts: 14, bluetooth: devices)!)),
         ]
     }
 

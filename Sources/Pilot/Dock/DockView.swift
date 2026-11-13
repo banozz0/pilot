@@ -35,30 +35,32 @@ struct DockView: View {
     @State private var rest: CGSize = .zero
 
     var body: some View {
-        let size = dock.settings.size, widgets = dock.settings.widgets
-        let kinds = DockWidgetSources.kinds(widgets), asked = DockWidgetSources.extensions(widgets)
-        let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar)
+        let size = dock.settings.size, widgets = dock.settings.widgets, stats = dock.settings.options.stats, magnify = dock.settings.magnify
+        let kinds = DockWidgetSources.kinds(widgets, stats: stats), asked = DockWidgetSources.extensions(widgets)
+        let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar, stats: stats)
+        let reach = size.reach(magnify)
         let byApp = Dictionary(grouping: tiler.windows, by: \.bundleId)
         let apps = DockController.apps(pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
         // Each widget is a view of its own, so a reading's tick redraws its widget, not the pill.
         DockStrip(size: size, apps: apps, hasWidgets: !widgets.isEmpty, maxWidth: DockWindow.widest(),
-                  windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock,
-                  origin: hovering ? CGFloat(size.reach.width) / 2 : 0, onHover: { hovering = $0 }) {
-            ForEach(widgets, id: \.self) { widget in DockWidgetView(widget: widget, reader: reader, store: store, dock: dock) }
+                  windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock, style: dock.settings.style, magnify: magnify,
+                  origin: hovering ? CGFloat(reach.width) / 2 : 0, onHover: { hovering = $0 }) {
+            ForEach(widgets, id: \.self) { slot in DockWidgetView(slot: slot, reader: reader, store: store, dock: dock) }
         }
             .environment(\.inTopBar, true)
             // The bar's Item colours, so a widget's warning and alert read as they do in the bar (amber, red), not
             // in the accent (the red Sven saw on Maple, whose accent is red; 2026-11-13).
             .environment(\.barItemColours, store.itemColours)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { if !hovering { rest = $0 } }
-            .frame(width: hovering ? rest.width + CGFloat(size.reach.width) : nil,
-                   height: hovering ? rest.height + CGFloat(size.reach.height) : nil, alignment: .bottom)
+            .frame(width: hovering ? rest.width + CGFloat(reach.width) : nil,
+                   height: hovering ? rest.height + CGFloat(reach.height) : nil, alignment: .bottom)
             .coordinateSpace(.named(DockPill.space))
             .onGeometryChange(for: CGSize.self) { $0.size } action: { fit($0) }
             .styled(.topBar)
             .pilotTheme()
             .onAppear { hold(kinds, asked, widgets) }
             .onChange(of: widgets) { hold(kinds, asked, widgets) }
+            .onChange(of: stats) { hold(kinds, asked, widgets) }
             .onDisappear {
                 sources.readings.hold([], replacing: &held)
                 extensionBar.hold([], for: Self.holder)
@@ -70,19 +72,20 @@ struct DockView: View {
 
     /// The widgets' readers held, their extensions asked for the dock even where no bar places them, and Calendar read
     /// (never asked) while a Calendar widget shows.
-    private func hold(_ kinds: Set<BarKind>, _ asked: Set<String>, _ widgets: [DockWidget]) {
+    private func hold(_ kinds: Set<BarKind>, _ asked: Set<String>, _ widgets: [DockSlot]) {
         sources.readings.hold(kinds, replacing: &held)
         extensionBar.hold(asked, for: Self.holder)
         follow(widgets)
     }
 
-    private func follow(_ widgets: [DockWidget]) {
-        if widgets.contains(.nextEvent) || widgets.contains(.timeline) { calendar.follow(now: sources.readings.now) } else { calendar.stop() }
+    private func follow(_ widgets: [DockSlot]) {
+        if widgets.contains(.widget(.nextEvent)) || widgets.contains(.widget(.timeline)) { calendar.follow(now: sources.readings.now) } else { calendar.stop() }
     }
 }
 
 /// The pill: the pins and running apps fitted to `maxWidth` (smaller down to 32 pt, then a scrolling row; never cut),
-/// the Dock's hairline, then the widgets, on glass that follows Look › Glass. Magnifies on hover, unless the row scrolls.
+/// the Dock's hairline, then the widgets, on the top bar's Solid, Glass or Clear (round 4). Magnifies on hover at
+/// `magnify`, unless the row scrolls or it is off.
 struct DockStrip<Widgets: View>: View {
     @Environment(\.ink) private var ink
     let size: DockSize
@@ -93,8 +96,10 @@ struct DockStrip<Widgets: View>: View {
     var windows: (DockApp) -> [AeroWindow] = { _ in [] }
     var tiler: TilerService?
     var dock: DockController?
-    /// What stands behind the pill; nil is the live glass or solid fill (DockBacking). A render passes a stand-in, as
-    /// glass draws nothing offscreen.
+    var style: TopBarBackground = .glass
+    var magnify: DockMagnification = .medium
+    /// What stands behind the pill; nil is the live ground (DockBacking). A render passes a stand-in on Glass, as glass
+    /// draws nothing offscreen.
     var backing: ((AnyView) -> AnyView)?
     /// Where the rest pill starts in DockView's box: the hover is measured from there, so the bell stays put as icons grow.
     var origin: CGFloat = 0
@@ -105,10 +110,12 @@ struct DockStrip<Widgets: View>: View {
     @State private var leaving: Task<Void, Never>?
 
     init(size: DockSize, apps: [DockApp], hasWidgets: Bool, maxWidth: CGFloat, windows: @escaping (DockApp) -> [AeroWindow] = { _ in [] },
-         tiler: TilerService? = nil, dock: DockController? = nil, backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
+         tiler: TilerService? = nil, dock: DockController? = nil, style: TopBarBackground = .glass, magnify: DockMagnification = .medium,
+         backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
          hoverApp: Int? = nil, @ViewBuilder widgets: @escaping () -> Widgets) {
         self.size = size; self.apps = apps; self.hasWidgets = hasWidgets; self.maxWidth = maxWidth; self.windows = windows
-        self.tiler = tiler; self.dock = dock; self.backing = backing; self.origin = origin; self.onHover = onHover; self.widgets = widgets
+        self.tiler = tiler; self.dock = dock; self.style = style; self.magnify = magnify; self.backing = backing; self.origin = origin
+        self.onHover = onHover; self.widgets = widgets
         let icon = CGFloat(size.icon), gap = (icon * DockPill.gapRatio).rounded()
         _hoverX = State(initialValue: hoverApp.map { CGFloat($0) * (icon + gap) + icon / 2 })
     }
@@ -147,10 +154,12 @@ struct DockStrip<Widgets: View>: View {
         }
         .frame(height: size.pill, alignment: .bottom)
         let shape = RoundedRectangle(cornerRadius: DockPill.radius, style: .continuous)
+        let shown = style.shown(transparency: Look.shared.transparency)
         Group {
-            if let backing { backing(AnyView(row)) } else { row.modifier(DockBacking(shape: shape)) }
+            if let backing, shown == .glass { backing(AnyView(row)) } else { row.modifier(DockBacking(shape: shape, style: shown)) }
         }
-        .overlay(shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1))
+        // Clear is nothing, as the top bar's: no ring either.
+        .overlay { if shown != .clear { shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1) } }
         .fixedSize()
     }
 
@@ -185,7 +194,8 @@ struct DockStrip<Widgets: View>: View {
         .padding(.bottom, DockSize.bottom)
         .animation(.spring(duration: 0.25, bounce: 0), value: hoverX == nil)
         .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .named(DockPill.space)) { phase in hover(phase) }
+        // Off: no hover at all, so the box never grows over the windows below.
+        .onContinuousHover(coordinateSpace: .named(DockPill.space)) { phase in if magnify != .off { hover(phase) } }
         if fit.scrolls {
             ScrollView(.horizontal, showsIndicators: false) { row }
                 .frame(width: max(0, maxWidth - CGFloat(fixed)))
@@ -216,30 +226,32 @@ struct DockStrip<Widgets: View>: View {
         }
     }
 
-    /// The Dock's bell: up to DockSize.magnify at the pointer, falling to none three icons either side.
+    /// The Dock's bell: up to `magnify` at the pointer, falling to none three icons either side.
     private func scale(at centre: CGFloat, icon: CGFloat) -> CGFloat {
         guard let x = hoverX else { return 1 }
         let d = abs(x - centre) / (icon * CGFloat(DockSize.reachIcons))
         guard d < 1 else { return 1 }
-        return 1 + CGFloat(DockSize.magnify - 1) * (cos(d * .pi) + 1) / 2
+        return 1 + CGFloat(magnify.scale - 1) * (cos(d * .pi) + 1) / 2
     }
 }
 
-/// The pill's ground: with Look › Glass on, Liquid Glass in the bar's tint (Look's Blur: Full regular, Light clear, Off
-/// the tint alone); off, the theme's solid bar ground.
+/// The pill's ground, the top bar's three (TopBarBackground, as shown at Look's Transparency): Solid the theme's bar
+/// ground; Glass Liquid Glass in the bar's tint whether Look › Glass is on or not, as the bar's (Look's Blur: Full
+/// regular, Light clear, Off the tint alone); Clear nothing the eye sees, yet the gaps between icons still take the click
+/// (TopBarColour.clearGround).
 struct DockBacking<S: Shape>: ViewModifier {
-    @Environment(\.style) private var style
+    @Environment(\.style) private var tokens
     let shape: S
+    let style: TopBarBackground
     var look: Look = .shared
 
     func body(content: Content) -> some View {
-        let tint = Color(nsColor: TopBarColour.tint(.theme, style: style, look: look))
-        if look.glass, let glass = look.glassBlur.glass {
-            content.glassEffect(glass.tint(tint), in: shape)
-        } else if look.glass {
-            content.background(shape.fill(tint))
-        } else {
-            content.background(shape.fill(TopBarColour.themeGround(style)))
+        switch style {
+        case .solid: content.background(shape.fill(TopBarColour.themeGround(tokens)))
+        case .clear: content.background(shape.fill(TopBarColour.clearGround))
+        case .glass:
+            let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+            if let glass = look.glassBlur.glass { content.glassEffect(glass.tint(tint), in: shape) } else { content.background(shape.fill(tint)) }
         }
     }
 }

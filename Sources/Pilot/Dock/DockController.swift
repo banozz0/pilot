@@ -183,7 +183,7 @@ final class DockController {
     var line: String {
         "dock: \(state.isOn ? "on" : "off"), saved autohide \(state.savedAutohide.map(String.init) ?? "none"), saved delay "
             + (state.delaySaved == true ? state.savedDelay.map { String($0) } ?? "absent" : "none") + ", size \(settings.size.rawValue), room "
-            + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.map(\.rawValue).joined(separator: " ")
+            + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.map(\.name).joined(separator: " ")
     }
 
     /// While on, the room follows the size; the block is written only when it changed.

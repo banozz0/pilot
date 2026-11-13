@@ -158,13 +158,14 @@ public enum DockSize: String, Codable, CaseIterable, Sendable {
     public static let top = 8.0, laneGap = 4.0, lane = 5.0, bottom = 5.0
     /// The pill's height: the icon, its dot's lane, and the room above and below.
     public var pill: Double { Self.top + icon + Self.laneGap + Self.lane + Self.bottom }
-    /// Hover magnification, the Dock's: the icon under the pointer this many times its size, falling to none
-    /// `reachIcons` icons either side.
-    public static let magnify = 1.5, reachIcons = 3.0
-    /// What the dock's box adds while the pointer is over its icons: above, the tallest magnified icon's growth; across,
-    /// the most the bell widens the row (its area, `reachIcons` icons at half the growth). Never part of `room`.
-    public var reach: (width: Double, height: Double) {
-        (width: (Self.reachIcons * icon * (Self.magnify - 1)).rounded(.up), height: (icon * (Self.magnify - 1)).rounded(.up))
+    /// Hover magnification falls to none `reachIcons` icons either side of the pointer.
+    public static let reachIcons = 3.0
+    /// What the dock's box adds while the pointer is over its icons at `magnify`: above, the tallest magnified icon's
+    /// growth; across, the most the bell widens the row (its area, `reachIcons` icons at half the growth). Never part of
+    /// `room`; nothing with magnification off, so no box above the pill ever takes the windows' clicks.
+    public func reach(_ magnify: DockMagnification) -> (width: Double, height: Double) {
+        let grow = magnify.scale - 1
+        return (width: (Self.reachIcons * icon * grow).rounded(.up), height: (icon * grow).rounded(.up))
     }
     /// The pill's gap to the screen's bottom edge.
     public static let margin = 8.0
@@ -172,17 +173,66 @@ public enum DockSize: String, Codable, CaseIterable, Sendable {
     public var room: Int { Int((pill + Self.margin).rounded(.up)) }
 }
 
+/// Hover magnification (round 4, Sven 2026-11-13: the Dock page's Magnification): the icon under the pointer this many
+/// times its size. Medium is round 2's, the Dock's own default look.
+public enum DockMagnification: String, Codable, CaseIterable, Sendable {
+    case off, small, medium, large
+
+    public var scale: Double {
+        switch self {
+        case .off: 1
+        case .small: 1.25
+        case .medium: 1.5
+        case .large: 1.75
+        }
+    }
+
+    public var title: String { rawValue.capitalized }
+}
+
+/// A widget's own choices (round 4, Sven 2026-11-13: "customise widgets aswell"), one field per widget that has any, so
+/// a later choice (round 5's battery looks, clocks) is one more field read with its default.
+public struct DockWidgetOptions: Codable, Equatable, Sendable {
+    /// System stats: the readings it shows, any the top bar's stats items read, in MenuBarStats.Stat's order.
+    public var stats: [MenuBarStats.Stat]
+
+    public static let defaultStats: [MenuBarStats.Stat] = [.cpu, .ram]
+
+    public init(stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats) { self.stats = stats }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // By name, so a stat a later Pilot adds is dropped here, never the whole list.
+        let names = (try? c.decodeIfPresent([String].self, forKey: .stats)) ?? nil
+        stats = names.map { $0.compactMap(MenuBarStats.Stat.init(rawValue:)) } ?? Self.defaultStats
+    }
+
+    /// Picks `stats` for System stats, each once, in the stats' own order; none leaves them as they are.
+    public mutating func pick(_ picked: [MenuBarStats.Stat]) {
+        guard !picked.isEmpty else { return }
+        stats = MenuBarStats.Stat.allCases.filter(picked.contains)
+    }
+}
+
+extension TopBarBackground: Codable {}
+
 /// The dock's choices, saved as one (`dock.settings`).
 public struct DockSettings: Codable, Equatable, Sendable {
     public var size: DockSize
-    /// Its widgets in Sven's order (design round 3, Q215): any of the eleven, each once.
-    public var widgets: [DockWidget]
+    /// What it stands on, the top bar's own choice (round 4, Sven 2026-11-13: "solid, glass and clear like everything
+    /// else"): Glass by default.
+    public var style: TopBarBackground = .glass
+    public var magnify: DockMagnification = .medium
+    /// Its widgets in Sven's order (design round 3, Q215): any of the eleven, each once, and installed extensions' bar
+    /// answers (round 4).
+    public var widgets: [DockSlot]
+    public var options = DockWidgetOptions()
     /// Pilot's own pins over the macOS Dock's, whose list is read and never written (spec pilot-dock; Sven on build 2454:
     /// Keep in Dock and Remove from Dock): apps kept past the Dock's own, and the Dock's pins taken out, by `DockPin.key`.
     public var kept: [DockPin] = []
     public var removed: [String] = []
 
-    public init(size: DockSize = .medium, widgets: [DockWidget] = DockWidget.defaults) { self.size = size; self.widgets = widgets }
+    public init(size: DockSize = .medium, widgets: [DockSlot] = DockSlot.defaults) { self.size = size; self.widgets = widgets }
 
     /// The dock's pins: the macOS Dock's (`dock`, Finder first) less the ones taken out, then the ones kept, in order.
     public func pinned(_ dock: [DockPin]) -> [DockPin] {
@@ -206,25 +256,28 @@ public struct DockSettings: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         size = (try? c.decode(DockSize.self, forKey: .size)) ?? .medium
-        // Saved as names: a list from before round 3 reads through DockWidget.migrated.
-        widgets = (try? c.decode([String].self, forKey: .widgets)).map(DockWidget.migrated) ?? DockWidget.defaults
+        style = (try? c.decodeIfPresent(TopBarBackground.self, forKey: .style)) ?? .glass
+        magnify = (try? c.decodeIfPresent(DockMagnification.self, forKey: .magnify)) ?? .medium
+        // Saved as names (DockSlot's Codable): a list from before round 3 reads through DockSlot.migrated.
+        widgets = (try? c.decode([String].self, forKey: .widgets)).map(DockSlot.migrated) ?? DockSlot.defaults
+        options = (try? c.decodeIfPresent(DockWidgetOptions.self, forKey: .options)) ?? DockWidgetOptions()
         kept = (try? c.decodeIfPresent([DockPin].self, forKey: .kept)) ?? []
         removed = (try? c.decodeIfPresent([String].self, forKey: .removed)) ?? []
     }
 
     /// Turns `widget` on, at `index` in the order (the end when nil or past it).
-    public mutating func add(_ widget: DockWidget, at index: Int? = nil) throws(DockWidgetError) {
-        guard !widgets.contains(widget) else { throw .already(widget.rawValue) }
+    public mutating func add(_ widget: DockSlot, at index: Int? = nil) throws(DockWidgetError) {
+        guard !widgets.contains(widget) else { throw .already(widget.name) }
         widgets.insert(widget, at: min(max(index ?? widgets.count, 0), widgets.count))
     }
 
-    public mutating func remove(_ widget: DockWidget) throws(DockWidgetError) {
-        guard let index = widgets.firstIndex(of: widget) else { throw .missing(widget.rawValue) }
+    public mutating func remove(_ widget: DockSlot) throws(DockWidgetError) {
+        guard let index = widgets.firstIndex(of: widget) else { throw .missing(widget.name) }
         widgets.remove(at: index)
     }
 
     /// Moves an on widget `by` places along the order (negative: toward the icons), held to the ends.
-    public mutating func move(_ widget: DockWidget, by: Int) {
+    public mutating func move(_ widget: DockSlot, by: Int) {
         guard let from = widgets.firstIndex(of: widget) else { return }
         let to = min(max(from + by, 0), widgets.count - 1)
         guard to != from else { return }
@@ -238,7 +291,7 @@ public enum DockWidgetError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .unknown(let name): "\(name) is no dock widget: " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ")
+        case .unknown(let name): "\(name) is no dock widget: " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ") + ", or extension:<id> for an installed extension with a menu bar item"
         case .already(let name): "\(name) is in the dock already"
         case .missing(let name): "\(name) is not in the dock"
         }

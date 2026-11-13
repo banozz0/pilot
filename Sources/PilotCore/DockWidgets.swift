@@ -3,7 +3,7 @@ import Foundation
 /// The dock's widgets (design round 3, Sven 2026-11-13: Q214 B, label over value; Q215 the eleven; revenue left out). Each
 /// reads one of Pilot's own readers or an extension's bar answer and draws as faces: a glyph beside a small capitals
 /// label over a value. Saved by raw value in DockSettings.widgets, in Sven's order.
-public enum DockWidget: String, CaseIterable, Codable, Sendable {
+public enum DockWidget: String, CaseIterable, Sendable {
     case aiUsage = "ai-usage", nextEvent = "next-event", nowPlaying = "now-playing", focus, system, weather
     case todo, github, markets, timeline, battery
 
@@ -49,8 +49,8 @@ public enum DockWidget: String, CaseIterable, Codable, Sendable {
         case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets: "the \(extensionID ?? rawValue) extension's bar item"
         case .nextEvent, .timeline: "Calendar, as the clock reads it"
         case .focus: "Pilot's timer (the Pomodoro extension starts it)"
-        case .system: "Pilot's CPU and memory readings"
-        case .battery: "the Mac's battery, else its Bluetooth devices'"
+        case .system: "Pilot's system readings, the top bar's stats"
+        case .battery: "the Mac's battery, else the power it draws, else its Bluetooth devices'"
         }
     }
 
@@ -75,12 +75,6 @@ public enum DockWidget: String, CaseIterable, Codable, Sendable {
     public static func legacy(_ name: String) -> DockWidget? {
         if let widget = DockWidget(rawValue: name) { return widget }
         switch name {
-        case "extension:ai-usage": return .aiUsage
-        case "extension:now-playing": return .nowPlaying
-        case "extension:weather": return .weather
-        case "extension:todo": return .todo
-        case "extension:github": return .github
-        case "extension:markets": return .markets
         case "kind:timer", "timer", "extension:pomodoro": return .focus
         case "kind:cpu", "kind:memory", "cpu", "memory": return .system
         case "kind:battery", "kind:bluetoothBatteries", "battery": return .battery
@@ -88,14 +82,78 @@ public enum DockWidget: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The catalogue extensions a built-in widget reads, so the Dock page's From extensions leaves them out.
+    public static let extensionIDs: Set<String> = Set(allCases.compactMap(\.extensionID))
+}
+
+/// One place in the dock's widget row (round 4, Sven 2026-11-13: "how can people add their own widgets"): one of the
+/// eleven built-in widgets, or an installed extension's top bar answer drawn as faces (DockFaces.extensionItem). Saved by
+/// name: a widget's raw value, or `extension:<id>`.
+public enum DockSlot: Hashable, Sendable, Codable {
+    case widget(DockWidget)
+    case extensionItem(String)
+
+    public static let defaults: [DockSlot] = DockWidget.defaults.map(DockSlot.widget)
+    static let extensionPrefix = "extension:"
+
+    public var name: String {
+        switch self {
+        case .widget(let widget): widget.rawValue
+        case .extensionItem(let id): Self.extensionPrefix + id
+        }
+    }
+
+    public var widget: DockWidget? { if case .widget(let widget) = self { widget } else { nil } }
+
+    /// What it reads, for the Dock page and `pilot dock-widgets`.
+    public var reads: String {
+        switch self {
+        case .widget(let widget): widget.reads
+        case .extensionItem(let id): "the \(id) extension's top bar item"
+        }
+    }
+
+    public var symbol: String { widget?.symbol ?? "puzzlepiece.extension" }
+
+    /// Saved as its name, so an older Pilot (round 3's) still reads the list and drops the names it does not know.
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(name)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let name = try decoder.singleValueContainer().decode(String.self)
+        guard let slot = DockSlot(name: name) else { throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "no dock widget \(name)")) }
+        self = slot
+    }
+
+    /// The extension whose bar answer it reads: an extension slot's, or a built-in widget's.
+    public var extensionID: String? {
+        switch self {
+        case .widget(let widget): widget == .focus ? nil : widget.extensionID
+        case .extensionItem(let id): id
+        }
+    }
+
+    /// A name as `pilot dock-widgets` takes it: a widget's raw value or title, or `extension:<id>`; an extension one of
+    /// the built-in widgets reads is that widget (`extension:markets` is Stocks and crypto).
+    public init?(name: String) {
+        let word = name.trimmingCharacters(in: .whitespaces)
+        if let widget = DockWidget(name: word) ?? DockWidget.legacy(word) { self = .widget(widget); return }
+        guard word.hasPrefix(Self.extensionPrefix) else { return nil }
+        let id = String(word.dropFirst(Self.extensionPrefix.count))
+        guard ThemePack.validID(id) else { return nil }
+        self = DockWidget.allCases.first { $0 != .focus && $0.extensionID == id }.map(DockSlot.widget) ?? .extensionItem(id)
+    }
+
     /// Look A's saved three before round 3: a list that is still exactly them reads as the new six (Sven picked those).
     static let lookADefaults = ["extension:ai-usage", "kind:timer", "extension:weather"]
 
     /// A saved list read now: the new names kept, the old ones mapped, each once, the rest dropped.
-    public static func migrated(_ saved: [String]) -> [DockWidget] {
+    public static func migrated(_ saved: [String]) -> [DockSlot] {
         if saved == lookADefaults { return defaults }
-        var seen = Set<DockWidget>()
-        return saved.compactMap(legacy).filter { seen.insert($0).inserted }
+        var seen = Set<DockSlot>()
+        return saved.compactMap(DockSlot.init(name:)).filter { seen.insert($0).inserted }
     }
 }
 
@@ -112,6 +170,8 @@ public struct DockFace: Equatable, Sendable {
         case image(Data)
         /// A ring filled to its share: the focus timer's time left.
         case ring(Double)
+        /// An extension's own icon, an emoji as its manifest gives it.
+        case emoji(String)
     }
 
     public var glyph: Glyph
@@ -246,17 +306,23 @@ public enum DockFaces {
         return DockFace(glyph: .ring(left ?? 0), label: paused ? "Paused" : title.flatMap { $0.isEmpty ? nil : $0 } ?? "Focus", value: countdown)
     }
 
-    /// System stats: CPU and memory, each over its share, amber or red as hard as it runs.
-    public static func system(_ values: SystemStats.Values?, raw: SystemStats.Raw?) -> [DockFace] {
-        [(MenuBarStats.Stat.cpu, "cpu", "CPU"), (.ram, "memorychip", "Memory")].map { stat, symbol, label in
-            DockFace(glyph: .symbol(symbol), label: label, value: MenuBarStats.value(stat, values: values, raw: raw) ?? "–",
-                     tone: tone(MenuBarStats.level(stat, values: values, raw: raw)), meter: MenuBarStats.share(stat, values: values, raw: raw))
+    /// System stats: the `stats` picked (round 4; CPU and memory by default), each by the top bar's name and glyph over
+    /// its value, amber or red as hard as it runs. A reading this Mac lacks (MenuBarStats.value's nil, once something was
+    /// read) is left out.
+    public static func system(_ stats: [MenuBarStats.Stat], values: SystemStats.Values?, raw: SystemStats.Raw?) -> [DockFace] {
+        stats.compactMap { stat in
+            let value = MenuBarStats.value(stat, values: values, raw: raw)
+            if value == nil, raw != nil { return nil }
+            return DockFace(glyph: .symbol(stat.symbol), label: BarKind(stat).title, value: value ?? "–",
+                            tone: tone(MenuBarStats.level(stat, values: values, raw: raw)), meter: MenuBarStats.share(stat, values: values, raw: raw))
         }
     }
 
-    /// Battery: the Mac's own, charging or not; on a Mac with none, the Bluetooth devices' (two at most, lowest first).
-    /// Nil with neither (Set up).
-    public static func battery(_ battery: SystemStats.Battery?, bluetooth: [SystemStats.BluetoothDevice]) -> [DockFace]? {
+    /// Battery: the Mac's own, charging or not; on a Mac with none (a Mac mini), the power it draws as the menu bar's
+    /// Power draw item shows it (Sven on build 2467); with neither, the Bluetooth devices' (two at most, lowest first).
+    /// Nil with none of them (Set up).
+    public static func battery(_ battery: SystemStats.Battery?, watts: Int? = nil, bluetooth: [SystemStats.BluetoothDevice]) -> [DockFace]? {
+        if battery == nil, let watts { return [DockFace(glyph: .symbol("bolt.fill"), label: "Power draw", value: "\(watts) W")] }
         if let battery {
             let level = MenuBarStats.level(battery)
             return [DockFace(glyph: .symbol(battery.charging ? "battery.100percent.bolt" : batterySymbol(battery.percent)),
@@ -323,6 +389,24 @@ public enum DockFaces {
         let to = ([20, at + 1] + spans.map(\.end)).max().map { min(24, $0.rounded(.up)) } ?? 20
         let left = today.filter { $0.end > now }.count
         return DockTimeline(from: from, to: to, now: at, spans: spans, label: left == 0 ? "Today · clear" : left == 1 ? "Today · 1 left" : "Today · \(left) left")
+    }
+
+    /// An extension's top bar answer in the dock (round 4): the faces it sends for a dock (ADR 0010, 2026-11-13), else a
+    /// face per gauge (its label over its text), else its icon beside its title over its text, the leading emoji gone.
+    public static func extensionItem(_ answer: Extension.BarAnswer, title: String, icon: String?) -> [DockFace] {
+        let glyph: (String?) -> DockFace.Glyph = { symbol in symbol.map { .symbol($0) } ?? icon.map(DockFace.Glyph.emoji) ?? .symbol("puzzlepiece.extension") }
+        if !answer.faces.isEmpty {
+            return answer.faces.map { DockFace(glyph: glyph($0.symbol), label: $0.label, value: $0.value, tone: $0.tone) }
+        }
+        if !answer.gauges.isEmpty {
+            return answer.gauges.map { g in
+                DockFace(glyph: g.icon.map(DockFace.Glyph.provider) ?? glyph(nil), label: g.label.isEmpty ? title : g.label,
+                         value: g.text.isEmpty ? g.meters.first.map { "\(Int($0.rounded()))%" } ?? "–" : g.text, tone: g.tone,
+                         meter: g.meters.first.map { $0 / 100 })
+            }
+        }
+        let text = plain(answer.text)
+        return [DockFace(glyph: glyph(nil), label: title, value: text.isEmpty ? "–" : text, tone: answer.tone)]
     }
 
     /// A reading's level as a face's tone.
