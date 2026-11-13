@@ -32,6 +32,9 @@ final class Look {
     var themeID: String {
         didSet {
             defaults.set(themeID, forKey: Key.theme)
+            // A removed theme is never worn hidden: Restore default, a style's fallback or a pick brings it back (Sven's
+            // coordinator, after build 2445).
+            if hiddenThemes.contains(themeID) { hiddenThemes.remove(themeID) }
             if pack == nil { defaults.set(try? ThemeDigest.encoded(ThemeNativePalette.stock(themeID)), forKey: "look.appliedPalette") }
             resolve()
         }
@@ -217,8 +220,9 @@ final class Look {
         if let savedStyle, savedStyle != style.rawValue { defaults.set(style.rawValue, forKey: Key.style) }
         defaults.removeObject(forKey: Key.layout)
         let saved = defaults.string(forKey: Key.theme)
-        themeID = PilotTheme.current(saved)
-        hiddenThemes = Set(defaults.stringArray(forKey: Key.hiddenThemes) ?? [])
+        let worn = PilotTheme.current(saved)
+        themeID = worn
+        hiddenThemes = Set(defaults.stringArray(forKey: Key.hiddenThemes) ?? []).subtracting([worn])
         // A saved Strength (80 where only a material was picked) is carried over once, under Transparency's own key, as
         // the Transparency whose ground draws what it drew.
         let material = defaults.string(forKey: Key.material)

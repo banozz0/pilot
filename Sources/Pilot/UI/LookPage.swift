@@ -256,9 +256,12 @@ private struct ThemePackControls: View {
     @State private var selected = ""
     /// The pack the Delete confirmation asks about.
     @State private var deleting: ThemePack?
-    /// Pilot's own packs and stock themes can't be deleted; the applied one is refused with its reason.
+    /// Delete removes a pack you made; one of Pilot's own is hidden, as Look › Catalogue's Remove does (Sven's
+    /// coordinator, after build 2445). The theme in use, and the last one, are refused with their reason.
     @State private var store: ThemePackStore?
-    private var deletable: Bool { packs.contains { $0.id == selected } && store?.isPilots(selected) == false }
+    private var deletable: Bool { packs.contains { $0.id == selected } }
+    /// Whether the pack Delete asks about is one of Pilot's own, which is only hidden.
+    private var deletingOwn: Bool { deleting.map { store?.isPilots($0.id) == true } ?? false }
     @State private var plan: ThemePlan?
     @State private var outcome = ""
     @State private var outcomeDetails = ""
@@ -319,9 +322,11 @@ private struct ThemePackControls: View {
                 Button("Export…") { exportPack() }.disabled(selected.isEmpty)
                 Button("Delete…") { deleting = packs.first { $0.id == selected } }.disabled(!deletable)
             }
-            .confirmationDialog("Delete \(deleting?.title ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-                Button("Delete", role: .destructive) { deletePack() }
-            } message: { Text("Its folder and pictures are removed. This can't be undone.") }
+            .confirmationDialog("\(deletingOwn ? "Remove" : "Delete") \(deleting?.title ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+                Button(deletingOwn ? "Remove" : "Delete", role: .destructive) { deletePack() }
+            } message: {
+                Text(deletingOwn ? ThemeCatalogueGallery.removeNote(.builtIn) : "Its folder and pictures are removed. This can't be undone.")
+            }
             if let apps {
                 if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
                 if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
@@ -402,11 +407,11 @@ private struct ThemePackControls: View {
         deleting = nil
         do {
             let owner = try ThemeCoordinator.production()
-            try owner.delete(pack.id)
+            let hidden = try owner.delete(pack.id)
             packs = try owner.store.list()
             if selected == pack.id { selected = look.themeID }
             plan = nil; draft = nil; outcomeDetails = ""
-            outcome = "\(pack.title) deleted."
+            outcome = hidden ? "\(pack.title) removed. Look › Catalogue's Get brings it back." : "\(pack.title) deleted."
         } catch { outcome = String(describing: error) }
     }
     private func exportPack() {
