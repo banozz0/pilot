@@ -282,7 +282,10 @@ private struct ThemePackControls: View {
                      mode: Binding(get: { following.mode != false }, set: { value in
                          do { following = try ThemeCoordinator.production().stageMode(follow: value); plan = nil }
                          catch { outcome = String(describing: error) }
-                     })) {
+                     }),
+                     // Right-click: Apply theme's press on that card, and Delete…'s question, so refusals read the same.
+                     menu: ThemeCardMenu(apply: { id in tryOn(id); press(id) },
+                                         remove: { id in deleting = packs.first { $0.id == id } })) {
             if let plan { preview(plan) }
             if !outcome.isEmpty { Text(outcome).foregroundStyle(ink.text2).textSelection(.enabled) }
             if !outcomeDetails.isEmpty {
@@ -293,6 +296,12 @@ private struct ThemePackControls: View {
                     save: { save(review: false) }, review: { save(review: true) }, cancel: { draft = nil })
             }
         } more: { more }
+        // On the section, not inside More's fold: a card's right-click Remove… asks it with More folded too.
+        .confirmationDialog("\(deletingOwn ? "Remove" : "Delete") \(deleting?.title ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button(deletingOwn ? "Remove" : "Delete", role: .destructive) { deletePack() }
+        } message: {
+            Text(deletingOwn ? ThemeCatalogueGallery.removeNote(.builtIn) : "Its folder and pictures are removed. This can't be undone.")
+        }
         .onDisappear { editor.invalidate(); look.endTrial(keep: !applied) }
         .task {
             do {
@@ -321,11 +330,6 @@ private struct ThemePackControls: View {
                 Button("Edit") { edit(copy: false) }.disabled(selected.isEmpty)
                 Button("Export…") { exportPack() }.disabled(selected.isEmpty)
                 Button("Delete…") { deleting = packs.first { $0.id == selected } }.disabled(!deletable)
-            }
-            .confirmationDialog("\(deletingOwn ? "Remove" : "Delete") \(deleting?.title ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-                Button(deletingOwn ? "Remove" : "Delete", role: .destructive) { deletePack() }
-            } message: {
-                Text(deletingOwn ? ThemeCatalogueGallery.removeNote(.builtIn) : "Its folder and pictures are removed. This can't be undone.")
             }
             if let apps {
                 if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
@@ -824,6 +828,8 @@ struct ThemeSection<Detail: View, More: View>: View {
     let restore: () -> Void
     /// Whether Apply also switches macOS to the theme's Light or Dark mode (Sven Q43, on by default).
     var mode: Binding<Bool>? = nil
+    /// The cards' right-click Apply and Remove….
+    var menu: ThemeCardMenu? = nil
     @ViewBuilder var detail: Detail
     @ViewBuilder var more: More
 
@@ -837,7 +843,7 @@ struct ThemeSection<Detail: View, More: View>: View {
                 }
             }
             VStack(alignment: .leading, spacing: 12) {
-                ThemeCards(themes: themes, picked: picked, columns: columns, pick: pick).disabled(running)
+                ThemeCards(themes: themes, picked: picked, columns: columns, pick: pick, menu: menu).disabled(running)
                 if let mode { Toggle("Switch macOS to light or dark with the theme", isOn: mode).disabled(running) }
                 detail
                 KitFold(title: "More") { more }
@@ -852,6 +858,9 @@ struct ThemeCards: View {
     let picked: String
     let columns: Int
     let pick: (String) -> Void
+    /// A card's right-click Apply and Remove… (Sven: "i should be able to right click a theme in look and remove or
+    /// apply"); none without them.
+    var menu: ThemeCardMenu? = nil
     @FocusState private var focused: String?
 
     var body: some View {
@@ -870,6 +879,12 @@ struct ThemeCards: View {
                         .focused($focused, equals: theme.id)
                         .focusEffectDisabled()
                         .onKeyPress(.return) { pick(theme.id); return .handled }
+                        .contextMenu {
+                            if let menu {
+                                Button("Apply") { menu.apply(theme.id) }
+                                Button("Remove…", role: .destructive) { menu.remove(theme.id) }
+                            }
+                        }
                     }
                 }
             }
@@ -880,6 +895,13 @@ struct ThemeCards: View {
             if themes.indices.contains(at + step) { focused = themes[at + step].id }
         }
     }
+}
+
+/// A theme card's right-click menu: Apply, as Apply theme does, and Remove…, as More's Delete… asks; both through
+/// ThemeCoordinator, which refuses the theme in use and the last one, as Look › Catalogue's tiles do.
+struct ThemeCardMenu {
+    let apply: (String) -> Void
+    let remove: (String) -> Void
 }
 
 /// Sven's theme card: three palette dots, a small window in the theme, the name in the theme's own display face, its
