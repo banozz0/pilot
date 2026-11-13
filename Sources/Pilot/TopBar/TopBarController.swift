@@ -429,14 +429,29 @@ final class TopBarPanel: NSPanel {
 
     func pin(_ frame: NSRect) {
         pinned = frame
+        refused = nil
         snapBack()
     }
 
+    /// Inside its own put-back: the resize that putting back makes comes here again and is left alone.
+    private var snapping = false
+    /// The pinned frame AppKit would not take (its constraints held the window to another size): kept as AppKit has it
+    /// until the next pin, never put back again.
+    private var refused: NSRect?
+
     @objc private func snapBack() {
-        guard let pinned, frame != pinned else { return }
+        guard let pinned, frame != pinned, !snapping, refused != pinned else { return }
         // Logged, so whatever moves a bar shows in the log rather than being quietly undone.
         tblog.notice("top bar moved to \(String(describing: self.frame), privacy: .public), put back at \(String(describing: pinned), privacy: .public)")
+        snapping = true
+        defer { snapping = false }
         setFrame(pinned, display: true)
+        // A frame AppKit refuses (a Pills island 30 wide that its constraints held at 242, Sven on build 2433): putting it
+        // back again from its own resize notification recursed inside layout until the stack ran out. Keep AppKit's.
+        if frame != pinned {
+            refused = pinned
+            tblog.error("top bar kept at \(String(describing: self.frame), privacy: .public): AppKit refused \(String(describing: pinned), privacy: .public)")
+        }
     }
 
     /// The bar sits in the menu bar's strip, where AppKit's constraint would push it below the menu bar.
