@@ -183,7 +183,11 @@ public enum Abilities {
         ("system.output:", "Sends the Mac's sound to @."),
     ]
 
-    static let lines: [String: String] = [
+    /// Every action's line; the pill's two only once it ships (PillFeature), as SystemModule registers them only then.
+    static let lines: [String: String] = PillFeature.released ? everyLine
+        : everyLine.filter { $0.key != "system.pill" && $0.key != "system.nextPillView" }
+
+    private static let everyLine: [String: String] = [
         // Pilot
         "engine.sheet": "Opens every bind in the menu's Learn › Keybindings; Return runs one.",
         "engine.openWindow": "Opens this window.",

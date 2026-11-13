@@ -9,8 +9,8 @@ import UniformTypeIdentifiers
 /// Pilot's image viewer (Sven, 2026-11-12, Q158): PNG, JPEG, HEIC, GIF, WebP, TIFF and BMP open here from Finder, Open
 /// With, a default Sven picked, `open -a Pilot`, Pilot Files, `pilot files open` and `pilot://view`. One window an open, on
 /// a solid ground in the capture editor's look: fitted to the window, zoomed with a pinch, ⌘-scroll, ⌘+ ⌘− ⌘0 or a
-/// double-click (100 %), Left and Right through the pictures opened together (several picked in Finder: only those, in
-/// Finder's name order; one: its folder's), Space or Esc to close; Mark up opens the capture editor on it, whose Done
+/// double-click (100 %), Left and Right through the pictures opened together (several picked in Finder or Pilot Files: only
+/// those, in the order handed over; one: its folder's), Space or Esc to close; Mark up opens the capture editor on it, whose Done
 /// asks before it writes over the file (Save a copy is the default). Lean (story 142): one picture held, decoded at the
 /// screen's size and read whole only for a press that needs it; the folder is a list of names.
 @MainActor
@@ -126,8 +126,8 @@ final class ImageViewerModel {
     /// The pictures opened together, by name, when more than one was: Left and Right step through only these. Nil: the
     /// folder's pictures.
     @ObservationIgnored private var chosen: [URL]?
-    /// The picture the last Move to Trash took, which an undo puts back among `chosen`.
-    @ObservationIgnored private var trashed: URL?
+    /// The picture the last Move to Trash took and its place among `chosen`, where an undo puts it back.
+    @ObservationIgnored private var trashed: (url: URL, at: Int?)?
     /// The picture shown, upright: the screen-size read (`base`), a sharper read while a zoom needs one, or an animation's
     /// frame; nil while it is read or unreadable.
     private(set) var image: CGImage?
@@ -169,10 +169,10 @@ final class ImageViewerModel {
     var size: CGSize { CGSize(width: pixels.width / scale, height: pixels.height / scale) }
 
     init(files: [URL], longest: Int, backing: CGFloat) {
-        let chosen = files.count > 1 ? WallpaperCycle.sortedByName(files) : nil
-        self.chosen = chosen
-        self.files = chosen ?? files
-        self.index = (chosen ?? files).firstIndex(of: files[0]) ?? 0
+        // Several opened together step in the order they were handed over: Pilot Files' list order, Finder's selection.
+        chosen = files.count > 1 ? files : nil
+        self.files = files
+        self.index = 0
         self.longest = longest
         self.backing = backing
     }
@@ -189,9 +189,11 @@ final class ImageViewerModel {
         await read?.value
     }
 
-    /// More pictures from the same open: the set grows to hold them, by name, the picture shown kept.
+    /// More pictures from the same open, handed over in parts: they join the set after the ones before, each once, the
+    /// picture shown kept.
     func add(_ more: [URL]) {
-        let set = WallpaperCycle.sortedByName(Array(Set((chosen ?? [file]) + more)))
+        var set = chosen ?? [file]
+        for url in more where !set.contains(url) { set.append(url) }
         guard set != chosen else { return }
         chosen = set
         relist(reload: false)
@@ -205,7 +207,9 @@ final class ImageViewerModel {
             let listed = await Task.detached {
                 chosen.map { $0.filter { FileManager.default.fileExists(atPath: $0.path) } } ?? ViewerImages.siblings(of: current)
             }.value
-            guard current == file else { return }
+            // A listing made for another set is dropped: a folder's listing landing after more pictures of the same open
+            // joined would put the whole folder back (Sven on build 2409: "of 9" for 6 picked).
+            guard current == file, chosen == self.chosen else { return }
             files = listed.isEmpty ? [current] : listed
             index = files.firstIndex(of: current) ?? min(index, files.count - 1)
             if reload { load() }
@@ -384,9 +388,9 @@ final class ImageViewerModel {
                 // FileOps' refusal word for word (its message is the description).
                 return say(error.localizedDescription)
             }
+            trashed = (url, chosen?.firstIndex(of: url))
             files.removeAll { $0 == url }
             chosen?.removeAll { $0 == url }
-            trashed = url
             guard !files.isEmpty else { return close() }
             index = min(index, files.count - 1)
             load()
@@ -406,7 +410,7 @@ final class ImageViewerModel {
                 return say(error.localizedDescription)
             }
             undo = false
-            if let back = trashed, chosen != nil { chosen = WallpaperCycle.sortedByName((chosen ?? []) + [back]) }
+            if let (back, at) = trashed, let at, var set = chosen { set.insert(back, at: min(at, set.count)); chosen = set }
             trashed = nil
             relist(reload: false)
             say("Put back")

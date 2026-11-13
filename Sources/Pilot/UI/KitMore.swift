@@ -88,7 +88,8 @@ extension EnvironmentValues {
 
 extension View {
     /// A block on a More tab under `place`: the spot a link, the search and its index scroll to, and where the index
-    /// learns which block is in view.
+    /// learns which block is in view. More's blocks stay one stack (Q60): the modifier hides KitBlock's PageFlow mark, so
+    /// two blocks never sit side by side and cross the spy's band together.
     func moreBlock(_ place: AppSection) -> some View { modifier(MoreBlockTag(place: place)) }
 }
 

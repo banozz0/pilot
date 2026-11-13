@@ -27,6 +27,9 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     case modes
     /// The extension timer's item (ExtensionTimer); it was the pomodoro's, so saved layouts keep reading its raw value.
     case clock, timer = "pomodoro"
+    /// Other apps' notifications in the top bar (Sven, 2026-11-12): a bell with what arrived unread; a click hangs their list
+    /// under it. Draws only while Notifications show in the top bar; picking Top bar puts it on (NotificationSettings.showIn).
+    case notifications
     /// The kind of an extension's own bar item (story 161, ExtensionBar): each placed in the top bar is an entry of its
     /// own in the one order, its `extensionID` naming it (Sven, 2026-11-04, spec pilot-1.1 T50); in the macOS menu bar each
     /// is its own item (Surfaces v2, BarSettings.extensionItems). The entry with no id is where they all drew as one slot
@@ -62,6 +65,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .modes: "Status lights"
         case .clock: "Clock"
         case .timer: "Timer"
+        case .notifications: "Notifications"
         case .extensions: "Extensions"
         case .spacer: "Spacer"
         case .divider: "Divider"
@@ -75,7 +79,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .cpu, .memory, .network, .graphics, .storage, .heat: .readings
         case .battery, .bluetoothBatteries, .keepAwake, .power: .power
         case .volume, .keyboardLayout, .wifi, .displays: .controls
-        case .modes, .clock, .timer: .timeAndFocus
+        case .modes, .clock, .timer, .notifications: .timeAndFocus
         case .terminal, .askAI, .pill, .capture: .drops
         case .extensions: .extensions
         case .spacer, .divider, .group: .layout
@@ -106,6 +110,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .modes: [.icons]
         case .clock: [.time, .dateTime, .twoZones]
         case .timer: [.countdown, .ring, .icon]
+        case .notifications: [.icon]
         case .extensions: [.text]
         case .spacer: [.fixed, .flexible]
         case .divider: [.line]
@@ -135,7 +140,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// Other apps' items and the front app's menus are listed only in the top bar: in the menu bar they are already there.
     /// Status lights are the top bar's alone: their dots are drawn there. So are the bar drops' items: their drops
     /// hang from the top bar.
-    public var topBarOnly: Bool { self == .otherApps || self == .appMenus || self == .extensions || self == .modes || isDrop }
+    public var topBarOnly: Bool { self == .otherApps || self == .appMenus || self == .extensions || self == .modes || self == .notifications || isDrop }
     /// Joins a saved layout on: the extensions' item draws nothing until an installed extension declares a bar item, so
     /// installing one is the ask (story 161); the bar drops' items are placed by default (spec Bar drops T4). Every other
     /// new item joins off, Status lights too: they are placed in edit mode.
@@ -153,9 +158,15 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// Shrinks in a crowded top bar before any item goes (card agent-bo-95423016): the app's menus fold behind a chevron.
     public var folds: Bool { self == .appMenus }
 
-    /// Can sit in the Group (Sven on build 2372: a group holds any number of items): an item drawn from its parts alone,
-    /// with no view, menu or pattern of its own the Group would lose. The readings are in it until taken out.
-    public var groupable: Bool { [.readings, .power, .controls].contains(group) || self == .timer }
+    /// Can sit in the Group (Sven on build 2372: a group holds any number of items; 2026-11-12, Q182: "i should be able to
+    /// group stuff such as group extensions all together"): an item drawn from its parts alone, each keeping its own
+    /// click there (BarParts.groupTargets): the readings, power, controls, the timer, the clock, Capture and the app in
+    /// front, and every extension's own item (BarSettings.groupable). Not those drawing a view of their own (other apps,
+    /// the app's menus, the status lights, the workspaces), the bar drops' and the pill's lit items, Pilot's icon or the
+    /// layout's. The readings are in it until taken out.
+    /// Ask AI and Terminal too (Sven on build 2433: "ask ai and terminal cant be grouped, is that normal?"): in a group
+    /// each is still its own button, toggling its drop (TopBarSlotView.perform).
+    public var groupable: Bool { [.readings, .power, .controls].contains(group) || [.timer, .clock, .capture, .focusedApp, .askAI, .terminal].contains(self) }
 
     /// The readings the Group starts with when it is put on with nothing in it (round 4's three).
     static let groupStarters: [BarKind] = [.cpu, .memory, .network]
@@ -273,12 +284,20 @@ public struct BarEntry: Codable, Equatable, Sendable {
     /// the `.divider` item, every other one an entry of its own in the top bar, there while it is on the bar. Nil for
     /// every other entry.
     public internal(set) var dividerID: Int?
-    /// In the Group (Sven on build 2372): drawn in the Group's slot while the Group shows in that bar, its own slot
-    /// otherwise. A reading is in it until taken out; any other groupable item once put in.
-    public internal(set) var inGroup = false
+    /// One more group past the first, by its number (Sven, 2026-11-12, Q182: extensions in one pill, the readings in
+    /// another), as the dividers past the first are: the `.group` item is Group 1, every other one an entry of its own in
+    /// the top bar, there while it holds an item. Nil for every other entry.
+    public internal(set) var groupID: Int?
+    /// The group it draws in (Sven on build 2372, Q182): 1 the Group, 2 and on one more group; nil its own slot. Drawn in
+    /// its group's slot while that group shows in the bar, its own slot otherwise. A reading is in Group 1 until taken out.
+    public internal(set) var groupNumber: Int?
+    /// In a group, whichever.
+    public var inGroup: Bool { groupNumber != nil }
 
-    /// What it is in a drag and in the order: a built-in item, one more divider, or an extension's.
-    public var item: BarTrayItem { extensionID.map(BarTrayItem.extension) ?? dividerID.map(BarTrayItem.divider) ?? .kind(kind) }
+    /// What it is in a drag and in the order: a built-in item, one more divider, one more group, or an extension's.
+    public var item: BarTrayItem {
+        extensionID.map(BarTrayItem.extension) ?? dividerID.map(BarTrayItem.divider) ?? groupID.map(BarTrayItem.group) ?? .kind(kind)
+    }
 
     /// An extension's item's place in the top bar, on `side`.
     init(extension id: String, side: TopBarSide) {
@@ -292,22 +311,28 @@ public struct BarEntry: Codable, Equatable, Sendable {
         (dividerID, self.side) = (id, side)
     }
 
+    /// One more group, number `id` (2 and on), on the top bar's `side`.
+    init(group id: Int, side: TopBarSide) {
+        self.init(.group, on: true, placement: .topBar)
+        (groupID, self.side) = (id, side)
+    }
+
     init(_ kind: BarKind, on: Bool = false, style: BarStyle? = nil, placement: BarPlacement = .both) {
         self.kind = kind
         self.on = on
         self.style = style ?? kind.styles[0]
         self.placement = placement
         side = kind.side
-        inGroup = kind.group == .readings
+        groupNumber = kind.group == .readings ? 1 : nil
         keepRules()
     }
 
     /// The rules no setting can break: a pinned item stays on and on the left, a top-bar-only item stays in the top bar,
-    /// only a groupable built-in item is in the Group.
+    /// only a groupable item (BarKind.groupable, or an extension's own item) is in the Group.
     mutating func keepRules() {
         if kind.pinned { (on, side) = (true, .left) }
         if kind.topBarOnly { placement = .topBar }
-        if !kind.groupable || extensionID != nil || dividerID != nil { inGroup = false }
+        if (!kind.groupable && extensionID == nil) || dividerID != nil || groupID != nil { groupNumber = nil }
     }
 
     /// Whether it shows in `place`, the top bar being on or off; Pilot's own icon is in the macOS menu bar always and in
@@ -327,6 +352,7 @@ extension BarEntry {
         case kind, on, style, placement, side, width, inGroup
         case extensionID = "extension"
         case dividerID = "divider"
+        case groupID = "group", groupNumber = "inGroupNumber"
     }
 
     /// An extension's item saves its kind as `extension`, which a Pilot from before T50 lacks, so it skips the entry
@@ -335,12 +361,21 @@ extension BarEntry {
     /// One more divider saves its kind as `dividers`, which an older Pilot lacks, so it skips the entry rather than
     /// refusing the whole bar for two dividers.
     static let dividerKind = "dividers"
+    /// One more group saves its kind as `groups`, which an older Pilot lacks, so it skips the entry; its members save
+    /// `inGroup` false beside their group's number, so that Pilot draws each on its own.
+    static let groupKind = "groups"
 
     /// Saved by another Pilot: a style the item lacks takes its first; an item this Pilot lacks fails, and the list skips it.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let id = try? c.decode(String.self, forKey: .extensionID), try c.decode(String.self, forKey: .kind) == Self.extensionKind {
             self.init(extension: id, side: (try? c.decode(TopBarSide.self, forKey: .side)) ?? .right)
+            // In a group (Q182); a Pilot from before reads the entry and leaves it out of the Group.
+            groupNumber = Self.groupNumber(c)
+            return
+        }
+        if let id = try? c.decode(Int.self, forKey: .groupID), id > 1, try c.decode(String.self, forKey: .kind) == Self.groupKind {
+            self.init(group: id, side: (try? c.decode(TopBarSide.self, forKey: .side)) ?? .right)
             return
         }
         if let id = try? c.decode(Int.self, forKey: .dividerID), try c.decode(String.self, forKey: .kind) == Self.dividerKind {
@@ -353,9 +388,28 @@ extension BarEntry {
                   placement: (try? c.decode(BarPlacement.self, forKey: .placement)) ?? .both)
         side = (try? c.decode(TopBarSide.self, forKey: .side)) ?? kind.side
         width = kind == .spacer ? (try? c.decodeIfPresent(Double.self, forKey: .width)).flatMap { $0 } : nil
-        // Saved before membership, a reading is in the Group, as the Group gathered every reading then.
-        if let grouped = try? c.decode(Bool.self, forKey: .inGroup) { inGroup = grouped }
+        // Saved before membership, a reading is in the Group, as the Group gathered every reading then; a bar saved with
+        // one Group reads it as Group 1.
+        if (try? c.decode(Bool.self, forKey: .inGroup)) != nil || (try? c.decode(Int.self, forKey: .groupNumber)) != nil {
+            groupNumber = Self.groupNumber(c)
+        }
         keepRules()
+    }
+
+    /// The group a saved entry is in: its number past 1, else 1 for `inGroup`, else none.
+    private static func groupNumber(_ c: KeyedDecodingContainer<CodingKeys>) -> Int? {
+        if let n = try? c.decode(Int.self, forKey: .groupNumber), n > 1 { return n }
+        return (try? c.decode(Bool.self, forKey: .inGroup)) == true ? 1 : nil
+    }
+
+    /// Group 1 as `inGroup` (a Pilot from before reads it); a later group as its number, `inGroup` false.
+    private func encodeGroup(_ c: inout KeyedEncodingContainer<CodingKeys>, always: Bool) throws {
+        if let groupNumber, groupNumber > 1 {
+            try c.encode(false, forKey: .inGroup)
+            try c.encode(groupNumber, forKey: .groupNumber)
+        } else if always || groupNumber == 1 {
+            try c.encode(groupNumber == 1, forKey: .inGroup)
+        }
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -363,6 +417,13 @@ extension BarEntry {
         if let extensionID {
             try c.encode(Self.extensionKind, forKey: .kind)
             try c.encode(extensionID, forKey: .extensionID)
+            try c.encode(side, forKey: .side)
+            try encodeGroup(&c, always: false)
+            return
+        }
+        if let groupID {
+            try c.encode(Self.groupKind, forKey: .kind)
+            try c.encode(groupID, forKey: .groupID)
             try c.encode(side, forKey: .side)
             return
         }
@@ -378,19 +439,21 @@ extension BarEntry {
         try c.encode(placement, forKey: .placement)
         try c.encode(side, forKey: .side)
         try c.encodeIfPresent(width, forKey: .width)
-        if kind.groupable { try c.encode(inGroup, forKey: .inGroup) }
+        if kind.groupable { try encodeGroup(&c, always: true) }
     }
 }
 
 /// One thing drawn in a bar: an item, or the group's readings as one.
 public enum BarSlot: Equatable, Sendable {
     case item(BarEntry)
-    case group([BarEntry])
+    /// A group's items as one, and which group it is (1 the Group, 2 and on one more); empty only on the Menu bar page's
+    /// strip, where an empty group is a dotted outline to drop items on (Q182).
+    case group([BarEntry], number: Int = 1)
 
     public var entries: [BarEntry] {
         switch self {
         case .item(let entry): [entry]
-        case .group(let entries): entries
+        case .group(let entries, _): entries
         }
     }
     public var kinds: [BarKind] { entries.map(\.kind) }
@@ -399,11 +462,23 @@ public enum BarSlot: Equatable, Sendable {
     public var click: BarClick { BarClick(kinds, isGroup: isGroup) }
     /// The item its right-click menu is for: the Group for the group.
     public var kind: BarKind { isGroup ? .group : kinds[0] }
-    /// What a drag of it moves: the Group, a built-in item or an extension's own item.
-    public var item: BarTrayItem { isGroup ? .kind(.group) : entries[0].item }
+    /// Which group it is: 1 the Group, 2 and on one more; nil for an item.
+    public var groupNumber: Int? { if case .group(_, let number) = self { number } else { nil } }
+    /// What a drag of it moves: the Group, one more group, a built-in item or an extension's own item.
+    public var item: BarTrayItem {
+        guard let groupNumber else { return entries[0].item }
+        return groupNumber > 1 ? .group(groupNumber) : .kind(.group)
+    }
     /// Its name in `pilot bar` and the observers dump: its items joined by +, an extension's as extension:<id>, one more
     /// divider as divider:<n>.
     public var name: String {
+        // The Group's members each by their own name: an extension's as extension:<id> (Q182).
+        if let groupNumber {
+            let members = entries.map { $0.extensionID == nil ? $0.kind.rawValue : $0.item.rawValue }.joined(separator: "+")
+            // An empty one (the page's strip, pilot bar) by its number alone.
+            if groupNumber == 1 { return members.isEmpty ? "group" : members }
+            return "group:\(groupNumber)=" + members
+        }
         if case .kind = item { return kinds.map(\.rawValue).joined(separator: "+") }
         return item.rawValue
     }
@@ -429,6 +504,10 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public var combineProcesses: Bool
     /// Each extension's bar item as Sven placed it (Surfaces v2); one never placed is on in the macOS menu bar.
     public internal(set) var extensionItems: [ExtensionBarEntry] = []
+    /// Each other preset's own layout, by its id (`layoutKey`): its items, order, groups and dividers, and its
+    /// extensions' places (Sven, 2026-11-13: "in pills i see it very clean to group everything and remove dividers but in
+    /// other menubar layouts i find it best differently"). The current preset's is `entries` itself.
+    public internal(set) var layouts: [String: BarLayout] = [:]
 
     /// Round 4's pick 7: Pilot's icon (the mark alone since spec pilot-1-1 T28: the workspaces item has the number), the workspaces, one group of CPU, Memory and Network, and
     /// the timer, in both places; the top bar adds the clock, the bar drops' items, the status lights and other apps' items,
@@ -436,7 +515,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public static let defaults: BarSettings = {
         let on: [BarKind: BarStyle] = [.pilot: .icon, .workspaces: .numbers, .group: .allInOne, .cpu: .text, .memory: .text,
                                        .network: .text, .timer: .countdown, .clock: .dateTime, .otherApps: .icons, .extensions: .text,
-                                       .modes: .icons, .terminal: .iconName, .askAI: .iconName, .capture: .icon]
+                                       .modes: .icons, .terminal: .icon, .askAI: .icon, .capture: .icon]
         var kinds = BarKind.allCases.filter { $0 != .group }
         kinds.insert(.group, at: kinds.firstIndex(of: .cpu)!)
         let entries = kinds.map { kind in
@@ -457,7 +536,29 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public mutating func set(_ kind: BarKind, on: Bool) { edit(kind) { $0.on = on } }
 
     /// Puts a groupable item in the Group or takes it out; any other item stays out.
-    public mutating func set(_ kind: BarKind, grouped: Bool) { edit(kind) { $0.inGroup = grouped } }
+    public mutating func set(_ kind: BarKind, grouped: Bool) { edit(kind) { $0.groupNumber = grouped ? 1 : nil } }
+
+    /// The same for any item by what a drag moves: a built-in one, or an extension's own item placed in the top bar.
+    public mutating func set(_ item: BarTrayItem, grouped: Bool) { set(item, group: grouped ? 1 : nil) }
+
+    /// Puts an item in group `number` (1 the Group), or none.
+    public mutating func set(_ item: BarTrayItem, group number: Int?) {
+        guard let index = index(of: item) else { return }
+        entries[index].groupNumber = number
+        entries[index].keepRules()
+    }
+
+    /// The groups past the first, by number.
+    public var moreGroups: [Int] { entries.compactMap(\.groupID) }
+
+    /// One more group, number `id`, last in the order on the top bar's `side` until it is placed.
+    mutating func addGroup(_ id: Int, side: TopBarSide) { entries.append(BarEntry(group: id, side: side)) }
+
+    /// The groups past the first that hold nothing go, as a divider taken off does; their number is free again.
+    mutating func removeEmptyGroups() {
+        let held = Set(entries.compactMap(\.groupNumber))
+        entries.removeAll { $0.groupID.map { !held.contains($0) } ?? false }
+    }
 
     /// A style the item lacks changes nothing; a style picked for the spacer drops its stretched width.
     public mutating func set(_ kind: BarKind, style: BarStyle) {
@@ -491,7 +592,7 @@ public struct BarSettings: Codable, Equatable, Sendable {
         for entry in Self.defaults.entries {
             set(entry.kind, in: placement, on: Self.defaults.isOn(entry.kind, in: placement))
             if placement == .topBar { set(entry.kind, side: entry.side) }
-            set(entry.kind, grouped: entry.inGroup)
+            set(entry.kind, grouped: entry.groupNumber == 1)
         }
         for item in extensionItems where isOn(extension: item.id, in: placement) != Self.defaults.isOn(extension: item.id, in: placement) {
             toggle(extension: item.id, in: placement)
@@ -529,21 +630,34 @@ public struct BarSettings: Codable, Equatable, Sendable {
     /// item in the Group shown there joins one slot at the Group's place; without it each is its own. Each extension's item
     /// placed in the top bar is a slot of its own there, drawn once it has something to show (BarParts); the old
     /// Extensions slot draws nowhere.
-    public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil) -> [BarSlot] {
+    /// `emptyGroups` keeps a group with nothing in it, in the top bar, as an empty slot: the Menu bar page's strip draws
+    /// it as a dotted outline to drop items on; the bar draws nothing for it.
+    public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil, emptyGroups: Bool = false) -> [BarSlot] {
         // Pilot's icon leads the top bar, in whatever order it was saved.
         let inTopBar = place == .topBar && topBarOn ? Set(extensionItems.filter { $0.on && $0.placement != .menuBar }.map(\.id)) : []
         let shown = entries.filter { entry in
             guard side == nil || entry.side == side else { return false }
             if let id = entry.extensionID { return inTopBar.contains(id) }
+            // The pill draws only once it ships (PillFeature); a saved bar keeps it, unshown.
+            if entry.kind == .pill, !PillFeature.released { return false }
             return entry.kind != .extensions && entry.shows(in: place, topBarOn: topBarOn)
         }
             .sorted { place == .topBar && $0.kind.pinned && !$1.kind.pinned }
-        // The group gathers its items from the whole bar, wherever their own side is.
-        let grouped = entry(.group).shows(in: place, topBarOn: topBarOn)
-        let members = grouped ? entries.filter { $0.inGroup && $0.shows(in: place, topBarOn: topBarOn) } : []
+        // Each group gathers its items from the whole bar, wherever their own side is: Group 1 where it shows, each one
+        // more in the top bar (Q182).
+        let groups = Set(entries.filter { $0.kind == .group && $0.shows(in: place, topBarOn: topBarOn) }.map { $0.groupID ?? 1 })
+        // An extension's own item is a member where it shows: the top bar alone (its menu bar item is its own).
+        func members(_ number: Int) -> [BarEntry] {
+            entries.filter { entry in
+                entry.groupNumber == number && (entry.extensionID.map(inTopBar.contains) ?? entry.shows(in: place, topBarOn: topBarOn))
+            }
+        }
         return shown.compactMap { entry in
-            if entry.kind == .group { return members.isEmpty ? nil : .group(members) }
-            return grouped && entry.inGroup ? nil : .item(entry)
+            if entry.kind == .group {
+                let number = entry.groupID ?? 1, gathered = members(number)
+                return gathered.isEmpty && !(emptyGroups && place == .topBar) ? nil : .group(gathered, number: number)
+            }
+            return entry.groupNumber.map(groups.contains) == true ? nil : .item(entry)
         }
     }
 
@@ -663,7 +777,7 @@ extension BarSettings {
                 throw ThemeFailure("invalid saved bar item")
             }
             // Future item kinds remain skippable; a malformed known item must never become a default item.
-            guard BarKind(rawValue: kind) != nil || kind == BarEntry.extensionKind || kind == BarEntry.dividerKind else { continue }
+            guard BarKind(rawValue: kind) != nil || [BarEntry.extensionKind, BarEntry.dividerKind, BarEntry.groupKind].contains(kind) else { continue }
             try check(Bool.self, fields, "on")
             try check(String.self, fields, "style") // A future style name still falls back to the item's first style.
             try check(BarPlacement.self, fields, "placement")
@@ -672,6 +786,8 @@ extension BarSettings {
             try check(Bool.self, fields, "inGroup")
             try check(String.self, fields, "extension", nullable: true)
             if kind == BarEntry.dividerKind { try check(Int.self, fields, "divider") }
+            if kind == BarEntry.groupKind { try check(Int.self, fields, "group") }
+            try check(Int.self, fields, "inGroupNumber")
             _ = try decoder.decode(BarEntry.self, from: ThemeDigest.encoded(entry))
         }
         try check(TopBarClockFormat.self, fields, "clock")
@@ -707,6 +823,8 @@ extension BarSettings {
                   extensionItems: (try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems))?.compactMap(\.value) ?? [])
         preset = c.contains(.preset) ? try c.decode(BarPresetConfiguration.self, forKey: .preset) : nil
         try preset?.validate()
+        // A bar saved before each preset kept its own: what it holds is the current preset's, the others start from it.
+        layouts = (try? c.decode([String: BarLayout].self, forKey: .layouts)) ?? [:]
         placeGroupedExtensions(order: decoder.userInfo[Self.extensionOrder] as? @Sendable () -> [String])
     }
 
@@ -734,6 +852,48 @@ extension BarSettings {
     /// Whether `kind` shows in `place` now.
     public func shows(_ kind: BarKind, in place: BarPlace, topBarOn: Bool) -> Bool {
         entry(kind).shows(in: place, topBarOn: topBarOn)
+    }
+}
+
+/// A preset's own layout (BarSettings.layouts): its items in order, with their groups and dividers, and its extensions'
+/// places. Read leniently, as the saved bar is: an item this Pilot cannot read is left out.
+public struct BarLayout: Codable, Equatable, Sendable {
+    public var entries: [BarEntry]
+    public var extensionItems: [ExtensionBarEntry]
+
+    public init(entries: [BarEntry], extensionItems: [ExtensionBarEntry]) { self.entries = entries; self.extensionItems = extensionItems }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        entries = ((try? c.decode([Lossy<BarEntry>].self, forKey: .entries)) ?? []).compactMap(\.value)
+        extensionItems = ((try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems)) ?? []).compactMap(\.value)
+    }
+}
+
+extension BarSettings {
+    /// A preset's key in `layouts`: its id, legacy for the Full bar.
+    public static func layoutKey(_ preset: BarPreset?) -> String { preset?.rawValue ?? "legacy" }
+
+    /// Switches to `configuration`'s preset (nil the Full bar), each keeping its own layout: the one left is kept under its
+    /// key; one kept before comes back, else the new preset starts from the layout left (Sven, 2026-11-13). The same
+    /// preset again only takes the geometry.
+    public mutating func choose(_ configuration: BarPresetConfiguration?) {
+        let from = Self.layoutKey(preset?.preset), to = Self.layoutKey(configuration?.preset)
+        if from != to {
+            layouts[from] = BarLayout(entries: entries, extensionItems: extensionItems)
+            if let kept = layouts.removeValue(forKey: to), !kept.entries.isEmpty {
+                // Items this Pilot added since that layout was kept join it off, as a saved bar's do.
+                var restored = kept.entries
+                for entry in entries where !restored.contains(where: { $0.item == entry.item }) && entry.extensionID == nil && entry.dividerID == nil && entry.groupID == nil {
+                    var off = entry
+                    off.on = false
+                    restored.append(off)
+                }
+                entries = restored
+                extensionItems = kept.extensionItems
+            }
+        }
+        preset = configuration
     }
 }
 

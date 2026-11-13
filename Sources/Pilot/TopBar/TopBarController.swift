@@ -186,7 +186,7 @@ final class TopBarController {
 }
 
 /// The real screens: each NSScreen by the tiler's monitor name, its strip measured while the menu bar shows and
-/// remembered for when autohide leaves it 0.
+/// remembered for when autohide leaves it 0, then held to the Full bar's least height (TopBarGeometry.fullBar).
 @MainActor
 enum TopBarScreens {
     private static let key = "topBar.strips"
@@ -198,7 +198,7 @@ enum TopBarScreens {
             let strip = TopBarGeometry.strip(frameMaxY: screen.frame.maxY, visibleMaxY: screen.visibleFrame.maxY,
                                              remembered: remembered[name], fallback: NSStatusBar.system.thickness)
             if screen.frame.maxY > screen.visibleFrame.maxY { remembered[name] = strip }
-            return TopBarGeometry.Screen(name: name, strip: strip, displayUUID: WallpaperScreen.number(screen).flatMap(DisplayIdentity.uuid(for:)))
+            return TopBarGeometry.Screen(name: name, strip: TopBarGeometry.fullBar(strip), displayUUID: WallpaperScreen.number(screen).flatMap(DisplayIdentity.uuid(for:)))
         }
         if remembered != defaults.dictionary(forKey: key) as? [String: Double] { defaults.set(remembered, forKey: key) }
         return screens
@@ -259,7 +259,7 @@ final class TopBarWindows: TopBarPanels {
         panels.forEach { Self.applyLook(look, store: store, wallpaper: wallpapers.strips[$0.key.screen], to: $0.value) }
         withObservationTracking {
             _ = (look.appearance(for: .topBar), look.style, look.theme, look.transparency, look.glassBlur, store.background, store.colour,
-                 wallpapers.strips, store.settings.preset)
+                 wallpapers.strips, store.topBarConfiguration)
         } onChange: { [weak self] in
             Task { @MainActor in self?.followLook() }
         }
@@ -276,7 +276,9 @@ final class TopBarWindows: TopBarPanels {
         let background = store.background.shown(transparency: look.transparency)
         let inked = TopBarColour.ink(store.colour, style: tokens, background: background, wallpaper: wallpaper, look: look).tokens
         panel.appearance = inked.inked ? NSAppearance(named: inked.dark ? .darkAqua : .aqua) : look.appearance(for: .topBar)
-        (panel.contentView as? MaterialBackdrop)?.show(background == .glass ? .glass : .solid,
+        // A Pills side's window shows no glass of its own: each pill draws its ground (TopBarStrip's BarPill).
+        let glass = background == .glass && store.topBarConfiguration?.preset != .pills
+        (panel.contentView as? MaterialBackdrop)?.show(glass ? .glass : .solid,
                                                          tint: TopBarColour.tint(store.colour, style: tokens, look: look), blur: look.glassBlur)
     }
 
@@ -305,23 +307,25 @@ final class TopBarWindows: TopBarPanels {
         shown = screens
         // These same panel frames define the hard edge for snapped windows and the existing item anchors.
         Screens.bars = Dictionary(screens.map { screen in
-            let config = store.settings.preset
+            let config = store.topBarConfiguration
             return (screen.name, config.map { reservedHeight(on: screen, configuration: $0) } ?? screen.strip)
         }, uniquingKeysWith: { first, _ in first })
         BarWallpapers.shared.follow(screens)
-        let islands = store.settings.preset?.preset == .threeIslands
+        let configuration = store.topBarConfiguration
+        let islands = configuration?.preset.islands == true
         for key in panels.keys where !screens.contains(where: { $0.name == key.screen }) || (key.side != nil) != islands {
             panels.removeValue(forKey: key)?.orderOut(nil)
         }
         for screen in screens {
             guard let ns = NSScreen.screens.first(where: { $0.localizedName == screen.name }) else { continue }
-            let frame = BarPresetGeometry.frame(store.settings.preset, screen: ns.frame, strip: screen.strip, notch: ns.safeAreaInsets.top)
+            let frame = BarPresetGeometry.frame(configuration, screen: ns.frame, strip: screen.strip, notch: ns.safeAreaInsets.top)
             let keys = islands ? TopBarSide.allCases.map { Key(screen: screen.name, side: $0) } : [Key(screen: screen.name)]
             for key in keys {
                 let panel = panels[key] ?? make(key)
                 panels[key] = panel
                 panel.contentView?.wantsLayer = true
-                panel.contentView?.layer?.cornerRadius = store.settings.preset?.radius ?? 0
+                // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners.
+                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills ? 0 : $0.radius } ?? 0
                 panel.contentView?.layer?.masksToBounds = true
                 if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
                     clip.canvas = frame
@@ -357,7 +361,7 @@ final class TopBarWindows: TopBarPanels {
     }
 
     private func placeIsland(_ key: Key, rect: CGRect) {
-        guard store.settings.preset?.preset == .threeIslands, let panel = panels[key],
+        guard store.topBarConfiguration?.preset.islands == true, let panel = panels[key],
               let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip else { return }
         // The final row rectangle drives the crop, window bounds and input region together. No full-width window.
         guard let frame = BarPresetGeometry.islandFrame(rect, in: clip.canvas) else {
@@ -425,14 +429,29 @@ final class TopBarPanel: NSPanel {
 
     func pin(_ frame: NSRect) {
         pinned = frame
+        refused = nil
         snapBack()
     }
 
+    /// Inside its own put-back: the resize that putting back makes comes here again and is left alone.
+    private var snapping = false
+    /// The pinned frame AppKit would not take (its constraints held the window to another size): kept as AppKit has it
+    /// until the next pin, never put back again.
+    private var refused: NSRect?
+
     @objc private func snapBack() {
-        guard let pinned, frame != pinned else { return }
+        guard let pinned, frame != pinned, !snapping, refused != pinned else { return }
         // Logged, so whatever moves a bar shows in the log rather than being quietly undone.
         tblog.notice("top bar moved to \(String(describing: self.frame), privacy: .public), put back at \(String(describing: pinned), privacy: .public)")
+        snapping = true
+        defer { snapping = false }
         setFrame(pinned, display: true)
+        // A frame AppKit refuses (a Pills island 30 wide that its constraints held at 242, Sven on build 2433): putting it
+        // back again from its own resize notification recursed inside layout until the stack ran out. Keep AppKit's.
+        if frame != pinned {
+            refused = pinned
+            tblog.error("top bar kept at \(String(describing: self.frame), privacy: .public): AppKit refused \(String(describing: pinned), privacy: .public)")
+        }
     }
 
     /// The bar sits in the menu bar's strip, where AppKit's constraint would push it below the menu bar.

@@ -42,6 +42,9 @@ struct MenuBarRenders {
     /// Where the page starts in a window `width` wide: right of the frame's rail and, but under 900 pt, the area's page
     /// list (RailLayout), each with its rule (Instrument 1 pt, Toybox 2), so the page's checks leave the frame's own words
     /// to the frame's renders.
+    /// The window's height: the whole Menu bar page fits (it outgrew 2600 at 1440 before the Pilot menu left it, Q182).
+    static let height: CGFloat = 5000
+
     static func pageLeft(_ style: PilotStyle, width: CGFloat) -> CGFloat {
         let (rail, rule): (CGFloat, CGFloat) = style == .instrument ? (72, 1) : (76, 2)
         return rail + rule + (RailLayout.narrow(width) ? 0 : RailLayout.listWidth(width) + rule)
@@ -75,7 +78,7 @@ struct MenuBarRenders {
         for (style, dark) in [(PilotStyle.instrument, true), (.instrument, false), (.toybox, false)] {
             Look.shared.style = style
             for width in [1440, 1000, 760] {
-                window.setContentSize(NSSize(width: CGFloat(width), height: 2600))
+                window.setContentSize(NSSize(width: CGFloat(width), height: Self.height))
                 RunLoop.main.run(until: Date().addingTimeInterval(0.8))
                 frame.layoutSubtreeIfNeeded()
                 let rep = try #require(snapshot(frame, scale: 2))
@@ -94,6 +97,21 @@ struct MenuBarRenders {
                 #expect(broken.isEmpty, "\(name): names not read whole \(broken)")
                 // Short of room, the strip's Finder goes before any of Pilot's items: the leftmost, CPU, outlasts it.
                 if read.contains(where: { $0.contains("Finder") }) { #expect(read.contains { $0.contains("CPU") }, "\(name): Finder kept, CPU dropped") }
+            }
+        }
+        // The Pilot menu's own page beside Menu bar (Sven, 2026-11-12, Q182), Instrument dark and light.
+        model.go(AppPlace(.pilotMenu))
+        for dark in [true, false] {
+            Look.shared.style = .instrument
+            Look.shared.themeID = dark ? "tokyo-night" : "porcelain"
+            for width in [1440, 1000] {
+                window.setContentSize(NSSize(width: CGFloat(width), height: 2600))
+                RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+                frame.layoutSubtreeIfNeeded()
+                let rep = try #require(snapshot(frame, scale: 2))
+                let name = "pilot-menu-instrument\(dark ? "" : "-light")-\(width)"
+                try RestyledRenders.writeTrimmed(rep, from: Int(Self.pageLeft(.instrument, width: CGFloat(width))), to: dir.appendingPathComponent("\(name).png"))
+                #expect(Self.gutterClear(rep), "\(name): the page runs past the window's right edge")
             }
         }
     }

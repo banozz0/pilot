@@ -177,9 +177,9 @@ struct BarFixture: Decodable {
                 guard defaults.synchronize() else { throw ThemeFailure("isolated defaults write failed") }
                 let inputs = try control()
                 let frames: [JSONValue] = config.screens.map { screen in
-                    let frame = BarPresetGeometry.frame(store.settings.preset, screen: screen.rect, strip: screen.strip, notch: screen.notch)
+                    let frame = BarPresetGeometry.frame(store.topBarConfiguration, screen: screen.rect, strip: screen.strip, notch: screen.notch)
                     let sides = store.settings.preview(.topBar).top ?? [:]
-                    let island = store.settings.preset?.preset == .threeIslands
+                    let island = store.topBarConfiguration?.preset.islands == true
                     // Fake measurements are explicit sources; the production layout and final visibility are unchanged.
                     let widths = sides.mapValues { slots in slots.map { slot -> CGFloat in
                         if inputs["hidden:" + slot.item.rawValue] == "yes" { return 0 }
@@ -195,8 +195,8 @@ struct BarFixture: Decodable {
                     let least: [TopBarSide: [CGFloat]] = Dictionary(uniqueKeysWithValues: sides.map { side, slots in
                         (side, slots.enumerated().map { i, slot in min(widths[side]![i], CGFloat(max(0, Double(inputs["least:" + slot.item.rawValue] ?? "10000") ?? 10000))) })
                     })
-                    let row = TopBarRow(spacing: store.settings.preset?.spacing ?? 8, gap: 12, islands: island ? store.settings.preset : nil)
-                    let plan = row.arrange(widths, least: least, room: max(0, frame.width - (island ? 0 : 2 * (store.settings.preset?.padding ?? 6))), more: 24, height: frame.height)
+                    let row = TopBarRow(spacing: store.topBarConfiguration?.spacing ?? 8, gap: 12, islands: island ? store.topBarConfiguration?.row : nil)
+                    let plan = row.arrange(widths, least: least, room: max(0, frame.width - (island ? 0 : 2 * (store.topBarConfiguration?.padding ?? 6))), more: 24, height: frame.height)
                     func rect(_ r: CGRect) -> JSONValue { .array([r.minX, r.minY, r.width, r.height].map { .number(Double($0)) }) }
                     let groups = TopBarSide.allCases.map { side -> (String, JSONValue) in
                         guard let group = plan.groups[side] else { return (side.rawValue, .null) }
@@ -227,12 +227,12 @@ struct BarFixture: Decodable {
                     let pillSide = sides.first { $0.value.contains { $0.item == .kind(.pill) } }?.key
                     let pillItem = sides.lazy.compactMap { side, slots -> CGFloat? in
                         guard let i = slots.firstIndex(where: { $0.item == .kind(.pill) }), let x = plan.x[side]?[i] ?? nil else { return nil }
-                        return frame.minX + (island ? 0 : (store.settings.preset?.padding ?? 6)) + x + (plan.width[side]?[i] ?? 0) / 2
+                        return frame.minX + (island ? 0 : (store.topBarConfiguration?.padding ?? 6)) + x + (plan.width[side]?[i] ?? 0) / 2
                     }.first
                     // The window the pill stands in, as TopBarWindows places it: its island, else the strip or whole bar;
                     // its flat foot is what the live drop takes from that window (BarDropLights.ground).
                     let pillWindow = island ? pillSide.flatMap { BarPresetGeometry.islandFrame(plan.groups[$0], in: frame) } : frame
-                    let pillGround = pillWindow.map { PillPlacement.ground(window: $0, radius: store.settings.preset?.radius ?? 0) }
+                    let pillGround = pillWindow.map { PillPlacement.ground(window: $0, radius: store.topBarConfiguration?.radius ?? 0) }
                     let pill: JSONValue = .object(["item": pillItem.map { .number(Double($0)) } ?? .null, "visible": rect(visible), "bar": rect(frame),
                         "window": pillWindow.map(rect) ?? .null, "ground": pillGround.map(rect) ?? .null,
                         "drop": pillItem.map { rect(PillPlacement.frame(item: $0, visible: visible, bar: frame, ground: pillGround)) } ?? .null,

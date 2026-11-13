@@ -12,13 +12,19 @@ protocol PilotSwitching: AnyObject {
 extension PilotSwitch: PilotSwitching {}
 
 extension SettingsSchema {
-    /// Other apps' notifications in Pilot: General's two switches, off by default.
+    /// Other apps' notifications in Pilot: General's two switches, off by default, and where they show.
     func registerNotifications(_ notifications: NotificationSettings) {
         register([
-            .bool("notifications.enabled", "Show other apps' notifications as Pilot cards, bottom right", page: "general", standard: false,
+            .bool("notifications.enabled", "Show other apps' notifications as Pilot cards, where Show in says", page: "general", standard: false,
                   read: { notifications.enabled }, write: { notifications.enabled = $0 }),
             .bool("notifications.hideMacBanners", "Hide macOS's own banner while Pilot's card shows", page: "general", standard: false,
                   read: { notifications.hideMacBanners }, write: { notifications.hideMacBanners = $0 }),
+            .choice(NotificationSettings.showInKey, "Notifications show floating (a bell and cards bottom right) or in the top bar (a bell item, cards under it); the top bar while off falls back to floating",
+                    page: "general", NotificationSettings.ShowIn.allCases, standard: .floating,
+                    read: { notifications.showIn }, write: { notifications.showIn = $0 }),
+            .choice(NotificationSettings.layerKey, "Floating notifications' bell and list rest above apps or below them on the desktop; a new card shows above apps either way",
+                    page: "general", NotificationSettings.Layer.allCases, standard: .above,
+                    read: { notifications.layer }, write: { notifications.layer = $0 }),
         ])
     }
 

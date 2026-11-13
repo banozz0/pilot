@@ -40,6 +40,8 @@ struct CaptureHistoryPage: View {
                 if !picked.isEmpty { BlockRow { combineBar } }
                 BlockRow { list }
             }
+            // The captures' list keeps the page's width (PageFlow).
+            .pageWide()
             KitBlock(title: "Keep", symbol: "internaldrive") {
                 BlockRow(first: true) {
                     HStack(spacing: 6) {

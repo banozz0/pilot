@@ -149,7 +149,7 @@ struct BarEditingTests {
         #expect(BarRoute(URL(string: "pilot://bar?spacer=wide")!) == nil)
     }
 
-    @Test("Taking the Group off the bar takes the readings it gathers with it, rather than coming apart into one item per reading; put back, it brings round 4's three (Sven on build 52)")
+    @Test("Taking the Group off the bar takes the readings it gathers with it, rather than coming apart into one item per reading; put back, it is empty, an outline on the page's strip (Sven on build 52, 2425)")
     func removeGroup() throws {
         var s = try Self.mockup()
         // The Extensions item joins a saved layout on, last on the right; off here, the mockup's right side as it was.
@@ -160,8 +160,9 @@ struct BarEditingTests {
         #expect(s.slots(in: .topBar, topBarOn: true, side: .right).map(\.kind) == [.otherApps, .volume, .keyboardLayout])
         #expect([BarKind.group, .cpu, .memory, .storage, .heat].allSatisfy { !s.entry($0).on })
         s.add(.group, on: .right, at: 1)
-        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).map(\.kind) == [.otherApps, .group, .volume, .keyboardLayout])
-        #expect(s.slots(in: .topBar, topBarOn: true).first(where: \.isGroup)?.kinds == [.cpu, .memory, .network])
+        #expect(s.slots(in: .topBar, topBarOn: true, side: .right).map(\.kind) == [.otherApps, .volume, .keyboardLayout])
+        #expect(s.slots(in: .topBar, topBarOn: true, side: .right, emptyGroups: true).map(\.kind) == [.otherApps, .group, .volume, .keyboardLayout])
+        #expect(s.entry(.group).on && [BarKind.cpu, .memory, .network].allSatisfy { !s.entry($0).on })
         // A plain item goes as it always did; Pilot never does; a link's remove is a drag's.
         s.remove(slot: .keyboardLayout)
         #expect(!s.entry(.keyboardLayout).on)

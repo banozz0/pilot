@@ -111,6 +111,8 @@ public struct BarInputs: Sendable {
     /// Every registered capture action's label by id, so one Capture's menu does not name (a new capture type) still
     /// gets its row.
     public var actionLabels: [String: String] = [:]
+    /// What arrived since the notifications' list last opened, while they show in the top bar; nil hides the bell.
+    public var notifications: Int?
 
     public init() {}
 }
@@ -227,6 +229,9 @@ public enum BarParts {
             // To a sixtieth: finer than a 12-point ring shows, and each finer step would redraw the item.
             let ring = BarPart.ring(((i.timerLeft ?? 0) * 60).rounded() / 60)
             return style == .ring ? [ring] : [ring, .value(countdown, widest: countdown.count > 5 ? "8:88:88" : "88:88")]
+        case .notifications:
+            guard let unread = i.notifications else { return nil }
+            return [.symbol("bell")] + (unread > 0 ? [.badge(unread > 99 ? "99+" : "\(unread)")] : [])
         case .extensions:
             // An extension's own slot draws its own item (spec pilot-1.1 T50); the old Extensions slot, every one, each its
             // own target, apart by the top bar's insets. Nothing to show hides it.
@@ -388,7 +393,7 @@ extension BarParts {
     public static func parts(_ slot: BarSlot, _ i: BarInputs, settings: BarSettings) -> [[BarPart]]? {
         switch slot {
         case .item(let entry): parts(entry, i, clock: settings.clock, zone: settings.clockZone).map { [$0] }
-        case .group(let entries): group(entries, i)
+        case .group(let entries, _): group(entries, i)
         }
     }
 }

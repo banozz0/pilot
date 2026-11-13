@@ -38,16 +38,16 @@ extension SettingsSchema {
         let all = Dropdown.Layout.arrangeable
         func listed(_ blocks: [Dropdown.Block]) -> String { blocks.isEmpty ? "none" : Dropdown.Layout.names(blocks) }
         register([
-            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "menuBar", standard: listed(all),
+            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "pilotMenu", standard: listed(all),
                   read: { listed(store.layout.order) }, write: { typed throws(ControlError) in try store.setOrder(Self.blocks(typed, key: "dropdown.order")) }),
-            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status always shows)", page: "menuBar",
+            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status always shows)", page: "pilotMenu",
                   standard: listed(all.filter(Dropdown.Layout.optional.contains)), read: { listed(all.filter(store.layout.hidden.contains)) },
                   write: { typed throws(ControlError) in try store.setHidden(Set(Self.blocks(typed, key: "dropdown.hidden"))) }),
-            .text("dropdown.pinned", "Pilot menu's blocks pinned above its scroll, comma-separated or none", page: "menuBar", standard: "none",
+            .text("dropdown.pinned", "Pilot menu's blocks pinned above its scroll, comma-separated or none", page: "pilotMenu", standard: "none",
                   read: { listed(all.filter(store.layout.pinned.contains)) },
                   write: { typed throws(ControlError) in try store.setPinned(Set(Self.blocks(typed, key: "dropdown.pinned"))) }),
             .text("dropdown.extensions", "The extensions' bar items in the Pilot menu's Extensions card, ids comma-separated or none",
-                  page: "menuBar", standard: "none",
+                  page: "pilotMenu", standard: "none",
                   read: { store.layout.extensions.isEmpty ? "none" : store.layout.extensions.joined(separator: ",") },
                   write: { typed throws(ControlError) in try store.setExtensions(Self.words(typed, lowercased: false)) }),
         ])

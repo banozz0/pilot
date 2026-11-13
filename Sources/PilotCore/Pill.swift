@@ -3,6 +3,13 @@ import CoreGraphics
 /// Where the pill's drop hangs (spec desktop-controls T5): under the pill's own item on the bar the click came from,
 /// kept inside the screen's visible frame, from the bar's lower edge; with no bar (the top bar off, the pill by key only)
 /// from the visible frame's top, centred. AppKit's screen coordinates, the origin bottom left.
+/// Whether the pill ships (Sven, 2026-11-13, on build 2425: "i think even normal pill we should release with the release
+/// of the pill bar"): off, the pill's item leaves the tray and draws in no bar (a saved bar holding it still loads), and
+/// its Menu bar block, its two actions and its settings are not offered; its code stays. Turn on with Pill first.
+public enum PillFeature {
+    public static let released = false
+}
+
 public enum PillPlacement {
     /// The drop's size: T2's face, 600 wide and a 12 pt shoulder each side, tall enough for a view's tabs and body.
     public static let size = CGSize(width: 624, height: 300)

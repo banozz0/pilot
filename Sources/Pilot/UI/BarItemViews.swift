@@ -154,6 +154,9 @@ struct TopBarSlotView: View {
         let view = content(shows)
             .background(ScreenAnchor(box: anchor, rightClick: { showMenu() },
                                      scroll: kind.scrolls ? { BarScroll.perform(kind, steps: $0, on: sources) } : nil))
+            // The bell item tells the notifications where it is, so a card drops under it; the page's strip tells nothing.
+            .onAppear { if kind == .notifications, inBar, !preview { NotificationPanels.register(anchor) } }
+            .onDisappear { if kind == .notifications { NotificationPanels.unregister(anchor) } }
         // The top bar's targets show their own tooltips, on BarHover's clock.
         if inBar { view } else { view.help(tooltip(shows)) }
     }
@@ -217,6 +220,8 @@ struct TopBarSlotView: View {
         if let one, click == one.click, NSEvent.modifierFlags.contains(.option), let option = one.optionClick {
             return sources.perform(option)
         }
+        // Ask AI or Terminal in a group: its own button, toggling its drop as its own item does (Sven on build 2433).
+        if let one, slot.isGroup, let drop = one.drop { return BarDropLights.shared.toggle(drop) }
         if case .extension(let id) = click {
             return BarPanel.shared.toggle(extension: id, under: anchor.view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }
@@ -309,6 +314,7 @@ struct BarPopover: View {
         case .timer: TimerPopover(timer: sources.timer)
         case .extensions: ExtensionBarPopover(bar: sources.extensionBar)
         case .modes: StatusPopover(lights: sources.readings.statusLights, close: sources.closePopover)
+        case .notifications: NotificationBarDrawer(model: .shared)
         default:
             LiveStatPopover(stats: kinds.compactMap(\.stat)) { AppWindowController.shared.open(.home) }
         }

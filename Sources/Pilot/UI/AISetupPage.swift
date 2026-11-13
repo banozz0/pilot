@@ -77,6 +77,8 @@ private struct AISetupBody: View {
             }
             if let problem { BlockRow { FinePrint(text: problem, color: ink.red) } }
         }
+        // Its own two columns keep the page's width (PageFlow).
+        .pageWide()
     }
 
     private func column(_ routes: [AIProvider]) -> some View {
@@ -240,11 +242,13 @@ private struct AISetupMore: View {
     private var chat: some View {
         KitBlock(title: AppSection.aiNewChat.title, symbol: "bubble.left.and.bubble.right") {
             BlockRow(first: true) {
-                Text("Start a new chat after")
-                InfoMark(text: "Left this long unused, the chat opens empty.")
-                Spacer()
-                Segments(selection: Binding(get: { settings.chatReset }, set: { settings.chatReset = $0 }),
-                         options: AIChat.Reset.allCases.map { ($0, $0.title) }, label: "Start a new chat after")
+                LabelledControls {
+                    Text("Start a new chat after")
+                    InfoMark(text: "Left this long unused, the chat opens empty.")
+                } controls: {
+                    Segments(selection: Binding(get: { settings.chatReset }, set: { settings.chatReset = $0 }),
+                             options: AIChat.Reset.allCases.map { ($0, $0.title) }, label: "Start a new chat after")
+                }
             }
         }
     }

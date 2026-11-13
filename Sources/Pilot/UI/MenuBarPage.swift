@@ -69,11 +69,15 @@ struct MenuBarPage: View {
                     BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
                 }
             }
-            // Pilot's own menu, first after the bar it hangs from (Sven on build 2276: it sat too far down).
-            DropdownEditor(extensionBar: extensionBar)
-            PillEditor(extensionBar: extensionBar)
-            BarPresetControls(store: store)
-            barColour(store)
+            // The page reads top to bottom as the bar does (Sven, 2026-11-12, Q182: "too crowded and im getting confused"):
+            // the switch, the bar's items, how the bar looks, each item's style, the clock and the pill, then the screens.
+            // Pilot's own menu has its own page beside this one (PilotMenuPage).
+            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                GridRow(alignment: .top) {
+                    BarPresetControls(store: store)
+                    barColour(store)
+                }
+            }
             // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
             let columns = 2, groups = BarGroup.allCases
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
@@ -83,8 +87,10 @@ struct MenuBarPage: View {
                     }
                 }
             }
-            screenChoices(topBar)
             clock(store)
+            // The pill's block once it ships (PillFeature, Sven on build 2425).
+            if PillFeature.released { PillEditor(extensionBar: extensionBar) }
+            screenChoices(topBar)
         }
         .disabled(store.loadError != nil)
         .onAppear { hold(previewed(store)) }
@@ -166,7 +172,7 @@ struct MenuBarPage: View {
 
     /// The items the preview shows.
     private func previewed(_ store: BarItemsStore) -> Set<BarKind> {
-        let preview = store.settings.preview(placement)
+        let preview = store.settings.preview(placement, emptyGroups: true)
         return Set(((preview.top?.values.joined()).map(Array.init) ?? []).flatMap(\.kinds) + (preview.menu ?? []).flatMap(\.kinds))
     }
 
@@ -238,7 +244,7 @@ struct MenuBarPage: View {
     /// would draw its words at half size, too small to read or grab; wrapped, it would not be the bar. The macOS menu
     /// bar keeps the page's width and crowds as macOS does (menuStrip).
     @ViewBuilder private func preview(_ store: BarItemsStore) -> some View {
-        let preview = store.settings.preview(placement)
+        let preview = store.settings.preview(placement, emptyGroups: true)
         let radius = ink.corner(10, \.control)
         VStack(spacing: 0) {
             if let top = preview.top {
@@ -269,16 +275,16 @@ struct MenuBarPage: View {
     /// while a drag is over it.
     private func topStrip(_ top: [TopBarSide: [BarSlot]], store: BarItemsStore) -> some View {
         let drop = topDrop(top), background = store.background.shown(transparency: Look.shared.transparency)
-        let joining = overTop.map { drop.joinsGroup(x: $0.x, y: $0.y, dragging: dragged) } ?? false
+        let joining = overTop.flatMap { drop.group(x: $0.x, y: $0.y, dragging: dragged) }
         return TopBarStrip(sides: top, configuration: store.settings.preset, background: background, colour: store.colour, glassPreview: true, itemColours: store.itemColours,
                            report: { side, index, rect in if topFrames[side]?[index] != rect { topFrames[side, default: [:]][index] = rect } }, preview: true) {
             stripSlot($0, store, inTopBar: true, joining: joining)
         }
         .frame(height: store.settings.preset?.height ?? 30)
-        .background { if background == .glass, store.settings.preset?.preset != .threeIslands { BarGlassGround(colour: store.colour) } }
+        .background { if background == .glass, store.settings.preset?.preset.islands != true { BarGlassGround(colour: store.colour) } }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
         // Over the Group the outline lights in place of the caret: the drop joins it.
-        .overlay { if let overTop, !joining { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
+        .overlay { if let overTop, joining == nil { BarDropMarks(drop: drop, target: drop.target(x: overTop.x, y: overTop.y, dragging: dragged)) } }
         .padding(.top, Self.room)
         // The whole strip takes the drop, its clear gaps too (a Glass bar draws no ground of its own).
         .contentShape(Rectangle())
@@ -292,7 +298,7 @@ struct MenuBarPage: View {
     static func topDrop(_ drop: BarDrop, store: BarItemsStore, placement: BarPlacement, dragged: BarTrayItem?, room: CGFloat = 0,
                         animation: Animation?, over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
-            if drop.joinsGroup(x: at.x, y: at.y - room, dragging: item) { return .group }
+            if let number = drop.group(x: at.x, y: at.y - room, dragging: item) { return .group(number) }
             return drop.target(x: at.x, y: at.y - room, dragging: item).map { BarStripDrop.top($0.side, index: $0.index) }
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
@@ -302,7 +308,7 @@ struct MenuBarPage: View {
                          over: @escaping (CGPoint?) -> Void, finish: @escaping () -> Void) -> TrayItemDrop<BarStripDrop> {
         TrayItemDrop(dragged: dragged, animation: animation, over: over, finish: finish) { item, at in
             if item.topBarOnly { return nil }
-            if BarDrop.joinsGroup(x: at.x, slots: slots, dragging: item) { return .group }
+            if let number = BarDrop.group(x: at.x, slots: slots, dragging: item) { return .group(number) }
             return .menu(index: BarDrop.menuTarget(x: at.x, slots: slots, dragging: item).index)
         } apply: { [store, placement] item, target in store.settings.drop(item, on: target, placement: placement) }
     }
@@ -324,7 +330,7 @@ struct MenuBarPage: View {
     private func menuStrip(_ menu: [BarSlot], store: BarItemsStore) -> some View {
         let extensions = extensionBar.items.filter { store.settings.shows(extension: $0.id, in: .menuBar, topBarOn: placement == .both) }
         let slots = menuSlots(menu)
-        let joining = overMenu.map { BarDrop.joinsGroup(x: $0, slots: slots, dragging: dragged) } ?? false
+        let joining = overMenu.flatMap { BarDrop.group(x: $0, slots: slots, dragging: dragged) }
         return HStack(spacing: 13) {
             Image(systemName: "apple.logo")
             ViewThatFits(in: .horizontal) { Text("Finder").fontWeight(.bold).fixedSize(); Color.clear.frame(width: 0) }
@@ -353,7 +359,7 @@ struct MenuBarPage: View {
         .background(ink.style.kind == .instrument ? ink.selected : ink.style.dark ? Color.black.opacity(0.42) : Color.white.opacity(0.45))
         .coordinateSpace(.named(Self.menuSpace))
         .overlay {
-            if let overMenu, !joining {
+            if let overMenu, joining == nil {
                 GeometryReader { BarCaret(x: BarDrop.menuTarget(x: overMenu, slots: slots, dragging: dragged).caret, height: $0.size.height) }
             }
         }
@@ -377,9 +383,9 @@ struct MenuBarPage: View {
     /// One slot of a strip, piece by piece (Sven on build 54: one by one, not by sections): an item is one piece; the
     /// Group's readings are a piece each inside its outline, the outline itself dragging the whole Group; an extension's
     /// item placed in the top bar is a slot and a piece of its own (spec pilot-1.1 T50), drawn while it is installed.
-    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool) -> some View {
+    @ViewBuilder private func stripSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Int?) -> some View {
         if slot.isGroup {
-            groupSlot(slot, store, inTopBar: inTopBar, joining: joining)
+            groupSlot(slot, store, inTopBar: inTopBar, joining: joining != nil && joining == slot.groupNumber)
         } else if case .extension(let id) = slot.item {
             if let item = extensionBar.items.first(where: { $0.id == id }) { extensionPiece(item, store: store, inTopBar: true) }
         } else {
@@ -391,7 +397,7 @@ struct MenuBarPage: View {
     /// Group it has no place of its own to step to: its menu takes it out of the Group, or splits the Group.
     private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, inGroup: Bool = false) -> some View {
         let kind = slot.kind, item = slot.item, screen = engine.topBar.connected.first?.name ?? ""
-        let grouped = inGroup ? [StripAction(title: "Take out of the Group", run: ungroup(kind, store)), StripAction(title: "Ungroup", run: ungroup(nil, store))] : []
+        let grouped = groupActions(item, store, inTopBar: inTopBar)
         return StripPiece(item: item, title: kind.title, pinned: kind.pinned, dragged: $dragged,
                           remove: takeOff(item, store), step: inGroup ? nil : step(item, store, inTopBar: inTopBar), actions: grouped) {
             BarDragChip(kind: kind, slot: slot, screen: screen, sources: engine.barSources, store: store)
@@ -405,16 +411,21 @@ struct MenuBarPage: View {
     /// lights while a drop would join it (`joining`).
     private func groupSlot(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, joining: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: ink.corner(ink.radius(6), \.chip), style: .continuous)
-        let group = BarTrayItem.kind(.group)
+        let group = slot.item, number = slot.groupNumber ?? 1, name = number > 1 ? "Group \(number)" : "The Group"
         return HStack(spacing: 10) {
-            ForEach(slot.entries, id: \.kind) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
+            // By item: several extensions' items share one kind.
+            ForEach(slot.entries, id: \.item) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
+            // Empty, from the tray or left so: the outline alone, room to drop on (Q182).
+            if slot.entries.isEmpty {
+                Text("Drop here").font(ink.ui(11)).foregroundStyle(ink.muted).padding(.horizontal, 10).frame(minWidth: 72, minHeight: 20)
+            }
         }
         .padding(.horizontal, 5).padding(.vertical, 1)
         .background {
             shape.fill(joining ? ink.accent.opacity(0.14) : .clear)
                 .overlay { shape.strokeBorder(joining ? ink.accent : ink.line2, style: StrokeStyle(lineWidth: joining ? 1.5 : 1, dash: [3, 2])) }
                 .contentShape(shape)
-                .help("The Group: drag its edge to move it whole, drop an item on it to group it, or drag one out")
+                .help("\(name): drag its edge to move it whole, drop an item on it to group it, or drag one out")
                 .onDrag {
                     dragged = group
                     return NSItemProvider(object: group.rawValue as NSString)
@@ -422,19 +433,31 @@ struct MenuBarPage: View {
                     BarDragChip(kind: .group, slot: slot, screen: engine.topBar.connected.first?.name ?? "", sources: engine.barSources, store: store)
                 }
                 .contextMenu {
-                    Button("Ungroup", action: ungroup(nil, store))
-                    Button("Take the Group off the bar", action: takeOff(group, store))
+                    Button("Ungroup", action: ungroup(nil, store, group: number))
+                    Button("Take \(number > 1 ? "this group" : "the Group") off the bar", action: takeOff(group, store))
                 }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Group")
-        .accessibilityAction(named: "Ungroup", ungroup(nil, store))
-        .accessibilityAction(named: "Take the Group off the bar", takeOff(group, store))
+        .accessibilityLabel(number > 1 ? "Group \(number)" : "Group")
+        .accessibilityAction(named: "Ungroup", ungroup(nil, store, group: number))
+        .accessibilityAction(named: "Take the group off the bar", takeOff(group, store))
     }
 
-    /// Takes `kind` out of the Group, or every item (Ungroup).
-    private func ungroup(_ kind: BarKind?, _ store: BarItemsStore) -> () -> Void {
-        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(kind) } }
+    /// Takes `item` out of its group, or every item of group `number` (Ungroup).
+    private func ungroup(_ item: BarTrayItem?, _ store: BarItemsStore, group number: Int? = nil) -> () -> Void {
+        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(item, group: number) } }
+    }
+
+    /// A piece's grouping lines in the top bar's strip, as the bar's own right-click has them (BarSettings.groupRows):
+    /// Group with each group, New group, Take out of the group; in a group, Ungroup splits it.
+    private func groupActions(_ item: BarTrayItem, _ store: BarItemsStore, inTopBar: Bool) -> [StripAction] {
+        guard inTopBar else { return [] }
+        var actions = store.settings.groupRows(item, names: engine.barSources.itemName).compactMap { row -> StripAction? in
+            guard case .action(let title, .edit(let edit), _, _) = row else { return nil }
+            return StripAction(title: title) { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.apply(edit, on: item) } }
+        }
+        if let number = store.settings.entry(for: item)?.groupNumber { actions.append(StripAction(title: "Ungroup", run: ungroup(nil, store, group: number))) }
+        return actions
     }
 
     /// An extension's own item, its emoji and its answer, a piece of its own in either strip.
@@ -442,7 +465,7 @@ struct MenuBarPage: View {
         let tray = BarTrayItem.extension(item.id)
         // Move left and right along the top bar, as a built-in item's; the macOS menu bar orders its own items.
         return StripPiece(item: tray, title: item.title, pinned: false, dragged: $dragged, remove: takeOff(tray, store),
-                          step: inTopBar ? step(tray, store, inTopBar: true) : nil) {
+                          step: inTopBar ? step(tray, store, inTopBar: true) : nil, actions: groupActions(tray, store, inTopBar: inTopBar)) {
             BarDragChip(kind: .extensions, slot: nil, screen: "", sources: engine.barSources, store: store, extensionItem: (item.icon ?? "🧩", item.title))
         } content: {
             ExtensionStripFace(item: item).fixedSize().padding(.horizontal, inTopBar ? 4 : 0)
@@ -463,7 +486,7 @@ struct MenuBarPage: View {
     // MARK: Items
 
     private func groupTile(_ group: BarGroup, store: BarItemsStore) -> some View {
-        let kinds = BarKind.allCases.filter { $0.group == group }
+        let kinds = BarKind.allCases.filter { $0.group == group && ($0 != .pill || PillFeature.released) }
         return Tile(title: group.title) {
             Text("\(kinds.count)").font(ink.mono(11)).foregroundStyle(ink.muted)
         } content: {
@@ -790,6 +813,7 @@ extension BarKind {
         case .modes: BarParts.statusSymbol
         case .clock: "clock"
         case .timer: "timer"
+        case .notifications: "bell"
         case .extensions: "puzzlepiece.extension"
         case .spacer: "arrow.left.and.right"
         case .divider: "line.diagonal"
@@ -872,24 +896,28 @@ struct BarPresetControls: View {
             Picker("Preset", selection: Binding(get: { store.settings.preset?.preset.rawValue ?? "legacy" }, set: { value in
                 do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
             })) {
-                Text("Current layout (before presets)").tag("legacy")
+                Text("Full bar").tag("legacy")
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
             }
             if let config = store.settings.preset {
-                Button("Reset geometry") {
-                    do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
-                }.buttonStyle(.pilot)
-                // Each row reads the preset again, never with `!`: picking Current layout clears it, and a row can redraw
-                // before this branch goes (build 2276 trapped there).
-                ForEach(BarItemsStore.geometryFields, id: \.0) { field in
-                    Stepper(field.1 + " · " + String(format: "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
-                        store.settings.preset?[keyPath: field.2] ?? 0
-                    }, set: { value in
-                        do { try store.setGeometry(field.0, value: value); problem = "" } catch { problem = String(describing: error) }
-                    }), in: BarPresetConfiguration.ranges[field.0]!)
+                // The sizes behind one fold, closed until opened (Sven, 2026-11-12): the preset's defaults are the bar.
+                KitFold(title: "Adjust sizes") {
+                    // Each row reads the preset again, never with `!`: picking Full bar clears it, and a row can redraw
+                    // before this branch goes (build 2276 trapped there).
+                    ForEach(BarItemsStore.geometryFields, id: \.0) { field in
+                        Stepper(field.1 + " · " + String(format: field.0 == "border" ? "%.1f pt" : "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
+                            store.settings.preset?[keyPath: field.2] ?? 0
+                        }, set: { value in
+                            do { try store.setGeometry(field.0, value: value); problem = "" } catch { problem = String(describing: error) }
+                        }), in: BarPresetConfiguration.ranges[field.0]!, step: field.0 == "border" ? 0.5 : 1)
+                    }
+                    Button("Reset sizes") {
+                        do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
+                    }.buttonStyle(.pilot)
                 }
             }
-            Text("Items and their order stay personal. Pack defaults and Restore are reviewed in Look.")
+            // Each preset its own layout (Sven, 2026-11-13).
+            Text("Each preset keeps its own items, order and groups; one you open the first time starts from the bar you have now. Pack defaults and Restore are reviewed in Look.")
             if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
         }
         .disabled(Look.shared.themePressing)  // A theme owns the layout: it waits while Look's Apply or Restore runs.

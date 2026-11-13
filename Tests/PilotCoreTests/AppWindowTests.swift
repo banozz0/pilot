@@ -4,9 +4,9 @@ import Testing
 
 @Suite("App window")
 struct AppWindowTests {
-    @Test("Twenty-six pages in Home, eight areas and Pilot at the foot; Cmd+1 to 9 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
+    @Test("Twenty-seven pages in Home, eight areas and Pilot at the foot; Cmd+1 to 9 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
     func pages() {
-        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Look", "System", "Activity",
+        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Pilot menu", "Look", "System", "Activity",
                                                    "Update & Clean", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
                                                    "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Launcher", "Desktop", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
@@ -14,7 +14,8 @@ struct AppWindowTests {
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
         for page in AppPage.allCases { #expect(page.area.pages.contains(page), "\(page)") }
         #expect(AppArea.home.pages == [.home] && AppArea.keys.pages == [.binds] && AppArea.launcher.pages == [.menu])
-        #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .look, .widgets])
+        // Pilot menu beside Menu bar (Sven, 2026-11-12, Q182).
+        #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .pilotMenu, .look, .widgets])
         // Majors first (simplify-pages T11): ⌘5 opens Update & Clean, ⌘7 Open with.
         #expect(AppArea.mac.pages == [.upkeep, .system, .activity, .stats])
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])

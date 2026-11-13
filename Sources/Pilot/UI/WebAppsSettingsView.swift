@@ -105,6 +105,8 @@ struct WebAppsSettingsView: View {
             }
             FinePrint(text: "Open web apps change at once. One an older Pilot made updates itself once it has quit.").padding(.vertical, 8)
         }
+        // Toybox's four segments need more than a column beside their label (PageFlow).
+        .pageWide()
     }
 
     /// One thing a web app does or does not do, under the link.
@@ -149,6 +151,8 @@ struct WebAppsSettingsView: View {
             }
             .padding(.vertical, 10)
         }
+        // The sites' cards keep the page's width (PageFlow).
+        .pageWide()
     }
 
     private var made: some View {

@@ -13,7 +13,7 @@ import Foundation
 /// Install for a page of its own after Configs (Sven, 2026-11-01: "for fonts i think its better to have its own page").
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -27,6 +27,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .workspaces: "Workspaces"
         case .tiling: "Tiling"
         case .menuBar: "Menu bar"
+        case .pilotMenu: "Pilot menu"
         case .look: "Look"
         case .system: "System"
         case .activity: "Activity"
@@ -59,6 +60,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .workspaces: "square.grid.2x2"
         case .tiling: "rectangle.split.3x1"
         case .menuBar: "menubar.rectangle"
+        case .pilotMenu: "list.bullet.below.rectangle"
         case .look: "paintpalette"
         case .system: "slider.horizontal.3"
         case .activity: "gauge.with.dots.needle.67percent"
@@ -88,7 +90,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
-        case .menu, .menuBar, .general, .activity: 3
+        case .menu, .menuBar, .pilotMenu, .general, .activity: 3
         case .install, .extensions, .files, .stats, .fonts, .repos: 4
         case .openWith, .configs, .notes: 5
         }
@@ -149,7 +151,10 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the rest moved with their controls to Tiling's More places (simplify-pages T9).
         case .tiling: ["gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim", "blur",
                        "dim other windows"]
-        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item"]
+        case .pilotMenu: ["pilot menu", "pilot's menu", "dropdown", "menu bar icon", "blocks", "pinned", "quick switches", "running now",
+                          "control centre", "control center", "extensions card"]
+        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
+                        "bar preset", "full bar", "floating strip", "three islands", "pills", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
         case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font", "material", "glass", "light or dark"]
@@ -206,7 +211,8 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .home: [.home]
         case .keys: [.binds]
         case .launcher: [.menu]
-        case .desktop: [.workspaces, .tiling, .menuBar, .look, .widgets]
+        // Pilot menu beside Menu bar: what the menu under Pilot's icon shows (Sven, 2026-11-12, Q182: Menu bar was crowded).
+        case .desktop: [.workspaces, .tiling, .menuBar, .pilotMenu, .look, .widgets]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘5 opens it; Clipboard, Notes, Files, Voice;
         // Open with first in Apps, so ⌘7 opens it.
         case .mac: [.upkeep, .system, .activity, .stats]
@@ -703,6 +709,7 @@ public struct AppPlace: Hashable, Sendable {
     /// Monitors and the swipe left Tiling for Workspaces (Sven's Q207 page map, 2026-10-17).
     static let renamed: [String: AppPlace] = [
         "topBar": AppPlace(.menuBar), "topbar": AppPlace(.menuBar), "menubar": AppPlace(.menuBar),
+        "pilotmenu": AppPlace(.pilotMenu), "dropdown": AppPlace(.pilotMenu),
         "installCatalogue": AppPlace(.catalogue), "pomodoro": AppPlace(.extensionCatalogue),
         "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.stats), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),

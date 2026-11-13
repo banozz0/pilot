@@ -120,7 +120,7 @@ struct MenuBarPageModelTests {
         // stays out); dropped on the Group's outline it joins it.
         let alone = s.drop(.kind(.heat), on: .top(.left, index: 0), placement: .topBar)
         #expect(alone && Self.kinds(s, .left).contains(.heat) && !s.entry(.heat).inGroup)
-        let joined = s.drop(.kind(.heat), on: .group, placement: .topBar)
+        let joined = s.drop(.kind(.heat), on: .group(1), placement: .topBar)
         #expect(joined && s.slots(in: .topBar, topBarOn: true).first(where: \.isGroup)?.kinds.contains(.heat) == true)
     }
 
@@ -200,14 +200,15 @@ struct MenuBarPageModelTests {
         #expect(landed192 && s.entry(.otherApps).placement == .topBar)
     }
 
-    @Test("The Group dropped with no reading brings CPU, Memory and Network into that bar, so its slot draws")
+    @Test("The Group dropped from the tray goes on empty: no reading is turned on or put in it (Sven on build 2425: it grouped Network, not on the bar)")
     func groupFills() {
         var s = BarSettings.defaults
         let took199 = s.takeOff(.kind(.group), placement: .menuBar)
         #expect(took199)
         let landed201 = s.drop(.kind(.group), on: .menu(index: 0), placement: .menuBar)
         #expect(landed201)
-        #expect(s.slots(in: .menuBar, topBarOn: false).first { $0.isGroup }?.kinds == [.cpu, .memory, .network])
+        #expect(s.isOn(.group, in: .menuBar) && s.slots(in: .menuBar, topBarOn: false).first { $0.isGroup } == nil)
+        #expect([BarKind.cpu, .memory, .network].allSatisfy { !s.isOn($0, in: .menuBar) })
     }
 
     @Test("An extension's item: onto the top bar it is its own slot where it drops; onto the menu bar it is its own item; back to the tray it leaves that bar")

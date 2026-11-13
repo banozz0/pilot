@@ -31,7 +31,7 @@ extension ControlVerbs {
     /// goes to the store both bars and the page draw from.
     func registerBar(_ bar: @escaping @Sendable @MainActor () -> BarItemsStore, reach: BarReach = BarReach()) {
         register(ControlCollection(
-            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both. The top bar holds any number of dividers: add divider while one is there adds one more, listed as divider:<n>, which remove and bar move name.",
+            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both. The top bar holds any number of dividers: add divider while one is there adds one more, listed as divider:<n>, which remove and bar move name; add group while the Group is there adds one more group, empty, listed as group:<n>.",
             fields: [.init("item", help: "one of \(Self.cases(BarKind.self)), or divider:<n> for one more divider"),
                      .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)); other apps, app menus and extensions are top bar only", required: false),
                      .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (the item's own)", required: false),
@@ -45,6 +45,10 @@ extension ControlVerbs {
                 // Once a divider is on the top bar, each add is one more there (Sven on build 2363), as the page's tray does.
                 if kind == .divider, args.value("placement") == nil, case let item = bar().settings.dividerToAdd(.topBar), item != .kind(.divider) {
                     return Self.change(item, in: bar(), reach) { s in s.drop(item, on: .top(side ?? s.entry(.divider).side, index: index ?? .max), placement: .topBar) }
+                }
+                // Once the Group is on the top bar, each add is one more group there, empty, as the page's tray does (Q182).
+                if kind == .group, args.value("placement") == nil, case let item = bar().settings.groupToAdd(.topBar), item != .kind(.group) {
+                    return Self.change(item, in: bar(), reach) { s in s.drop(item, on: .top(side ?? s.entry(.group).side, index: index ?? .max), placement: .topBar) }
                 }
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
                 let placement = try Self.placement(word, for: kind)
@@ -68,9 +72,10 @@ extension ControlVerbs {
             }))
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
-        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (ungroup alone splits the whole Group), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> | pilot bar ungroup [<item>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits every group, --group one; --group puts it in a group of its own number, each its own pill), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
+                                     .init("group", help: "group: the group it joins, 1 the Group (the default), 2 and on one more, each its own pill, made where the item is if new; new is the next free number. ungroup: the group it splits"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
                                      .init("placement", help: "clear, restore: the bar it acts on, \(Self.cases(BarPlacement.self)) (the one the Menu bar page shows)")],
@@ -83,7 +88,7 @@ extension ControlVerbs {
             try bar().requireWritable()
             switch sub {
             case "preset":
-                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands>") }
+                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands|pills>: legacy is the Full bar") }
                 try bar().choosePreset(try args.word(1, "preset"))
                 return Self.state(bar(), reach)
             case "geometry":
@@ -117,20 +122,24 @@ extension ControlVerbs {
                 }
                 return Self.change(kind, in: bar(), reach) { $0.set(kind, style: style) }
             case "group":
-                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
+                let word = try args.word(1, "item")
+                let item = try Self.groupItem(word, reach)
                 var joined = bar().settings
-                guard joined.group(kind) else {
-                    throw ControlError(.badValue, "\(kind.rawValue) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")), while the Group is on")
+                let number = try Self.groupNumber(args.value("group"), next: joined.nextGroup) ?? 1
+                guard joined.group(item, into: number) else {
+                    throw ControlError(.badValue, "\(word) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")) and any extension's bar item by its id, while the Group is on")
                 }
-                return Self.change(kind, in: bar(), reach) { $0 = joined }
+                return Self.change(item, in: bar(), reach) { $0 = joined }
             case "ungroup":
+                let number = try Self.groupNumber(args.value("group"), next: nil)
                 guard args.positional.count > 1 else {
-                    Self.write(bar()) { $0.ungroup() }
+                    Self.write(bar()) { $0.ungroup(group: number) }
                     return Self.state(bar(), reach)
                 }
-                let kind: BarKind = try Self.choice(try args.word(1, "item"), "item")
-                guard bar().settings.entry(kind).inGroup else { throw ControlError(.badValue, "\(kind.rawValue) is not in the Group") }
-                return Self.change(kind, in: bar(), reach) { $0.ungroup(kind) }
+                let word = try args.word(1, "item")
+                let item = try Self.groupItem(word, reach)
+                guard bar().settings.entry(for: item)?.inGroup == true else { throw ControlError(.badValue, "\(word) is not in the Group") }
+                return Self.change(item, in: bar(), reach) { $0.ungroup(item) }
             case "spacer":
                 let word = try args.word(1, "points or reset")
                 let points = word == "reset" ? nil : Double(word)
@@ -257,7 +266,7 @@ extension ControlVerbs {
                         "onlyInTopBar": .array(s.onlyInTopBar.map { .string($0.rawValue) }),
                         "readingsLook": .string(s.readingsLook.rawValue),
                         // The top bar's order, side by side, as it draws with the bar on: each extension's item its own.
-                        "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar).top ?? [:]).map { side, slots in
+                        "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar, emptyGroups: true).top ?? [:]).map { side, slots in
                             (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
                         })),
                         "preset": (try? ThemeDigest.encoded(s.preset)).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) } ?? .null,
@@ -295,6 +304,20 @@ extension ControlVerbs {
     }
 
     /// One more divider (divider:<n>) named on the command line, on the top bar; nil for any other word.
+    /// `--group`'s number: 1 and on, or new (the next free number, when `next` is given); nil when not given.
+    private static func groupNumber(_ word: String?, next: Int?) throws(ControlError) -> Int? {
+        guard let word else { return nil }
+        if word == "new", let next { return next }
+        guard let number = Int(word), number >= 1 else { throw ControlError(.badValue, "--group is a group's number from 1\(next == nil ? "" : ", or new"), not \(word)") }
+        return number
+    }
+
+    /// What `pilot bar group` and `ungroup` name: a built-in item by its name, else an extension's bar item by its id (Q182).
+    private static func groupItem(_ word: String, _ reach: BarReach) throws(ControlError) -> BarTrayItem {
+        if let kind = BarKind(rawValue: word) { return .kind(kind) }
+        return .extension(try Self.extensionItem(word, reach).id)
+    }
+
     private static func moreDivider(_ word: String, on store: BarItemsStore) throws(ControlError) -> BarTrayItem? {
         guard word.hasPrefix("divider:") else { return nil }
         guard let item = BarTrayItem(rawValue: word), case .divider = item, store.settings.onStrip(item, placement: .topBar) else {
@@ -305,7 +328,7 @@ extension ControlVerbs {
     }
 
     private static func row(_ entry: BarEntry, lacking: Set<BarKind>) -> JSONValue {
-        .object(["item": .string(entry.dividerID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
+        .object(["item": .string(entry.item == .kind(entry.kind) ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
                  "styles": .array(entry.kind.styles.map { .string($0.rawValue) }),
                  "placement": .string(entry.placement.rawValue), "side": .string(entry.side.rawValue),
                  "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)), "inGroup": .bool(entry.inGroup),

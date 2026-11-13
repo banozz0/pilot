@@ -22,8 +22,8 @@ struct TopBarView: View {
         let sides = store.settings.preview(.topBar).top ?? [:]
         let kinds = Set(sides.values.joined().flatMap(\.kinds))
         // Each slot is its own view, so a timer tick redraws the timer, not the bar.
-        TopBarStrip(sides: sides, configuration: store.settings.preset, look: Look.shared, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,
-                    wallpaper: wallpapers.strips[screen], foot: BarFoot(screen: screen, configuration: store.settings.preset), reportIsland: reportIsland, report: { [frames, screen] in frames.report($2, side: $0, index: $1, on: screen) },
+        TopBarStrip(sides: sides, configuration: store.topBarConfiguration, look: Look.shared, background: store.background.shown(transparency: Look.shared.transparency), colour: store.colour, itemColours: store.itemColours,
+                    wallpaper: wallpapers.strips[screen], foot: BarFoot(screen: screen, configuration: store.topBarConfiguration), reportIsland: reportIsland, report: { [frames, screen] in frames.report($2, side: $0, index: $1, on: screen) },
                     // Capture shows the recording's time itself, in place of the red-dot control; checked first, so the bar
                     // never follows the recorder then.
                     trailing: !kinds.contains(.capture) && recorder.isActive ? AnyView(RecordingControl(recorder: recorder)) : nil,
@@ -243,8 +243,10 @@ struct TopBarStrip<Slot: View>: View {
     var body: some View {
         // Toybox's islands (ToyBar) stand on its canvas, apart, with no hairline or rule. Instrument's (InstrumentBar) draws
         // a hairline between the bar's groups, its caption face and the rule along its foot.
-        let islands = configuration?.preset == .threeIslands
+        let islands = configuration?.preset.islands == true
         let toybox = style.kind == .toybox, instrument = style.kind == .instrument
+        // Pills: each slot its own pill (BarPill), the sides' grounds left out; Toybox's slots are pills already.
+        let pills = configuration?.preset == .pills, pilled = pills && !toybox
         let rules = instrument ? sides.mapValues(InstrumentBar.hairlines(before:)) : [:]
         let placed = live?.layoutValue(key: TopBarRow.Side.self, value: liveSide).layoutValue(key: TopBarRow.Folds.self, value: true)
         // On the left it follows the mark: placed first only where there is none.
@@ -253,12 +255,13 @@ struct TopBarStrip<Slot: View>: View {
         let (inked, tone): (StyleTokens, TopBarColour.Toned?) = if let look {
             TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: look)
         } else { (TopBarColour.tokens(colour, style: style, background: background), nil) }
-        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration : nil, packed: preview) {
+        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration?.row : nil, packed: preview) {
             if islands, let configuration {
                 ForEach(TopBarSide.allCases, id: \.self) { side in
                     GeometryReader { proxy in
-                        // A zero final width draws no fill or stroke, including when every saved item is hidden.
-                        if proxy.size.width > 0, proxy.size.height > 0 {
+                        // A zero final width draws no fill or stroke, including when every saved item is hidden. A Pills
+                        // side draws nothing: its pills are its ground.
+                        if !pills, proxy.size.width > 0, proxy.size.height > 0 {
                             islandGround(ground: ground, tone: tone)
                                 .background { if glassPreview, background == .glass { BarGlassGround(colour: colour) } }
                                 .clipShape(.rect(cornerRadius: configuration.radius))
@@ -278,6 +281,7 @@ struct TopBarStrip<Slot: View>: View {
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
                     let ruled = rules[side]?.contains(index) == true
                     slot(item)
+                        .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: look))
                         .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
                         .reported(report.map { report in { report(side, index, $0) } })
                         .layoutValue(key: TopBarRow.Side.self, value: side)
@@ -318,6 +322,40 @@ struct TopBarStrip<Slot: View>: View {
     @ViewBuilder private func islandGround(ground: UInt32, tone: TopBarColour.Toned?) -> some View {
         if background == .solid { colour == .theme ? TopBarColour.themeGround(style) : Color(Paint(ground)) }
         else { TopBarColour.toneGround(tone, background: background) }
+    }
+}
+
+/// A Pills slot's own pill (Sven, 2026-11-12, Q177, after a Waybar picture): the bar's colour (the theme's, or the picked
+/// one) under it, its corners `radius`, a `border` ring in the accent's line colour, `padding` inside. Glass draws the
+/// colour at Look's Transparency share (the window behind a Pills side shows no glass of its own), Clear only the ring.
+/// Nil `configuration` leaves the slot as it is.
+private struct BarPill: ViewModifier {
+    @Environment(\.style) private var style
+    let configuration: BarPresetConfiguration?
+    let background: TopBarBackground
+    let colour: ColourChoice
+    let look: Look?
+
+    func body(content: Content) -> some View {
+        if let configuration {
+            let shape = RoundedRectangle(cornerRadius: configuration.radius, style: .circular)
+            let ground = Color(Paint(TopBarColour.ground(colour, style: style)))
+            content
+                .padding(.horizontal, configuration.padding)
+                .frame(maxHeight: .infinity)
+                .background {
+                    switch background {
+                    case .solid: shape.fill(colour == .theme ? TopBarColour.themeGround(style) : ground)
+                    case .glass: shape.fill(ground.opacity(Double(look.map(TopBarColour.tintAlpha) ?? 55) / 100))
+                    case .clear: shape.fill(TopBarColour.clearGround)
+                    }
+                }
+                // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
+                // its ends offscreen (the bar look round).
+                .overlay { shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border) }
+        } else {
+            content
+        }
     }
 }
 

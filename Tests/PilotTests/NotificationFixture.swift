@@ -232,7 +232,7 @@ final class NotificationRecordingPresenter: NotificationPresenting {
 enum NotificationFixtureRender {
     static func cards(_ cards: [NotificationEntry]) -> Data? {
         let model = NotificationCardsModel()
-        model.cards = Array(cards.prefix(NotificationFeed.cardLimit).reversed())
+        model.cards = Array(cards.prefix(NotificationFeed.cardLimit))
         let host = NSHostingView(rootView: NotificationCardStack(model: model).padding(16).background(Color(white: 0.2)).styled(.barPopovers).pilotTheme().fixedSize())
         host.frame.size = host.fittingSize
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
