@@ -24,6 +24,8 @@ final class BarPanel: NSObject {
     private(set) var shown: [BarKind]?
     /// The extension whose own item's panel shows (Surfaces v2), with `shown` [.extensions].
     private(set) var shownExtension: String?
+    /// The dock app whose window list shows (spec pilot-dock), with `shown` empty.
+    private(set) var shownDock: String?
 
     init(presenter: BarPanelPresenting) {
         self.presenter = presenter
@@ -34,6 +36,7 @@ final class BarPanel: NSObject {
         presenter.closed = { [weak self] in
             self?.shown = nil
             self?.shownExtension = nil
+            self?.shownDock = nil
         }
     }
 
@@ -52,11 +55,16 @@ final class BarPanel: NSObject {
         toggle([.extensions], extension: id, under: view?.screenFrame, content)
     }
 
-    private func toggle(_ id: [BarKind], extension ext: String?, under item: CGRect?, _ content: AnyView) {
-        if shown == id && shownExtension == ext { return close() }
+    /// A dock app's window list (spec pilot-dock), keyed by its app: it rises over the icon (BarPanelPlacement.rises).
+    func toggle(dock app: String, under view: NSView?, _ content: AnyView) {
+        toggle([], dock: app, under: view?.screenFrame, content)
+    }
+
+    private func toggle(_ id: [BarKind], extension ext: String? = nil, dock: String? = nil, under item: CGRect?, _ content: AnyView) {
+        if shown == id && shownExtension == ext && shownDock == dock { return close() }
         guard let item else { return }
         presenter.present(content, under: item)
-        (shown, shownExtension) = (id, ext)
+        (shown, shownExtension, shownDock) = (id, ext, dock)
     }
 
     /// What an edit list drives live: the shown bar panel (the Pilot menu) or the open bar drops (the pill).
@@ -77,7 +85,7 @@ final class BarPanel: NSObject {
     @objc func close() {
         guard shown != nil else { return }
         presenter.dismiss()
-        (shown, shownExtension) = (nil, nil)
+        (shown, shownExtension, shownDock) = (nil, nil, nil)
     }
 }
 

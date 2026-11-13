@@ -9,28 +9,46 @@ public protocol MenuBarAutohide: Sendable {
 }
 
 /// The real one: osascript in a child process (AGENTS.md: never NSAppleScript on the main thread), the timeout long
-/// enough for macOS's one Automation prompt to be answered.
+/// enough for macOS's one Automation prompt to be answered. `property` is the `dock preferences` switch it reads and sets:
+/// the menu bar's (`autohide menu bar`, the top bar) or the Dock's (`autohide`, Pilot's dock, spec pilot-dock). A test
+/// process never runs it: every call refuses there, so a suite or the sandbox host that forgot its fake changes nothing.
 public struct SystemEventsAutohide: MenuBarAutohide {
-    public init() {}
+    public let property: String
+    public init(property: String = "autohide menu bar") { self.property = property }
 
-    static let readScript = #"tell application "System Events" to get autohide menu bar of dock preferences"#
-    static func writeScript(_ hidden: Bool) -> String {
-        #"tell application "System Events" to set autohide menu bar of dock preferences to "# + (hidden ? "true" : "false")
+    /// The Dock's own auto-hide.
+    public static let dock = SystemEventsAutohide(property: "autohide")
+
+    var readScript: String { #"tell application "System Events" to get "# + property + " of dock preferences" }
+    func writeScript(_ hidden: Bool) -> String {
+        #"tell application "System Events" to set "# + property + " of dock preferences to " + (hidden ? "true" : "false")
     }
+    /// The menu bar's scripts, as the tests read them.
+    static var readScript: String { SystemEventsAutohide().readScript }
+    static func writeScript(_ hidden: Bool) -> String { SystemEventsAutohide().writeScript(hidden) }
     static func parse(_ output: String) -> Bool? {
         ["true": true, "false": false][output.trimmingCharacters(in: .whitespacesAndNewlines)]
     }
 
     public func isHidden() async throws -> Bool {
-        let out = try await Self.run(Self.readScript)
-        guard let hidden = Self.parse(out) else { throw ChildProcess.Failure(tool: "osascript", status: 0, message: "autohide read \(out)") }
+        let out = try await Self.run(readScript)
+        guard let hidden = Self.parse(out) else { throw ChildProcess.Failure(tool: "osascript", status: 0, message: "\(property) read \(out)") }
         return hidden
     }
 
-    public func setHidden(_ hidden: Bool) async throws { _ = try await Self.run(Self.writeScript(hidden)) }
+    public func setHidden(_ hidden: Bool) async throws { _ = try await Self.run(writeScript(hidden)) }
+
+    /// A test run's process: XCTest's or SwiftPM's helper.
+    public static var inTestProcess: Bool {
+        let name = ProcessInfo.processInfo.processName
+        return NSClassFromString("XCTestCase") != nil || name.contains("swiftpm-testing-helper") || name.hasSuffix("xctest")
+    }
+
+    public struct Refused: Error, CustomStringConvertible { public var description: String { "a test run never changes the macOS menu bar or Dock" } }
 
     private static func run(_ script: String) async throws -> String {
-        try await ChildProcess.run("/usr/bin/osascript", ["-e", script], timeout: .seconds(120))
+        guard !inTestProcess else { throw Refused() }
+        return try await ChildProcess.run("/usr/bin/osascript", ["-e", script], timeout: .seconds(120))
     }
 }
 

@@ -43,6 +43,21 @@ struct MenuBarPage: View {
         _placement = State(initialValue: placement ?? BarItemsStore.shared.pagePlacement)
     }
 
+    /// Pilot's dock (spec pilot-dock): its switch, its problem, and its size while it is on. Its widgets are `pilot dock-widgets`.
+    @ViewBuilder private func dockCard(_ dock: DockController) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SwitchCard(symbol: "dock.rectangle", name: "Dock", isOn: dock.isOn, busy: dock.busy,
+                       detail: "Pilot's own dock at the foot of the main screen: your Dock's apps, the running ones and three widgets. On turns on the macOS Dock's auto-hide; off, or quitting Pilot, puts your setting back.") {
+                dock.set(!dock.isOn)
+            }
+            if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
+            if dock.isOn {
+                Segments(selection: Binding(get: { dock.settings.size }, set: { dock.settings.size = $0 }),
+                         options: DockSize.allCases.map { ($0, $0.rawValue.capitalized) }, label: "Dock size")
+            }
+        }
+    }
+
     var body: some View {
         let store = BarItemsStore.shared, topBar = engine.topBar
         PageBody {
@@ -56,6 +71,7 @@ struct MenuBarPage: View {
                 if let problem = topBar.problem { FinePrint(text: problem, color: ink.red) }
                 onlyInTopBar(store, topBarOn: topBar.isOn)
             }
+            dockCard(engine.dock)
             HStack(alignment: .bottom) {
                 Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
                     .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
