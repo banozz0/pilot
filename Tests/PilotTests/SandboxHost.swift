@@ -37,6 +37,8 @@ struct SandboxHost {
         ImageViewer.onScreen = false
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
+        // PILOT_SANDBOX_DOCK=<folder>: a fake macOS Dock (DockFixture); without it every dock switch refuses, and the dock never draws.
+        DockFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DOCK"], on: engine.dock)
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores
         // without a prompt on Sven's screen (P49's publish, against a local bare remote).
         if ProcessInfo.processInfo.environment["PILOT_SANDBOX_ALLOW"] == "1" {
