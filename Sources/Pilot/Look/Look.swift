@@ -36,6 +36,14 @@ final class Look {
             resolve()
         }
     }
+    /// Pilot's own themes the person removed (Sven on build 2445: "i should be able to remove even pre installed themes"):
+    /// left out of Look's cards, the desktop menu and `pilot theme colours|list`; Look › Catalogue's Get brings one back.
+    /// The pack itself stays in the app, so nothing is deleted. ThemeCoordinator.delete and restore are the way in.
+    var hiddenThemes: Set<String> { didSet { defaults.set(hiddenThemes.sorted(), forKey: Key.hiddenThemes) } }
+
+    /// The designed themes `style` can wear, less the ones removed.
+    func shownThemes(for style: String) -> [PilotTheme] { PilotTheme.designed(for: style).filter { !hiddenThemes.contains($0.id) } }
+
     /// Glass behind the window and every panel, popover and HUD, else Solid (Sven, 2026-10-09: off on a fresh install).
     var glass: Bool { didSet { defaults.set(glass, forKey: Key.glass) } }
     /// From 0 % (solid) to 100 % (33 by default): how see-through the window's surfaces are over Glass (Layers).
@@ -181,7 +189,7 @@ final class Look {
 
     private enum Key {
         static let layout = "look.layout", style = "look.style", theme = "look.theme", glass = "look.glass", transparency = "look.transparency",
-                   glassBlur = "look.glassBlur"
+                   glassBlur = "look.glassBlur", hiddenThemes = "look.hiddenThemes"
         /// The Strength slider's and the material's (Solid, Tinted or Glass), read only to carry them over to Transparency
         /// and Glass; left in place, so an older Pilot still reads them.
         static let strength = "look.strength", material = "look.material"
@@ -205,6 +213,7 @@ final class Look {
         defaults.removeObject(forKey: Key.layout)
         let saved = defaults.string(forKey: Key.theme)
         themeID = PilotTheme.current(saved)
+        hiddenThemes = Set(defaults.stringArray(forKey: Key.hiddenThemes) ?? [])
         // A saved Strength (80 where only a material was picked) is carried over once, under Transparency's own key, as
         // the Transparency whose ground draws what it drew.
         let material = defaults.string(forKey: Key.material)

@@ -77,13 +77,26 @@ final class ThemeCatalogueModel {
         applied = try? owner.appliedTheme().id
     }
 
+    /// A built-in theme you removed (Look.hiddenThemes) stands as one to get: Get brings it back.
     func standing(of theme: ExtensionCatalogue.Theme) -> Standing {
-        if builtIn.contains(theme.id) { return .builtIn }
+        if builtIn.contains(theme.id) { return Look.shared.hiddenThemes.contains(theme.id) ? .get : .builtIn }
         return switch ExtensionCatalogue.standing(of: theme, installed: installed) {
         case .install: .get
         case .installed: .installed
         case .update: .update
         }
+    }
+
+    /// Whether `id` is the theme in use, applied or worn: what Remove and Update refuse.
+    func inUse(_ id: String) -> Bool { applied == id || Look.shared.themeID == id }
+
+    /// Brings back the built-in theme `id` you removed; false when it is not one.
+    func restore(_ id: String) async -> Bool {
+        guard builtIn.contains(id), let owner = try? ThemeCoordinator.production(), owner.restore(id) else { return false }
+        looklog.notice("theme catalogue: \(id, privacy: .public) back")
+        failures[id] = nil
+        await readInstalled()
+        return true
     }
 
     /// Why Get or Update of `theme` can't start, before anything is asked or fetched; nil when it can.
@@ -131,6 +144,7 @@ final class ThemeCatalogueModel {
 
     /// A tile's Get or Update: no Allow from Pilot's own window, as Extensions' Get; the HUD line it ended on.
     func get(_ theme: ExtensionCatalogue.Theme) async -> String {
+        if await restore(theme.id) { return "\(theme.title) is back in your themes. Nothing applied." }
         let had = installed[theme.id]
         if let why = refusal(theme) { return failed(theme.id, why) }
         do {
@@ -157,10 +171,10 @@ final class ThemeCatalogueModel {
         } catch { return failed(id, String(describing: error)) }
     }
 
-    /// A tile's Remove: the downloaded pack out of your themes through `theme delete`'s rules (never Pilot's own, the
-    /// applied one or one whose wallpaper is on screen); the HUD line.
+    /// A tile's Remove through `theme delete`'s rules: a downloaded pack leaves your themes, one of Pilot's own is hidden
+    /// (never the theme in use, one whose wallpaper is on screen, or the last one); the HUD line.
     func remove(_ theme: ExtensionCatalogue.Theme) async -> String {
-        guard installed[theme.id] != nil, !builtIn.contains(theme.id) else { return "\(theme.title) is not one you downloaded." }
+        guard installed[theme.id] != nil || builtIn.contains(theme.id) else { return "\(theme.title) is not in your themes." }
         failures[theme.id] = nil
         do {
             try ThemeCoordinator.production().delete(theme.id)

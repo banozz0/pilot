@@ -268,7 +268,7 @@ private struct ThemePackControls: View {
     /// Every theme this style can wear: Pilot's own in their designed order, then the ones a person made.
     private var cards: [PilotTheme] {
         let style = look.style.rawValue
-        return PilotTheme.designed(for: style) + packs.filter { pack in pack.compatible(with: style) && !PilotTheme.designed.contains { $0.id == pack.id } }
+        return look.shownThemes(for: style) + packs.filter { pack in pack.compatible(with: style) && !PilotTheme.designed.contains { $0.id == pack.id } }
             .map { $0.appearance(keeping: .standard) }
     }
 
@@ -800,7 +800,7 @@ private struct ThemeGrid: View {
     var columns = 4
 
     var body: some View {
-        ThemeCards(themes: PilotTheme.designed(for: look.style.rawValue),
+        ThemeCards(themes: look.shownThemes(for: look.style.rawValue),
                    picked: look.themeID, columns: columns) { look.pick($0) }
     }
 }

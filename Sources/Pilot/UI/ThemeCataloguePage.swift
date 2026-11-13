@@ -5,7 +5,7 @@ import SwiftUI
 /// Look › Catalogue (public-repo-catalogue T22, Sven's variant C of T21's round): every theme pack in Pilot's catalogue as
 /// a gallery of desks, each its palette over its wallpaper (LookDesk), its name in its own face and who made it, acting
 /// from its own tile: Get, Update, Apply, Remove. All, Installed, Updates and From others filter it, a search narrows it.
-/// The themes Pilot ships show Built in and apply only; Remove takes only a pack you downloaded, never the one in use
+/// The themes Pilot ships show Built in; Remove hides one (Sven on build 2445) and Get brings it back. Never the one in use
 /// (apply another or Restore default first, `theme delete`'s rule). Nothing is fetched before the tab shows: the index as it
 /// opens, each tile's picture as the tile scrolls in.
 struct ThemeCataloguePage: View {
@@ -33,7 +33,7 @@ struct ThemeCataloguePage: View {
             let pack = ThemePack(id: theme.id, title: theme.title, dark: theme.dark, palette: theme.palette, styles: theme.styles)
             guard pack.compatible(with: style) else { return nil }
             return ThemeCatalogueTile(id: theme.id, theme: PilotTheme.named(theme.id) ?? pack.appearance(keeping: .standard), author: theme.author,
-                                      standing: model.standing(of: theme), applied: model.applied == theme.id,
+                                      standing: model.standing(of: theme), applied: model.inUse(theme.id),
                                       toyboxOnly: theme.styles == ["toybox"] || StyleTokens.toyboxThemes.contains(theme.id),
                                       busy: model.busy[theme.id], failure: model.failures[theme.id], picture: model.pictures[theme.id])
         }
@@ -62,6 +62,8 @@ struct ThemeCatalogueTile: Identifiable {
 
     /// In your themes from the catalogue: what Remove takes.
     var downloaded: Bool { standing == .installed || standing == .update }
+    /// In your themes, downloaded or built in: what Installed lists and Remove takes.
+    var inYourThemes: Bool { downloaded || standing == .builtIn }
 }
 
 /// The gallery under Look's bar: its filters and search, then the tiles, or a line while the index is read, out of reach
@@ -100,7 +102,7 @@ struct ThemeCatalogueGallery: View {
         func holds(_ tile: ThemeCatalogueTile) -> Bool {
             switch self {
             case .all: true
-            case .installed: tile.downloaded
+            case .installed: tile.inYourThemes
             case .updates: tile.standing == .update
             case .others: tile.author != nil
             }
@@ -127,8 +129,17 @@ struct ThemeCatalogueGallery: View {
             Button("Remove", role: .destructive) { if let id = removing?.id { actions.remove(id) }; removing = nil }
         } message: {
             // An Update tile's pack differs from the catalogue's (an older copy, or one you edited): Get brings back only theirs.
-            Text(removing?.standing == .update ? "Its folder and pictures leave your themes, with any change you made to it. This can't be undone."
-                 : "Its folder and pictures leave your themes. Get brings it back from the catalogue.")
+            Text(Self.removeNote(removing?.standing))
+        }
+    }
+
+    /// Remove's question: what goes, and whether Get brings it back.
+    static func removeNote(_ standing: ThemeCatalogueModel.Standing?) -> String {
+        switch standing {
+        case .update: "Its folder and pictures leave your themes, with any change you made to it. This can't be undone."
+        // One of Pilot's own is only hidden: its pack stays in the app.
+        case .builtIn: "It leaves Look's themes. Get brings it back."
+        default: "Its folder and pictures leave your themes. Get brings it back from the catalogue."
         }
     }
 
@@ -201,7 +212,7 @@ private struct ThemeTile: View {
                     author
                     Text("· \(standingWords)").font(ink.ui(11.5)).foregroundStyle(ink.text2).lineLimit(1)
                     Spacer(minLength: 6)
-                    if tile.busy == nil, !tile.applied, tile.downloaded { quiet("Remove", askRemove) }
+                    if tile.busy == nil, !tile.applied, tile.inYourThemes { quiet("Remove", askRemove) }
                 }
                 if let failure = tile.failure { FinePrint(text: failure, color: ink.red).lineLimit(3) }
             }

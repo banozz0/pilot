@@ -31,6 +31,8 @@ extension ControlVerbs {
         guard let theme = model.catalogue.index?.theme(id) else {
             throw ControlError(.badValue, ExtensionCatalogue.Problem.themeNotListed(id).reason + " pilot theme catalogue lists them.")
         }
+        // One of Pilot's own you removed comes back from the app's own copy: nothing is fetched or asked.
+        if await model.restore(id) { return .object(["installed": .string(id), "changed": .bool(true), "restored": .bool(true)]) }
         let had = model.installed[id]
         guard had != theme.digest else { return .object(["installed": .string(id), "changed": .bool(false)]) }
         if let why = model.refusal(theme) { throw ControlError(.badValue, why + " Nothing asked.") }
