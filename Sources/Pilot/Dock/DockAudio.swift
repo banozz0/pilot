@@ -266,19 +266,29 @@ final class CoreAudioTapSource: DockAudioSource {
     }
 
     /// The IO block, made outside the main actor: Core Audio calls it on its own thread, where a main-actor closure would
-    /// trap on its isolation check.
+    /// trap on its isolation check. An output device with inputs of its own (AirPods' mic) puts its streams in the
+    /// aggregate's input too, ahead of the tap's: the tap's is the last with its channel count (interleaved), or the last
+    /// two mono buffers (not interleaved).
     nonisolated private static func reader(_ ring: DockSampleRing, interleaved: Bool, channels: Int) -> AudioDeviceIOBlock {
         { _, input, _, _, _ in
             let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
-            guard let first = buffers.first, let data = first.mData else { return }
-            let samples = data.assumingMemoryBound(to: Float.self)
             if interleaved {
-                let frames = Int(first.mDataByteSize) / MemoryLayout<Float>.size / channels
-                ring.write(left: samples, right: channels > 1 ? samples + 1 : nil, frames: frames, stride: channels)
+                guard let tap = buffers.last(where: { Int($0.mNumberChannels) == channels }) ?? buffers.last, let data = tap.mData else { return }
+                let samples = data.assumingMemoryBound(to: Float.self), step = max(1, Int(tap.mNumberChannels))
+                let frames = Int(tap.mDataByteSize) / MemoryLayout<Float>.size / step
+                ring.write(left: samples, right: step > 1 ? samples + 1 : nil, frames: frames, stride: step)
             } else {
-                let frames = Int(first.mDataByteSize) / MemoryLayout<Float>.size
-                let right = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float.self) : nil
-                ring.write(left: samples, right: right.map { UnsafePointer($0) }, frames: frames)
+                // The last two mono buffers, found from the end without allocating on the audio thread.
+                var last = -1, before = -1
+                for i in stride(from: buffers.count - 1, through: 0, by: -1) where buffers[i].mNumberChannels == 1 && buffers[i].mData != nil {
+                    if last < 0 { last = i } else { before = i; break }
+                }
+                guard last >= 0 else { return }
+                let leftBuffer = buffers[before >= 0 ? before : last]
+                guard let left = leftBuffer.mData else { return }
+                let right = before >= 0 ? buffers[last].mData : nil
+                ring.write(left: left.assumingMemoryBound(to: Float.self), right: right.map { UnsafePointer($0.assumingMemoryBound(to: Float.self)) },
+                           frames: Int(leftBuffer.mDataByteSize) / MemoryLayout<Float>.size)
             }
         }
     }
