@@ -100,6 +100,71 @@ struct DockWidgetRenders {
                             to: dir.appendingPathComponent("\(name).png"), wait: 1.5)
         }
     }
+
+    /// Round 5 (Sven's Lumabar picks, Q217): every new widget and look as the dock maps them, from fixed readings.
+    static func round5() -> [(String, String, DockWidgetBody)] {
+        let files: [DockStack: [DockFile]] = [
+            .downloads: [DockFile(url: URL(filePath: "/tmp/dl/Invoice-2026-11.pdf"), date: now)],
+            .captures: [DockFile(url: URL(filePath: "/tmp/cap/Capture 2026-11-13 at 14.20.png"), date: now)],
+            .recent: [DockFile(url: URL(filePath: "/tmp/r/pilot-dock.notes.md"), date: now)],
+        ]
+        let malta = (latitude: 35.9, longitude: 14.5167)
+        let battery = SystemStats.Battery(percent: 64, charging: false, minutesLeft: nil)
+        let devices = [SystemStats.BluetoothDevice(name: "Magic Mouse", level: "38 %")]
+        let toggles = DockToggleStates(wifi: true, bluetooth: true, dnd: false, micMuted: true, output: "Studio Display Speakers")
+        var watch = DockStopwatch(gathered: 247)
+        watch.started = nil
+        let cpu = [SystemStats.Row(name: "Xcode", value: "84%", explanation: "")], memory = [SystemStats.Row(name: "Safari", value: "3.1 GB", explanation: "")]
+        return [
+            ("Quick toggles", "switch.2", .faces(DockFaces.toggles(DockToggle.allCases, toggles))),
+            ("Recent files", "square.stack.3d.down.right", .faces(DockFaces.stacks(DockStack.allCases, files))),
+            ("Clocks", "clock", .faces(DockFaces.clocks(now, look: .digital, zones: ["Asia/Tokyo", "America/New_York"], sun: true, place: malta, calendar: calendar, locale: Locale(identifier: "en_GB")))),
+            ("Clocks", "clock", .faces(DockFaces.clocks(now, look: .flip, zones: [], sun: false, place: nil, calendar: calendar, locale: Locale(identifier: "en_GB")))),
+            ("Clocks", "clock", .faces(DockFaces.clocks(now, look: .analog, zones: ["Asia/Tokyo"], sun: false, place: nil, calendar: calendar, locale: Locale(identifier: "en_GB")))),
+            ("Scratch note", "note.text", .faces([DockFaces.note("# Dock\nCall the bank before 16:00\n")])),
+            ("Stopwatch", "stopwatch", .faces([DockFaces.stopwatch(watch, now: now)])),
+            ("System stats", "cpu", .faces(DockFaces.topApps(DockTopApp.allCases, cpu: cpu, memory: memory))),
+            ("Battery", "battery.75percent", .faces(DockFaces.look(DockFaces.battery(battery, bluetooth: devices, devices: true)!, .ring))),
+            ("Battery", "battery.75percent", .faces(DockFaces.look(DockFaces.battery(battery, bluetooth: devices)!, .gauge))),
+            ("Battery", "battery.75percent", .faces(DockFaces.look(DockFaces.battery(battery, bluetooth: devices)!, .dots))),
+            // His Mac mini: no battery, the power it draws beside a device in the dots look.
+            ("Battery", "battery.75percent", .faces(DockFaces.look(DockFaces.battery(nil, watts: 14, bluetooth: devices, devices: true)!, .dots))),
+        ]
+    }
+
+    @Test("Round 5: the new widgets, the clock and battery looks, and their panels", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func round5Render() throws {
+        let dir = try ClockRenders.dir("dock-widgets")
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let wall = Self.env["PILOT_DOCK_WALL"].flatMap(NSImage.init(contentsOfFile:))
+        let look = Look.shared
+        let was = (look.style, look.themeID, look.glass, look.transparency)
+        defer { (look.style, look.themeID, look.glass, look.transparency) = was }
+        (look.style, look.themeID, look.glass, look.transparency) = (.instrument, "dracula", true, 33)
+        let tokens = StyleTokens.of(look.style, theme: look.theme)
+        let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let bodies = Self.round5()
+        // Two rows of a laptop-wide dock, so every face shows whole.
+        for (name, part) in [("round5-a", Array(bodies.prefix(2))), ("round5-b", Array(bodies[2..<7])), ("round5-c", Array(bodies.dropFirst(7)))] {
+            let desk = R.Desk(wall: wall, screen: R.laptop, size: CGSize(width: R.laptop.width, height: 150))
+            let strip = DockStrip(size: .medium, apps: R.apps(4), hasWidgets: true, maxWidth: R.laptop.width - 2 * DockPill.sideMargin, style: .solid,
+                                  backing: { AnyView($0.modifier(R.GlassStandIn(desk: desk, tint: tint))) }) {
+                ForEach(Array(part.enumerated()), id: \.offset) { _, row in DockWidgetBodyView(title: row.0, symbol: row.1, shown: row.2, act: { _, _ in }) }
+            }
+            try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look),
+                            to: dir.appendingPathComponent("\(name).png"), wait: 1.2)
+        }
+        // The panels a click opens, each as BarPanel hangs it.
+        let files = (0..<6).map { DockFile(url: URL(filePath: "/tmp/dl/" + ["Invoice-2026-11.pdf", "pilot-2457.dmg", "photo.heic", "notes.md", "budget.numbers", "song.m4a"][$0]),
+                                          date: Self.now.addingTimeInterval(Double(-$0) * 3_700)) }
+        let panels: [(String, AnyView)] = [
+            ("panel-stack", AnyView(DockStackPanel(stack: .downloads, files: files, open: { _ in }, openFolder: {}))),
+        ]
+        for (name, panel) in panels {
+            try writeRender(panel.styled(.topBar, look: look).pilotTheme(look: look).padding(12).background(Color(white: 0.1)), to: dir.appendingPathComponent("\(name).png"), wait: 0.6)
+        }
+    }
 }
 }
 #endif

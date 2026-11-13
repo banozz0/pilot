@@ -6,6 +6,8 @@ import Foundation
 public enum DockWidget: String, CaseIterable, Sendable {
     case aiUsage = "ai-usage", nextEvent = "next-event", nowPlaying = "now-playing", focus, system, weather
     case todo, github, markets, timeline, battery
+    /// Round 5 (Sven's Lumabar picks, Q217).
+    case toggles, stacks, clock, note, stopwatch
 
     /// On by default: the six round 3 rendered.
     public static let defaults: [DockWidget] = [.aiUsage, .nextEvent, .nowPlaying, .focus, .system, .weather]
@@ -23,6 +25,11 @@ public enum DockWidget: String, CaseIterable, Sendable {
         case .markets: "Stocks and crypto"
         case .timeline: "Day timeline"
         case .battery: "Battery"
+        case .toggles: "Quick toggles"
+        case .stacks: "Recent files"
+        case .clock: "Clocks"
+        case .note: "Scratch note"
+        case .stopwatch: "Stopwatch"
         }
     }
 
@@ -40,6 +47,11 @@ public enum DockWidget: String, CaseIterable, Sendable {
         case .markets: "chart.line.uptrend.xyaxis"
         case .timeline: "calendar.day.timeline.left"
         case .battery: "battery.75percent"
+        case .toggles: "switch.2"
+        case .stacks: "square.stack.3d.down.right"
+        case .clock: "clock"
+        case .note: "note.text"
+        case .stopwatch: "stopwatch"
         }
     }
 
@@ -51,6 +63,11 @@ public enum DockWidget: String, CaseIterable, Sendable {
         case .focus: "Pilot's timer (the Pomodoro extension starts it)"
         case .system: "Pilot's system readings, the top bar's stats"
         case .battery: "the Mac's battery, else the power it draws, else its Bluetooth devices'"
+        case .toggles: "Wi-Fi, Bluetooth, the mic and the sound output, and Do Not Disturb through a Shortcut"
+        case .stacks: "Downloads, Pilot's captures and the files you opened lately"
+        case .clock: "the time here and in other places, and today's sunrise and sunset"
+        case .note: "Notes' Scratch note"
+        case .stopwatch: "Pilot's own stopwatch"
         }
     }
 
@@ -59,7 +76,7 @@ public enum DockWidget: String, CaseIterable, Sendable {
         switch self {
         case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets: rawValue
         case .focus: "pomodoro"
-        case .nextEvent, .timeline, .system, .battery: nil
+        case .nextEvent, .timeline, .system, .battery, .toggles, .stacks, .clock, .note, .stopwatch: nil
         }
     }
 
@@ -172,6 +189,18 @@ public struct DockFace: Equatable, Sendable {
         case ring(Double)
         /// An extension's own icon, an emoji as its manifest gives it.
         case emoji(String)
+        /// An analog clock's face at this time, in hours (0 to 12) and minutes.
+        case analog(hour: Double, minute: Double)
+        /// A gauge filled to its share (Battery's gauge look), in the face's tone.
+        case gauge(Double)
+        /// `filled` of `count` dots (Battery's dots look).
+        case dots(filled: Int, count: Int)
+    }
+
+    /// How a face draws: a reading (the glyph beside label over value), a toggle (a round button lit while on; nil: it
+    /// cannot be read or switched), or flip cards (the value's digits each on a card, the label over them).
+    public enum Kind: Equatable, Sendable {
+        case reading, toggle(on: Bool?), flip
     }
 
     public var glyph: Glyph
@@ -180,13 +209,30 @@ public struct DockFace: Equatable, Sendable {
     public var tone: Extension.Tone?
     /// 0 to 1: the share a reading runs at, kept for the words `pilot dock` gives.
     public var meter: Double?
+    public var kind: Kind = .reading
+    /// What its own click does, for a widget whose faces each do something.
+    public enum Action: Equatable, Sendable { case toggle(DockToggle), stack(DockStack) }
+    public var action: Action?
 
-    public init(glyph: Glyph, label: String, value: String, tone: Extension.Tone? = nil, meter: Double? = nil) {
-        self.glyph = glyph; self.label = label; self.value = value; self.tone = tone; self.meter = meter
+    public init(glyph: Glyph, label: String, value: String, tone: Extension.Tone? = nil, meter: Double? = nil, kind: Kind = .reading,
+                action: Action? = nil) {
+        self.glyph = glyph; self.label = label; self.value = value; self.tone = tone; self.meter = meter; self.kind = kind; self.action = action
     }
 
-    /// "CLAUDE 72%": the face as `pilot dock` says it.
-    public var words: String { "\(label.uppercased()) \(value)" }
+    /// "CLAUDE 72%": the face as `pilot dock` says it; a face with no words, its glyph alone.
+    public var words: String { label.isEmpty && value.isEmpty ? "(glyph only)" : "\(label.uppercased()) \(value)" }
+
+    /// Its look in words where it is not plain, for `pilot dock widgets`: flip, analog, ring, gauge, dots.
+    public var look: String? {
+        if kind == .flip { return "flip" }
+        return switch glyph {
+        case .analog: "analog"
+        case .ring: "ring"
+        case .gauge: "gauge"
+        case .dots(let filled, let count): "dots \(filled) of \(count)"
+        default: nil
+        }
+    }
 }
 
 /// The day timeline's wider face: today's timed events across the hours they span, now marked.
@@ -244,13 +290,18 @@ public enum DockFaces {
         }
     }
 
-    /// Now playing: the track row its bar answer carries (round 3: with its artwork), the artist over the title; the
-    /// app's name while paused.
+    /// Now playing: what its bar answer shows, so its own Shows setting holds in the dock too (Sven on build 2470): a lone
+    /// ♫ (Just ♫, or paused) is the artwork alone; "♫ Artist – Title" the artist over the title; "♫ Title" the title. The
+    /// track row the answer carries gives only the artwork and the artist and title the text names.
     public static func nowPlaying(_ answer: Extension.BarAnswer) -> DockFace? {
         guard let row = rows(answer.blocks).first else { return nil }
-        let paused = answer.text.trimmingCharacters(in: .whitespaces) == "♫"
-        let label = paused ? "Paused" : row.subtitle.flatMap { $0.isEmpty ? nil : $0 } ?? "Now playing"
-        return DockFace(glyph: row.image.map(DockFace.Glyph.image) ?? .symbol("music.note"), label: label, value: row.title)
+        let glyph = row.image.map(DockFace.Glyph.image) ?? .symbol("music.note")
+        let text = plain(answer.text)
+        // No text: its item hides, nothing plays.
+        guard !text.isEmpty else { return nil }
+        if text == "♫" { return DockFace(glyph: glyph, label: "", value: "") }
+        if let artist = row.subtitle, !artist.isEmpty, text.hasPrefix(artist + " – ") { return DockFace(glyph: glyph, label: artist, value: row.title) }
+        return DockFace(glyph: glyph, label: "Now playing", value: text)
     }
 
     /// Weather: its bar text's emoji as a symbol in its own colours and the condition's word, over the temperature.
@@ -284,21 +335,25 @@ public enum DockFaces {
         return DockFace(glyph: .symbol("arrow.triangle.pull"), label: "GitHub", value: text.isEmpty ? "All clear" : text, tone: answer.tone)
     }
 
-    /// Markets: a face per symbol it follows, at most two: its bar gauges where it sends them, else its rows' symbol over
-    /// the price, the change's badge giving the tone. Nil with no symbols (Set up).
+    /// Markets without faces of its own (before 1.5): what its bar answer shows, so its settings hold (Sven on build
+    /// 2470: one at a time, which numbers): its gauges, else each " · " part of its text, the symbol over its numbers and
+    /// the arrow's tone. Nil with no symbols (Set up).
     public static func markets(_ answer: Extension.BarAnswer) -> [DockFace]? {
         if !answer.gauges.isEmpty {
-            return answer.gauges.prefix(2).map { DockFace(glyph: .symbol("chart.line.uptrend.xyaxis"), label: $0.label.isEmpty ? "Markets" : $0.label, value: $0.text, tone: $0.tone) }
+            return answer.gauges.map { DockFace(glyph: .symbol(trend($0.tone)), label: $0.label.isEmpty ? "Markets" : $0.label, value: $0.text, tone: $0.tone) }
         }
-        let found = rows(answer.blocks).prefix(2)
-        guard !found.isEmpty else { return nil }
-        return found.map { row in
-            let parts = row.title.components(separatedBy: " · ")
-            let change = row.badges.first
-            return DockFace(glyph: .symbol(change?.tone == .alert ? "chart.line.downtrend.xyaxis" : "chart.line.uptrend.xyaxis"),
-                            label: parts.first ?? row.title, value: parts.count > 1 ? parts[1] : change?.text ?? "–", tone: change?.tone)
+        let parts = plain(answer.text).components(separatedBy: " · ").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && $0 != "–" }
+        guard !parts.isEmpty else { return nil }
+        return parts.map { part in
+            let words = part.split(separator: " ", maxSplits: 1).map(String.init)
+            // The symbol leads unless its Show the symbol is off: then the part is all numbers.
+            let named = words.count > 1 && words[0].contains(where: \.isLetter) && !words[0].contains(where: { "▲▼".contains($0) })
+            let tone: Extension.Tone? = part.contains("▼") ? .alert : part.contains("▲") ? .fine : nil
+            return DockFace(glyph: .symbol(trend(tone)), label: named ? words[0] : "Markets", value: named ? words[1] : part, tone: tone)
         }
     }
+
+    static func trend(_ tone: Extension.Tone?) -> String { tone == .alert ? "chart.line.downtrend.xyaxis" : "chart.line.uptrend.xyaxis" }
 
     /// The focus timer: a ring of the time left beside its title over the countdown; with none running, Focus over Start.
     public static func focus(countdown: String?, left: Double?, title: String?, paused: Bool) -> DockFace {
@@ -319,23 +374,25 @@ public enum DockFaces {
     }
 
     /// Battery: the Mac's own, charging or not; on a Mac with none (a Mac mini), the power it draws as the menu bar's
-    /// Power draw item shows it (Sven on build 2467); with neither, the Bluetooth devices' (two at most, lowest first).
-    /// Nil with none of them (Set up).
-    public static func battery(_ battery: SystemStats.Battery?, watts: Int? = nil, bluetooth: [SystemStats.BluetoothDevice]) -> [DockFace]? {
-        if battery == nil, let watts { return [DockFace(glyph: .symbol("bolt.fill"), label: "Power draw", value: "\(watts) W")] }
+    /// Power draw item shows it (Sven on build 2467); with neither, the Bluetooth devices' (two at most, lowest first),
+    /// and beside the Mac's own reading too when `devices` is on (round 5). Nil with none of them (Set up).
+    public static func battery(_ battery: SystemStats.Battery?, watts: Int? = nil, bluetooth: [SystemStats.BluetoothDevice], devices: Bool = false) -> [DockFace]? {
+        var own: [DockFace] = []
         if let battery {
             let level = MenuBarStats.level(battery)
-            return [DockFace(glyph: .symbol(battery.charging ? "battery.100percent.bolt" : batterySymbol(battery.percent)),
-                             label: battery.charging ? "Charging" : "Battery", value: "\(battery.percent)%", tone: tone(level),
-                             meter: Double(battery.percent) / 100)]
+            own = [DockFace(glyph: .symbol(battery.charging ? "battery.100percent.bolt" : batterySymbol(battery.percent)),
+                            label: battery.charging ? "Charging" : "Battery", value: "\(battery.percent)%", tone: tone(level),
+                            meter: Double(battery.percent) / 100)]
+        } else if let watts {
+            own = [DockFace(glyph: .symbol("bolt.fill"), label: "Power draw", value: "\(watts) W")]
         }
-        let devices = bluetooth.filter { $0.percent != nil }.sorted { ($0.percent ?? 0) < ($1.percent ?? 0) }.prefix(2)
-        guard !devices.isEmpty else { return nil }
-        return devices.map { device in
+        let others = bluetooth.filter { $0.percent != nil }.sorted { ($0.percent ?? 0) < ($1.percent ?? 0) }.prefix(2).map { device in
             let percent = device.percent ?? 0
             return DockFace(glyph: .symbol(deviceSymbol(device.name)), label: device.name, value: "\(percent)%",
                             tone: tone(MenuBarStats.level(percent: percent)), meter: Double(percent) / 100)
         }
+        if own.isEmpty { return others.isEmpty ? nil : others }
+        return devices ? own + others : own
     }
 
     static func batterySymbol(_ percent: Int) -> String {

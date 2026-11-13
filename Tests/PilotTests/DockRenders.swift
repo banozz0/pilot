@@ -74,6 +74,19 @@ struct DockRenders {
                 // Item colours on, the bar's default (Q251): the alert gauge in the theme's red, as DockView passes it.
                 try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look), to: dir.appendingPathComponent("dock-\(theme)-\(name).png"), wait: 1.2)
             }
+            // Round 5: widgets on both sides of the apps, on Glass, over the wallpaper and over a light one
+            // (PILOT_DOCK_WALL_LIGHT), the Glass edge drawn.
+            let light = Self.env["PILOT_DOCK_WALL_LIGHT"].flatMap(NSImage.init(contentsOfFile:))
+            for (name, backdrop) in [("sides", wall), ("glass-light", light)] where theme == "dracula" || name == "glass-light" {
+                let desk = Desk(wall: backdrop, screen: Self.laptop, size: CGSize(width: Self.laptop.width, height: 150))
+                let all = Self.widgets
+                let strip = DockStrip(size: .medium, apps: Self.apps(8), hasWidgets: true, maxWidth: Self.laptop.width - 2 * DockPill.sideMargin, style: .glass,
+                                      backing: { AnyView($0.modifier(GlassStandIn(desk: desk, tint: tint))) },
+                                      leftWidgets: AnyView(ForEach(Array(all.prefix(2).enumerated()), id: \.offset) { _, pair in DockWidgetBodyView(widget: pair.0, shown: pair.1) })) {
+                    ForEach(Array(all.dropFirst(4).enumerated()), id: \.offset) { _, pair in DockWidgetBodyView(widget: pair.0, shown: pair.1) }
+                }
+                try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look), to: dir.appendingPathComponent("dock-\(theme)-\(name).png"), wait: 1.2)
+            }
         }
     }
 
@@ -86,9 +99,10 @@ struct DockRenders {
         DisplayFaces.directory = LookThemeTests.fonts
         DisplayFaces.register()
         let look = Look.shared
-        let was = (look.style, look.themeID)
-        defer { (look.style, look.themeID) = was }
-        (look.style, look.themeID) = (.instrument, "dracula")
+        let was = (look.style, look.themeID, look.glass)
+        defer { (look.style, look.themeID, look.glass) = was }
+        // Glass off: a page on Look's Glass draws nothing offscreen under its text.
+        (look.style, look.themeID, look.glass) = (.instrument, "dracula", false)
         let folder = FileManager.default.temporaryDirectory.appending(path: "dock-page-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let catalogue = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(path: "catalogue/extensions")
@@ -97,13 +111,16 @@ struct DockRenders {
             try FileManager.default.copyItem(at: catalogue.appending(path: id), to: folder.appending(path: id))
         }
         let engine = Engine()
-        engine.dock.settings.widgets = DockSlot.defaults + [.widget(.markets)]
+        engine.dock.settings.widgets = DockSlot.defaults + [.widget(.markets), .widget(.toggles), .widget(.clock), .widget(.battery)]
+        engine.dock.settings.options.zones = ["Asia/Tokyo", "America/New_York"]
         let prefs = ExtensionsSettings(folder: folder)
         await prefs.load()
-        for (name, editing) in [("page", nil), ("page-markets", DockSlot.widget(.markets)), ("page-system", .widget(.system))] as [(String, DockSlot?)] {
+        for (name, editing) in [("page", nil), ("page-markets", DockSlot.widget(.markets)), ("page-system", .widget(.system)),
+                               ("page-clock", .widget(.clock)), ("page-toggles", .widget(.toggles)), ("page-battery", .widget(.battery))] as [(String, DockSlot?)] {
             let focus = DockPageFocus()
             focus.editing = editing
-            let page = ScrollView { DockPage(folder: folder, focus: focus, prefs: prefs).environment(engine) }.pilotTheme()
+            // On the app's own ground, as the window draws it: text on a clear ground smears offscreen in dark mode.
+            let page = ScrollView { DockPage(folder: folder, focus: focus, prefs: prefs).environment(engine) }.pilotTheme().background(Theme.background)
             try writeRender(page.frame(width: 1000 - 232, height: editing == nil ? 1100 : 1500), to: dir.appendingPathComponent("dock-\(name).png"), wait: 1.5)
         }
     }

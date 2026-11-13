@@ -18,12 +18,18 @@ final class DockPageFocus {
     /// starts the timer.
     static func settingsID(_ slot: DockSlot) -> String? { slot.widget?.extensionID ?? slot.extensionID }
 
-    /// Whether `slot` has settings of its own: System stats' picks, or an installed extension's preferences (its one
-    /// manifest read, on a right click).
-    static func hasSettings(_ slot: DockSlot, folder: URL = Extension.folder) -> Bool {
-        if slot == .widget(.system) { return true }
-        guard let id = settingsID(slot), let ext = try? Extension(folder: folder.appending(path: id)) else { return false }
-        return !ext.preferences.isEmpty
+    /// The widgets whose choices are the dock's own (DockWidgetOptions).
+    static let ownSettings: Set<DockWidget> = [.system, .battery, .toggles, .stacks, .clock]
+
+    /// Whether `slot` has settings: choices of its own, or an installed extension's preferences, which `preferences`
+    /// says from its id (the page from what it read, a right click from the one manifest).
+    static func hasSettings(_ slot: DockSlot, preferences: (String) -> Bool = DockPageFocus.manifestHasPreferences) -> Bool {
+        if let widget = slot.widget, ownSettings.contains(widget) { return true }
+        return settingsID(slot).map(preferences) ?? false
+    }
+
+    nonisolated static func manifestHasPreferences(_ id: String) -> Bool {
+        (try? Extension(folder: Extension.folder.appending(path: id)))?.preferences.isEmpty == false
     }
 }
 
@@ -129,6 +135,11 @@ struct DockWidgetList: View {
                     Text("Reads \(slot.reads)").font(ink.ui(11)).foregroundStyle(ink.muted).lineLimit(1)
                 }
                 Spacer()
+                if at != nil {
+                    // Its side of the apps, the top bar's sides (Sven, 2026-11-13).
+                    Segments(selection: Binding(get: { dock.settings.side(slot) }, set: { dock.settings.move(slot, to: $0) }),
+                             options: [(TopBarSide.left, "Left"), (.right, "Right")], label: "\(name) side")
+                }
                 if let at {
                     Button { dock.settings.move(slot, by: -1) } label: { Image(systemName: "chevron.up") }
                         .buttonStyle(.plain).foregroundStyle(at == 0 ? ink.line2 : ink.text2).disabled(at == 0)
@@ -137,7 +148,7 @@ struct DockWidgetList: View {
                         .buttonStyle(.plain).foregroundStyle(at == count - 1 ? ink.line2 : ink.text2).disabled(at == count - 1)
                         .accessibilityLabel("Move \(name) down")
                 }
-                if slot == .widget(.system) || DockPageFocus.settingsID(slot).flatMap({ id in prefs.rows.first { $0.id == id } })?.fields.isEmpty == false {
+                if DockPageFocus.hasSettings(slot, preferences: { id in prefs.rows.first { $0.id == id }?.fields.isEmpty == false }) {
                     Button { focus.editing = open ? nil : slot } label: { Image(systemName: open ? "gearshape.fill" : "gearshape") }
                         .buttonStyle(.plain).foregroundStyle(open ? ink.accent : ink.text2)
                         .help("\(name) settings").accessibilityLabel("\(name) settings")
@@ -175,9 +186,86 @@ struct DockWidgetSettings: View {
     let prefs: ExtensionsSettings
 
     var body: some View {
-        if slot == .widget(.system) {
-            stats
-        } else if let id = DockPageFocus.settingsID(slot) {
+        switch slot.widget {
+        case .system?: VStack(alignment: .leading, spacing: 0) { stats; picks("Busiest apps", DockTopApp.allCases, \.topApps, title: \.title, least: 0) }
+        case .battery?: battery
+        case .toggles?: toggles
+        case .stacks?: picks("Stacks", DockStack.allCases, \.stacks, title: \.title)
+        case .clock?: clock
+        default: extensionSettings
+        }
+    }
+
+    private var options: Binding<DockWidgetOptions> { Binding(get: { dock.settings.options }, set: { dock.settings.options = $0 }) }
+
+    /// A switch per choice, kept in the choices' own order; `least` of them stay on.
+    private func picks<T: Hashable & CaseIterable>(_ heading: String, _ all: T.AllCases, _ key: WritableKeyPath<DockWidgetOptions, [T]>,
+                                                   title: KeyPath<T, String>, least: Int = 1) -> some View where T.AllCases: RandomAccessCollection {
+        let picked = dock.settings.options[keyPath: key]
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(heading).font(ink.ui(12, .semibold)).foregroundStyle(ink.text2).padding(.top, 8)
+            ForEach(Array(all), id: \.self) { choice in
+                BlockRow {
+                    Toggle(isOn: Binding(get: { picked.contains(choice) }, set: { on in
+                        options.wrappedValue[keyPath: key] = all.filter { $0 == choice ? on : picked.contains($0) }
+                    })) { Text(choice[keyPath: title]).foregroundStyle(ink.text) }
+                    .toggleStyle(.pilotSwitchRow)
+                    .disabled(picked.contains(choice) && picked.count <= least)
+                }
+            }
+        }
+    }
+
+    private var battery: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BlockRow(first: true) {
+                Text("Look").foregroundStyle(ink.text)
+                Spacer()
+                Segments(selection: options.batteryLook, options: DockBatteryLook.allCases.map { ($0, $0.title) }, label: "Battery look")
+            }
+            BlockRow {
+                Toggle(isOn: options.batteryDevices) { Text("Bluetooth devices beside it").foregroundStyle(ink.text) }.toggleStyle(.pilotSwitchRow)
+            }
+            FinePrint(text: "Ring, gauge and dots draw a level: the battery's and the devices'. A Mac with no battery shows the power it draws, which has none.")
+        }
+    }
+
+    private var toggles: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            picks("Buttons", DockToggle.allCases, \.toggles, title: \.title)
+            BlockRow {
+                Text("Do Not Disturb runs").foregroundStyle(ink.text)
+                InfoMark(text: "macOS lets no app switch Focus, so the button runs a Shortcut of yours that does (Shortcuts › Set Focus). Empty: it opens Focus settings.")
+                Spacer()
+                TextField("Shortcut name", text: options.dndShortcut).textFieldStyle(.roundedBorder).frame(width: 170)
+            }
+        }
+    }
+
+    private var clock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BlockRow(first: true) {
+                Text("Look").foregroundStyle(ink.text)
+                Spacer()
+                Segments(selection: options.clockLook, options: DockClockLook.allCases.map { ($0, $0.title) }, label: "Clock look")
+            }
+            BlockRow {
+                Text("World clocks").foregroundStyle(ink.text)
+                InfoMark(text: "Up to three time zones, by their ids: Asia/Tokyo, America/New_York.")
+                Spacer()
+                TextField("Asia/Tokyo, America/New_York", text: Binding(get: { dock.settings.options.zones.joined(separator: ", ") }, set: { text in
+                    try? dock.settings.options.set("zones", [text])
+                })).textFieldStyle(.roundedBorder).frame(width: 220)
+            }
+            BlockRow {
+                Toggle(isOn: options.sun) { Text("Sunrise and sunset").foregroundStyle(ink.text) }.toggleStyle(.pilotSwitchRow)
+            }
+            FinePrint(text: "The sun's times are where this time zone's city stands, from macOS's own list: no Location needed.")
+        }
+    }
+
+    @ViewBuilder private var extensionSettings: some View {
+        if let id = DockPageFocus.settingsID(slot) {
             if let row = prefs.rows.first(where: { $0.id == id }) {
                 if row.fields.isEmpty {
                     FinePrint(text: "\(row.ext.title) has no settings.")

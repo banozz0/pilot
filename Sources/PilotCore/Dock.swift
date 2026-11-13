@@ -195,22 +195,111 @@ public enum DockMagnification: String, Codable, CaseIterable, Sendable {
 public struct DockWidgetOptions: Codable, Equatable, Sendable {
     /// System stats: the readings it shows, any the top bar's stats items read, in MenuBarStats.Stat's order.
     public var stats: [MenuBarStats.Stat]
+    /// System stats' busiest apps (round 5): by CPU, by memory; none by default, as each reads the process list.
+    public var topApps: [DockTopApp] = []
+    /// Battery's look (round 5): its value as text, a ring, a gauge or dots.
+    public var batteryLook: DockBatteryLook = .text
+    /// Battery: the Bluetooth devices' batteries beside the Mac's own reading (its battery or its draw).
+    public var batteryDevices = false
+    /// Clock's look, its world clocks (time zone ids, three at most) and its sunrise and sunset.
+    public var clockLook: DockClockLook = .digital
+    public var zones: [String] = []
+    public var sun = true
+    /// Quick toggles' buttons, in their order.
+    public var toggles: [DockToggle] = DockToggle.allCases
+    /// The Shortcut Do Not Disturb runs (macOS gives apps no switch for Focus); empty opens Focus settings.
+    public var dndShortcut = ""
+    /// Recent files' stacks, in their order.
+    public var stacks: [DockStack] = DockStack.allCases
 
     public static let defaultStats: [MenuBarStats.Stat] = [.cpu, .ram]
+    public static let mostZones = 3
 
     public init(stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats) { self.stats = stats }
 
+    /// Every field read with its default when absent or unreadable, a list by name so a value a later Pilot adds is
+    /// dropped, never the whole list: a relaunch keeps every choice an older Pilot saved.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // By name, so a stat a later Pilot adds is dropped here, never the whole list.
-        let names = (try? c.decodeIfPresent([String].self, forKey: .stats)) ?? nil
-        stats = names.map { $0.compactMap(MenuBarStats.Stat.init(rawValue:)) } ?? Self.defaultStats
+        func names<T: RawRepresentable<String>>(_ key: CodingKeys, _: T.Type) -> [T]? {
+            ((try? c.decodeIfPresent([String].self, forKey: key)) ?? nil).map { $0.compactMap(T.init(rawValue:)) }
+        }
+        func value<T: Decodable>(_ key: CodingKeys, _ standard: T) -> T { ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? standard }
+        stats = names(.stats, MenuBarStats.Stat.self) ?? Self.defaultStats
+        topApps = names(.topApps, DockTopApp.self) ?? []
+        batteryLook = value(.batteryLook, DockBatteryLook.text)
+        batteryDevices = value(.batteryDevices, false)
+        clockLook = value(.clockLook, DockClockLook.digital)
+        zones = value(.zones, [String]())
+        sun = value(.sun, true)
+        toggles = names(.toggles, DockToggle.self) ?? DockToggle.allCases
+        dndShortcut = value(.dndShortcut, "")
+        stacks = names(.stacks, DockStack.self) ?? DockStack.allCases
     }
 
     /// Picks `stats` for System stats, each once, in the stats' own order; none leaves them as they are.
     public mutating func pick(_ picked: [MenuBarStats.Stat]) {
         guard !picked.isEmpty else { return }
         stats = MenuBarStats.Stat.allCases.filter(picked.contains)
+    }
+
+    /// Sets one choice by its name as `pilot dock option` takes it, from words; throws why a value does not read.
+    public mutating func set(_ name: String, _ words: [String]) throws(DockOptionError) {
+        func each<T: RawRepresentable<String> & CaseIterable & Equatable>(_: T.Type) throws(DockOptionError) -> [T] {
+            var found: [T] = []
+            for word in words.flatMap({ $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() } }) where !word.isEmpty {
+                guard let one = T(rawValue: word) else { throw .badValue(name, word, T.allCases.map(\.rawValue)) }
+                if !found.contains(one) { found.append(one) }
+            }
+            return found
+        }
+        func one<T: RawRepresentable<String> & CaseIterable & Equatable>(_ type: T.Type) throws(DockOptionError) -> T {
+            let found = try each(type)
+            guard found.count == 1 else { throw .badValue(name, words.joined(separator: " "), T.allCases.map(\.rawValue)) }
+            return found[0]
+        }
+        func flag() throws(DockOptionError) -> Bool {
+            switch words.first?.lowercased() {
+            case "on", "true", "yes": return true
+            case "off", "false", "no": return false
+            default: throw .badValue(name, words.joined(separator: " "), ["on", "off"])
+            }
+        }
+        switch name {
+        case "stats": pick(try each(MenuBarStats.Stat.self))
+        case "top-apps": topApps = DockTopApp.allCases.filter(try each(DockTopApp.self).contains)
+        case "battery-look": batteryLook = try one(DockBatteryLook.self)
+        case "battery-devices": batteryDevices = try flag()
+        case "clock-look": clockLook = try one(DockClockLook.self)
+        case "zones":
+            let ids = words.flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }.filter { !$0.isEmpty }
+            if let bad = ids.first(where: { TimeZone(identifier: $0) == nil }) { throw .badValue(name, bad, ["a time zone id, Asia/Tokyo"]) }
+            zones = Array(ids.prefix(Self.mostZones))
+        case "sun": sun = try flag()
+        case "toggles": toggles = try each(DockToggle.self)
+        case "dnd-shortcut": dndShortcut = words.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        case "stacks": stacks = try each(DockStack.self)
+        default: throw .unknown(name)
+        }
+    }
+
+    /// Each choice by its name and value, as `pilot dock option` reads them.
+    public var named: [(String, String)] {
+        [("stats", stats.map(\.rawValue).joined(separator: " ")), ("top-apps", topApps.map(\.rawValue).joined(separator: " ")),
+         ("battery-look", batteryLook.rawValue), ("battery-devices", batteryDevices ? "on" : "off"), ("clock-look", clockLook.rawValue),
+         ("zones", zones.joined(separator: " ")), ("sun", sun ? "on" : "off"), ("toggles", toggles.map(\.rawValue).joined(separator: " ")),
+         ("dnd-shortcut", dndShortcut), ("stacks", stacks.map(\.rawValue).joined(separator: " "))]
+    }
+}
+
+public enum DockOptionError: Error, Equatable, CustomStringConvertible {
+    case unknown(String), badValue(String, String, [String])
+
+    public var description: String {
+        switch self {
+        case .unknown(let name): "no dock option \(name): " + DockWidgetOptions().named.map(\.0).joined(separator: ", ")
+        case .badValue(let name, let word, let choices): "\(name) takes " + choices.joined(separator: ", ") + ", not \(word)"
+        }
     }
 }
 
@@ -227,6 +316,9 @@ public struct DockSettings: Codable, Equatable, Sendable {
     /// answers (round 4).
     public var widgets: [DockSlot]
     public var options = DockWidgetOptions()
+    /// The widgets drawn on the left of the apps (Sven, 2026-11-13: "widgets can be set left or right side of apps"),
+    /// the top bar's sides; the rest on the right, as before. Each keeps its place in `widgets` within its side.
+    public var left: [DockSlot] = []
     /// Pilot's own pins over the macOS Dock's, whose list is read and never written (spec pilot-dock; Sven on build 2454:
     /// Keep in Dock and Remove from Dock): apps kept past the Dock's own, and the Dock's pins taken out, by `DockPin.key`.
     public var kept: [DockPin] = []
@@ -261,8 +353,21 @@ public struct DockSettings: Codable, Equatable, Sendable {
         // Saved as names (DockSlot's Codable): a list from before round 3 reads through DockSlot.migrated.
         widgets = (try? c.decode([String].self, forKey: .widgets)).map(DockSlot.migrated) ?? DockSlot.defaults
         options = (try? c.decodeIfPresent(DockWidgetOptions.self, forKey: .options)) ?? DockWidgetOptions()
+        left = (try? c.decodeIfPresent([String].self, forKey: .left)).map { $0?.compactMap(DockSlot.init(name:)) ?? [] } ?? []
         kept = (try? c.decodeIfPresent([DockPin].self, forKey: .kept)) ?? []
         removed = (try? c.decodeIfPresent([String].self, forKey: .removed)) ?? []
+    }
+
+    /// A widget's side of the apps: left or right (the top bar's sides; never the centre, which is the apps').
+    public func side(_ widget: DockSlot) -> TopBarSide { left.contains(widget) ? .left : .right }
+
+    /// The widgets on `side`, in their order.
+    public func widgets(on side: TopBarSide) -> [DockSlot] { widgets.filter { self.side($0) == side } }
+
+    /// Moves `widget` to `side`; the centre is the apps', so it reads as right.
+    public mutating func move(_ widget: DockSlot, to side: TopBarSide) {
+        left.removeAll { $0 == widget }
+        if side == .left { left.append(widget) }
     }
 
     /// Turns `widget` on, at `index` in the order (the end when nil or past it).
@@ -274,6 +379,7 @@ public struct DockSettings: Codable, Equatable, Sendable {
     public mutating func remove(_ widget: DockSlot) throws(DockWidgetError) {
         guard let index = widgets.firstIndex(of: widget) else { throw .missing(widget.name) }
         widgets.remove(at: index)
+        left.removeAll { $0 == widget }
     }
 
     /// Moves an on widget `by` places along the order (negative: toward the icons), held to the ends.

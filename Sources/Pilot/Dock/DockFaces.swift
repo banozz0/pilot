@@ -30,14 +30,48 @@ struct DockWidgetView: View {
     private var widget: DockWidget? { slot.widget }
 
     var body: some View {
-        let shown = reader.body(slot)
-        Button { click(shown) } label: { DockWidgetBodyView(title: title, symbol: slot.symbol, shown: shown).contentShape(Rectangle()) }
-            .buttonStyle(.plain)
-            .background(ScreenAnchor(box: anchor, rightClick: { showMenu() }))
-            .help(help(shown))
-            // Today's events again as the day turns: read in the Calendar widgets alone, so the clock's tick (each second
-            // with seconds shown) redraws them, never the pill.
-            .onChange(of: day) { reader.calendar.follow(now: reader.sources.readings.now) }
+        // The stopwatch ticks by the second only while it runs, in its own view; nothing else redraws.
+        if reader.ticks(slot) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in content(reader.body(slot, now: context.date)) }
+        } else {
+            content(reader.body(slot))
+        }
+    }
+
+    /// One button for the widget, or one per face where each face does its own thing (a toggle, a stack).
+    @ViewBuilder private func content(_ shown: DockWidgetBody) -> some View {
+        Group {
+            if case .faces(let faces) = shown, faces.contains(where: { $0.action != nil }) {
+                DockWidgetBodyView(title: title, symbol: slot.symbol, shown: shown, act: { act($0, under: $1) })
+            } else {
+                Button { click(shown) } label: { DockWidgetBodyView(title: title, symbol: slot.symbol, shown: shown).contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .background(ScreenAnchor(box: anchor, rightClick: { showMenu() }))
+        .help(help(shown))
+        // Today's events again as the day turns: read in the Calendar widgets alone, so the clock's tick (each second
+        // with seconds shown) redraws them, never the pill.
+        .onChange(of: day) { reader.calendar.follow(now: reader.sources.readings.now) }
+    }
+
+    /// A face's own click: a toggle switches (the output lists its devices), a stack lists its files.
+    private func act(_ action: DockFace.Action, under view: NSView?) {
+        let readings = reader.sources.readings, extras = reader.extras
+        switch action {
+        // Wi-Fi and Bluetooth through the top bar's own switches.
+        case .toggle(.wifi): reader.sources.perform(.radio(.wifi, on: !(readings.wifi?.on ?? false)), on: .wifi, store: store) {}
+        case .toggle(.bluetooth):
+            reader.sources.perform(.radio(.bluetooth, on: !(extras.bluetooth ?? false)), on: .bluetoothBatteries, store: store) {}
+            Task { try? await Task.sleep(for: .seconds(2)); extras.readToggles() }
+        case .toggle(.dnd): extras.toggleDND(shortcut: reader.options.dndShortcut)
+        case .toggle(.mic): readings.sound.toggleMute(.input)
+        // The output opens what the top bar's Volume opens.
+        case .toggle(.output): barPopover([.volume], under: view)
+        case .stack(let stack):
+            extras.readFiles([stack])
+            BarPanel.shared.toggle(dock: "dock.stack.\(stack.rawValue)", under: view, AnyView(DockLiveStack(extras: extras, stack: stack)))
+        }
     }
 
     /// Today, for a Calendar widget only; nil for the rest, which never read the clock here.
@@ -79,14 +113,22 @@ struct DockWidgetView: View {
             } else {
                 BarPanel.shared.toggle([.timer], under: view, AnyView(BarPopover(kinds: [.timer], sources: reader.sources, store: store)))
             }
-        case .system: _ = AppsModule.open(bundle: AppsModule.resolved(.activityMonitor))
-        case .battery: NSWorkspace.shared.open(Self.batterySettings)
-        case .nextEvent:
-            let now = reader.sources.readings.now
-            let next = DockFaces.timed(reader.calendar.events).first { $0.end > now }
-            if let url = next?.url { NSWorkspace.shared.open(url) } else { _ = AppsModule.open(bundle: Self.calendarApp) }
-        case .timeline: _ = AppsModule.open(bundle: Self.calendarApp)
+        // A widget a top bar item reads opens what that item opens (Sven on build 2470): the readings with their busiest
+        // apps, the battery's, the clock's month and events.
+        case .system: barPopover(reader.options.stats.map(BarKind.init), under: view)
+        case .battery: barPopover([.battery], under: view)
+        case .nextEvent, .timeline, .clock: barPopover([.clock], under: view)
+        case .note:
+            BarPanel.shared.close()
+            NotesPanel.shared.show(note: NoteStore.scratch)
+        case .stopwatch: reader.extras.stopwatch.toggle(Date())
+        case .toggles, .stacks: break
         }
+    }
+
+    /// The top bar's popover for `kinds`, hung over the widget: what that item's click opens.
+    private func barPopover(_ kinds: [BarKind], under view: NSView?) {
+        BarPanel.shared.toggle(kinds, under: view, AnyView(BarPopover(kinds: kinds, sources: reader.sources, store: store)))
     }
 
     private func setUp(_ why: DockSetUp) {
@@ -109,8 +151,25 @@ struct DockWidgetView: View {
         if let id = slot.extensionID, reader.extensionBar.items.first(where: { $0.id == id })?.hasPage == true {
             rows += [.pick("Open \(title) page") { AppWindowController.shared.openExtensionPage(id) }, .separator]
         }
+        switch widget {
+        case .system: rows += [.pick("Open Activity Monitor") { _ = AppsModule.open(bundle: AppsModule.resolved(.activityMonitor)) }, .separator]
+        case .nextEvent, .timeline: rows += [.pick("Open Calendar") { _ = AppsModule.open(bundle: Self.calendarApp) }, .separator]
+        case .stopwatch:
+            let extras = reader.extras, timer = reader.sources.timer
+            rows += [.pick("Reset") { extras.stopwatch.reset() }]
+            rows += [5, 10, 25].map { minutes in
+                .pick("Start a \(minutes) min timer") { timer.start(.init(title: "Timer", seconds: minutes * 60), owner: .init(id: "dock", title: "Dock")) }
+            }
+            rows.append(.separator)
+        default: break
+        }
         if DockPageFocus.hasSettings(slot) {
             rows.append(.pick("Widget settings…") { [slot] in DockPageFocus.shared.open(slot) })
+        }
+        // The top bar's sides, left or right of the apps (Sven, 2026-11-13).
+        if let dock {
+            let other: TopBarSide = dock.settings.side(slot) == .left ? .right : .left
+            rows.append(.pick("Move to \(other.rawValue)") { [slot] in dock.settings.move(slot, to: other) })
         }
         rows += [.pick("Remove from Dock") { [dock, slot] in try? dock?.settings.remove(slot) },
                  .pick("Edit widgets…") { DockPageFocus.shared.open(nil) }]
@@ -118,7 +177,6 @@ struct DockWidgetView: View {
     }
 
     static let calendarApp = "com.apple.iCal"
-    static let batterySettings = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")!
     static let bluetoothSettings = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!
 }
 
@@ -129,12 +187,16 @@ struct DockWidgetBodyView: View {
     let title: String
     let symbol: String
     let shown: DockWidgetBody
+    /// Each face with an action is its own button, told its action and where it is drawn (for its panel).
+    var act: ((DockFace.Action, NSView?) -> Void)? = nil
 
     var body: some View {
         switch shown {
         case .faces(let faces):
             HStack(spacing: DockFaceMetrics.faceGap) {
-                ForEach(Array(faces.enumerated()), id: \.offset) { _, face in DockFaceView(face: face) }
+                ForEach(Array(faces.enumerated()), id: \.offset) { _, face in
+                    if let act, let action = face.action { DockFaceButton(face: face) { act(action, $0) } } else { DockFaceView(face: face) }
+                }
             }
         case .timeline(let timeline): DockTimelineView(timeline: timeline)
         case .setUp:
@@ -157,6 +219,36 @@ extension DockWidgetBodyView {
     init(widget: DockWidget, shown: DockWidgetBody) { self.init(title: widget.title, symbol: widget.symbol, shown: shown) }
 }
 
+/// A face that is its own button: its view, its click told where it is drawn.
+struct DockFaceButton: View {
+    let face: DockFace
+    let click: (NSView?) -> Void
+    @State private var anchor = ScreenAnchor.Box()
+
+    var body: some View {
+        Button { click(anchor.view) } label: { DockFaceView(face: face).contentShape(Rectangle()) }
+            .buttonStyle(.plain)
+            .background(ScreenAnchor(box: anchor))
+            .help("\(face.label): \(face.value)")
+    }
+}
+
+/// A stack's panel over the files as last read, so a read finishing after it opens fills it.
+struct DockLiveStack: View {
+    let extras: DockExtras
+    let stack: DockStack
+
+    var body: some View {
+        DockStackPanel(stack: stack, files: extras.files[stack] ?? []) { file in
+            BarPanel.shared.close()
+            FilesWindows.shared.newWindow(file.url.deletingLastPathComponent(), selecting: file.url)
+        } openFolder: {
+            BarPanel.shared.close()
+            if let folder = extras.files[stack]?.first?.url.deletingLastPathComponent() { FilesWindows.shared.newWindow(folder) }
+        }
+    }
+}
+
 /// One face: its glyph beside small capitals over the value (treatment B).
 struct DockFaceView: View {
     @Environment(\.ink) private var ink
@@ -165,6 +257,57 @@ struct DockFaceView: View {
     var setUp = false
 
     var body: some View {
+        switch face.kind {
+        case .toggle(let on): toggle(on)
+        case .flip: flip
+        case .reading: reading
+        }
+    }
+
+    /// A toggle: its glyph in a round button, lit in the accent while on, dimmed while it cannot be read.
+    private func toggle(_ on: Bool?) -> some View {
+        Image(systemName: glyphName).font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(on == true ? ink.onAccent : on == nil ? ink.text2 : ink.text)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(on == true ? ink.accent : ink.text.opacity(0.10)))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(face.label) \(face.value)")
+    }
+
+    private var glyphName: String { if case .symbol(let name, _) = face.glyph { name } else { "circle" } }
+
+    /// Flip cards: the label over each digit on a card of its own, the separators between them bare.
+    private var flip: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(face.label.uppercased()).font(ink.mono(10, weight: .semibold)).tracking(0.6).foregroundStyle(ink.text2).lineLimit(1)
+            HStack(spacing: 2) {
+                ForEach(Array(face.value.enumerated()), id: \.offset) { _, character in
+                    if character.isNumber {
+                        Text(String(character)).font(.system(size: 18, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(ink.text)
+                            .frame(width: 16, height: 24)
+                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ink.text.opacity(0.12)))
+                            .overlay(Rectangle().fill(ink.text.opacity(0.18)).frame(height: 1))
+                    } else {
+                        Text(String(character)).font(.system(size: 16, weight: .bold)).foregroundStyle(ink.text2)
+                    }
+                }
+            }
+        }
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(face.label) \(face.value)")
+    }
+
+    @ViewBuilder private var reading: some View {
+        // A face with no words (Now playing's Just ♫): its glyph alone.
+        if face.label.isEmpty, face.value.isEmpty {
+            glyph.accessibilityLabel(face.words)
+        } else {
+            words
+        }
+    }
+
+    private var words: some View {
         HStack(spacing: 9) {
             glyph
             VStack(alignment: .leading, spacing: 1) {
@@ -216,6 +359,25 @@ struct DockFaceView: View {
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         case .emoji(let text):
             Text(text).font(.system(size: g * 0.82)).frame(width: g, height: g)
+        case .analog(let hour, let minute):
+            ZStack {
+                Circle().stroke(ink.text.opacity(0.35), lineWidth: 1.5)
+                Capsule().fill(ink.text).frame(width: 2, height: g * 0.26).offset(y: -g * 0.13).rotationEffect(.degrees(hour * 30))
+                Capsule().fill(ink.text).frame(width: 1.5, height: g * 0.38).offset(y: -g * 0.19).rotationEffect(.degrees(minute * 6))
+                Circle().fill(ink.accent).frame(width: 3, height: 3)
+            }
+            .frame(width: g, height: g)
+        case .gauge(let share):
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).stroke(ink.text.opacity(0.45), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: 2).fill(toneInk ?? ink.text).frame(width: max(2, (g * 1.1 - 4) * share)).padding(2)
+            }
+            .frame(width: g * 1.1, height: g * 0.55).frame(height: g)
+        case .dots(let filled, let count):
+            HStack(spacing: 2) {
+                ForEach(0..<count, id: \.self) { i in Circle().fill(i < filled ? toneInk ?? ink.text : ink.text.opacity(0.18)).frame(width: 5, height: 5) }
+            }
+            .frame(height: g)
         case .ring(let share):
             ZStack {
                 Circle().stroke(ink.text.opacity(0.18), lineWidth: 2.5)

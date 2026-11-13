@@ -28,8 +28,8 @@ extension ControlVerbs {
             guard let dock = dock() else { throw ControlError(.notReady, "Pilot's dock is not up yet; ask again in a moment") }
             return dock
         }
-        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. Style and magnification are dock.style and dock.magnify.",
-                             usage: "pilot dock | pilot dock widgets | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app>   (<app>: a bundle id or a name)") { call throws(ControlError) in
+        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. Style and magnification are dock.style and dock.magnify.",
+                             usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app>   (<app>: a bundle id or a name)") { call throws(ControlError) in
             // Read for the answer alone: the pill keeps what it shows.
             let dock = try up(), args = call.arguments(), dockPins = dock.readPins(), byApp = Dictionary(grouping: windows(), by: \.bundleId)
             // While on, the running apps the pill draws (the ones it follows); off, read now.
@@ -37,20 +37,51 @@ extension ControlVerbs {
             if args.positional.first == "widgets" {
                 // And what else could go in: each installed extension with a top bar item no widget reads, not in the dock yet.
                 let more = DockWidgetSources.barExtensions().map { DockSlot.extensionItem($0.id) }.filter { !dock.settings.widgets.contains($0) }
-                return .object(["widgets": await Self.widgetFaces(dock.settings.widgets, stats: dock.settings.options.stats),
+                return .object(["widgets": await Self.widgetFaces(dock.settings.widgets, options: dock.settings.options, showing: dock.isOn),
                                 "fromExtensions": .array(more.map { .string($0.name) })])
             }
-            if args.positional.first == "stats" {
-                // pilot dock stats [stat…]: System stats' readings, picked (none given: read).
-                let picked = try args.positional.dropFirst().flatMap { $0.split(separator: ",").map(String.init) }.map { word throws(ControlError) -> MenuBarStats.Stat in
-                    guard let stat = MenuBarStats.Stat(rawValue: word.trimmingCharacters(in: .whitespaces).lowercased()) else {
-                        throw ControlError(.badValue, "\(word) is no stat: " + MenuBarStats.Stat.allCases.map(\.rawValue).joined(separator: ", "))
-                    }
-                    return stat
+            if args.positional.first == "option" || args.positional.first == "stats" {
+                // pilot dock option [name [value…]]: the widgets' own choices, read, or one set; `dock stats …` is
+                // `dock option stats …`.
+                let words = args.positional.first == "stats" ? ["stats"] + args.positional.dropFirst() : Array(args.positional.dropFirst())
+                if let name = words.first, words.count > 1 {
+                    do throws(DockOptionError) { try dock.settings.options.set(name, Array(words.dropFirst())) } catch { throw ControlError(.badValue, error.description) }
                 }
-                dock.settings.options.pick(picked)
-                return .object(["stats": .array(dock.settings.options.stats.map { .string($0.rawValue) }),
-                                "choices": .array(MenuBarStats.Stat.allCases.map { .string($0.rawValue) })])
+                let named = dock.settings.options.named.filter { words.first == nil || $0.0 == words.first }
+                guard !named.isEmpty else { throw ControlError(.badValue, DockOptionError.unknown(words[0]).description) }
+                return .object(Dictionary(uniqueKeysWithValues: named.map { ($0.0, JSONValue.string($0.1)) }))
+            }
+            if args.positional.first == "side" {
+                // pilot dock side <widget> [left|right]: a widget's side of the apps, read or set.
+                let slot = try widget(try args.word(1, "widget"))
+                guard dock.settings.widgets.contains(slot) else { throw ControlError(.badValue, "\(slot.name) is not in the dock") }
+                if let word = args.positional.dropFirst(2).first {
+                    guard let side = TopBarSide(rawValue: word), side != .centre else { throw ControlError(.badValue, "a side is left or right, not \(word)") }
+                    dock.settings.move(slot, to: side)
+                }
+                return .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
+                                "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) })])
+            }
+            if args.positional.first == "stopwatch" {
+                // pilot dock stopwatch [start|pause|reset]: Pilot's own stopwatch, nothing on the Mac.
+                let extras = DockExtras.shared, now = Date()
+                switch args.positional.dropFirst().first {
+                case nil: break
+                case "start": extras.stopwatch.start(now)
+                case "pause": extras.stopwatch.pause(now)
+                case "reset": extras.stopwatch.reset()
+                case let other?: throw ControlError(.badValue, "pilot dock stopwatch start|pause|reset, not \(other)")
+                }
+                return .object(["running": .bool(extras.stopwatch.running), "shows": .string(DockFaces.stopwatch(extras.stopwatch, now: now).words)])
+            }
+            if args.positional.first == "files" {
+                // pilot dock files <stack>: what a Recent files stack's panel lists, newest first.
+                let word = try args.word(1, "stack: " + DockStack.allCases.map(\.rawValue).joined(separator: ", "))
+                guard let stack = DockStack(rawValue: word) else { throw ControlError(.badValue, "\(word) is no stack: " + DockStack.allCases.map(\.rawValue).joined(separator: ", ")) }
+                let extras = DockExtras.shared
+                extras.readFiles([stack])
+                for _ in 0..<30 where extras.files[stack] == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                return .array((extras.files[stack] ?? []).map { .object(["name": .string($0.name), "folder": .string($0.url.deletingLastPathComponent().lastPathComponent)]) })
             }
             if let sub = args.positional.first {
                 let name = try args.word(1, "app")
@@ -77,6 +108,7 @@ extension ControlVerbs {
                 "savedDelay": dock.state.delaySaved == true ? dock.state.savedDelay.map(JSONValue.number) ?? .string("absent") : .null,
                 "room": .array(dock.room.map { .object(["screen": .string($0.monitor), "height": .number(Double($0.height))]) }),
                 "widgets": .array(dock.settings.widgets.map { .string($0.name) }),
+                "leftOfApps": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
                 "problem": dock.problem.map(JSONValue.string) ?? .null,
                 "apps": .array(apps.map { app in
                     .object(["name": .string(app.name), "bundleID": app.bundleID.map(JSONValue.string) ?? .null, "pinned": .bool(app.pinned),
@@ -111,10 +143,25 @@ extension ControlVerbs {
     /// off, the sandbox) they are held for this answer alone: the extensions asked once, the sampler's CPU reading
     /// and network readings waited for up to 7 s. Calendar is read, never asked.
     @MainActor
-    static func widgetFaces(_ widgets: [DockSlot], stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats, sources: BarSources? = Engine.shared?.barSources,
-                            extensionBar: ExtensionBar = .shared, calendar: DockCalendar = .shared) async -> JSONValue {
+    static func widgetFaces(_ widgets: [DockSlot], options: DockWidgetOptions = DockWidgetOptions(), showing: Bool = false,
+                            sources: BarSources? = Engine.shared?.barSources, extensionBar: ExtensionBar = .shared, calendar: DockCalendar = .shared,
+                            extras: DockExtras = .shared) async -> JSONValue {
         guard let sources else { return .array([]) }
+        let stats = options.stats
         let kinds = DockWidgetSources.kinds(widgets, stats: stats).subtracting([.extensions]), asked = DockWidgetSources.extensions(widgets)
+        // The round 5 sources, followed for this answer alone while the dock does not show: their reads waited for.
+        if !showing {
+            extras.follow(widgets, options: options)
+            let shown = Set(widgets.compactMap(\.widget))
+            for _ in 0..<30 where shown.contains(.stacks) && options.stacks.contains(where: { extras.files[$0] == nil })
+                || shown.contains(.clock) && options.sun && extras.place == nil {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if shown.contains(.system), !options.topApps.isEmpty {
+                for _ in 0..<40 where sources.sampler.busiestCPU.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
+            }
+        }
+        defer { if !showing { extras.follow([], options: options) } }
         let live = extensionBar.isRunning && extensionBar.held.isSuperset(of: asked)
         if !live {
             kinds.forEach(sources.readings.hold)
@@ -142,7 +189,7 @@ extension ControlVerbs {
             }
         }
         if widgets.contains(.widget(.nextEvent)) || widgets.contains(.widget(.timeline)) { calendar.follow(now: sources.readings.now) }
-        let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar, stats: stats)
+        let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar, options: options, extras: extras)
         return .array(widgets.map { widget in
             var row: [String: JSONValue] = ["widget": .string(widget.name), "reads": .string(widget.reads)]
             switch reader.body(widget) {
@@ -152,6 +199,8 @@ extension ControlVerbs {
                     var one: [String: JSONValue] = ["face": .string(face.words)]
                     if let tone = face.tone { one["tone"] = .string(tone.rawValue) }
                     if case .image(let data) = face.glyph { one["artwork"] = .string("\(data.count) bytes") }
+                    if case .toggle(let on) = face.kind { one["on"] = on.map(JSONValue.bool) ?? .null }
+                    if let look = face.look { one["look"] = .string(look) }
                     return .object(one)
                 })
             case .timeline(let timeline):

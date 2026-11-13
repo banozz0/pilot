@@ -13,8 +13,10 @@ struct DockWidgetSources {
     /// Whether the pomodoro extension, which starts the focus timer, is installed; read from its folder.
     var installed: (String) -> Bool = { DockWidgetSources.isInstalled($0) }
 
-    /// The System stats widget's picks (DockWidgetOptions.stats).
-    var stats: [MenuBarStats.Stat] = DockWidgetOptions.defaultStats
+    /// The widgets' own choices (DockWidgetOptions).
+    var options = DockWidgetOptions()
+    /// The round 5 widgets' sources (DockExtras).
+    var extras: DockExtras = .shared
 
     /// The readers `widgets` hold while the dock shows them: System stats' the stats it shows (the sampler reads only
     /// those), an extension slot the extensions' loop.
@@ -25,8 +27,10 @@ struct DockWidgetSources {
             case .aiUsage, .nowPlaying, .weather, .todo, .github, .markets: return [.extensions]
             case .system: return stats.map(BarKind.init)
             case .battery: return [.battery, .bluetoothBatteries]
-            case .nextEvent, .timeline: return [.clock]
+            case .nextEvent, .timeline, .clock: return [.clock]
             case .focus: return [.timer]
+            case .toggles: return [.wifi, .volume]
+            case .stacks, .note, .stopwatch: return []
             }
         })
     }
@@ -36,17 +40,21 @@ struct DockWidgetSources {
         Set(widgets.compactMap(\.extensionID))
     }
 
-    /// What `slot` draws now.
-    func body(_ slot: DockSlot) -> DockWidgetBody {
+    /// Whether `slot` ticks by the second now: the stopwatch while it runs. Its view alone redraws on that tick.
+    func ticks(_ slot: DockSlot) -> Bool { slot == .widget(.stopwatch) && extras.stopwatch.running }
+
+    /// What `slot` draws now; `now` for a widget that ticks (`ticks`).
+    func body(_ slot: DockSlot, now: Date? = nil) -> DockWidgetBody {
         switch slot {
-        case .widget(let widget): body(widget)
+        case .widget(let widget): body(widget, now: now)
         // Drawn from its answer alone: its faces, gauges or text (answered).
         case .extensionItem(let id): answered(id, waiting: DockFace(glyph: .symbol(slot.symbol), label: id, value: "…")) { Self.generic($0, $1) }
         }
     }
 
-    /// What `widget` draws now.
-    func body(_ widget: DockWidget) -> DockWidgetBody {
+    /// What `widget` draws now. Only the widgets that tell the time read the clock, so its tick redraws them alone.
+    func body(_ widget: DockWidget, now given: Date? = nil) -> DockWidgetBody {
+        var now: Date { given ?? sources.readings.now }
         switch widget {
         case .aiUsage: return answered(widget) { .faces(DockFaces.aiUsage($0)) }
         case .nowPlaying:
@@ -65,19 +73,31 @@ struct DockWidgetSources {
             let timer = sources.timer
             if timer.countdown == nil, let id = widget.extensionID, !installed(id) { return .setUp(.install(id)) }
             return .faces([DockFaces.focus(countdown: timer.countdown, left: timer.left, title: timer.title, paused: timer.isPaused)])
-        case .system: return .faces(DockFaces.system(stats, values: sources.sampler.latestValues, raw: sources.sampler.latest))
+        case .system:
+            let sampler = sources.sampler
+            return .faces(DockFaces.system(options.stats, values: sampler.latestValues, raw: sampler.latest)
+                + DockFaces.topApps(options.topApps, cpu: sampler.busiestCPU, memory: sampler.busiestMemory))
         case .battery:
             let readings = sources.readings
             // Nothing read yet: no Set up before the battery, the draw or the sampler was looked at.
             if readings.battery == nil, readings.watts == nil, sources.sampler.latest == nil { return .faces([waiting(widget)]) }
-            return DockFaces.battery(readings.battery, watts: readings.watts, bluetooth: sources.sampler.latest?.slow.bluetooth ?? []).map(DockWidgetBody.faces)
-                ?? .setUp(.bluetooth)
+            return DockFaces.battery(readings.battery, watts: readings.watts, bluetooth: sources.sampler.latest?.slow.bluetooth ?? [],
+                                     devices: options.batteryDevices)
+                .map { .faces(DockFaces.look($0, options.batteryLook)) } ?? .setUp(.bluetooth)
+        case .toggles:
+            let sound = sources.readings.sound, output = sound.side(.output)
+            let states = DockToggleStates(wifi: sources.readings.wifi?.on, bluetooth: extras.bluetooth, dnd: extras.dnd,
+                                          micMuted: sound.side(.input).muted, output: output.devices.first { $0.id == output.current }?.name)
+            return .faces(DockFaces.toggles(options.toggles, states))
+        case .stacks: return .faces(DockFaces.stacks(options.stacks, extras.files))
+        case .clock: return .faces(DockFaces.clocks(now, look: options.clockLook, zones: options.zones, sun: options.sun, place: extras.place))
+        case .note: return .faces([DockFaces.note(extras.scratch)])
+        case .stopwatch: return .faces([DockFaces.stopwatch(extras.stopwatch, now: now)])
         case .nextEvent, .timeline:
             switch calendar.access {
             case .undetermined: return .setUp(.askCalendar)
             case .denied: return .setUp(.calendarPrivacy)
             case .granted:
-                let now = sources.readings.now
                 return widget == .nextEvent ? .faces([DockFaces.nextEvent(calendar.events, now: now)]) : .timeline(DockFaces.timeline(calendar.events, now: now))
             }
         }

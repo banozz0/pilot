@@ -5,7 +5,7 @@
       "id": "ai-usage",
       "title": "AI usage",
       "icon": "📊",
-      "version": "3.6.0",
+      "version": "3.6.1",
       "description": "See how much of your Claude and Codex limits is left this session and this week, how your pace compares, and when each resets, in the menu bar, as CodexBar shows it. Add a second Codex account with Codex's own sign-in.",
       "examples": [
         "Glance at the menu bar: Claude's and Codex's logo with the session left, amber once a window is 60% used, red from 85%",
@@ -49,8 +49,8 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "82df8f21def3b9c9c960992dab9b17ff13954d75f8bfe357b24e4c14979c5da8",
-          "size": 4124,
+          "sha256": "f0abea238e5e278982571289d32771b1a7043326535c2d5263e16db11026b4df",
+          "size": 4138,
           "executable": false
         },
         {
@@ -344,7 +344,7 @@
       "id": "markets",
       "title": "Markets",
       "icon": "📈",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "description": "Stocks, ETFs and coins and their day's change in the menu bar, as text, with the day's line or as mini bars, one symbol, several side by side or in turn; click it for every symbol you follow with its price, its change and its line, each a click from its page on TradingView. Search TradingView as on its site (BTC, AAPL, EURUSD, SPX) to add stocks, funds, coin and currency pairs, indices and futures, and order or remove them on the page. Free data from TradingView, or Nasdaq and CoinGecko, in euros or your currency, no account or key.",
       "examples": [
         "The menu bar shows SPY ▲0.28% · BTC ▲1.4%: click it for every symbol with its price and the day's line",
@@ -381,8 +381,8 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "af5d1bee37ca1f9900c8325378cb476e2cd149e771704a6b18339ecffa551543",
-          "size": 5311,
+          "sha256": "45446908a8c1dd20004801ac71ed6c29c9552c89b807bcabff35834227f822b0",
+          "size": 5278,
           "executable": false
         },
         {
@@ -397,7 +397,7 @@
       "id": "now-playing",
       "title": "Now playing",
       "icon": "🎵",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Whatever your Mac is playing, in the menu bar, as Control Center's Now Playing sees it: Music, Spotify, a YouTube tab in Chrome, Safari or Zen, any app. Pilot's dock shows the track with its artwork once a popover has fetched it, or when the player hands it over. Click it, or open its page, for the track with its artwork and artist, how far in, play or pause, previous and next; Favourite while Music plays. Click the track to go to the tab or app playing it. The artwork comes from Music, Spotify's cover or a YouTube tab's thumbnail. Never starts a player; macOS asks once to let Pilot control the browser (for its tab and a video's thumbnail), Spotify (its cover) and Music (its artwork and Favourite).",
       "examples": [
         "A YouTube video plays in Chrome: the menu bar shows ♫ and its title; a lone ♫ while paused, nothing when nothing has played",
@@ -454,8 +454,8 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "209d1f6d1749dc2cf94d731b34c6ca18df48d6f6ffabd678b0d94caecb0b4af0",
-          "size": 2551,
+          "sha256": "87325c4da7b9758c01cf42bf2b9f67f35738a5fb903760e8987d65de3f29fdbd",
+          "size": 2573,
           "executable": false
         },
         {
