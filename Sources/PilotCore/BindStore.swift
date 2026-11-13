@@ -290,6 +290,21 @@ public struct BindStore: Equatable, Sendable {
         mouse[key] = bind
     }
 
+    /// The button whose hold opens This window by default (Q194): Mouse 4, the back thumb button on most mice.
+    public static let ringButton = Key("Mouse 4", hyper: false)
+
+    /// Gives Mouse 4's hold to This window, once, as rings.json moves to version 4 (Rings.upgrades): only while Mouse 4's
+    /// click runs a bind of its own, since a held button's quick click runs only its bind and Pilot posts no click for it
+    /// (Q370), so a free button would lose its Back; and only while no hold sits on Mouse 4. True when it was given.
+    @discardableResult
+    public mutating func addRingHold() -> Bool {
+        let hold = MouseKeys.hold(Self.ringButton)
+        guard action(for: Self.ringButton) != nil, !mouseBinds.contains(where: { MouseKeys.isHold($0.trigger.keyCode)
+            && (MouseKeys.number(MouseKeys.plain($0.trigger)) == 4 || $0.bind.button == 4) }) else { return false }
+        setMouse(hold, to: Rings.window.openID)
+        return true
+    }
+
     /// The drawn button a media key or a key the mouse sends, or its hold, sits on: only those have one, and only a button
     /// past the main clicks that a CGEvent numbers (3 to 32).
     private static func sender(_ button: Int?, of key: Key) -> Int? {
