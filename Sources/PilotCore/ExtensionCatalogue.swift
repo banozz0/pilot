@@ -65,7 +65,8 @@ public enum ExtensionCatalogue {
     public struct Theme: Equatable, Sendable, Identifiable {
         public let id: String, title: String, dark: Bool, styles: [String], palette: [String: String], preview: String?
         public let digest: String, files: [File]
-        /// Who made it, a GitHub handle; nil for Pilot's own (T22: the gallery's From others).
+        /// Who made it, a GitHub handle from its PROVENANCE.md's `Pack by: @handle` line (build-index.py); nil for Pilot's
+        /// own (T22: the gallery's From others).
         public var author: String? = nil
 
         /// What every file weighs together.
