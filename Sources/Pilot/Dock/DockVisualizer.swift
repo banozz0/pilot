@@ -16,8 +16,10 @@ protocol DockBarsPanels: AnyObject {
 /// watch (DockAudioWatch) says when something plays; the gate open (DockAudioGate), the tap starts and a 60 fps frame
 /// clock analyses both channels (DockSpectrum) and redraws the bars as one CAShapeLayer path, out from the pill to the
 /// screen's edges. Closed, the tap and the clock stop and the bars settle into a flat line, which costs nothing (round
-/// 1: 0.0 % while silent, about 1.2 % of an M4 at 60 fps). A tap that hears silence for DockAudioGate.settle seconds
-/// stops the clock too, and the next loud sample starts it again.
+/// 1: 0.0 % while silent, about 1.2 % of an M4 at 60 fps). Silence for DockAudioGate.settle seconds: with the reader
+/// saying a player plays (a gap between tracks), the clock stops and a check twice a second starts it at the next loud
+/// sample; open on the device alone (the reader cannot read), the tap stops too and waits for the device's next start,
+/// as the tap's own aggregate device keeps the output device running while it lasts.
 @Observable @MainActor
 final class DockVisualizer {
     static let fps = 60.0
@@ -49,6 +51,8 @@ final class DockVisualizer {
     @ObservationIgnored private var clock: DockFrameClock?
     @ObservationIgnored private var quiet = 0.0
     @ObservationIgnored private var wake: Timer?
+    /// Settled on the device alone: the tap waits for the device to stop and start again.
+    @ObservationIgnored private var waitingForStart = false
 
     init(watch: any DockAudioWatch = CoreAudioWatch(), source: any DockAudioSource = CoreAudioTapSource(), panels: any DockBarsPanels = DockBarsWindow()) {
         self.watch = watch
@@ -65,6 +69,7 @@ final class DockVisualizer {
         if on {
             panels.show(height: tallest)
             drawFlat()
+            followTheme()
             watch.start { [weak self] running, playing in self?.heard(running, playing) }
         } else {
             watch.stop()
@@ -72,6 +77,19 @@ final class DockVisualizer {
             panels.hide()
             deviceRunning = false
             playing = nil
+            waitingForStart = false
+        }
+    }
+
+    /// The flat line drawn again in the new accent when the theme changes (the moving bars take it on their next frame).
+    private func followTheme() {
+        guard on else { return }
+        _ = withObservationTracking { Look.shared.theme.accent } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.on else { return }
+                if !self.drawing { self.drawFlat() }
+                self.followTheme()
+            }
         }
     }
 
@@ -79,9 +97,10 @@ final class DockVisualizer {
     func ask() async { await source.ask() }
 
     private func heard(_ running: Bool, _ playing: Bool?) {
+        if !running || playing != nil { waitingForStart = false }
         deviceRunning = running
         self.playing = playing
-        if open { listen() } else { close() }
+        if open && !waitingForStart { listen() } else { close() }
     }
 
     /// The gate opened: the tap starts and the bars move.
@@ -135,7 +154,11 @@ final class DockVisualizer {
         frames += 1
         panels.draw(DockBarsPath.path(width: screenWidth(), pill: pillWidth, tallest: tallest, left: left, right: right))
         quiet = samples.peak < 0.0005 && (left + right).allSatisfy { $0 < 0.01 } ? quiet + dt : 0
-        if quiet >= DockAudioGate.settle {
+        if quiet >= DockAudioGate.settle, playing == nil {
+            // Open on the device alone: the tap itself keeps the device running, so it stops until the next start.
+            waitingForStart = true
+            close()
+        } else if quiet >= DockAudioGate.settle {
             halt()
             drawFlat()
             wake = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -165,6 +188,7 @@ final class DockVisualizer {
             "deviceRunning": .bool(deviceRunning), "player": .string(playing.map { $0 ? "playing" : "paused" } ?? "unknown"),
             "gate": .string(open ? "open" : "closed"), "tapping": .bool(tapping), "moving": .bool(drawing),
             "shows": .string(!on ? "nothing" : drawing ? "bars" : "flat line"), "frames": .number(Double(frames)),
+            "waitsForDeviceStart": .bool(waitingForStart),
             "fps": .number(Self.fps), "barsPerSide": .number(Double(n)), "tallest": .number(Double(tallest)),
             "leftNearestPill": left.isEmpty ? .null : bars(left), "rightNearestPill": right.isEmpty ? .null : bars(right),
             "problem": problem.map(JSONValue.string) ?? .null,

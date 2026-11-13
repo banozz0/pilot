@@ -2,6 +2,7 @@ import AppKit
 import CoreAudio
 import Foundation
 import os
+import PilotCore
 
 /// What the visualizer hears (rice round, Sven 2026-11-13, Q220 A): a Core Audio process tap on what the Mac plays,
 /// started only while the gate is open (DockAudioGate: the output device runs and the now-playing reader says a player
@@ -94,7 +95,7 @@ enum DockAudioError: Error, CustomStringConvertible {
         switch self {
         case .status(let step, let status): "the visualizer's tap could not \(step) (Core Audio \(status))"
         case .noDevice: "no output device to listen to"
-        case .notHere: "no tap here: the sandbox has no audio source"
+        case .notHere: "no tap here: a test run or a sandbox never listens to the Mac"
         }
     }
 }
@@ -136,6 +137,8 @@ final class CoreAudioWatch: DockAudioWatch {
     func start(_ changed: @escaping @MainActor (Bool, Bool?) -> Void) {
         stop()
         self.changed = changed
+        // A test run never listens to the Mac's audio, as it never changes its Dock (SystemEventsAutohide).
+        guard !SystemEventsAutohide.inTestProcess else { return changed(false, nil) }
         let follow: AudioObjectPropertyListenerBlock = { [weak self] _, _ in MainActor.assumeIsolated { self?.attach() } }
         defaultListener = follow
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &Self.defaultDevice, .main, follow)
@@ -190,12 +193,13 @@ final class CoreAudioWatch: DockAudioWatch {
         }
     }
 
-    /// What the reader says, read again at each change it makes; nil while it cannot say (no helper, nothing read yet).
+    /// What the reader says, read again at each change it makes: nothing read yet is nothing playing; nil only while it
+    /// cannot read at all (no helper in this build).
     private func followPlaying() {
         guard nowPlaying != nil else { return }
         let reader = nowPlayingReader
         let said: Bool? = withObservationTracking {
-            reader.problem == nil ? reader.track?.playing : nil
+            reader.problem == nil ? reader.track?.playing ?? false : nil
         } onChange: { [weak self] in
             Task { @MainActor in self?.followPlaying() }
         }
@@ -220,6 +224,8 @@ final class CoreAudioTapSource: DockAudioSource {
 
     func start(into ring: DockSampleRing) throws {
         stop()
+        // A test run never makes a real tap, so never raises macOS's ask on the screen.
+        guard !SystemEventsAutohide.inTestProcess else { throw DockAudioError.notHere }
         guard let output = defaultOutput() else { throw DockAudioError.noDevice }
         var uidRef: Unmanaged<CFString>?
         var status = audioProperty(output, kAudioDevicePropertyDeviceUID, &uidRef)

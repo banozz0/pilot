@@ -17,12 +17,14 @@ enum DockFixture {
         dock.visualizer.source = NoAudioSource()
         guard let folder else { return }
         let root = URL(filePath: folder, directoryHint: .isDirectory)
-        // `audio.json` ({"device": true|false, "player": "playing"|"paused"|"unknown"}) stands in for the output device
-        // and the now-playing reader, read again as it changes; the tap is DockSyntheticMusic, written in real time on its
-        // own thread as Core Audio's would. `audio.log` gets a line per start, stop and ask.
+        // `audio.json` ({"device": true|false, "player": "playing"|"paused"|"unknown", "quiet": true|false}) stands in
+        // for the output device and the now-playing reader, read again as it is replaced; the tap is DockSyntheticMusic,
+        // written in real time on its own thread as Core Audio's would, or zeros while `quiet`. `audio.log` gets a line
+        // per change, start, stop and ask.
         let audioLog = root.appending(path: "audio.log")
-        dock.visualizer.watch = FileAudioWatch(file: root.appending(path: "audio.json"), log: audioLog)
-        dock.visualizer.source = SyntheticAudioSource(log: audioLog)
+        let audio = root.appending(path: "audio.json")
+        dock.visualizer.watch = FileAudioWatch(file: audio, log: audioLog)
+        dock.visualizer.source = SyntheticAudioSource(log: audioLog, file: audio)
         let prefs = root.appending(path: "com.apple.dock.plist")
         dock.readPins = { DockPins.read(file: prefs) }
         let plist = (try? Data(contentsOf: prefs)).flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
@@ -165,25 +167,29 @@ final class FileAudioWatch: DockAudioWatch {
 @MainActor
 final class SyntheticAudioSource: DockAudioSource {
     let name = "synthetic music (sandbox)"
-    let log: URL
+    let log: URL, file: URL
     private var timer: (any DispatchSourceTimer)?
 
-    init(log: URL) { self.log = log }
+    init(log: URL, file: URL) { self.log = log; self.file = file }
 
     func start(into ring: DockSampleRing) throws {
         stop()
         ring.rate = DockSyntheticMusic.rate
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "sandbox-tap", qos: .userInteractive))
         timer.schedule(deadline: .now(), repeating: .nanoseconds(Int(512 / DockSyntheticMusic.rate * 1e9)), leeway: .microseconds(500))
-        timer.setEventHandler(handler: Self.feeder(ring))
+        // Quiet: zeros, as a tap hears between sounds; read at each start.
+        let quiet = ((try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["quiet"] as? Bool) ?? false
+        timer.setEventHandler(handler: Self.feeder(ring, quiet: quiet))
         timer.resume()
         self.timer = timer
-        FileDockAutohide.append("tap started (synthetic)", to: log)
+        FileDockAutohide.append(quiet ? "tap started (silence)" : "tap started (synthetic)", to: log)
     }
 
     /// The feed, made outside the main actor, as it runs on the tap's own queue.
-    nonisolated private static func feeder(_ ring: DockSampleRing) -> @Sendable () -> Void {
-        let music = DockSyntheticMusic.stereo(seconds: 8), frames = 512
+    nonisolated private static func feeder(_ ring: DockSampleRing, quiet: Bool) -> @Sendable () -> Void {
+        let music = quiet ? (left: [Float](repeating: 0, count: 48_000), right: [Float](repeating: 0, count: 48_000))
+            : DockSyntheticMusic.stereo(seconds: 8)
+        let frames = 512
         let at = OSAllocatedUnfairLock(initialState: 0)
         return {
             let start = at.withLock { n in
