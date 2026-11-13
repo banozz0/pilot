@@ -40,13 +40,8 @@ struct DockRenders {
         }
     }
 
-    /// AI usage's two gauges (OpenAI's in alert), the idle timer, the weather.
-    static let widgets: [[[BarPart]]] = [
-        [[.extensionItem(ExtensionBarFace(id: "ai-usage", title: "AI usage", answer: .init(text: "", tone: .alert, gauges: [
-            .init(tone: .fine, icon: .claude, text: "94%"), .init(tone: .alert, icon: .openai, text: "67%")])))]],
-        [[.symbol("timer")]],
-        [[.extensionItem(ExtensionBarFace(id: "weather", title: "Weather", answer: .init(text: "☀ 24°")))]],
-    ]
+    /// The six widgets on by default (round 3), as DockWidgetRenders maps them.
+    static var widgets: [(DockWidget, DockWidgetBody)] { DockWidgetRenders.bodies().filter { DockWidget.defaults.contains($0.0) } }
 
     @Test("The dock on two screens: fitted, crowded, hovered, Glass and Solid", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
@@ -72,7 +67,7 @@ struct DockRenders {
                 let desk = Desk(wall: wall, screen: screen, size: CGSize(width: min(screen.width, 1640), height: 150))
                 let strip = DockStrip(size: .medium, apps: Self.apps(count), hasWidgets: true, maxWidth: screen.width - 2 * DockPill.sideMargin,
                                       backing: glass ? { AnyView($0.modifier(GlassStandIn(desk: desk, tint: tint))) } : nil, hoverApp: hover) {
-                    ForEach(Array(Self.widgets.enumerated()), id: \.offset) { _, face in DockWidget(size: .medium) { BarPartsView(items: face) } }
+                    ForEach(Array(Self.widgets.enumerated()), id: \.offset) { _, pair in DockWidgetBodyView(widget: pair.0, shown: pair.1) }
                 }
                 // Item colours on, the bar's default (Q251): the alert gauge in the theme's red, as DockView passes it.
                 try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look), to: dir.appendingPathComponent("dock-\(theme)-\(name).png"), wait: 1.2)

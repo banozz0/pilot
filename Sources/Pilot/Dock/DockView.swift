@@ -10,9 +10,6 @@ enum DockPill {
     static let ends: CGFloat = 10
     /// The gap between icons, as a share of an icon, so a shrinking row keeps its rhythm.
     static let gapRatio = 0.125
-    /// The widgets' type over the bar's 12 pt mono: they stand beside 40 to 56 pt icons here, not in a 28 pt bar.
-    static let widgetScale: CGFloat = 1.25
-    static let widgetGap: CGFloat = 22
     /// The screen's width less this each side is the widest the pill may be.
     static let sideMargin: CGFloat = 16
     /// The hover's coordinate space, DockView's box, which never moves on screen as the icons grow.
@@ -29,6 +26,7 @@ struct DockView: View {
     let sources: BarSources
     let store: BarItemsStore
     var extensionBar: ExtensionBar = .shared
+    var calendar: DockCalendar = .shared
     /// Told the box's size as it changes, so its window fits it.
     var fit: (CGSize) -> Void = { _ in }
     /// The readers the widgets hold while they show.
@@ -37,20 +35,16 @@ struct DockView: View {
     @State private var rest: CGSize = .zero
 
     var body: some View {
-        let size = dock.settings.size, screen = dock.screen() ?? ""
-        let slots = store.settings.dockSlots(dock.settings.widgets, extensions: Set(extensionBar.items.filter { $0.face != nil }.map(\.id)))
-        let kinds = Set(slots.flatMap(\.kinds))
+        let size = dock.settings.size, widgets = dock.settings.widgets
+        let kinds = DockWidgetSources.kinds(widgets), asked = DockWidgetSources.extensions(widgets)
+        let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar)
         let byApp = Dictionary(grouping: tiler.windows, by: \.bundleId)
         let apps = DockController.apps(pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
         // Each widget is a view of its own, so a reading's tick redraws its widget, not the pill.
-        DockStrip(size: size, apps: apps, hasWidgets: !slots.isEmpty, maxWidth: DockWindow.widest(),
+        DockStrip(size: size, apps: apps, hasWidgets: !widgets.isEmpty, maxWidth: DockWindow.widest(),
                   windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock,
                   origin: hovering ? CGFloat(size.reach.width) / 2 : 0, onHover: { hovering = $0 }) {
-            ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
-                DockWidget(size: size, draws: { !TopBarSlotView.targets(slot, sources.inputs(for: slot.entries), settings: store.settings).isEmpty }) {
-                    TopBarSlotView(slot: slot, screen: screen, sources: sources, store: store)
-                }
-            }
+            ForEach(widgets, id: \.self) { widget in DockWidgetView(widget: widget, reader: reader, store: store, dock: dock) }
         }
             .environment(\.inTopBar, true)
             // The bar's Item colours, so a widget's warning and alert read as they do in the bar (amber, red), not
@@ -63,21 +57,29 @@ struct DockView: View {
             .onGeometryChange(for: CGSize.self) { $0.size } action: { fit($0) }
             .styled(.topBar)
             .pilotTheme()
-            .onAppear { sources.readings.hold(kinds, replacing: &held) }
-            .onChange(of: kinds) { sources.readings.hold(kinds, replacing: &held) }
-            .onDisappear { sources.readings.hold([], replacing: &held) }
+            .onAppear { hold(kinds, asked, widgets) }
+            .onChange(of: widgets) { hold(kinds, asked, widgets) }
+            // Today's events again as the day turns.
+            .onChange(of: Calendar.autoupdatingCurrent.startOfDay(for: sources.readings.now)) { follow(widgets) }
+            .onDisappear {
+                sources.readings.hold([], replacing: &held)
+                extensionBar.hold([], for: Self.holder)
+                calendar.stop()
+            }
     }
-}
 
-/// One widget, on the glass itself at the dock's scale; with nothing to show now (the timer while none runs, an
-/// extension not answering) it leaves nothing. `draws` is read here, so a reading's change redraws this widget alone.
-struct DockWidget<Content: View>: View {
-    let size: DockSize
-    var draws: () -> Bool = { true }
-    @ViewBuilder let content: () -> Content
+    static let holder = "dock"
 
-    var body: some View {
-        if draws() { DockScaled(scale: DockPill.widgetScale, content: content).frame(height: size.icon) }
+    /// The widgets' readers held, their extensions asked for the dock even where no bar places them, and Calendar read
+    /// (never asked) while a Calendar widget shows.
+    private func hold(_ kinds: Set<BarKind>, _ asked: Set<String>, _ widgets: [DockWidget]) {
+        sources.readings.hold(kinds, replacing: &held)
+        extensionBar.hold(asked, for: Self.holder)
+        follow(widgets)
+    }
+
+    private func follow(_ widgets: [DockWidget]) {
+        if widgets.contains(.nextEvent) || widgets.contains(.timeline) { calendar.follow(now: sources.readings.now) } else { calendar.stop() }
     }
 }
 
@@ -113,8 +115,21 @@ struct DockStrip<Widgets: View>: View {
         _hoverX = State(initialValue: hoverApp.map { CGFloat($0) * (icon + gap) + icon / 2 })
     }
 
-    /// What the pill spends besides its icons: its ends, the hairline and the widgets as last measured.
-    private var fixed: Double { Double(2 * DockPill.ends + (hasWidgets ? 25 + widgetsWidth : 0)) }
+    /// The hairline and the room either side of it.
+    private static var hairline: CGFloat { 25 }
+
+    /// The widest the widgets may be: what the icons leave at their smallest, and never under 40 % of the pill, so many
+    /// widgets shrink the icons first, then scroll (Sven, 2026-11-13: never cut, the apps' rule).
+    private var widgetsRoom: CGFloat {
+        let n = CGFloat(apps.count), small = CGFloat(DockFit.smallest), gap = (small * DockPill.gapRatio).rounded()
+        let icons = n > 0 ? n * small + (n - 1) * gap : 0
+        return max(maxWidth * 0.4, maxWidth - 3 * DockPill.ends - 2 - Self.hairline - icons)
+    }
+
+    /// What the pill spends besides its icons: its ends, the hairline and the widgets as they show.
+    private var fixed: Double {
+        Double(2 * DockPill.ends + (hasWidgets ? Self.hairline + min(widgetsWidth, widgetsRoom) + DockPill.ends + 2 : 0))
+    }
 
     var body: some View {
         let fit = DockFit.fit(apps: apps.count, icon: size.icon, gapRatio: DockPill.gapRatio, fixed: fixed, available: Double(maxWidth))
@@ -125,10 +140,9 @@ struct DockStrip<Widgets: View>: View {
             if hasWidgets {
                 Rectangle().fill(ink.text.opacity(0.22)).frame(width: 1, height: size.icon * 0.62)
                     .frame(height: size.icon).padding(.bottom, iconLine).padding(.trailing, 12)
-                HStack(spacing: DockPill.widgetGap) { widgets() }
+                widgetRow
                     .frame(height: size.icon)
                     .padding(.leading, 12)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widgetsWidth = $0 }
                     .padding(.bottom, iconLine)
                     .padding(.trailing, DockPill.ends + 2)
             }
@@ -140,6 +154,23 @@ struct DockStrip<Widgets: View>: View {
         }
         .overlay(shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1))
         .fixedSize()
+    }
+
+    /// The widgets at their own width while it fits `widgetsRoom`, else in a row that scrolls, its far end faded. The
+    /// width is measured on the row itself, never the scroll's frame, so the fit never feeds back on itself.
+    @ViewBuilder
+    private var widgetRow: some View {
+        let row = HStack(spacing: DockFaceMetrics.widgetGap) { widgets() }
+            .fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widgetsWidth = $0 }
+        if widgetsWidth > widgetsRoom {
+            ScrollView(.horizontal, showsIndicators: false) { row }
+                .frame(width: widgetsRoom)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.94),
+                                             .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+        } else {
+            row
+        }
     }
 
     /// The icons at the fitted size, on one baseline; past the smallest size a row that scrolls, its far end faded.
@@ -215,20 +246,6 @@ struct DockBacking<S: Shape>: ViewModifier {
     }
 }
 
-/// A view drawn `scale` times its own size and laid out at that size (the bar's parts have one fixed size).
-struct DockScaled<Content: View>: View {
-    let scale: CGFloat
-    @ViewBuilder let content: () -> Content
-    @State private var natural: CGSize = .zero
-
-    var body: some View {
-        content().fixedSize()
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { natural = $0 }
-            .scaleEffect(scale)
-            .frame(width: natural.width * scale, height: natural.height * scale)
-    }
-}
-
 /// One app: its icon on nothing (no tile behind any icon), a dot under it while it runs, the front app's dot a wider
 /// accent capsule. A click opens it, focuses its one window, or lists its windows over it to pick one.
 struct DockAppIcon: View {
@@ -278,7 +295,7 @@ struct DockAppIcon: View {
         }
     }
 
-    /// The right-click menu (Sven on build 2454): Open, its windows, Show in Finder, Keep in Dock or Remove from Dock
+    /// The right-click menu (Sven on build 2454): Open, its windows, Show in Files, Keep in Dock or Remove from Dock
     /// (Pilot's own pins), Quit; over the icon.
     private func showMenu() {
         guard let view = anchor.view else { return }
@@ -292,7 +309,8 @@ struct DockAppIcon: View {
             switch item {
             case .open: activate()
             case .window(let id, _, _): focus(id)
-            case .showInFinder: if let url = app.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            // Pilot Files on the app's folder, the app picked (Sven, 2026-11-13).
+            case .showInFiles: if let url = app.url { FilesWindows.shared.newWindow(url.deletingLastPathComponent(), selecting: url) }
             case .keepInDock: dock?.keep(app)
             case .removeFromDock: dock?.unpin(app)
             case .quit: if let pid = app.pid { NSRunningApplication(processIdentifier: pid)?.terminate() }

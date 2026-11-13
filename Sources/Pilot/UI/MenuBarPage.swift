@@ -43,17 +43,50 @@ struct MenuBarPage: View {
         _placement = State(initialValue: placement ?? BarItemsStore.shared.pagePlacement)
     }
 
-    /// Pilot's dock (spec pilot-dock): its switch, its problem, and its size while it is on. Its widgets are `pilot dock-widgets`.
+    /// Pilot's dock (spec pilot-dock): its switch, its problem, and while it is on its size and its widgets (design round 3,
+    /// Q215): every one with a switch, the ones on in the dock's order with Move up and Move down (`pilot dock-widgets`).
     @ViewBuilder private func dockCard(_ dock: DockController) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             SwitchCard(symbol: "dock.rectangle", name: "Dock", isOn: dock.isOn, busy: dock.busy,
-                       detail: "Pilot's own dock at the foot of the main screen: your Dock's apps, the running ones and three widgets. On turns on the macOS Dock's auto-hide; off, or quitting Pilot, puts your setting back.") {
+                       detail: "Pilot's own dock at the foot of the main screen: your Dock's apps, the running ones and your widgets. On turns on the macOS Dock's auto-hide; off, or quitting Pilot, puts your setting back.") {
                 dock.set(!dock.isOn)
             }
             if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
             if dock.isOn {
                 Segments(selection: Binding(get: { dock.settings.size }, set: { dock.settings.size = $0 }),
                          options: DockSize.allCases.map { ($0, $0.rawValue.capitalized) }, label: "Dock size")
+                dockWidgets(dock)
+            }
+        }
+    }
+
+    /// The dock's widgets: the ones on first, in the dock's order, then the rest; a switch each, and arrows to move one on.
+    @ViewBuilder private func dockWidgets(_ dock: DockController) -> some View {
+        let on = dock.settings.widgets, rows = on + DockWidget.allCases.filter { !on.contains($0) }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Dock widgets").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.bottom, 4)
+            ForEach(rows, id: \.self) { widget in
+                let at = on.firstIndex(of: widget)
+                BlockRow {
+                    Image(systemName: widget.symbol).frame(width: 18).foregroundStyle(ink.text2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(widget.title).font(ink.ui(13)).foregroundStyle(ink.text)
+                        Text("Reads \(widget.reads)").font(ink.ui(11)).foregroundStyle(ink.muted).lineLimit(1)
+                    }
+                    Spacer()
+                    if let at {
+                        Button { dock.settings.move(widget, by: -1) } label: { Image(systemName: "chevron.up") }
+                            .buttonStyle(.plain).foregroundStyle(at == 0 ? ink.line2 : ink.text2).disabled(at == 0)
+                            .accessibilityLabel("Move \(widget.title) up")
+                        Button { dock.settings.move(widget, by: 1) } label: { Image(systemName: "chevron.down") }
+                            .buttonStyle(.plain).foregroundStyle(at == on.count - 1 ? ink.line2 : ink.text2).disabled(at == on.count - 1)
+                            .accessibilityLabel("Move \(widget.title) down")
+                    }
+                    Toggle(widget.title, isOn: Binding(get: { at != nil }, set: { show in
+                        if show { try? dock.settings.add(widget) } else { try? dock.settings.remove(widget) }
+                    }))
+                    .labelsHidden().toggleStyle(.pilotSwitch)
+                }
             }
         }
     }
