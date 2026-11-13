@@ -37,6 +37,8 @@ struct SandboxHost {
         ImageViewer.onScreen = false
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
+        // PILOT_SANDBOX_DOCK=<folder>: a fake macOS Dock (DockFixture); without it every dock switch refuses, and the dock never draws.
+        DockFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DOCK"], on: engine.dock)
         // PILOT_SANDBOX_BINDS=<file>: a copy of a bind file as this run's bind file, loaded again so the engine's load (and
         // its migrations) runs on it; the given file is only read.
         if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_BINDS"] {

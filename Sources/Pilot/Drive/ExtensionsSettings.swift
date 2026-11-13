@@ -21,6 +21,8 @@ final class ExtensionsSettings {
     @ObservationIgnored private let label: @Sendable (String) -> String?
     /// Uninstall goes through the catalogue's model, so its card shows the remove in flight too; a test's is on its folder.
     @ObservationIgnored let catalogue: ExtensionCatalogueModel
+    /// The bar asks waiting for the edits to pause, by extension.
+    @ObservationIgnored private var asking: [String: Task<Void, Never>] = [:]
 
     init(folder: URL = Extension.folder, storage: ExtensionStorage = ExtensionStorage(),
          label: @escaping @Sendable (String) -> String? = { id in MainActor.assumeIsolated { Engine.shared?.registry.actions[id]?.label } },
@@ -54,10 +56,23 @@ final class ExtensionsSettings {
             failure = (key, "Not saved: \(error.localizedDescription)")
             return
         }
+        askBar(row)
         // The store clears a password set empty, so the page shows none.
         let saved = field.preference.kind == .password && value == .string("") ? nil : value
         guard let r = rows.firstIndex(where: { $0.id == row.id }), let f = rows[r].fields.firstIndex(where: { $0.id == field.id }) else { return }
         rows[r].fields[f] = ExtensionsPage.Field(preference: field.preference, value: field.preference.resolved(saved))
+    }
+
+    /// After a save, an extension with a bar item is asked again (ExtensionBar.ask) once the edits pause for a second, so the
+    /// top bar and the dock show the new setting without waiting for its next round, and typing runs it once, not per key.
+    private func askBar(_ row: ExtensionsPage.Row) {
+        guard row.ext.bar != nil, folder == Extension.folder else { return }
+        asking[row.id]?.cancel()
+        asking[row.id] = Task { [id = row.id] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            ExtensionBar.shared.ask(id)
+        }
     }
 
     /// Uninstall (story 158): the catalogue's remove (the folder to the Trash, its settings and data kept), then the folder

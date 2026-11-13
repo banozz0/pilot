@@ -39,6 +39,7 @@ final class ControlSocket {
         verbs.registerExtensions(ExtensionTools())
         verbs.registerWidgets(WidgetTools())
         verbs.registerAppCollections()
+        verbs.registerDock()
         verbs.registerStatus(status)
         verbs.registerBindCollections(ControlActions())
         verbs.registerKeys(ControlActions())

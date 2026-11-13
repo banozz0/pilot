@@ -14,6 +14,8 @@ extension ControlVerbs {
                                    askerAdd: { args, _ throws(ControlError) in
             let (ext, preference) = try await tools.preference(args.value("pref")!)
             try await tools.save(try Self.prefValue(args.value("value")!, for: preference, of: ext), for: preference, of: ext)
+            // Its bar item (and dock widget) is asked again now, as a save on the Extensions page does (Sven on build 2470).
+            if ext.bar != nil { await MainActor.run { ExtensionBar.shared.ask(ext.id) } }
             return Self.prefRow(await tools.prefRow(preference, of: ext))
         }, askerRemove: { args, peer throws(ControlError) in
             let (ext, preference) = try await tools.preference(try args.word(0, "pref"))
@@ -25,6 +27,7 @@ extension ControlVerbs {
             } else if row.passwordSet == nil {
                 try await tools.save(nil, for: preference, of: ext)
             }
+            if ext.bar != nil { await MainActor.run { ExtensionBar.shared.ask(ext.id) } }
             return Self.prefRow(row.passwordSet == false ? row : await tools.prefRow(preference, of: ext))
         }))
     }
