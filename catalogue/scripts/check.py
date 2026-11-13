@@ -19,7 +19,8 @@ known manifest keys, each once; schema 1; an id of 1 to 80 lowercase letters, di
 title with no control characters; styles instrument or toybox; every palette role as #RRGGBB, variants likewise; a
 material of glass, transparency 0 to 100 and blur full, light or off; a barPreset floatingStrip or threeIslands; adapters
 ghostty, zed and obsidian, each {}; wallpapers and preview relative paths inside the folder, and no file they don't
-name but manifest.json and PROVENANCE.md. The catalogue's own: no customMappings (their template is the one theme path
+name but manifest.json and PROVENANCE.md. The catalogue's own: at most one `Pack by: @handle` line in PROVENANCE.md,
+naming the pack's author by a GitHub handle (none: Pilot's own); no customMappings (their template is the one theme path
 to code); no executable file; images PNG, JPEG or HEIC by their bytes, at most 16384 pixels a side and 50 million in
 all; no `url(`, `@import` or `://` in the manifest; at most 300 files, 8 MB a file, 40 MB in all.
 
@@ -484,6 +485,11 @@ def check_theme(folder):
             problems.append("%s is executable: a theme is data" % where)
         if where == "PROVENANCE.md" and not (text_of(folder / where) or "").strip():
             problems.append("PROVENANCE.md must be UTF-8 text")
+        if where == "PROVENANCE.md":
+            authors = build_index.pack_by(folder)
+            if len(authors) > 1:
+                problems.append("PROVENANCE.md has %d `Pack by:` lines: one names the pack's author" % len(authors))
+            problems.extend("PROVENANCE.md's `Pack by: @%s` is not a GitHub handle" % a for a in authors if not build_index.HANDLE.match(a))
         if where in ("manifest.json", "PROVENANCE.md"):
             continue
         if where != preview and not any(where == w or where.startswith(w + "/") for w in wallpapers):

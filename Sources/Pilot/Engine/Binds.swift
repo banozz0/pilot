@@ -82,6 +82,13 @@ final class Binds {
         log.notice("binds: \(key.label, privacy: .public)\(on, privacy: .public) \(action.map { "runs \(LinkToken.redact($0))" } ?? "freed", privacy: .public)")
     }
 
+    /// Mouse 4's hold opens This window (Q194), when BindStore.addRingHold finds it free and its click bound.
+    func addRingHold() {
+        guard store.addRingHold() else { return log.notice("binds: Mouse 4's hold left as it is (no click bind, or a hold already)") }
+        save()
+        log.notice("binds: Mouse 4's hold opens This window")
+    }
+
     func replace(_ action: String, with key: Key, from old: String? = nil) {
         let freed = BindsPage.moving(store: store, action: action, to: key)
         let other = store.replace(action, with: key, from: old)

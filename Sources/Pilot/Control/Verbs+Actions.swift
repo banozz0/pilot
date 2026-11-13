@@ -50,7 +50,7 @@ final class ControlActions {
             "apps.bitwardenFill": .picker, ExtensionCatalogueMenu.actionID: .picker,
             "apps.clipboard": .panel, "apps.clipboardOptionV": .panel, NotesPanel.toggleID: .panel, QuickAIActions.askID: .panel,
             AIChatPanel.chatID: .panel,
-            "engine.openWindow": .window, "apps.webApp": .window, "apps.reports": .window, "apps.install": .window,
+            "engine.openWindow": .window, "apps.webApp": .window, "apps.reports": .window, "apps.install": .window, "apps.themeCatalogue": .window,
             "apps.bitwardenSearch": .window, "apps.bitwardenGenerator": .window, "system.soundSettings": .window,
             "system.bluetoothSettings": .window, "system.wifiSettings": .window, "system.displaySettings": .window,
             "system.focusSettings": .window, "system.translationLanguages": .window,

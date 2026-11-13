@@ -217,6 +217,7 @@ public enum Abilities {
         "apps.previousApp": "Brings forward the app you used longest ago, as a Command-Shift-Tab tap; again walks back through them all.",
         "apps.reports": "Shows every Update and Clean run kept: what ran, how it ended, its output.",
         "apps.update": "Opens Update in Hyper+Space: what can be updated, run only after you confirm.",
+        "apps.themeCatalogue": "Opens Look › Catalogue: every theme in Pilot's catalogue on its own desk, to get, update, apply or remove.",
         "apps.install": "Opens Install, the apps Pilot recommends, each installed through Homebrew after you confirm.",
         "apps.clean": "Opens Clean in Hyper+Space: what Mole would clear, run only after you confirm.",
         "apps.bitwardenFill": "Fills the login for the site in front from Bitwarden.",
