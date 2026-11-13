@@ -134,12 +134,13 @@ public struct ThemeWallpaperMutation: Codable, Equatable, Sendable {
 /// The apps a theme follows besides Ghostty, Zed and Obsidian. Paths and folder names are taken from each app's own
 /// documentation; none of these apps has been run against this code, so what each one does with the file is unverified.
 public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
-    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2, btop
+    case vscode, cursor, windsurf, kitty, alacritty, wezterm, iterm2, btop, lazygit, neovim, fish, vesktop
     public static let schemeName = "Pilot Theme"
     public var name: String {
         switch self {
         case .vscode: "VS Code"; case .cursor: "Cursor"; case .windsurf: "Windsurf"
         case .kitty: "Kitty"; case .alacritty: "Alacritty"; case .wezterm: "WezTerm"; case .iterm2: "iTerm2"; case .btop: "btop"
+        case .lazygit: "lazygit"; case .neovim: "Neovim"; case .fish: "fish"; case .vesktop: "Vesktop"
         }
     }
     /// What the app does with the theme, when a person has to do something for it to show.
@@ -148,6 +149,12 @@ public enum ThemeAppKind: String, Codable, CaseIterable, Sendable {
         case .kitty: "Reload Kitty's config (Ctrl+Cmd+,) to see it."
         case .wezterm: "WezTerm: add config.color_scheme = '\(Self.schemeName)' to your wezterm.lua."
         case .iterm2: "iTerm2: pick the profile named \(Self.schemeName) in its Profiles settings."
+        case .lazygit: "lazygit takes the theme the next time it starts: quit an open one (q) and start it again."
+        // Pilot never reaches into a running nvim: nothing outside it can reload its colours safely.
+        case .neovim: "Neovim takes the theme the next time it starts; in one already open, run :colorscheme pilot."
+        case .fish: "fish takes the theme in each new shell; in one already open, run exec fish."
+        // Vesktop reads its settings once at start, and follows its themes folder live after that (Vencord's source).
+        case .vesktop: "Vesktop: quit it (Cmd+Q) and open it again once to turn the theme on; after that it follows each theme live."
         default: nil
         }
     }
@@ -311,12 +318,13 @@ public enum ThemeRegions {
         if let range = try range(selector, in: bytes) { file.replaceSubrange(range, with: owned ?? Data()) }
         else if case .blockAfter(let anchor, _, _) = selector, let owned {
             let text = String(decoding: file, as: UTF8.self)
-            var offset = 0, found: Int?
+            var offset = 0, hits: [Int] = []
             for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                if line.trimmingCharacters(in: .whitespaces) == anchor { found = offset + line.utf8.count; break }
+                if line.trimmingCharacters(in: .whitespaces) == anchor { hits.append(offset + line.utf8.count) }
                 offset += line.utf8.count + 1
             }
-            guard let found else { throw ThemeFailure("expected line is missing") }
+            guard hits.count < 2 else { throw ThemeFailure("expected line \(anchor) is there more than once") }
+            guard let found = hits.first else { throw ThemeFailure("expected line is missing") }
             file.insert(contentsOf: owned, at: found)
         }
         else if let owned { file.append(insertedPrefix); file.append(owned) }

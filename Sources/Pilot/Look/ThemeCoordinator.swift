@@ -33,7 +33,8 @@ final class ThemeCoordinator {
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
                                                 appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() },
-                                                btop: { isTestRun ? 0 : ThemeCoordinator.reloadBtop() }), reload: { intent in
+                                                btop: { isTestRun ? 0 : ThemeCoordinator.reloadBtop() },
+                                                vesktopOpen: { !isTestRun && !ThemeCoordinator.processes(named: "vesktop").isEmpty }), reload: { intent in
                 try await Task.detached {
                     try intent.launch { command in
                         let process = Process(); process.executableURL = URL(fileURLWithPath: command.executable); process.arguments = command.arguments
@@ -98,6 +99,8 @@ final class ThemeCoordinator {
         var ghostty: () async -> Bool? = { nil }
         /// SIGUSR2 to the person's running btop once its files changed: how many took it.
         var btop: () async -> Int = { 0 }
+        /// Whether Vesktop is open. It reads its enabled themes only when it starts (Vencord's src/main/settings.ts).
+        var vesktopOpen: () async -> Bool = { false }
     }
     /// A real adapter and a recording adapter use this same seam. No singleton/default desktop dependency.
     struct WallpaperEffects {
@@ -326,19 +329,20 @@ final class ThemeCoordinator {
     /// Omarchy's omarchy-restart-btop does the same), so an open one follows without Ctrl+R. Another user's btop, a root one
     /// included, is never listed. Returns how many took the signal.
     nonisolated static func reloadBtop() -> Int {
+        processes(named: "btop").filter { kill($0, SIGUSR2) == 0 }.count
+    }
+    /// This user's processes by their exact name (an app's main executable, never its helpers).
+    nonisolated static func processes(named wanted: String) -> [pid_t] {
         let uid = getuid(), width = MemoryLayout<pid_t>.size
         let size = proc_listpids(UInt32(PROC_UID_ONLY), uid, nil, 0)
-        guard size > 0 else { return 0 }
+        guard size > 0 else { return [] }
         var pids = [pid_t](repeating: 0, count: Int(size) / width + 16)
         let bytes = proc_listpids(UInt32(PROC_UID_ONLY), uid, &pids, Int32(pids.count * width))
-        guard bytes > 0 else { return 0 }
-        var signalled = 0
-        for pid in pids.prefix(Int(bytes) / width) where pid > 0 {
+        guard bytes > 0 else { return [] }
+        return pids.prefix(Int(bytes) / width).filter { pid in
             var name = [CChar](repeating: 0, count: 256)
-            guard proc_name(pid, &name, UInt32(name.count)) > 0, String(cString: name) == "btop" else { continue }
-            if kill(pid, SIGUSR2) == 0 { signalled += 1 }
+            return pid > 0 && proc_name(pid, &name, UInt32(name.count)) > 0 && String(cString: name) == wanted
         }
-        return signalled
     }
     struct DetectedApps: Equatable {
         var zed: ThemeBinding?
@@ -1304,6 +1308,8 @@ final class ThemeCoordinator {
             if case .jsonMembership = claim.selector, vaults.contains(claim.root) {
                 let vault = Self.vaultLabel(claim.root, among: vaults)
                 line = done ? "Kept the Pilot snippet off in Obsidian vault \(vault)." : "The Pilot snippet stays off in Obsidian vault \(vault): you turned it off. Turn it on under CSS snippets in Obsidian's Appearance settings to see the theme there."
+            } else if case .jsonMembership = claim.selector, plan.apps.contains(where: { $0.kind == .vesktop && $0.root == claim.root }) {
+                line = done ? "Kept the Pilot theme off in Vesktop." : "The Pilot theme stays off in Vesktop: you turned it off. Turn it on under Themes in Vesktop's settings to see it there."
             } else {
                 let file = AppConfigs.tilde(claim.resolved, home: NSHomeDirectory())
                 line = done ? "Kept your change to \(file)." : "Your change to \(file) stays: you edited Pilot's part after the theme, so Pilot leaves it alone."
@@ -1741,6 +1747,16 @@ final class ThemeCoordinator {
         if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
             let count = await effects.btop()
             result["btop"] = .string(count > 0 ? "reloaded \(count) running" : "not running; it reads the theme when it starts")
+        }
+        // Turning the theme on or off is a settings change an open Vesktop never reads; a new colour in its theme file it
+        // takes live. Said in the result, first, because Sven missed it in Preview (test-5, build 2454).
+        if let app = plan.apps.first(where: { $0.kind == .vesktop }),
+           plan.mutations.contains(where: { $0.target.root == app.root && $0.target.path == app.config && $0.before != $0.after }) {
+            if await effects.vesktopOpen() {
+                result["vesktop"] = .string("open; it switches the theme on or off only when it starts")
+                let line = "Vesktop is open, so it hasn't switched the theme yet: quit it (Cmd+Q) and open it again."
+                result["next"] = .array([.string(line)] + (result["next"].flatMap { if case .array(let rows) = $0 { rows } else { nil } } ?? []))
+            } else { result["vesktop"] = .string("not running; it reads the theme when it starts") }
         }
         guard result["status"] == .string("applied") else { return .object(result) }
         var outcomes: [JSONValue] = []
@@ -2324,6 +2340,9 @@ struct ThemeFixture: Decodable {
                     _ = try? ThemeFiles.write((file.bytes ?? Data()) + Data("btop SIGUSR2 ×\(running)\n".utf8), over: file)
                 }
                 return running
+            }, vesktopOpen: {
+                // Recorded only: the control file plays an open Vesktop.
+                (try? controls())?["vesktop"] == "open"
             }), reload: { intent in
                 // Pause after the asynchronous handoff, before the same final validation as production.
                 try await Task.detached {
