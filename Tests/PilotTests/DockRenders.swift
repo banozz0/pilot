@@ -41,7 +41,7 @@ struct DockRenders {
         let faces: [[[BarPart]]] = [
             [[.label("SESSION"), .bar(0.62), .value("62%")], [.label("WEEK"), .bar(0.41), .value("41%")]],
             [[.ring(0.5), .value("18:42"), .label("FOCUS 2 OF 4")]],
-            [[.symbol("cloud.sun"), .value("24°"), .label("VALLETTA")]],
+            [[.symbol("cloud.sun"), .value("24°"), .label("MIRAVEL")]],
         ]
         for size in DockSize.allCases {
             let strip = DockStrip(size: size, hasWidgets: true) {

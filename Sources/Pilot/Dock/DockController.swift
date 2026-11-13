@@ -170,14 +170,22 @@ final class DockWindow: DockPanels {
     static let level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
 
     func show() {
-        let panel = self.panel ?? TopBarWindows.panel(MaterialBackdrop(content: make()), level: Self.level)
-        if self.panel == nil {
+        if panel == nil {
+            // Its first frame from the pill's own size, as BarPanel.keyPanel's: a host left at zero would wait on a
+            // geometry report from inside a zero-size window.
+            let host = make()
+            host.frame.size = host.fittingSize
+            let backdrop = MaterialBackdrop(content: host)
+            backdrop.frame = host.frame
+            let panel = TopBarWindows.panel(backdrop, level: Self.level)
             panel.title = "Pilot dock"
             panel.contentView?.wantsLayer = true
             panel.contentView?.layer?.cornerRadius = DockPill.radius
             panel.contentView?.layer?.masksToBounds = true
+            self.panel = panel
+            fit(host.frame.size)
         }
-        self.panel = panel
+        guard let panel else { return }
         panel.appearance = Look.shared.appearance(for: .topBar)
         (panel.contentView as? MaterialBackdrop)?.show(.glass, tint: TopBarColour.tint(.theme, style: TopBarWindows.tokens(.shared), look: .shared),
                                                          blur: Look.shared.glassBlur)
