@@ -468,6 +468,32 @@ public struct BindStore: Equatable, Sendable {
         rebuild()
     }
 
+    /// Q195 (Sven, 2026-11-13): Pilot default's Hyper+Ctrl+arrows went from the display keys to nudge, and the display
+    /// keys to their registry defaults. On Pilot default, a display action still on its old key as set by hand, or left
+    /// keyless by Binds' Replace putting its nudge on that key, goes back to the defaults, its nudge too. A display
+    /// action on anything else, or whose new key another action holds, is the user's own and stays. Returns the moved.
+    public static let displayKeysMove: [(display: String, nudge: String, old: Key)] = [
+        ("windows.focusDisplayLeft", "windows.nudgeLeft", Key("left", .ctrl)),
+        ("windows.focusDisplayRight", "windows.nudgeRight", Key("right", .ctrl)),
+        ("windows.sendToDisplayLeft", "windows.nudgeUp", Key("up", .ctrl)),
+        ("windows.sendToDisplayRight", "windows.nudgeDown", Key("down", .ctrl)),
+    ]
+
+    @discardableResult
+    public mutating func moveDisplayKeys() -> [String] {
+        guard preset.id == Preset.pilot.id else { return [] }
+        var moved: [String] = []
+        for (display, nudge, old) in Self.displayKeysMove {
+            guard let set = custom[display], set == old || (set == nil && custom[nudge] == .some(old)) else { continue }
+            if let key = defaults[display], clash(key, for: display) != nil { continue }
+            custom[display] = nil
+            if custom[nudge] == .some(old) { custom[nudge] = nil }
+            moved.append(display)
+        }
+        if !moved.isEmpty { rebuild() }
+        return moved
+    }
+
     public mutating func resetAll() {
         custom = [:]
         rebuild()

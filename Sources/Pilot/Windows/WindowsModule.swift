@@ -52,6 +52,10 @@ enum WindowsModule {
                   .focus(d)) { focus(d, observers: observers) }
             tiled(&registry, tiler, "vimSwap\(name)", "Swap with window \(d.rawValue), vim keys", nil,
                   .swap(d)) { swap(d, observers: observers) }
+            // Hyper+Ctrl+arrows (Sven, 2026-11-13, Q195): a floating window, or any with the tiler off, moves a step and
+            // keeps moving while held; a tiled one swaps that way, as Hyper+Shift+arrows does.
+            tiled(&registry, tiler, "nudge\(name)", "Nudge window \(d.rawValue)", Key(d.rawValue, .ctrl),
+                  .swap(d), repeats: true) { nudge(d) }
         }
         for (verb, sign, key) in [("grow", 1, "="), ("shrink", -1, "-")] {
             for axis in [AeroCommand.Axis.width, .height] {
@@ -137,10 +141,11 @@ enum WindowsModule {
     private static var running: Set<String> = []
 
     /// A tiled window key: through the tiler or Pilot's own code (`fallback`, nil for keys only the tiler can do), as
-    /// TiledKey's route says. Repeats for resize only, the step actions.
+    /// TiledKey's route says. Repeats for resize, and for any key that asks (nudge).
     private static func tiled(_ registry: inout ActionRegistry, _ tiler: TilerService, _ id: String, _ label: String,
-                              _ key: Key?, _ tiledKey: TiledKey, fallback: (@Sendable @MainActor () -> Bool)? = nil) {
-        let repeats = if case .resize = tiledKey { true } else { false }
+                              _ key: Key?, _ tiledKey: TiledKey, repeats: Bool = false,
+                              fallback: (@Sendable @MainActor () -> Bool)? = nil) {
+        let repeats = if case .resize = tiledKey { true } else { repeats }
         add(&registry, id, label, key, repeats: repeats) {
             guard running.insert(id).inserted else { return }
             Task {
@@ -286,6 +291,13 @@ enum WindowsModule {
         guard let frame = AXWindow.focused()?.frame,
               let target = neighbour(d, of: frame, observers: observers), let ax = AXWindow.matching(target) else { return false }
         ax.focus()
+        return true
+    }
+
+    /// One nudge step, kept on the window's own screen.
+    private static func nudge(_ d: Direction) -> Bool {
+        guard let (w, frame) = movable() else { return false }
+        w.setFrame(WindowGeometry.nudged(frame, d, within: Screens.visibleFrame(containing: frame)))
         return true
     }
 
