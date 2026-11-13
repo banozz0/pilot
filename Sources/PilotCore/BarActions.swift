@@ -29,6 +29,10 @@ public enum BarEdit: Equatable, Sendable {
     case style(BarStyle)
     case move(TopBarSide)
     case remove
+    /// Into group `number` (1 the Group), or a new one for nil (Q182).
+    case group(Int?)
+    /// Out of its group.
+    case ungroup
 }
 
 /// One row of the menu, drawn as a native NSMenu; `hint` is the other way to do it, greyed at the right.
@@ -145,6 +149,8 @@ extension BarSettings {
         case .style(let style): set(kind, style: style)
         case .move(let side): move(kind, to: side)
         case .remove: set(kind, on: false)
+        case .group(let number): group(.kind(kind), into: number ?? nextGroup)
+        case .ungroup: ungroup(.kind(kind))
         }
     }
 
@@ -153,6 +159,9 @@ extension BarSettings {
     public mutating func apply(_ edit: BarEdit, on item: BarTrayItem) {
         switch (item, edit) {
         case (.kind(let kind), _): apply(edit, on: kind)
+        // Grouping goes by item (Q182): an extension's own item joins or leaves as a built-in one does.
+        case (_, .group(let number)): group(item, into: number ?? nextGroup)
+        case (_, .ungroup): ungroup(item)
         case (.extension, .style), (.divider, .style), (.group, .style): break
         case (.extension, .move(let side)), (.divider, .move(let side)), (.group, .move(let side)): move(item, to: side)
         case (.extension(let id), .remove): if isOn(extension: id, in: .topBar) { toggle(extension: id, in: .topBar) }
@@ -180,7 +189,7 @@ public enum BarTooltip {
         case .item(let entry):
             // An extension's own slot names its own answer, not every extension's.
             if let id = entry.extensionID { i.extensionBars.first { $0.id == id }?.tooltip ?? entry.kind.title } else { text(entry.kind, i) }
-        case .group(let entries): entries.map { text($0.kind, i) }.joined(separator: "  ·  ")
+        case .group(let entries, _): entries.map { text($0.kind, i) }.joined(separator: "  ·  ")
         }
     }
 

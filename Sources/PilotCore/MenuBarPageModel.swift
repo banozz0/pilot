@@ -90,9 +90,10 @@ extension BarSettings {
     /// What the page's preview draws for `placement`: the top bar's three sides and the macOS menu bar, each nil when
     /// that bar is not shown; with Both, the menu bar keeps only what stays there while the top bar is on. The same
     /// slots the bars draw.
-    public func preview(_ placement: BarPlacement) -> (top: [TopBarSide: [BarSlot]]?, menu: [BarSlot]?) {
+    /// `emptyGroups`: the Menu bar page's strip, which keeps a group holding nothing as an outline to drop on.
+    public func preview(_ placement: BarPlacement, emptyGroups: Bool = false) -> (top: [TopBarSide: [BarSlot]]?, menu: [BarSlot]?) {
         let top = placement == .menuBar ? nil
-            : Dictionary(uniqueKeysWithValues: TopBarSide.allCases.map { ($0, slots(in: .topBar, topBarOn: true, side: $0)) })
+            : Dictionary(uniqueKeysWithValues: TopBarSide.allCases.map { ($0, slots(in: .topBar, topBarOn: true, side: $0, emptyGroups: emptyGroups)) })
         return (top, placement == .topBar ? nil : slots(in: .menuBar, topBarOn: placement == .both))
     }
 }
@@ -233,9 +234,10 @@ extension BarSettings {
         BarGroup.allCases.compactMap { group in
             let kinds = BarKind.allCases.filter {
                 $0.group == group && !$0.pinned && $0 != .extensions && !(placement == .menuBar && $0.topBarOnly)
-                    && (!onStrip($0, placement: placement) || $0 == .divider && placement != .menuBar)
+                    && ($0 != .pill || PillFeature.released)
+                    && (!onStrip($0, placement: placement) || [.divider, .group].contains($0) && placement != .menuBar)
             }
-            let items = kinds.map { $0 == .divider ? dividerToAdd(placement) : .kind($0) }
+            let items = kinds.map { $0 == .divider ? dividerToAdd(placement) : $0 == .group ? groupToAdd(placement) : .kind($0) }
                 + (group == .extensions ? extensions.filter { !onStrip(extension: $0, placement: placement) }.map(BarTrayItem.extension) : [])
             return items.isEmpty ? nil : (group, items)
         }
@@ -246,6 +248,13 @@ extension BarSettings {
     public func dividerToAdd(_ placement: BarPlacement) -> BarTrayItem {
         guard placement != .menuBar, onStrip(.divider, placement: placement) else { return .kind(.divider) }
         return .divider((entries.compactMap(\.dividerID).max() ?? 0) + 1)
+    }
+
+    /// The group the tray adds for `placement` (Q182): the Group until it is on the strip, then one more in the top bar,
+    /// the next free number; each goes on empty, a dotted outline on the page's strip to drop items on.
+    public func groupToAdd(_ placement: BarPlacement) -> BarTrayItem {
+        guard placement != .menuBar, onStrip(.group, placement: placement) else { return .kind(.group) }
+        return .group(nextGroup)
     }
 
     /// A drop of `item` on the strip for `placement` at `drop`; false where it cannot land (Pilot, which never moves; an
@@ -264,12 +273,10 @@ extension BarSettings {
         case (.group(let number), _): return group(.kind(kind), into: number)
         case (.top(let side, let index), .topBar):
             set(kind, in: .topBar, on: true)
-            fillGroup(kind, in: .topBar)
             place(kind, on: side, at: index)
         case (.top(let side, let index), .both):
             set(kind, on: true)
             set(kind, placement: .both)
-            fillGroup(kind, in: .topBar)
             place(kind, on: side, at: index)
         case (.menu(let index), .menuBar), (.menu(let index), .both):
             guard !kind.topBarOnly else { return false }
@@ -279,7 +286,6 @@ extension BarSettings {
             } else {
                 set(kind, in: .menuBar, on: true)
             }
-            fillGroup(kind, in: .menuBar)
             placeInMenuBar(kind, at: index, topBarOn: placement == .both)
         case (.top, .menuBar), (.menu, .topBar): return false
         }
@@ -314,7 +320,9 @@ extension BarSettings {
 
     /// One more group dragged along the top bar's strip by its outline: it moves; it is made only by grouping an item.
     private mutating func drop(group id: Int, on drop: BarStripDrop, placement: BarPlacement) -> Bool {
-        guard case .top(let side, let index) = drop, placement != .menuBar, self.index(of: .group(id)) != nil else { return false }
+        guard case .top(let side, let index) = drop, placement != .menuBar else { return false }
+        // New from the tray it is made there, empty (Q182); one already there moves.
+        if self.index(of: .group(id)) == nil { addGroup(id, side: side) }
         place(.group(id), on: side, at: index)
         return true
     }
@@ -389,23 +397,14 @@ extension BarSettings {
         }
     }
 
-    /// The Group put on with no reading to gather draws nothing: it brings round 4's three into the same bar.
-    private mutating func fillGroup(_ kind: BarKind, in place: BarPlace) {
-        guard kind == .group, !slots(in: place, topBarOn: place == .topBar).contains(where: \.isGroup) else { return }
-        for reading in BarKind.groupStarters {
-            if place == .topBar { set(reading, in: .topBar, on: true) } else { set(reading, in: .menuBar, on: true) }
-            set(reading, grouped: true)
-        }
-    }
-
     /// The readings the Group's slot gathers in the strip for `placement`.
     private func groupSlotKinds(_ placement: BarPlacement) -> [BarKind] {
         stripSlots(placement).filter(\.isGroup).flatMap(\.kinds)
     }
 
     /// Every slot the strip for `placement` draws: the top bar's sides in order, then the menu bar's.
-    private func stripSlots(_ placement: BarPlacement) -> [BarSlot] {
-        let preview = preview(placement)
+    func stripSlots(_ placement: BarPlacement) -> [BarSlot] {
+        let preview = preview(placement, emptyGroups: true)
         let top = preview.top.map { sides in TopBarSide.allCases.flatMap { sides[$0] ?? [] } } ?? []
         return top + (preview.menu ?? [])
     }

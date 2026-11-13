@@ -439,12 +439,14 @@ extension BarEntry {
 /// One thing drawn in a bar: an item, or the group's readings as one.
 public enum BarSlot: Equatable, Sendable {
     case item(BarEntry)
-    case group([BarEntry])
+    /// A group's items as one, and which group it is (1 the Group, 2 and on one more); empty only on the Menu bar page's
+    /// strip, where an empty group is a dotted outline to drop items on (Q182).
+    case group([BarEntry], number: Int = 1)
 
     public var entries: [BarEntry] {
         switch self {
         case .item(let entry): [entry]
-        case .group(let entries): entries
+        case .group(let entries, _): entries
         }
     }
     public var kinds: [BarKind] { entries.map(\.kind) }
@@ -453,8 +455,8 @@ public enum BarSlot: Equatable, Sendable {
     public var click: BarClick { BarClick(kinds, isGroup: isGroup) }
     /// The item its right-click menu is for: the Group for the group.
     public var kind: BarKind { isGroup ? .group : kinds[0] }
-    /// Which group it is: 1 the Group, 2 and on one more; nil for an item. Its members all share it.
-    public var groupNumber: Int? { isGroup ? entries.first?.groupNumber ?? 1 : nil }
+    /// Which group it is: 1 the Group, 2 and on one more; nil for an item.
+    public var groupNumber: Int? { if case .group(_, let number) = self { number } else { nil } }
     /// What a drag of it moves: the Group, one more group, a built-in item or an extension's own item.
     public var item: BarTrayItem {
         guard let groupNumber else { return entries[0].item }
@@ -466,7 +468,9 @@ public enum BarSlot: Equatable, Sendable {
         // The Group's members each by their own name: an extension's as extension:<id> (Q182).
         if let groupNumber {
             let members = entries.map { $0.extensionID == nil ? $0.kind.rawValue : $0.item.rawValue }.joined(separator: "+")
-            return groupNumber > 1 ? "group:\(groupNumber)=" + members : members
+            // An empty one (the page's strip, pilot bar) by its number alone.
+            if groupNumber == 1 { return members.isEmpty ? "group" : members }
+            return "group:\(groupNumber)=" + members
         }
         if case .kind = item { return kinds.map(\.rawValue).joined(separator: "+") }
         return item.rawValue
@@ -615,12 +619,16 @@ public struct BarSettings: Codable, Equatable, Sendable {
     /// item in the Group shown there joins one slot at the Group's place; without it each is its own. Each extension's item
     /// placed in the top bar is a slot of its own there, drawn once it has something to show (BarParts); the old
     /// Extensions slot draws nowhere.
-    public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil) -> [BarSlot] {
+    /// `emptyGroups` keeps a group with nothing in it, in the top bar, as an empty slot: the Menu bar page's strip draws
+    /// it as a dotted outline to drop items on; the bar draws nothing for it.
+    public func slots(in place: BarPlace, topBarOn: Bool, side: TopBarSide? = nil, emptyGroups: Bool = false) -> [BarSlot] {
         // Pilot's icon leads the top bar, in whatever order it was saved.
         let inTopBar = place == .topBar && topBarOn ? Set(extensionItems.filter { $0.on && $0.placement != .menuBar }.map(\.id)) : []
         let shown = entries.filter { entry in
             guard side == nil || entry.side == side else { return false }
             if let id = entry.extensionID { return inTopBar.contains(id) }
+            // The pill draws only once it ships (PillFeature); a saved bar keeps it, unshown.
+            if entry.kind == .pill, !PillFeature.released { return false }
             return entry.kind != .extensions && entry.shows(in: place, topBarOn: topBarOn)
         }
             .sorted { place == .topBar && $0.kind.pinned && !$1.kind.pinned }
@@ -635,8 +643,8 @@ public struct BarSettings: Codable, Equatable, Sendable {
         }
         return shown.compactMap { entry in
             if entry.kind == .group {
-                let gathered = members(entry.groupID ?? 1)
-                return gathered.isEmpty ? nil : .group(gathered)
+                let number = entry.groupID ?? 1, gathered = members(number)
+                return gathered.isEmpty && !(emptyGroups && place == .topBar) ? nil : .group(gathered, number: number)
             }
             return entry.groupNumber.map(groups.contains) == true ? nil : .item(entry)
         }

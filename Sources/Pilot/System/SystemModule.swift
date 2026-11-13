@@ -128,10 +128,13 @@ enum SystemModule {
 
         // The pill's drop (spec desktop-controls T5) on the focused display, by key; works with the top bar off too. Opened
         // by key it lights its first row, and the arrows, Tab and Return work it (the pill from the keyboard, 2026-11-12).
-        add(&registry, "pill", "Open the pill", nil, .system, keywords: "pill music now playing top bar drop") { PillDrop.shared.toggle(byKey: true) }
-        // The compact pill's next view, without opening it; no key until Sven binds one.
-        add(&registry, "nextPillView", "Next pill view", nil, .system, keywords: "pill view music extensions activity controls cycle") {
-            PillDrop.shared.layout.next()
+        // Both only once the pill ships (PillFeature): no bind or search entry for it before.
+        if PillFeature.released {
+            add(&registry, "pill", "Open the pill", nil, .system, keywords: "pill music now playing top bar drop") { PillDrop.shared.toggle(byKey: true) }
+            // The compact pill's next view, without opening it; no key until Sven binds one.
+            add(&registry, "nextPillView", "Next pill view", nil, .system, keywords: "pill view music extensions activity controls cycle") {
+                PillDrop.shared.layout.next()
+            }
         }
 
         // Omarchy's Super+Ctrl+Alt+T, which flashes the time (story 188): the time, date, battery and weather, read on the press.

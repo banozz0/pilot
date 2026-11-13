@@ -388,7 +388,7 @@ extension BarParts {
     public static func parts(_ slot: BarSlot, _ i: BarInputs, settings: BarSettings) -> [[BarPart]]? {
         switch slot {
         case .item(let entry): parts(entry, i, clock: settings.clock, zone: settings.clockZone).map { [$0] }
-        case .group(let entries): group(entries, i)
+        case .group(let entries, _): group(entries, i)
         }
     }
 }

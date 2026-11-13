@@ -31,7 +31,7 @@ extension ControlVerbs {
     /// goes to the store both bars and the page draw from.
     func registerBar(_ bar: @escaping @Sendable @MainActor () -> BarItemsStore, reach: BarReach = BarReach()) {
         register(ControlCollection(
-            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both. The top bar holds any number of dividers: add divider while one is there adds one more, listed as divider:<n>, which remove and bar move name.",
+            "bar-items", help: "The items on in Pilot's top bar or the macOS menu bar, in order (Menu bar). add with --placement puts the item in that bar and keeps the other it is in, as the page's switch does; without it the item joins the top bar, as a drop on the Menu bar page's top bar strip does. remove with --placement takes it out of that bar alone; without it, off both. The top bar holds any number of dividers: add divider while one is there adds one more, listed as divider:<n>, which remove and bar move name; add group while the Group is there adds one more group, empty, listed as group:<n>.",
             fields: [.init("item", help: "one of \(Self.cases(BarKind.self)), or divider:<n> for one more divider"),
                      .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)); other apps, app menus and extensions are top bar only", required: false),
                      .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (the item's own)", required: false),
@@ -45,6 +45,10 @@ extension ControlVerbs {
                 // Once a divider is on the top bar, each add is one more there (Sven on build 2363), as the page's tray does.
                 if kind == .divider, args.value("placement") == nil, case let item = bar().settings.dividerToAdd(.topBar), item != .kind(.divider) {
                     return Self.change(item, in: bar(), reach) { s in s.drop(item, on: .top(side ?? s.entry(.divider).side, index: index ?? .max), placement: .topBar) }
+                }
+                // Once the Group is on the top bar, each add is one more group there, empty, as the page's tray does (Q182).
+                if kind == .group, args.value("placement") == nil, case let item = bar().settings.groupToAdd(.topBar), item != .kind(.group) {
+                    return Self.change(item, in: bar(), reach) { s in s.drop(item, on: .top(side ?? s.entry(.group).side, index: index ?? .max), placement: .topBar) }
                 }
                 guard let word = args.value("placement") else { return Self.apply(.add(kind, side: side, index: index), kind, to: bar(), reach) }
                 let placement = try Self.placement(word, for: kind)
@@ -262,7 +266,7 @@ extension ControlVerbs {
                         "onlyInTopBar": .array(s.onlyInTopBar.map { .string($0.rawValue) }),
                         "readingsLook": .string(s.readingsLook.rawValue),
                         // The top bar's order, side by side, as it draws with the bar on: each extension's item its own.
-                        "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar).top ?? [:]).map { side, slots in
+                        "topBar": .object(Dictionary(uniqueKeysWithValues: (s.preview(.topBar, emptyGroups: true).top ?? [:]).map { side, slots in
                             (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
                         })),
                         "preset": (try? ThemeDigest.encoded(s.preset)).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) } ?? .null,
@@ -324,7 +328,7 @@ extension ControlVerbs {
     }
 
     private static func row(_ entry: BarEntry, lacking: Set<BarKind>) -> JSONValue {
-        .object(["item": .string(entry.dividerID == nil && entry.extensionID == nil ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
+        .object(["item": .string(entry.item == .kind(entry.kind) ? entry.kind.rawValue : entry.item.rawValue), "on": .bool(entry.on), "style": .string(entry.style.rawValue),
                  "styles": .array(entry.kind.styles.map { .string($0.rawValue) }),
                  "placement": .string(entry.placement.rawValue), "side": .string(entry.side.rawValue),
                  "topBarOnly": .bool(entry.kind.topBarOnly), "lacking": .bool(lacking.contains(entry.kind)), "inGroup": .bool(entry.inGroup),

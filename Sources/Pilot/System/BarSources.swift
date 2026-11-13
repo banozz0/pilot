@@ -126,7 +126,16 @@ struct BarSources {
     /// The same for any slot's item, an extension's own in the top bar included (spec pilot-1.1 T50).
     func menu(_ item: BarTrayItem, in place: BarPlace, store: BarItemsStore) -> [BarMenuRow] {
         guard let entry = store.settings.entries.first(where: { $0.item == item }) else { return [] }
-        return entry.menu(menuInputs(entry), in: place)
+        let rows = entry.menu(menuInputs(entry), in: place)
+        // In the top bar a groupable item can join a group, start one or leave one (Q182, Sven on build 2425).
+        let grouping = place == .topBar ? store.settings.groupRows(item, names: itemName) : []
+        return grouping.isEmpty ? rows : rows + [.separator] + grouping
+    }
+
+    /// An entry's name in a menu: an extension's own item by its extension's title.
+    func itemName(_ entry: BarEntry) -> String {
+        guard let id = entry.extensionID else { return entry.kind.title }
+        return extensionBar.items.first { $0.id == id }?.title ?? id
     }
 
     /// The menu Capture's click opens: its own actions alone.

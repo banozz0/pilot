@@ -136,7 +136,6 @@ extension BarSettings {
         guard item.kind?.pinned != true, self.index(of: item) != nil else { return }
         // Put at a place of its own, an item is out of the Group (Sven on build 2372: dragged out, it stays out).
         set(item, grouped: false)
-        removeEmptyGroups()
         let others = slots(in: .topBar, topBarOn: true, side: side).filter { $0.item != item }
         // A link can name any index: below 0 is first.
         let index = max(index, 0)
@@ -151,8 +150,8 @@ extension BarSettings {
     /// both) and lands as a drop does. Pilot is on and placed already.
     public mutating func add(_ kind: BarKind, on side: TopBarSide, at index: Int) {
         guard !kind.pinned else { return }
-        // The Group draws nothing without a reading: one put back after it went with its readings brings round 4's three.
-        if kind == .group, gathered.isEmpty { for reading in BarKind.groupStarters { join(reading); set(reading, grouped: true) } }
+        // The Group goes on as it is, empty if it holds nothing: never with readings put in it (Sven on build 2425: it
+        // grouped CPU, Memory and Network, Network not even on the bar).
         join(kind)
         place(kind, on: side, at: index)
     }
@@ -192,8 +191,26 @@ extension BarSettings {
             move(.group(number), to: at)
         }
         set(item, group: number)
-        removeEmptyGroups()
         return true
+    }
+
+    /// The groups an item can join now, in the top bar: the Group while it is on, then each one more, by number.
+    public var groupNumbers: [Int] { (entry(.group).on ? [1] : []) + moreGroups.sorted() }
+
+    /// A group's name in a menu: Group 1, Group 2, … with what it holds, as "Group 2 · Markets, lazygit".
+    public func groupTitle(_ number: Int, names: (BarEntry) -> String) -> String {
+        let held = entries.filter { $0.groupNumber == number }.map(names)
+        return "Group \(number)" + (held.isEmpty ? " · empty" : " · " + held.joined(separator: ", "))
+    }
+
+    /// An item's grouping rows (Q182, Sven on build 2425: no right-click to group): Group with each group it is not in,
+    /// New group, and, in a group, Take out of the group; none for an item that cannot join one.
+    public func groupRows(_ item: BarTrayItem, names: (BarEntry) -> String) -> [BarMenuRow] {
+        guard Self.groupable(item), let entry = entry(for: item) else { return [] }
+        var rows: [BarMenuRow] = groupNumbers.filter { $0 != entry.groupNumber }.map { .action("Group with " + groupTitle($0, names: names), .edit(.group($0))) }
+        rows.append(.action("New group", .edit(.group(nil))))
+        if entry.inGroup { rows.append(.action("Take out of the group", .edit(.ungroup))) }
+        return rows
     }
 
     /// The next free group number past the first: a new pill.
@@ -217,7 +234,9 @@ extension BarSettings {
             set(member.item, side: entries[at].side)
             move(member.item, to: entries.filter { $0.item != member.item }.firstIndex { $0.item == group }!)
         }
-        removeEmptyGroups()
+        // Ungroup splits a group past the first and it goes; one item taken out leaves its group, empty or not, as an
+        // outline to drop on (Q182).
+        if item == nil { removeEmptyGroups() }
     }
 
     /// The item on, in the top bar: one in the macOS menu bar alone is put in both.

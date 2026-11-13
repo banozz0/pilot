@@ -88,7 +88,8 @@ struct MenuBarPage: View {
                 }
             }
             clock(store)
-            PillEditor(extensionBar: extensionBar)
+            // The pill's block once it ships (PillFeature, Sven on build 2425).
+            if PillFeature.released { PillEditor(extensionBar: extensionBar) }
             screenChoices(topBar)
         }
         .disabled(store.loadError != nil)
@@ -171,7 +172,7 @@ struct MenuBarPage: View {
 
     /// The items the preview shows.
     private func previewed(_ store: BarItemsStore) -> Set<BarKind> {
-        let preview = store.settings.preview(placement)
+        let preview = store.settings.preview(placement, emptyGroups: true)
         return Set(((preview.top?.values.joined()).map(Array.init) ?? []).flatMap(\.kinds) + (preview.menu ?? []).flatMap(\.kinds))
     }
 
@@ -243,7 +244,7 @@ struct MenuBarPage: View {
     /// would draw its words at half size, too small to read or grab; wrapped, it would not be the bar. The macOS menu
     /// bar keeps the page's width and crowds as macOS does (menuStrip).
     @ViewBuilder private func preview(_ store: BarItemsStore) -> some View {
-        let preview = store.settings.preview(placement)
+        let preview = store.settings.preview(placement, emptyGroups: true)
         let radius = ink.corner(10, \.control)
         VStack(spacing: 0) {
             if let top = preview.top {
@@ -396,10 +397,7 @@ struct MenuBarPage: View {
     /// Group it has no place of its own to step to: its menu takes it out of the Group, or splits the Group.
     private func piece(_ slot: BarSlot, _ store: BarItemsStore, inTopBar: Bool, inGroup: Bool = false) -> some View {
         let kind = slot.kind, item = slot.item, screen = engine.topBar.connected.first?.name ?? ""
-        // In a group: out of it, or split it; otherwise an item that can join one starts a new group, its own pill (Q182).
-        let number = slot.entries.first?.groupNumber
-        let grouped = inGroup ? [StripAction(title: "Take out of the group", run: ungroup(item, store)), StripAction(title: "Ungroup", run: ungroup(nil, store, group: number))]
-            : BarSettings.groupable(item) && inTopBar ? [StripAction(title: "New group", run: newGroup(item, store))] : []
+        let grouped = groupActions(item, store, inTopBar: inTopBar)
         return StripPiece(item: item, title: kind.title, pinned: kind.pinned, dragged: $dragged,
                           remove: takeOff(item, store), step: inGroup ? nil : step(item, store, inTopBar: inTopBar), actions: grouped) {
             BarDragChip(kind: kind, slot: slot, screen: screen, sources: engine.barSources, store: store)
@@ -417,6 +415,10 @@ struct MenuBarPage: View {
         return HStack(spacing: 10) {
             // By item: several extensions' items share one kind.
             ForEach(slot.entries, id: \.item) { entry in piece(.item(entry), store, inTopBar: inTopBar, inGroup: true) }
+            // Empty, from the tray or left so: the outline alone, room to drop on (Q182).
+            if slot.entries.isEmpty {
+                Text("Drop here").font(ink.ui(11)).foregroundStyle(ink.muted).padding(.horizontal, 10).frame(minWidth: 72, minHeight: 20)
+            }
         }
         .padding(.horizontal, 5).padding(.vertical, 1)
         .background {
@@ -446,9 +448,16 @@ struct MenuBarPage: View {
         { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.ungroup(item, group: number) } }
     }
 
-    /// Puts `item` in a new group of its own, its own pill, where it is.
-    private func newGroup(_ item: BarTrayItem, _ store: BarItemsStore) -> () -> Void {
-        { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { _ = store.settings.group(item, into: store.settings.nextGroup) } }
+    /// A piece's grouping lines in the top bar's strip, as the bar's own right-click has them (BarSettings.groupRows):
+    /// Group with each group, New group, Take out of the group; in a group, Ungroup splits it.
+    private func groupActions(_ item: BarTrayItem, _ store: BarItemsStore, inTopBar: Bool) -> [StripAction] {
+        guard inTopBar else { return [] }
+        var actions = store.settings.groupRows(item, names: engine.barSources.itemName).compactMap { row -> StripAction? in
+            guard case .action(let title, .edit(let edit), _, _) = row else { return nil }
+            return StripAction(title: title) { [reduceMotion] in withAnimation(reduceMotion ? nil : Kit.change) { store.settings.apply(edit, on: item) } }
+        }
+        if let number = store.settings.entry(for: item)?.groupNumber { actions.append(StripAction(title: "Ungroup", run: ungroup(nil, store, group: number))) }
+        return actions
     }
 
     /// An extension's own item, its emoji and its answer, a piece of its own in either strip.
@@ -456,7 +465,7 @@ struct MenuBarPage: View {
         let tray = BarTrayItem.extension(item.id)
         // Move left and right along the top bar, as a built-in item's; the macOS menu bar orders its own items.
         return StripPiece(item: tray, title: item.title, pinned: false, dragged: $dragged, remove: takeOff(tray, store),
-                          step: inTopBar ? step(tray, store, inTopBar: true) : nil) {
+                          step: inTopBar ? step(tray, store, inTopBar: true) : nil, actions: groupActions(tray, store, inTopBar: inTopBar)) {
             BarDragChip(kind: .extensions, slot: nil, screen: "", sources: engine.barSources, store: store, extensionItem: (item.icon ?? "🧩", item.title))
         } content: {
             ExtensionStripFace(item: item).fixedSize().padding(.horizontal, inTopBar ? 4 : 0)
@@ -477,7 +486,7 @@ struct MenuBarPage: View {
     // MARK: Items
 
     private func groupTile(_ group: BarGroup, store: BarItemsStore) -> some View {
-        let kinds = BarKind.allCases.filter { $0.group == group }
+        let kinds = BarKind.allCases.filter { $0.group == group && ($0 != .pill || PillFeature.released) }
         return Tile(title: group.title) {
             Text("\(kinds.count)").font(ink.mono(11)).foregroundStyle(ink.muted)
         } content: {

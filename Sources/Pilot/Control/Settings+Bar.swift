@@ -10,7 +10,8 @@ extension SettingsSchema {
     func registerBar(_ bar: BarItemsStore, topBar: TopBarController) {
         register([.bool("topBar.on", "Top bar", page: "menuBar", standard: false, read: { topBar.isOn }, write: { on throws(ControlError) in try await Self.flip(topBar, to: on) })])
         registerBarAppearance(bar)
-        registerPill(.forSettings)
+        // The pill's settings once it ships (PillFeature), so Settings search offers none before.
+        if PillFeature.released { registerPill(.forSettings) }
     }
 
     /// Store-only setters. The isolated bar host never constructs the top-bar switch or a live controller.
