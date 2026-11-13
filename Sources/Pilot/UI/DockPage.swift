@@ -14,8 +14,17 @@ final class DockPageFocus {
         AppWindowController.shared.open(.dock)
     }
 
-    /// Whether `slot` has settings of its own: System stats' picks, or the preferences of the extension it reads.
-    static func hasSettings(_ slot: DockSlot) -> Bool { slot == .widget(.system) || slot.extensionID != nil }
+    /// The extension whose preferences a widget's settings show: the one it reads, or for Focus timer Pomodoro, which
+    /// starts the timer.
+    static func settingsID(_ slot: DockSlot) -> String? { slot.widget?.extensionID ?? slot.extensionID }
+
+    /// Whether `slot` has settings of its own: System stats' picks, or an installed extension's preferences (its one
+    /// manifest read, on a right click).
+    static func hasSettings(_ slot: DockSlot, folder: URL = Extension.folder) -> Bool {
+        if slot == .widget(.system) { return true }
+        guard let id = settingsID(slot), let ext = try? Extension(folder: folder.appending(path: id)) else { return false }
+        return !ext.preferences.isEmpty
+    }
 }
 
 /// Settings › Desktop › Dock (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop"): the dock's
@@ -128,7 +137,7 @@ struct DockWidgetList: View {
                         .buttonStyle(.plain).foregroundStyle(at == count - 1 ? ink.line2 : ink.text2).disabled(at == count - 1)
                         .accessibilityLabel("Move \(name) down")
                 }
-                if DockPageFocus.hasSettings(slot) {
+                if slot == .widget(.system) || DockPageFocus.settingsID(slot).flatMap({ id in prefs.rows.first { $0.id == id } })?.fields.isEmpty == false {
                     Button { focus.editing = open ? nil : slot } label: { Image(systemName: open ? "gearshape.fill" : "gearshape") }
                         .buttonStyle(.plain).foregroundStyle(open ? ink.accent : ink.text2)
                         .help("\(name) settings").accessibilityLabel("\(name) settings")
@@ -168,7 +177,7 @@ struct DockWidgetSettings: View {
     var body: some View {
         if slot == .widget(.system) {
             stats
-        } else if let id = slot.extensionID {
+        } else if let id = DockPageFocus.settingsID(slot) {
             if let row = prefs.rows.first(where: { $0.id == id }) {
                 if row.fields.isEmpty {
                     FinePrint(text: "\(row.ext.title) has no settings.")
