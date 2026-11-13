@@ -11,8 +11,12 @@ import SwiftUI
 /// show here.
 struct LookDesk: View {
     @Environment(\.ink) private var ink
-    let look: Look
+    /// The theme's roles: the Look's own, or a catalogue tile's (Look › Catalogue, T22).
+    let colors: ThemeColors
     let picture: Image?
+
+    init(look: Look, picture: Image?) { self.init(colors: look.colors, picture: picture) }
+    init(colors: ThemeColors, picture: Image?) { self.colors = colors; self.picture = picture }
 
     var body: some View {
         GeometryReader { g in
@@ -31,7 +35,7 @@ struct LookDesk: View {
     private enum App { case editor, terminal, graph }
 
     private func window(_ app: App, _ rect: CGRect, f: CGFloat, radius: CGFloat) -> some View {
-        let c = look.colors, shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let c = colors, shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return VStack(spacing: 0) {
             switch app {
             case .editor: DeskEditor(colors: c, f: f, size: rect.size)

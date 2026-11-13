@@ -377,6 +377,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Wallpaper block on its front (Previous, Next, Change on its own), which a link and the desktop's Hyper +
     /// right-click › Wallpaper settings… scroll to.
     case wallpaper
+    /// Look's Catalogue (public-repo-catalogue T22, Sven's variant C): every theme pack in Pilot's catalogue as a gallery
+    /// of desks, each acting from its own tile (Get, Update, Apply, Remove).
+    case themeCatalogue
     /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts and how
     /// apps show (back on More in pages round 5); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
@@ -446,7 +449,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .lookMore, .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -592,6 +595,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .recording: "Recording"
         case .captureHistory: "History"
         case .wallpaper: "Wallpaper"
+        case .themeCatalogue: "Catalogue"
         case .lookStyle: "Style"
         case .menuLayout: "Hyper+Space menu"
         case .windowLayout: "Window layout"
@@ -626,6 +630,8 @@ public enum AppSection: String, CaseIterable, Sendable {
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
         case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
+                               "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
         case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset", "snapshot", "save", "restore",
                                "reopen"]
