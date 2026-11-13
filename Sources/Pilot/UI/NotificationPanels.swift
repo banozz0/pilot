@@ -6,6 +6,9 @@ import SwiftUI
 /// What the panels show, handed to their views. Words stay in memory.
 @Observable @MainActor
 final class NotificationCardsModel {
+    /// The app's: the panels draw it, and the top bar's bell item reads its count.
+    static let shared = NotificationCardsModel()
+    /// The cards showing, newest first, as the feed has them; the stack orders them for where it sits.
     var cards: [NotificationEntry] = []
     var drawer: [NotificationEntry] = []
     var unread = 0
@@ -19,20 +22,73 @@ final class NotificationCardsModel {
 }
 
 /// Pilot's own notification surfaces. The panels are made as things arrive and dropped as they go, never activate Pilot,
-/// and never take key status: the app in front keeps its typing, and Notification Center's own panel stays open.
+/// and never take key status: the app in front keeps its typing, and Notification Center's own panel stays open. Where
+/// they sit follows NotificationSettings' placement: floating, the bell above or below apps; or the top bar, its bell item
+/// with the cards dropping under it and the list as its popover.
 @MainActor
 final class NotificationPanels: NotificationPresenting {
-    let model = NotificationCardsModel()
+    let model = NotificationCardsModel.shared
+    private let settings = NotificationSettings.shared
     private var cardsPanel: KeyPanel?
     private var bellPanel: KeyPanel?
     private var drawerPanel: KeyPanel?
     private var outsideClicks: Any?
     private var screenWatch: (any NSObjectProtocol)?
+    /// Where the panels are laid out for; nil while off.
+    private var laid: (place: NotificationSettings.ShowIn, layer: NotificationSettings.Layer)?
+    /// Which follow is current: one left over from before an end must not lay the panels out again.
+    private var following = 0
 
     private let bellPlaces = NotificationBellPlaces(defaults: UserDefaults.pilot())
 
+    /// The top bar's bell items as each bar draws one (TopBarSlot), so a card drops under the one on the main display.
+    private static var barItems: [ScreenAnchor.Box] = []
+    static func register(_ box: ScreenAnchor.Box) { barItems.append(box) }
+    static func unregister(_ box: ScreenAnchor.Box) { barItems.removeAll { $0 === box } }
+
+    /// Under every window, over the desktop's icons: a widget's level (WidgetDesk).
+    static let belowApps = NSWindow.Level(rawValue: DesktopIcons.level + 1)
+
     func begin() {
-        guard bellPanel == nil else { return }
+        guard screenWatch == nil else { return }
+        // A display change moves the corner: all three follow.
+        screenWatch = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.replace() }
+        }
+        following += 1
+        follow(following)
+    }
+
+    /// Lays the panels out for where they show now, and again each time that changes: Show in, Layer, or Pilot's top bar
+    /// going on or off.
+    private func follow(_ generation: Int) {
+        guard generation == following else { return }
+        // The layer is read only while floating, so changing it under the top bar lays nothing out again.
+        let now = withObservationTracking {
+            let place = settings.placement
+            return (place, place == .floating ? settings.layer : .above)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.follow(generation) }
+        }
+        lay(now.0, now.1)
+    }
+
+    private func lay(_ place: NotificationSettings.ShowIn, _ layer: NotificationSettings.Layer) {
+        guard laid?.place != place || laid?.layer != layer else { return }
+        laid = (place, layer)
+        closeDrawer()
+        closeBarList()
+        if place == .topBar {
+            close(&bellPanel)
+        } else if let bellPanel {
+            rest(bellPanel)
+        } else {
+            makeBell()
+        }
+        placeCards()
+    }
+
+    private func makeBell() {
         let start = bellFrame()
         model.bellSide = start.width
         let bell = NotificationBell(model: model) { [weak self] in self?.bellDropped($0) }
@@ -40,28 +96,39 @@ final class NotificationPanels: NotificationPresenting {
         bellPanel = BarPanelWindow.keyPanel(bell, surface: .barPopovers, level: HUD.level, takesKey: false) { [weak self] size in
             self?.bellPanel.map { CGRect(origin: $0.frame.origin, size: size) } ?? start
         }
-        // A display change moves the corner: all three follow.
-        screenWatch = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.replace() }
-        }
+        bellPanel.map(rest)
     }
 
+    /// The bell and the drawer rest at the layer picked: above apps, or below them on every Space as a widget does.
+    private func rest(_ panel: KeyPanel) {
+        let below = laid?.layer == .below
+        panel.level = below ? Self.belowApps : HUD.level
+        panel.collectionBehavior = below ? [.canJoinAllSpaces, .stationary, .ignoresCycle] : [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+    }
+
+    /// Laid out for the top bar: `laid` is what the panels were last laid out for, so a change that moves nothing skips it.
+    private var inBar: Bool { laid?.place == .topBar }
+
     func update(cards: [NotificationEntry], drawer: [NotificationEntry], unread: Int) {
-        model.cards = Array(cards.prefix(NotificationFeed.cardLimit).reversed())
+        model.cards = Array(cards.prefix(NotificationFeed.cardLimit))
         model.drawer = drawer
         model.unread = unread
         if model.cards.isEmpty {
             closeCards()
         } else if cardsPanel == nil {
+            // Above apps whatever the layer: a card pops up over the window in front while it shows.
             cardsPanel = BarPanelWindow.keyPanel(NotificationCardStack(model: model), surface: .barPopovers, level: HUD.level, takesKey: false) { [weak self] in
-                NotificationPlacement.cards(in: notificationScreen(), size: $0, bell: self?.bellPanel?.frame)
+                self?.cardsFrame($0) ?? NotificationPlacement.cards(in: notificationScreen(), size: $0)
             }
         }
     }
 
     func end() {
+        following += 1
+        laid = nil
         closeCards()
         closeDrawer()
+        closeBarList()
         close(&bellPanel)
         screenWatch.map(NotificationCenter.default.removeObserver)
         screenWatch = nil
@@ -93,13 +160,52 @@ final class NotificationPanels: NotificationPresenting {
         placeCards()
     }
 
-    /// The cards above the bell when it sits low in their column.
+    /// Floating: above the bell when it sits low in their column. Top bar: under the bell item, else under the main
+    /// display's bar at its right.
+    private func cardsFrame(_ size: CGSize) -> CGRect {
+        guard inBar, let spot = barItem() ?? barRight() else {
+            return NotificationPlacement.cards(in: notificationScreen(), size: size, bell: bellPanel?.frame)
+        }
+        return NotificationPlacement.cards(under: spot.item.midX, foot: spot.foot, in: spot.screen, size: size)
+    }
+
+    /// Where the top bar's cards hang from: an item's frame (the bar's right end stands in for it), its bar window's
+    /// foot and its screen.
+    private struct BarSpot { let item: CGRect, foot: CGFloat, screen: CGRect }
+
     private func placeCards() {
         guard let cardsPanel else { return }
-        cardsPanel.setFrame(NotificationPlacement.cards(in: notificationScreen(), size: cardsPanel.frame.size, bell: bellPanel?.frame), display: true)
+        cardsPanel.setFrame(cardsFrame(cardsPanel.frame.size), display: true)
+    }
+
+    /// The bell item a bar shows, the main display's first; nil when none does (taken off the bar, gone for room, or
+    /// cropped out of an island's window: BarDropPlacement.shown, the drops' rule).
+    private func barItem() -> BarSpot? {
+        let shown = Self.barItems.compactMap { box -> (spot: BarSpot, screen: NSScreen)? in
+            guard let view = box.view, let window = view.window, window.isVisible, let screen = window.screen, let item = view.screenFrame,
+                  let bar = Self.bar(on: screen), BarDropPlacement.shown([(item, window.frame)], on: bar) != nil else { return nil }
+            return (BarSpot(item: item, foot: window.frame.minY, screen: screen.frame), screen)
+        }
+        return (shown.first { $0.screen == NSScreen.screens.first } ?? shown.first)?.spot
+    }
+
+    /// The main display's bar, its right end: where the cards drop while no bell item is drawn.
+    private func barRight() -> BarSpot? {
+        guard let screen = NSScreen.screens.first, let bar = Self.bar(on: screen) else { return nil }
+        return BarSpot(item: CGRect(x: bar.maxX - NotificationPlacement.margin, y: bar.minY, width: 0, height: bar.height), foot: bar.minY, screen: screen.frame)
+    }
+
+    /// `screen`'s top bar strip, while it has one.
+    private static func bar(on screen: NSScreen) -> CGRect? {
+        Screens.bars[screen.localizedName].map { TopBarGeometry.frame(screen: screen.frame, strip: $0) }
     }
 
     func toggleDrawer() {
+        if inBar {
+            // The list hangs under the bell item as its popover, as a click on it does.
+            guard let item = barItem()?.item else { return say("Put Notifications in the top bar to open its list: Pilot › Menu bar") }
+            return BarPanel.shared.toggle([.notifications], under: item, AnyView(NotificationBarDrawer(model: model)))
+        }
         if drawerPanel != nil { return closeDrawer() }
         let panel = makeDrawer()
         panel.escape = { [weak self] in self?.closeDrawer() }
@@ -110,12 +216,12 @@ final class NotificationPanels: NotificationPresenting {
     }
 
     /// The drawer moves and resizes as a widget does (Q42, Sven 2026-11-10): dragged by its header, pulled at its edges.
-    /// It opens beside the bell wherever that is, at the size it last had (Q55).
+    /// It opens beside the bell wherever that is, at the size it last had (Q55), and rests at the bell's layer.
     private func makeDrawer() -> KeyPanel {
         let panel = KeyPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.contentView = MaterialBackdrop(content: NSHostingView(rootView: NotificationDrawer(model: model).styled(.barPopovers).pilotTheme()))
         panel.appearance = Look.shared.appearance(for: .barPopovers)
-        panel.level = HUD.level
+        rest(panel)
         panel.resizesFromFace(withoutMargins: true)
         panel.minSize = NotificationBellPlaces.drawerMin
         panel.setFrame(drawerFrame(), display: false)
@@ -138,10 +244,12 @@ final class NotificationPanels: NotificationPresenting {
     }
 
     private func replace() {
-        bellPanel?.setFrame(bellFrame(), display: true)
+        if let bellPanel {
+            bellPanel.setFrame(bellFrame(), display: true)
+            model.bellSide = bellPanel.frame.width
+        }
         placeCards()
         if let drawerPanel { drawerPanel.setFrame(drawerFrame(size: drawerPanel.frame.size), display: true) }
-        model.bellSide = bellPanel?.frame.width ?? model.bellSide
     }
 
     private func closeDrawer() {
@@ -149,6 +257,11 @@ final class NotificationPanels: NotificationPresenting {
         outsideClicks.map(NSEvent.removeMonitor)
         outsideClicks = nil
         close(&drawerPanel)
+    }
+
+    /// The top bar's list, while it is the bar popover showing.
+    private func closeBarList() {
+        if BarPanel.shared.shown == [.notifications] { BarPanel.shared.close() }
     }
 
     private func closeCards() { close(&cardsPanel) }
@@ -252,6 +365,8 @@ private struct BellHandle: NSViewRepresentable {
 struct NotificationDrawer: View {
     @Environment(\.style) private var style
     let model: NotificationCardsModel
+    /// Hung under the top bar's bell item as its popover: its arrow, and no header to drag it by.
+    var inBar = false
 
     var body: some View {
         // The panel's size, which Sven sets by pulling its edges; the list takes the height the header leaves.
@@ -259,17 +374,17 @@ struct NotificationDrawer: View {
     }
 
     private func face(width: CGFloat) -> some View {
-        KitPopover(width: width, inset: 0, arrow: false) {
+        KitPopover(width: width, inset: 0, arrow: inBar) {
             HStack {
                 Text("Notifications").styleText(\.strong).foregroundStyle(style.color(\.text))
                 // The header drags the panel: a hosting view never lets a press move its window by its background.
-                WindowDragArea().frame(maxWidth: .infinity).frame(height: 24)
+                if inBar { Spacer() } else { WindowDragArea().frame(maxWidth: .infinity).frame(height: 24) }
                 if !model.drawer.isEmpty {
                     Button("Clear all") { PilotNotifications.shared.clearDrawer() }.buttonStyle(.pilotSoft)
                 }
             }
             .padding(12)
-            .background { WindowDragArea() }
+            .background { if !inBar { WindowDragArea() } }
             Divider()
             if model.drawer.isEmpty {
                 EmptyState(title: "No notifications yet", line: "What macOS shows from now on appears here. It stays in memory.").padding(12)
@@ -303,13 +418,26 @@ struct NotificationDrawer: View {
     }
 }
 
-/// The cards, newest nearest the corner, each on the top bar's glass while Look's Glass is on, else KitPopover's panel.
-struct NotificationCardStack: View {
+/// The top bar's list: the drawer as the bell item's popover, at the drawer's first size; opening it reads what arrived.
+struct NotificationBarDrawer: View {
     let model: NotificationCardsModel
 
     var body: some View {
+        NotificationDrawer(model: model, inBar: true)
+            .frame(width: NotificationPlacement.drawerWidth, height: NotificationBellPlaces.drawerFirst.height)
+            .onAppear { PilotNotifications.shared.markRead() }
+    }
+}
+
+/// The cards, newest nearest the corner when floating and nearest the bar under the top bar (the model holds the feed's
+/// order, newest first), each on the top bar's glass while Look's Glass is on, else KitPopover's panel.
+struct NotificationCardStack: View {
+    let model: NotificationCardsModel
+    var settings = NotificationSettings.shared
+
+    var body: some View {
         VStack(alignment: .trailing, spacing: NotificationPlacement.gap) {
-            ForEach(model.cards) { NotificationCard(entry: $0) }
+            ForEach(settings.placement == .topBar ? model.cards : model.cards.reversed()) { NotificationCard(entry: $0) }
         }
         .allowsWindowActivationEvents(true)
     }

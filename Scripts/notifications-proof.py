@@ -733,7 +733,7 @@ def bell(s):
     # screens change.
     dropped = panels[panels.index('private func bellDropped'):panels.index('private func placeCards')]
     replace = panels[panels.index('private func replace()'):]
-    check(panels.count('bell: self?.bellPanel?.frame') == 1 and panels.count('bell: bellPanel?.frame') == 1
+    check(panels.count('self?.cardsFrame($0)') == 1 and panels.count('bell: bellPanel?.frame') == 1
           and 'placeCards()' in dropped and 'placeCards()' in replace.split('\n    }')[0],
           'the app places cards against its bell panel, and again on a drop and a screen change')
     check(not SECRET.search(json.dumps([x for x in s.events() if x['event'] == 'bell-place'])), 'bell events carry no notification text')
@@ -741,14 +741,28 @@ def bell(s):
 
 def setting(s):
     settings = s.pilot('settings').stdout
-    for key, words in [('notifications.enabled', "Show other apps' notifications as Pilot cards, bottom right"),
-                       ('notifications.hideMacBanners', "Hide macOS's own banner while Pilot's card shows")]:
+    for key, words in [('notifications.enabled', "Show other apps' notifications as Pilot cards, where Show in says"),
+                       ('notifications.hideMacBanners', "Hide macOS's own banner while Pilot's card shows"),
+                       ('notifications.showIn', 'Notifications show floating'), ('notifications.layer', "Floating notifications' bell and list rest")]:
         check(key in settings and words in settings, f'{key} is listed, in plain words')
     check(s.get('notifications.enabled') is False and s.get('notifications.hideMacBanners') is False, 'both are off by default')
     wrong = s.pilot('set', 'notifications.enabled', '"maybe"', ok=False)
     check(wrong.returncode != 0, 'a bad value is refused')
     for key in ('notifications.enabled', 'notifications.hideMacBanners'):
         print(f'pilot get {key}:', s.pilot('get', key).stdout.strip(), flush=True)
+    # Where they show (Sven, 2026-11-12): floating above apps by default; Top bar falls back to floating while the
+    # sandbox's top bar is off, and puts the bell item on the bar.
+    word = lambda key: s.pilot('get', key).stdout.strip()
+    check(word('notifications.showIn') == 'floating' and word('notifications.layer') == 'above', 'floating, above apps, by default')
+    check(s.pilot('set', 'notifications.showIn', 'sideways', ok=False).returncode != 0, 'a place that is not one is refused')
+    s.pilot('set', 'notifications.showIn', 'topBar')
+    s.pilot('set', 'notifications.layer', 'below')
+    st = s.status()
+    check(st['showIn'] == 'topBar' and st['layer'] == 'below' and st['placement'] == 'floating', 'top bar falls back to floating while the top bar is off')
+    items = json.loads(s.pilot('list', 'bar-items').stdout)
+    check(any(i.get('item') == 'notifications' and i.get('on') for i in items), 'top bar puts the bell item on the bar')
+    s.pilot('set', 'notifications.showIn', 'floating')
+    s.pilot('set', 'notifications.layer', 'above')
     run = s.pilot('actions').stdout
     check('system.notificationDrawer' in run, 'the drawer action is registered with no default key')
     st = s.status()

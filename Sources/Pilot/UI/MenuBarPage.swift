@@ -813,6 +813,7 @@ extension BarKind {
         case .modes: BarParts.statusSymbol
         case .clock: "clock"
         case .timer: "timer"
+        case .notifications: "bell"
         case .extensions: "puzzlepiece.extension"
         case .spacer: "arrow.left.and.right"
         case .divider: "line.diagonal"

@@ -27,6 +27,9 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     case modes
     /// The extension timer's item (ExtensionTimer); it was the pomodoro's, so saved layouts keep reading its raw value.
     case clock, timer = "pomodoro"
+    /// Other apps' notifications in the top bar (Sven, 2026-11-12): a bell with what arrived unread; a click hangs their list
+    /// under it. Draws only while Notifications show in the top bar; picking Top bar puts it on (NotificationSettings.showIn).
+    case notifications
     /// The kind of an extension's own bar item (story 161, ExtensionBar): each placed in the top bar is an entry of its
     /// own in the one order, its `extensionID` naming it (Sven, 2026-11-04, spec pilot-1.1 T50); in the macOS menu bar each
     /// is its own item (Surfaces v2, BarSettings.extensionItems). The entry with no id is where they all drew as one slot
@@ -62,6 +65,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .modes: "Status lights"
         case .clock: "Clock"
         case .timer: "Timer"
+        case .notifications: "Notifications"
         case .extensions: "Extensions"
         case .spacer: "Spacer"
         case .divider: "Divider"
@@ -75,7 +79,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .cpu, .memory, .network, .graphics, .storage, .heat: .readings
         case .battery, .bluetoothBatteries, .keepAwake, .power: .power
         case .volume, .keyboardLayout, .wifi, .displays: .controls
-        case .modes, .clock, .timer: .timeAndFocus
+        case .modes, .clock, .timer, .notifications: .timeAndFocus
         case .terminal, .askAI, .pill, .capture: .drops
         case .extensions: .extensions
         case .spacer, .divider, .group: .layout
@@ -106,6 +110,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
         case .modes: [.icons]
         case .clock: [.time, .dateTime, .twoZones]
         case .timer: [.countdown, .ring, .icon]
+        case .notifications: [.icon]
         case .extensions: [.text]
         case .spacer: [.fixed, .flexible]
         case .divider: [.line]
@@ -135,7 +140,7 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// Other apps' items and the front app's menus are listed only in the top bar: in the menu bar they are already there.
     /// Status lights are the top bar's alone: their dots are drawn there. So are the bar drops' items: their drops
     /// hang from the top bar.
-    public var topBarOnly: Bool { self == .otherApps || self == .appMenus || self == .extensions || self == .modes || isDrop }
+    public var topBarOnly: Bool { self == .otherApps || self == .appMenus || self == .extensions || self == .modes || self == .notifications || isDrop }
     /// Joins a saved layout on: the extensions' item draws nothing until an installed extension declares a bar item, so
     /// installing one is the ask (story 161); the bar drops' items are placed by default (spec Bar drops T4). Every other
     /// new item joins off, Status lights too: they are placed in edit mode.

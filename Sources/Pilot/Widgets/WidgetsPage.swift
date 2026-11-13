@@ -261,6 +261,7 @@ struct WidgetsPage: View {
             }
             .padding(.vertical, 10)
         }
+        .pageWide()
     }
 
     private var yours: some View {
@@ -278,6 +279,7 @@ struct WidgetsPage: View {
             }
             .padding(.vertical, 10)
         }
+        .pageWide()
     }
 
     /// Every way to a widget of your own, in one menu: the AI chat, the builder, an import, the folder.

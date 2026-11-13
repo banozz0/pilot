@@ -18,10 +18,6 @@ struct GeneralPage: View {
     @State private var confirming: LayerKeyChange?
     /// Read when the page shows and when Pilot comes back to the front, not on every redraw (it lists a folder).
     @State private var fullDisk: Bool?
-    /// Whether the page is wide enough for two columns (`paired(width:)`), followed as the window resizes. It starts
-    /// narrow: one column never runs past the page, so its width is the page's; pairs that started first ran off the page
-    /// and measured themselves wide enough to stay (Instrument at 1000, C3's renders).
-    @State private var wide = false
     /// The acknowledgement whose licence the sheet shows.
     @State private var licence: Acknowledgement?
     /// About's Acknowledgements, Resources listed once per page shown, not on every redraw.
@@ -39,11 +35,11 @@ struct GeneralPage: View {
     /// Support (Sven 2026-10-10): Pilot's GitHub Sponsors page.
     static let supportURL = URL(string: "https://github.com/sponsors/banozz0")!
     /// Accessibility's ⓘ, on Needs you and on Permissions.
+    static let showInInfo = "Floating: a bell you can drag, with each card in the bottom right. Top bar: a bell item in Pilot's top bar "
+        + "with the count of new ones; each card drops under it and a click lists what arrived."
+    static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
+        + "window, as widgets do. A new card still pops up above apps while it shows."
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
-
-    /// The front's short blocks sit in pairs from this width up (simplify-pages T8); narrower they stack (Moody: at 760
-    /// they ran off the right edge).
-    static func paired(width: CGFloat) -> Bool { width >= 820 }
 
     /// `acknowledgementsOpen` is for the renders; the app always opens the page with the list closed.
     init(acknowledgementsOpen: Bool = false) {
@@ -55,32 +51,19 @@ struct GeneralPage: View {
         KitLanding {
             KitPage {
                 header
-                if !granted { needsYou }
-                // Its rows run too wide for a column (Hold Hyper's).
+                if !granted { needsYou.pageWide() }
+                // The blocks flow into the page's columns (KitPage's PageFlow), each at its own height.
                 hyperKeys(focused: granted).id(AppSection.hyperKey)
-                if wide {
-                    // Two columns, each block at its own height, so none stretches to its neighbour's foot.
-                    columns { startup; status.id(AppSection.status) } right: { notifications.id(AppSection.notifications) }
-                } else {
-                    startup; status.id(AppSection.status); notifications.id(AppSection.notifications)
-                }
+                startup
+                status.id(AppSection.status)
+                notifications.id(AppSection.notifications)
                 permissions(granted).id(AppSection.permissions)
                 data.id(AppSection.data)
                 about.id(AppSection.about)
             }
-            .onGeometryChange(for: Bool.self) { Self.paired(width: $0.size.width) } action: { wide = $0 }
         }
         .layerKeyConfirm($confirming, settings: engine.settings, from: .settings)
         .task { updates.countOnce() }
-    }
-
-    /// Two columns of blocks the page's gap apart, each top-aligned at its own height; from `paired(width:)`, under
-    /// InstrumentPair's 880, so the front fits the window's first size in Instrument too (simplify-pages T8).
-    private func columns(@ViewBuilder left: () -> some View, @ViewBuilder right: () -> some View) -> some View {
-        HStack(alignment: .top, spacing: ink.isInstrument ? style.density.gap : 20) {
-            VStack(alignment: .leading, spacing: 0, content: left).frame(maxWidth: .infinity, alignment: .top)
-            VStack(alignment: .leading, spacing: 0, content: right).frame(maxWidth: .infinity, alignment: .top)
-        }
     }
 
     // MARK: Pilot
@@ -193,13 +176,15 @@ struct GeneralPage: View {
                 Toggle("Show the bind when I use the mouse or the menu", isOn: $settings.bindNudges).toggleStyle(.pilotSwitch)
             }
             BlockRow {
-                Text("Hold Hyper to see your binds")
-                InfoMark(text: "Hold the Hyper key this long to see that layer's binds; Shift or Ctrl turns the page.")
-                Spacer()
-                // Off: the stepper dims, as the delay waits for the switch.
-                overlayDelay.disabled(!settings.overlayEnabled)
-                Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
-                Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
+                LabelledControls {
+                    Text("Hold Hyper to see your binds")
+                    InfoMark(text: "Hold the Hyper key this long to see that layer's binds; Shift or Ctrl turns the page.")
+                } controls: {
+                    // Off: the stepper dims, as the delay waits for the switch.
+                    overlayDelay.disabled(!settings.overlayEnabled)
+                    Button("Edit what shows") { AppWindowController.shared.open(AppPlace(.overlay)) }.buttonStyle(.pilot)
+                    Toggle("Show the overlay when I hold Hyper", isOn: $settings.overlayEnabled).toggleStyle(.pilotSwitch)
+                }
             }
         }
     }
@@ -326,10 +311,29 @@ struct GeneralPage: View {
     /// Other apps' notifications as Pilot's cards (spec notifications.html): off by default, nothing runs until it's on.
     private var notifications: some View {
         @Bindable var settings = NotificationSettings.shared
+        let placement = settings.placement
         return KitBlock(title: "Notifications", symbol: "bell") {
             BlockRow(first: true) {
                 Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
-                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card in the bottom right, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+            }
+            if settings.enabled {
+                BlockRow {
+                    HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                    Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
+                }
+                if settings.showIn == .topBar && placement == .floating {
+                    BlockRow {
+                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on in Menu bar.")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if placement == .floating {
+                    BlockRow {
+                        HStack(spacing: 6) { Text("Layer"); InfoMark(text: Self.layerInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                        Segments(selection: $settings.layer, options: NotificationSettings.Layer.allCases.map { ($0, $0.label) }, label: "Layer")
+                    }
+                }
             }
             BlockRow {
                 Toggle("Hide macOS's own banner", isOn: $settings.hideMacBanners)
@@ -346,17 +350,20 @@ struct GeneralPage: View {
     private var about: some View {
         KitBlock(title: "About", symbol: "info.circle") {
             // Send feedback (card agent-bo-95423195): the browser on a new issue, prefilled.
+            // Two or three buttons: under the label in a page column (LabelledControls).
             BlockRow(first: true) {
-                TitledText(title: "Send feedback", detail: "A GitHub issue with this Mac's facts filled in").padding(.vertical, 4)
-                InfoMark(text: "Opens a new GitHub issue in your browser with this Mac's facts filled in; nothing is sent until you submit it.")
-                Spacer()
-                ForEach(Feedback.Kind.allCases, id: \.self) { kind in
-                    Button(kind.label) { SendFeedback.open(kind, layerKeys: engine.settings.layerKeys) }.buttonStyle(.pilot)
-                }
-                // SH12 (Sven Q315): the report stays on this Mac; Finder shows it for the person to attach.
-                if let crash {
-                    Button("Reveal crash reports") { NSWorkspace.shared.activateFileViewerSelecting([crash.url]) }.buttonStyle(.pilot)
-                        .help("\(crash.process) left a crash report on \(crash.date.formatted(date: .abbreviated, time: .shortened)). Attaching \(crash.name) to a bug report is your choice; it may hold paths from this Mac.")
+                LabelledControls {
+                    TitledText(title: "Send feedback", detail: "A GitHub issue with this Mac's facts filled in").padding(.vertical, 4)
+                    InfoMark(text: "Opens a new GitHub issue in your browser with this Mac's facts filled in; nothing is sent until you submit it.")
+                } controls: {
+                    ForEach(Feedback.Kind.allCases, id: \.self) { kind in
+                        Button(kind.label) { SendFeedback.open(kind, layerKeys: engine.settings.layerKeys) }.buttonStyle(.pilot)
+                    }
+                    // SH12 (Sven Q315): the report stays on this Mac; Finder shows it for the person to attach.
+                    if let crash {
+                        Button("Reveal crash reports") { NSWorkspace.shared.activateFileViewerSelecting([crash.url]) }.buttonStyle(.pilot)
+                            .help("\(crash.process) left a crash report on \(crash.date.formatted(date: .abbreviated, time: .shortened)). Attaching \(crash.name) to a bug report is your choice; it may hold paths from this Mac.")
+                    }
                 }
             }
             .task { crash = await Task.detached { CrashReports.newest() }.value }

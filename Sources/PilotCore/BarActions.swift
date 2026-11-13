@@ -225,6 +225,7 @@ public enum BarTooltip {
         case .displays: return "Brightness, resolution and refresh rate"
         case .clock: return i.now.formatted(Date.FormatStyle(date: .complete, time: .omitted, locale: i.locale, timeZone: i.timeZone))
         case .timer: return i.timerCountdown.map { "\(i.timerTitle ?? "Timer") · \($0) left" } ?? "No timer running"
+        case .notifications: return (i.notifications ?? 0) > 0 ? "Notifications, \(i.notifications ?? 0) new" : "Notifications"
         case .extensions: return i.extensionBars.isEmpty ? "No extension shows anything here" : i.extensionBars.map(\.tooltip).joined(separator: " · ")
         case .terminal: return "Drop the terminal · click shows or hides it"
         case .askAI: return "Drop Ask AI · click shows or hides it"
