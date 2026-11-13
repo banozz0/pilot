@@ -113,6 +113,9 @@ public struct PilotBlock: Codable, Equatable, Sendable {
     public var gapsOn: Bool
     /// The screens with the top bar on, empty while it is off; kept whether gaps are on or off.
     public var topBar: [BarInset]
+    /// The screens showing Pilot's dock (spec pilot-dock), its room at their foot; empty while it is off. A block saved
+    /// before the dock has none.
+    public var dock: [BarInset] = []
     public var scrolling: Scrolling
     /// Tiled windows glide to a new place instead of jumping (Sven's Q147); Reduce Motion and Low Power Mode jump anyway.
     public var glide: Bool
@@ -134,6 +137,7 @@ public struct PilotBlock: Codable, Equatable, Sendable {
                   gapsOn: try c.decode(Bool.self, forKey: .gapsOn), topBar: try c.decodeIfPresent([BarInset].self, forKey: .topBar) ?? [],
                   scrolling: try c.decodeIfPresent(Scrolling.self, forKey: .scrolling) ?? Scrolling(),
                   glide: try c.decodeIfPresent(Bool.self, forKey: .glide) ?? true)
+        dock = try c.decodeIfPresent([BarInset].self, forKey: .dock) ?? []
     }
 
     /// The Window shelf's room at the left edge of a monitor showing a Stage workspace, in points (ADR 0015: Q660's 172,

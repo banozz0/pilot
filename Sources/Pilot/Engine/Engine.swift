@@ -243,6 +243,8 @@ final class Engine {
     let layouts: WorkspaceLayouts
     let presets: WorkspacePresets
     let topBar: TopBarController
+    /// Pilot's dock (spec pilot-dock): off by default.
+    let dock: DockController
     /// Bind hints (card agent-bo-95422934).
     @ObservationIgnored private(set) lazy var nudger = BindNudger(engine: self)
     /// The Window shelf on Stage workspaces (ADR 0015), its first place under the top bar's room and the outer gap.
@@ -337,6 +339,9 @@ final class Engine {
         // Items placed in both leave the macOS menu bar while the top bar is on (card agent-bo-95422910).
         BarItemsStore.shared.isTopBarOn = { [topBar] in topBar.isOn }
         topBar.switched = { BarItemsStore.shared.topBarSwitched($0) }
+        let dockWindow = DockWindow()
+        dock = DockController(writeRoom: { [pilotBlock] in try await pilotBlock.writeDock($0) }, panels: dockWindow)
+        dockWindow.draw(dock, observers: observers, sources: barSources)
         ExtensionBar.shared.shows = { BarItemsStore.shared.shows(extension: $0, in: $1) }
         registerActions()
         wireRings()
@@ -477,6 +482,7 @@ final class Engine {
         ReminderScheduler.shared.start()
         // The bar needs no Accessibility: it comes back at launch if it was left on.
         topBar.start()
+        dock.start()
         // The speech model in use, compiled for a new pilot-dictate a minute in, so the first dictation after an update
         // does not wait minutes (SpeechModel.prepareInBackground); with no model, or one this helper already prepared,
         // nothing. Then the takes a quit left while the model loaded, written down into Recent takes.
@@ -1017,7 +1023,7 @@ final class Engine {
     }
 
     func printObservers() {
-        let s = observers.snapshot() + "\nmenu bar: \(menuBarTitle)\n" + topBar.line + "\n" + BarItemsStore.shared.line
+        let s = observers.snapshot() + "\nmenu bar: \(menuBarTitle)\n" + topBar.line + "\n" + dock.line + "\n" + BarItemsStore.shared.line
         log.notice("observers:\n\(s, privacy: .public)")
         print(s)
     }
