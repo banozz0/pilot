@@ -65,9 +65,19 @@ public enum ExtensionCatalogue {
     public struct Theme: Equatable, Sendable, Identifiable {
         public let id: String, title: String, dark: Bool, styles: [String], palette: [String: String], preview: String?
         public let digest: String, files: [File]
+        /// Who made it, a GitHub handle from its PROVENANCE.md's `Pack by: @handle` line (build-index.py); nil for Pilot's
+        /// own (T22: the gallery's From others).
+        public var author: String? = nil
 
         /// What every file weighs together.
         public var size: Int { files.reduce(0) { $0 + $1.size } }
+
+        /// The one file its card shows: its preview, else its first wide wallpaper, else its first picture.
+        public var picture: File? {
+            let pictures = files.filter { $0.path != "manifest.json" && $0.path != "PROVENANCE.md" }
+            return preview.flatMap { p in pictures.first { $0.path == p } }
+                ?? pictures.first { $0.path.hasPrefix("wallpapers/") && !$0.path.contains("-tall") } ?? pictures.first
+        }
     }
 
     /// What the catalogue holds: its extensions and themes by title, and the entries Pilot left out, each with why (in
@@ -166,6 +176,7 @@ public enum ExtensionCatalogue {
     private struct ThemeLine: Decodable {
         let id: String, title: String, dark: Bool, styles: [String]?, palette: [String: String]?, preview: String?, digest: String
         let files: [Line.File]
+        let author: String?
     }
 
     /// The index `data` holds: entries whose id, version or files break a rule are skipped with why, and of two with one
@@ -220,8 +231,9 @@ public enum ExtensionCatalogue {
         let files = try checked(line.files, most: themeMostFiles, manifest: "manifest.json", file: (themeFileLimit, "\(themeFileLimit >> 20) MB a theme's file"),
                                 total: (themeLimit, "\(themeLimit >> 20) MB a theme")).map { File(path: $0.path, sha256: $0.sha256, size: $0.size) }
         guard line.digest == digest(files) else { throw no("its digest is not its files'") }
+        guard line.author.map(isHandle) ?? true else { throw no("author must be a GitHub handle") }
         return Theme(id: line.id, title: line.title, dark: line.dark, styles: line.styles ?? [], palette: line.palette ?? [:],
-                     preview: line.preview, digest: line.digest, files: files)
+                     preview: line.preview, digest: line.digest, files: files, author: line.author)
     }
 
     /// An entry's file list once each file is a safe path, listed once, with a sha256 and a size under `file`'s limit,
@@ -252,6 +264,11 @@ public enum ExtensionCatalogue {
     public static func isSafe(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0") else { return false }
         return path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+
+    /// A GitHub handle: 1 to 39 letters, digits and single hyphens, never at either end.
+    public static func isHandle(_ text: String) -> Bool {
+        text.wholeMatch(of: /[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}/) != nil
     }
 
     /// The sha256 of `data` in lowercase hex, as the index lists it.
@@ -492,6 +509,14 @@ extension ExtensionCatalogue {
                 try fm.setAttributes([.posixPermissions: mode(file)], ofItemAtPath: url.path)
                 progress(i + 1, files.count)
             }
+        }
+
+        /// `theme`'s card picture (`Theme.picture`) fetched into `folder`, held to its size and sha256 like every install's
+        /// file; its URL, or nil when the pack has no picture.
+        public func picture(of theme: Theme, into folder: URL) async throws -> URL? {
+            guard let file = theme.picture else { return nil }
+            try await download([file], from: "themes/\(theme.id)", limit: themeFileLimit, into: folder, mode: { _ in 0o644 }, progress: { _, _ in })
+            return folder.appending(path: file.path)
         }
 
         /// The catalogue folder `root` on this Mac (a clone's `catalogue/`): each path read inside it, at most `limit` bytes.

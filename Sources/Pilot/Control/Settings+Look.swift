@@ -13,7 +13,7 @@ extension SettingsSchema {
                     read: { look.style }, write: { look.style = $0 }),
             .choice("look.theme", "Stock theme catalog; current style choices: pilot theme colours", page: "look", PilotTheme.designed.map(\.id), standard: PilotTheme.defaultID,
                     read: { look.themeID }, write: { id throws(ControlError) in
-                        guard PilotTheme.named(id) != nil, ThemeNativePalette.stock(id).compatible(with: look.style.rawValue) else { throw ControlError(.badValue, "unknown or incompatible stock theme; pilot theme colours lists current choices") }
+                        guard PilotTheme.named(id) != nil, look.shows(id), ThemeNativePalette.stock(id).compatible(with: look.style.rawValue) else { throw ControlError(.badValue, "unknown or incompatible stock theme; pilot theme colours lists current choices") }
                         look.pick(id)
                         if let error = look.lastError { throw ControlError(.badValue, error) }
                     }),

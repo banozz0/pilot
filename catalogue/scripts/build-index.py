@@ -6,11 +6,14 @@ Run after every change to an extension or a theme. scripts/check.py fails when i
 Schema 2: {"schema": 2, "extensions": [...], "themes": [...]}. Each entry lists every file with its path (inside its
 folder, catalogue/<kind>/<id>/), sha256, size and executable bit. An extension entry is schema 1's unchanged. A theme
 pack's manifest has no version (ThemePack.decode refuses unknown keys), so a theme entry carries `digest`, the sha256
-of its file list, which changes whenever any file does: that is what an update compares.
+of its file list, which changes whenever any file does: that is what an update compares. A theme entry carries
+`author`, a GitHub handle, when the pack's PROVENANCE.md has a `Pack by: @handle` line (Pilot's gallery shows it, and
+From others lists it); a pack without one is Pilot's own.
 """
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -67,11 +70,25 @@ def entry(folder):
     }
 
 
+# A PROVENANCE.md line naming who made a theme pack: `Pack by: @handle`, as a list item or not. check.py refuses a
+# second one or a handle GitHub would not take.
+PACK_BY = re.compile(r"^[ \t]*(?:[-*][ \t]+)?Pack by:[ \t]*@(\S*)[ \t]*$", re.M)
+HANDLE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\Z")
+
+
+def pack_by(folder):
+    """The handles on the `Pack by:` lines of a theme pack's PROVENANCE.md, in order; none for Pilot's own."""
+    try:
+        return PACK_BY.findall((folder / "PROVENANCE.md").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
 def theme_entry(folder):
     """One theme pack's index entry, read from its manifest: what a catalogue card shows before anything is downloaded."""
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     listing = files(folder)
-    return {
+    entry = {
         "id": manifest["id"],
         "title": manifest["title"],
         "dark": manifest["dark"],
@@ -81,6 +98,10 @@ def theme_entry(folder):
         "digest": hashlib.sha256("".join("%s %s\n" % (f["path"], f["sha256"]) for f in listing).encode("utf-8")).hexdigest(),
         "files": listing,
     }
+    authors = pack_by(folder)
+    if authors:
+        entry["author"] = authors[0]
+    return entry
 
 
 def folders(kind=EXTENSIONS):

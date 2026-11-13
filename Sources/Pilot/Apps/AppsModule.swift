@@ -62,6 +62,8 @@ enum AppsModule {
         // Update and Clean themselves, each its menu branch with its own confirm, for a widget's button (Q697: the Mac upkeep
         // widget) and anywhere else an action is picked.
         add(&registry, "update", "Update apps", nil, keywords: "upgrade homebrew brew mas upkeep") { PilotMenu.shared.open(branch: .update) }
+        // Look › Catalogue (public-repo-catalogue T22): the catalogue's theme packs, to get, update, apply and remove.
+        add(&registry, "themeCatalogue", "Theme catalogue", nil, keywords: "themes browse download get gallery look") { show(AppPlace(.themeCatalogue)) }
         add(&registry, "install", "Install apps", nil, keywords: "recommended apps casks homebrew") { show(AppPlace(.install)) }
         add(&registry, "clean", "Clean this Mac", nil, keywords: "mole caches junk free space upkeep") { PilotMenu.shared.open(branch: .clean) }
         add(&registry, "lazygit", "lazygit: pick a repo", Key("g", .shift)) { pickRepo() }
