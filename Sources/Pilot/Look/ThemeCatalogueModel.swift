@@ -93,9 +93,9 @@ final class ThemeCatalogueModel {
     /// Brings back the built-in theme `id` you removed; false when it is not one.
     func restore(_ id: String) async -> Bool {
         guard builtIn.contains(id), let owner = try? ThemeCoordinator.production(), owner.restore(id) else { return false }
+        // Only Look's list changed: standing(of:) reads it, so nothing is hashed again.
         looklog.notice("theme catalogue: \(id, privacy: .public) back")
         failures[id] = nil
-        await readInstalled()
         return true
     }
 
@@ -177,9 +177,9 @@ final class ThemeCatalogueModel {
         guard installed[theme.id] != nil || builtIn.contains(theme.id) else { return "\(theme.title) is not in your themes." }
         failures[theme.id] = nil
         do {
-            try ThemeCoordinator.production().delete(theme.id)
+            // A built-in one is only hidden: nothing on disk changed, so nothing is hashed again.
+            if try !ThemeCoordinator.production().delete(theme.id) { await readInstalled() }
             looklog.notice("theme catalogue: \(theme.id, privacy: .public) removed")
-            await readInstalled()
             return "\(theme.title) removed from your themes. Get brings it back."
         } catch { return failed(theme.id, String(describing: error)) }
     }

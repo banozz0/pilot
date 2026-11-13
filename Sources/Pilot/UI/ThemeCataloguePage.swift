@@ -61,9 +61,8 @@ struct ThemeCatalogueTile: Identifiable {
     var picture: NSImage?
 
     /// In your themes from the catalogue: what Remove takes.
-    var downloaded: Bool { standing == .installed || standing == .update }
     /// In your themes, downloaded or built in: what Installed lists and Remove takes.
-    var inYourThemes: Bool { downloaded || standing == .builtIn }
+    var inYourThemes: Bool { standing != .get }
 }
 
 /// The gallery under Look's bar: its filters and search, then the tiles, or a line while the index is read, out of reach

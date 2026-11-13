@@ -893,10 +893,9 @@ final class ThemeCoordinator {
         }
     }
 
-    /// Deletes a pack a person made. The applied pack, and one holding a wallpaper on screen or one Restore puts back, stay:
-    /// Restore needs nothing else from a pack's folder, as the ledger keeps every colour it sets (ThemeLedger.selected,
-    /// ThemeNativePalette.pack).
-    /// Deletes a pack you made or imported; one of Pilot's own is hidden instead (`hide`). True when it was hidden.
+    /// Deletes a pack a person made or imported; one of Pilot's own is hidden instead (`hide`), and true says so. The
+    /// applied pack, and one holding a wallpaper on screen or one Restore puts back, stay: Restore needs nothing else from
+    /// a pack's folder, as the ledger keeps every colour it sets (ThemeLedger.selected, ThemeNativePalette.pack).
     @discardableResult
     func delete(_ id: String) throws -> Bool {
         guard !busy else { throw ThemeFailure("theme mutation already waiting/running") }
@@ -916,9 +915,12 @@ final class ThemeCoordinator {
     private func hide(_ id: String) throws {
         let look = Look.shared, name = PilotTheme.named(id)?.name ?? id
         guard !look.hiddenThemes.contains(id) else { throw ThemeFailure("\(name) is removed already; pilot theme get \(id) brings it back.") }
-        guard try !inUse(id) else { throw ThemeFailure("\(name) is the theme in use. Apply another theme or Restore default first, then remove it.") }
-        let shown = PilotTheme.designed.filter { !look.hiddenThemes.contains($0.id) }.count + (try store.list().filter { !store.isPilots($0.id) }.count)
-        guard shown > 1 else { throw ThemeFailure("\(name) is the last theme left: at least one stays.") }
+        guard !inUse(id) else { throw ThemeFailure("\(name) is the theme in use. Apply another theme or Restore default first, then remove it.") }
+        // The packs you made are read only when no other of Pilot's own still shows.
+        let others = look.shownThemes().filter { $0.id != id }.count
+        guard try others > 0 || store.list().contains(where: { !store.isPilots($0.id) }) else {
+            throw ThemeFailure("\(name) is the last theme left: at least one stays.")
+        }
         look.hiddenThemes.insert(id)
     }
 
@@ -927,7 +929,7 @@ final class ThemeCoordinator {
     func restore(_ id: String) -> Bool { Look.shared.hiddenThemes.remove(id) != nil }
 
     /// Whether `id` is the theme in use: the one applied, or the one Pilot wears. A ledger that does not read counts as yes.
-    func inUse(_ id: String) throws -> Bool {
+    private func inUse(_ id: String) -> Bool {
         do { return try appliedTheme().id == id || Look.shared.themeID == id } catch { return true }
     }
 

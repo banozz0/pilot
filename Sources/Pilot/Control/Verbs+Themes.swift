@@ -13,8 +13,8 @@ extension ControlVerbs {
                 switch words.first {
                 // A removed built-in theme (Look.hiddenThemes) is left out until theme get brings it back.
                 case "list" where words.count == 1:
-                    let hidden = Look.shared.hiddenThemes
-                    return try themeJSON(owner.store.list().filter { $0.compatible(with: owner.style()) && !hidden.contains($0.id) })
+                    let look = Look.shared
+                    return try themeJSON(owner.store.list().filter { $0.compatible(with: owner.style()) && look.shows($0.id) })
                 case "colours" where words.count == 1:
                     return .array(Look.shared.shownThemes(for: owner.style()).map {
                         .object(["id": .string($0.id), "title": .string($0.name)])

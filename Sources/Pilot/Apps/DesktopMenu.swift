@@ -32,7 +32,7 @@ enum DesktopMenu {
             }
         }
         let styles = PilotStyle.allCases.map { style in BarMenu.Row.pick(style.title, checked: look.style == style) { look.style = style } }
-        let themes = PilotTheme.designed.filter { !look.hiddenThemes.contains($0.id) }.map { theme in
+        let themes = look.shownThemes().map { theme in
             BarMenu.Row.pick(theme.name, checked: look.themeID == theme.id) {
                 look.pick(theme.id)
                 // What the Look page shows under its cards: Ghostty did not take the theme.

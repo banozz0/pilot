@@ -41,8 +41,13 @@ final class Look {
     /// The pack itself stays in the app, so nothing is deleted. ThemeCoordinator.delete and restore are the way in.
     var hiddenThemes: Set<String> { didSet { defaults.set(hiddenThemes.sorted(), forKey: Key.hiddenThemes) } }
 
-    /// The designed themes `style` can wear, less the ones removed.
-    func shownThemes(for style: String) -> [PilotTheme] { PilotTheme.designed(for: style).filter { !hiddenThemes.contains($0.id) } }
+    /// Whether the designed theme `id` shows: not one the person removed.
+    func shows(_ id: String) -> Bool { !hiddenThemes.contains(id) }
+
+    /// The designed themes `style` can wear, every style's when nil, less the ones removed.
+    func shownThemes(for style: String? = nil) -> [PilotTheme] {
+        (style.map(PilotTheme.designed(for:)) ?? PilotTheme.designed).filter { shows($0.id) }
+    }
 
     /// Glass behind the window and every panel, popover and HUD, else Solid (Sven, 2026-10-09: off on a fresh install).
     var glass: Bool { didSet { defaults.set(glass, forKey: Key.glass) } }
