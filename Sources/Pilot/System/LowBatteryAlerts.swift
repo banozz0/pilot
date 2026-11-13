@@ -1,7 +1,6 @@
 import AppKit
 import Observation
 import PilotCore
-import UserNotifications
 
 /// Low-battery alerts (Sven, Q394), on until turned off in Menu bar › Bluetooth batteries: while on, the sampler reads the
 /// Bluetooth HID batteries with its slow readings (every minute, no timer of its own), and a device falling to 20 % and
@@ -43,16 +42,8 @@ final class LowBatteryAlerts {
         watch = Task { [sampler] in await sampler.watch(every: .seconds(SystemStats.diskInterval), needs: .lowBattery) }
     }
 
+    /// Through smart nudges' funnel, so quiet hours hold it with the rest.
     private static func show(_ alert: LowBattery.Alert) {
-        NSSound(named: "Glass")?.play()
-        HUD.tip(alert.text, seconds: 10)
-        Task {
-            let center = UNUserNotificationCenter.current()
-            guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }
-            let content = UNMutableNotificationContent()
-            content.title = "Low battery"
-            content.body = alert.text
-            try? await center.add(UNNotificationRequest(identifier: "lowBattery.\(alert.name)", content: content, trigger: nil))
-        }
+        SmartNudgeCenter.shared.post(.init(id: "lowBattery.\(alert.name)", title: "Low battery", body: alert.text, sound: true))
     }
 }

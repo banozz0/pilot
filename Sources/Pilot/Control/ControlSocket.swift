@@ -59,6 +59,7 @@ final class ControlSocket {
         verbs.registerModels(ControlModels())
         verbs.registerPermits(ControlPermits())
         verbs.registerLight()
+        verbs.registerSmartNudges()
         verbs.registerUninstall()
         return verbs
     }
