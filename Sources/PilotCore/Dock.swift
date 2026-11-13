@@ -117,8 +117,18 @@ public enum DockSize: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// The pill's height: the icon, room for its dots under it, and the pill's inset.
-    public var pill: Double { icon + 18 }
+    /// The room over the icons, the dot's lane under them and its gap, and the room under the lane (look A, round 2).
+    public static let top = 8.0, laneGap = 4.0, lane = 5.0, bottom = 5.0
+    /// The pill's height: the icon, its dot's lane, and the room above and below.
+    public var pill: Double { Self.top + icon + Self.laneGap + Self.lane + Self.bottom }
+    /// Hover magnification, the Dock's: the icon under the pointer this many times its size, falling to none
+    /// `reachIcons` icons either side.
+    public static let magnify = 1.5, reachIcons = 3.0
+    /// What the dock's box adds while the pointer is over its icons: above, the tallest magnified icon's growth; across,
+    /// the most the bell widens the row (its area, `reachIcons` icons at half the growth). Never part of `room`.
+    public var reach: (width: Double, height: Double) {
+        (width: (Self.reachIcons * icon * (Self.magnify - 1)).rounded(.up), height: (icon * (Self.magnify - 1)).rounded(.up))
+    }
     /// The pill's gap to the screen's bottom edge.
     public static let margin = 8.0
     /// What the tiler keeps clear at the bottom of the dock's screen.
@@ -274,5 +284,26 @@ public struct DockSwitch: Codable, Equatable, Sendable {
     public func restoredForQuit(autohide: any DockAutohide) async throws(DockError) {
         guard isOn else { return }
         do { try await autohide.setHidden(savedAutohide ?? false) } catch { throw .autohide(error) }
+    }
+}
+
+/// How the dock's icons fit its screen (design round 2, look A): at their size while the row fits, smaller down to
+/// `smallest` when it does not, then at `smallest` in a row that scrolls. The pill is never wider than `available`, so
+/// nothing is cut.
+public struct DockFit: Equatable, Sendable {
+    public static let smallest = 32.0
+    public let icon: Double
+    public let scrolls: Bool
+
+    public init(icon: Double, scrolls: Bool) { self.icon = icon; self.scrolls = scrolls }
+
+    /// `fixed` is what the pill spends besides its icons (its ends, the hairline, the widgets); `gapRatio` the gap as a
+    /// share of an icon.
+    public static func fit(apps: Int, icon: Double, gapRatio: Double, fixed: Double, available: Double, smallest: Double = DockFit.smallest) -> DockFit {
+        guard apps > 0 else { return DockFit(icon: icon, scrolls: false) }
+        let n = Double(apps), fitted = ((available - fixed) / (n + (n - 1) * gapRatio)).rounded(.down)
+        if fitted >= icon { return DockFit(icon: icon, scrolls: false) }
+        if fitted >= smallest { return DockFit(icon: fitted, scrolls: false) }
+        return DockFit(icon: smallest, scrolls: true)
     }
 }

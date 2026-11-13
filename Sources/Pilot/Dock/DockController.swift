@@ -171,26 +171,23 @@ final class DockWindow: DockPanels {
 
     func show() {
         if panel == nil {
-            // Its first frame from the pill's own size, as BarPanel.keyPanel's: a host left at zero would wait on a
-            // geometry report from inside a zero-size window.
+            // Its first frame from the box's own size, as BarPanel.keyPanel's: a host left at zero would wait on a
+            // geometry report from inside a zero-size window. The window is clear: the pill draws its own glass or solid
+            // ground (DockBacking), so the box can grow above it for magnified icons.
             let host = make()
             host.frame.size = host.fittingSize
-            let backdrop = MaterialBackdrop(content: host)
-            backdrop.frame = host.frame
-            let panel = TopBarWindows.panel(backdrop, level: Self.level)
+            let panel = TopBarWindows.panel(host, level: Self.level)
             panel.title = "Pilot dock"
-            panel.contentView?.wantsLayer = true
-            panel.contentView?.layer?.cornerRadius = DockPill.radius
-            panel.contentView?.layer?.masksToBounds = true
             self.panel = panel
             fit(host.frame.size)
         }
         guard let panel else { return }
         panel.appearance = Look.shared.appearance(for: .topBar)
-        (panel.contentView as? MaterialBackdrop)?.show(.glass, tint: TopBarColour.tint(.theme, style: TopBarWindows.tokens(.shared), look: .shared),
-                                                         blur: Look.shared.glassBlur)
         if !panel.isVisible { panel.orderFrontRegardless() }
     }
+
+    /// The widest the pill may be: the dock's screen less DockPill.sideMargin each side.
+    static func widest() -> CGFloat { (NSScreen.screens.first?.frame.width ?? 1440) - 2 * DockPill.sideMargin }
 
     func hide() {
         panel?.orderOut(nil)
@@ -200,11 +197,14 @@ final class DockWindow: DockPanels {
 
     private var fitted: NSRect?
 
-    /// The pill reports its size as its icons and widgets change; the window follows, centred at the foot of the screen.
+    /// The box reports its size as its icons and widgets change and as a hover grows it; the window follows, centred at
+    /// the foot of the screen, its bottom edge where the pill's is, so a taller box grows upward only.
     func fit(_ size: CGSize) {
         guard let panel, let screen = NSScreen.screens.first, size.width > 0 else { return }
-        let frame = NSRect(x: (screen.frame.midX - size.width / 2).rounded(), y: screen.frame.minY + DockSize.margin,
-                           width: size.width.rounded(.up), height: size.height.rounded(.up))
+        // The pill is held to DockWindow.widest(); only a hover's box at the widest can reach past the screen: held to it.
+        let width = min(size.width.rounded(.up), screen.frame.width)
+        let frame = NSRect(x: (screen.frame.midX - width / 2).rounded(), y: screen.frame.minY + DockSize.margin,
+                           width: width, height: size.height.rounded(.up))
         guard frame != fitted else { return }
         fitted = frame
         panel.pin(frame)
