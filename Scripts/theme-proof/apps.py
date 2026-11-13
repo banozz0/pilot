@@ -441,10 +441,15 @@ def checks(passed):
         assert f'set -g fish_color_command {palette["blue"][1:]}\n' in fish.read_text() and '#' not in fish.read_text().split('\n', 1)[1], fish.read_text()
         got = json.loads(settings.read_text())
         assert got['enabledThemes'] == ['pilot.theme.css'] and {k: v for k, v in got.items() if k != 'enabledThemes'} == {k: v for k, v in mine.items() if k != 'enabledThemes'}, got
-        assert css.read_text().startswith('/**\n * @name Pilot\n') and f'--background-primary: {palette["background"]};' in css.read_text()
+        assert css.read_text().startswith('/**\n * @name Pilot\n') and f'--background-primary: {palette["background"]} !important;' in css.read_text()
         # Discord sets its colours on .theme-dark with a second class: Pilot's scope is midnight-discord's, which wins.
-        scope = 'body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme) {'
-        assert scope in css.read_text() and f'--app-frame-background: {palette["dark_background"]};' in css.read_text(), css.read_text()[:400]
+        # A Discord colour theme marks the root and paints from gradient variables: those are cleared and its tint set to none.
+        scope = 'body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme), html.custom-theme-background, html.custom-client-theme {'
+        text = css.read_text()
+        assert scope in text and f'--app-frame-background: {palette["dark_background"]} !important;' in text, text[:400]
+        assert '--background-gradient-chat: initial !important;' in text and '--custom-theme-base-color-amount: 0% !important;' in text, text[-600:]
+        assert all(l.endswith('!important;') for l in text.splitlines() if l.startswith('  --')), 'a colour without !important'
+        shutil.copy(css, life.EVIDENCE / 'vesktop-pilot.theme.css')  # For the headless Discord check, outside the fixture home.
         for path in [fish, settings]: show('applied', path)
         print('  applied pilot.theme.css: ' + repr(css.read_text()[:260]) + f' … {len(css.read_text().splitlines())} lines', flush=True)
         shell = shutil.which('fish')

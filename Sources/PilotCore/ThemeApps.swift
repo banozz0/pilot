@@ -277,15 +277,25 @@ public enum ThemeApps {
     /// What a Vesktop theme's colours are set on. Discord sets its own on .theme-dark and .theme-light with a second class,
     /// so a single class loses; refact0r/midnight-discord (src/colors.css, maintained) sets them here, and so does Pilot.
     static let vesktopScope = "body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme)"
+        // A colour theme from Discord's Appearance settings marks the root custom-theme-background and custom-client-theme
+        // (Discord's client, chunk 873727 in Wumpus-Central/discrapper-canary) and sets its own colours there.
+        + ", html.custom-theme-background, html.custom-client-theme"
+    /// Discord's colour themes paint the app from these instead (CapnKitten/Material-Discord, css/addons/custom-themes:
+    /// each use is var(--background-gradient-…, var(--background-base-…))), so clearing them shows Pilot's colours.
+    static let vesktopGradients = ["lowest", "lower", "low", "high", "higher", "highest", "chat", "chat-preview", "app-frame"].map { "background-gradient-" + $0 }
 
     /// A Vencord theme for Discord in Vesktop: its header, then Discord's colour variables from the pack's roles, by the
-    /// names midnight-discord sets today (Discord's refreshed look) and the older ones.
+    /// names midnight-discord sets today (Discord's refreshed look) and the older ones. Every one is !important: Discord's
+    /// colour themes set the same names on the root with selectors Pilot cannot outweigh by specificity alone (Sven, 2026-11-13).
     static func vesktop(_ pack: ThemePack) -> Data {
         let p = pack.palette
         let roles: [(String, String)] = [
             ("app-frame-background", "dark_background"), ("background-accent", "lighter_background"), ("background-brand", "accent"),
             ("background-base-lowest", "darker_background"), ("background-base-lower", "dark_background"), ("background-base-low", "dark_background"),
             ("background-surface-high", "background"), ("background-surface-higher", "lighter_background"), ("background-surface-highest", "lighter_background"),
+            ("background-base-high", "lighter_background"), ("background-base-higher", "lighter_background"), ("background-base-highest", "selection"),
+            ("control-brand-foreground", "accent"), ("control-primary-background-default", "accent"), ("control-primary-background-hover", "accent"),
+            ("control-primary-background-active", "accent"), ("control-primary-text-default", "background"), ("control-primary-text-hover", "background"),
             ("background-mod-subtle", "lighter_background"), ("background-mod-muted", "lighter_background"),
             ("background-mod-normal", "lighter_background"), ("background-mod-strong", "selection"),
             ("background-primary", "background"), ("background-secondary", "dark_background"), ("background-secondary-alt", "dark_background"),
@@ -297,7 +307,11 @@ public enum ThemeApps {
             ("interactive-normal", "light_foreground"), ("interactive-hover", "foreground"), ("interactive-active", "bright_foreground"),
             ("interactive-muted", "muted"), ("text-link", "blue"), ("brand-500", "accent"), ("brand-experiment", "accent"), ("border-subtle", "lighter_background")]
         let lines = ["/**", " * @name Pilot", header(pack, " * @description"), " * @author Pilot", "*/", "",
-                     vesktopScope + " {"] + roles.map { "  --\($0.0): \(p[$0.1]!);" } + ["}"]
+                     vesktopScope + " {"] + roles.map { "  --\($0.0): \(p[$0.1]!) !important;" }
+            // The colour theme's own ground and how much of its tint Discord mixes into every surface, set to none.
+            + ["  --custom-theme-background: \(p["background"]!) !important;"]
+            + ["base-color", "text-color", "border-color"].map { "  --custom-theme-\($0)-amount: 0% !important;" }
+            + vesktopGradients.map { "  --\($0): initial !important;" } + ["}"]
         return text(lines)
     }
 
