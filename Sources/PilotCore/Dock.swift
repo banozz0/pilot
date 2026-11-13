@@ -167,10 +167,43 @@ public enum DockSize: String, Codable, CaseIterable, Sendable {
         let grow = magnify.scale - 1
         return (width: (Self.reachIcons * icon * grow).rounded(.up), height: (icon * grow).rounded(.up))
     }
-    /// The pill's gap to the screen's bottom edge.
+    /// The pill's gap to the screen's bottom edge while it floats.
     public static let margin = 8.0
-    /// What the tiler keeps clear at the bottom of the dock's screen.
-    public var room: Int { Int((pill + Self.margin).rounded(.up)) }
+    /// The pill's gap to the screen's bottom edge: none attached (rice round, Sven 2026-11-13, Q222).
+    public static func margin(_ placement: DockPlacement) -> Double { placement == .attached ? 0 : margin }
+    /// What the tiler keeps clear at the bottom of the dock's screen: the pill and its gap.
+    public func room(_ placement: DockPlacement) -> Int { Int((pill + Self.margin(placement)).rounded(.up)) }
+    /// The visualizer's tallest bar (rice round): half again the pill, so the tallest rise past the room into the space
+    /// over it, where windows stand in front of them.
+    public var tallestBar: Double { (pill * 1.5).rounded() }
+}
+
+/// Where the pill stands (rice round, Sven 2026-11-13, Q220 A and Q222: "how its attatched to the very bottom of the
+/// screen thats probably the most part i want"): flush on the screen's bottom edge, its bottom corners square on it, or
+/// floating 8 pt over it with every corner round (look A, round 2).
+public enum DockPlacement: String, Codable, CaseIterable, Sendable {
+    case attached, floating
+
+    public var title: String { rawValue.capitalized }
+}
+
+/// The icons' colours (rice round, Sven 2026-11-13, Q221 and Q222: "if we do tinted icons they should match the theme"):
+/// their own, or each recoloured from the theme, its tile from the accent sunk into the ground and its glyph from the
+/// accent lifted toward the ink, again at every theme change.
+public enum DockIconTint: String, Codable, CaseIterable, Sendable {
+    case off, theme
+
+    public var title: String { rawValue.capitalized }
+}
+
+/// When the visualizer listens (rice round): while the Mac's output device runs for some app, and, when the now-playing
+/// reader can say, while it says a player plays, so a paused player that keeps the device open (a browser, Spotify)
+/// never keeps the tap running. `playing` nil is a reader that cannot say: the device alone decides, and the bars settle
+/// after `settle` seconds of silence.
+public enum DockAudioGate {
+    public static let settle = 2.0
+
+    public static func open(deviceRunning: Bool, playing: Bool?) -> Bool { deviceRunning && playing != false }
 }
 
 /// Hover magnification (round 4, Sven 2026-11-13: the Dock page's Magnification): the icon under the pointer this many
@@ -323,8 +356,16 @@ public struct DockSettings: Codable, Equatable, Sendable {
     /// Keep in Dock and Remove from Dock): apps kept past the Dock's own, and the Dock's pins taken out, by `DockPin.key`.
     public var kept: [DockPin] = []
     public var removed: [String] = []
+    /// Rice round (Sven 2026-11-13, Q220 A, Q221, Q222): attached to the screen's foot by default, icons in the theme's
+    /// colours, the visualizer off until switched on (its switch asks macOS for System Audio Recording).
+    public var placement: DockPlacement = .attached
+    public var tint: DockIconTint = .theme
+    public var visualizer = false
 
     public init(size: DockSize = .medium, widgets: [DockSlot] = DockSlot.defaults) { self.size = size; self.widgets = widgets }
+
+    /// What the tiler keeps clear at the foot of the dock's screen.
+    public var room: Int { size.room(placement) }
 
     /// The dock's pins: the macOS Dock's (`dock`, Finder first) less the ones taken out, then the ones kept, in order.
     public func pinned(_ dock: [DockPin]) -> [DockPin] {
@@ -356,6 +397,9 @@ public struct DockSettings: Codable, Equatable, Sendable {
         left = (try? c.decodeIfPresent([String].self, forKey: .left)).map { $0?.compactMap(DockSlot.init(name:)) ?? [] } ?? []
         kept = (try? c.decodeIfPresent([DockPin].self, forKey: .kept)) ?? []
         removed = (try? c.decodeIfPresent([String].self, forKey: .removed)) ?? []
+        placement = (try? c.decodeIfPresent(DockPlacement.self, forKey: .placement)) ?? .attached
+        tint = (try? c.decodeIfPresent(DockIconTint.self, forKey: .tint)) ?? .theme
+        visualizer = (try? c.decodeIfPresent(Bool.self, forKey: .visualizer)) ?? false
     }
 
     /// A widget's side of the apps: left or right (the top bar's sides; never the centre, which is the apps').

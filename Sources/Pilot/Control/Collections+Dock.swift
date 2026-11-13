@@ -28,8 +28,8 @@ extension ControlVerbs {
             guard let dock = dock() else { throw ControlError(.notReady, "Pilot's dock is not up yet; ask again in a moment") }
             return dock
         }
-        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. Style and magnification are dock.style and dock.magnify.",
-                             usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app>   (<app>: a bundle id or a name)") { call throws(ControlError) in
+        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); visualizer reads what the visualizer does now (dock.visualizer, off by default): whether the output device runs, what the now-playing reader says, the gate, the tap, whether the bars move or lie flat, and the bars nearest the pill, after waiting the seconds given (up to 10); placement (dock.placement, attached or floating) and tint (dock.tint, off or theme) are settings; stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. Style and magnification are dock.style and dock.magnify.",
+                             usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock visualizer [<seconds>] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app>   (<app>: a bundle id or a name)") { call throws(ControlError) in
             // Read for the answer alone: the pill keeps what it shows.
             let dock = try up(), args = call.arguments(), dockPins = dock.readPins(), byApp = Dictionary(grouping: windows(), by: \.bundleId)
             // While on, the running apps the pill draws (the ones it follows); off, read now.
@@ -61,6 +61,15 @@ extension ControlVerbs {
                 }
                 return .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
                                 "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) })])
+            }
+            if args.positional.first == "visualizer" {
+                // pilot dock visualizer [<seconds>]: what the visualizer does now (rice round), read after waiting up to 10 s,
+                // so its frames can be seen to move: the gate's two inputs, the tap, the bars nearest the pill.
+                if let word = args.positional.dropFirst().first {
+                    guard let seconds = Double(word), seconds >= 0 else { throw ControlError(.badValue, "pilot dock visualizer [<seconds to wait, up to 10>]") }
+                    try? await Task.sleep(for: .seconds(min(seconds, 10)))
+                }
+                return .object(dock.visualizer.report)
             }
             if args.positional.first == "stopwatch" {
                 // pilot dock stopwatch [start|pause|reset]: Pilot's own stopwatch, nothing on the Mac.
@@ -103,7 +112,8 @@ extension ControlVerbs {
             }
             return .object([
                 "on": .bool(dock.isOn), "size": .string(dock.settings.size.rawValue), "style": .string(dock.settings.style.rawValue),
-                "magnify": .string(dock.settings.magnify.rawValue), "stats": .array(dock.settings.options.stats.map { .string($0.rawValue) }),
+                "magnify": .string(dock.settings.magnify.rawValue), "placement": .string(dock.settings.placement.rawValue),
+                "tint": .string(dock.settings.tint.rawValue), "visualizer": .bool(dock.settings.visualizer), "stats": .array(dock.settings.options.stats.map { .string($0.rawValue) }),
                 "savedAutohide": dock.state.savedAutohide.map(JSONValue.bool) ?? .null,
                 "savedDelay": dock.state.delaySaved == true ? dock.state.savedDelay.map(JSONValue.number) ?? .string("absent") : .null,
                 "room": .array(dock.room.map { .object(["screen": .string($0.monitor), "height": .number(Double($0.height))]) }),

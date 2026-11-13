@@ -94,6 +94,29 @@ struct DockPage: View {
                 Segments(selection: Binding(get: { dock.settings.magnify }, set: { dock.settings.magnify = $0 }),
                          options: DockMagnification.allCases.map { ($0, $0.title) }, label: "Dock magnification")
             }
+            // Rice round (Sven 2026-11-13, Q220 A, Q221, Q222).
+            BlockRow {
+                Text("Placement").foregroundStyle(ink.text)
+                InfoMark(text: "Attached sits the dock on the screen's bottom edge, its bottom corners square on it, and windows end where it starts. Floating leaves a gap under it, every corner round.")
+                Spacer()
+                Segments(selection: Binding(get: { dock.settings.placement }, set: { dock.settings.placement = $0 }),
+                         options: DockPlacement.allCases.map { ($0, $0.title) }, label: "Dock placement")
+            }
+            BlockRow {
+                Text("Icon colours").foregroundStyle(ink.text)
+                InfoMark(text: "Theme draws every icon in your theme's colours, its tile from the accent and its mark toward the text colour, and draws them again when you change theme. Off keeps each app's own colours.")
+                Spacer()
+                Segments(selection: Binding(get: { dock.settings.tint }, set: { dock.settings.tint = $0 }),
+                         options: DockIconTint.allCases.map { ($0, $0.title) }, label: "Dock icon colours")
+            }
+            BlockRow {
+                Text("Visualizer").foregroundStyle(ink.text)
+                InfoMark(text: "Bars in the theme's colour along the screen's foot, out from the dock to both edges, moving with what your Mac plays; a flat line when nothing plays. Turning it on asks macOS for System Audio Recording: Pilot turns the sound into bars on this Mac and keeps none of it. It listens only while music plays.")
+                Spacer()
+                Toggle("Visualizer", isOn: Binding(get: { dock.settings.visualizer }, set: { on in Task { await dock.setVisualizer(on) } }))
+                    .toggleStyle(.pilotSwitch).labelsHidden()
+            }
+            if dock.settings.visualizer, let problem = dock.visualizer.problem { FinePrint(text: problem, color: ink.red) }
         }
         .font(ink.ui(13))
     }

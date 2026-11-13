@@ -40,9 +40,12 @@ final class DockController {
         didSet {
             guard settings != oldValue else { return }
             defaults.set(try? JSONEncoder().encode(settings), forKey: Self.settingsKey)
-            if settings.size != oldValue.size { follow() }
+            if settings.size != oldValue.size || settings.placement != oldValue.placement { follow() }
+            if settings.size != oldValue.size || settings.visualizer != oldValue.visualizer { listen() }
         }
     }
+    /// The visualizer (rice round): on while the dock shows and its switch is on.
+    let visualizer: DockVisualizer
     /// The macOS Dock's own pins, as last read.
     private(set) var dockPins: [DockPin] = []
     /// The dock's pins: the Dock's, less the ones taken out, then the ones kept (DockSettings.pinned).
@@ -59,8 +62,9 @@ final class DockController {
     @ObservationIgnored var readRunning: @MainActor () -> [DockRunning] = { DockController.runningApps() }
 
     init(defaults: UserDefaults = .pilot(), autohide: any DockAutohide = SystemEventsAutohide.dock, readPins: @escaping @MainActor () -> [DockPin] = DockPins.readLive,
-         writeRoom: @escaping DockSwitch.WriteRoom, panels: any DockPanels) {
+         writeRoom: @escaping DockSwitch.WriteRoom, panels: any DockPanels, visualizer: DockVisualizer = DockVisualizer()) {
         self.defaults = defaults
+        self.visualizer = visualizer
         self.autohide = autohide
         self.readPins = readPins
         self.writeRoom = writeRoom
@@ -72,7 +76,7 @@ final class DockController {
     var isOn: Bool { state.isOn }
 
     /// The room the tiler keeps at the foot of the dock's screen.
-    var room: [PilotBlock.BarInset] { screen().map { [PilotBlock.BarInset(monitor: $0, height: settings.size.room)] } ?? [] }
+    var room: [PilotBlock.BarInset] { screen().map { [PilotBlock.BarInset(monitor: $0, height: settings.room)] } ?? [] }
 
     /// At launch with the switch left on: the Dock hides again and the pill shows. Off, the dock reads nothing.
     func start() {
@@ -94,6 +98,24 @@ final class DockController {
         dockPins = readPins()
         followRunning()
         panels.show()
+        listen()
+    }
+
+    /// The visualizer on while the dock shows and its switch is on, its bars as tall as the size makes them.
+    private func listen() {
+        let tallest = CGFloat(settings.size.tallestBar)
+        if tallest != visualizer.tallest {
+            visualizer.set(false)
+            visualizer.tallest = tallest
+        }
+        visualizer.set(state.isOn && settings.visualizer)
+    }
+
+    /// The visualizer's switch: on asks macOS for System Audio Recording Only now, on this press, by starting a tap for
+    /// a moment (the first start asks); never at launch.
+    func setVisualizer(_ on: Bool) async {
+        settings.visualizer = on
+        if on { await visualizer.ask() }
     }
 
     /// The running apps, followed through NSWorkspace's own list (KVO, as Apple documents it), not read inside the launch
@@ -123,6 +145,7 @@ final class DockController {
         runningWatch?.invalidate()
         runningWatch = nil
         panels.hide()
+        visualizer.set(false)
     }
 
     static func runningApps() -> [DockRunning] {
@@ -184,6 +207,7 @@ final class DockController {
         "dock: \(state.isOn ? "on" : "off"), saved autohide \(state.savedAutohide.map(String.init) ?? "none"), saved delay "
             + (state.delaySaved == true ? state.savedDelay.map { String($0) } ?? "absent" : "none") + ", size \(settings.size.rawValue), room "
             + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.map(\.name).joined(separator: " ")
+            + ", \(settings.placement.rawValue), tint \(settings.tint.rawValue), visualizer \(settings.visualizer ? "on" : "off")"
     }
 
     /// While on, the room follows the size; the block is written only when it changed.
@@ -208,6 +232,8 @@ final class DockWindow: DockPanels {
     private var panel: TopBarPanel?
     /// The pill's view; set once the controller it draws exists (Engine).
     var make: () -> NSView = { NSView() }
+    /// Where the pill stands: on the screen's bottom edge, or over it (rice round).
+    var placement: () -> DockPlacement = { .attached }
 
     /// One above the Dock's own level, so its auto-hidden slide-up shows under the pill, not over it.
     static let level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
@@ -246,7 +272,7 @@ final class DockWindow: DockPanels {
         guard let panel, let screen = NSScreen.screens.first, size.width > 0 else { return }
         // The pill is held to DockWindow.widest(); only a hover's box at the widest can reach past the screen: held to it.
         let width = min(size.width.rounded(.up), screen.frame.width)
-        let frame = NSRect(x: (screen.frame.midX - width / 2).rounded(), y: screen.frame.minY + DockSize.margin,
+        let frame = NSRect(x: (screen.frame.midX - width / 2).rounded(), y: screen.frame.minY + DockSize.margin(placement()),
                            width: width, height: size.height.rounded(.up))
         guard frame != fitted else { return }
         fitted = frame

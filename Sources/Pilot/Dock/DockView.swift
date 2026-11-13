@@ -14,6 +14,14 @@ enum DockPill {
     static let sideMargin: CGFloat = 16
     /// The hover's coordinate space, DockView's box, which never moves on screen as the icons grow.
     static let space = "dock"
+
+    /// The pill's outline: attached, its top corners round and its bottom ones square on the screen's edge, as the
+    /// reference's (rice round, Q222); floating, every corner round.
+    static func shape(_ placement: DockPlacement) -> UnevenRoundedRectangle {
+        let foot = placement == .attached ? 0 : radius
+        return UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: foot, bottomTrailingRadius: foot, topTrailingRadius: radius,
+                                      style: .continuous)
+    }
 }
 
 /// The dock on screen: the pill at rest, and while the pointer is over its icons a taller, wider box, so magnified icons
@@ -33,6 +41,8 @@ struct DockView: View {
     @State private var held: Set<BarKind> = []
     @State private var hovering = false
     @State private var rest: CGSize = .zero
+    /// The box's size as last told to the window, told again when the placement moves it.
+    @State private var box: CGSize = .zero
 
     var body: some View {
         let size = dock.settings.size, widgets = dock.settings.widgets, options = dock.settings.options, magnify = dock.settings.magnify
@@ -46,6 +56,7 @@ struct DockView: View {
         DockStrip(size: size, apps: apps, hasWidgets: !right.isEmpty, maxWidth: DockWindow.widest(),
                   windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock, style: dock.settings.style, magnify: magnify,
                   origin: hovering ? CGFloat(reach.width) / 2 : 0, onHover: { hovering = $0 },
+                  placement: dock.settings.placement, tint: dock.settings.tint,
                   leftWidgets: left.isEmpty ? nil : AnyView(ForEach(left, id: \.self) { slot in DockWidgetView(slot: slot, reader: reader, store: store, dock: dock) })) {
             ForEach(right, id: \.self) { slot in DockWidgetView(slot: slot, reader: reader, store: store, dock: dock) }
         }
@@ -53,11 +64,20 @@ struct DockView: View {
             // The bar's Item colours, so a widget's warning and alert read as they do in the bar (amber, red), not
             // in the accent (the red Sven saw on Maple, whose accent is red; 2026-11-13).
             .environment(\.barItemColours, store.itemColours)
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { if !hovering { rest = $0 } }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: {
+                if !hovering {
+                    rest = $0
+                    dock.visualizer.pillWidth = $0.width
+                }
+            }
             .frame(width: hovering ? rest.width + CGFloat(reach.width) : nil,
                    height: hovering ? rest.height + CGFloat(reach.height) : nil, alignment: .bottom)
             .coordinateSpace(.named(DockPill.space))
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { fit($0) }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: {
+                box = $0
+                fit($0)
+            }
+            .onChange(of: dock.settings.placement) { fit(box) }
             .styled(.topBar)
             .pilotTheme()
             .onAppear { hold(kinds, asked, widgets) }
@@ -108,6 +128,10 @@ struct DockStrip<Widgets: View>: View {
     /// Where the rest pill starts in DockView's box: the hover is measured from there, so the bell stays put as icons grow.
     var origin: CGFloat = 0
     var onHover: (Bool) -> Void = { _ in }
+    /// Rice round (Sven 2026-11-13, Q220 A, Q222): on the screen's bottom edge, its bottom corners square on it, or
+    /// floating with every corner round; the icons in their own colours or the theme's.
+    var placement: DockPlacement = .floating
+    var tint: DockIconTint = .off
     /// The widgets set on the left of the apps (Sven, 2026-11-13), behind their own hairline; nil with none there.
     var leftWidgets: AnyView? = nil
     @ViewBuilder let widgets: () -> Widgets
@@ -119,10 +143,11 @@ struct DockStrip<Widgets: View>: View {
     init(size: DockSize, apps: [DockApp], hasWidgets: Bool, maxWidth: CGFloat, windows: @escaping (DockApp) -> [AeroWindow] = { _ in [] },
          tiler: TilerService? = nil, dock: DockController? = nil, style: TopBarBackground = .glass, magnify: DockMagnification = .medium,
          backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
-         hoverApp: Int? = nil, leftWidgets: AnyView? = nil, @ViewBuilder widgets: @escaping () -> Widgets) {
+         hoverApp: Int? = nil, placement: DockPlacement = .floating, tint: DockIconTint = .off, leftWidgets: AnyView? = nil,
+         @ViewBuilder widgets: @escaping () -> Widgets) {
         self.size = size; self.apps = apps; self.hasWidgets = hasWidgets; self.maxWidth = maxWidth; self.windows = windows
         self.tiler = tiler; self.dock = dock; self.style = style; self.magnify = magnify; self.backing = backing; self.origin = origin
-        self.onHover = onHover; self.leftWidgets = leftWidgets; self.widgets = widgets
+        self.onHover = onHover; self.placement = placement; self.tint = tint; self.leftWidgets = leftWidgets; self.widgets = widgets
         let icon = CGFloat(size.icon), gap = (icon * DockPill.gapRatio).rounded()
         _hoverX = State(initialValue: hoverApp.map { CGFloat($0) * (icon + gap) + icon / 2 })
     }
@@ -179,7 +204,7 @@ struct DockStrip<Widgets: View>: View {
             }
         }
         .frame(height: size.pill, alignment: .bottom)
-        let shape = RoundedRectangle(cornerRadius: DockPill.radius, style: .continuous)
+        let shape = DockPill.shape(placement)
         let shown = style.shown(transparency: Look.shared.transparency)
         Group {
             if let backing, shown == .glass { backing(AnyView(row)) } else { row.modifier(DockBacking(shape: shape, style: shown)) }
@@ -221,7 +246,7 @@ struct DockStrip<Widgets: View>: View {
         let row = HStack(alignment: .bottom, spacing: gap) {
             ForEach(Array(apps.enumerated()), id: \.offset) { i, app in
                 DockAppIcon(app: app, icon: icon, scale: fit.scrolls ? 1 : scale(at: CGFloat(i) * (icon + gap) + icon / 2, icon: icon),
-                            windows: windows(app), tiler: tiler, dock: dock)
+                            windows: windows(app), tiler: tiler, dock: dock, tint: tint, tintPoints: icon * CGFloat(magnify.scale))
             }
         }
         .padding(.top, DockSize.top)
@@ -290,8 +315,8 @@ struct DockBacking<S: Shape>: ViewModifier {
     }
 }
 
-/// One app: its icon on nothing (no tile behind any icon), a dot under it while it runs, the front app's dot a wider
-/// accent capsule. A click opens it, focuses its one window, or lists its windows over it to pick one.
+/// One app: its icon on nothing (no tile behind any icon), an accent dot under it while it runs, the front app's a wider
+/// capsule. A click opens it, focuses its one window, or lists its windows over it to pick one.
 struct DockAppIcon: View {
     @Environment(\.ink) private var ink
     let app: DockApp
@@ -302,19 +327,31 @@ struct DockAppIcon: View {
     var tiler: TilerService? = nil
     /// Its Keep in Dock and Remove from Dock edit this dock's own pins; nil in a render.
     var dock: DockController? = nil
+    /// Theme: drawn in the theme's colours (DockTinter), again when the theme changes; at `tintPoints`, the most the
+    /// magnification draws it, so a magnified icon stays sharp.
+    var tint: DockIconTint = .off
+    var tintPoints: CGFloat = 0
     @State private var anchor = ScreenAnchor.Box()
+
+    private var image: NSImage {
+        let own = DockIcons.icon(app)
+        guard tint == .theme else { return own }
+        return DockTinter.tinted(own, key: app.url?.path(percentEncoded: false) ?? app.name, ends: DockTinter.ends(Look.shared.theme),
+                                 points: max(icon, tintPoints))
+    }
 
     var body: some View {
         Button(action: open) {
             VStack(spacing: DockSize.laneGap) {
-                Image(nsImage: DockIcons.icon(app))
+                Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: icon * scale, height: icon * scale)
                 // A fixed lane, drawn or not, so every icon stands on one baseline.
                 Color.clear.frame(width: icon, height: DockSize.lane).overlay {
                     if app.running {
-                        Capsule().fill(app.front ? ink.accent : ink.text.opacity(0.85)).frame(width: app.front ? 16 : 5, height: DockSize.lane)
+                        // In the theme's colour (rice round, Sven 2026-11-13); the front app's the wider capsule.
+                        Capsule().fill(ink.accent).frame(width: app.front ? 16 : 5, height: DockSize.lane)
                     }
                 }
             }
@@ -433,6 +470,7 @@ enum DockIcons {
 extension DockWindow {
     /// The pill the window shows: the dock's apps and widgets, fitting the window to its size.
     func draw(_ dock: DockController, observers: EngineObservers, sources: BarSources) {
+        placement = { [weak dock] in dock?.settings.placement ?? .attached }
         // The closure holds only these four, never the Engine.
         make = { [weak self] in
             let host = NSHostingView(rootView: DockView(dock: dock, tiler: observers.tiler, observers: observers, sources: sources, store: .shared,
