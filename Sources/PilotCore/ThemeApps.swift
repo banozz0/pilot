@@ -5,10 +5,15 @@ public enum ThemeApps {
     public static let colourKey = "workbench.colorCustomizations"
     private static let begin = GhosttyThemeAdapter.begin, end = GhosttyThemeAdapter.end
     private static let editors: [(ThemeAppKind, String)] = [(.vscode, "Code"), (.cursor, "Cursor"), (.windsurf, "Windsurf")]
+    /// The line a block goes right after, for a config that cannot take it at the end.
+    private static let anchors: [ThemeAppKind: String] = [.alacritty: "[general]", .lazygit: "gui:"]
+    /// The JSON list an app's own theme file is turned on in, and Pilot's entry there.
+    private static let memberships: [ThemeAppKind: (path: [String], element: String)] = [.vesktop: (vesktopList, vesktopTheme)]
 
     /// Each app's bundle name in an Applications folder.
     private static let bundles: [ThemeAppKind: String] = [.vscode: "Visual Studio Code.app", .cursor: "Cursor.app", .windsurf: "Windsurf.app",
-                                                           .kitty: "kitty.app", .alacritty: "Alacritty.app", .wezterm: "WezTerm.app", .iterm2: "iTerm.app"]
+                                                           .kitty: "kitty.app", .alacritty: "Alacritty.app", .wezterm: "WezTerm.app", .iterm2: "iTerm.app",
+                                                           .vesktop: "vesktop.app"]
 
     /// Each installed app: its config folder, its config file (WezTerm's ~/.wezterm.lua), or its bundle in one of
     /// `applications`. A folder that isn't there yet is where the app's docs put it, and Apply makes it. A folder name is
@@ -39,13 +44,29 @@ public enum ThemeApps {
         if folder(config + "/btop") { found.append(.init(kind: .btop, root: config + "/btop", config: "btop.conf", generated: "themes/\(btopTheme).theme")) }
         let iterm = "\(support)/\(onDisk("iTerm2"))"
         if folder(iterm) || installed(.iterm2) { found.append(.init(kind: .iterm2, root: iterm, config: nil, generated: "DynamicProfiles/pilot-theme.json")) }
+        // lazygit and Neovim have no app bundle and their folder is made on first use, so the folder is the sign, as btop's.
+        // lazygit on macOS reads Application Support unless XDG_CONFIG_HOME is set in its shell (`lazygit -cd`, its Config.md).
+        let lazygit = "\(support)/\(onDisk("lazygit"))"
+        if folder(lazygit) { found.append(.init(kind: .lazygit, root: lazygit, config: "config.yml", generated: nil)) }
+        // Neovim reads ~/.config/nvim on macOS too. An init.vim alone is the config: a new init.lua beside it stops nvim starting.
+        let nvim = config + "/nvim"
+        if folder(nvim) {
+            let vim = files.fileExists(atPath: nvim + "/init.vim") && !files.fileExists(atPath: nvim + "/init.lua")
+            found.append(.init(kind: .neovim, root: nvim, config: vim ? "init.vim" : "init.lua", generated: "colors/\(neovimScheme).lua"))
+        }
+        // fish sources every conf.d/*.fish at start, before config.fish: a file of Pilot's own there and nothing else.
+        if folder(config + "/fish") { found.append(.init(kind: .fish, root: config + "/fish", config: nil, generated: "conf.d/pilot-theme.fish")) }
+        // Vesktop keeps Vencord's settings and themes folders in its own Application Support folder.
+        let vesktop = "\(support)/\(onDisk("vesktop"))"
+        if folder(vesktop) || installed(.vesktop) { found.append(.init(kind: .vesktop, root: vesktop, config: "settings/settings.json", generated: "themes/\(vesktopTheme)")) }
         return found
     }
 
     /// The folders an app's files may wait on: its root and anything below it, made by Apply.
     public static func roots(home: String) -> [String] {
         let support = home + "/Library/Application Support"
-        return editors.map { "\(support)/\($0.1)/User" } + ["kitty", "alacritty", "wezterm", "btop"].map { home + "/.config/" + $0 } + ["\(support)/iTerm2"]
+        return editors.map { "\(support)/\($0.1)/User" } + ["kitty", "alacritty", "wezterm", "btop", "nvim", "fish"].map { home + "/.config/" + $0 }
+            + ["iTerm2", "lazygit", "vesktop"].map { "\(support)/\($0)" }
     }
 
     /// Whether this path is an app's own config, the one file dotfiles users link. Decided from fixed shapes, never a journal.
@@ -53,18 +74,47 @@ public enum ThemeApps {
         let support = (home + "/Library/Application Support/").lowercased(), lower = root.lowercased()
         if path == "settings.json", lower.hasPrefix(support), lower.hasSuffix("/user") { return editors.contains { lower == support + $0.1.lowercased() + "/user" } }
         return (root == home + "/.config/kitty" && path == "kitty.conf") || (root == home + "/.config/alacritty" && path == "alacritty.toml")
-            || (root == home + "/.config/btop" && path == "btop.conf")
+            || (root == home + "/.config/btop" && path == "btop.conf") || (root == home + "/.config/nvim" && ["init.lua", "init.vim"].contains(path))
+            || (lower == support + "lazygit" && path == "config.yml")
     }
 
     public static func valid(_ selector: ThemeSelector, path: String, app: ThemeAppBinding) -> Bool {
         switch selector {
         case .file: return path == app.generated
-        case .jsonValue(let keys): return path == app.config && keys == [colourKey] && app.generated == nil
-        case .block(let b, let e, let prefix): return path == app.config && b == begin && e == end && (0...2).contains(prefix)
-        case .blockAfter(let anchor, let b, let e): return app.kind == .alacritty && path == app.config && anchor == "[general]" && b == begin && e == end
-        case .jsonMembership: return false
+        case .jsonValue(let keys): return editors.contains { $0.0 == app.kind } && path == app.config && keys == [colourKey]
+        case .block(let b, let e, let prefix): return path == app.config && (b, e) == markers(app) && (0...2).contains(prefix)
+        case .blockAfter(let anchor, let b, let e): return path == app.config && (b, e) == markers(app) && anchor == anchors[app.kind]
+        case .jsonMembership(let keys, let element, _): return path == app.config && memberships[app.kind].map { $0.path == keys && $0.element == element } == true
         }
     }
+
+    /// A config's comment mark, by its file's kind: Lua's, Vim script's, or the # of every other config here.
+    private static func comment(_ path: String?) -> String {
+        path?.hasSuffix(".lua") == true ? "--" : path?.hasSuffix(".vim") == true ? "\"" : "#"
+    }
+
+    /// Each app's block markers: Ghostty's, in its config's own comment mark.
+    static func markers(_ app: ThemeAppBinding) -> (begin: String, end: String) {
+        let mark = comment(app.config)
+        return (mark + begin.dropFirst(), mark + end.dropFirst())
+    }
+
+    /// A config's lines with Pilot's block taken out, as the person wrote them.
+    private static func linesWithoutBlock(_ target: ThemeSnapshot, _ markers: (begin: String, end: String)) throws -> [String] {
+        let rest = try ThemeRegions.replacing(.block(begin: markers.begin, end: markers.end, prefix: 0), in: target.bytes, with: nil) ?? Data()
+        guard let text = String(data: rest, encoding: .utf8) else { throw ThemeFailure("\(target.path) is not UTF-8") }
+        return text.components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+    }
+
+    /// The first line of a file Pilot writes whole, in that file's comment mark. The title can neither break the line
+    /// nor close a CSS comment.
+    private static func header(_ pack: ThemePack, _ mark: String) -> String {
+        let title = pack.title.filter { !$0.isNewline }.replacingOccurrences(of: "*/", with: "")
+        return "\(mark) Written by Pilot from its theme \(title); Pilot rewrites this file, so change the look in Pilot."
+    }
+
+    /// A file's lines, each ended by a newline.
+    private static func text(_ lines: [String]) -> Data { Data((lines.joined(separator: "\n") + "\n").utf8) }
 
     private static func ansi(_ pack: ThemePack) -> [String] {
         GhosttyLook.palette.map { pack.ghostty[role: $0] }
@@ -94,7 +144,7 @@ public enum ThemeApps {
                          "selection_background \(pack.palette["selection"]!)", "selection_foreground \(pack.palette["foreground"]!)",
                          "cursor \(pack.palette["bright_foreground"]!)"]
             lines += ansi(pack).enumerated().map { "color\($0.offset) \($0.element)" }
-            return ([try asset(app.generated!, Data((lines.joined(separator: "\n") + "\n").utf8)), try loader(snapshot(app.config!), claims, line: "include \(generated)")], [])
+            return ([try asset(app.generated!, text(lines)), try loader(snapshot(app.config!), claims, line: "include \(generated)")], [])
         case .alacritty:
             let path = app.root + "/" + app.generated!
             // Alacritty takes the first config it finds, ~/.config/alacritty/alacritty.toml before ~/.alacritty.toml (its docs).
@@ -144,6 +194,32 @@ public enum ThemeApps {
                 "Selected Text Color": colour(pack.palette["foreground"]!)]
             for (index, value) in ansi(pack).enumerated() { profile["Ansi \(index) Color"] = colour(value) }
             return ([try asset(app.generated!, try ThemeDigest.encoded(JSONValue.object(["Profiles": .array([.object(profile)])])))], ["iTerm2: appears as a profile to pick; your default profile stays"])
+        case .lazygit:
+            return ([try lazygitLoader(snapshot(app.config!), claims, pack)], [])
+        case .fish:
+            return ([try asset(app.generated!, fish(pack))], ["fish: colours your config.fish sets itself still win"])
+        case .vesktop:
+            // Pilot's file in its enabledThemes list, as Obsidian's snippet; Vencord rewrites the whole file from memory, so
+            // the entry is matched by its value, never its bytes.
+            let target = try snapshot(app.config!)
+            let selector = try claims.first { $0.path == app.config }?.selector
+                ?? .jsonMembership(path: vesktopList, element: vesktopTheme, removeEmptyContainer: ThemeJSONC(target.bytes ?? Data("{}".utf8)).owned(vesktopList) == nil)
+            return ([try asset(app.generated!, vesktop(pack)), try block(selector, target, text: ThemeDigest.encoded(vesktopTheme))], [])
+        case .neovim:
+            let colours = try asset(app.generated!, neovim(pack)), target = try snapshot(app.config!), marks = markers(app)
+            let lua = app.config == "init.lua", mark = comment(app.config)
+            let code = try linesWithoutBlock(target, marks).filter { line in
+                let text = line.trimmingCharacters(in: .whitespaces); return !text.isEmpty && !text.hasPrefix(mark)
+            }
+            // An init that loads the scheme itself needs no line of Pilot's.
+            if !claims.contains(where: { $0.path == app.config }), code.contains(where: { $0.range(of: #"colorscheme[\s("'\[=]*pilot\b"#, options: .regularExpression) != nil }) {
+                return ([colours], [])
+            }
+            // Lua takes nothing after a top-level return, so a line there would stop nvim starting.
+            if lua, let last = code.last, last.range(of: #"^return\b"#, options: .regularExpression) != nil {
+                throw ThemeFailure("its init.lua ends in a return, and nothing after it runs. Add vim.cmd.colorscheme(\"\(neovimScheme)\") above it yourself")
+            }
+            return ([colours, try loader(target, claims, line: lua ? "pcall(vim.cmd.colorscheme, \"\(neovimScheme)\")" : "silent! colorscheme \(neovimScheme)", markers: marks)], [])
         }
     }
 
@@ -169,9 +245,114 @@ public enum ThemeApps {
             ("process_start", "cyan"), ("process_mid", "blue"), ("process_end", "magenta"),
             ("proc_pause_bg", "red"), ("proc_follow_bg", "blue"), ("proc_banner_bg", "selection"), ("proc_banner_fg", "bright_foreground"),
             ("followed_bg", "blue"), ("followed_fg", "background")]
-        let lines = ["# Written by Pilot from its theme \(pack.title); Pilot rewrites this file, so change the look in Pilot."]
-            + keys.map { "theme[\($0.0)]=\"\(p[$0.1]!)\"" }
-        return Data((lines.joined(separator: "\n") + "\n").utf8)
+        let lines = [header(pack, "#")] + keys.map { "theme[\($0.0)]=\"\(p[$0.1]!)\"" }
+        return text(lines)
+    }
+
+    static let neovimScheme = "pilot"
+    static let vesktopTheme = "pilot.theme.css", vesktopList = ["enabledThemes"]
+
+    /// fish's syntax and pager colours (its docs, Syntax highlighting variables) as globals, which cover the universal
+    /// ones its own theme set. Colours go without their #, which starts a comment in fish.
+    static func fish(_ pack: ThemePack) -> Data {
+        let p = pack.palette
+        func c(_ role: String) -> String { String(p[role]!.dropFirst()) }
+        let colours: [(String, String)] = [
+            ("fish_color_normal", c("foreground")), ("fish_color_command", c("blue")), ("fish_color_keyword", c("magenta")),
+            ("fish_color_quote", c("green")), ("fish_color_redirection", c("cyan")), ("fish_color_end", c("cyan")),
+            ("fish_color_error", c("red")), ("fish_color_param", c("foreground")), ("fish_color_option", c("yellow")),
+            ("fish_color_operator", c("cyan")), ("fish_color_escape", c("magenta")), ("fish_color_comment", c("muted")),
+            ("fish_color_autosuggestion", c("muted")), ("fish_color_valid_path", "--underline"),
+            ("fish_color_selection", "--background=" + c("selection")), ("fish_color_search_match", "--background=" + c("selection")),
+            ("fish_color_cwd", c("green")), ("fish_color_cwd_root", c("red")), ("fish_color_user", c("green")),
+            ("fish_color_host", c("blue")), ("fish_color_host_remote", c("yellow")), ("fish_color_status", c("red")),
+            ("fish_color_cancel", c("red") + " --reverse"), ("fish_color_history_current", "--bold"),
+            ("fish_pager_color_progress", c("accent")), ("fish_pager_color_prefix", c("accent") + " --bold"),
+            ("fish_pager_color_completion", c("foreground")), ("fish_pager_color_description", c("muted")),
+            ("fish_pager_color_selected_background", "--background=" + c("selection"))]
+        let lines = [header(pack, "#")] + colours.map { "set -g \($0.0) \($0.1)" }
+        return text(lines)
+    }
+
+    /// What a Vesktop theme's colours are set on. Discord sets its own on .theme-dark and .theme-light with a second class,
+    /// so a single class loses; refact0r/midnight-discord (src/colors.css, maintained) sets them here, and so does Pilot.
+    static let vesktopScope = "body, .theme-dark:not(.custom-user-profile-theme), .theme-light:not(.custom-user-profile-theme)"
+
+    /// A Vencord theme for Discord in Vesktop: its header, then Discord's colour variables from the pack's roles, by the
+    /// names midnight-discord sets today (Discord's refreshed look) and the older ones.
+    static func vesktop(_ pack: ThemePack) -> Data {
+        let p = pack.palette
+        let roles: [(String, String)] = [
+            ("app-frame-background", "dark_background"), ("background-accent", "lighter_background"), ("background-brand", "accent"),
+            ("background-base-lowest", "darker_background"), ("background-base-lower", "dark_background"), ("background-base-low", "dark_background"),
+            ("background-surface-high", "background"), ("background-surface-higher", "lighter_background"), ("background-surface-highest", "lighter_background"),
+            ("background-mod-subtle", "lighter_background"), ("background-mod-muted", "lighter_background"),
+            ("background-mod-normal", "lighter_background"), ("background-mod-strong", "selection"),
+            ("background-primary", "background"), ("background-secondary", "dark_background"), ("background-secondary-alt", "dark_background"),
+            ("background-tertiary", "darker_background"), ("background-floating", "darker_background"), ("channeltextarea-background", "lighter_background"),
+            ("background-modifier-hover", "lighter_background"), ("background-modifier-active", "selection"), ("background-modifier-selected", "selection"),
+            ("chat-background-default", "background"), ("input-background-default", "lighter_background"),
+            ("text-default", "foreground"), ("text-normal", "foreground"), ("text-strong", "bright_foreground"), ("text-muted", "muted"),
+            ("header-primary", "bright_foreground"), ("header-secondary", "light_foreground"), ("channels-default", "light_foreground"),
+            ("interactive-normal", "light_foreground"), ("interactive-hover", "foreground"), ("interactive-active", "bright_foreground"),
+            ("interactive-muted", "muted"), ("text-link", "blue"), ("brand-500", "accent"), ("brand-experiment", "accent"), ("border-subtle", "lighter_background")]
+        let lines = ["/**", " * @name Pilot", header(pack, " * @description"), " * @author Pilot", "*/", "",
+                     vesktopScope + " {"] + roles.map { "  --\($0.0): \(p[$0.1]!);" } + ["}"]
+        return text(lines)
+    }
+
+    /// A Neovim colour scheme from the pack's roles: the base syntax groups (Neovim links the rest and the tree-sitter
+    /// groups to them), the editor's own interface, diagnostics and the terminal's 16 colours. `highlight clear` drops
+    /// the scheme before it, and also unsets colors_name, so setting 'background' after it reloads nothing.
+    static func neovim(_ pack: ThemePack) -> Data {
+        let p = pack.palette
+        let groups: [(String, String?, String?, String)] = [
+            ("Normal", "foreground", "background", ""), ("NormalNC", "foreground", "background", ""),
+            ("NormalFloat", "foreground", "dark_background", ""), ("FloatBorder", "muted", "dark_background", ""), ("FloatTitle", "accent", "dark_background", "bold = true"),
+            ("Cursor", "background", "bright_foreground", ""), ("CursorLine", nil, "lighter_background", ""), ("CursorColumn", nil, "lighter_background", ""),
+            ("ColorColumn", nil, "lighter_background", ""), ("CursorLineNr", "accent", nil, "bold = true"), ("LineNr", "muted", nil, ""),
+            ("SignColumn", nil, "background", ""), ("FoldColumn", "muted", "background", ""), ("Folded", "muted", "dark_background", ""),
+            ("WinSeparator", "muted", nil, ""), ("StatusLine", "foreground", "dark_background", ""), ("StatusLineNC", "muted", "dark_background", ""),
+            ("WinBar", "foreground", nil, "bold = true"), ("WinBarNC", "muted", nil, ""),
+            ("TabLine", "muted", "dark_background", ""), ("TabLineSel", "bright_foreground", "background", "bold = true"), ("TabLineFill", nil, "darker_background", ""),
+            ("Pmenu", "foreground", "dark_background", ""), ("PmenuSel", "bright_foreground", "selection", "bold = true"),
+            ("PmenuSbar", nil, "dark_background", ""), ("PmenuThumb", nil, "muted", ""),
+            ("Visual", nil, "selection", ""), ("Search", "background", "yellow", ""), ("IncSearch", "background", "accent", ""), ("CurSearch", "background", "accent", ""),
+            ("Substitute", "background", "red", ""), ("MatchParen", "accent", "selection", "bold = true"), ("QuickFixLine", nil, "selection", ""),
+            ("LspReferenceText", nil, "lighter_background", ""), ("LspReferenceRead", nil, "lighter_background", ""), ("LspReferenceWrite", nil, "lighter_background", ""),
+            ("NonText", "lighter_background", nil, ""), ("Whitespace", "lighter_background", nil, ""), ("SpecialKey", "muted", nil, ""), ("Conceal", "muted", nil, ""),
+            ("Directory", "blue", nil, ""), ("Title", "accent", nil, "bold = true"), ("Question", "green", nil, ""), ("MoreMsg", "green", nil, ""),
+            ("ModeMsg", "foreground", nil, "bold = true"), ("ErrorMsg", "red", nil, ""), ("WarningMsg", "yellow", nil, ""), ("WildMenu", "background", "accent", ""),
+            ("Comment", "muted", nil, "italic = true"), ("Constant", "magenta", nil, ""), ("String", "green", nil, ""), ("Character", "green", nil, ""),
+            ("Identifier", "foreground", nil, ""), ("Function", "blue", nil, ""), ("Statement", "magenta", nil, ""), ("Operator", "cyan", nil, ""),
+            ("PreProc", "cyan", nil, ""), ("Type", "yellow", nil, ""), ("Special", "cyan", nil, ""), ("Delimiter", "light_foreground", nil, ""),
+            ("Underlined", "blue", nil, "underline = true"), ("Error", "red", nil, ""), ("Todo", "background", "yellow", "bold = true"),
+            ("@variable", "foreground", nil, ""),
+            ("DiffAdd", "green", nil, ""), ("DiffChange", "yellow", nil, ""), ("DiffDelete", "red", nil, ""), ("DiffText", "blue", nil, "bold = true"),
+            ("Added", "green", nil, ""), ("Changed", "yellow", nil, ""), ("Removed", "red", nil, ""),
+            ("DiagnosticError", "red", nil, ""), ("DiagnosticWarn", "yellow", nil, ""), ("DiagnosticInfo", "blue", nil, ""),
+            ("DiagnosticHint", "cyan", nil, ""), ("DiagnosticOk", "green", nil, "")]
+        func spec(_ fg: String?, _ bg: String?, _ extra: String) -> String {
+            ([fg.map { "fg = \"\(p[$0]!)\"" }, bg.map { "bg = \"\(p[$0]!)\"" }, extra.isEmpty ? nil : extra]).compactMap { $0 }.joined(separator: ", ")
+        }
+        var lines = [header(pack, "--"), "vim.cmd(\"highlight clear\")", "if vim.fn.exists(\"syntax_on\") == 1 then vim.cmd(\"syntax reset\") end",
+                     "vim.o.background = \"\(pack.dark ? "dark" : "light")\"", "vim.g.colors_name = \"\(neovimScheme)\"", "local hl = vim.api.nvim_set_hl"]
+        lines += groups.map { "hl(0, \"\($0.0)\", { \(spec($0.1, $0.2, $0.3)) })" }
+        lines += [("Error", "red"), ("Warn", "yellow"), ("Info", "blue"), ("Hint", "cyan"), ("Ok", "green")].map { "hl(0, \"DiagnosticUnderline\($0.0)\", { undercurl = true, sp = \"\(p[$0.1]!)\" })" }
+        lines += ansi(pack).enumerated().map { "vim.g.terminal_color_\($0.offset) = \"\($0.element)\"" }
+        return text(lines)
+    }
+
+    /// lazygit's gui.theme, each colour lazygit takes (its Config.md, Color Attributes), from the pack's roles.
+    static func lazygitTheme(_ pack: ThemePack, indent: String) -> [String] {
+        let p = pack.palette
+        let keys: [(String, String, bold: Bool)] = [
+            ("activeBorderColor", "accent", true), ("inactiveBorderColor", "muted", false), ("searchingActiveBorderColor", "yellow", true),
+            ("optionsTextColor", "blue", false), ("selectedLineBgColor", "selection", false), ("inactiveViewSelectedLineBgColor", "lighter_background", false),
+            ("cherryPickedCommitFgColor", "background", false), ("cherryPickedCommitBgColor", "cyan", false),
+            ("markedBaseCommitFgColor", "background", false), ("markedBaseCommitBgColor", "yellow", false),
+            ("unstagedChangesColor", "red", false), ("defaultFgColor", "foreground", false)]
+        return keys.map { indent + $0.0 + ": [\"\(p[$0.1]!)\"" + ($0.bold ? ", \"bold\"]" : "]") }
     }
 
     private static func colours(_ pack: ThemePack) -> JSONValue {
@@ -195,7 +376,8 @@ public enum ThemeApps {
     }
 
     /// Our block at the end of a config, as Ghostty's: a newline goes first only when the file does not end in one.
-    private static func loader(_ target: ThemeSnapshot, _ claims: [ThemeClaim], line: String) throws -> ThemeMutation {
+    private static func loader(_ target: ThemeSnapshot, _ claims: [ThemeClaim], line: String, markers: (begin: String, end: String) = (begin, end)) throws -> ThemeMutation {
+        let (begin, end) = markers
         let bytes = target.bytes ?? Data(), newline = bytes.contains(13) ? "\r\n" : "\n"
         let probe = ThemeSelector.block(begin: begin, end: end, prefix: 0)
         let hasBlock = try ThemeRegions.range(probe, in: target.bytes) != nil
@@ -204,6 +386,27 @@ public enum ThemeApps {
         let selector = ThemeSelector.block(begin: begin, end: end, prefix: prefix)
         let text = Data(((prefix > 0 ? newline : "") + [begin, line, end].joined(separator: newline)).utf8)
         return try block(selector, target, text: text)
+    }
+
+    /// gui.theme in lazygit's config.yml. YAML takes no second gui key (lazygit stops on one), so under a gui of the person's
+    /// the block goes right after its line, at its keys' indent; with none, a gui of Pilot's own goes at the end.
+    private static func lazygitLoader(_ target: ThemeSnapshot, _ claims: [ThemeClaim], _ pack: ThemePack) throws -> ThemeMutation {
+        let lines = try linesWithoutBlock(target, (begin, end))
+        let gui = lines.indices.filter { lines[$0].range(of: #"^["']?gui["']?\s*:"#, options: .regularExpression) != nil }
+        guard let at = gui.first else { return try loader(target, claims, line: (["gui:", "  theme:"] + lazygitTheme(pack, indent: "    ")).joined(separator: "\n")) }
+        // The anchor is a whole line (another gui: line further in refuses it), so gui: must be alone on its line.
+        guard gui.count == 1, lines[at].trimmingCharacters(in: .whitespaces) == "gui:" else {
+            throw ThemeFailure("its gui line holds more than gui:, so Pilot won't edit around it. Add theme under gui yourself")
+        }
+        func indent(_ line: String) -> String { String(line.prefix { $0 == " " }) }
+        let body = lines[(at + 1)...].prefix { line in let t = line.trimmingCharacters(in: .whitespaces); return t.isEmpty || t.hasPrefix("#") || !indent(line).isEmpty }
+        let keys = body.filter { line in let t = line.trimmingCharacters(in: .whitespaces); return !t.isEmpty && !t.hasPrefix("#") }
+        let inner = keys.first.map(indent) ?? "  "
+        if keys.contains(where: { indent($0) == inner && $0.dropFirst(inner.count).range(of: #"^["']?theme["']?\s*:"#, options: .regularExpression) != nil }) {
+            throw ThemeFailure("its config.yml sets gui.theme already. Take it out for Pilot to follow")
+        }
+        let block = "\n" + ([begin, inner + "theme:"] + lazygitTheme(pack, indent: inner + inner) + [end]).joined(separator: "\n")
+        return try self.block(.blockAfter(anchor: anchors[.lazygit]!, begin: begin, end: end), target, text: Data(block.utf8))
     }
 
     /// `general.import` by plain lines: inside an existing [general] when there is one, otherwise a table of our own at the end.
@@ -235,7 +438,7 @@ public enum ThemeApps {
         }
         if general || existing.map({ if case .blockAfter = $0.selector { true } else { false } }) == true {
             let inner = "\n" + [begin, "import = [\(quoted)]", end].joined(separator: "\n")
-            return try block(.blockAfter(anchor: "[general]", begin: begin, end: end), target, text: Data(inner.utf8))
+            return try block(.blockAfter(anchor: anchors[.alacritty]!, begin: begin, end: end), target, text: Data(inner.utf8))
         }
         return try loader(target, claims, line: "[general]\nimport = [\(quoted)]")
     }
