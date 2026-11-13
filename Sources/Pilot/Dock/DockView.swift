@@ -44,7 +44,7 @@ struct DockView: View {
         let apps = DockController.apps(pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
         // Each widget is a view of its own, so a reading's tick redraws its widget, not the pill.
         DockStrip(size: size, apps: apps, hasWidgets: !slots.isEmpty, maxWidth: DockWindow.widest(),
-                  windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler,
+                  windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock,
                   origin: hovering ? CGFloat(size.reach.width) / 2 : 0, onHover: { hovering = $0 }) {
             ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
                 DockWidget(size: size, draws: { !TopBarSlotView.targets(slot, sources.inputs(for: slot.entries), settings: store.settings).isEmpty }) {
@@ -92,6 +92,7 @@ struct DockStrip<Widgets: View>: View {
     let maxWidth: CGFloat
     var windows: (DockApp) -> [AeroWindow] = { _ in [] }
     var tiler: TilerService?
+    var dock: DockController?
     /// What stands behind the pill; nil is the live glass or solid fill (DockBacking). A render passes a stand-in, as
     /// glass draws nothing offscreen.
     var backing: ((AnyView) -> AnyView)?
@@ -104,10 +105,10 @@ struct DockStrip<Widgets: View>: View {
     @State private var leaving: Task<Void, Never>?
 
     init(size: DockSize, apps: [DockApp], hasWidgets: Bool, maxWidth: CGFloat, windows: @escaping (DockApp) -> [AeroWindow] = { _ in [] },
-         tiler: TilerService? = nil, backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
+         tiler: TilerService? = nil, dock: DockController? = nil, backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
          hoverApp: Int? = nil, @ViewBuilder widgets: @escaping () -> Widgets) {
         self.size = size; self.apps = apps; self.hasWidgets = hasWidgets; self.maxWidth = maxWidth; self.windows = windows
-        self.tiler = tiler; self.backing = backing; self.origin = origin; self.onHover = onHover; self.widgets = widgets
+        self.tiler = tiler; self.dock = dock; self.backing = backing; self.origin = origin; self.onHover = onHover; self.widgets = widgets
         let icon = CGFloat(size.icon), gap = (icon * DockPill.gapRatio).rounded()
         _hoverX = State(initialValue: hoverApp.map { CGFloat($0) * (icon + gap) + icon / 2 })
     }
@@ -148,7 +149,7 @@ struct DockStrip<Widgets: View>: View {
         let row = HStack(alignment: .bottom, spacing: gap) {
             ForEach(Array(apps.enumerated()), id: \.offset) { i, app in
                 DockAppIcon(app: app, icon: icon, scale: fit.scrolls ? 1 : scale(at: CGFloat(i) * (icon + gap) + icon / 2, icon: icon),
-                            windows: windows(app), tiler: tiler)
+                            windows: windows(app), tiler: tiler, dock: dock)
             }
         }
         .padding(.top, DockSize.top)
@@ -238,6 +239,8 @@ struct DockAppIcon: View {
     /// Its own windows, from Pilot's tiler.
     var windows: [AeroWindow] = []
     var tiler: TilerService? = nil
+    /// Its Keep in Dock and Remove from Dock edit this dock's own pins; nil in a render.
+    var dock: DockController? = nil
     @State private var anchor = ScreenAnchor.Box()
 
     var body: some View {
@@ -257,7 +260,7 @@ struct DockAppIcon: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(ScreenAnchor(box: anchor))
+        .background(ScreenAnchor(box: anchor, rightClick: { showMenu() }))
         .help(app.name)
         .accessibilityLabel(app.front ? "\(app.name), in front" : app.running ? "\(app.name), open" : app.name)
     }
@@ -272,6 +275,28 @@ struct DockAppIcon: View {
             if let id = mine.first?.id { focus(id) } else { activate() }
         case .activate:
             activate()
+        }
+    }
+
+    /// The right-click menu (Sven on build 2454): Open, its windows, Show in Finder, Keep in Dock or Remove from Dock
+    /// (Pilot's own pins), Quit; over the icon.
+    private func showMenu() {
+        guard let view = anchor.view else { return }
+        BarPanel.shared.close()
+        let sections = DockMenuItem.menu(app, windows: windows).map { $0.map(row) }
+        BarMenu.show(Array(sections.joined(separator: [BarMenu.Row.separator])), under: view)
+    }
+
+    private func row(_ item: DockMenuItem) -> BarMenu.Row {
+        .pick(item.title) { [app, dock] in
+            switch item {
+            case .open: activate()
+            case .window(let id, _, _): focus(id)
+            case .showInFinder: if let url = app.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            case .keepInDock: dock?.keep(app)
+            case .removeFromDock: dock?.unpin(app)
+            case .quit: if let pid = app.pid { NSRunningApplication(processIdentifier: pid)?.terminate() }
+            }
         }
     }
 

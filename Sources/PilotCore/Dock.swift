@@ -6,12 +6,15 @@ import Foundation
 /// Pilot quits.
 
 /// One app the macOS Dock keeps, as its `persistent-apps` names it.
-public struct DockPin: Equatable, Sendable {
+public struct DockPin: Codable, Equatable, Sendable {
     public let bundleID: String?
     public let url: URL
     public let name: String
 
     public init(bundleID: String?, url: URL, name: String) { self.bundleID = bundleID; self.url = url; self.name = name }
+
+    /// What Pilot's own pin list knows it by: its bundle id, else its path.
+    public var key: String { bundleID ?? url.path(percentEncoded: false) }
 }
 
 /// The macOS Dock's pins, read from `com.apple.dock` and never written (spec: "read only, never written").
@@ -74,6 +77,8 @@ public struct DockApp: Equatable, Sendable {
     }
 
     public var running: Bool { pid != nil }
+    /// What Pilot's own pin list knows it by, as DockPin.key.
+    public var key: String { bundleID ?? url?.path(percentEncoded: false) ?? name }
     /// The dots under it: one per window, at most three; a running app with no window listed keeps one, as the Dock's does.
     public var dots: Int { running ? min(max(windows, 1), DockApps.mostDots) : 0 }
     /// What a click does: open or bring it forward, focus its one window, or list its windows to pick one.
@@ -81,6 +86,37 @@ public struct DockApp: Equatable, Sendable {
 }
 
 public enum DockClick: String, Equatable, Sendable { case activate, focusWindow, listWindows }
+
+/// An app's right-click menu in the dock (Sven on build 2454): Open, its windows, Show in Finder, Keep in Dock or Remove
+/// from Dock (Pilot's own pins), Quit. Sections, a separator between each.
+public enum DockMenuItem: Equatable, Sendable {
+    case open
+    case window(id: Int, title: String, workspace: String)
+    case showInFinder, keepInDock, removeFromDock, quit
+
+    public var title: String {
+        switch self {
+        case .open: "Open"
+        case .window(_, let title, let workspace): "\(title)  ·  WS \(workspace)"
+        case .showInFinder: "Show in Finder"
+        case .keepInDock: "Keep in Dock"
+        case .removeFromDock: "Remove from Dock"
+        case .quit: "Quit"
+        }
+    }
+
+    /// `windows` are the app's own, from Pilot's tiler. Finder can be neither taken out nor quit, as in the Dock.
+    public static func menu(_ app: DockApp, windows: [AeroWindow]) -> [[DockMenuItem]] {
+        let finder = app.bundleID == DockPins.finder.bundleID
+        return [
+            [.open],
+            windows.map { .window(id: $0.id, title: $0.title.isEmpty ? app.name : $0.title, workspace: $0.workspace) },
+            app.url == nil ? [] : [.showInFinder],
+            finder ? [] : [app.pinned ? .removeFromDock : .keepInDock],
+            app.running && !finder ? [.quit] : [],
+        ].filter { !$0.isEmpty }
+    }
+}
 
 public enum DockApps {
     public static let mostDots = 3
@@ -140,8 +176,31 @@ public struct DockSettings: Codable, Equatable, Sendable {
     public var size: DockSize
     /// Its widgets in order, by the bar tray's names (`BarTrayItem.rawValue`): built-in items, extensions' items and groups.
     public var widgets: [String]
+    /// Pilot's own pins over the macOS Dock's, whose list is read and never written (spec pilot-dock; Sven on build 2454:
+    /// Keep in Dock and Remove from Dock): apps kept past the Dock's own, and the Dock's pins taken out, by `DockPin.key`.
+    public var kept: [DockPin] = []
+    public var removed: [String] = []
 
     public init(size: DockSize = .medium, widgets: [String] = DockSettings.defaultWidgets) { self.size = size; self.widgets = widgets }
+
+    /// The dock's pins: the macOS Dock's (`dock`, Finder first) less the ones taken out, then the ones kept, in order.
+    public func pinned(_ dock: [DockPin]) -> [DockPin] {
+        let keys = Set(dock.map(\.key))
+        return dock.filter { !removed.contains($0.key) } + kept.filter { !keys.contains($0.key) }
+    }
+
+    /// Keep in Dock: an app the Dock's list holds comes back; any other joins the end.
+    public mutating func keep(_ pin: DockPin, dock: [DockPin]) {
+        removed.removeAll { $0 == pin.key }
+        if !dock.contains(where: { $0.key == pin.key }), !kept.contains(where: { $0.key == pin.key }) { kept.append(pin) }
+    }
+
+    /// Remove from Dock: one Pilot kept goes; one of the Dock's is taken out of Pilot's dock alone. Finder stays, as in the Dock.
+    public mutating func unpin(_ key: String, dock: [DockPin]) {
+        guard key != DockPins.finder.key else { return }
+        kept.removeAll { $0.key == key }
+        if dock.contains(where: { $0.key == key }), !removed.contains(key) { removed.append(key) }
+    }
 
     /// Look A's three: AI usage, the timer and the weather, each drawn only while it has something to show.
     public static let defaultWidgets = ["extension:ai-usage", BarTrayItem.kind(.timer).rawValue, "extension:weather"]
@@ -151,6 +210,8 @@ public struct DockSettings: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         size = (try? c.decode(DockSize.self, forKey: .size)) ?? .medium
         widgets = (try? c.decode([String].self, forKey: .widgets)) ?? Self.defaultWidgets
+        kept = (try? c.decodeIfPresent([DockPin].self, forKey: .kept)) ?? []
+        removed = (try? c.decodeIfPresent([String].self, forKey: .removed)) ?? []
     }
 
     /// The item a widget name reads as, or why the dock cannot hold it: a built-in item drawn from its parts alone, an
@@ -219,71 +280,142 @@ extension BarSettings {
 
 public typealias DockAutohide = MenuBarAutohide
 
+/// The macOS Dock's reveal delay, its own `autohide-delay` default in seconds; nil while the key is absent (macOS's own
+/// delay). Auto-hide alone still slides the Dock up as the pointer touches the screen's foot, over Pilot's pill (Sven on
+/// build 2454: his delay was 0, so it rose at once); a delay of `DockSwitch.hiddenDelay` keeps it down. A protocol so
+/// tests and the sandbox never touch the real one.
+public protocol DockRevealDelay: Sendable {
+    func read() async throws -> Double?
+    /// Writes `seconds` (nil removes the key), then has the Dock take it.
+    func write(_ seconds: Double?) async throws
+}
+
+/// The real one: `defaults` in a child process, then `killall Dock`, since the Dock reads its delay only as it starts
+/// (launchd starts it again at once). Refuses in a test process, as SystemEventsAutohide does.
+public struct DefaultsDockDelay: DockRevealDelay {
+    public init() {}
+
+    public func read() async throws -> Double? {
+        guard !SystemEventsAutohide.inTestProcess else { throw SystemEventsAutohide.Refused() }
+        do {
+            let out = try await ChildProcess.run("/usr/bin/defaults", ["read", "com.apple.dock", "autohide-delay"], timeout: .seconds(10))
+            return Double(out.trimmingCharacters(in: .whitespacesAndNewlines))
+        } catch let failure as ChildProcess.Failure where failure.message.contains("does not exist") { return nil }
+    }
+
+    public func write(_ seconds: Double?) async throws {
+        guard !SystemEventsAutohide.inTestProcess else { throw SystemEventsAutohide.Refused() }
+        let args = seconds.map { ["write", "com.apple.dock", "autohide-delay", "-float", String($0)] } ?? ["delete", "com.apple.dock", "autohide-delay"]
+        _ = try await ChildProcess.run("/usr/bin/defaults", args, timeout: .seconds(10))
+        _ = try await ChildProcess.run("/usr/bin/killall", ["Dock"], timeout: .seconds(10))
+    }
+}
+
 public enum DockError: Error, CustomStringConvertible {
     case autohide(any Error)
+    case delay(any Error)
     case room(any Error)
 
     public var description: String {
         switch self {
         case .autohide(let e): "The macOS Dock's hiding was not changed (System Events: \(e)); allow Pilot under Privacy & Security › Automation"
+        case .delay(let e): "The macOS Dock's reveal delay was not changed: \(e)"
         case .room(let e): "The tiler's room for the dock was not set: \(e)"
         }
     }
 }
 
-/// The dock's switch, as the top bar's (TopBarSwitch): on saves the Dock's auto-hide, makes room in Pilot's block, then
-/// turns auto-hide on; off clears the room, then puts the saved value back. Each step that fails undoes the one before
-/// it, so the switch is fully on or as it was. Quitting puts the saved value back and keeps the switch on, so the next
-/// launch hides the Dock again (`resumed`).
+/// The dock's switch, as the top bar's (TopBarSwitch): on saves the Dock's auto-hide and reveal delay, makes room in
+/// Pilot's block, turns auto-hide on, then sets the delay to `hiddenDelay` so the Dock never rises at the screen's foot;
+/// off clears the room, then puts both back. Each step that fails undoes the ones before it, so the switch is fully on
+/// or as it was. Quitting puts both back and keeps the switch on, so the next launch hides the Dock again (`resumed`).
 public struct DockSwitch: Codable, Equatable, Sendable {
     public var isOn: Bool
     /// The Dock's auto-hide as Sven had it, put back by off and by quitting.
     public var savedAutohide: Bool?
+    /// The Dock's reveal delay as Sven had it (nil: the key was absent), put back while `delaySaved`. Both optional, so a
+    /// switch saved before the delay decodes with none saved.
+    public var savedDelay: Double?
+    public var delaySaved: Bool?
 
-    public init(isOn: Bool, savedAutohide: Bool?) { self.isOn = isOn; self.savedAutohide = savedAutohide }
+    public init(isOn: Bool, savedAutohide: Bool?, savedDelay: Double? = nil, delaySaved: Bool? = nil) {
+        self.isOn = isOn; self.savedAutohide = savedAutohide; self.savedDelay = savedDelay; self.delaySaved = delaySaved
+    }
 
     public static let off = DockSwitch(isOn: false, savedAutohide: nil)
+    /// Seconds the pointer must rest at the screen's foot before the hidden Dock rises: past any real wait.
+    public static let hiddenDelay = 1000.0
 
     public typealias WriteRoom = @Sendable ([PilotBlock.BarInset]) async throws -> Void
 
-    public func switchedOn(_ room: [PilotBlock.BarInset], autohide: any DockAutohide, writeRoom: WriteRoom) async throws(DockError) -> DockSwitch {
+    public func switchedOn(_ room: [PilotBlock.BarInset], autohide: any DockAutohide, delay: any DockRevealDelay,
+                           writeRoom: WriteRoom) async throws(DockError) -> DockSwitch {
         guard !isOn else { return self }
-        let found: Bool
+        let found: Bool, foundDelay: Double?
         do { found = try await autohide.isHidden() } catch { throw .autohide(error) }
+        do { foundDelay = try await delay.read() } catch { throw .delay(error) }
         do { try await writeRoom(room) } catch { throw .room(error) }
         do { try await autohide.setHidden(true) } catch {
             try? await writeRoom([])
             throw .autohide(error)
         }
-        return DockSwitch(isOn: true, savedAutohide: found)
+        // Each write restarts the Dock: none when it is at the hidden delay already.
+        do { if foundDelay != Self.hiddenDelay { try await delay.write(Self.hiddenDelay) } } catch {
+            try? await autohide.setHidden(found)
+            try? await writeRoom([])
+            throw .delay(error)
+        }
+        return DockSwitch(isOn: true, savedAutohide: found, savedDelay: foundDelay, delaySaved: true)
     }
 
     /// `room` is the one kept now, written back when the Dock refuses to come back.
-    public func switchedOff(room: [PilotBlock.BarInset], autohide: any DockAutohide, writeRoom: WriteRoom) async throws(DockError) -> DockSwitch {
+    public func switchedOff(room: [PilotBlock.BarInset], autohide: any DockAutohide, delay: any DockRevealDelay,
+                            writeRoom: WriteRoom) async throws(DockError) -> DockSwitch {
         guard isOn else { return self }
         do { try await writeRoom([]) } catch { throw .room(error) }
-        do { try await autohide.setHidden(savedAutohide ?? false) } catch {
+        do { try await restore(autohide: autohide, delay: delay) } catch {
+            try? await autohide.setHidden(true)
             try? await writeRoom(room)
-            throw .autohide(error)
+            throw error
         }
         return .off
     }
 
     /// At launch with the switch on: the Dock's auto-hide now is Sven's when it is off (a clean quit put his back, and he may
-    /// have changed it since); on, it is the one a crash left or his own, and the saved value stands. Then hides it again.
-    public func resumed(autohide: any DockAutohide) async throws(DockError) -> DockSwitch {
+    /// have changed it since); on, it is the one a crash left or his own, and the saved value stands. The delay likewise:
+    /// any value but `hiddenDelay` is his. Then both are set again.
+    public func resumed(autohide: any DockAutohide, delay: any DockRevealDelay) async throws(DockError) -> DockSwitch {
         guard isOn else { return self }
+        var next = self
         do {
             let now = try await autohide.isHidden()
             if !now { try await autohide.setHidden(true) }
-            return DockSwitch(isOn: true, savedAutohide: now ? savedAutohide ?? true : false)
+            next.savedAutohide = now ? savedAutohide ?? true : false
         } catch { throw .autohide(error) }
+        do {
+            let now = try await delay.read()
+            if now != Self.hiddenDelay {
+                (next.savedDelay, next.delaySaved) = (now, true)
+                try await delay.write(Self.hiddenDelay)
+            } else if delaySaved != true {
+                // Found at the hidden delay with none saved: a Pilot from before the delay never set it, so macOS's own.
+                (next.savedDelay, next.delaySaved) = (nil, true)
+            }
+        } catch { throw .delay(error) }
+        return next
     }
 
-    /// Quitting with the switch on: the saved auto-hide goes back; the switch stays on for the next launch.
-    public func restoredForQuit(autohide: any DockAutohide) async throws(DockError) {
+    /// Quitting with the switch on: the saved auto-hide and delay go back; the switch stays on for the next launch.
+    public func restoredForQuit(autohide: any DockAutohide, delay: any DockRevealDelay) async throws(DockError) {
         guard isOn else { return }
+        try await restore(autohide: autohide, delay: delay)
+    }
+
+    /// Sven's auto-hide, then his delay, put back.
+    private func restore(autohide: any DockAutohide, delay: any DockRevealDelay) async throws(DockError) {
         do { try await autohide.setHidden(savedAutohide ?? false) } catch { throw .autohide(error) }
+        guard delaySaved == true, savedDelay != Self.hiddenDelay else { return }
+        do { try await delay.write(savedDelay) } catch { throw .delay(error) }
     }
 }
 

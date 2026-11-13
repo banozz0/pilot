@@ -23,6 +23,8 @@ final class DockController {
     @ObservationIgnored private let defaults: UserDefaults
     /// The Dock's auto-hide; the sandbox puts a file in its place (DockFixture).
     @ObservationIgnored var autohide: any DockAutohide
+    /// The Dock's reveal delay, so it never rises at the screen's foot under the pill; the sandbox puts a file in its place.
+    @ObservationIgnored var delay: any DockRevealDelay = DefaultsDockDelay()
     /// The Dock's pins; the sandbox reads a copy of its preferences.
     @ObservationIgnored var readPins: @MainActor () -> [DockPin]
     @ObservationIgnored var writeRoom: DockSwitch.WriteRoom
@@ -41,7 +43,10 @@ final class DockController {
             if settings.size != oldValue.size { follow() }
         }
     }
-    private(set) var pins: [DockPin] = []
+    /// The macOS Dock's own pins, as last read.
+    private(set) var dockPins: [DockPin] = []
+    /// The dock's pins: the Dock's, less the ones taken out, then the ones kept (DockSettings.pinned).
+    var pins: [DockPin] { settings.pinned(dockPins) }
     private(set) var running: [DockRunning] = []
     private(set) var busy = false
     /// The last refusal, shown on the Menu bar page; nil after a clean switch.
@@ -71,7 +76,7 @@ final class DockController {
         busy = true
         Task {
             defer { busy = false }
-            do { state = try await state.resumed(autohide: autohide) } catch {
+            do { state = try await state.resumed(autohide: autohide, delay: delay) } catch {
                 problem = String(describing: error)
                 docklog.error("dock resume: \(String(describing: error), privacy: .public)")
             }
@@ -82,7 +87,7 @@ final class DockController {
 
     /// On screen: the pins read, the running apps followed as apps launch and quit, the pill shown.
     private func shown() {
-        pins = readPins()
+        dockPins = readPins()
         running = Self.runningApps()
         let centre = NSWorkspace.shared.notificationCenter
         tokens = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification].map { name in
@@ -112,8 +117,8 @@ final class DockController {
         Task {
             defer { busy = false }
             do {
-                state = on ? try await state.switchedOn(room, autohide: autohide, writeRoom: writeRoom)
-                    : try await state.switchedOff(room: room, autohide: autohide, writeRoom: writeRoom)
+                state = on ? try await state.switchedOn(room, autohide: autohide, delay: delay, writeRoom: writeRoom)
+                    : try await state.switchedOff(room: room, autohide: autohide, delay: delay, writeRoom: writeRoom)
             } catch {
                 problem = String(describing: error)
                 docklog.error("dock \(on ? "on" : "off", privacy: .public): \(String(describing: error), privacy: .public)")
@@ -127,10 +132,24 @@ final class DockController {
 
     /// Quitting: Sven's auto-hide goes back, the switch stays on for the next launch. Never throws: quit goes on.
     func restoreForQuit() async {
-        do { try await state.restoredForQuit(autohide: autohide) } catch {
+        do { try await state.restoredForQuit(autohide: autohide, delay: delay) } catch {
             docklog.error("dock quit: \(String(describing: error), privacy: .public)")
         }
     }
+
+    /// Keep in Dock: the app joins Pilot's own pins (never the macOS Dock's list).
+    func keep(_ app: DockApp, dock: [DockPin]? = nil) {
+        guard let url = app.url else { return }
+        settings.keep(DockPin(bundleID: app.bundleID, url: url, name: app.name), dock: dock ?? current)
+    }
+
+    /// Remove from Dock: out of Pilot's dock alone; the macOS Dock's list is never written.
+    func unpin(_ app: DockApp, dock: [DockPin]? = nil) {
+        settings.unpin(app.key, dock: dock ?? current)
+    }
+
+    /// The Dock's pins as last read, or read now while the dock is off.
+    private var current: [DockPin] { dockPins.isEmpty ? readPins() : dockPins }
 
     /// The icons: pins, then the other running apps, each with its windows from Pilot's tiler (`byApp`, by bundle id).
     static func apps(pins: [DockPin], running: [DockRunning], byApp: [String: [AeroWindow]], front: String?) -> [DockApp] {
@@ -139,7 +158,8 @@ final class DockController {
 
     /// The observers dump's line.
     var line: String {
-        "dock: \(state.isOn ? "on" : "off"), saved autohide \(state.savedAutohide.map(String.init) ?? "none"), size \(settings.size.rawValue), room "
+        "dock: \(state.isOn ? "on" : "off"), saved autohide \(state.savedAutohide.map(String.init) ?? "none"), saved delay "
+            + (state.delaySaved == true ? state.savedDelay.map { String($0) } ?? "absent" : "none") + ", size \(settings.size.rawValue), room "
             + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.joined(separator: " ")
     }
 
