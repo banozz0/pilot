@@ -469,7 +469,7 @@ struct LookPreview: View {
     @State private var image: NSImage?
 
     var body: some View {
-        LookDesk(look: look, picture: (still ?? image).map { Image(nsImage: $0) })
+        LookDesk(colors: look.colors, picture: (still ?? image).map { Image(nsImage: $0) })
             .task { await read() }
             .onReceive(NotificationCenter.default.publisher(for: WallpaperSwitch.changed)) { _ in Task { await read() } }
             .accessibilityHidden(true)
