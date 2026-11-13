@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "night-train",
+  "title": "Night Train",
+  "dark": true,
+  "palette": {
+    "background": "#0E141D",
+    "dark_background": "#0A0E14",
+    "darker_background": "#171D26",
+    "lighter_background": "#212730",
+    "foreground": "#E0E8F0",
+    "dark_foreground": "#777E86",
+    "light_foreground": "#BAC2CA",
+    "bright_foreground": "#F0F4F8",
+    "accent": "#B0CFFC",
+    "selection": "#323D4E",
+    "muted": "#5E656D",
+    "red": "#C9756F",
+    "yellow": "#D6C069",
+    "green": "#79BBB7",
+    "cyan": "#6B9BE0",
+    "blue": "#B0CFFC",
+    "magenta": "#A98EEA",
+    "bright_red": "#D89C97",
+    "bright_yellow": "#E1D293",
+    "bright_green": "#9FCECB",
+    "bright_cyan": "#94B7E9",
+    "bright_blue": "#C6DCFD",
+    "bright_magenta": "#C1AEF0",
+    "native_line": "#2C333C",
+    "native_line2": "#40464F",
+    "native_text3": "#7A8189",
+    "native_second": "#D6C069",
+    "native_third": "#6B9BE0",
+    "native_graph1": "#B0CFFC",
+    "native_graph2": "#D6C069",
+    "native_graph3": "#79BBB7",
+    "native_selection": "#B0CFFC"
+  },
+  "styles": [
+    "instrument",
+    "toybox"
+  ],
+  "wallpapers": [
+    "wallpapers"
+  ],
+  "adapters": {
+    "ghostty": {},
+    "zed": {},
+    "obsidian": {}
+  }
+}
