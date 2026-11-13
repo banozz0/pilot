@@ -124,6 +124,7 @@ struct PageView: View {
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         case .pilotMenu: PilotMenuPage()
+        case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)

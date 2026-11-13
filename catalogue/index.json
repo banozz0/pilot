@@ -1063,6 +1063,77 @@
       ]
     },
     {
+      "id": "beacon",
+      "title": "Beacon",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#191919",
+        "dark_background": "#121212",
+        "darker_background": "#212121",
+        "lighter_background": "#2B2B2B",
+        "foreground": "#E3E6E2",
+        "dark_foreground": "#7E807E",
+        "light_foreground": "#BFC1BE",
+        "bright_foreground": "#F1F2F0",
+        "accent": "#F5D39F",
+        "selection": "#494236",
+        "muted": "#666765",
+        "red": "#CD887F",
+        "yellow": "#EDD685",
+        "green": "#9EBF9E",
+        "cyan": "#93C0BA",
+        "blue": "#95B3B9",
+        "magenta": "#B3A9B3",
+        "bright_red": "#DBA9A3",
+        "bright_yellow": "#F2E1A7",
+        "bright_green": "#B9D1B9",
+        "bright_cyan": "#B1D2CD",
+        "bright_blue": "#B3C8CD",
+        "bright_magenta": "#C8C1C8",
+        "native_line": "#363636",
+        "native_line2": "#484948",
+        "native_text3": "#818381",
+        "native_second": "#93C0BA",
+        "native_third": "#EDD685",
+        "native_graph1": "#F5D39F",
+        "native_graph2": "#93C0BA",
+        "native_graph3": "#9EBF9E",
+        "native_selection": "#F5D39F"
+      },
+      "preview": null,
+      "digest": "dbd73163e4209cea5af9bac09a27c966242878f0c85d10dda34cf808d754f58d",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "b25c3a5d78f61ba562bcc7e683c9689800c25f10894473e5211e5db7eec0ed1a",
+          "size": 2475,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "0a367783960cf4a54515ab95cc5ab98a5d7417b7e376e58e44043407649e7ac7",
+          "size": 1217,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/beacon-lighthouse-in-fog.heic",
+          "sha256": "62c078581d52bb9dff24ec7ab09b05fbd9d6cf47c9b6b81ccad36769e87e3477",
+          "size": 142093,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/beacon-tall.heic",
+          "sha256": "35c67a4ceec31ededa7d78423d8d12bb7dcebc5538012ee81f29ff06dda9eac4",
+          "size": 144821,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "catppuccin",
       "title": "Catppuccin",
       "dark": true,
@@ -1218,6 +1289,148 @@
           "path": "wallpapers/celadon-tea-hills.heic",
           "sha256": "0e7114e5618a0b6addf00ca72d4ea4be5a14826d72d31ea186938adfe533d8b7",
           "size": 466149,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "comet",
+      "title": "Comet",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#1A1238",
+        "dark_background": "#120D27",
+        "darker_background": "#231B40",
+        "lighter_background": "#2D2549",
+        "foreground": "#F0EAFA",
+        "dark_foreground": "#857E99",
+        "light_foreground": "#C9C3D7",
+        "bright_foreground": "#F8F4FC",
+        "accent": "#6FD8FF",
+        "selection": "#2D3E64",
+        "muted": "#6B6482",
+        "red": "#F27A9A",
+        "yellow": "#F5D29A",
+        "green": "#8FE0B8",
+        "cyan": "#6FD8FF",
+        "blue": "#8C8CFF",
+        "magenta": "#E86BC3",
+        "bright_red": "#F69FB6",
+        "bright_yellow": "#F8DFB6",
+        "bright_green": "#AEE9CC",
+        "bright_cyan": "#97E3FF",
+        "bright_blue": "#ACACFF",
+        "bright_magenta": "#EE94D4",
+        "native_line": "#393154",
+        "native_line2": "#4C4565",
+        "native_text3": "#857E99",
+        "native_second": "#E86BC3",
+        "native_third": "#F5D29A",
+        "native_graph1": "#6FD8FF",
+        "native_graph2": "#E86BC3",
+        "native_graph3": "#8FE0B8",
+        "native_selection": "#6FD8FF"
+      },
+      "preview": null,
+      "digest": "599670bf7ab16e72dec42c52eeca412d432962ecf8cee6c35f5548aafc416e55",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "220411892d7bb82cf8e7febd613df54a6fe5229cf5b2f4171b5003b67d2d9b56",
+          "size": 2335,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "2fa29460b1d0f7ce0ec882e697c0f76f0a247be9d44cb58515fde9c0e008a6af",
+          "size": 1215,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/comet-mirror-lake.heic",
+          "sha256": "cc8eddc72e0c99a12170831093e41becccfaf0c42948cd1a1576f6994ca95bdf",
+          "size": 489507,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/comet-tall.heic",
+          "sha256": "e0c895480fd9b89330a1061fe5626e9b93486dc2eda686f1f88ef364c77f5584",
+          "size": 298819,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "cumulus",
+      "title": "Cumulus",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#07302F",
+        "dark_background": "#052221",
+        "darker_background": "#103837",
+        "lighter_background": "#1B4140",
+        "foreground": "#EAF2E8",
+        "dark_foreground": "#78918C",
+        "light_foreground": "#C1CFC7",
+        "bright_foreground": "#F4F8F4",
+        "accent": "#F7C843",
+        "selection": "#3C5133",
+        "muted": "#5D7A75",
+        "red": "#FF7A6A",
+        "yellow": "#F7C843",
+        "green": "#7FD86E",
+        "cyan": "#3FD6E0",
+        "blue": "#4FA8FF",
+        "magenta": "#E28FD8",
+        "bright_red": "#FF9F94",
+        "bright_yellow": "#F9D778",
+        "bright_green": "#A3E397",
+        "bright_cyan": "#75E1E9",
+        "bright_blue": "#80C0FF",
+        "bright_magenta": "#EAAEE3",
+        "native_line": "#274C4A",
+        "native_line2": "#3C5D5B",
+        "native_text3": "#7F9792",
+        "native_second": "#3FD6E0",
+        "native_third": "#4FA8FF",
+        "native_graph1": "#F7C843",
+        "native_graph2": "#3FD6E0",
+        "native_graph3": "#7FD86E",
+        "native_selection": "#F7C843"
+      },
+      "preview": null,
+      "digest": "20b6413d693565ea23e175c2d4054f5e574b0595841602ad0ec87fdd98de6be7",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "9565ef2d7fefca56f88d1a2773f86b2e345abe27421f4fc2bdc40b90790dfbbc",
+          "size": 2354,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "ce1f590c0532c0dd0ee13b62285cf995687478e024cc0b959a8140a414961943",
+          "size": 1219,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/cumulus-tall.heic",
+          "sha256": "7138001bc90e1ff41cb3986aa0fadd64d875cb46dcb5d855e2f2c4b1a8194777",
+          "size": 457551,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/cumulus-thunderheads.heic",
+          "sha256": "f9adceb9719ee883ecf035cd9329b51a832bb9250777d9d6037d9065206d13e8",
+          "size": 644874,
           "executable": false
         }
       ]
@@ -1537,6 +1750,77 @@
       ]
     },
     {
+      "id": "isle",
+      "title": "Isle",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#1A1640",
+        "dark_background": "#120F2D",
+        "darker_background": "#231F48",
+        "lighter_background": "#2D2951",
+        "foreground": "#ECE8FA",
+        "dark_foreground": "#837F9D",
+        "light_foreground": "#C6C2D9",
+        "bright_foreground": "#F6F4FC",
+        "accent": "#A99BFF",
+        "selection": "#39336A",
+        "muted": "#6A6687",
+        "red": "#F07A8A",
+        "yellow": "#F6C177",
+        "green": "#9ED3A6",
+        "cyan": "#8FD0E8",
+        "blue": "#9A93E8",
+        "magenta": "#F2A7C3",
+        "bright_red": "#F49FAB",
+        "bright_yellow": "#F9D29D",
+        "bright_green": "#B9DFBF",
+        "bright_cyan": "#AEDDEE",
+        "bright_blue": "#B6B1EE",
+        "bright_magenta": "#F6C0D4",
+        "native_line": "#38345B",
+        "native_line2": "#4C486C",
+        "native_text3": "#8682A0",
+        "native_second": "#F6C177",
+        "native_third": "#F2A7C3",
+        "native_graph1": "#A99BFF",
+        "native_graph2": "#F6C177",
+        "native_graph3": "#9ED3A6",
+        "native_selection": "#A99BFF"
+      },
+      "preview": null,
+      "digest": "31c25dc897d70be5f639001cf3f4f01ee00176e1df5f6696a4e0778a5f1d5259",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "2d3a6249dd66d893dbb81eb02c8442c6c581573e140f68cac634ac5573d6e1fd",
+          "size": 2493,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "f13e306daa04098802b598dcd364e5807d5c931326870410fc3ad34936cf29c1",
+          "size": 1213,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/isle-floating-isle.heic",
+          "sha256": "a1d7215e5dfa9740c342f4fb70687e7e590cbe7ffe2056df7f2cc88cf240cd25",
+          "size": 359110,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/isle-tall.heic",
+          "sha256": "45f2d06e91d726d2ecadb034ee695c5ea64a5432c41c0755585674db15924225",
+          "size": 321661,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "jade",
       "title": "Jade",
       "dark": true,
@@ -1691,6 +1975,77 @@
       ]
     },
     {
+      "id": "maple",
+      "title": "Maple",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#1E190E",
+        "dark_background": "#15120A",
+        "darker_background": "#272116",
+        "lighter_background": "#312B1F",
+        "foreground": "#F2E2CC",
+        "dark_foreground": "#887E6D",
+        "light_foreground": "#CCBEAA",
+        "bright_foreground": "#F8F0E6",
+        "accent": "#DD3025",
+        "selection": "#481E13",
+        "muted": "#6F6556",
+        "red": "#DD3025",
+        "yellow": "#E67F48",
+        "green": "#BB8250",
+        "cyan": "#AA887A",
+        "blue": "#AC838C",
+        "magenta": "#C87370",
+        "bright_red": "#E76A62",
+        "bright_yellow": "#EDA37B",
+        "bright_green": "#CEA581",
+        "bright_cyan": "#C2A99F",
+        "bright_blue": "#C3A6AC",
+        "bright_magenta": "#D79A98",
+        "native_line": "#3D3629",
+        "native_line2": "#50483B",
+        "native_text3": "#8B8170",
+        "native_second": "#E67F48",
+        "native_third": "#BB8250",
+        "native_graph1": "#DD3025",
+        "native_graph2": "#E67F48",
+        "native_graph3": "#BB8250",
+        "native_selection": "#DD3025"
+      },
+      "preview": null,
+      "digest": "e358563b7e89ee2502617a182478bada8ffb86ff4c39b22f1cc3dd6ba67d919b",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "fca17e9918a7585750dd1eb61bfffaf99e15dff645d3c3877730592ccd4159d5",
+          "size": 2323,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "502c24af7d52ab373e53d5032d7fb8376a4b8329e1da5349e59a1f31f527725f",
+          "size": 1215,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/maple-footbridge.heic",
+          "sha256": "3f77c22d94abcba6ea8b6602d369c0e607f3d76fc7ebdad80a34831bcb7eaddc",
+          "size": 700008,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/maple-tall.heic",
+          "sha256": "d818d7d437eacb52b3d2da58b4d29a8490d362338efdf933a86e460a623967ff",
+          "size": 293409,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "matte-black",
       "title": "Matte Black",
       "dark": true,
@@ -1775,6 +2130,290 @@
       ]
     },
     {
+      "id": "meadow",
+      "title": "Meadow",
+      "dark": false,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#F1F1DE",
+        "dark_background": "#E5E5D3",
+        "darker_background": "#F4F4E5",
+        "lighter_background": "#F7F7ED",
+        "foreground": "#1E2A1C",
+        "dark_foreground": "#888E7D",
+        "light_foreground": "#444E3F",
+        "bright_foreground": "#0F150E",
+        "accent": "#2379AB",
+        "selection": "#C4D7D3",
+        "muted": "#A1A594",
+        "red": "#955064",
+        "yellow": "#7B7643",
+        "green": "#3C7D60",
+        "cyan": "#2586A4",
+        "blue": "#2379AB",
+        "magenta": "#775BA4",
+        "bright_red": "#6B3A48",
+        "bright_yellow": "#595530",
+        "bright_green": "#2B5A45",
+        "bright_cyan": "#1B6076",
+        "bright_blue": "#19577B",
+        "bright_magenta": "#564276",
+        "native_line": "#EAEBE0",
+        "native_line2": "#D4D6CC",
+        "native_text3": "#666E5E",
+        "native_second": "#7B7643",
+        "native_third": "#955064",
+        "native_graph1": "#2379AB",
+        "native_graph2": "#7B7643",
+        "native_graph3": "#3C7D60",
+        "native_selection": "#2379AB"
+      },
+      "preview": null,
+      "digest": "f3126fd2f261d7df8fb6905989ba87e950dd7f4d88320c4c666361dd578c2e66",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "0f7e0369b4d564632dd65bb12fd11390adef5354d69c5cb55f80c0bc7e63d5a4",
+          "size": 2335,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "e20772f4e4ea35bec7c997569ab3187847a7bd1eb70001d172827d27f30545eb",
+          "size": 1218,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/meadow-sunflowers.heic",
+          "sha256": "353e6dbb3be77eb5145808c4603c88c93ac26d3067e2d4b996d9f70522697f95",
+          "size": 775203,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/meadow-tall.heic",
+          "sha256": "27a2087fc322b1b55e7c0a25cc9b662706156eeb7557e3553268d7e7f4872f41",
+          "size": 503585,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "mesa",
+      "title": "Mesa",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#28272A",
+        "dark_background": "#1C1B1D",
+        "darker_background": "#302F31",
+        "lighter_background": "#3A3839",
+        "foreground": "#F2E3D3",
+        "dark_foreground": "#8D857E",
+        "light_foreground": "#CEC1B5",
+        "bright_foreground": "#F8F1E9",
+        "accent": "#EF5A31",
+        "selection": "#54322C",
+        "muted": "#756E6A",
+        "red": "#E56759",
+        "yellow": "#E7B483",
+        "green": "#B1AC7F",
+        "cyan": "#A6B6B7",
+        "blue": "#99A1C4",
+        "magenta": "#D296AE",
+        "bright_red": "#EC9287",
+        "bright_yellow": "#EEC9A6",
+        "bright_green": "#C7C3A3",
+        "bright_cyan": "#BFCACB",
+        "bright_blue": "#B6BBD5",
+        "bright_magenta": "#DFB3C5",
+        "native_line": "#454242",
+        "native_line2": "#575352",
+        "native_text3": "#978E86",
+        "native_second": "#99A1C4",
+        "native_third": "#E7B483",
+        "native_graph1": "#EF5A31",
+        "native_graph2": "#99A1C4",
+        "native_graph3": "#B1AC7F",
+        "native_selection": "#EF5A31"
+      },
+      "preview": null,
+      "digest": "6cb696db64a562d2fe3762795d810d7185fb69933ecbf73773889f1ceafbba06",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "0dfda78a834b2d721e40b12a1ea8fe7e1f885fa82fd01c066b3f692388904c48",
+          "size": 2466,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "893c03add5a605b5dc34ef185b91f47ccfaad7e0979b2f963c4c8cde3690088b",
+          "size": 1213,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/mesa-milky-way.heic",
+          "sha256": "a1714ca44974be3a2e281e77a8638be3c000ac5471f2776d2a3498cab0fbc6aa",
+          "size": 624491,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/mesa-tall.heic",
+          "sha256": "f2d015b34b964f14c7756fefee254f6e01dbfe34a6a7d01bb914283b725816e2",
+          "size": 498525,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "neon-rain",
+      "title": "Neon Rain",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#150D1B",
+        "dark_background": "#0F0913",
+        "darker_background": "#1E1624",
+        "lighter_background": "#29212F",
+        "foreground": "#F2E6F5",
+        "dark_foreground": "#847A88",
+        "light_foreground": "#CABFCE",
+        "bright_foreground": "#F8F2FA",
+        "accent": "#FF4FA3",
+        "selection": "#481C39",
+        "muted": "#695F6E",
+        "red": "#FF5C7A",
+        "yellow": "#F5D76E",
+        "green": "#6EF2B0",
+        "cyan": "#36E2EC",
+        "blue": "#6C8CFF",
+        "magenta": "#FF4FA3",
+        "bright_red": "#FF8A9F",
+        "bright_yellow": "#F8E297",
+        "bright_green": "#97F6C6",
+        "bright_cyan": "#6EEAF1",
+        "bright_blue": "#95ACFF",
+        "bright_magenta": "#FF80BD",
+        "native_line": "#352D3B",
+        "native_line2": "#49414F",
+        "native_text3": "#847A88",
+        "native_second": "#36E2EC",
+        "native_third": "#6C8CFF",
+        "native_graph1": "#FF4FA3",
+        "native_graph2": "#36E2EC",
+        "native_graph3": "#6EF2B0",
+        "native_selection": "#FF4FA3"
+      },
+      "preview": null,
+      "digest": "b8058b3fdf4179f058fe62a0b39123415848d814493f342e38f9227acaca93d9",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "d06b9e33aa7eb3ba4bf168d8da571d3cbe13a6e47f3042dfb98ef40d45401349",
+          "size": 2328,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "c8df7d175abf96c55947ffe5346314667a59e87967b19d75f4f7c4b5b72d4e30",
+          "size": 1223,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/neon-rain-tall.heic",
+          "sha256": "0b08b2ca017523cad353c8a80abf7253f1c36354ef52b0b6c779e813ef7f543c",
+          "size": 282798,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/neon-rain-wet-alley.heic",
+          "sha256": "f82199471b2a7c966192c93860cf7105f6388e81b0a4204bb83e4d13cb1b9d2f",
+          "size": 289621,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "night-train",
+      "title": "Night Train",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#0E141D",
+        "dark_background": "#0A0E14",
+        "darker_background": "#171D26",
+        "lighter_background": "#212730",
+        "foreground": "#E0E8F0",
+        "dark_foreground": "#777E86",
+        "light_foreground": "#BAC2CA",
+        "bright_foreground": "#F0F4F8",
+        "accent": "#B0CFFC",
+        "selection": "#323D4E",
+        "muted": "#5E656D",
+        "red": "#C9756F",
+        "yellow": "#D6C069",
+        "green": "#79BBB7",
+        "cyan": "#6B9BE0",
+        "blue": "#B0CFFC",
+        "magenta": "#A98EEA",
+        "bright_red": "#D89C97",
+        "bright_yellow": "#E1D293",
+        "bright_green": "#9FCECB",
+        "bright_cyan": "#94B7E9",
+        "bright_blue": "#C6DCFD",
+        "bright_magenta": "#C1AEF0",
+        "native_line": "#2C333C",
+        "native_line2": "#40464F",
+        "native_text3": "#7A8189",
+        "native_second": "#D6C069",
+        "native_third": "#6B9BE0",
+        "native_graph1": "#B0CFFC",
+        "native_graph2": "#D6C069",
+        "native_graph3": "#79BBB7",
+        "native_selection": "#B0CFFC"
+      },
+      "preview": null,
+      "digest": "976925a306bb3b3eb09b0396b02e987a5384fd1f8bbd5301b09a4c4efe2b611c",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "f4e474adace6f65489af68eb33aa06a9c7ed15c6f9ad7e4518a58bfeeca653fa",
+          "size": 2343,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "f97577a2e61a7b7c7ca1ccd77d70928aa11a2ea9f3b7791519aeeb5afa0e470a",
+          "size": 1227,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/night-train-tall.heic",
+          "sha256": "64ffaf5884b5e1367cfc0fa736405d9b6e254d344d47927b35c9edd3cb255b48",
+          "size": 249487,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/night-train-viaduct.heic",
+          "sha256": "2d0b3158fcd6342d15572e07f307c0753ec0a00299fc82639869e0ca3cd003a4",
+          "size": 282083,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "nord",
       "title": "Nord",
       "dark": true,
@@ -1847,6 +2486,77 @@
           "path": "wallpapers/nord-tall.heic",
           "sha256": "d517119367664bc6a6c86436b297cc283e23e14ef5c9e90f02062fe094fe2d65",
           "size": 317092,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "pier",
+      "title": "Pier",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#0D293E",
+        "dark_background": "#091D2B",
+        "darker_background": "#163146",
+        "lighter_background": "#213B4F",
+        "foreground": "#EEF0F6",
+        "dark_foreground": "#7E8C9A",
+        "light_foreground": "#C6CCD5",
+        "bright_foreground": "#F6F8FA",
+        "accent": "#FE4C45",
+        "selection": "#423140",
+        "muted": "#627584",
+        "red": "#F44C63",
+        "yellow": "#FF9F6D",
+        "green": "#8BBB92",
+        "cyan": "#70BCC1",
+        "blue": "#7090C8",
+        "magenta": "#F17FB0",
+        "bright_red": "#F77E8F",
+        "bright_yellow": "#FFBA96",
+        "bright_green": "#ABCEB1",
+        "bright_cyan": "#98CFD2",
+        "bright_blue": "#98AFD7",
+        "bright_magenta": "#F5A3C6",
+        "native_line": "#2D4659",
+        "native_line2": "#42586A",
+        "native_text3": "#828F9D",
+        "native_second": "#70BCC1",
+        "native_third": "#FF9F6D",
+        "native_graph1": "#FE4C45",
+        "native_graph2": "#70BCC1",
+        "native_graph3": "#8BBB92",
+        "native_selection": "#FE4C45"
+      },
+      "preview": null,
+      "digest": "9b7fde7affceda1ed62a7d4e4f1f3a1fd034e57dd1c80fd94ec463118e1e90cf",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "3c0fb6cbff2512c56ef67b0b9f235ecb55171d74e00827639703c6b0cb0c945f",
+          "size": 2332,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "3b19863ffb8720b1091bef8d1a82f2b1bb30e240a85852379b41cc23ef2a0749",
+          "size": 1213,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/pier-blue-hour.heic",
+          "sha256": "161b35f25427cf3c308537cff9fe4fdcd8d3d1ef7f894d6dea48311ca8fc8a6f",
+          "size": 484187,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/pier-tall.heic",
+          "sha256": "893f17e0606bf7f62eb0548430f07e4026ad559bf7b494d14bb1d1c018d126cc",
+          "size": 349633,
           "executable": false
         }
       ]
@@ -2013,6 +2723,148 @@
           "path": "wallpapers/retro-82-zen-boat.heic",
           "sha256": "5b56fc07c3e1a7bd8a30e590cb54b2a131a18c04a3f4579136d155d2ca24b562",
           "size": 858887,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "sakura",
+      "title": "Sakura",
+      "dark": false,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#FBF2F0",
+        "dark_background": "#EEE6E4",
+        "darker_background": "#FCF5F3",
+        "lighter_background": "#FDF8F7",
+        "foreground": "#33232B",
+        "dark_foreground": "#978A8E",
+        "light_foreground": "#57484E",
+        "bright_foreground": "#1A1216",
+        "accent": "#C8346A",
+        "selection": "#F0C8D3",
+        "muted": "#AFA3A5",
+        "red": "#B8322F",
+        "yellow": "#93620F",
+        "green": "#4F7A44",
+        "cyan": "#2F7A82",
+        "blue": "#4F64A0",
+        "magenta": "#A0428C",
+        "bright_red": "#842422",
+        "bright_yellow": "#6A470B",
+        "bright_green": "#395831",
+        "bright_cyan": "#22585E",
+        "bright_blue": "#394873",
+        "bright_magenta": "#733065",
+        "native_line": "#F1EBEB",
+        "native_line2": "#DDD6D6",
+        "native_text3": "#7A6C71",
+        "native_second": "#4F7A44",
+        "native_third": "#4F64A0",
+        "native_graph1": "#C8346A",
+        "native_graph2": "#4F7A44",
+        "native_graph3": "#4F7A44",
+        "native_selection": "#C8346A"
+      },
+      "preview": null,
+      "digest": "afd0b46a4fe4fe18a7c2cc2dffb9ff741479b9bb8fe2f9f6af927c15732daa78",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "b97e416c07890d89daf5bc59ff361ab08122ad9c5d7246c580a76fcd03cb4ee7",
+          "size": 2365,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "ee5bd3739e3677a0450cc1d47924e283e8eb1c63c0c3683d2e67168bf612077d",
+          "size": 1218,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/sakura-cherry-above-the-clouds.heic",
+          "sha256": "23c5a60380efdc37d89aa8ec5b89940888df68e8437fb58536be3ede61fd61d4",
+          "size": 576085,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/sakura-tall.heic",
+          "sha256": "0092a76e7d117d8808d6e3cdb0ef5c0086b527611c5714f5a697283ac0dfc7cc",
+          "size": 592212,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "sky-whale",
+      "title": "Sky Whale",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#231C42",
+        "dark_background": "#18142E",
+        "darker_background": "#2C2549",
+        "lighter_background": "#362F52",
+        "foreground": "#F3ECF7",
+        "dark_foreground": "#8B849C",
+        "light_foreground": "#CEC7D6",
+        "bright_foreground": "#F9F6FB",
+        "accent": "#FFB38A",
+        "selection": "#533D52",
+        "muted": "#726B87",
+        "red": "#F2788A",
+        "yellow": "#FFD49A",
+        "green": "#9FD8B4",
+        "cyan": "#8FD4F0",
+        "blue": "#8FA0F2",
+        "magenta": "#D9A0E8",
+        "bright_red": "#F69EAB",
+        "bright_yellow": "#FFE0B6",
+        "bright_green": "#BAE3C9",
+        "bright_cyan": "#AEE0F4",
+        "bright_blue": "#AEBBF6",
+        "bright_magenta": "#E4BBEE",
+        "native_line": "#413A5C",
+        "native_line2": "#544D6C",
+        "native_text3": "#8E879F",
+        "native_second": "#D9A0E8",
+        "native_third": "#8FD4F0",
+        "native_graph1": "#FFB38A",
+        "native_graph2": "#D9A0E8",
+        "native_graph3": "#9FD8B4",
+        "native_selection": "#FFB38A"
+      },
+      "preview": null,
+      "digest": "78cbeb2a73f95384a8954c50a8a191fabf1ba3a27bd05c72266f36bb4acdc0a8",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "a1f9d6a4d52cf4c131fdb9b8ac2ecdf7cf29ef97ba7443ed476210178710cf86",
+          "size": 2372,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "e218e4bef2b7abf6419350246e6906003e7f065987f072756aae48030d54a482",
+          "size": 1223,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/sky-whale-tall.heic",
+          "sha256": "9e235d15fb26c6614fe0300dd8def90d7bd3f4e448e5ef76e4537d9c733d88ee",
+          "size": 313494,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/sky-whale-whale-at-sunset.heic",
+          "sha256": "affbc48e7db624be011e20012265decc738992995761b033516cf6f878f98589",
+          "size": 434567,
           "executable": false
         }
       ]

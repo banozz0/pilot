@@ -32,10 +32,26 @@ final class Look {
     var themeID: String {
         didSet {
             defaults.set(themeID, forKey: Key.theme)
+            // A removed theme is never worn hidden: Restore default, a style's fallback or a pick brings it back (Sven's
+            // coordinator, after build 2445).
+            if hiddenThemes.contains(themeID) { hiddenThemes.remove(themeID) }
             if pack == nil { defaults.set(try? ThemeDigest.encoded(ThemeNativePalette.stock(themeID)), forKey: "look.appliedPalette") }
             resolve()
         }
     }
+    /// Pilot's own themes the person removed (Sven on build 2445: "i should be able to remove even pre installed themes"):
+    /// left out of Look's cards, the desktop menu and `pilot theme colours|list`; Look › Catalogue's Get brings one back.
+    /// The pack itself stays in the app, so nothing is deleted. ThemeCoordinator.delete and restore are the way in.
+    var hiddenThemes: Set<String> { didSet { defaults.set(hiddenThemes.sorted(), forKey: Key.hiddenThemes) } }
+
+    /// Whether the designed theme `id` shows: not one the person removed.
+    func shows(_ id: String) -> Bool { !hiddenThemes.contains(id) }
+
+    /// The designed themes `style` can wear, every style's when nil, less the ones removed.
+    func shownThemes(for style: String? = nil) -> [PilotTheme] {
+        (style.map(PilotTheme.designed(for:)) ?? PilotTheme.designed).filter { shows($0.id) }
+    }
+
     /// Glass behind the window and every panel, popover and HUD, else Solid (Sven, 2026-10-09: off on a fresh install).
     var glass: Bool { didSet { defaults.set(glass, forKey: Key.glass) } }
     /// From 0 % (solid) to 100 % (33 by default): how see-through the window's surfaces are over Glass (Layers).
@@ -181,7 +197,7 @@ final class Look {
 
     private enum Key {
         static let layout = "look.layout", style = "look.style", theme = "look.theme", glass = "look.glass", transparency = "look.transparency",
-                   glassBlur = "look.glassBlur"
+                   glassBlur = "look.glassBlur", hiddenThemes = "look.hiddenThemes"
         /// The Strength slider's and the material's (Solid, Tinted or Glass), read only to carry them over to Transparency
         /// and Glass; left in place, so an older Pilot still reads them.
         static let strength = "look.strength", material = "look.material"
@@ -204,7 +220,9 @@ final class Look {
         if let savedStyle, savedStyle != style.rawValue { defaults.set(style.rawValue, forKey: Key.style) }
         defaults.removeObject(forKey: Key.layout)
         let saved = defaults.string(forKey: Key.theme)
-        themeID = PilotTheme.current(saved)
+        let worn = PilotTheme.current(saved)
+        themeID = worn
+        hiddenThemes = Set(defaults.stringArray(forKey: Key.hiddenThemes) ?? []).subtracting([worn])
         // A saved Strength (80 where only a material was picked) is carried over once, under Transparency's own key, as
         // the Transparency whose ground draws what it drew.
         let material = defaults.string(forKey: Key.material)
