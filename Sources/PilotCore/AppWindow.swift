@@ -632,7 +632,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: ["key engine", "keyboard engine", "password field lock", "secure input", "tiler", "health", "diagnostics", "log", "running"]
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
                      "ghostty"]
-        case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
+        case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner",
+                              "smart nudges", "pause music", "meeting", "ai limit", "quiet hours"]
         case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: []
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]

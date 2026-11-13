@@ -57,6 +57,9 @@ final class ExtensionBar {
     /// item shows everywhere until then (tests).
     @ObservationIgnored var shows: @MainActor (_ id: String, _ place: BarPlace) -> Bool = { _, _ in true }
 
+    /// Hears every bar answer as it arrives: smart nudges point it at their AI limit warning at launch (SmartNudgeCenter).
+    @ObservationIgnored var answered: @MainActor (_ id: String, _ answer: Extension.BarAnswer) -> Void = { _, _ in }
+
     @ObservationIgnored private let folder: URL
     @ObservationIgnored private let storage: ExtensionStorage
     @ObservationIgnored private let run: @Sendable (Extension.Surface, ExtensionRun.Inputs) async -> SurfaceOutcome
@@ -145,7 +148,9 @@ final class ExtensionBar {
                 continue
             }
             switch await run(bar, inputs) {
-            case .bar(let answer): (next[index].answer, next[index].problem) = (answer, nil)
+            case .bar(let answer):
+                (next[index].answer, next[index].problem) = (answer, nil)
+                answered(ext.id, answer)
             case .error(let why):
                 (next[index].answer, next[index].problem) = (nil, why)
                 dlog.error("extension bar: \(ext.id, privacy: .public) \(why, privacy: .private)")

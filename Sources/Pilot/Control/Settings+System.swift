@@ -28,6 +28,35 @@ extension SettingsSchema {
         ])
     }
 
+    /// Smart nudges (spec smart-nudges): Notifications › Smart nudges, each switch off by default. Pause music's switch
+    /// going on is what asks for Calendar, here as on the page.
+    func registerSmartNudges(_ nudges: SmartNudgeCenter) {
+        register([
+            .bool(SmartNudgeCenter.pauseKey, "Pause what plays a few minutes before a calendar event with a video link (asks for Calendar)", page: "general",
+                  standard: false, read: { nudges.pauseMusic }, write: { nudges.pauseMusic = $0 }),
+            .int(SmartNudgeCenter.minutesKey, "Pause music this many minutes before the event", page: "general", range: SmartNudges.minutes,
+                 standard: SmartNudges.standardMinutes, read: { nudges.minutes }, write: { nudges.minutes = $0 }),
+            .bool(SmartNudgeCenter.anyKey, "Pause music before any timed event, not only video calls", page: "general", standard: false,
+                  read: { nudges.anyEvent }, write: { nudges.anyEvent = $0 }),
+            .bool(SmartNudgeCenter.aiKey, "Warn once per window when an AI usage window passes the threshold (AI usage on a bar)", page: "general",
+                  standard: false, read: { nudges.aiLimit }, write: { nudges.aiLimit = $0 }),
+            .int(SmartNudgeCenter.thresholdKey, "The AI limit warning's share used, in percent", page: "general", range: SmartNudges.thresholds,
+                 standard: SmartNudges.standardThreshold, read: { nudges.threshold }, write: { nudges.threshold = $0 }),
+            .bool(SmartNudgeCenter.quietKey, "Quiet hours: hold Pilot's own alerts (smart nudges, low battery), one summary after; reminders still arrive, macOS Focus is left alone",
+                  page: "general", standard: false, read: { nudges.quietHours }, write: { nudges.quietHours = $0 }),
+            .text(SmartNudgeCenter.fromKey, "Quiet hours start, a time like 22:00", page: "general", standard: SmartNudges.standardFrom,
+                  read: { nudges.quietFrom }, write: { value throws(ControlError) in nudges.quietFrom = try Self.quietClock(SmartNudgeCenter.fromKey, value) }),
+            .text(SmartNudgeCenter.toKey, "Quiet hours end, a time like 08:00", page: "general", standard: SmartNudges.standardTo,
+                  read: { nudges.quietTo }, write: { value throws(ControlError) in nudges.quietTo = try Self.quietClock(SmartNudgeCenter.toKey, value) }),
+        ])
+    }
+
+    /// A quiet hours time as the settings keep it, "8:00" as "08:00"; bad-value for anything else.
+    nonisolated static func quietClock(_ key: String, _ value: String) throws(ControlError) -> String {
+        guard let minutes = QuietHours.minutes(value) else { throw ControlError(.badValue, "\(key) takes a time like 22:00, not \(value)") }
+        return QuietHours.clock(minutes)
+    }
+
     /// The rest of Pilot's own settings: Look's wallpaper cycle, the overlay's mode, the notes folder, recommendations,
     /// This Mac's public IP, Update's self-updating casks and Pilot's switch. The switch's keys wait on the Allow gate, as
     /// the switch is Sven's alone; the live system values (brightness, volume, dark mode …) are actions, not settings.
