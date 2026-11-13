@@ -915,7 +915,8 @@ struct BarPresetControls: View {
                     }.buttonStyle(.pilot)
                 }
             }
-            Text("Items and their order stay personal. Pack defaults and Restore are reviewed in Look.")
+            // Each preset its own layout (Sven, 2026-11-13).
+            Text("Each preset keeps its own items, order and groups; one you open the first time starts from the bar you have now. Pack defaults and Restore are reviewed in Look.")
             if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
         }
         .disabled(Look.shared.themePressing)  // A theme owns the layout: it waits while Look's Apply or Restore runs.

@@ -217,6 +217,8 @@ struct TopBarSlotView: View {
         if let one, click == one.click, NSEvent.modifierFlags.contains(.option), let option = one.optionClick {
             return sources.perform(option)
         }
+        // Ask AI or Terminal in a group: its own button, toggling its drop as its own item does (Sven on build 2433).
+        if let one, slot.isGroup, let drop = one.drop { return BarDropLights.shared.toggle(drop) }
         if case .extension(let id) = click {
             return BarPanel.shared.toggle(extension: id, under: anchor.view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }

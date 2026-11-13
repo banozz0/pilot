@@ -159,7 +159,9 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// front, and every extension's own item (BarSettings.groupable). Not those drawing a view of their own (other apps,
     /// the app's menus, the status lights, the workspaces), the bar drops' and the pill's lit items, Pilot's icon or the
     /// layout's. The readings are in it until taken out.
-    public var groupable: Bool { [.readings, .power, .controls].contains(group) || [.timer, .clock, .capture, .focusedApp].contains(self) }
+    /// Ask AI and Terminal too (Sven on build 2433: "ask ai and terminal cant be grouped, is that normal?"): in a group
+    /// each is still its own button, toggling its drop (TopBarSlotView.perform).
+    public var groupable: Bool { [.readings, .power, .controls].contains(group) || [.timer, .clock, .capture, .focusedApp, .askAI, .terminal].contains(self) }
 
     /// The readings the Group starts with when it is put on with nothing in it (round 4's three).
     static let groupStarters: [BarKind] = [.cpu, .memory, .network]
@@ -497,6 +499,10 @@ public struct BarSettings: Codable, Equatable, Sendable {
     public var combineProcesses: Bool
     /// Each extension's bar item as Sven placed it (Surfaces v2); one never placed is on in the macOS menu bar.
     public internal(set) var extensionItems: [ExtensionBarEntry] = []
+    /// Each other preset's own layout, by its id (`layoutKey`): its items, order, groups and dividers, and its
+    /// extensions' places (Sven, 2026-11-13: "in pills i see it very clean to group everything and remove dividers but in
+    /// other menubar layouts i find it best differently"). The current preset's is `entries` itself.
+    public internal(set) var layouts: [String: BarLayout] = [:]
 
     /// Round 4's pick 7: Pilot's icon (the mark alone since spec pilot-1-1 T28: the workspaces item has the number), the workspaces, one group of CPU, Memory and Network, and
     /// the timer, in both places; the top bar adds the clock, the bar drops' items, the status lights and other apps' items,
@@ -812,6 +818,8 @@ extension BarSettings {
                   extensionItems: (try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems))?.compactMap(\.value) ?? [])
         preset = c.contains(.preset) ? try c.decode(BarPresetConfiguration.self, forKey: .preset) : nil
         try preset?.validate()
+        // A bar saved before each preset kept its own: what it holds is the current preset's, the others start from it.
+        layouts = (try? c.decode([String: BarLayout].self, forKey: .layouts)) ?? [:]
         placeGroupedExtensions(order: decoder.userInfo[Self.extensionOrder] as? @Sendable () -> [String])
     }
 
@@ -839,6 +847,48 @@ extension BarSettings {
     /// Whether `kind` shows in `place` now.
     public func shows(_ kind: BarKind, in place: BarPlace, topBarOn: Bool) -> Bool {
         entry(kind).shows(in: place, topBarOn: topBarOn)
+    }
+}
+
+/// A preset's own layout (BarSettings.layouts): its items in order, with their groups and dividers, and its extensions'
+/// places. Read leniently, as the saved bar is: an item this Pilot cannot read is left out.
+public struct BarLayout: Codable, Equatable, Sendable {
+    public var entries: [BarEntry]
+    public var extensionItems: [ExtensionBarEntry]
+
+    public init(entries: [BarEntry], extensionItems: [ExtensionBarEntry]) { self.entries = entries; self.extensionItems = extensionItems }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        entries = ((try? c.decode([Lossy<BarEntry>].self, forKey: .entries)) ?? []).compactMap(\.value)
+        extensionItems = ((try? c.decode([Lossy<ExtensionBarEntry>].self, forKey: .extensionItems)) ?? []).compactMap(\.value)
+    }
+}
+
+extension BarSettings {
+    /// A preset's key in `layouts`: its id, legacy for the Full bar.
+    public static func layoutKey(_ preset: BarPreset?) -> String { preset?.rawValue ?? "legacy" }
+
+    /// Switches to `configuration`'s preset (nil the Full bar), each keeping its own layout: the one left is kept under its
+    /// key; one kept before comes back, else the new preset starts from the layout left (Sven, 2026-11-13). The same
+    /// preset again only takes the geometry.
+    public mutating func choose(_ configuration: BarPresetConfiguration?) {
+        let from = Self.layoutKey(preset?.preset), to = Self.layoutKey(configuration?.preset)
+        if from != to {
+            layouts[from] = BarLayout(entries: entries, extensionItems: extensionItems)
+            if let kept = layouts.removeValue(forKey: to), !kept.entries.isEmpty {
+                // Items this Pilot added since that layout was kept join it off, as a saved bar's do.
+                var restored = kept.entries
+                for entry in entries where !restored.contains(where: { $0.item == entry.item }) && entry.extensionID == nil && entry.dividerID == nil && entry.groupID == nil {
+                    var off = entry
+                    off.on = false
+                    restored.append(off)
+                }
+                entries = restored
+                extensionItems = kept.extensionItems
+            }
+        }
+        preset = configuration
     }
 }
 

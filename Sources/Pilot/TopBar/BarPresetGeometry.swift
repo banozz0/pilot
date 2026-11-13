@@ -9,9 +9,10 @@ extension BarItemsStore {
 
     func choosePreset(_ id: String) throws(ControlError) {
         try requireWritable()
-        if id == "legacy" { settings.preset = nil; return }
+        // Each preset keeps its own layout (BarSettings.choose); the same one again resets its geometry alone.
+        if id == "legacy" { settings.choose(nil); return }
         guard let preset = BarPreset(rawValue: id) else { throw ControlError(.badValue, "unknown bar preset") }
-        settings.preset = preset.configuration
+        settings.choose(preset.configuration)
     }
 
     func applyGeometry(_ json: String) throws(ControlError) {
