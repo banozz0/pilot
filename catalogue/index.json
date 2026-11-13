@@ -290,7 +290,7 @@
       "id": "github",
       "title": "GitHub",
       "icon": "🐙",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "description": "See what on GitHub needs you: pull requests waiting on your review, your own with their checks, issues given to you and CI runs that failed.",
       "examples": [
         "Type pull: PRs waiting on your review first, then yours, each with its checks passing or failing; Return opens it on github.com",
@@ -328,14 +328,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "7b73744e556473f91e438c5e55cd7a6995b7621d7776ba40903c8a73c124eb8b",
+          "sha256": "b26dc05f1fb4c8133c5fb4356c70bfdefad753396bac1143e4ec19fde836d806",
           "size": 1694,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "8ed229dcb9e143c7c90aec0a58d1f0eab3cb0192f67de7b21bc692296d964162",
-          "size": 24381,
+          "sha256": "f32803a2813286f83d4824b5847947fd77738236ae188340f842e3c9be33f6ec",
+          "size": 24708,
           "executable": true
         }
       ]
@@ -397,8 +397,8 @@
       "id": "now-playing",
       "title": "Now playing",
       "icon": "🎵",
-      "version": "1.3.0",
-      "description": "Whatever your Mac is playing, in the menu bar, as Control Center's Now Playing sees it: Music, Spotify, a YouTube tab in Chrome, Safari or Zen, any app. Click it, or open its page, for the track with its artwork and artist, how far in, play or pause, previous and next; Favourite while Music plays. Click the track to go to the tab or app playing it. The artwork comes from Music, Spotify's cover or a YouTube tab's thumbnail. Never starts a player; macOS asks once to let Pilot control the browser (for its tab and a video's thumbnail), Spotify (its cover) and Music (its artwork and Favourite).",
+      "version": "1.4.0",
+      "description": "Whatever your Mac is playing, in the menu bar, as Control Center's Now Playing sees it: Music, Spotify, a YouTube tab in Chrome, Safari or Zen, any app. Pilot's dock shows the track with its artwork once a popover has fetched it, or when the player hands it over. Click it, or open its page, for the track with its artwork and artist, how far in, play or pause, previous and next; Favourite while Music plays. Click the track to go to the tab or app playing it. The artwork comes from Music, Spotify's cover or a YouTube tab's thumbnail. Never starts a player; macOS asks once to let Pilot control the browser (for its tab and a video's thumbnail), Spotify (its cover) and Music (its artwork and Favourite).",
       "examples": [
         "A YouTube video plays in Chrome: the menu bar shows ♫ and its title; a lone ♫ while paused, nothing when nothing has played",
         "Click it, then the track: Chrome comes forward on the YouTube tab that plays it"
@@ -454,14 +454,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "f6512a1dd5a0cf79bc49b620c0142271c3b95a10673d8b169c443f1ee5edc5bf",
-          "size": 2440,
+          "sha256": "209d1f6d1749dc2cf94d731b34c6ca18df48d6f6ffabd678b0d94caecb0b4af0",
+          "size": 2551,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "3c294f9e61e3b5a325ae3785c42a5aa95192bb47709dc726a999541868b2d379",
-          "size": 26616,
+          "sha256": "8388f889990df4e358e7437a4e45a55b7c1eddeb6b98ea167189be627cddc20f",
+          "size": 26937,
           "executable": true
         }
       ]

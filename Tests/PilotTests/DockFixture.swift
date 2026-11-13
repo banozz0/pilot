@@ -25,9 +25,37 @@ enum DockFixture {
             try? String(seconds).write(to: delay, atomically: true, encoding: .utf8)
         }
         dock.delay = FileDockDelay(state: delay, log: root.appending(path: "autohide.log"))
+        // `running.json` ([{"name", "bundleID", "path"}]), when there: the running apps in place of the Mac's, read again
+        // as the file changes, standing in for NSWorkspace's list the real dock follows (Sven on build 2459).
+        let running = root.appending(path: "running.json")
+        if FileManager.default.fileExists(atPath: running.path(percentEncoded: false)) {
+            dock.readRunning = { readRunning(running) }
+            watch(running) { dock.refreshRunning() }
+        }
         print("dock fixture: \(prefs.path(percentEncoded: false)), autohide \(start)")
         fflush(stdout)
     }
+
+    /// The sandbox's running apps, pid 1000 on.
+    static func readRunning(_ file: URL) -> [DockRunning] {
+        let rows = (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: String]] } ?? []
+        return rows.enumerated().map { i, row in
+            DockRunning(bundleID: row["bundleID"], url: row["path"].map { URL(filePath: $0, directoryHint: .isDirectory) }, name: row["name"] ?? "App", pid: Int32(1000 + i))
+        }
+    }
+
+    /// Calls `changed` on the main queue each time `file` is written in place or replaced.
+    static func watch(_ file: URL, _ changed: @escaping @MainActor () -> Void) {
+        let folder = file.deletingLastPathComponent()
+        let fd = open(folder.path(percentEncoded: false), O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        source.setEventHandler { MainActor.assumeIsolated { changed() } }
+        source.resume()
+        watches.append(source)
+    }
+
+    nonisolated(unsafe) static var watches: [any DispatchSourceFileSystemObject] = []
 }
 
 /// The fake Dock's reveal delay: a file holding the seconds, none while the key is absent; each call logged.

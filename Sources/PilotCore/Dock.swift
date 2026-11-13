@@ -1,7 +1,7 @@
 import Foundation
 
 /// Pilot's dock (spec Projects/Pilot/specs/pilot-dock.html, look A, Sven 2026-11-13, Q199 and Q200): a centred pill at the
-/// bottom of the main screen holding the macOS Dock's pins, then the running apps, then up to three of the top bar's items.
+/// bottom of the main screen holding the macOS Dock's pins, then the running apps, then its widgets (DockWidget).
 /// While it is on, the macOS Dock hides itself through its own auto-hide; Sven's setting comes back when it goes off or
 /// Pilot quits.
 
@@ -87,18 +87,19 @@ public struct DockApp: Equatable, Sendable {
 
 public enum DockClick: String, Equatable, Sendable { case activate, focusWindow, listWindows }
 
-/// An app's right-click menu in the dock (Sven on build 2454): Open, its windows, Show in Finder, Keep in Dock or Remove
+/// An app's right-click menu in the dock (Sven on build 2454): Open, its windows, Show in Files (Pilot's own, Sven
+/// 2026-11-13: "show in finder should probably show in pilots finder"), Keep in Dock or Remove
 /// from Dock (Pilot's own pins), Quit. Sections, a separator between each.
 public enum DockMenuItem: Equatable, Sendable {
     case open
     case window(id: Int, title: String, workspace: String)
-    case showInFinder, keepInDock, removeFromDock, quit
+    case showInFiles, keepInDock, removeFromDock, quit
 
     public var title: String {
         switch self {
         case .open: "Open"
         case .window(_, let title, let workspace): "\(title)  ·  WS \(workspace)"
-        case .showInFinder: "Show in Finder"
+        case .showInFiles: "Show in Files"
         case .keepInDock: "Keep in Dock"
         case .removeFromDock: "Remove from Dock"
         case .quit: "Quit"
@@ -111,7 +112,7 @@ public enum DockMenuItem: Equatable, Sendable {
         return [
             [.open],
             windows.map { .window(id: $0.id, title: $0.title.isEmpty ? app.name : $0.title, workspace: $0.workspace) },
-            app.url == nil ? [] : [.showInFinder],
+            app.url == nil ? [] : [.showInFiles],
             finder ? [] : [app.pinned ? .removeFromDock : .keepInDock],
             app.running && !finder ? [.quit] : [],
         ].filter { !$0.isEmpty }
@@ -174,14 +175,14 @@ public enum DockSize: String, Codable, CaseIterable, Sendable {
 /// The dock's choices, saved as one (`dock.settings`).
 public struct DockSettings: Codable, Equatable, Sendable {
     public var size: DockSize
-    /// Its widgets in order, by the bar tray's names (`BarTrayItem.rawValue`): built-in items, extensions' items and groups.
-    public var widgets: [String]
+    /// Its widgets in Sven's order (design round 3, Q215): any of the eleven, each once.
+    public var widgets: [DockWidget]
     /// Pilot's own pins over the macOS Dock's, whose list is read and never written (spec pilot-dock; Sven on build 2454:
     /// Keep in Dock and Remove from Dock): apps kept past the Dock's own, and the Dock's pins taken out, by `DockPin.key`.
     public var kept: [DockPin] = []
     public var removed: [String] = []
 
-    public init(size: DockSize = .medium, widgets: [String] = DockSettings.defaultWidgets) { self.size = size; self.widgets = widgets }
+    public init(size: DockSize = .medium, widgets: [DockWidget] = DockWidget.defaults) { self.size = size; self.widgets = widgets }
 
     /// The dock's pins: the macOS Dock's (`dock`, Finder first) less the ones taken out, then the ones kept, in order.
     public func pinned(_ dock: [DockPin]) -> [DockPin] {
@@ -202,78 +203,44 @@ public struct DockSettings: Codable, Equatable, Sendable {
         if dock.contains(where: { $0.key == key }), !removed.contains(key) { removed.append(key) }
     }
 
-    /// Look A's three: AI usage, the timer and the weather, each drawn only while it has something to show.
-    public static let defaultWidgets = ["extension:ai-usage", BarTrayItem.kind(.timer).rawValue, "extension:weather"]
-    public static let mostWidgets = 3
-
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         size = (try? c.decode(DockSize.self, forKey: .size)) ?? .medium
-        widgets = (try? c.decode([String].self, forKey: .widgets)) ?? Self.defaultWidgets
+        // Saved as names: a list from before round 3 reads through DockWidget.migrated.
+        widgets = (try? c.decode([String].self, forKey: .widgets)).map(DockWidget.migrated) ?? DockWidget.defaults
         kept = (try? c.decodeIfPresent([DockPin].self, forKey: .kept)) ?? []
         removed = (try? c.decodeIfPresent([String].self, forKey: .removed)) ?? []
     }
 
-    /// The item a widget name reads as, or why the dock cannot hold it: a built-in item drawn from its parts alone, an
-    /// extension's own item, or a group. Not the items drawing views of their own (workspaces, other apps, the app's
-    /// menus, the status lights), the bar drops, Pilot's icon or the layout's.
-    public static func widget(_ name: String) throws(DockWidgetError) -> BarTrayItem {
-        guard let item = BarTrayItem(rawValue: name) ?? BarTrayItem(rawValue: "kind:" + name) else { throw .unknown(name) }
-        switch item {
-        case .extension, .group, .kind(.group): return item
-        case .kind(let kind) where kind.groupable && kind.drop == nil: return item
-        case .kind(let kind): throw .notDrawable(kind.rawValue)
-        case .divider: throw .unknown(name)
-        }
+    /// Turns `widget` on, at `index` in the order (the end when nil or past it).
+    public mutating func add(_ widget: DockWidget, at index: Int? = nil) throws(DockWidgetError) {
+        guard !widgets.contains(widget) else { throw .already(widget.rawValue) }
+        widgets.insert(widget, at: min(max(index ?? widgets.count, 0), widgets.count))
     }
 
-    public mutating func add(_ name: String) throws(DockWidgetError) {
-        let item = try Self.widget(name)
-        guard !widgets.contains(item.rawValue) else { throw .already(item.rawValue) }
-        guard widgets.count < Self.mostWidgets else { throw .full }
-        widgets.append(item.rawValue)
-    }
-
-    public mutating func remove(_ name: String) throws(DockWidgetError) {
-        let item = try Self.widget(name)
-        guard let index = widgets.firstIndex(of: item.rawValue) else { throw .missing(item.rawValue) }
+    public mutating func remove(_ widget: DockWidget) throws(DockWidgetError) {
+        guard let index = widgets.firstIndex(of: widget) else { throw .missing(widget.rawValue) }
         widgets.remove(at: index)
+    }
+
+    /// Moves an on widget `by` places along the order (negative: toward the icons), held to the ends.
+    public mutating func move(_ widget: DockWidget, by: Int) {
+        guard let from = widgets.firstIndex(of: widget) else { return }
+        let to = min(max(from + by, 0), widgets.count - 1)
+        guard to != from else { return }
+        widgets.remove(at: from)
+        widgets.insert(widget, at: to)
     }
 }
 
 public enum DockWidgetError: Error, Equatable, CustomStringConvertible {
-    case unknown(String), notDrawable(String), already(String), missing(String), full
+    case unknown(String), already(String), missing(String)
 
     public var description: String {
         switch self {
-        case .unknown(let name): "\(name) is no bar item: a built-in item (cpu, timer, clock…), extension:<id>, group or group:<n>"
-        case .notDrawable(let kind): "\(kind) draws a view of its own in the top bar, so the dock cannot hold it"
+        case .unknown(let name): "\(name) is no dock widget: " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ")
         case .already(let name): "\(name) is in the dock already"
         case .missing(let name): "\(name) is not in the dock"
-        case .full: "the dock holds \(DockSettings.mostWidgets) widgets; remove one first"
-        }
-    }
-}
-
-extension BarSettings {
-    /// The dock's widgets as slots the top bar draws (BarSlot): a built-in item in its top bar style, an extension's item
-    /// while it is in `extensions` (the installed ones with a bar item), a group with its members as the top bar groups
-    /// them. One with nothing to draw is left out.
-    public func dockSlots(_ widgets: [String], extensions: Set<String>) -> [BarSlot] {
-        // keepRules leaves no divider or group entry in a group.
-        func group(_ number: Int) -> BarSlot? {
-            let members = entries.filter { $0.groupNumber == number && ($0.extensionID.map(extensions.contains) ?? true) }
-            return members.isEmpty ? nil : .group(members, number: number)
-        }
-        return widgets.compactMap { name -> BarSlot? in
-            guard let item = try? DockSettings.widget(name) else { return nil }
-            switch item {
-            case .extension(let id): return extensions.contains(id) ? .item(BarEntry(extension: id, side: .right)) : nil
-            case .kind(.group): return group(1)
-            case .group(let number): return group(number)
-            case .kind(let kind): return .item(entry(for: .kind(kind)) ?? BarEntry(kind))
-            case .divider: return nil
-            }
         }
     }
 }

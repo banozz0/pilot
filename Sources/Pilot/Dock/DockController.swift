@@ -53,6 +53,10 @@ final class DockController {
     private(set) var problem: String?
     @ObservationIgnored private var written: [PilotBlock.BarInset]?
     @ObservationIgnored private var tokens: [NSObjectProtocol] = []
+    /// NSWorkspace's own list of running apps, followed while the dock shows.
+    @ObservationIgnored private var runningWatch: NSKeyValueObservation?
+    /// The running apps as the dock reads them; the sandbox's stays the real Mac's.
+    @ObservationIgnored var readRunning: @MainActor () -> [DockRunning] = { DockController.runningApps() }
 
     init(defaults: UserDefaults = .pilot(), autohide: any DockAutohide = SystemEventsAutohide.dock, readPins: @escaping @MainActor () -> [DockPin] = DockPins.readLive,
          writeRoom: @escaping DockSwitch.WriteRoom, panels: any DockPanels) {
@@ -88,17 +92,36 @@ final class DockController {
     /// On screen: the pins read, the running apps followed as apps launch and quit, the pill shown.
     private func shown() {
         dockPins = readPins()
-        running = Self.runningApps()
-        let centre = NSWorkspace.shared.notificationCenter
-        tokens = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification].map { name in
-            centre.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.running = Self.runningApps() } }
-        }
+        followRunning()
         panels.show()
+    }
+
+    /// The running apps, followed through NSWorkspace's own list (KVO, as Apple documents it), not read inside the launch
+    /// and quit notifications: those can come before the list has the new app, so an app opened that is not kept never
+    /// showed until the next launch or quit (Sven on build 2459). An app coming forward reads it again too, for an app
+    /// that turns into a regular one after it launched.
+    private func followRunning() {
+        refreshRunning()
+        runningWatch = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.refreshRunning() } }
+        }
+        let centre = NSWorkspace.shared.notificationCenter
+        tokens = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didActivateApplicationNotification].map { name in
+            centre.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.refreshRunning() } }
+        }
+    }
+
+    /// The running apps read again; set only when they changed, so a steady list redraws nothing.
+    func refreshRunning() {
+        let now = readRunning()
+        if now != running { running = now }
     }
 
     private func hidden() {
         tokens.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         tokens = []
+        runningWatch?.invalidate()
+        runningWatch = nil
         panels.hide()
     }
 
@@ -160,7 +183,7 @@ final class DockController {
     var line: String {
         "dock: \(state.isOn ? "on" : "off"), saved autohide \(state.savedAutohide.map(String.init) ?? "none"), saved delay "
             + (state.delaySaved == true ? state.savedDelay.map { String($0) } ?? "absent" : "none") + ", size \(settings.size.rawValue), room "
-            + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.joined(separator: " ")
+            + room.map { "\($0.monitor) \($0.height)" }.joined(separator: ", ") + ", widgets " + settings.widgets.map(\.rawValue).joined(separator: " ")
     }
 
     /// While on, the room follows the size; the block is written only when it changed.
