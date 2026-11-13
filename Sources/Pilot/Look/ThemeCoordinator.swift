@@ -897,19 +897,44 @@ final class ThemeCoordinator {
         }
     }
 
-    /// Deletes a pack a person made. The applied pack, and one holding a wallpaper on screen or one Restore puts back, stay:
-    /// Restore needs nothing else from a pack's folder, as the ledger keeps every colour it sets (ThemeLedger.selected,
-    /// ThemeNativePalette.pack).
-    func delete(_ id: String) throws {
+    /// Deletes a pack a person made or imported; one of Pilot's own is hidden instead (`hide`), and true says so. The
+    /// applied pack, and one holding a wallpaper on screen or one Restore puts back, stay: Restore needs nothing else from
+    /// a pack's folder, as the ledger keeps every colour it sets (ThemeLedger.selected, ThemeNativePalette.pack).
+    @discardableResult
+    func delete(_ id: String) throws -> Bool {
         guard !busy else { throw ThemeFailure("theme mutation already waiting/running") }
         busy = true; defer { busy = false }
-        guard !store.isPilots(id) else { throw ThemePackStore.pilotsOwn(id) }
+        if store.isPilots(id) { try hide(id); return true }
         guard let loaded = try? store.load(id) else { throw ThemeFailure("No theme pack is named \(id); pilot theme list-all shows them.") }
         guard try ledger().1.selected?.id != id else { throw ThemeFailure("\(loaded.pack.title) is the theme applied now. Apply another theme or Restore default first, then delete it.") }
         guard try !wallpaperUses(loaded.folder, missing: true) else {
             throw ThemeFailure("\(loaded.pack.title)'s wallpaper is on screen or is what Restore puts back. Pick another wallpaper or Restore default first, then delete it.")
         }
         try store.delete(id)
+        return false
+    }
+
+    /// One of Pilot's own themes out of sight (Sven on build 2445): off Look's cards and the lists (Look.hiddenThemes),
+    /// its pack left in the app for `restore`. Never the theme in use, worn or applied, nor the last theme shown.
+    private func hide(_ id: String) throws {
+        let look = Look.shared, name = PilotTheme.named(id)?.name ?? id
+        guard !look.hiddenThemes.contains(id) else { throw ThemeFailure("\(name) is removed already; pilot theme get \(id) brings it back.") }
+        guard !inUse(id) else { throw ThemeFailure("\(name) is the theme in use. Apply another theme or Restore default first, then remove it.") }
+        // The packs you made are read only when no other of Pilot's own still shows.
+        let others = look.shownThemes().filter { $0.id != id }.count
+        guard try others > 0 || store.list().contains(where: { !store.isPilots($0.id) }) else {
+            throw ThemeFailure("\(name) is the last theme left: at least one stays.")
+        }
+        look.hiddenThemes.insert(id)
+    }
+
+    /// Brings back one of Pilot's own themes `hide` took out; false when it was not hidden.
+    @discardableResult
+    func restore(_ id: String) -> Bool { Look.shared.hiddenThemes.remove(id) != nil }
+
+    /// Whether `id` is the theme in use: the one applied, or the one Pilot wears. A ledger that does not read counts as yes.
+    private func inUse(_ id: String) -> Bool {
+        do { return try appliedTheme().id == id || Look.shared.themeID == id } catch { return true }
     }
 
     /// Compare filesystem identities along resolved ancestry, including aliases of any ancestor.

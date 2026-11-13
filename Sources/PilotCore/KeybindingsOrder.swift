@@ -9,9 +9,9 @@ public enum KeybindingsOrder {
                                     "windows.close", "windows.fullscreen", "windows.maximise", "windows.toggleFloat", "windows.popOut",
                                     "apps.clipboard", "captures.menu", "system.lock"]
 
-    /// The groups after the essentials, each by id prefix: workspaces, moves, focus, resize.
+    /// The groups after the essentials, each by id prefix: workspaces, moves, focus, resize, nudge.
     static let groups = [["workspaces.go:"], ["workspaces.move:"], ["windows.focus", "windows.vimFocus"],
-                         ["windows.grow", "windows.shrink"]]
+                         ["windows.grow", "windows.shrink"], ["windows.nudge"]]
 
     /// `actions` in Keybindings' order; ties keep the order they came in.
     public static func sorted(_ actions: [BindsPage.ActionInfo]) -> [BindsPage.ActionInfo] {

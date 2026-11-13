@@ -54,6 +54,9 @@ final class Binds {
         for (old, new) in Self.retired where store.rename(old, to: new) {
             log.notice("binds: \(LinkToken.redact(old), privacy: .public) is \(LinkToken.redact(new), privacy: .public) now, on \(self.store.trigger(for: new)?.label ?? "no key", privacy: .public)")
         }
+        for id in store.moveDisplayKeys() {
+            log.notice("binds: \(LinkToken.redact(id), privacy: .public) moved to \(self.store.trigger(for: id)?.label ?? "no key", privacy: .public) (Q195)")
+        }
         if let notice = store.notice {
             log.notice("binds: \(notice, privacy: .public)")
             HUD.tip(notice)
@@ -77,6 +80,13 @@ final class Binds {
         save()
         let on = store.mouseBinds.first { $0.trigger == key }?.bind.button.map { " on Mouse \($0)" } ?? ""
         log.notice("binds: \(key.label, privacy: .public)\(on, privacy: .public) \(action.map { "runs \(LinkToken.redact($0))" } ?? "freed", privacy: .public)")
+    }
+
+    /// Mouse 4's hold opens This window (Q194), when BindStore.addRingHold finds it free and its click bound.
+    func addRingHold() {
+        guard store.addRingHold() else { return log.notice("binds: Mouse 4's hold left as it is (no click bind, or a hold already)") }
+        save()
+        log.notice("binds: Mouse 4's hold opens This window")
     }
 
     func replace(_ action: String, with key: Key, from old: String? = nil) {
