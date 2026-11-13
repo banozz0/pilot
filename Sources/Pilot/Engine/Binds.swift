@@ -55,7 +55,7 @@ final class Binds {
             log.notice("binds: \(LinkToken.redact(old), privacy: .public) is \(LinkToken.redact(new), privacy: .public) now, on \(self.store.trigger(for: new)?.label ?? "no key", privacy: .public)")
         }
         for id in store.moveDisplayKeys() {
-            log.notice("binds: \(id, privacy: .public) moved to \(self.store.trigger(for: id)?.label ?? "no key", privacy: .public) (Q195)")
+            log.notice("binds: \(LinkToken.redact(id), privacy: .public) moved to \(self.store.trigger(for: id)?.label ?? "no key", privacy: .public) (Q195)")
         }
         if let notice = store.notice {
             log.notice("binds: \(notice, privacy: .public)")
