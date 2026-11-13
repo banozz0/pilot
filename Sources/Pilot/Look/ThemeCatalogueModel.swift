@@ -26,6 +26,16 @@ final class ThemeCatalogueModel {
             case .builtIn: "built-in"
             }
         }
+
+        /// The command's button: Extensions' words ("Install", "Installed", "Update"); "Built in" for a shipped one.
+        var label: String {
+            switch self {
+            case .get: ExtensionCatalogue.Standing.install.label
+            case .installed: ExtensionCatalogue.Standing.installed.label
+            case .update: ExtensionCatalogue.Standing.update.label
+            case .builtIn: "Built in"
+            }
+        }
     }
 
     /// The digest of each catalogue theme's pack in your themes, by id.
@@ -58,10 +68,12 @@ final class ThemeCatalogueModel {
     /// Where each catalogue theme stands in your themes now, read off the main thread.
     func readInstalled() async {
         guard let owner = try? ThemeCoordinator.production() else { return }
-        let installer = Self.installer(owner), ids = themes.map(\.id)
-        installed = await Task.detached { installer.installed(ids) }.value
-        builtIn = Set(ids.filter(installer.isBuiltIn))
-        pictured = Set(builtIn.filter { id in (try? owner.store.load(id)).map(ShippedWallpapers.wants) == true })
+        let installer = Self.installer(owner), store = owner.store, ids = themes.map(\.id)
+        // Off the main thread, which runs the key tap: every installed file is hashed, and a pack's load decodes its pictures.
+        (installed, builtIn, pictured) = await Task.detached {
+            let builtIn = Set(ids.filter(installer.isBuiltIn))
+            return (installer.installed(ids), builtIn, builtIn.filter { id in (try? store.load(id)).map(ShippedWallpapers.wants) == true })
+        }.value
         applied = try? owner.appliedTheme().id
     }
 
@@ -77,8 +89,11 @@ final class ThemeCatalogueModel {
     /// Why Get or Update of `theme` can't start, before anything is asked or fetched; nil when it can.
     func refusal(_ theme: ExtensionCatalogue.Theme) -> String? {
         guard let owner = try? ThemeCoordinator.production() else { return "Pilot's themes did not open." }
-        // Its files are the applied theme's (wallpapers on the desktop now): replaced only once another is applied.
-        if installed[theme.id] != nil, applied == theme.id {
+        // Its files are the applied theme's (wallpapers on the desktop now): replaced only once another is applied. A
+        // ledger that does not read counts as applied, so nothing in use is replaced.
+        let now: String?
+        do { now = try owner.appliedTheme().id } catch { now = theme.id }
+        if installed[theme.id] != nil, now == theme.id {
             return "\(theme.id) is the theme applied now: apply another or restore first, then update it."
         }
         // An id Pilot's own themes or another pack root hold is refused first, so nothing starts bound to fail.
@@ -109,16 +124,15 @@ final class ThemeCatalogueModel {
             await readInstalled()
             return loaded
         } catch {
-            failures[id] = ExtensionCatalogue.Problem.reason(error)
             await readInstalled()
-            throw error
+            throw failed(id, ExtensionCatalogue.Problem.reason(error), error)
         }
     }
 
     /// A tile's Get or Update: no Allow from Pilot's own window, as Extensions' Get; the HUD line it ended on.
     func get(_ theme: ExtensionCatalogue.Theme) async -> String {
         let had = installed[theme.id]
-        if let why = refusal(theme) { failures[theme.id] = why; return why }
+        if let why = refusal(theme) { return failed(theme.id, why) }
         do {
             let loaded = try await install(theme, expecting: had)
             return "\(loaded.pack.title) \(had == nil ? "is in your themes" : "updated"). Nothing applied."
@@ -140,10 +154,7 @@ final class ThemeCatalogueModel {
             look.endTrial(keep: false)
             await readInstalled()
             return themeOutcomeText(result)
-        } catch {
-            failures[id] = String(describing: error)
-            return String(describing: error)
-        }
+        } catch { return failed(id, String(describing: error)) }
     }
 
     /// A tile's Remove: the downloaded pack out of your themes through `theme delete`'s rules (never Pilot's own, the
@@ -156,11 +167,12 @@ final class ThemeCatalogueModel {
             looklog.notice("theme catalogue: \(theme.id, privacy: .public) removed")
             await readInstalled()
             return "\(theme.title) removed from your themes. Get brings it back."
-        } catch {
-            failures[theme.id] = String(describing: error)
-            return String(describing: error)
-        }
+        } catch { return failed(theme.id, String(describing: error)) }
     }
+
+    /// `why` kept on `id`'s tile until its next press; `why` back for the HUD.
+    private func failed(_ id: String, _ why: String) -> String { failures[id] = why; return why }
+    private func failed(_ id: String, _ why: String, _ error: any Error) -> any Error { failures[id] = why; return error }
 
     // MARK: Card pictures
 

@@ -12,12 +12,7 @@ extension ControlVerbs {
         return .object(["count": .number(Double(model.themes.count)), "themes": .array(model.themes.map { theme in
             let standing = model.standing(of: theme)
             // A shipped theme's catalogue copy only brings its pictures, on Apply (ShippedWallpapers): never installed.
-            let button = switch standing {
-            case .builtIn: model.pictured.contains(theme.id) ? "Built in: apply it for its wallpapers" : "Built in"
-            case .get: "Install"
-            case .installed: "Installed"
-            case .update: "Update"
-            }
+            let button = standing == .builtIn && model.pictured.contains(theme.id) ? "Built in: apply it for its wallpapers" : standing.label
             var o: [String: JSONValue] = [
                 "id": .string(theme.id), "title": .string(theme.title), "dark": .bool(theme.dark), "styles": .array(theme.styles.map(JSONValue.string)),
                 "standing": .string(standing.word), "button": .string(button), "applied": .bool(model.applied == theme.id),

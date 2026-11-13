@@ -265,12 +265,12 @@ public enum ExtensionCatalogue {
         return path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
     }
 
-    /// The sha256 of `data` in lowercase hex, as the index lists it.
     /// A GitHub handle: 1 to 39 letters, digits and single hyphens, never at either end.
     public static func isHandle(_ text: String) -> Bool {
         text.wholeMatch(of: /[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}/) != nil
     }
 
+    /// The sha256 of `data` in lowercase hex, as the index lists it.
     public static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 
     // MARK: Versions and what an entry's button says

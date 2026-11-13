@@ -21,7 +21,7 @@ struct ThemeCataloguePage: View {
             apply: { id in run(id) { await model.apply($0.id) } },
             remove: { id in run(id) { await model.remove($0) } },
             retry: { Task { await model.open(refresh: true) } },
-            appear: { id in if let theme = model.themes.first(where: { $0.id == id }) { Task { await model.picture(for: theme) } } }))
+            appear: { id in if let theme = model.catalogue.index?.theme(id) { Task { await model.picture(for: theme) } } }))
         .task { await model.open() }
         .onDisappear { model.close() }
     }
@@ -34,13 +34,13 @@ struct ThemeCataloguePage: View {
             guard pack.compatible(with: style) else { return nil }
             return ThemeCatalogueTile(id: theme.id, theme: PilotTheme.named(theme.id) ?? pack.appearance(keeping: .standard), author: theme.author,
                                       standing: model.standing(of: theme), applied: model.applied == theme.id,
-                                      toyboxOnly: theme.styles == ["toybox"] || ["toybox", "toybox-night"].contains(theme.id),
+                                      toyboxOnly: theme.styles == ["toybox"] || StyleTokens.toyboxThemes.contains(theme.id),
                                       busy: model.busy[theme.id], failure: model.failures[theme.id], picture: model.pictures[theme.id])
         }
     }
 
     private func run(_ id: String, _ work: @escaping (ExtensionCatalogue.Theme) async -> String) {
-        guard let theme = model.themes.first(where: { $0.id == id }) else { return }
+        guard let theme = model.catalogue.index?.theme(id) else { return }
         Task { HUD.tip(await work(theme)) }
     }
 }
@@ -129,10 +129,9 @@ struct ThemeCatalogueGallery: View {
     }
 
     private var shown: [ThemeCatalogueTile] {
-        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
-        return tiles.filter { filter.holds($0) }.filter { tile in
-            words.isEmpty || [tile.theme.name, tile.id, tile.author ?? "pilot"].contains { $0.lowercased().contains(words) }
-        }
+        let picked = tiles.filter(filter.holds), q = query.trimmingCharacters(in: .whitespaces)
+        // Extensions' search (ExtensionCatalogue.search): the same ranking and typo tolerance.
+        return q.isEmpty ? picked : FuzzyRanker.Filter(q).filter(picked) { [$0.theme.name, $0.id, $0.author ?? "Pilot"] }
     }
 
     private var toolbar: some View {
@@ -148,7 +147,7 @@ struct ThemeCatalogueGallery: View {
                 InfoMark(text: Self.others)
             }
             Spacer(minLength: 12)
-            SearchBox(prompt: "Search \(tiles.count) themes", text: $query).frame(maxWidth: 220)
+            SearchBox(prompt: "Search \(ExtensionsPageView.plural(tiles.count, "theme"))", text: $query).frame(maxWidth: 220)
         }
         .padding(.horizontal, 18).padding(.vertical, 10)
     }
@@ -168,7 +167,7 @@ struct ThemeCatalogueGallery: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(text).font(ink.ui(13, .medium)).foregroundStyle(ink.text)
             if let detail { Text(detail).font(ink.ui(12)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true) }
-            if let why { FinePrint(text: why) }
+            if let why { FinePrint(text: ExtensionsPageView.why(why)) }
             if retry { Button("Try again", action: actions.retry).buttonStyle(.pilot) }
         }
         .padding(18)
@@ -241,7 +240,7 @@ private struct ThemeTile: View {
         case .get: "Not installed"
         case .installed: "Installed"
         case .update: "Update out"
-        case .builtIn: "Built in"
+        case .builtIn: tile.standing.label
         }
     }
 

@@ -15,9 +15,6 @@ struct LookDesk: View {
     let colors: ThemeColors
     let picture: Image?
 
-    init(look: Look, picture: Image?) { self.init(colors: look.colors, picture: picture) }
-    init(colors: ThemeColors, picture: Image?) { self.colors = colors; self.picture = picture }
-
     var body: some View {
         GeometryReader { g in
             let f = Self.font(g.size)
