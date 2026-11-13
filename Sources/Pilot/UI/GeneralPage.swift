@@ -57,6 +57,7 @@ struct GeneralPage: View {
                 startup
                 status.id(AppSection.status)
                 notifications.id(AppSection.notifications)
+                smartNudges
                 permissions(granted).id(AppSection.permissions)
                 data.id(AppSection.data)
                 about.id(AppSection.about)
@@ -341,6 +342,75 @@ struct GeneralPage: View {
                     .disabled(!settings.enabled)
             }
         }
+    }
+
+    // MARK: Smart nudges
+
+    /// Smart nudges (spec smart-nudges): three switches, each off by default, each with its one figure.
+    private var smartNudges: some View {
+        @Bindable var nudges = SmartNudgeCenter.shared
+        return KitBlock(title: "Smart nudges", symbol: "sparkles") {
+            BlockRow(first: true) {
+                Toggle("Pause music before a meeting", isOn: $nudges.pauseMusic)
+                    .toggleStyle(.pilotSwitchRow(info: "A few minutes before a calendar event with a video link (Zoom, Meet, Teams, FaceTime …), Pilot pauses what plays, as dictation does. Turning it on asks for Calendar; nothing plays again on its own."))
+            }
+            if nudges.pauseMusic {
+                BlockRow {
+                    Text("Minutes before").frame(maxWidth: .infinity, alignment: .leading)
+                    Stepper(value: $nudges.minutes, in: SmartNudges.minutes) {
+                        Text("\(nudges.minutes) min").font(ink.mono(12)).foregroundStyle(ink.text2)
+                    }
+                    .accessibilityLabel("Minutes before").accessibilityValue("\(nudges.minutes) minutes")
+                }
+                BlockRow {
+                    Toggle("Any event, not only video calls", isOn: $nudges.anyEvent)
+                        .toggleStyle(.pilotSwitchRow(info: "Pauses before every timed event in Calendar; all-day events never."))
+                }
+                if nudges.calendarRefused {
+                    BlockRow {
+                        FinePrint(text: "Pilot has no Calendar access, so it can't see your meetings.").frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Open Privacy & Security") { NSWorkspace.shared.open(ClockCalendar.privacy) }.buttonStyle(.pilot)
+                    }
+                }
+            }
+            BlockRow {
+                Toggle("Warn before an AI limit runs out", isOn: $nudges.aiLimit)
+                    .toggleStyle(.pilotSwitchRow(info: "One notification when a Claude or Codex window passes the share below, and not again until that window resets. It reads the AI usage extension's menu bar item, so that item has to be on a bar."))
+            }
+            if nudges.aiLimit {
+                BlockRow {
+                    Text("Warn at").frame(maxWidth: .infinity, alignment: .leading)
+                    Stepper(value: $nudges.threshold, in: SmartNudges.thresholds, step: 5) {
+                        Text("\(nudges.threshold)% used").font(ink.mono(12)).foregroundStyle(ink.text2)
+                    }
+                    .accessibilityLabel("Warn at").accessibilityValue("\(nudges.threshold) percent used")
+                }
+            }
+            BlockRow {
+                Toggle("Quiet hours", isOn: $nudges.quietHours)
+                    .toggleStyle(.pilotSwitchRow(info: "Between these times Pilot holds its own notifications and nudges, low battery included, and sends one summary as they end. Music still pauses. macOS Focus is left alone."))
+            }
+            if nudges.quietHours {
+                BlockRow {
+                    Text("From").frame(maxWidth: .infinity, alignment: .leading)
+                    quietTime($nudges.quietFrom, "From")
+                    Text("to")
+                    quietTime($nudges.quietTo, "To")
+                }
+            }
+        }
+    }
+
+    /// A quiet hours time ("22:00") as an hour-and-minute field.
+    private func quietTime(_ text: Binding<String>, _ label: String) -> some View {
+        let day = Calendar.autoupdatingCurrent.startOfDay(for: .now)
+        let date = Binding<Date>(
+            get: { day.addingTimeInterval(Double((QuietHours.minutes(text.wrappedValue) ?? 0) * 60)) },
+            set: { picked in
+                let parts = Calendar.autoupdatingCurrent.dateComponents([.hour, .minute], from: picked)
+                text.wrappedValue = QuietHours.clock((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+            })
+        return DatePicker(label, selection: date, displayedComponents: .hourAndMinute).labelsHidden().datePickerStyle(.field).fixedSize()
     }
 
     // MARK: About

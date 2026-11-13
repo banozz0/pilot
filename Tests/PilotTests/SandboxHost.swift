@@ -68,6 +68,9 @@ struct SandboxHost {
         // PILOT_SANDBOX_NOTIFICATIONS=<folder>: Notification Center's tree as a file there, read through the real reader and
         // feed; the live source is never made in a test run, so nothing on the Mac is observed or moved.
         if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOTIFICATIONS"] { NotificationFixture.install(folder) }
+        // PILOT_SANDBOX_NUDGES=<folder>: smart nudges' Calendar, player, AI usage reading and Notification Center as files
+        // there (NudgeFixture), so `pilot nudges check --at` proves each without a meeting, a limit or the night.
+        if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NUDGES"] { NudgeFixture.install(folder) }
         // PILOT_SANDBOX_SPACES=<file.json>: the window server's Spaces layout as a file in CGSCopyManagedDisplaySpaces' shape,
         // read at each ask, so `pilot list top-bar-screens` shows which screens' bars a fullscreen Space hides.
         if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_SPACES"] {

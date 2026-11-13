@@ -89,6 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await SystemSampler.shared.watch(every: SystemSampler.historyInterval, needs: .history) }
         // Low-battery alerts (Q394): the Bluetooth batteries with the slow readings while the setting is on.
         LowBatteryAlerts.shared.follow()
+        // Smart nudges (spec smart-nudges), each off by default: Pause music's watch while on, quiet hours' held ones.
+        SmartNudgeCenter.shared.start()
         // Reminders from dated note lines (P66): Done and Snooze answered, the folder's reminders scheduled.
         NoteReminders.shared.start()
         // Other apps' notifications as Pilot's cards, off by default: nothing runs until the setting is on.

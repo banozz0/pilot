@@ -22,12 +22,15 @@ enum CalendarAccess { case undetermined, granted, denied }
     func reminders(in range: DateInterval) async -> [ClockEvent]
     /// Calls `changed` whenever Calendar or Reminders change, in Pilot or anywhere else.
     func observe(_ changed: @escaping @MainActor () -> Void)
+    /// Smart nudges' Pause music: the events in `range`, each with whether it links to a video call; none in a fake.
+    func meetings(in range: DateInterval) -> [MeetingEvent]
 }
 
 extension CalendarStore {
     func requestRemindersAccess() async {}
     func reminders(in range: DateInterval) async -> [ClockEvent] { [] }
     func observe(_ changed: @escaping @MainActor () -> Void) {}
+    func meetings(in range: DateInterval) -> [MeetingEvent] { [] }
 }
 
 /// The clock's popover's events (card agent-bo-95423011, SPEC story 168): the store is made, and access asked, only
@@ -205,6 +208,14 @@ final class ClockCalendar {
     }
 
     var newEventsCalendar: String? { store.defaultCalendarForNewEvents?.title }
+
+    /// A video call is a Zoom, Meet, Teams … link in the event's URL, location or notes (MeetingLink).
+    func meetings(in range: DateInterval) -> [MeetingEvent] {
+        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil)).map { event in
+            MeetingEvent(id: event.eventIdentifier ?? event.calendarItemIdentifier, title: event.title ?? "", start: event.startDate,
+                         allDay: event.isAllDay, video: MeetingLink.find(in: [event.url?.absoluteString, event.location, event.notes]) != nil)
+        }
+    }
 
     func add(_ quick: QuickEvent) throws {
         let event = EKEvent(eventStore: store)
