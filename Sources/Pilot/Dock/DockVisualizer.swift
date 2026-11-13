@@ -162,11 +162,10 @@ final class DockVisualizer {
             halt()
             drawFlat()
             wake = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let self, self.tapping else { return }
-                    if self.ring.read(1).peak >= 0.0005 { self.run() }
-                }
+                MainActor.assumeIsolated { if let self, self.tapping, self.ring.read(1).peak >= 0.0005 { self.run() } }
             }
+            // The idle listen coalesces with other wake-ups (story 142, P9).
+            wake?.tolerance = 0.1
         }
     }
 
@@ -219,6 +218,7 @@ final class DockFrameClock: NSObject {
             timer = Timer.scheduledTimer(withTimeInterval: 1 / fps, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick(1 / (self?.fps ?? 60)) }
             }
+            timer?.tolerance = 0.1 / fps
         }
     }
 
