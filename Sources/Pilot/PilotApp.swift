@@ -96,7 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A kill or a logout sends SIGTERM; route it through terminate so the Caps Lock remap is undone.
         signal(SIGTERM, SIG_IGN)
         sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        sigterm?.setEventHandler { NSApp.terminate(nil) }
+        // terminate runs from the run loop, never inside this main-queue callout: a quit that waits (.terminateLater)
+        // spins a nested loop, and from inside a callout the main queue never drains again, so its replies never come.
+        sigterm?.setEventHandler {
+            CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) { NSApp.terminate(nil) }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
+        }
         sigterm?.resume()
         // Finder's Convert with Pilot… (Info.plist NSServices, card agent-bo-95423211).
         NSApp.servicesProvider = services
