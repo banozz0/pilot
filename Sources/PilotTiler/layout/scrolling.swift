@@ -32,13 +32,16 @@ struct Strip {
 
     /// The offset nearest `offset` that shows column `index` whole, landing it on the usable edge (the outer gap from the
     /// monitor's); never past either end of the strip, so no empty space shows while a column is off screen. `centre`
-    /// always, or on overflow when the column is not whole at `offset`, puts it in the middle instead (T9).
+    /// always, or on overflow when the column is not whole at `offset`, puts it in the middle instead (T9); always puts
+    /// even the first and last columns there, past the strip's ends, leaving the screen's edge empty (One centred,
+    /// Sven 2026-11-14).
     func offset(showing index: Int?, from offset: CGFloat, centre: PilotBlock.CentreMode = .never) -> CGFloat {
         var offset = offset
         if let index, columns.indices.contains(index) {
             let column = columns[index]
             let whole = column.x >= offset - 0.5 && column.x + column.width <= offset + usable.width + 0.5
-            if centre == .always || centre == .overflow && !whole { return self.offset(centring: index) }
+            if centre == .always { return self.offset(centring: index, pastEnds: true) }
+            if centre == .overflow && !whole { return self.offset(centring: index) }
             if column.x < offset {
                 offset = column.x
             } else if column.x + column.width > offset + usable.width {
@@ -48,10 +51,10 @@ struct Strip {
         return offset.coerce(in: 0 ... max(0, length - usable.width))
     }
 
-    /// The offset that puts column `index` in the middle, as far as the strip's ends allow.
-    func offset(centring index: Int) -> CGFloat {
-        let column = columns[index]
-        return (column.x + column.width / 2 - usable.width / 2).coerce(in: 0 ... max(0, length - usable.width))
+    /// The offset that puts column `index` in the middle, as far as the strip's ends allow, or `pastEnds` wholly.
+    func offset(centring index: Int, pastEnds: Bool = false) -> CGFloat {
+        let column = columns[index], centred = column.x + column.width / 2 - usable.width / 2
+        return pastEnds ? centred : centred.coerce(in: 0 ... max(0, length - usable.width))
     }
 
     /// Each column's frame at `offset`. One wholly past an edge of `monitor` is pulled back to keep `sliver` points on

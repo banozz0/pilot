@@ -190,7 +190,7 @@ extension TilingContainer {
         var fractions = others.map { $0.columnWidth ?? config.scrollingNewWidth }
         fractions.insert(window.columnWidth ?? config.scrollingNewWidth, at: index)
         let strip = Strip(fractions: fractions, usable: usable, gap: CGFloat(ResolvedGaps(gaps: config.gaps, monitor: monitor).inner.horizontal))
-        return strip.frames(at: strip.offset(showing: index, from: stripOffset), on: monitor.rect, sliver: config.scrollingSliver)[index]
+        return strip.frames(at: strip.offset(showing: index, from: stripOffset, centre: config.scrollingCentre), on: monitor.rect, sliver: config.scrollingSliver)[index]
     }
 }
 
