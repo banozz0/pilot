@@ -11,12 +11,17 @@ public struct WorkspaceArrangement: Equatable, Sendable {
     /// How the tree read its windows when `arrange` last built it (layouts round 1): what open order is followed from,
     /// whatever the preset since. A record of the build, not part of the arrangement's identity.
     var built: [UInt32]?
+    /// The room it was built for. Its weights are points of that room, and layout tops every weight up by the same
+    /// amount, so unequal shares (Centred main's quarters) come out wrong in another room: an auto workspace is built
+    /// again once its room changes (another display, the dock's or the top bar's room, the gaps).
+    var area: CGSize?
 
-    init(_ preset: LayoutPreset, auto: Bool, order: [UInt32], built: [UInt32]? = nil) {
+    init(_ preset: LayoutPreset, auto: Bool, order: [UInt32], built: [UInt32]? = nil, area: CGSize? = nil) {
         self.preset = preset
         self.auto = auto
         self.order = order
         self.built = built
+        self.area = area
     }
 
     public static func == (a: Self, b: Self) -> Bool { a.preset == b.preset && a.auto == b.auto && a.order == b.order }
@@ -43,6 +48,7 @@ extension Workspace {
         arrangements[name] = kept
         try arrange(kept.preset, order: kept.order)
         arrangements[name]?.built = try rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
+        arrangements[name]?.area = areaSize
     }
 
     @MainActor
@@ -158,14 +164,16 @@ extension TilingContainer {
     }
 }
 
-/// Before layout: each auto workspace whose tiled windows changed is rebuilt, the windows it had in their open order as
+/// Before layout: each auto workspace whose tiled windows or room changed is rebuilt, the windows it had in their open order as
 /// the tree now holds them (a swap since is kept; WorkspaceArrangement.openOrder), new ones after. A workspace whose window is being dragged waits for the release.
 @MainActor
 func arrangeAutoWorkspaces() throws {
     for (name, var kept) in arrangements where kept.auto {
         guard let workspace = Workspace.existing(byName: name) else { continue }
         let tiled = try workspace.rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
-        guard tiled.count != kept.order.count || Set(tiled) != Set(kept.order),
+        // A strip or a stage keeps its own widths, so only a tree's room counts.
+        let moved = kept.area.map { $0 != workspace.areaSize && kept.preset.tree(1, in: $0) != nil } ?? false
+        guard tiled.count != kept.order.count || Set(tiled) != Set(kept.order) || moved,
               currentlyManipulatedWithMouseWindowId.map(tiled.contains) != true else { continue }
         kept.order = try kept.openOrder(on: workspace)
         try workspace.arrange(kept)

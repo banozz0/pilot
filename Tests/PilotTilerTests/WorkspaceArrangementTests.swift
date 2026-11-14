@@ -174,6 +174,16 @@ extension TilerTreeTests {
             try #require(Window.get(byId: 2)).unbindFromParent()
             try arrangeAutoWorkspaces()
             #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles(windows([3, 4]))]))
+            // Its room changes (wider gaps here, another display or the dock's room live): it is built again, so its
+            // weights are points of the new room and layout keeps the shares (layouts round 1).
+            let gaps = config.gaps
+            defer { config.gaps = gaps }
+            config.gaps = Gaps(inner: .zero, outer: .init(left: 600, bottom: 0, top: 0, right: 0))
+            try arrangeAutoWorkspaces()
+            let root = try workspace.rootTilingContainer
+            #expect(abs(try root.children.reduce(0) { try $0 + $1.getWeight(.h) } - workspace.areaSize.width) < 0.5)
+            #expect(arrangements[name]?.area == workspace.areaSize)
+            #expect(abs(try #require(Window.get(byId: 1)).getWeight(.h) - workspace.areaSize.width / 2) < 0.5)
         }
 
         @Test func manualAndDraggedWorkspacesAreLeftAlone() throws {

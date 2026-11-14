@@ -103,7 +103,7 @@ public struct InProcessTiler: TilerRunning {
         arrangements = layouts.reduce(into: [:]) { kept, entry in
             guard let preset = entry.value.preset else { return }
             let was = arrangements[entry.key]
-            kept[entry.key] = WorkspaceArrangement(preset, auto: entry.value.auto, order: was?.order ?? [], built: was?.built)
+            kept[entry.key] = WorkspaceArrangement(preset, auto: entry.value.auto, order: was?.order ?? [], built: was?.built, area: was?.area)
         }
     }
 
