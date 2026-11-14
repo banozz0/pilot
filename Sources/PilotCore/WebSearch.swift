@@ -2,7 +2,8 @@ import Foundation
 
 /// Search the web for what was typed in Hyper+Space (Sven 2026-10-16): in the default browser, with that browser's own
 /// default search engine, read from its settings. Safari's engine is Safari's to pick (its `x-web-search:` link); a
-/// Chromium browser keeps its engine as a template in its profile's Preferences; a Firefox one in its profile's
+/// Chromium browser keeps its engine as a template in its profile's Preferences (with Full Disk Access only,
+/// WebSearchReader.settingsFile); a Firefox one in its profile's
 /// search.json (mozlz4, which the app decompresses before this reads it). Anything unread searches Google, as Install's
 /// web search does. Pure: the app reads the files (WebSearchReader).
 public enum WebSearch {
@@ -56,19 +57,25 @@ public enum WebSearch {
         case other
     }
 
+    /// The Chromium family by bundle id: its folder under Application Support and its first engine.
+    static let chromium: [String: (folder: String, standard: Engine)] = [
+        "com.google.Chrome": ("Google/Chrome", google),
+        "com.google.Chrome.beta": ("Google/Chrome Beta", google),
+        "com.google.Chrome.canary": ("Google/Chrome Canary", google),
+        "org.chromium.Chromium": ("Chromium", google),
+        "com.brave.Browser": ("BraveSoftware/Brave-Browser", Engine(name: "Brave Search", template: "https://search.brave.com/search?q={query}")),
+        "com.microsoft.edgemac": ("Microsoft Edge", Engine(name: "Bing", template: "https://www.bing.com/search?q={query}")),
+        "com.vivaldi.Vivaldi": ("Vivaldi", google),
+        "company.thebrowser.Browser": ("Arc/User Data", google),
+    ]
+
+    /// The Chromium family's data folders, guarded like Chrome's (WebSearchReader.settingsFile).
+    public static let chromiumFolders = chromium.values.map(\.folder)
+
     public static func family(bundleID: String) -> Family {
-        let bing = Engine(name: "Bing", template: "https://www.bing.com/search?q={query}")
-        let brave = Engine(name: "Brave Search", template: "https://search.brave.com/search?q={query}")
+        if let browser = chromium[bundleID] { return .chromium(folder: browser.folder, standard: browser.standard) }
         switch bundleID {
         case "com.apple.Safari", "com.apple.SafariTechnologyPreview": return .safari
-        case "com.google.Chrome": return .chromium(folder: "Google/Chrome", standard: google)
-        case "com.google.Chrome.beta": return .chromium(folder: "Google/Chrome Beta", standard: google)
-        case "com.google.Chrome.canary": return .chromium(folder: "Google/Chrome Canary", standard: google)
-        case "org.chromium.Chromium": return .chromium(folder: "Chromium", standard: google)
-        case "com.brave.Browser": return .chromium(folder: "BraveSoftware/Brave-Browser", standard: brave)
-        case "com.microsoft.edgemac": return .chromium(folder: "Microsoft Edge", standard: bing)
-        case "com.vivaldi.Vivaldi": return .chromium(folder: "Vivaldi", standard: google)
-        case "company.thebrowser.Browser": return .chromium(folder: "Arc/User Data", standard: google)
         case "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly": return .firefox(folder: "Firefox")
         case "app.zen-browser.zen": return .firefox(folder: "zen")
         case "org.mozilla.librewolf", "io.gitlab.librewolf-community": return .firefox(folder: "librewolf")

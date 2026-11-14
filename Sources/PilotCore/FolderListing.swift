@@ -207,9 +207,11 @@ public enum FolderListing {
     /// Disk Access only the volumes. A size is never worked out from outside them, so no question shows.
     public static func protectedRoots(home: String = NSHomeDirectory(), fullDiskAccess: Bool) -> [String] {
         guard !fullDiskAccess else { return ["/Volumes"] }
-        return ["/Volumes"] + ["Desktop", "Documents", "Downloads", "Pictures/Photos Library.photoslibrary", "Library/Mobile Documents",
-                               "Library/CloudStorage", "Library/Application Support/AddressBook", "Library/Calendars", "Library/Reminders",
-                               "Library/Mail", "Library/Messages", "Library/Safari"]
+        // The Chromium browsers' own data is guarded like Chrome's (WebSearchReader.settingsFile).
+        let browsers = WebSearch.chromiumFolders.map { "Library/Application Support/" + $0 }
+        return ["/Volumes"] + (["Desktop", "Documents", "Downloads", "Pictures/Photos Library.photoslibrary", "Library/Mobile Documents",
+                                "Library/CloudStorage", "Library/Application Support/AddressBook", "Library/Calendars", "Library/Reminders",
+                                "Library/Mail", "Library/Messages", "Library/Safari"] + browsers)
             .map { home + "/" + $0 } + appData(home: home)
     }
 

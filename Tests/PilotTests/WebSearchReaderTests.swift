@@ -4,8 +4,9 @@ import PilotCore
 import Testing
 @testable import Pilot
 
-/// Search the web's engine read from a browser's own files (Sven 2026-10-16): a Chromium profile's Preferences and a
-/// Firefox profile's LZ4-compressed search.json, in a made-up Application Support folder, never this Mac's.
+/// Search the web's engine read from a browser's own files (Sven 2026-10-16): a Chromium profile's Preferences (with Full
+/// Disk Access only) and a Firefox profile's LZ4-compressed search.json, in a made-up Application Support folder, never
+/// this Mac's.
 @Suite("Web search reader")
 struct WebSearchReaderTests {
     func folder() throws -> URL {
@@ -27,7 +28,7 @@ struct WebSearchReaderTests {
         return Data("mozLz40\0".utf8) + Data(bytes: &length, count: 4) + out.prefix(written)
     }
 
-    @Test("Chrome: the last-used profile's engine, the row naming it with the browser; Google's template made plain")
+    @Test("Chrome: the last-used profile's engine with Full Disk Access, else its own unread (Data Access Blocked); Google's template made plain")
     func chrome() throws {
         let support = try folder()
         defer { try? FileManager.default.removeItem(at: support) }
@@ -36,13 +37,16 @@ struct WebSearchReaderTests {
         try Data(#"{"profile":{"last_used":"Profile 1"}}"#.utf8).write(to: root.appending(path: "Local State"))
         try Data(#"{"default_search_provider_data":{"template_url_data":{"short_name":"Ecosia","url":"https://www.ecosia.org/search?q={searchTerms}&tt={google:RLZ}"}}}"#.utf8)
             .write(to: root.appending(path: "Profile 1/Preferences"))
-        let choice = WebSearchReader.read(browser: ("Google Chrome", "com.google.Chrome"), support: support)
+        let chrome = (name: "Google Chrome", bundleID: "com.google.Chrome")
+        #expect(WebSearchReader.settingsFile(browser: chrome, support: support, fullDiskAccess: false) == nil)
+        #expect(WebSearchReader.read(browser: chrome, support: support, fullDiskAccess: false).via == "Google in Google Chrome")
+        let choice = WebSearchReader.read(browser: chrome, support: support, fullDiskAccess: true)
         #expect(choice.via == "Ecosia in Google Chrome")
         #expect(choice.engine.url(for: "trees")?.absoluteString == "https://www.ecosia.org/search?q=trees&tt=")
         // A browser with nothing saved searches with its own first engine; one Pilot does not know, Google.
-        #expect(WebSearchReader.read(browser: ("Microsoft Edge", "com.microsoft.edgemac"), support: support).engine.name == "Bing")
-        #expect(WebSearchReader.read(browser: ("Orion", "com.kagi.kagimacOS"), support: support).engine == WebSearch.google)
-        #expect(WebSearchReader.read(browser: ("Safari", "com.apple.Safari"), support: support).via == "Safari")
+        #expect(WebSearchReader.read(browser: ("Microsoft Edge", "com.microsoft.edgemac"), support: support, fullDiskAccess: true).engine.name == "Bing")
+        #expect(WebSearchReader.read(browser: ("Orion", "com.kagi.kagimacOS"), support: support, fullDiskAccess: true).engine == WebSearch.google)
+        #expect(WebSearchReader.read(browser: ("Safari", "com.apple.Safari"), support: support, fullDiskAccess: true).via == "Safari")
     }
 
     @Test("Zen: installs.ini's profile, its search.json.mozlz4 decompressed, the default engine; the stamp follows the file")
@@ -57,11 +61,11 @@ struct WebSearchReaderTests {
         try mozlz4(Data(json.utf8)).write(to: file)
         #expect(WebSearchReader.mozlz4(try Data(contentsOf: file)) == Data(json.utf8))
         let browser = (name: "Zen", bundleID: "app.zen-browser.zen")
-        let choice = WebSearchReader.read(browser: browser, support: support)
+        let choice = WebSearchReader.read(browser: browser, support: support, fullDiskAccess: true)
         #expect(choice.via == "DuckDuckGo in Zen")
-        let stamp = WebSearchReader.stamp(browser: browser, support: support)
+        let stamp = WebSearchReader.stamp(browser: browser, support: support, fullDiskAccess: true)
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: file.path)
-        #expect(WebSearchReader.stamp(browser: browser, support: support) != stamp, "a changed engine is read again")
+        #expect(WebSearchReader.stamp(browser: browser, support: support, fullDiskAccess: true) != stamp, "a changed engine is read again")
         #expect(WebSearchReader.mozlz4(Data("not lz4".utf8)) == nil)
     }
 }
