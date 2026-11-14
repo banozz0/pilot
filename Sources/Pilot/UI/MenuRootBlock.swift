@@ -102,12 +102,12 @@ struct MenuRootPreview: View {
     @Environment(\.ink) private var ink
     let settings: MenuRootSettings
 
-    /// The rows the preview has room for beside Your menu; the menu itself scrolls to the rest.
-    static let maxRows = 10
     static let width: CGFloat = 250
 
     var body: some View {
-        let rows = settings.root.shownRows().prefix(Self.maxRows)
+        // Every row switched on, in order: the preview grows with Your menu's list beside it, never cut (Sven on build
+        // 2503: it stopped at the tenth, Extensions, with Activity, Stats, About and System on).
+        let rows = settings.root.shownRows()
         let frame = RoundedRectangle(cornerRadius: ink.radius(8), style: .continuous)
         KitBlock(title: "Hyper+Space shows", symbol: "eye") {
             VStack(alignment: .leading, spacing: 0) {
