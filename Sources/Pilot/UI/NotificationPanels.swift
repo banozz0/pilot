@@ -3,7 +3,7 @@ import Observation
 import PilotCore
 import SwiftUI
 
-/// What the panels show, handed to their views. Words stay in memory.
+/// What the panels show, handed to their views. Words are never logged or sent.
 @Observable @MainActor
 final class NotificationCardsModel {
     /// The app's: the panels draw it, and the top bar's bell item reads its count.
@@ -361,7 +361,7 @@ private struct BellHandle: NSViewRepresentable {
     }
 }
 
-/// The drawer: what arrived since the setting went on, newest first, in memory only.
+/// The drawer: what arrived since the setting went on, newest first, kept across a relaunch on the Mac only.
 struct NotificationDrawer: View {
     @Environment(\.style) private var style
     let model: NotificationCardsModel
@@ -387,7 +387,7 @@ struct NotificationDrawer: View {
             .background { if !inBar { WindowDragArea() } }
             Divider()
             if model.drawer.isEmpty {
-                EmptyState(title: "No notifications yet", line: "What macOS shows from now on appears here. It stays in memory.").padding(12)
+                EmptyState(title: "No notifications yet", line: "What macOS shows from now on appears here. It stays on this Mac.").padding(12)
                     .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 ScrollView {

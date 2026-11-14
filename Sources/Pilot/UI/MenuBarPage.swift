@@ -718,7 +718,7 @@ struct MenuBarPage: View {
         return Tile(title: "Notifications", symbol: "bell") {
             BlockRow(first: true) {
                 Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
-                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. The list is kept on this Mac across a relaunch, never sent, and deleted when this goes off; macOS keeps its own copy. macOS's own banners, such as an app accessing your screen, show too. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
             }
             if settings.enabled {
                 BlockRow {
