@@ -136,6 +136,9 @@ class TerminalSurface: NSView, @preconcurrency NSTextInputClient {
         return String(cString: text.text)
     }
 
+    /// Text to the shell as one paste (bracketed when the shell asks for it), with no key: the clipboard's Return.
+    func paste(_ text: String) { sendText(text) }
+
     /// Words to the shell as a paste.
     private func sendText(_ text: String) {
         guard let surface else { return }

@@ -1,5 +1,5 @@
 import AppKit
-import Clipboard
+@testable import Clipboard
 import CryptoKit
 import Foundation
 @testable import Pilot
@@ -135,12 +135,17 @@ struct SandboxHost {
             try store.setSecretLifetime(ClipboardHistory.shared.settings.secretLifetime)
             let copies = new.enumerated().map { index, line in
                 var text = Substring(line), app = "dev.banozz.pilot.sandbox", at = Date().addingTimeInterval(Double(index - new.count) / 1000)
+                var image: String?
                 while let space = text.firstIndex(of: " ") {
                     let field = text[..<space]
-                    if field.hasPrefix("@app=") { app = String(field.dropFirst("@app=".count)) }
+                    if field.hasPrefix("@image=") { image = String(field.dropFirst("@image=".count)) }
+                    else if field.hasPrefix("@app=") { app = String(field.dropFirst("@app=".count)) }
                     else if field.hasPrefix("@at=") { at = (try? Date(String(field.dropFirst("@at=".count)), strategy: .iso8601)) ?? at }
                     else { break }
                     text = text[space...].dropFirst()
+                }
+                if let image, let png = FileManager.default.contents(atPath: image) {
+                    return (ClipItem(kind: .image, text: "", contents: [["public.png": png]], sourceApp: app), at)
                 }
                 var item = ClipItem.plainText(String(text), sourceApp: app)
                 if ClipboardCapture.colourValue(item.text) != nil { item.kind = .colour }
@@ -156,7 +161,32 @@ struct SandboxHost {
             fflush(stdout)
         }
         defer { clipWatcher?.stop(); clipBoard?.releaseGlobally() }
-        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, homeBlocks: homeBlocks))
+        // PILOT_SANDBOX_PASTE=<folder>, with PILOT_SANDBOX_CLIPS (and PILOT_SANDBOX_ALLOW=1): `pilot clip paste --app <app>`
+        // writes the run's own pasteboard, brings nothing to the front and posts no key. Each Cmd+V instead reads that
+        // pasteboard as Ghostty reads one (its file URLs' paths, space-separated, else its text) and appends a line to
+        // `<folder>/pasted.jsonl`: the app, the first item's types and what a terminal would paste. A terminal's images go
+        // in `<folder>/images` (TerminalPaste). A line `@image=<png path> ` seeds an image copy (an `@image=` line
+        // still needs a word after it).
+        let clipboard = ClipboardTools()
+        if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_PASTE"].map({ URL(filePath: $0, directoryHint: .isDirectory) }),
+           let clipBoard {
+            var front = ""
+            clipboard.pasteboard = clipBoard
+            clipboard.front = { app in front = app }
+            // `--app` as a bundle id: a terminal is one of Open with's terminals, as the panel reads the app in front.
+            clipboard.terminal = { AppRolePicks.candidates(.terminal).contains(front) ? folder.appending(path: "images") : nil }
+            clipboard.post = {
+                let urls = (clipBoard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+                let pasted = urls.isEmpty ? clipBoard.string(forType: .string) ?? "" : urls.map(\.path).joined(separator: " ")
+                let line: [String: Any] = ["app": front, "types": clipBoard.pasteboardItems?.first?.types.map(\.rawValue) ?? [], "pasted": pasted]
+                guard let data = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
+                let log = folder.appending(path: "pasted.jsonl")
+                if let handle = try? FileHandle(forWritingTo: log) {
+                    handle.seekToEndOfFile(); handle.write(data + Data("\n".utf8)); try? handle.close()
+                } else { try? (data + Data("\n".utf8)).write(to: log) }
+            }
+        }
+        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, homeBlocks: homeBlocks, clipboard: clipboard))
         #expect(served.start())
         defer { served.stop() }
         try Data().write(to: hold)
