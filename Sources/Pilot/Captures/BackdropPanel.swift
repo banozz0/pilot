@@ -452,7 +452,7 @@ struct BackdropPanel: View {
     }
 
     /// An image file picked in an open panel, from the captures folder.
-    private static func choose() -> URL? {
+    static func choose() -> URL? {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false

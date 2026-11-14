@@ -5,10 +5,10 @@ import PilotCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The capture editor (spec `capture.html` CP6, CP7; Q158: it opens after every capture; B, Sven Q805, editors-round-2):
-/// the capture on the sunken ground, the fourteen tools in a floating rail at its left, History (undo, redo, delete) and
-/// the actions ending in Cancel and Done along the top, the picked tool's options in one strip under it, the zoom and
-/// size at the bottom right, the backdrop panel floating at the right. Done copies the marked-up capture and writes it over the file the capture was saved to; ⌘C copies
+/// The capture editor (spec `capture.html` CP6, CP7; Q158: it opens after every capture; C, Two modes, Sven Q238, capture
+/// editor round 1): the top bar with Cancel, undo, redo and delete, the Mark up / Frame switch, More, Copy and Done; the
+/// capture on the solid sunken ground; under it Mark up's options strip and dock of named tools, or Frame's strip of
+/// looks and fills. Done copies the marked-up capture and writes it over the file the capture was saved to; ⌘C copies
 /// and ⌘S saves a copy beside it without closing; Escape (twice when there are marks) and Cancel leave the capture as
 /// taken. The marks are flattened, encoded and written off the main thread.
 @MainActor
@@ -53,11 +53,9 @@ enum CaptureEditor {
         // Drags snap to edges, marks and the centre (C3, C7).
         model.snaps = true
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        let library = BackdropLibrary.shared
-        model.panelOpen = library.panelOpen
-        model.panelChanged = { library.panelOpen = $0 }
+        // It opens in Mark up: marking is the first job (C).
         _ = sizeWatch
-        let least = EditorLayout.least(panel: model.panelOpen)
+        let least = EditorLayout.least
         let size = EditorLayout.opening(room: screen?.visibleFrame.size ?? CGSize(width: 1440, height: 900), least: least,
                                         saved: EditorLayout.saved(sizeKey))
         let panel = EditorPanel(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -308,20 +306,19 @@ enum CaptureEditor {
 /// narrower than its tools need. Both editors open at one size whatever the capture's shape (Sven on build 76).
 enum EditorLayout {
     static let margin: CGFloat = 16
-    /// The narrowest window: B's top row (History and the actions, Cancel and Done with them) fits it in every style
-    /// (CaptureEditorBarWidth), and so does the bottom row's widest strip, Text's options beside the View pill.
-    static let minWidth: CGFloat = 980
-
-    /// The backdrop panel's column, its floating card and the margin to the window's edge (B), and the height that shows
-    /// it without much scrolling.
-    static let panel: CGFloat = BackdropPanel.width + 16
-    static let panelHeight: CGFloat = 720
-    /// The room the floating tool rail takes at the room's left (B); the fit keeps the capture clear of it on both sides,
-    /// so it stays centred.
-    static let rail: CGFloat = 64
+    /// The narrowest window (C): the top bar, Mark up's dock of fourteen named tools with Text's options over it, and
+    /// Frame's row of fill kinds, sliders and ratio fit it in every style (CaptureEditorBarWidth).
+    static let minWidth: CGFloat = 1120
+    /// The lowest: the room keeps about 500 points with Frame's strip under it.
+    static let minHeight: CGFloat = 720
 
     static func bar(_ s: StyleTokens) -> CGFloat { s.density.control + 16 }
     static func foot(_ s: StyleTokens) -> CGFloat { s.density.control + 12 }
+    /// Mark up's dock: a named tool and the pill round it.
+    static func dock(_ s: StyleTokens) -> CGFloat { DockTool.height(s) + 12 }
+    /// What sits under the room: Mark up's options row, the dock and the margin to the window's edge, or Frame's strip
+    /// and its hairline.
+    static func under(_ s: StyleTokens, framing: Bool) -> CGFloat { framing ? FrameStrip.height(s) + 1 : foot(s) + 4 + dock(s) + 12 }
 
     /// The size an editor opens at on a screen whose visible frame is `room`: the one it was last dragged to (`saved`), else
     /// 70 % of the screen up to 1600 × 1050; never under `least`, never past the screen. The capture is fitted inside.
@@ -332,9 +329,13 @@ enum EditorLayout {
         return CGSize(width: side(room.width, least.width, 1600, saved?.width), height: side(room.height, least.height, 1050, saved?.height))
     }
 
-    /// The capture editor's smallest window: its tools' width, the backdrop panel's column beside them when it is open.
-    static func least(panel open: Bool) -> CGSize {
-        CGSize(width: minWidth + (open ? panel : 0), height: open ? panelHeight : 640)
+    /// The capture editor's smallest window, in either mode, so a switch never resizes it.
+    static let least = CGSize(width: minWidth, height: minHeight)
+
+    /// Where the room sits in a window `size` big: under the top bar and its hairline, over Mark up's rows or Frame's strip.
+    static func room(in size: CGSize, tokens: StyleTokens, framing: Bool = false) -> CGRect {
+        let top = bar(tokens) + 1
+        return CGRect(x: 0, y: top, width: size.width, height: size.height - top - under(tokens, framing: framing))
     }
 
     /// The size kept under `key` by `watchSize`, if the editor was ever dragged to one.
@@ -371,12 +372,11 @@ enum EditorLayout {
         max(0.1, min(1, space.width / max(capture.width, 1), space.height / max(capture.height, 1)))
     }
 
-    /// The window that holds `capture` at `fit`, clear of the tool rail, and nothing more, which the renders draw; with the
-    /// backdrop panel open it is the panel wider and at least `panelHeight` high.
-    static func window(_ capture: CGSize, fit: CGFloat, tokens: StyleTokens, panel open: Bool = false) -> CGSize {
-        let side = open ? panel : 0
-        return CGSize(width: max(minWidth, capture.width * fit + 2 * (margin + rail)) + side,
-                      height: max(open ? panelHeight : 0, bar(tokens) + foot(tokens) + capture.height * fit + 2 * margin + 2))
+    /// The window that holds `capture` at `fit` in Mark up, or in Frame (`panel`), and nothing more, which the renders draw;
+    /// never under `least`.
+    static func window(_ capture: CGSize, fit: CGFloat, tokens: StyleTokens, panel framing: Bool = false) -> CGSize {
+        CGSize(width: max(minWidth, capture.width * fit + 2 * margin),
+               height: max(minHeight, bar(tokens) + 1 + under(tokens, framing: framing) + capture.height * fit + 2 * margin))
     }
 }
 
@@ -423,10 +423,10 @@ final class EditorPanel: NSPanel, BorderedWindow {
     }
 }
 
-/// B (Sven, Q805; editors-round-2): the sunken ground under everything; along the top History and the actions, in a row
-/// `EditorLayout.bar` high; the room with the capture centred in it and the tool rail floating at its left; the backdrop
-/// panel's card at the right while it is open; along the bottom the options strip and the View pill, `EditorLayout.foot`
-/// high. A point of air between the rows and the room keeps the room where the old hairlines had it.
+/// C, Two modes (Sven, Q238): the top bar along the top, `EditorLayout.bar` high over a hairline; the room with the
+/// capture centred on the solid sunken ground (on Glass too, so the capture never melts into the desktop); under it Mark
+/// up's options row and tool dock on the same ground, or Frame's strip on the bar's face. On Glass the top bar and Frame's
+/// strip stand on the window's glass.
 struct CaptureEditorView: View {
     @Environment(\.style) private var style
     let model: EditorModel
@@ -439,48 +439,53 @@ struct CaptureEditorView: View {
     var drag: (() -> NSItemProvider)?
     /// Add a capture (C8): the picked file and how the two sit.
     var add: ((URL, CombineLayout.Direction) -> Void)?
-    /// Glass is behind the editor (its window's MaterialBackdrop): no ground or ring over it, the pills stand on it.
+    /// Glass is behind the editor (its window's MaterialBackdrop): the bars carry no fill over it.
     var glass = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
         VStack(spacing: 0) {
-            EditorTopBar(model: model, save: save, copy: copy, pin: pin, ask: ask, cancel: cancel, done: done, drag: drag)
+            EditorTopBar(model: model, save: save, copy: copy, pin: pin, ask: ask, cancel: cancel, done: done, drag: drag, add: add)
                 .frame(height: EditorLayout.bar(style))
-            Color.clear.frame(height: 1)
-            HStack(spacing: 0) {
-                ZStack(alignment: .topLeading) {
-                    EditorCanvas(model: model)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .overlay(alignment: .bottom) { if let hint = model.hint { EditorHint(text: hint).padding(.bottom, 18) } }
-                    ToolRail(model: model).padding(.leading, 12).padding(.vertical, 4)
+                .background { if !glass { style.color(\.panel) } }
+            style.color(\.line).frame(height: 1)
+            EditorCanvas(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(style.color(\.sunken))
+                .overlay(alignment: .bottom) { if let hint = model.hint { EditorHint(text: hint).padding(.bottom, 18) } }
+                // Over the rows under it, so the colour picker's loupe is whole at the capture's edge.
+                .zIndex(1)
+            if model.panelOpen {
+                VStack(spacing: 0) {
+                    style.color(\.line).frame(height: 1)
+                    FrameStrip(model: model)
                 }
-                if model.panelOpen {
-                    BackdropPanel(backdrop: model.backdrop, set: model.setBackdrop, live: model.previewBackdrop, subject: model.image,
-                                  capture: true, add: add)
-                        .frame(maxHeight: .infinity)
-                        .editorPill(radius: \.pop, fixed: false)
-                        .padding(.vertical, 4).padding(.trailing, 12)
-                        .frame(width: EditorLayout.panel, alignment: .trailing)
+                .frame(height: EditorLayout.under(style, framing: true))
+                .background { if !glass { style.color(\.panel) } }
+            } else {
+                VStack(spacing: 4) {
+                    EditorFooter(model: model).frame(height: EditorLayout.foot(style))
+                    ToolDock(model: model).frame(height: EditorLayout.dock(style))
                 }
+                .padding(.horizontal, 12).padding(.bottom, 12)
+                .frame(height: EditorLayout.under(style, framing: false), alignment: .top)
+                .frame(maxWidth: .infinity)
+                .background(style.color(\.sunken))
             }
-            // Over the bars, so the colour picker's loupe is whole at the capture's edge.
-            .zIndex(1)
-            Color.clear.frame(height: 1)
-            EditorFooter(model: model).padding(.horizontal, 12).frame(height: EditorLayout.foot(style))
         }
-        .background { if !glass { style.color(\.sunken) } }
         .clipShape(shape)
         .overlay {
             if style.kind == .toybox { shape.strokeBorder(style.color(\.outline), lineWidth: 2) }
             else if !glass { shape.strokeBorder(style.color(\.line2)) }
         }
+        // More's Add a capture lists History's newest captures.
+        .onAppear { if add != nil { BackdropLibrary.shared.load() } }
     }
 }
 
 /// The capture with its marks on its room, drawn by the same renderer the export uses at the model's zoom; a drag on the
-/// capture draws with the picked tool. With its screen (P77) the screen shows round it, dimmed, and the backdrop's marks
-/// draw on the backdrop's canvas, outside the capture's spot.
+/// capture draws with the picked tool. The screen it was cut from (P77) shows round it only while cropping, dimmed, so an
+/// uncrop can reach it (C, Sven Q238); the backdrop's marks draw on the backdrop's canvas, outside the capture's spot.
 struct EditorCanvas: View {
     @Environment(\.style) private var style
     let model: EditorModel
@@ -495,6 +500,8 @@ struct EditorCanvas: View {
             ctx.scaleBy(x: zoom, y: zoom)
             let stage = model.stage, source = model.source
             ctx.translateBy(x: -stage.minX, y: -stage.minY)
+            // Off Crop the room shows only the stage: never the screen round it.
+            if model.tool != .crop { ctx.clip(to: Path(stage)) }
             let ring = ctx
             // Where the backdrop's marks and the chrome draw: the document's points, over the capture and its backdrop.
             var top = ctx
@@ -519,11 +526,10 @@ struct EditorCanvas: View {
             let flags = NSEvent.modifierFlags
             switch press {
             case nil:
-                // A handle can sit just off the capture, and a crop can start anywhere round it; with its screen a mark
-                // can start on the screen round it too.
+                // A handle can sit just off the capture, and a crop can start anywhere round it, on the screen round the
+                // capture too.
                 let at = point(g.location)
                 press = model.shown.contains(g.location) || model.tool == .crop || model.grip(at: at) != nil
-                    || (model.screen != nil && CGRect(origin: .zero, size: model.size).contains(at))
                 if press == true { model.begin(at, shift: flags.contains(.shift)) }
             case true?: model.drag(point(g.location), shift: flags.contains(.shift), option: flags.contains(.option))
             case false?: break
@@ -544,8 +550,7 @@ struct EditorCanvas: View {
     /// A point on the view as a point on the capture, through the zoom and the backdrop's preview.
     private func point(_ at: CGPoint) -> CGPoint { model.capturePoint(inRoom: at) }
 
-    /// The backdrop's preview, drawn as MarkupRenderer.framed draws the export: with a screen, the screen round the
-    /// canvas, dimmed and lined up with the capture in its spot; its fill over the export's canvas fitted to the room (a
+    /// The backdrop's preview, drawn as MarkupRenderer.framed draws the export: its fill over the export's canvas fitted to the room (a
     /// picture fill's picture covering it), a shadow under the capture's rounded spot, then the space moved and clipped
     /// so the capture and its marks draw inside it. `top` is moved the same way but clipped to the canvas, for the
     /// backdrop's marks.
@@ -554,13 +559,6 @@ struct EditorCanvas: View {
         ctx.translateBy(x: v.origin.x, y: v.origin.y)
         ctx.scaleBy(x: v.k, y: v.k)
         let e = CGRect(origin: .zero, size: v.canvas), toDocument = CGSize(width: v.spot.minX - v.area.minX, height: v.spot.minY - v.area.minY)
-        if let screen = model.screen {
-            var around = ctx
-            around.translateBy(x: toDocument.width, y: toDocument.height)
-            let whole = CGRect(origin: .zero, size: model.size)
-            around.draw(Image(decorative: screen.image, scale: model.scale), in: whole)
-            around.fill(Path(whole), with: .color(.black.opacity(0.45)))
-        }
         switch b.fill {
         case .colour(let rgb): ctx.fill(Path(e), with: .color(Color(Paint(rgb))))
         case .gradient(let colours) where colours.count > 1:
@@ -725,8 +723,7 @@ struct CropSizeChip: View {
             Text(verbatim: "\(Int((crop.width * s).rounded())) × \(Int((crop.height * s).rounded())) · was \(model.image.width) × \(model.image.height)")
                 .font(Font(EditorFooter.mono(style, 10.5))).foregroundStyle(style.color(\.text)).monospacedDigit().fixedSize()
                 .padding(.horizontal, 7).chipFace(style)
-                // Clear of the tool rail when an uncrop takes the crop's corner past it.
-                .offset(x: max(EditorLayout.rail + 12, at.x), y: max(4, at.y - 30))
+                .offset(x: max(4, at.x), y: max(4, at.y - 30))
         }
     }
 }

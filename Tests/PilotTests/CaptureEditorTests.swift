@@ -182,16 +182,15 @@ struct CaptureEditorTests {
     func layout() {
         let tokens = StyleTokens.of(.instrument, theme: .designed[0])
         // A thin strip on Sven's 3440 × 1440 screen (visible 3440 × 1410) gets the same window as any capture.
-        let open = EditorLayout.opening(room: CGSize(width: 3440, height: 1410), least: EditorLayout.least(panel: false))
+        let open = EditorLayout.opening(room: CGSize(width: 3440, height: 1410), least: EditorLayout.least)
         #expect(open.width == 1600 && abs(open.height - 987) < 0.01)
-        let room = CGSize(width: open.width, height: open.height - EditorLayout.bar(tokens) - EditorLayout.foot(tokens) - 2)
+        let room = EditorLayout.room(in: open, tokens: tokens).size
         let inside = CGSize(width: room.width - 2 * EditorLayout.margin, height: room.height - 2 * EditorLayout.margin)
         #expect(EditorLayout.fit(CGSize(width: 1345, height: 380), inside: inside) == 1)
         #expect(EditorLayout.fit(CGSize(width: 3000, height: 1000), inside: inside) < 0.6)
         let laptop = CGSize(width: 1200, height: 800)
-        #expect(EditorLayout.opening(room: laptop, least: EditorLayout.least(panel: false)) == CGSize(width: EditorLayout.minWidth, height: 640))
-        #expect(EditorLayout.opening(room: laptop, least: EditorLayout.least(panel: true)).height == 720)
-        // A dragged size wins, held to the screen.
-        #expect(EditorLayout.opening(room: laptop, least: EditorLayout.least(panel: false), saved: CGSize(width: 1100, height: 900)) == CGSize(width: 1100, height: 760))
+        #expect(EditorLayout.opening(room: laptop, least: EditorLayout.least) == CGSize(width: EditorLayout.minWidth, height: EditorLayout.minHeight))
+        // A dragged size wins, held to the screen and over the smallest.
+        #expect(EditorLayout.opening(room: laptop, least: EditorLayout.least, saved: CGSize(width: 1150, height: 900)) == CGSize(width: 1150, height: 760))
     }
 }

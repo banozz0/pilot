@@ -695,9 +695,13 @@ final class EditorModel {
                 default: return false
                 }
             } else if let tool = MarkTool.picked(by: c) {
+                // A tool's key in Frame goes back to Mark up with that tool (C, Sven Q238).
+                if panelOpen { frame(false) }
                 pick(tool)
             } else if c.lowercased() == "b" {
-                panelOpen.toggle()
+                frame(!panelOpen)
+            } else if c.lowercased() == "m" {
+                frame(false)
             } else {
                 return false
             }
@@ -958,9 +962,26 @@ final class EditorModel {
     var backdrop: Backdrop? { backdropDraft ?? document.backdrop }
     /// A slider's backdrop while it moves; kept as one undo step when it lets go.
     private(set) var backdropDraft: Backdrop?
-    /// Whether the backdrop panel shows at the editor's left (B, or the top bar's Backdrop); the window remembers it.
+    /// Frame mode (C, Sven Q238): the backdrop's strip in place of the tool dock, Select the tool. The top bar's switch,
+    /// B and M set it through `frame`; the editor opens in Mark up.
     var panelOpen = false { didSet { if panelOpen != oldValue { panelChanged(panelOpen) } } }
     @ObservationIgnored var panelChanged: (Bool) -> Void = { _ in }
+    /// The tool Mark up had when Frame took over; it comes back with Mark up.
+    @ObservationIgnored private var markTool: MarkTool = .select
+
+    /// Frame (`on`) or Mark up: Frame keeps the marks still under Select (a crop under way is kept), Mark up brings back
+    /// the tool it left.
+    func frame(_ on: Bool) {
+        guard on != panelOpen else { return }
+        if on {
+            markTool = tool
+            pick(.select)
+            panelOpen = true
+        } else {
+            panelOpen = false
+            pick(markTool)
+        }
+    }
     /// A picture fill's picture at the preview's size (1600 on its longer side), read off the main thread when the fill
     /// or its blur changes; the export reads its own at full size.
     private(set) var backdropPicture: CGImage?
@@ -1108,11 +1129,10 @@ final class EditorModel {
     /// The zoom follows the room while it is the fit.
     @ObservationIgnored private var fitted = true
 
-    /// The zoom that shows the whole capture inside the room's margin and clear of the tool rail on either side (so it
-    /// stays centred), never past actual size.
+    /// The zoom that shows the whole capture inside the room's margin, never past actual size.
     var fit: CGFloat { EditorLayout.fit(stage.size, inside: fitRoom) }
 
-    private var fitRoom: CGSize { room.insetBy(dx: EditorLayout.margin + EditorLayout.rail, dy: EditorLayout.margin).size }
+    private var fitRoom: CGSize { room.insetBy(dx: EditorLayout.margin, dy: EditorLayout.margin).size }
 
     /// The zoom out stops at: the fit, or while cropping a capture with its screen, one that shows all the screen round
     /// the stage, so an uncrop can reach every edge.
