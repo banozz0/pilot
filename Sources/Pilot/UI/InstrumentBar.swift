@@ -221,11 +221,14 @@ private extension BarPart {
 /// (WorkspaceAppIcons).
 struct InstrumentWorkspaceChip: View {
     @Environment(\.style) private var style
-    let label: String
+    /// Its number (and app); nil when the glyph stands alone.
+    let label: String?
     let current: Bool
     let focused: Bool
     let occupied: Bool
     var workspace: OccupiedWorkspace?
+    /// The shown workspace's layout, drawn in place of its number (layouts round 1); `label` is then its app or nil.
+    var glyph: LayoutPreset?
 
     var body: some View {
         // `.tb-ws b`: Geist Mono 500 at 11.5 in a box a point rounder than a chip's (the panels lane's measures).
@@ -233,11 +236,12 @@ struct InstrumentWorkspaceChip: View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let live = current && focused
         HStack(spacing: InstrumentBar.partGap) {
-            Text(label).font(style.font(\.key, size: 11.5)).monospacedDigit().lineLimit(1).fixedSize()
+            if let glyph { LayoutGlyph(preset: glyph) }
+            if let label { Text(label).font(style.font(\.key, size: 11.5)).monospacedDigit().lineLimit(1).fixedSize() }
             if let workspace, !workspace.apps.isEmpty { WorkspaceAppIcons(workspace: workspace, lit: current) }
         }
         .foregroundStyle(style.color(live ? \.onAccent : focused ? \.accentText : current || occupied ? \.text : \.text3))
-        .padding(.horizontal, label.count > 1 || workspace != nil ? InstrumentBar.partGap : 0)
+        .padding(.horizontal, (label?.count ?? 0) > 1 || workspace != nil || glyph != nil ? InstrumentBar.partGap : 0)
         .frame(minWidth: InstrumentBar.chip.width, minHeight: InstrumentBar.chip.height)
         .background { if live { shape.fill(style.color(\.accent)) } }
         .instrumentRaised(current && !live, radius: radius)

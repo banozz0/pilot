@@ -38,7 +38,7 @@ struct WorkspacePresetsTests {
         try Data("{ not json".utf8).write(to: url)
         let presets = WorkspacePresets(observers: EngineObservers(), store: WorkspacePresetStore(url: url))
         #expect(presets.lastError?.hasPrefix("workspace presets not read") == true)
-        presets.save(WorkspacePreset(name: "Work", apps: [], layout: .columns), to: "2")
+        presets.save(WorkspacePreset(name: "Work", apps: [], layout: .scrolling), to: "2")
         presets.remove(from: "1")
         #expect(try String(contentsOf: url, encoding: .utf8) == "{ not json")
         #expect(presets.contents.preset(for: "2") == nil)
@@ -52,7 +52,7 @@ struct WorkspacePresetsTests {
         defer { try? FileManager.default.removeItem(at: file) }
         // A file where the store's folder should be: the write fails.
         let presets = WorkspacePresets(observers: EngineObservers(), store: WorkspacePresetStore(url: file.appending(path: "workspace-presets.json")))
-        presets.save(WorkspacePreset(name: "Work", apps: [], layout: .columns), to: "2")
+        presets.save(WorkspacePreset(name: "Work", apps: [], layout: .scrolling), to: "2")
         #expect(presets.contents.preset(for: "2") == nil)
         #expect(presets.lastError?.hasPrefix("workspace preset not saved") == true)
     }
@@ -64,7 +64,7 @@ struct WorkspacePresetsTests {
         let presets = WorkspacePresets(observers: EngineObservers(), store: WorkspacePresetStore(url: dir.appending(path: "p.json")))
         var autos: [String: Bool?] = [:]
         presets.onSave = { workspace, _, auto in autos[workspace] = auto }
-        let work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 100)], layout: .columns)
+        let work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 100)], layout: .scrolling)
         presets.save(work, to: "2")
         presets.save(work, to: "3", keepLayout: false)
         #expect(autos["3"] == .some(false) && autos["2"] == .some(nil))
@@ -76,7 +76,7 @@ struct WorkspacePresetsTests {
         let dir = FileManager.default.temporaryDirectory.appending(path: "pilot-presets-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = WorkspacePresetStore(url: dir.appending(path: "p.json"))
-        var work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 100)], layout: .columns)
+        var work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 100)], layout: .scrolling)
         work.apps[0].atLogin = true
         var contents = WorkspacePresetStore.Contents()
         contents.assign(work, to: "1")

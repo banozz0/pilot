@@ -34,7 +34,7 @@ extension TilerTreeTests {
             windowsSeenInDrag.withLock { _ = $0.insert(50) } // the app reported it while the mouse was down
             let opened = try await open(50, at: onDisplayOne)
             #expect(opened.nodeWorkspace == one)
-            #expect(try one.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles([.window(2), .window(3), .window(50)])]))
+            #expect(try one.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles([.window(2), .h_tiles([.window(3), .window(50)])])]))
             #expect(windowsSeenInDrag.withLock { $0.isEmpty }, "used once")
         }
 

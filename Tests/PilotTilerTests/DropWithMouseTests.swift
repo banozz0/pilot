@@ -59,10 +59,10 @@ extension TilerTreeTests {
 
         @Test func autoWorkspaceTakesTheSlotUnderTheRelease() throws {
             let (left, right) = try twoMonitors()
-            arrangements = [right.name: WorkspaceArrangement(.columns, auto: true, order: [3, 4])]
+            arrangements = [right.name: WorkspaceArrangement(.mainStack, auto: true, order: [3, 4])]
             // Left half of window 4's column: before 4.
             try drag(1, releasingAt: CGPoint(x: 3000, y: 500))
-            #expect(try right.rootTilingContainer.layoutDescription == .h_tiles([.window(3), .window(1), .window(4)]))
+            #expect(try right.rootTilingContainer.layoutDescription == .h_tiles([.window(3), .v_tiles([.window(1), .window(4)])]))
             #expect(arrangements[right.name]?.order == [3, 1, 4])
             #expect(try left.rootTilingContainer.layoutDescription == .h_tiles([.window(2)]))
         }

@@ -283,10 +283,10 @@ struct CollectionsDesktopTests {
         let rig = try Rig()
         let finder = "com.apple.finder", text = "com.apple.TextEdit"
         let row = await rig.ok("add", "workspace-presets", "--workspace", "3", "--apps", "\(finder),\(text)", "--name", "Write",
-                               "--layout", "columns", "--keep-layout", "off", "--at-login", text)
+                               "--layout", "scrolling", "--keep-layout", "off", "--at-login", text)
         #expect(row.flatMap { Self.field($0, "keepLayout") } == .bool(false))
         #expect(rig.presets.contents.preset(for: "3")?.apps.map(\.atLogin) == [false, true])
-        #expect(rig.layouts.layout("3") == WorkspaceLayout(preset: .columns, auto: false))
+        #expect(rig.layouts.layout("3") == WorkspaceLayout(preset: .scrolling, auto: false))
 
         // A change of layout alone keeps the apps, their At login, the name and Keep this layout.
         _ = await rig.ok("add", "workspace-presets", "--workspace", "3", "--layout", "rows")

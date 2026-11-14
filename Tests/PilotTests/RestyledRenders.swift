@@ -35,7 +35,7 @@ struct RestyledRenders {
         block.floatTitles = ["Preferences"]
         block.gaps = .init(inner: 10, outer: 14)
         UserDefaults.standard.set(try JSONEncoder().encode(block), forKey: "pilotBlock")
-        WorkspaceLayout.save(["1": .init(preset: .mainStack, auto: true), "2": .init(preset: .columns, auto: false)], to: .standard)
+        WorkspaceLayout.save(["1": .init(preset: .mainStack, auto: true), "2": .init(preset: .scrolling, auto: false)], to: .standard)
         let snapshots = """
         {"1": {"workspace": "1", "layout": "h_tiles", "savedAt": "\(ISO8601DateFormatter().string(from: .now.addingTimeInterval(-7200)))",
                "windows": [{"bundleId": "com.mitchellh.ghostty", "appName": "Ghostty", "title": "zsh", "floating": false, "frame": [[0, 0], [700, 900]]}]},

@@ -313,12 +313,15 @@ extension TilerTreeTests {
         }
 
         /// T9: the centre mode picks where a focus move lands. Never scrolls the least; on overflow centres only a column
-        /// that was not whole in view; always centres one that was, too.
+        /// that was not whole in view; always centres one that was, too, and the first and last columns past the strip's
+        /// ends (One centred, Sven 2026-11-14), where the others keep the strip's edge on the screen's.
         @Test(arguments: PilotBlock.CentreMode.allCases) mutating func theCentreModePicksWhereFocusLands(mode: PilotBlock.CentreMode) async throws {
             let (workspace, windows) = try desk(columns: 6)
             config.scrollingCentre = mode
             #expect(try windows[0].focusWindow())
             try await pass(workspace, windows)
+            #expect(mode == .always ? Self.close(try focused().center.x, Self.usable.center.x) : Self.close(try focused().minX, Self.usable.minX),
+                    "the first column")
             #expect(try await focusedWindow().focusNeighbor(.right))
             try await pass(workspace, windows)
             let centred = Self.close(try focused().center.x, Self.usable.center.x)

@@ -10,7 +10,8 @@ import PilotCore
 /// is the usable width; a lone column is always full (Omarchy's fullscreen_on_one_column).
 struct Strip {
     /// Every column's width until Hyper+R changes one, half the usable width (Sven's Q42, 2026-10-12): two columns fill
-    /// the screen and the rest wait to be scrolled to; a lone one is full.
+    /// the screen and the rest wait to be scrolled to; a lone one is full. Settings' Scrolling picture makes it a third
+    /// (layouts round 1): `config.scrollingAutomaticWidth` is the one in use.
     static let automaticWidth: CGFloat = 1.0 / 2
     /// How long a strip scroll glides, eased out (GlideSet): one speed, smooth and fast at once (Sven, 2026-10-12).
     static let glide: Duration = GlideSet.duration
@@ -31,13 +32,16 @@ struct Strip {
 
     /// The offset nearest `offset` that shows column `index` whole, landing it on the usable edge (the outer gap from the
     /// monitor's); never past either end of the strip, so no empty space shows while a column is off screen. `centre`
-    /// always, or on overflow when the column is not whole at `offset`, puts it in the middle instead (T9).
+    /// always, or on overflow when the column is not whole at `offset`, puts it in the middle instead (T9); always puts
+    /// even the first and last columns there, past the strip's ends, leaving the screen's edge empty (One centred,
+    /// Sven 2026-11-14).
     func offset(showing index: Int?, from offset: CGFloat, centre: PilotBlock.CentreMode = .never) -> CGFloat {
         var offset = offset
         if let index, columns.indices.contains(index) {
             let column = columns[index]
             let whole = column.x >= offset - 0.5 && column.x + column.width <= offset + usable.width + 0.5
-            if centre == .always || centre == .overflow && !whole { return self.offset(centring: index) }
+            if centre == .always { return self.offset(centring: index, pastEnds: true) }
+            if centre == .overflow && !whole { return self.offset(centring: index) }
             if column.x < offset {
                 offset = column.x
             } else if column.x + column.width > offset + usable.width {
@@ -47,10 +51,10 @@ struct Strip {
         return offset.coerce(in: 0 ... max(0, length - usable.width))
     }
 
-    /// The offset that puts column `index` in the middle, as far as the strip's ends allow.
-    func offset(centring index: Int) -> CGFloat {
-        let column = columns[index]
-        return (column.x + column.width / 2 - usable.width / 2).coerce(in: 0 ... max(0, length - usable.width))
+    /// The offset that puts column `index` in the middle, as far as the strip's ends allow, or `pastEnds` wholly.
+    func offset(centring index: Int, pastEnds: Bool = false) -> CGFloat {
+        let column = columns[index], centred = column.x + column.width / 2 - usable.width / 2
+        return pastEnds ? centred : centred.coerce(in: 0 ... max(0, length - usable.width))
     }
 
     /// Each column's frame at `offset`. One wholly past an edge of `monitor` is pulled back to keep `sliver` points on
@@ -85,7 +89,7 @@ extension TilingContainer {
         fittedColumns = children.count
         for child in children where refit || child.columnWidth == nil {
             child.columnWidth = child.anyLeafWindowRecursive?.app.rawAppBundleId.flatMap { config.scrollingAppWidths[$0] }
-                ?? Strip.automaticWidth
+                ?? config.scrollingAutomaticWidth
         }
     }
 
@@ -158,7 +162,7 @@ extension Window {
         if let before = column.widthBeforeMaximise {
             column.columnWidth = before
         } else if width >= 1 {
-            column.columnWidth = Strip.automaticWidth
+            column.columnWidth = config.scrollingAutomaticWidth
         } else {
             column.columnWidth = 1
             column.widthBeforeMaximise = width
@@ -220,5 +224,19 @@ extension Rect {
     /// Whether the two share any area: a frame touching another display's edge does not reach onto it.
     func overlaps(_ other: Rect) -> Bool {
         min(maxX, other.maxX) - max(minX, other.minX) > 0.5 && min(maxY, other.maxY) - max(minY, other.minY) > 0.5
+    }
+}
+
+/// A strip as Settings' Scrolling pictures and `pilot layout tiles scrolling` show it (layouts round 1): `count` columns at
+/// `look`'s width (a lone one full), scrolled as layout scrolls to show column `focus` (the newest when nil), from the
+/// strip's start, gapless on a screen of `size`. A column scrolled off keeps its place past the edge.
+public enum StripPreview {
+    @MainActor
+    public static func frames(_ count: Int, look: PilotBlock.StripLook, focus: Int? = nil, in size: CGSize) -> [CGRect] {
+        guard count > 0 else { return [] }
+        let usable = Rect(topLeftX: 0, topLeftY: 0, width: size.width, height: size.height)
+        let strip = Strip(fractions: Array(repeating: 1 / CGFloat(look.onScreen), count: count), usable: usable, gap: 0)
+        let offset = strip.offset(showing: min(focus ?? count - 1, count - 1), from: 0, centre: look.centre)
+        return strip.columns.map { CGRect(x: $0.x - offset, y: 0, width: $0.width, height: size.height) }
     }
 }

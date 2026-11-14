@@ -31,10 +31,10 @@ extension TilerTreeTests {
             try await openWindow(id, on: registrationWorkspace(windowId: id, rect: nil).workspace)
         }
 
-        /// The window joined the remaining display's workspace at the foot of its stack.
+        /// The window joined the remaining display's workspace in the tile its main + stack halves (layouts round 1).
         private func expectJoinsTheStack(_ opened: Window, _ main: Workspace) throws {
             #expect(opened.nodeWorkspace == main, "joins the workspace the remaining display shows")
-            #expect(try main.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles([.window(2), .window(3), .window(50)])]))
+            #expect(try main.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles([.window(2), .h_tiles([.window(3), .window(50)])])]))
         }
 
         /// No session ran between the display going and the window opening: the engine still had "side" shown, and the

@@ -1,4 +1,5 @@
 @testable import PilotTiler
+import CoreGraphics
 import PilotCore
 import Testing
 
@@ -34,14 +35,33 @@ extension TilerTreeTests {
             let workspace = try scrambled(n)
             try workspace.arrange(preset, order: (1...n).map(UInt32.init))
             #expect(try workspace.layoutDescription == .workspace([root, .floatingWindowsContainer([.window(99)])]))
-            // Equal sizes: every tile and column carries the same weight along its parent.
-            for node in try workspace.rootTilingContainer.allLeafWindowsRecursive.flatMap(\.parentsWithSelf) {
-                if let parent = node.parent as? TilingContainer, parent.layout == .tiles { #expect(try node.getWeight(parent.orientation) == 1) }
-            }
+            try expectShares(workspace, preset, n)
         }
 
-        @Test(arguments: 1...5) func columns(n: Int) throws {
-            try expectArranged(.columns, n, .h_tiles(windows(1...n)))
+        /// The weights give each window the tile its layout's tree does (layouts round 1): each at its share of the
+        /// workspace's room, in points, so layout's even top-up keeps unequal shares.
+        func expectShares(_ workspace: Workspace, _ preset: LayoutPreset, _ n: Int) throws {
+            guard preset != .scrolling, preset != .stage else { return }
+            let area = CGRect(origin: .zero, size: workspace.areaSize)
+            var frames: [UInt32: CGRect] = [:]
+            func walk(_ node: TreeNode, _ rect: CGRect) throws {
+                if let window = node as? Window { frames[window.windowId] = rect; return }
+                guard let container = node as? TilingContainer else { return }
+                let weights = try container.children.map { try $0.getWeight(container.orientation) }, sum = weights.reduce(0, +)
+                var start: CGFloat = 0
+                for (child, weight) in zip(container.children, weights) {
+                    try walk(child, container.orientation == .h
+                        ? CGRect(x: rect.minX + rect.width * start / sum, y: rect.minY, width: rect.width * weight / sum, height: rect.height)
+                        : CGRect(x: rect.minX, y: rect.minY + rect.height * start / sum, width: rect.width, height: rect.height * weight / sum))
+                    start += weight
+                }
+            }
+            try walk(workspace.rootTilingContainer, preset.room(n, in: area))
+            for (i, tile) in preset.tiles(n, in: area).enumerated() {
+                let frame = try #require(frames[UInt32(i + 1)])
+                #expect(abs(frame.minX - tile.minX) < 0.5 && abs(frame.minY - tile.minY) < 0.5 && abs(frame.width - tile.width) < 0.5
+                        && abs(frame.height - tile.height) < 0.5, "\(preset) with \(n): window \(i + 1) at \(frame), its tile \(tile)")
+            }
         }
 
         @Test(arguments: 1...5) func rows(n: Int) throws {
@@ -57,8 +77,8 @@ extension TilerTreeTests {
                 1: .h_tiles([.window(1)]),
                 2: .h_tiles([.window(1), .window(2)]),
                 3: .h_tiles([.window(1), .v_tiles([.window(2), .window(3)])]),
-                4: .h_tiles([.window(1), .v_tiles([.window(2), .window(3), .window(4)])]),
-                5: .h_tiles([.window(1), .v_tiles([.window(2), .window(3), .window(4), .window(5)])]),
+                4: .h_tiles([.window(1), .v_tiles([.window(2), .h_tiles([.window(3), .window(4)])])]),
+                5: .h_tiles([.window(1), .v_tiles([.h_tiles([.window(2), .window(5)]), .h_tiles([.window(3), .window(4)])])]),
             ]
             try expectArranged(.mainStack, n, try #require(expected[n]))
         }
@@ -66,7 +86,7 @@ extension TilerTreeTests {
         @Test(arguments: 1...5) func grid(n: Int) throws {
             let expected: [Int: LayoutDescription] = [
                 1: .h_tiles([.window(1)]),
-                2: .v_tiles([.window(1), .window(2)]),
+                2: .h_tiles([.window(1), .window(2)]),
                 3: .h_tiles([.v_tiles([.window(1), .window(2)]), .window(3)]),
                 4: .h_tiles([.v_tiles([.window(1), .window(2)]), .v_tiles([.window(3), .window(4)])]),
                 5: .h_tiles([.v_tiles([.window(1), .window(2)]), .v_tiles([.window(3), .window(4)]), .window(5)]),
@@ -84,14 +104,15 @@ extension TilerTreeTests {
                 let built = try workspace.layoutDescription
                 try workspace.normalizeContainers()
                 #expect(try workspace.layoutDescription == built, "\(preset) with \(n)")
+                try expectShares(workspace, preset, n)
                 for child in workspace.children { try child.unbindFromParent() }
             }
         }
 
         @Test func orderIsKept() throws {
             let workspace = try scrambled(3)
-            try workspace.arrange(.columns, order: [3, 1, 2])
-            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles(windows([3, 1, 2])))
+            try workspace.arrange(.rows, order: [3, 1, 2])
+            #expect(try workspace.rootTilingContainer.layoutDescription == .v_tiles(windows([3, 1, 2])))
         }
 
         @Test func pilotsPresetIsBuiltFocusedFirst() async throws {
@@ -103,9 +124,15 @@ extension TilerTreeTests {
             #expect(arrangements.keys.sorted() == [name])
             try await tiler.arrange(name, as: .mainStack)
             #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(2), .v_tiles(windows([1, 3]))]))
+            // Cycling on from Centred main, which reads 3, 2, 1, keeps the open order (layouts round 1).
+            try await tiler.arrange(name, as: .centred)
+            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles(windows([3, 2, 1])))
+            try await tiler.arrange(name, as: .grid)
+            #expect(arrangements[name]?.order == [2, 1, 3])
+            try await tiler.arrange(name, as: .mainStack)
             // A later settings change keeps the order that build made.
-            tiler.setLayouts([name: WorkspaceLayout(preset: .columns, auto: true)])
-            #expect(arrangements[name] == WorkspaceArrangement(.columns, auto: true, order: [2, 1, 3]))
+            tiler.setLayouts([name: WorkspaceLayout(preset: .scrolling, auto: true)])
+            #expect(arrangements[name] == WorkspaceArrangement(.scrolling, auto: true, order: [2, 1, 3]))
             await #expect(throws: TilerCallRefused.self) { try await tiler.arrange("nowhere", as: .rows) }
         }
 
@@ -137,21 +164,31 @@ extension TilerTreeTests {
             // A new window joins at the end of the order; nothing else moves.
             try TestWindow.new(id: 4, parent: workspace.rootTilingContainer)
             try arrangeAutoWorkspaces()
-            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(2), .v_tiles(windows([1, 3, 4]))]))
+            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(2), .v_tiles([.window(1), .h_tiles(windows([3, 4]))])]))
             #expect(arrangements[name]?.order == [2, 1, 3, 4])
             // A closed one leaves the order.
             try #require(Window.get(byId: 2)).unbindFromParent()
             try arrangeAutoWorkspaces()
             #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(1), .v_tiles(windows([3, 4]))]))
+            // Its room changes (wider gaps here, another display or the dock's room live): it is built again, so its
+            // weights are points of the new room and layout keeps the shares (layouts round 1).
+            let gaps = config.gaps
+            defer { config.gaps = gaps }
+            config.gaps = Gaps(inner: .zero, outer: .init(left: 600, bottom: 0, top: 0, right: 0))
+            try arrangeAutoWorkspaces()
+            let root = try workspace.rootTilingContainer
+            #expect(abs(try root.children.reduce(0) { try $0 + $1.getWeight(.h) } - workspace.areaSize.width) < 0.5)
+            #expect(arrangements[name]?.area == workspace.areaSize)
+            #expect(abs(try #require(Window.get(byId: 1)).getWeight(.h) - workspace.areaSize.width / 2) < 0.5)
         }
 
         @Test func manualAndDraggedWorkspacesAreLeftAlone() throws {
             let workspace = try scrambled(2)
             let before = try workspace.layoutDescription
-            arrangements = [name: WorkspaceArrangement(.columns, auto: false, order: [])]
+            arrangements = [name: WorkspaceArrangement(.rows, auto: false, order: [])]
             try arrangeAutoWorkspaces()
             #expect(try workspace.layoutDescription == before)
-            arrangements = [name: WorkspaceArrangement(.columns, auto: true, order: [])]
+            arrangements = [name: WorkspaceArrangement(.rows, auto: true, order: [])]
             currentlyManipulatedWithMouseWindowId = 2
             defer { currentlyManipulatedWithMouseWindowId = nil }
             try arrangeAutoWorkspaces()

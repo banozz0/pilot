@@ -110,7 +110,7 @@ struct WorkspacePresetTests {
         let tiler = FakeTiler(windows: [Self.window(10, "Finder", workspace: "2"), Self.window(11, "TextEdit", workspace: "1"),
                                                 Self.window(12, "Finder", workspace: "3")], focused: "2")
         let opener = FakeOpener(tiler, lands: "2")
-        let preset = WorkspacePreset(name: "Work", apps: [Self.app("Finder"), Self.app("TextEdit"), Self.app("Notes")], layout: .columns)
+        let preset = WorkspacePreset(name: "Work", apps: [Self.app("Finder"), Self.app("TextEdit"), Self.app("Notes")], layout: .scrolling)
         let outcome = try await Self.apply(preset, tiler, opener)
         #expect(opener.opened == ["com.apple.notes"])
         #expect(tiler.moves == [.moveWindow(id: 11, toWorkspace: "2")])
@@ -118,14 +118,14 @@ struct WorkspacePresetTests {
         // Window 12, Finder's second window, stays where it is: one window per app.
         #expect(tiler.windows.first { $0.id == 12 }?.workspace == "3")
         // The ready layout, preset apps first in list order: Finder 10, TextEdit 11, Notes 900.
-        #expect(tiler.evals.last == LayoutPreset.columns.commands(workspace: "2", windows: [10, 11, 900]))
+        #expect(tiler.evals.last == LayoutPreset.scrolling.commands(workspace: "2", windows: [10, 11, 900]))
     }
 
     @Test("A running app's window that opens on another workspace (an app rule) is moved in once it appears")
     func openedElsewhere() async throws {
         let tiler = FakeTiler(windows: [], focused: "2")
         let opener = FakeOpener(tiler, lands: "1")
-        let preset = WorkspacePreset(name: "Notes", apps: [Self.app("Notes")], layout: .columns)
+        let preset = WorkspacePreset(name: "Notes", apps: [Self.app("Notes")], layout: .scrolling)
         _ = try await Self.apply(preset, tiler, opener)
         #expect(tiler.moves == [.moveWindow(id: 900, toWorkspace: "2")])
     }
@@ -134,7 +134,7 @@ struct WorkspacePresetTests {
     func twoOpenedElsewhere() async throws {
         let tiler = FakeTiler(windows: [], focused: "2")
         let opener = FakeOpener(tiler, lands: "1")
-        let preset = WorkspacePreset(name: "Two", apps: [Self.app("Notes"), Self.app("Mail")], layout: .columns)
+        let preset = WorkspacePreset(name: "Two", apps: [Self.app("Notes"), Self.app("Mail")], layout: .scrolling)
         _ = try await Self.apply(preset, tiler, opener)
         #expect(tiler.evals.first == [.moveWindow(id: 900, toWorkspace: "2"), .moveWindow(id: 901, toWorkspace: "2")])
         // Focus checked at the start, before the moves, and before the layout: nothing is sent alone between them.
@@ -168,7 +168,7 @@ struct WorkspacePresetTests {
         let tiler = FakeTiler(windows: [Self.window(11, "TextEdit", workspace: "1")], focused: "2")
         tiler.onCommand = { if case .moveWindow = $0 { tiler.focused = "3" } }
         let opener = FakeOpener(tiler, lands: "2")
-        let preset = WorkspacePreset(name: "Work", apps: [Self.app("TextEdit")], layout: .columns)
+        let preset = WorkspacePreset(name: "Work", apps: [Self.app("TextEdit")], layout: .scrolling)
         await #expect(throws: WorkspacePresetApply.LeftWorkspace.self) { try await Self.apply(preset, tiler, opener) }
         // The move went; no layout followed it.
         #expect(tiler.evals == [[.moveWindow(id: 11, toWorkspace: "2")]])
@@ -187,7 +187,7 @@ struct WorkspacePresetTests {
         var model = SnapshotTests.AeroModel(order: [10, 11], weights: [10: 1000, 11: 1000])
         _ = try await Self.apply(preset, tiler, opener, frames: { model.frames() })
         try #require(tiler.evals.count == 2)
-        #expect(tiler.evals[0] == LayoutPreset.columns.commands(workspace: "2", windows: [10, 11]))
+        #expect(tiler.evals[0] == LayoutPreset.sideBySide(workspace: "2", windows: [10, 11]))
         model.apply(tiler.evals[1])
         #expect(abs(model.weights[10]! - 1400) <= 2 && abs(model.weights[11]! - 600) <= 2, "\(model.weights)")
     }
@@ -208,8 +208,8 @@ struct WorkspacePresetTests {
     func duplicateApp() async throws {
         let tiler = FakeTiler(windows: [Self.window(10, "Finder", workspace: "2")], focused: "2")
         let opener = FakeOpener(tiler, lands: "2")
-        _ = try await Self.apply(WorkspacePreset(name: "x", apps: [Self.app("Finder"), Self.app("Finder")], layout: .columns), tiler, opener)
-        #expect(opener.opened.isEmpty && tiler.evals.last == LayoutPreset.columns.commands(workspace: "2", windows: [10]))
+        _ = try await Self.apply(WorkspacePreset(name: "x", apps: [Self.app("Finder"), Self.app("Finder")], layout: .scrolling), tiler, opener)
+        #expect(opener.opened.isEmpty && tiler.evals.last == LayoutPreset.scrolling.commands(workspace: "2", windows: [10]))
     }
 
     @Test("The store keeps presets by name and each workspace's preset; a file that does not decode throws, so no save wipes it")

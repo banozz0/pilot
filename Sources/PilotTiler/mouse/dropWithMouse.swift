@@ -19,7 +19,7 @@ func startDrag(_ window: Window) {
 
 /// What a release at a point does with the dragged window, decided once for the drop and its preview (dropLanding).
 enum DropPlan {
-    /// An auto workspace rebuilt in the slot its layout has under the point (PilotCore's dropOrder); `tiled` is its order now.
+    /// An auto workspace rebuilt in the slot its layout has under the point (PilotCore's dropOrder); `tiled` is its open order now.
     case arrange(Workspace, WorkspaceArrangement, tiled: [UInt32])
     /// Another workspace: AeroSpace's rule, bound beside the window under the point, on the side of the point.
     case insert(TilingContainer, index: Int)
@@ -33,7 +33,8 @@ func dropPlan(_ window: Window, at point: CGPoint) throws -> DropPlan? {
     let target = point.monitorApproximation.activeWorkspace
     let root = try target.rootTilingContainer
     if var kept = arrangements[target.name], kept.auto {
-        let tiled = root.allLeafWindowsRecursive.map(\.windowId)
+        // Its windows in open order, the order dropOrder's slots and the landing's tiles go by.
+        let tiled = try kept.openOrder(on: target)
         kept.order = kept.order(dropping: window.windowId, at: point, among: tiled, in: target.workspaceMonitor.visibleRectPaddedByOuterGaps,
                                 columns: kept.columnFrames(tiled))
         return .arrange(target, kept, tiled: tiled)
@@ -145,9 +146,9 @@ func landing(of plan: DropPlan, for window: Window) throws -> Rect? {
                 return try target.rootTilingContainer.stripLanding(of: window, at: slot, among: others, on: target.workspaceMonitor)
             }
             let area = target.workspaceMonitor.visibleRectPaddedByOuterGaps
-            let frame = try target.rootTilingContainer.lastAppliedLayoutPhysicalRect ?? area
+            // The preset's tiles are cut from the whole area: tiles() takes its room (Centred main's margins) itself.
             let inner = ResolvedGaps(gaps: config.gaps, monitor: target.workspaceMonitor).inner
-            return kept.preset.tiles(kept.order.count, in: frame.cgRect)[slot].engineRect.inset(within: frame, by: inner)
+            return kept.preset.tiles(kept.order.count, in: area.cgRect)[slot].engineRect.inset(within: area, by: inner)
         case .insert(let parent, let index):
             guard let target = parent.nodeWorkspace else { return nil }
             if parent.layout == .stage { return parent.stageLanding(of: window, at: index, on: target.workspaceMonitor) }
@@ -188,7 +189,7 @@ extension TilingContainer {
         var fractions = others.map { $0.columnWidth ?? config.scrollingNewWidth }
         fractions.insert(window.columnWidth ?? config.scrollingNewWidth, at: index)
         let strip = Strip(fractions: fractions, usable: usable, gap: CGFloat(ResolvedGaps(gaps: config.gaps, monitor: monitor).inner.horizontal))
-        return strip.frames(at: strip.offset(showing: index, from: stripOffset), on: monitor.rect, sliver: config.scrollingSliver)[index]
+        return strip.frames(at: strip.offset(showing: index, from: stripOffset, centre: config.scrollingCentre), on: monitor.rect, sliver: config.scrollingSliver)[index]
     }
 }
 

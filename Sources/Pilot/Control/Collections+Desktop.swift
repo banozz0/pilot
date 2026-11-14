@@ -126,7 +126,7 @@ extension ControlVerbs {
                      .init("apps", help: "bundle ids, comma separated, in order: the whole list; under own sizes an app added takes the next empty spot's width, otherwise sizes split evenly again when an app comes or goes (the preset's apps)", required: false),
                      .init("preset", help: "start from this saved preset, as From a preset… does (pilot list saved-presets)", required: false),
                      .init("name", help: "the preset's name (the preset's; Workspace <n> for a new one)", required: false),
-                     .init("layout", help: "\(Self.cases(LayoutPreset.self)) or own (side by side at --percents) (the preset's; the workspace's own layout, else columns, for a new one)", required: false),
+                     .init("layout", help: "\(Self.cases(LayoutPreset.self)) or own (side by side at --percents) (the preset's; the workspace's own layout, else scrolling, for a new one)", required: false),
                      .init("percents", help: "own sizes, comma separated, adding up to 100: one per app, then any more are empty spots the next apps added take; with no app, the spots alone", required: false),
                      .init("open-missing", help: "on opens apps with no window yet, off only pulls running ones in (the preset's; on)", required: false),
                      .init("keep-layout", help: "on lays the workspace out again as windows come and go; own sizes never do (the workspace's)", required: false),

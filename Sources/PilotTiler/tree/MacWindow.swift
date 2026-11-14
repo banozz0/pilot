@@ -289,7 +289,7 @@ private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, w
         return BindingData(parent: root, adaptiveWeight: WEIGHT_AUTO, index: root.focusedColumnIndex.map { $0 + 1 } ?? INDEX_BIND_LAST)
     }
     // Pilot (Sven's Q122): on a workspace with a ready layout a new window takes the layout's next slot, Keep this layout on or off
-    if let preset = arrangements[workspace.name]?.preset { return try root.nextSlot(preset) }
+    if let kept = arrangements[workspace.name] { return try root.nextSlot(kept) }
     if let mruWindow, let tilingParent = mruWindow.parent as? TilingContainer {
         return BindingData(
             parent: tilingParent,
