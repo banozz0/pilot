@@ -102,7 +102,8 @@ struct CaptureAskAITests {
 
 #if DEBUG
 extension SharedLook {
-/// The editor's top bar, Ask AI and Redact sensitive text in it, fits the editor at its narrowest in every style.
+/// The editor's top bar (More, the mode switch, Copy and Done) and Mark up's dock of named tools fit the editor at its
+/// narrowest in every style.
 @MainActor
 @Suite("Capture editor bar width")
 struct CaptureEditorBarWidth {
@@ -115,8 +116,10 @@ struct CaptureEditorBarWidth {
         let model = EditorModel(image: CaptureAskAITests.capture(), scale: 2, accent: 0x3CD2DB, dark: true)
         for style in PilotStyle.allCases {
             look.style = style
-            let width = NSHostingView(rootView: EditorTopBar(model: model).fixedSize().styled(.hud, look: look)).fittingSize.width
+            let width = NSHostingView(rootView: EditorTopBar(model: model, drag: { NSItemProvider() }).fixedSize().styled(.hud, look: look)).fittingSize.width
             #expect(width <= EditorLayout.minWidth, "\(style.rawValue): \(width)")
+            let dock = NSHostingView(rootView: ToolDock(model: model).fixedSize().styled(.hud, look: look)).fittingSize.width
+            #expect(dock + 24 <= EditorLayout.minWidth, "\(style.rawValue) dock: \(dock)")
         }
     }
 }

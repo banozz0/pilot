@@ -4,13 +4,15 @@ import ImageScale
 import PilotCore
 import SwiftUI
 
-// The capture editor's chrome in B (Sven, Q805; editors-round-2's mocks and parity table): every control on a floating
-// pill over the sunken ground, nothing over the capture. Drawn from StyleTokens, Instrument's and Toybox's own parts; on
-// Glass the pills stand on the window's glass. The designer's notes kept from A: Copy is a plain cap and Done the one
-// primary; the selection is a fixed blue, so the theme's colour means only the picked tool; ⌘S says "Saved a copy".
+// The capture editor's chrome in C, Two modes (Sven, Q238; capture editor round 1): a top bar with the Mark up / Frame
+// switch in its middle, the room with the capture on the solid sunken ground, and under it Mark up's options strip and
+// dock of named tools, or Frame's strip of looks. Drawn from StyleTokens, Instrument's and Toybox's own parts; on Glass
+// the bars stand on the window's glass. Copy and Done are words, Done the one primary; the selection is a fixed blue, so
+// the theme's colour means only the picked tool and the live mode; ⌘S says "Saved a copy".
 
-/// The top row: History (undo, redo, delete) at the left; at the right the actions, backdrop, read text, redact, ask AI
-/// and upscale, then pin, drag, save a copy and copy, then Cancel and Done. The row's empty room drags the window.
+/// The top bar: Cancel, then undo, redo and delete at the left; the Mark up / Frame switch in the middle; More (save a
+/// copy, pin, upscale, read text, redact, ask AI, add a capture), the drag cap, Copy and Done at the right. The bar's
+/// empty room drags the window.
 struct EditorTopBar: View {
     @Environment(\.style) private var style
     let model: EditorModel
@@ -23,15 +25,31 @@ struct EditorTopBar: View {
     var done: () -> Void = {}
     /// What a drag from the Drag cap carries: the export, backdrop and all, as a PNG file; nil hides the cap.
     var drag: (() -> NSItemProvider)?
+    /// Add a capture (C8): the picked file and how the two sit; nil leaves it out of More.
+    var add: ((URL, CombineLayout.Direction) -> Void)?
+    var library = BackdropLibrary.shared
 
     static func cap(_ s: StyleTokens) -> CGSize { s.kind == .toybox ? CGSize(width: 36, height: 36) : CGSize(width: 30, height: 28) }
     static func gap(_ s: StyleTokens) -> CGFloat { s.kind == .toybox ? 6 : 4 }
 
     var body: some View {
-        HStack(spacing: 0) {
-            history
-            WindowDragArea().frame(minWidth: 16, maxWidth: .infinity, maxHeight: .infinity)
-            actions
+        ZStack {
+            WindowDragArea().frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: Self.gap(style)) {
+                Button("Cancel", action: cancel).buttonStyle(PilotButtonStyle(ghost: true)).help("Leave the capture as taken  Esc")
+                EditorRule().padding(.horizontal, 4)
+                history
+                Spacer(minLength: 16)
+                more
+                if let drag {
+                    ActionCap(symbol: "hand.point.up.left", label: "Drag into an app")
+                        .onDrag(drag)
+                        .help("Drag the capture, as marked up, into any app")
+                }
+                Button(action: copy) { worded("Copy", symbol: "doc.on.doc") }.buttonStyle(.pilot).help("Copy  ⌘C")
+                Button("Done", action: done).buttonStyle(.pilotPrimary).help("Done copies it and saves over the capture  ↩")
+            }
+            ModeSwitch(model: model)
         }
         .padding(.horizontal, 12)
     }
@@ -45,70 +63,55 @@ struct EditorTopBar: View {
             Button(action: model.deleteSelected) { ActionCap(symbol: "trash", label: "Delete") }
                 .buttonStyle(.plain).help("Delete the selected marks  ⌫").disabled(model.selected == nil)
         }
-        .padding(4).editorPill()
     }
 
-    private var actions: some View {
-        HStack(spacing: Self.gap(style)) {
-            Button { model.panelOpen.toggle() } label: { ActionCap(symbol: "photo.artframe", label: "Backdrop", lit: model.panelOpen, key: "B") }
-                .buttonStyle(.plain).help("Backdrop: gradients, wallpapers, padding, shadow, corners and ratio  B")
-            Button(action: model.startReading) { ActionCap(symbol: "text.viewfinder", label: "Read text", lit: model.reading != nil) }
-                .buttonStyle(.plain).help("Read the text and QR codes, and copy them")
-            Button(action: model.redactSensitive) { ActionCap(symbol: "eye.slash", label: "Redact sensitive text", lit: model.finding) }
-                .buttonStyle(.plain).help("Cover emails, card numbers, IP addresses, keys and phone numbers")
-            Button(action: ask) { ActionCap(symbol: "sparkles", label: "Ask AI") }.buttonStyle(.plain).help("Ask AI about the capture, as marked up")
-            Button {
+    /// More: what ships or reads the capture besides Copy and Done. Upscale's settings open under the button.
+    private var more: some View {
+        Menu {
+            Button("Save a Copy", action: save)
+            Button("Pin over Your Windows", action: pin)
+            Button("Upscale…") {
                 let size = model.exportSize
                 model.upscale.size(width: Int(size.width), height: Int(size.height))
                 upscaling = true
-            } label: { ActionCap(symbol: "arrow.up.left.and.arrow.down.right", label: "Upscale", lit: model.upscale.busy) }
-                .buttonStyle(.plain).help("Upscale the capture 2x to 4x, or fit it to a monitor, beside the original")
-                .popover(isPresented: $upscaling, arrowEdge: .bottom) { UpscalePopover(model: model) { upscaling = false } }
-            rule
-            Button(action: pin) { ActionCap(symbol: "pin", label: "Pin") }.buttonStyle(.plain).help("Pin it over your windows, and close the editor")
-            if let drag {
-                ActionCap(symbol: "hand.point.up.left", label: "Drag into an app")
-                    .onDrag(drag)
-                    .help("Drag the capture, as marked up, into any app")
             }
-            Button(action: save) { ActionCap(symbol: "square.and.arrow.down", label: "Save a copy") }.buttonStyle(.plain).help("Save a copy  ⌘S")
-            Button(action: copy) { ActionCap(symbol: "doc.on.doc", label: "Copy") }.buttonStyle(.plain).help("Copy  ⌘C")
-            rule
-            ToolButtons(primary: "Done", run: done, cancel: cancel).help("Done copies it and saves over the capture  ↩ · Cancel  Esc")
+            .disabled(model.upscale.busy)
+            Divider()
+            Button("Read Text", action: model.startReading)
+            Button("Redact Sensitive Text", action: model.redactSensitive)
+            Button("Ask AI", action: ask)
+            if let add {
+                Divider()
+                Menu("Add a Capture Beside It") { adding(add, .sideBySide) }
+                Menu("Add a Capture Under It") { adding(add, .stacked) }
+            }
+        } label: {
+            worded("More", symbol: "ellipsis.circle")
         }
-        .padding(4).editorPill()
+        .menuStyle(.button).buttonStyle(PilotButtonStyle(ghost: true)).menuIndicator(.hidden).fixedSize()
+        .help("Save a copy, pin, upscale, read text, redact, ask AI, or add a capture")
+        .popover(isPresented: $upscaling, arrowEdge: .bottom) { UpscalePopover(model: model) { upscaling = false } }
     }
 
-    private var rule: some View { EditorRule().padding(.horizontal, 4) }
-}
-
-/// B's tool rail: all fourteen tools down the room's left, in the keys' order (1 to 0, C, F, R, I); one column fits the
-/// smallest window (EditorLayout.least) in either style.
-struct ToolRail: View {
-    @Environment(\.style) private var style
-    let model: EditorModel
-
-    /// A rail cap: the top bar's, a little shorter in Toybox so fourteen fit the smallest window.
-    static func cap(_ s: StyleTokens) -> CGSize { s.kind == .toybox ? CGSize(width: 36, height: 32) : EditorTopBar.cap(s) }
-
-    var body: some View {
-        VStack(spacing: 4) {
-            ForEach(MarkTool.allCases, id: \.self) { t in
-                Button { model.pick(t) } label: { ToolCap(tool: t, picked: model.tool == t) }
-                    .buttonStyle(.plain).help("\(t.name)  \(t.key)")
-            }
+    /// Add a capture (C8): History's newest captures by name, then Choose…; the one picked joins this one in a new capture.
+    @ViewBuilder private func adding(_ add: @escaping (URL, CombineLayout.Direction) -> Void, _ direction: CombineLayout.Direction) -> some View {
+        ForEach(library.recent, id: \.self) { url in
+            Button(url.deletingPathExtension().lastPathComponent) { add(url, direction) }
         }
-        .padding(4).editorPill()
+        if !library.recent.isEmpty { Divider() }
+        Button("Choose a Picture…") { if let url = BackdropPanel.choose() { add(url, direction) } }
+    }
+
+    private func worded(_ title: String, symbol: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: symbol).font(.system(size: 12, weight: style.kind == .toybox ? .bold : .medium))
+            Text(title)
+        }
     }
 }
 
-/// One tool cap: its symbol, its key at the bottom right; picked, the accent's soft fill, line and text (Instrument),
-/// or Toybox's sun cap.
-struct ToolCap: View {
-    @Environment(\.style) private var style
-    let tool: MarkTool
-    let picked: Bool
-
+/// A tool's symbol, for the dock and the capture overlay's tool row.
+enum ToolCap {
     static func symbol(_ tool: MarkTool) -> String {
         switch tool {
         case .select: "cursorarrow"
@@ -127,38 +130,9 @@ struct ToolCap: View {
         case .eyedropper: "eyedropper"
         }
     }
-
-    var body: some View {
-        let size = ToolRail.cap(style)
-        if style.kind == .toybox {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: Self.symbol(tool)).font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(picked ? style.color(\.onHyper) : style.color(\.text))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                CapKey(key: tool.key, lit: picked)
-            }
-            .padding(EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2))
-            .frame(width: size.width, height: size.height)
-            .background(Toy.block(style, fill: picked ? style.color(\.hyper) : style.color(\.raised), radius: style.radii.chip + 2, edge: 4))
-            .offset(y: picked ? 1 : 0)
-            .contentShape(Rectangle())
-        } else {
-            let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: Self.symbol(tool)).font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(picked ? style.color(\.accentText) : style.color(\.text2))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).offset(x: -1, y: -1)
-                CapKey(key: tool.key, lit: picked)
-            }
-            .frame(width: size.width, height: size.height)
-            .background { shape.fill(picked ? style.color(\.accentSoft) : style.color(\.raised)) }
-            .overlay { shape.strokeBorder(picked ? style.color(\.accentLine) : style.color(\.line)) }
-            .contentShape(Rectangle())
-        }
-    }
 }
 
-/// An action at the bar's right, a plain cap (Copy too: Done is the one primary).
+/// A plain action cap: undo, redo, delete and the drag cap in the top bar, Text's bold and italic.
 struct ActionCap: View {
     @Environment(\.style) private var style
     @Environment(\.isEnabled) private var enabled
@@ -166,7 +140,7 @@ struct ActionCap: View {
     let label: String
     /// Lit while its result shows (Read text), in the picked tool's colours.
     var lit = false
-    /// Its key, at the bottom right as on a tool cap (the backdrop's B).
+    /// Its key, at the bottom right.
     var key: String?
 
     var body: some View {
@@ -195,7 +169,7 @@ struct ActionCap: View {
     }
 }
 
-/// The bottom row: the options strip centred under the capture, the View pill (zoom and the export's size) at the right.
+/// Mark up's options row: the options strip centred over the dock, the View pill (zoom and the export's size) at the right.
 struct EditorFooter: View {
     @Environment(\.style) private var style
     let model: EditorModel
@@ -205,11 +179,7 @@ struct EditorFooter: View {
             Spacer(minLength: 0)
             EditorStrip(model: model)
             Spacer(minLength: 0)
-            HStack(spacing: 6) {
-                ZoomControl(model: model, font: Font(Self.mono(style, 10.5)))
-                ImageSizeChip(model: model, font: Font(Self.mono(style, 10.5)))
-            }
-            .padding(4).editorPill()
+            EditorViewPill(model: model)
         }
     }
 
@@ -218,7 +188,21 @@ struct EditorFooter: View {
     }
 }
 
-/// The options strip (B): always the one place for the picked tool's or the picked mark's options, Read text's result,
+/// The zoom and the export's size on one pill, at the right of Mark up's options row and Frame's controls.
+struct EditorViewPill: View {
+    @Environment(\.style) private var style
+    let model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ZoomControl(model: model, font: Font(EditorFooter.mono(style, 10.5)))
+            ImageSizeChip(model: model, font: Font(EditorFooter.mono(style, 10.5)))
+        }
+        .padding(4).editorPill()
+    }
+}
+
+/// The options strip: always the one place for the picked tool's or the picked mark's options, Read text's result,
 /// or, while cropping, the crop's own strip.
 struct EditorStrip: View {
     @Environment(\.style) private var style
@@ -240,12 +224,7 @@ struct EditorStrip: View {
         switch tool {
         case .select:
             if model.selected == nil {
-                HStack(spacing: 10) {
-                    Text("Click a mark to pick it · drag round several").styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1).fixedSize()
-                    if !model.panelOpen {
-                        Button("Backdrop") { model.panelOpen = true }.buttonStyle(.pilot).help("Show the backdrop panel  B")
-                    }
-                }
+                Text("Click a mark to pick it · drag round several").styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1).fixedSize()
             } else if let mark = model.selectedMark {
                 if mark.isText { TextOptions(model: model) } else { picked(mark) }
             } else { Text("Drag to move · ⌫ deletes").styleText(\.caption).foregroundStyle(style.color(\.text3)) }
@@ -322,7 +301,7 @@ struct EditorRule: View {
     var body: some View { style.color(\.line2).frame(width: 1, height: 16) }
 }
 
-/// A cap's key at its bottom right (a tool's 1 to I, the backdrop's B); in the lit cap's colours when it is lit.
+/// A cap's key at its bottom right; in the lit cap's colours when it is lit.
 struct CapKey: View {
     @Environment(\.style) private var style
     let key: String
@@ -339,7 +318,7 @@ struct CapKey: View {
     }
 }
 
-/// The crop's strip (B): what a drag does, Whole capture, As taken once the capture kept its screen and the crop left its
+/// The crop's strip: what a drag does, Whole capture, As taken once the capture kept its screen and the crop left its
 /// area (P77), then Cancel and Crop (Esc and Return).
 struct CropStrip: View {
     @Environment(\.style) private var style
@@ -363,7 +342,7 @@ struct CropStrip: View {
 }
 
 extension View {
-    /// B's floating pills and cards: the panel's fill in the style's card recipe (Toybox's ink outline and solid edge,
+    /// The editor's floating pills and cards: the panel's fill in the style's card recipe (Toybox's ink outline and solid edge,
     /// Instrument's hairline ring), no soft shadow, the content clipped to it. A pill keeps its natural size, so a row's
     /// drag room gives way and never a button; `fixed: false` lets a card (the backdrop panel's) fill its column.
     func editorPill(radius: KeyPath<StyleRadii, Double> = \.card, fixed: Bool = true) -> some View {
@@ -514,7 +493,7 @@ struct WindowDragArea: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Read text's result in the strip (B): how many lines were read (they are on the pasteboard already), Copy text to copy
+/// Read text's result in the strip: how many lines were read (they are on the pasteboard already), Copy text to copy
 /// them again, and Show text for every line.
 struct ReadTip: View {
     @Environment(\.style) private var style
@@ -699,7 +678,7 @@ extension ZoomSteps {
 extension EditorModel: ZoomSteps {}
 extension ImageViewerModel: ZoomSteps {}
 
-/// The top bar's Upscale: the shared settings, Upscale, and Cancel that stops a run.
+/// More's Upscale: the shared settings, Upscale, and Cancel that stops a run.
 struct UpscalePopover: View {
     @Environment(\.style) private var style
     let model: EditorModel

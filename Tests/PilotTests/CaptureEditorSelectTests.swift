@@ -38,8 +38,8 @@ struct CaptureEditorSelectTests {
             window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
             window.orderFrontRegardless()
             // The canvas sits centred in the room under the bar, inside the margin.
-            let room = CGSize(width: size.width, height: size.height - EditorLayout.bar(tokens) - EditorLayout.foot(tokens) - 2)
-            canvas = CGPoint(x: (room.width - model.size.width) / 2, y: EditorLayout.bar(tokens) + 1 + (room.height - model.size.height) / 2)
+            let room = EditorLayout.room(in: size, tokens: tokens)
+            canvas = CGPoint(x: room.minX + (room.width - model.size.width) / 2, y: room.minY + (room.height - model.size.height) / 2)
             settle()
         }
 

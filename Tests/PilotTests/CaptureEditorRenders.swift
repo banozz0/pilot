@@ -8,10 +8,11 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The capture editor in B (Sven, Q805; editors-round-2's 21 parity rows): the real CaptureEditorView over the designer's
-/// made-up billing page, in every state Sven leaves it in, plus the smallest window and the two popovers' panels (a
-/// popover is a window of its own, which a snapshot never draws), in Instrument (Tokyo Night, Folio) and Toybox
-/// (toybox-night, toybox). The window keeps one size whatever the state, the backdrop panel's column aside.
+/// The capture editor in C, Two modes (Sven, Q238; capture editor round 1; editors-round-2's 21 parity rows): the real
+/// CaptureEditorView over the designer's made-up billing page, in every state Sven leaves it in, Mark up and Frame, plus
+/// the smallest window in each mode and the two popovers' panels (a popover is a window of its own, which a snapshot never
+/// draws), in Instrument (Tokyo Night, Folio) and Toybox (toybox-night, toybox). The window keeps one size whatever the
+/// state in each mode.
 /// Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureEditorRenders`
 extension SharedLook {
@@ -93,9 +94,7 @@ struct CaptureEditorRenders {
 
         // Zoomed in to 200 % about Update card (P33): the room set as the window lays it out, an arrow drawn at the zoom.
         let zoomed = model()
-        let window = EditorLayout.window(zoomed.size, fit: 1, tokens: tokens)
-        zoomed.setRoom(CGRect(x: 0, y: EditorLayout.bar(tokens) + 1, width: window.width,
-                              height: window.height - EditorLayout.bar(tokens) - EditorLayout.foot(tokens) - 2))
+        zoomed.setRoom(EditorLayout.room(in: EditorLayout.window(zoomed.size, fit: 1, tokens: tokens), tokens: tokens))
         zoomed.zoom(to: 2, about: zoomed.roomPoint(CGPoint(x: update.midX, y: update.midY)))
         zoomed.pick(.arrow)
         zoomed.begin(CGPoint(x: 600, y: 76)); zoomed.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
@@ -119,7 +118,7 @@ struct CaptureEditorRenders {
             resize.begin(right); resize.drag(CGPoint(x: right.x + 94, y: right.y))
         }
 
-        // History with both steps (B's redo): two marks, the second undone.
+        // History with both steps: two marks, the second undone.
         let history = model()
         history.pick(.arrow)
         history.begin(CGPoint(x: 600, y: 76)); history.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
@@ -127,12 +126,16 @@ struct CaptureEditorRenders {
         history.begin(CGPoint(x: card.minX, y: card.minY)); history.end(CGPoint(x: card.maxX, y: card.maxY))
         history.undo()
 
-        // The backdrop panel open at the right, a gradient picked and an arrow on the capture (B's first mock).
+        // Frame: an arrow and a pill of text on the capture, the Sunset look picked, the strip of looks under it (C's mock).
         let panel = model()
         panel.pick(.arrow)
         panel.begin(CGPoint(x: 600, y: 76)); panel.end(CGPoint(x: update.minX - 4, y: update.minY + 6))
-        panel.setBackdrop(Backdrop(fill: .gradient([0xF7B267, 0xF25F5C, 0x8E44AD])))
-        panel.panelOpen = true
+        panel.pick(.text); panel.setStyle(1)
+        panel.begin(CGPoint(x: 470, y: 58)); panel.typed = "Update the card first"; panel.commitText()
+        panel.setBackdrop(BackdropPreset.looks[0].backdrop.resolved(edge: BackdropPanel.read(capture).edge))
+        panel.loadPictureNow()
+        panel.pick(.arrow)
+        panel.frame(true)
 
         // Image size applied: the View pill's size chip lit at 2x.
         let sized = model()
@@ -140,7 +143,7 @@ struct CaptureEditorRenders {
 
         return [("1-empty", empty), ("2-marks", marks), ("3-selected", selected), ("4-steps", steps), ("5-crop", crop), ("6-read", read),
                 ("7-ruler", ruler), ("8-backdrop", backdrop), ("9-eyedropper", picker), ("10-zoom", zoomed), ("11-text", text), ("12-resize", resize),
-                ("13-history", history), ("14-panel", panel), ("15-image-size", sized)]
+                ("13-history", history), ("14-frame", panel), ("15-image-size", sized)]
     }
 
     @Test("The editor renders in Instrument and Toybox, dark and light, every state, at one size",
@@ -175,7 +178,7 @@ struct CaptureEditorRenders {
             look.themeID = pass.theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)
             func write(_ rep: NSBitmapImageRep, _ name: String) throws {
-                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-\(name)-\(pass.tag).png"))
+                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("C-\(name)-\(pass.tag).png"))
             }
             let states = Self.states(capture, tokens: tokens)
             for (name, model) in states {
@@ -185,16 +188,26 @@ struct CaptureEditorRenders {
                 try write(rep, name)
                 sizes["\(pass.tag) panel \(model.panelOpen)", default: []].insert("\(rep.pixelsWide)x\(rep.pixelsHigh)")
             }
-            // The smallest window (EditorLayout.least): the capture fitted, the fourteen tools still in the rail.
+            // The smallest window (EditorLayout.least): the capture fitted, the fourteen named tools still in the dock; and
+            // in Frame, the strip's looks scrolling and its row of controls whole.
             let small = states[1].1
             try write(Self.draw(CaptureEditorView(model: small, drag: { NSItemProvider() }), tokens: tokens,
-                                size: EditorLayout.least(panel: false), scale: 2), "16-smallest")
+                                size: EditorLayout.least, scale: 2), "16-smallest")
+            let smallFrame = states[13].1
+            try write(Self.draw(CaptureEditorView(model: smallFrame, drag: { NSItemProvider() }), tokens: tokens,
+                                size: EditorLayout.least, scale: 2), "16-smallest-frame")
+            // Frame's fill kinds swap the strip to their swatches: the wallpapers, each round this capture.
+            let walls = try BackdropPanelRenders.wallpapers(in: out.appendingPathComponent("wallpapers"))
+            BackdropLibrary.shared.setWallpapersNow(walls)
+            let wide = EditorLayout.window(smallFrame.size, fit: 1, tokens: tokens, panel: true)
+            try write(Self.draw(FrameStrip(model: smallFrame, kind: .wallpapers), tokens: tokens,
+                                size: CGSize(width: wide.width, height: FrameStrip.height(tokens)), scale: 2), "24-frame-wallpapers")
             // Text's options, the widest strip, with a picked colour's seventh swatch, at the smallest window.
             let narrow = states[10].1
             narrow.takeColour(0x7A5CFA)
             narrow.pick(.text)
             try write(Self.draw(CaptureEditorView(model: narrow, drag: { NSItemProvider() }), tokens: tokens,
-                                size: EditorLayout.least(panel: false), scale: 2), "16-smallest-text")
+                                size: EditorLayout.least, scale: 2), "16-smallest-text")
             // The View pill's Image size and the actions' Upscale, as their popovers draw them.
             let popovers = states[0].1
             let target = ResizeTarget(width: Int(popovers.flatSize.width), height: Int(popovers.flatSize.height))
@@ -262,11 +275,11 @@ struct CaptureEditorRenders {
             let size = EditorLayout.window(CaptureFixture.size, fit: 1, tokens: tokens)
             for (name, m) in [("19-uncrop-pulling", pulling), ("20-uncropped", kept), ("21-backdrop-mark", marked), ("22-backdrop-mark-grown", grown)] {
                 let rep = try Self.draw(CaptureEditorView(model: m, drag: { NSItemProvider() }), tokens: tokens, size: size, scale: 2)
-                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-\(name)-\(pass.tag).png"))
+                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("C-\(name)-\(pass.tag).png"))
             }
             // The crop strip at its widest (the uncrop hint, Whole capture, As taken) in the smallest window.
-            let rep = try Self.draw(CaptureEditorView(model: pulling, drag: { NSItemProvider() }), tokens: tokens, size: EditorLayout.least(panel: false), scale: 2)
-            try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("B-23-uncrop-smallest-\(pass.tag).png"))
+            let rep = try Self.draw(CaptureEditorView(model: pulling, drag: { NSItemProvider() }), tokens: tokens, size: EditorLayout.least, scale: 2)
+            try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("C-23-uncrop-smallest-\(pass.tag).png"))
         }
     }
 
