@@ -1293,7 +1293,8 @@ void main(){
   float m = .3 + .7 * smoothstep(.2, .95, uv.x);
   float r = length(gl_FragCoord.xy - P), w = R.y * .07;
   float inside = 1. - smoothstep(F - w, F + w * .3, r);
-  float ring = exp(-pow((r - F) / w, 2.)) * K;
+  float d = (r - F) / w;   // no pow: GLSL ES leaves pow undefined for a negative base
+  float ring = exp(-d * d) * K;
   vec3 col = mix(C0, C, inside);
   float a = smoothstep(.42, .92, f) * m * mix(A0, A, inside) * (1. + 1.6 * ring) + ring * (.18 + .3 * f);
   a = min(a, .6);
@@ -1342,7 +1343,7 @@ void main(){
     const s = cv.width / innerWidth, w = swell, k0 = w ? Math.min(1, (performance.now() - w.t) / w.d) : 1;
     if (w && k0 >= 1) swell = null;
     gl.uniform3fv(uni.C0, w ? w.from.c : k.c); gl.uniform1f(uni.A0, w ? w.from.a : k.a);
-    gl.uniform2f(uni.P, w ? w.x * s : 0, w ? cv.height - w.y * s : 0); gl.uniform1f(uni.F, w ? easeOut(k0) * w.far * s : 1e5);
+    gl.uniform2f(uni.P, w ? w.x * s : 0, w ? cv.height - w.y * s : 0); gl.uniform1f(uni.F, w ? easeOut(k0) * w.far * s : 2 * (cv.width + cv.height));   // at rest: past every pixel, inside mediump's range
     gl.uniform1f(uni.K, w ? (1 - k0) ** .6 : 0);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
