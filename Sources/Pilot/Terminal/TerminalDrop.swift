@@ -37,6 +37,12 @@ final class TerminalDrop {
 
     var isShown: Bool { drops.isOpen(.terminal) }
 
+    /// Open with its shell taking the keys: the clipboard's Return pastes straight into it (TerminalSurface.paste).
+    var hasKeyboard: Bool {
+        guard isShown, let surface, let window = surface.window else { return false }
+        return window.isKeyWindow && window.firstResponder === surface
+    }
+
     func toggle() { isShown ? hide() : show() }
 
     /// Opens on a running shell, or says why not: a terminal that did not start never drops, so no blank panel takes

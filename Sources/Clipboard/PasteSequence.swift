@@ -27,12 +27,16 @@ public final class PasteSequence {
     private var pending = false
     /// Which start a scheduled step belongs to, so a step of a replaced sequence does nothing.
     private var run = 0
+    /// Read as each pick goes on: a terminal's image folder while one is in front (TerminalPaste), else nil.
+    private let terminal: @MainActor () -> URL?
 
     public init(pasteboard: NSPasteboard = .general,
                 after: @escaping PasteBack.Later = PasteBack.onMain,
+                terminal: @escaping @MainActor () -> URL? = { nil },
                 report: @escaping (Event) -> Void) {
         self.pasteboard = pasteboard
         self.after = after
+        self.terminal = terminal
         self.report = report
     }
 
@@ -78,8 +82,9 @@ public final class PasteSequence {
 
     private func put() throws {
         guard let store else { return }
-        let paste = try PanelRows.pastes([clips[index]], from: store, plain: false)
+        var paste = try PanelRows.pastes([clips[index]], from: store, plain: false)
         guard paste.first?.contents.isEmpty == false else { throw ClipboardStoreError.sqlite("pick \(clips[index].id) is gone") }
+        if let folder = terminal() { paste = try TerminalPaste.files(paste, in: folder) }
         PanelRows.write(paste, plain: false, forget: true, to: pasteboard)
         changeCount = pasteboard.changeCount
     }

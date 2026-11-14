@@ -17,6 +17,8 @@ final class ClipboardTools {
     var front: @MainActor (String) async throws(ControlError) -> Void = ControlActions.bringToFront
     /// Cmd+V into the app in front, as the panel's Return sends it once the panel is gone.
     var post: @MainActor () -> Void = { Post.key(KeyCode.v, .cmd) }
+    /// Read once the app is in front: a terminal's image folder, as the panel reads it (TerminalPaste), else nil.
+    var terminal: @MainActor () -> URL? = { ClipboardHistory.terminalFolder() }
     /// Paste one by one: the panel's own sequence, which the tap's Cmd+V reports drive.
     lazy var sequence: @MainActor ([StoredClip]) throws -> Void = { [unowned self] in try history.startSequence($0) }
     /// Open and Show in Finder, as the panel's Cmd+K list runs them.
@@ -261,7 +263,7 @@ extension ControlVerbs {
                 try tools.attempt("clipboard sequence") { try tools.sequence(clips) }
             } else {
                 steps = try tools.attempt("clipboard paste") {
-                    try tools.history.write(clips, plain: plain, delete: delete, paste: true, to: tools.pasteboard)
+                    try tools.history.write(clips, plain: plain, delete: delete, paste: true, terminal: tools.terminal(), to: tools.pasteboard)
                 }
             }
             // The panel's own pause before Cmd+V; an image among several goes in steps, as the panel pastes them.

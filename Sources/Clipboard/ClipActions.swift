@@ -166,8 +166,7 @@ public struct ClipActions {
         case .copyPath: opener.copy(try targets.flatMap(fileURLs).map(\.path).joined(separator: "\n"), tip: "Path copied")
         case .saveImage:
             guard let clip = targets.first, let item = try store.contents(of: clip.id).first,
-                  let data = item[NSPasteboard.PasteboardType.png.rawValue] ?? item[NSPasteboard.PasteboardType.tiff.rawValue]
-                      .flatMap({ NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }) else { return [] }
+                  let data = TerminalPaste.png(item) else { return [] }
             opener.saveImage(data, named: "Clipboard image.png")
         case .copyText: if let text = targets.first?.recognised { opener.copy(text, tip: "Text copied") }
         case .code(.link(let url)): opener.open(url)

@@ -337,13 +337,17 @@ public enum PanelRows {
     /// History rows back on the pasteboard, from their stored contents; see the several-copies write. A plain paste
     /// takes an image's text, read from it, as its text (card agent-bo-95423070); any other paste keeps the image, so
     /// several images never paste as their texts. `paste`: rows that cannot go on as one are not written; their
-    /// `steps` come back, for PasteSteps.
+    /// `steps` come back, for PasteSteps. `terminal`: a paste into a terminal, each image as its file there
+    /// (TerminalPaste).
     @discardableResult
     public static func write(_ clips: [StoredClip], from store: ClipboardStore, plain: Bool, forget: Bool = false, paste: Bool = false,
-                             to pasteboard: NSPasteboard) throws -> [Paste]? {
-        let pastes = try pastes(clips, from: store, plain: plain)
-        if paste, let steps = steps(pastes) { return steps }
-        write(pastes, plain: plain, forget: forget, to: pasteboard)
+                             terminal: URL? = nil, to pasteboard: NSPasteboard) throws -> [Paste]? {
+        var pastes = try pastes(clips, from: store, plain: plain)
+        if paste, let steps = steps(pastes) { return try terminal.map { try TerminalPaste.files(steps, in: $0) } ?? steps }
+        // An image swapped for its file is no copy as it was copied: transient, as a several-copies write is.
+        let swapped = paste && terminal != nil && pastes.contains(where: TerminalPaste.isImage)
+        if swapped, let terminal { pastes = try TerminalPaste.files(pastes, in: terminal) }
+        write(pastes, plain: plain, forget: forget || swapped, to: pasteboard)
         return nil
     }
 
@@ -374,7 +378,7 @@ public enum PanelRows {
     }
 
     /// The clips' stored contents on their way back, with the text a paste or a plain paste writes.
-    static func pastes(_ clips: [StoredClip], from store: ClipboardStore, plain: Bool) throws -> [Paste] {
+    public static func pastes(_ clips: [StoredClip], from store: ClipboardStore, plain: Bool) throws -> [Paste] {
         try clips.map { Paste(contents: try store.contents(of: $0.id), text: plain ? $0.plainText : $0.text) }
     }
 

@@ -3,8 +3,8 @@ import AppKit
 
 /// Return on several picks that cannot go on as one (PanelRows.steps): each step goes on the pasteboard, transient, and
 /// is pasted with its own Cmd+V; the next goes on once the app has read it, and after the last Sven's copy goes back,
-/// as PasteBack puts it back. Anything copied meanwhile ends it there and stays on. An app that takes no image (a
-/// terminal) pastes the texts and nothing for an image.
+/// as PasteBack puts it back. Anything copied meanwhile ends it there and stays on. A terminal, which takes no image,
+/// gets each image as its file's path (TerminalPaste), a text step like any other.
 ///
 /// An image step's data is promised, not written (Sven, build 46: three images took two seconds to land): the app
 /// asking for it is the sign it has read the step, so the next goes on `afterRead` later rather than after

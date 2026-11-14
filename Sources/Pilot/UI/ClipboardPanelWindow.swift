@@ -25,6 +25,8 @@ final class ClipboardHistory: ScreenPausing {
     @ObservationIgnored private var model: PanelModel?
     /// Where the menu stood when its Trigger › Clipboard row opened the panel; Escape goes back there (card agent-bo-95423020).
     @ObservationIgnored private var menuBack: MenuNavigator.Spot?
+    /// Pilot's terminal drop had the keyboard as the panel opened: Return pastes straight into its shell.
+    @ObservationIgnored private var dropHadKeyboard = false
     /// The dropdown's Clipboard switch (SessionSwitch.clipboard, card agent-bo-95422912): paused, nothing copied is kept;
     /// resumed, recording starts from what is on the pasteboard then, never what was copied meanwhile.
     /// Paused, the secrets already due leave the disk now, not when recording resumes; the rest stay hidden once due (P65).
@@ -148,6 +150,7 @@ final class ClipboardHistory: ScreenPausing {
     private func toggleNow(back: MenuNavigator.Spot?, searching words: String?) {
         if panel != nil { close(); return }
         menuBack = back
+        dropHadKeyboard = TerminalDrop.shared.hasKeyboard
         guard let store else { HUD.tip("Clipboard history is not running."); return }
         let model = PanelModel(store: store, order: settings.order)
         if let words { model.query = words }
@@ -245,7 +248,7 @@ final class ClipboardHistory: ScreenPausing {
     }
 
     /// Paste in sequence (card agent-bo-95423071): the tap reports each Cmd+V, Pilot's own too, so this one pastes the first.
-    @ObservationIgnored private lazy var sequence = PasteSequence { event in
+    @ObservationIgnored private lazy var sequence = PasteSequence(terminal: { Self.terminalFolder() }) { event in
         cliplog.notice("clipboard sequence \(String(describing: event), privacy: .public)")
         switch event {
         case .started(let count): HUD.tip("Pasting \(count) one by one: ⌘V pastes the next.")
@@ -307,12 +310,37 @@ final class ClipboardHistory: ScreenPausing {
     /// cannot go on as one (an image among them) writes nothing and returns its steps, for PasteSteps. The panel's paste
     /// and copy, and the pilot command's (CLI W11, on a test's own pasteboard there).
     @discardableResult
-    func write(_ clips: [StoredClip], plain: Bool, delete: Bool = false, paste: Bool = false,
+    func write(_ clips: [StoredClip], plain: Bool, delete: Bool = false, paste: Bool = false, terminal: URL? = nil,
                to pasteboard: NSPasteboard = .general) throws -> [PanelRows.Paste]? {
         guard let store else { return nil }
-        let steps = try PanelRows.write(clips, from: store, plain: plain, forget: delete, paste: paste, to: pasteboard)
+        let steps = try PanelRows.write(clips, from: store, plain: plain, forget: delete, paste: paste, terminal: terminal, to: pasteboard)
         if delete { try store.delete(clips.map(\.id)) }
         return steps
+    }
+
+    /// TerminalPaste's folder while a terminal takes the paste: a terminal app in front (Open with's terminals), or
+    /// Pilot's drop with the keyboard (`drop`: it had it when the panel opened); nil for any other app.
+    static func terminalFolder(drop: Bool = TerminalDrop.shared.hasKeyboard) -> URL? {
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        return drop || AppRolePicks.candidates(.terminal).contains(front) ? TerminalPaste.folder : nil
+    }
+
+    /// Return into Pilot's own terminal: the text goes straight to its shell as a paste, no key posted; each step its
+    /// own paste, so no new line goes between a text and an image's path.
+    private func pasteIntoDrop(_ clips: [StoredClip], plain: Bool, delete: Bool) {
+        guard let store else { return }
+        let texts: [String]
+        do {
+            texts = try TerminalPaste.texts(PanelRows.pastes(clips, from: store, plain: plain), in: TerminalPaste.folder)
+            if delete { try store.delete(clips.map(\.id)) }
+        } catch {
+            cliplog.error("clipboard read \(clips.map(\.id)): \(String(describing: error), privacy: .public)"); return
+        }
+        close()
+        cliplog.notice("clipboard paste\(plain ? " plain" : "", privacy: .public) ids=\(clips.map(\.id)) in \(texts.count) pastes into the terminal drop")
+        guard let surface = TerminalDrop.shared.surface else { return }
+        surface.window?.makeKey()
+        for text in texts { surface.paste(text) }
     }
 
     /// Writes the clips to the pasteboard as one paste and closes; a paste then sends Cmd+V to the app that has focus
@@ -320,8 +348,9 @@ final class ClipboardHistory: ScreenPausing {
     /// (Option+Return) removes them from the history once they are read.
     private func put(_ clips: [StoredClip], plain: Bool, paste: Bool, delete: Bool = false) {
         guard !clips.isEmpty, store != nil else { return }
+        if paste, dropHadKeyboard { return pasteIntoDrop(clips, plain: plain, delete: delete) }
         let steps: [PanelRows.Paste]?
-        do { steps = try write(clips, plain: plain, delete: delete, paste: paste) } catch {
+        do { steps = try write(clips, plain: plain, delete: delete, paste: paste, terminal: paste ? Self.terminalFolder(drop: false) : nil) } catch {
             cliplog.error("clipboard read \(clips.map(\.id)): \(String(describing: error), privacy: .public)"); return
         }
         leave("\(paste ? (plain ? "paste plain" : "paste") : "copy")\(delete ? " and delete" : "") ids=\(clips.map(\.id))", paste: paste, steps: steps)
