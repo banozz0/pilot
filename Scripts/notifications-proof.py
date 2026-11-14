@@ -55,7 +55,8 @@ class Sandbox:
         self.log = None
         self.log_path = self.root / 'host.log'
         self.widget = None
-        self.drop_first = False
+        # Banners up at switching on become cards (2026-11-14), so the cases start from an empty host unless one asks.
+        self.drop_first = True
 
     def start(self):
         self.home = self.host(self.base).get('position', [0, 0])
@@ -194,7 +195,7 @@ def only(event, field='cards'):
 
 def shape(s):
     """The real test of a captured shape: its own banners, delivered as new, must read."""
-    captured = [b for b in s.first_banners() if b.get('subrole', '').startswith('AXNotificationCenter')]
+    captured = [b for b in s.scroll(s.base)['children'] if b.get('subrole', '').startswith('AXNotificationCenter')]
     s.tree([], bump=False)
     s.set('notifications.enabled', True)
     s.settled(0.4)
@@ -208,7 +209,7 @@ def shape(s):
         check(not empty, f'{d["id"][:12]}: has app, title and kind' + (f' (missing {empty})' if empty else ''))
     s.set('notifications.enabled', False)
     s.wait_event('end')
-    s.tree(captured, bump=False)
+    s.tree([], bump=False)
 
 
 def probe(s):
@@ -222,7 +223,19 @@ def probe(s):
     check(st['on'] and st['observing'] and st['timers'] == 1 and st['workspaceObservers'] == 3, f'on: observing with one slow timer ({st})')
     s.settled(0.4)
     st = s.status()
-    check(st['cards'] == 0 and st['live'] == 0 and st['hostFound'], 'what was already up is seeded, not replayed')
+    check(st['cards'] == 0 and st['live'] == 0 and st['hostFound'], 'on with nothing up: no card')
+    s.set('notifications.enabled', False)
+    s.wait_event('detach')
+    # A banner already up when the setting goes on (or Pilot launches) becomes a card.
+    s.drop_first = False
+    s.tree(s.first_banners(), bump=False)
+    s.new_events()
+    s.set('notifications.enabled', True)
+    e = s.wait_event('cards', lambda ev: ev['cards'])
+    check(len(e['cards']) == len(s.first_banners()) and s.status()['live'] == len(s.first_banners()), f'what was already up becomes a card ({len(e["cards"])})')
+    s.drop_first = True
+    s.tree([])
+    s.wait_event('cards', lambda ev: ev['cards'] == [])
     s.new_events()
     # A walk that can't see the host window (a timeout, a locked screen) says nothing: the card stays.
     s.new_events()
@@ -343,8 +356,9 @@ def privacy(s):
     check(not SECRET.search(answer), 'pilot reads carry no notification text')
     support = Path(s.pilot('get', 'notes.folder').stdout.strip().strip('"')).parent
     check(support.is_dir() and support != Path.home() / 'Library/Application Support/Pilot', f'found the throwaway support folder ({support})')
-    leaked = subprocess.run(['grep', '-rlaE', SECRET.pattern, str(support)], capture_output=True, text=True).stdout.strip()
-    check(leaked == '', f'nothing on disk in Pilot\'s folder holds a notification word ({leaked or "none"})')
+    leaked = [l for l in subprocess.run(['grep', '-rlaE', SECRET.pattern, str(support)], capture_output=True, text=True).stdout.split('\n')
+              if l and Path(l).name != 'notifications.json']
+    check(leaked == [], f'on disk only the saved drawer holds a notification word ({leaked or "none"})')
 
 
 def card(s):
@@ -371,13 +385,9 @@ def card(s):
     s.settled(0.3)
     check([e for e in s.new_events() if e['event'] == 'move'] == [], 'hiding off: macOS\'s window stays where it is')
     check(s.status()['hostParked'] is False, 'hiding off: not parked')
-    # A banner that was up before the setting went on has no card, so macOS's window must stay.
+    # Hiding on: every banner up has a card (one up at switching on too, 2026-11-14), so the window goes off screen at once,
+    # and comes back after the last, where it was.
     s.set('notifications.hideMacBanners', True)
-    s.settled(0.4)
-    check([e for e in s.new_events() if e['event'] == 'move'] == [], 'a banner with no card keeps macOS\'s window on screen')
-    # Hiding on: with only carded banners up the window goes off screen, and comes back after the last, where it was.
-    s.drop_first = True
-    s.tree([b1])
     m = s.wait_event('move')
     check(m['y'] == -9999 and m['subrole'] == 'AXSystemDialog', f'hiding on: the host window goes off screen ({m})')
     check(s.status()['hostParked'] is True, 'status says parked')
@@ -499,7 +509,6 @@ def card(s):
     check(m['y'] == s.home[1] and m['x'] == s.home[0], f'a window left off screen by a crash comes back on attach ({m})')
     s.set('notifications.enabled', False)
     s.settled(0.3)
-    s.drop_first = False
 
 
 def command(s, line):
@@ -577,7 +586,6 @@ def actions(s):
     s.settled(0.3)
     s.set('notifications.enabled', False)
     s.settled(0.2)
-    s.drop_first = False
 
 
 def drawer(s):
@@ -686,8 +694,7 @@ def nohost(s):
     s.wait_event('cards', lambda ev: ev['cards'] == [])
     s.set('notifications.enabled', False)
     s.wait_event('detach')
-    s.drop_first = False
-    s.tree(s.first_banners(), bump=False)
+    s.tree([], bump=False)
 
 
 def bell(s):
@@ -770,7 +777,104 @@ def setting(s):
     check(not SECRET.search(json.dumps(st)), 'status carries counts only')
 
 
-CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting)
+def cc_window(key, texts, roles=(), y=40, button=True):
+    """A Control Center window as macOS 27.2 might draw it: its exact make-up is unmeasured (2026-11-14), so the reader
+    keys on positive signs only and the cases cover what must never become a card."""
+    children = [dict(role='AXImage')] + [dict(role='AXStaticText', value=t) for t in texts] + [dict(role=r) for r in roles]
+    if button:
+        children.append(dict(role='AXButton', description='Close', actions=['AXPress']))
+    return dict(role='AXWindow', subrole='AXSystemDialog', key=key, position=[1500, y],
+                children=[dict(role='AXGroup', actions=['AXPress'], children=children)])
+
+
+def cc(s, windows, bump=True):
+    path = s.folder / 'cc-tree.json'
+    if windows is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(json.dumps(dict(role='AXApplication', windows=windows)))
+    if bump:
+        s.bump()
+
+
+def saved_file():
+    tmp = Path(os.environ.get('TMPDIR', tempfile.gettempdir()))
+    files = sorted(tmp.glob('dev.banozz.pilot.test.*/notifications.json'), key=lambda f: f.stat().st_mtime)
+    return files[-1] if files else None
+
+
+def system(s):
+    """macOS's own banners from Control Center (the screen-capture privacy hint, 2026-11-14) become cards and hide; sliders
+    and module windows never do; the drawer outlives a relaunch, and a banner up at relaunch comes back with no second row."""
+    cc(s, [], bump=False)
+    s.tree([], bump=False)
+    s.set('notifications.enabled', True)
+    s.set('notifications.hideMacBanners', True)
+    s.wait_event('attach')
+    s.settled(0.4)
+    s.new_events()
+    # The volume HUD: a slider, one line. Never a card.
+    cc(s, [cc_window('hud', ['Sekret-Title-50'], roles=('AXSlider',), button=False)])
+    s.settled(0.5)
+    check(s.status()['cards'] == 0 and not [e for e in s.new_events() if e['event'] == 'cards'], 'a volume slider banner is not a card')
+    # A menu extra's module window: lines of text and switches. Never a card.
+    cc(s, [cc_window('module', ['Sekret-Title-51', 'Sekret-Body-51'], roles=('AXCheckBox', 'AXScrollArea'))])
+    s.settled(0.5)
+    check(s.status()['cards'] == 0 and not [e for e in s.new_events() if e['event'] in ('cards', 'move-system')], 'a module window with switches is not a card, nor moved')
+    # The privacy hint: a title and a body. A card, and Control Center's window goes off screen.
+    start = s.offset
+    cc(s, [cc_window('hint', ['Sekret-Title-52', 'Sekret-Body-52'])])
+    card = only(s.wait_event('cards', lambda ev: ev['cards']))
+    s.offset = start  # the move lands right after the card
+    check((card['app'], card['title'], card['body'], card['kind']) == ('macOS', 'Sekret-Title-52', 'Sekret-Body-52', 'PilotControlCenterBanner'),
+          f'a Control Center privacy hint becomes a card ({card["app"]}, {card["kind"]})')
+    check(card['id'].startswith('cc-') and 'Sekret' not in card['id'], 'its key carries no words')
+    moved = s.wait_event('move-system', lambda ev: ev['key'] == 'hint')
+    check(moved['y'] == -9999 and moved['x'] == 1500, f'macOS\'s banner is hidden like the others ({moved["x"]}, {moved["y"]})')
+    st = s.status()
+    check(st['systemCards'] == 1 and st['systemParked'] == 1, f'status counts it ({st["systemCards"]}, {st["systemParked"]})')
+    # Close on the card presses the banner's own dismiss button.
+    s.new_events()
+    command(s, f'close {card["id"]}')
+    e = s.wait_event('press')
+    check(e['action'] == 'AXPress', 'the card\'s close presses Control Center\'s dismiss button')
+    # Gone with no layout change to say so (only a window's creation is observed): the look-again walk sees it.
+    s.new_events()
+    cc(s, [], bump=False)
+    s.wait_event('cards', lambda ev: ev['cards'] == [], seconds=4)
+    check(s.status()['systemParked'] == 0 and s.status()['drawer'] == 1, 'it going clears the card within the second\'s look; the drawer keeps it')
+    # Saved across a relaunch: what a row shows, readable by Sven's account only.
+    s.settled(0.3)
+    f = saved_file()
+    check(f is not None and oct(f.stat().st_mode & 0o777) == '0o600', f'the drawer is saved, mode 600 ({f and oct(f.stat().st_mode & 0o777)})')
+    saved = json.loads(f.read_text())
+    check(len(saved['entries']) == 1 and set(saved['entries'][0]) == {'id', 'kind', 'app', 'title', 'subtitle', 'body', 'arrived'},
+          f'it holds only what a row shows ({sorted(saved["entries"][0])})')
+    # A Notification Center banner up at the relaunch, the hint gone: the drawer comes back and the banner becomes a card.
+    s.tree([banner(53)], bump=False)
+    s.new_events()
+    command(s, 'relaunch')
+    e = s.wait_event('cards', lambda ev: ev['cards'])
+    st = s.status()
+    check([c['title'] for c in e['cards']] == ['Sekret-Title-53'] and st['drawer'] == 2,
+          f'after a relaunch: the drawer is back and the banner already up is a card ({st["drawer"]})')
+    # Relaunched again with the same banner up: it goes live again, no second row.
+    s.new_events()
+    command(s, 'relaunch')
+    s.settled(0.6)
+    st = s.status()
+    check(st['drawer'] == 2 and st['cards'] == 1, f'a saved banner still up comes back as its card, no second row ({st["drawer"]}, {st["cards"]})')
+    # Off: the saved drawer goes with it.
+    s.set('notifications.enabled', False)
+    s.wait_event('detach')
+    s.set('notifications.hideMacBanners', False)
+    s.settled(0.3)
+    check(not f.exists(), 'switching off deletes the saved drawer')
+    cc(s, None, bump=False)
+    s.tree([], bump=False)
+
+
+CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system)
 
 
 def main():
