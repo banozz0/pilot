@@ -21,8 +21,8 @@ struct MenuPage: View {
     /// The books Aliases and Quicklinks edit; a render passes its own.
     var aliases: AliasBook = .shared
     var links: QuicklinkBook = .shared
-    /// Whether the page is `besideWidth` wide, followed as the window resizes; narrow until measured, as GeneralPage's.
-    @State private var wide = false
+    /// How much of Your menu stands side by side, followed as the window resizes; stacked until measured, as GeneralPage's.
+    @State private var fit = Fit.stacked
 
     static let intro = "Hyper+Space: the rows it lists before you type, in your order."
     static let introInfo = "Its other tabs: everything Pilot can do and the rings. More holds Translate, aliases and quicklinks."
@@ -30,6 +30,15 @@ struct MenuPage: View {
     /// least (a long title, its ⓘ, the arrows and the switch), the gap, the preview.
     static let rowsWidth: CGFloat = 372, gap: CGFloat = 18
     static let besideWidth = rowsWidth + gap + MenuRootPreview.width
+    /// The page width from which More rows stands right of the preview too (Sven, 2026-11-14: left list, the preview
+    /// narrow in the middle, right list): its rows at their least are Your menu's.
+    static let acrossWidth = besideWidth + gap + rowsWidth
+
+    /// Your menu's layouts by width: both lists with the preview between them, the rows beside the preview with More
+    /// rows under, or all three stacked without the preview.
+    enum Fit { case across, beside, stacked
+        init(width: CGFloat) { self = width >= MenuPage.acrossWidth ? .across : width >= MenuPage.besideWidth ? .beside : .stacked }
+    }
 
     /// More's index (simplify-pages T15). A row added to or moved off a block changes its count here; Aliases and
     /// Quicklinks are a list each.
@@ -56,15 +65,18 @@ struct MenuPage: View {
             }
         default:
             // An ability's own settings go under it on Abilities (page map, Sven 2026-10-17). The preview stands beside
-            // the rows only when both fit; narrower it goes, as a stacked one would push the rows past the window.
+            // the rows only when both fit; narrower it goes, as a stacked one would push the rows past the window. One
+            // HStack, so the page's columns (PageFlow) take the row as one block.
+            let extras = MenuExtrasBlock(settings: .shared).id(AppSection.menuExtras)
             KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {
                 HStack(alignment: .top, spacing: Self.gap) {
                     MenuRootBlock(settings: .shared)
-                    if wide { MenuRootPreview(settings: .shared) }
+                    if fit != .stacked { MenuRootPreview(settings: .shared) }
+                    if fit == .across { extras }
                 }
-                MenuExtrasBlock(settings: .shared).id(AppSection.menuExtras)
+                if fit != .across { extras }
             } }
-            .onGeometryChange(for: Bool.self) { $0.size.width >= Self.besideWidth } action: { wide = $0 }
+            .onGeometryChange(for: Fit.self) { Fit(width: $0.size.width) } action: { fit = $0 }
         }
     }
 }

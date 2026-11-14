@@ -3,7 +3,7 @@ import Observation
 import PilotCore
 import SwiftUI
 
-/// Files › Duplicates (Homy-style Files, T5): identical files and the space they take. Scan runs only when pressed,
+/// Files › Duplicates (Homy-style Files, T5; a block on Files' front since the settings tidy): identical files and the space they take. Scan runs only when pressed,
 /// never on its own; each group keeps one copy, picked by `keeper` and changed with its Keep, and Move to Trash asks
 /// once with the count and size before moving the rest. Nothing is deleted: Finder's Put Back returns any of them.
 /// A copy inside a package (an .rtfd, an iMovie or Photos library) is the package's own, so it is never listed.
@@ -151,28 +151,28 @@ struct DuplicatesView: View {
     /// The rows' pictures, dropped with the page.
     @State private var thumbnails = FileThumbnails()
 
-    static let intro = "Identical files in your home folder. Nothing moves until you say so."
-    static let introInfo = "Found by their contents. Hidden files, what is inside apps, libraries and other packages, git repos and the never-index list are left out."
+    static let note = "Identical files in your home folder. Nothing moves until you say so."
+    static let info = "Found by their contents. Hidden files, what is inside apps, libraries and other packages, git repos and the never-index list are left out."
 
     var body: some View {
-        KitPage(intro: Self.intro, info: Self.introInfo) {
-            KitBlock(title: "Duplicates", symbol: "doc.on.doc", trailing: { scanButton }) { summary }
-            ForEach(model.groups) { group in
-                KitBlock(title: "\(Self.bytes(group.size)) · \(group.files.count) copies") {
-                    // Identical copies look alike: one thumbnail a group, and only for as many groups as the cache
-                    // holds, so the rows never take turns evicting each other's.
-                    let picture = group.id < FileThumbnails.limit ? group.files.first?.path : nil
-                    ForEach(Array(group.files.enumerated()), id: \.element.path) { i, file in
-                        row(file, in: group, first: i == 0, picture: picture.flatMap(thumbnails.image))
-                    }
+        // Blocks on Files' front (ConvertPage), which holds the page; the groups follow the scan's block.
+        KitBlock(title: "Duplicates", symbol: "doc.on.doc", note: Self.note, trailing: { InfoMark(text: Self.info); scanButton }) { summary }
+            .id(AppSection.duplicates)
+            .confirmationDialog(Text(Self.question(model.extras.count, model.freed)), isPresented: $model.asking) {
+                Button("Move to Trash", role: .destructive) { Task { await model.confirmTrash() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("One copy of each stays. Finder's Put Back returns any of them; the space comes back when the Trash is emptied.")
+            }
+        ForEach(model.groups) { group in
+            KitBlock(title: "\(Self.bytes(group.size)) · \(group.files.count) copies") {
+                // Identical copies look alike: one thumbnail a group, and only for as many groups as the cache
+                // holds, so the rows never take turns evicting each other's.
+                let picture = group.id < FileThumbnails.limit ? group.files.first?.path : nil
+                ForEach(Array(group.files.enumerated()), id: \.element.path) { i, file in
+                    row(file, in: group, first: i == 0, picture: picture.flatMap(thumbnails.image))
                 }
             }
-        }
-        .confirmationDialog(Text(Self.question(model.extras.count, model.freed)), isPresented: $model.asking) {
-            Button("Move to Trash", role: .destructive) { Task { await model.confirmTrash() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("One copy of each stays. Finder's Put Back returns any of them; the space comes back when the Trash is emptied.")
         }
     }
 

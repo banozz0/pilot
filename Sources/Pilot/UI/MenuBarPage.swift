@@ -45,7 +45,8 @@ struct MenuBarPage: View {
 
     var body: some View {
         let store = BarItemsStore.shared, topBar = engine.topBar
-        PageBody {
+        // A link or the search to Notifications scrolls to its block.
+        KitLanding { PageBody {
             if let problem = store.loadError { FinePrint(text: problem, color: ink.red) }
             // The switch, its problem and the hidden items' notice are one group, closer together than the blocks.
             VStack(alignment: .leading, spacing: 8) {
@@ -87,11 +88,17 @@ struct MenuBarPage: View {
                     }
                 }
             }
-            clock(store)
+            // The clock and the bell's notifications, both Time and focus items, side by side.
+            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                GridRow(alignment: .top) {
+                    clock(store)
+                    notifications.id(AppSection.notifications)
+                }
+            }
             // The pill's block once it ships (PillFeature, Sven on build 2425).
             if PillFeature.released { PillEditor(extensionBar: extensionBar) }
             screenChoices(topBar)
-        }
+        } }
         .disabled(store.loadError != nil)
         .onAppear { hold(previewed(store)) }
         .onChange(of: previewed(store)) { hold(previewed(store)) }
@@ -700,6 +707,47 @@ struct MenuBarPage: View {
                 Text("The bar shows").frame(maxWidth: .infinity, alignment: .leading)
                 Text(Self.clockPreview(store.settings, pattern: TopBarClockFormat(rawValue: typed), now: .now))
                     .foregroundStyle(ink.text2).monospacedDigit().lineLimit(1)
+            }
+        }
+    }
+
+    /// Other apps' notifications as Pilot's cards (spec notifications.html), beside the bell's item and the clock (on the
+    /// Pilot page until the settings tidy, Sven 2026-11-14): off by default, nothing runs until it's on.
+    static let showInInfo = "Floating: a bell you can drag, with each card in the bottom right. Top bar: a bell item in Pilot's top bar "
+        + "with the count of new ones; each card drops under it and a click lists what arrived."
+    static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
+        + "window, as widgets do. A new card still pops up above apps while it shows."
+
+    private var notifications: some View {
+        @Bindable var settings = NotificationSettings.shared
+        let placement = settings.placement
+        return Tile(title: "Notifications", symbol: "bell") {
+            BlockRow(first: true) {
+                Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
+                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
+            }
+            if settings.enabled {
+                BlockRow {
+                    HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                    Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
+                }
+                if settings.showIn == .topBar && placement == .floating {
+                    BlockRow {
+                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on above.")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if placement == .floating {
+                    BlockRow {
+                        HStack(spacing: 6) { Text("Layer"); InfoMark(text: Self.layerInfo) }.frame(maxWidth: .infinity, alignment: .leading)
+                        Segments(selection: $settings.layer, options: NotificationSettings.Layer.allCases.map { ($0, $0.label) }, label: "Layer")
+                    }
+                }
+            }
+            BlockRow {
+                Toggle("Hide macOS's own banner", isOn: $settings.hideMacBanners)
+                    .toggleStyle(.pilotSwitchRow(info: "Moves Notification Center's banners off screen while a Pilot card shows. Nothing is lost: the notification is still in macOS's Notification Center. A notification Pilot can't fully handle, like a reply, keeps macOS's banner."))
+                    .disabled(!settings.enabled)
             }
         }
     }

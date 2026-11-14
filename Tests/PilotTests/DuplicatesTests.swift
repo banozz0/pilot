@@ -270,7 +270,8 @@ struct DuplicatesTests {
         let model = DuplicatesModel(scan: { $0(.found(found)) })
         model.scan()
         var text = ""
-        let view = DuplicatesView(model: model).frame(width: 1000, height: 600).background(Theme.background).pilotTheme(look: look)
+        // Its blocks on a page of their own, as Files' front holds them.
+        let view = KitPage { DuplicatesView(model: model) }.frame(width: 1000, height: 600).background(Theme.background).pilotTheme(look: look)
         try LookPageTests().hosted(view, height: 600) { host in
             let rep = try #require(snapshot(host, scale: 2))
             if let dir = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"] {

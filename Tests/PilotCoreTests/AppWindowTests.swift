@@ -51,7 +51,7 @@ struct AppWindowTests {
         #expect(RailLayout.hint(.extensions) == "⌘9 Extensions" && RailLayout.hint(.extensions, rows: 3) == "⌘9 Extensions · ⌃Tab next page")
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's, Activity's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
-        #expect(AppPage.files.tabs.map(\.title) == ["Convert", "File search", "Duplicates", "Folders"])
+        #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
         #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
         // Reports beside the runs it records, Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "Reports"] && AppPage.activity.tabs.isEmpty)
