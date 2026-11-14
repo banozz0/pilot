@@ -1270,12 +1270,18 @@
 
   /* ------------------------------------------------ the shader: Glow (Sven, Q571), one fixed canvas behind every page.
      A slow haze in the theme's accent, heavier toward the right, drawn at 40 % of CSS pixels and stretched (a haze needs no
-     detail), at most 30 frames a second, paused in a hidden tab, one still frame with reduced motion, none under 600 px. */
+     detail), at most 30 frames a second, paused in a hidden tab, one still frame with reduced motion, none under 600 px.
+     A theme change rolls the new theme in from the swatch you pressed (Sven, 2026-11-14: "barely visible when
+     changing themes" once 76f2af9's muted themes replaced the vivid ones): the page is revealed in a widening circle (a view
+     transition) and the haze's front travels on its edge in the new accent, behind it the new colour, ahead of it the old. */
   const cv = $('#shader');
   const hasShader = !!cv;
   let mode = hasShader ? 'glow' : 'off', gl = null, raf = 0, last = 0, t0 = performance.now(), uni = {}, TK = null;
+  let swell = null;   // a theme change in flight: { from: tokens, x, y (CSS px), t: start, d: ms, far: CSS px to the farthest corner }
+  const easeOut = (k) => 1 - (1 - k) ** 3;
   const FS = `precision mediump float;
 uniform vec2 R; uniform float T; uniform float Y; uniform vec3 C; uniform float A;
+uniform vec3 C0; uniform float A0; uniform vec2 P; uniform float F; uniform float K;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1., 0.)), f.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), f.x), f.y); }
 float fbm(vec2 p){ float v = 0., a = .5; for (int i = 0; i < 4; i++) { v += a * n(p); p = p * 2.03 + 17.; a *= .5; } return v; }
@@ -1285,17 +1291,33 @@ void main(){
   vec2 q = vec2(fbm(p + vec2(t, 0.)), fbm(p + vec2(3.1, -t)));
   float f = fbm(p + q * 1.6 + vec2(t * .7, -t * .5));
   float m = .3 + .7 * smoothstep(.2, .95, uv.x);
-  float a = smoothstep(.42, .92, f) * m * A;
-  gl_FragColor = vec4(C * a, a);
+  float r = length(gl_FragCoord.xy - P), w = R.y * .07;
+  float inside = 1. - smoothstep(F - w, F + w * .3, r);
+  float ring = exp(-pow((r - F) / w, 2.)) * K;
+  vec3 col = mix(C0, C, inside);
+  float a = smoothstep(.42, .92, f) * m * mix(A0, A, inside) * (1. + 1.6 * ring) + ring * (.18 + .3 * f);
+  a = min(a, .6);
+  gl_FragColor = vec4(col * a, a);
 }`;
   const VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
   const tokens = () => {
     const cs = getComputedStyle(document.documentElement);
     const hex = (v) => { v = v.trim().replace('#', ''); return [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16) / 255); };
     const lum = (c) => .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
-    const g = hex(cs.getPropertyValue('--g')), c = hex(cs.getPropertyValue('--lime')), dark = lum(g) < .5;
-    // the haze's peak stays faint enough that the third text keeps 4.5:1 over it
-    return { c, a: dark ? .12 : (lum(c) < .3 ? .06 : .2) };
+    const g = hex(cs.getPropertyValue('--g')), c = hex(cs.getPropertyValue('--lime')), t3 = hex(cs.getPropertyValue('--t3')), dark = lum(g) < .5;
+    // The strength each theme had before 1.2 (tuned for near-black grounds and vivid accents) is the floor; a muted accent
+    // on a tinted ground (Jade, Nord, Gruvbox, Wisteria, Folio) is raised until the haze differs from the ground by one
+    // OKLab step of .11, as far as the third text keeps 4.5:1 over the haze's peak (about half of A, measured).
+    const floor = dark ? .12 : (lum(c) < .3 ? .06 : .2);
+    const lin = (v) => v.map(x => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4);
+    const Y = (v) => lum(lin(v)), mix = (a) => g.map((x, i) => x * (1 - a) + c[i] * a);
+    const ok = (v) => { const [r, gg, b] = lin(v); const l = Math.cbrt(.4122 * r + .5363 * gg + .0514 * b), m = Math.cbrt(.2119 * r + .6807 * gg + .1074 * b), s = Math.cbrt(.0883 * r + .2817 * gg + .6300 * b);
+      return [.2105 * l + .7936 * m - .0041 * s, 1.978 * l - 2.4286 * m + .4506 * s, .0259 * l + .7828 * m - .8087 * s]; };
+    const o = ok(g), dE = (a) => Math.hypot(...ok(mix(a)).map((x, i) => x - o[i]));
+    const cr = (a) => { const p = Y(t3), q = Y(mix(a)); return (Math.max(p, q) + .05) / (Math.min(p, q) + .05); };
+    let want = .06; while (want < .3 && dE(want) < .11) want += .005;
+    let cap = .06; while (cap < .3 && cr((cap + .005) / 2) >= 4.5) cap += .005;
+    return { c, a: Math.max(floor, Math.min(want, cap)) };
   };
   const retoken = () => { TK = tokens(); };
   const init = () => {
@@ -1307,7 +1329,7 @@ void main(){
     gl.useProgram(prog);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    ['R', 'T', 'Y', 'C', 'A'].forEach(k => uni[k] = gl.getUniformLocation(prog, k));
+    ['R', 'T', 'Y', 'C', 'A', 'C0', 'A0', 'P', 'F', 'K'].forEach(k => uni[k] = gl.getUniformLocation(prog, k));
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); return true;
   };
   const size = () => { cv.width = Math.max(1, Math.round(innerWidth * .4)); cv.height = Math.max(1, Math.round(innerHeight * .4)); if (gl) gl.viewport(0, 0, cv.width, cv.height); };
@@ -1315,9 +1337,16 @@ void main(){
   const frame = (tt) => {
     if (!gl) return; window.__frames++; const k = TK || (TK = tokens());
     gl.uniform2f(uni.R, cv.width, cv.height); gl.uniform1f(uni.T, tt); gl.uniform1f(uni.Y, reduced ? 0 : scrollY / innerHeight * .35);
-    gl.uniform3fv(uni.C, k.c); gl.uniform1f(uni.A, k.a); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.uniform3fv(uni.C, k.c); gl.uniform1f(uni.A, k.a);
+    // the swell: progress k0 eases out; its front sits where the page's circle is (both from the same ease and corner)
+    const s = cv.width / innerWidth, w = swell, k0 = w ? Math.min(1, (performance.now() - w.t) / w.d) : 1;
+    if (w && k0 >= 1) swell = null;
+    gl.uniform3fv(uni.C0, w ? w.from.c : k.c); gl.uniform1f(uni.A0, w ? w.from.a : k.a);
+    gl.uniform2f(uni.P, w ? w.x * s : 0, w ? cv.height - w.y * s : 0); gl.uniform1f(uni.F, w ? easeOut(k0) * w.far * s : 1e5);
+    gl.uniform1f(uni.K, w ? (1 - k0) ** .6 : 0);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
-  const loop = (now) => { raf = 0; if (mode === 'off' || document.hidden) return; if (now - last >= 33) { last = now; frame((now - t0) / 1000); } raf = requestAnimationFrame(loop); };
+  const loop = (now) => { raf = 0; if (mode === 'off' || document.hidden) return; if (swell || now - last >= 33) { last = now; frame((now - t0) / 1000); } raf = requestAnimationFrame(loop); };
   const apply = () => {
     if (!hasShader) return; cancelAnimationFrame(raf); raf = 0;
     const off = mode === 'off' || innerWidth < 600;
@@ -1330,7 +1359,25 @@ void main(){
 
   /* ------------------------------------------------ the theme: Refreshed by default, or one of Pilot's own themes */
   const tbtn = $('.tbtn'), tpop = $('.tpop');
-  const setTheme = (t) => {
+  // A pressed swatch rolls the theme in from where it was pressed (see the shader); a first load, reduced motion or a browser
+  // without view transitions switches at once, the haze still rolling where WebGL runs.
+  const setTheme = (t, from) => {
+    const cur = document.documentElement.dataset.theme || '';
+    if (from && !reduced && cur !== (t || '')) {
+      const r = from.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const far = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)), d = 1100;
+      const old = TK || tokens();
+      const go = () => { applyTheme(t); if (gl && !document.documentElement.classList.contains('no-fx')) swell = { from: old, x, y, t: performance.now(), d, far }; };
+      if (!document.startViewTransition) return go();
+      const vt = document.startViewTransition(go);
+      vt.ready.then(() => document.documentElement.animate(
+        { clipPath: Array.from({ length: 13 }, (_, i) => `circle(${easeOut(i / 12) * far}px at ${x}px ${y}px)`) },
+        { duration: d, easing: 'linear', pseudoElement: '::view-transition-new(root)' })).catch(() => {});
+      return;
+    }
+    applyTheme(t);
+  };
+  const applyTheme = (t) => {
     if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
     try { t ? localStorage.setItem('pilot-theme', t) : localStorage.removeItem('pilot-theme'); } catch (_) {}
     $$('.tpop [data-t]').forEach(b => b.setAttribute('aria-checked', b.dataset.t === (t || '')));
@@ -1341,13 +1388,13 @@ void main(){
   if (tbtn && tpop) {
     const close = () => { tpop.hidden = true; tbtn.setAttribute('aria-expanded', 'false'); };
     tbtn.addEventListener('click', (e) => { e.stopPropagation(); const o = tpop.hidden; tpop.hidden = !o; tbtn.setAttribute('aria-expanded', String(o)); if (o) $('.tpop [aria-checked=true]')?.focus(); });
-    tpop.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) { setTheme(b.dataset.t); close(); tbtn.focus(); } });
+    tpop.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) { setTheme(b.dataset.t, tbtn); close(); tbtn.focus(); } });
     tpop.addEventListener('keydown', (e) => { const items = $$('.tpop [data-t]'), i = items.indexOf(document.activeElement); if (e.key === 'Escape') { close(); tbtn.focus(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); } });
     document.addEventListener('click', (e) => { if (!tpop.hidden && !e.target.closest('.thm-menu')) close(); });
     let saved = ''; try { saved = localStorage.getItem('pilot-theme') || ''; } catch (_) {}
     setTheme(new URLSearchParams(location.search).get('theme') ?? saved);
   }
-  $$('.tryth [data-t]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.t)));
+  $$('.tryth [data-t]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.t, b)));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { retoken(); if (hasShader) apply(); });
   const tabRow = $('.atabs .row'), tabOn = $('.atabs [aria-current]');
   if (tabRow && tabOn && tabRow.scrollWidth > tabRow.clientWidth) tabRow.scrollLeft = tabOn.offsetLeft - tabRow.clientWidth / 2 + tabOn.offsetWidth / 2;

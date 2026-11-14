@@ -19,6 +19,8 @@
 .bgfx.still { display: none; background: radial-gradient(60% 50% at 88% 8%, color-mix(in srgb, var(--lime) 10%, transparent), transparent 70%); }
 .css-fallback .bgfx.still { display: block; }
 .css-fallback canvas.bgfx, .no-fx .bgfx { display: none; }
+/* A theme change is a widening circle from the pressed swatch (pilot.js), not the default cross-fade. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 .site .top > .still-old { display: none; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--t1) 7%, transparent) 0 5px, transparent 6px) 0 0 / 28px 28px; -webkit-mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); }
 .site .w.wide { width: min(1240px, 100% - 64px); }
 .site .hero { padding: 40px 0 96px; }
