@@ -94,15 +94,21 @@ struct SettingsSchemaPart2Tests {
         }
     }
 
-    static let notesFolder = FileManager.default.temporaryDirectory.appending(path: "pilot-notes-\(UUID().uuidString.prefix(8))")
+    /// A new folder of the test's own: tests run in parallel, and one shared folder was deleted by one test's cleanup while
+    /// another still set it (test-12, 2026-11-15).
+    static func ownFolder() throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-notes-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
 
     /// Keys whose store reads UserDefaults on each get, so a value written behind its back is what get reads.
     static let computedOverDefaults: Set = ["update.selfUpdatingCasks"]
 
-    static func sample(_ setting: SettingKey) -> (word: String, value: JSONValue)? {
+    static func sample(_ setting: SettingKey, folder: URL) -> (word: String, value: JSONValue)? {
         // Any folder that exists: the notes one stands in for the wallpaper folder every theme uses.
         if setting.key == "notes.folder" || setting.key == "wallpaper.themeFolder" {
-            let path = notesFolder.path(percentEncoded: false)
+            let path = folder.path(percentEncoded: false)
             return (path, .string(path))
         }
         return SettingsSchemaTests.sample(setting)
@@ -110,13 +116,13 @@ struct SettingsSchemaPart2Tests {
 
     @Test("Every part 2 key: set to a valid non-default value, get reads it back from the store, not from UserDefaults")
     func roundTrip() async throws {
-        try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
+        let folder = try Self.ownFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
         #expect(rig.schema.keys.count == 55)
         for setting in rig.schema.sorted {
-            let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
+            let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
             let set = await rig.ask("set", setting.key, sample.word)
             #expect(set.ok && set.result == sample.value, "set \(setting.key) \(sample.word): \(set.error?.message ?? "\(String(describing: set.result))")")
@@ -189,11 +195,11 @@ struct SettingsSchemaPart2Tests {
 
     @Test("notes.folder never moves the user's notes: with notes in the old folder it refuses and changes nothing")
     func notesStay() async throws {
-        try FileManager.default.createDirectory(at: Self.notesFolder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
+        let folder = try Self.ownFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         rig.notesLeft = 3
-        let answer = await rig.ask("set", "notes.folder", Self.notesFolder.path(percentEncoded: false))
+        let answer = await rig.ask("set", "notes.folder", folder.path(percentEncoded: false))
         #expect(answer.error?.code == .badValue && answer.error?.message.contains("Notes page") == true)
         #expect(rig.settings.notesFolder == nil)
     }
