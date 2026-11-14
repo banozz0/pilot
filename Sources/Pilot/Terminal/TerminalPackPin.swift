@@ -3,6 +3,6 @@
 // leaf, the SHA-1 of the certificate that signed it, is the tests'; Pilot checks a pack against its own certificate.
 // key daaa610d8afb1610: its inputs, so a clone with the same ones fetches this pack from its release instead of building another.
 extension TerminalPack {
-    static let pin = Pin(file: "PilotTerminal-aadb20db.zip", bytes: 4924270, sha256: "deb5b9aff6d6c36a25e2ab16d20e81c0cd2cbcfb0cd92e1707e40e29448ce5cc",
-                         dylibSHA256: "aadb20db8238f9a6307376fe52f451f154f9d58dc99e998acef15f085881d1c7", leaf: "fae2d9624b926d5eea47cb1127032b4c3b05e8f3")
+    static let pin = Pin(file: "PilotTerminal-3285abe1.zip", bytes: 4924264, sha256: "defe5b5d7e82544c3fee1687eb2f7a0ee03515810ad189f138d5311bc7db921d",
+                         dylibSHA256: "3285abe15c4c933d976f9adfedaeb8835508b579eaa262d811f896ed84253365", leaf: "fae2d9624b926d5eea47cb1127032b4c3b05e8f3")
 }
