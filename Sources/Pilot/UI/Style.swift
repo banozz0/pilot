@@ -296,17 +296,20 @@ extension GlassBlur {
 
 /// macOS draws glass in a window without focus as inactive: on Light a blur of 10 and no refraction where a focused window
 /// has no blur, the smear Sven saw on widgets (never key) and on every window he left. It asks the window one private
-/// question, so on Light every Pilot window answers active there, in this one place; Full and Off keep macOS's answer. Only
-/// the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as they are. A macOS
-/// without the selector simply keeps its inactive glass.
-@MainActor enum LightGlassFocus {
+/// question, so on Light every Pilot window answers active there, in this one place. The top bar's and the dock's windows
+/// (TopBarPanel) answer active at every blur, as macOS's own menu bar and Dock draw their glass: they never take focus, so
+/// on Full they always drew inactive glass (the liquid-glass branch, Sven 2026-11-14). Other windows keep macOS's answer at
+/// Full and Off. Only the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as
+/// they are. A macOS without the selector simply keeps its inactive glass.
+@MainActor enum GlassFocus {
     static func install() {
         let selector = NSSelectorFromString("_hasActiveAppearanceIgnoringKeyFocus")
         guard let method = class_getInstanceMethod(NSWindow.self, selector) else { return }
         typealias Answer = @convention(c) (NSWindow, Selector) -> Bool
         let original = unsafeBitCast(method_getImplementation(method), to: Answer.self)
         let answer: @convention(block) (NSWindow) -> Bool = { window in
-            (Thread.isMainThread && MainActor.assumeIsolated { Look.shared.glassBlur == .light }) || original(window, selector)
+            window is TopBarPanel || (Thread.isMainThread && MainActor.assumeIsolated { Look.shared.glassBlur == .light })
+                || original(window, selector)
         }
         method_setImplementation(method, imp_implementationWithBlock(answer))
         follow()

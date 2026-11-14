@@ -202,7 +202,7 @@ struct TopBarDropItem: View {
 /// The top bar's three sides, in either Look, on one opaque strip (card
 /// agent-bo-95423007: the menu bar reveals under the bar, and none of it may show through), whatever Look's Glass says:
 /// the bar's own Background and Colour decide (BarItemsStore; Sven, 2026-10-10, who could not read it on Look's Glass).
-/// Glass leaves the strip clear over the bar window's glass (TopBarWindows.applyLook). On a picked colour the bar's text
+/// Glass leaves the strip clear over the bar window's glass (TopBarWindows.applyLook); islands and pills draw their own. On a picked colour the bar's text
 /// turns white or near-black, whichever reads (StyleTokens.inked); on Glass and Clear in Instrument it does so for the
 /// wallpaper under it, its light spots toned down behind the items as the macOS menu bar does (BarTone; Sven, Q254). It draws the Strip (card agent-bo-95423013, design
 /// JJPiA9o30SA direction A), Omarchy's: no boxes, mono type, a hairline before the status glyphs and a rule along its
@@ -270,7 +270,10 @@ struct TopBarStrip<Slot: View>: View {
                         if !pills, proxy.size.width > 0, proxy.size.height > 0 {
                             let shape = BarIslandShape.of(configuration)
                             islandGround(ground: ground, tone: tone)
-                                .background { if glassPreview, background == .glass { BarGlassGround(colour: colour) } }
+                                .background {
+                                    if glassPreview, background == .glass { BarGlassGround(colour: colour) }
+                                    else if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
+                                }
                                 .clipShape(shape)
                                 .overlay {
                                     shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
@@ -291,7 +294,7 @@ struct TopBarStrip<Slot: View>: View {
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
                     let ruled = rules[side]?.contains(index) == true
                     slot(item)
-                        .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: look))
+                        .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: glassPreview ? nil : look))
                         .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
                         // Before the report, which then keeps the slot's place at rest while a drag moves it.
                         .modifier(BarSlotMoved(side: side, index: index, moved: moved))
@@ -305,6 +308,9 @@ struct TopBarStrip<Slot: View>: View {
             if let trailing { trailing.layoutValue(key: TopBarRow.Side.self, value: .right) }
             if let overflow { overflow.layoutValue(key: TopBarRow.Overflow.self, value: true) }
         }
+        // Pills on Glass: every pill's glass in one container, which renders them in one pass (Apple: "for the best
+        // rendering performance"); spacing 0, so pills apart stay apart and only touching flares join at the edge.
+        .modifier(GlassBatch(on: pilled && background == .glass && !glassPreview && look != nil))
         .environment(\.inTopBar, true)
         .environment(\.barItemColours, itemColours)
         .environment(\.barGround, tone.map { ($0.tone.ground, inked.dark) })
@@ -338,6 +344,15 @@ struct TopBarStrip<Slot: View>: View {
     }
 }
 
+/// Its content's Liquid Glass shapes in one GlassEffectContainer while `on`.
+private struct GlassBatch: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on { GlassEffectContainer(spacing: 0) { content } } else { content }
+    }
+}
+
 /// A slot moved by a drag to rearrange (spec drag-reorder): only this reads the drag, so a move redraws the slots
 /// that shift, not the strip.
 private struct BarSlotMoved: ViewModifier {
@@ -352,8 +367,9 @@ private struct BarSlotMoved: ViewModifier {
 }
 
 /// A Pills slot's own pill (Sven, 2026-11-12, Q177, after a Waybar picture): the bar's colour (the theme's, or the picked
-/// one) under it, its corners `radius`, a `border` ring in the accent's line colour, `padding` inside. Glass draws the
-/// colour at Look's Transparency share (the window behind a Pills side shows no glass of its own), Clear only the ring.
+/// one) under it, its corners `radius`, a `border` ring in the accent's line colour, `padding` inside. Glass is the pill's own
+/// Liquid Glass in its outline (TopBarColour.liquidGlass; the window behind a Pills side shows none), the colour at Look's
+/// Transparency share where no Look is given (the renders), Clear only the ring.
 /// Nil `configuration` leaves the slot as it is.
 private struct BarPill: ViewModifier {
     @Environment(\.style) private var style
@@ -373,7 +389,9 @@ private struct BarPill: ViewModifier {
                     Group {
                         switch background {
                         case .solid: shape.fill(colour == .theme ? TopBarColour.themeGround(style) : ground)
-                        case .glass: shape.fill(ground.opacity(Double(look.map(TopBarColour.tintAlpha) ?? 55) / 100))
+                        case .glass:
+                            if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
+                            else { shape.fill(ground.opacity(0.55)) }
                         case .clear: shape.fill(TopBarColour.clearGround)
                         }
                     }
@@ -555,18 +573,33 @@ enum TopBarColour {
     /// The theme's bar colour: the style's canvas.
     static func themeGround(_ style: StyleTokens) -> Color { style.color(\.canvas) }
 
+    /// An island's or a pill's own Liquid Glass on a Glass bar (the liquid-glass branch, Sven 2026-11-14: "like mac os
+    /// liquid glass"): drawn in its outline, flares and all, so the glass's own edge and refraction follow the shape, where
+    /// the window-wide glass under a mask cut them; in the bar's tint, in Look's Blur, the tint alone at Off. Solid and
+    /// Clear draw nothing here. Offscreen it draws nothing (renders pass no `look`, or the page's glassPreview).
+    @ViewBuilder static func liquidGlass(in shape: GrownEdgeShape, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
+                                         look: Look) -> some View {
+        if background == .glass {
+            let tint = Color(nsColor: tint(colour, style: style, look: look))
+            if let glass = look.glassBlur.glass { Color.clear.glassEffect(glass.tint(tint), in: shape) } else { shape.fill(tint) }
+        }
+    }
+
     /// The glass's tint on a Glass bar: its colour at Look's Transparency, whether Look's own Glass is on or not.
     static func tint(_ colour: ColourChoice, style: StyleTokens, look: Look) -> NSColor {
         look.glassTint(Color(Paint(ground(colour, style: style))), alpha: tintAlpha(look))
     }
 
     /// The glass's tint's share in percent at Look's Transparency, over its whole range (Sven, Q714): whole at 0 %, where
-    /// the bar goes solid (TopBarBackground.shown), 55 % at the default 33 % as before, down to the window ground's least
-    /// (42 %) at 100 %, in a line between each. 50 % is 52, 77 % 46.
+    /// the bar goes solid (TopBarBackground.shown), 55 % at the default 33 % as before, down to `least` at 100 %, in a line
+    /// between each. 50 % is 45, 77 % 29. `least` was the window ground's least (42 %) until the liquid-glass branch
+    /// (coordinator's call for Sven, 2026-11-14, a change to Q714 for his check): 15 %, toward the light tint macOS's own
+    /// Liquid Glass wears, so high Transparency reads as glass, not frosted colour. Bar, islands, pills and dock.
+    static let least = 15.0
     static func tintAlpha(_ look: Look) -> Int { tintAlpha(transparency: look.transparency) }
     static func tintAlpha(transparency: Int) -> Int {
         let t = Double(min(100, max(0, transparency))), standard = 33.0
-        let atStandard = MaterialValues.glassShare * 100, least = Layers(transparency: 100).ground * 100
+        let atStandard = MaterialValues.glassShare * 100, least = Self.least
         let share = t <= standard ? 100 + (atStandard - 100) * t / standard : atStandard + (least - atStandard) * (t - standard) / (100 - standard)
         return Int(share.rounded())
     }

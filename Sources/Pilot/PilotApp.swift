@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = PilotServices()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        LightGlassFocus.install()
+        GlassFocus.install()
         if !AXIsProcessTrusted() { NSApp.activate() }
         AXTimeout.applyEverywhere()
         // The themes' display faces, for Pilot only; then Reduce transparency, Increase contrast and the wallpaper's
