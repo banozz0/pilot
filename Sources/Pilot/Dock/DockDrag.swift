@@ -16,7 +16,8 @@ final class DockDrag: PanelDrag {
 
     /// The pill as last drawn, in the box's space (DockPill.space, the host's own): each icon's frame by its app's id,
     /// the icons' row, one icon's place at rest (icon and gap), the apps in order, each widget's frame, the widgets' gap.
-    /// Reported by the views while nothing is dragged and read at a press, so a report never redraws the pill.
+    /// Reported by the views as laid out (a drag's offsets come after the reports, so they never feed back), and read
+    /// at a press and each move, so a report never redraws the pill. The row is reported only at rest.
     @ObservationIgnored var icons: [String: CGRect] = [:]
     @ObservationIgnored var row: CGRect = .zero
     @ObservationIgnored var slot: CGFloat = 0
@@ -38,8 +39,8 @@ final class DockDrag: PanelDrag {
     private(set) var dx: CGFloat = 0
     private(set) var appLanding: Int?
     private(set) var widgetLanding: Landing?
-    /// What a press picked, before it moves far enough to be a drag.
-    @ObservationIgnored private var press: (piece: Piece, x: CGFloat)?
+    /// What a press picked, and where on it: a widget is held where it was grabbed, an icon by its middle.
+    @ObservationIgnored private var press: (piece: Piece, grab: CGFloat)?
     /// As the drag began: the widgets on each side, and the places the dragged app may go.
     @ObservationIgnored private var start: (left: [DockSlot], right: [DockSlot])?
     @ObservationIgnored private var reach: ClosedRange<Int>?
@@ -66,9 +67,9 @@ final class DockDrag: PanelDrag {
     func pressed(at point: CGPoint) -> Bool {
         press = nil
         if let i = apps.firstIndex(where: { icons[$0.dragID]?.contains(point) == true }) {
-            if DockSettings.reach(of: apps[i].key, in: apps) != nil { press = (.app(key: apps[i].key, from: i), point.x) }
+            if DockSettings.reach(of: apps[i].key, in: apps) != nil { press = (.app(key: apps[i].key, from: i), 0) }
         } else if let hit = frames.first(where: { $0.value.contains(point) }) {
-            press = (.widget(hit.key), point.x)
+            press = (.widget(hit.key), point.x - hit.value.midX)
         }
         return press != nil
     }
@@ -82,7 +83,13 @@ final class DockDrag: PanelDrag {
             piece = press.piece
             BarPanel.shared.close()
         }
-        follow(point.x - press.x)
+        // From the piece's middle as laid out now: once magnification pauses the icons shrink back to rest, and the
+        // piece stays under the pointer.
+        let middle: CGFloat? = switch press.piece {
+        case .app(_, let from): apps.indices.contains(from) ? icons[apps[from].dragID]?.midX : nil
+        case .widget(let widget): frames[widget]?.midX
+        }
+        if let middle { follow(point.x - press.grab - middle) }
     }
 
     /// The move and the gap closing in one animation: each icon and widget, known by its own id, slides from where the

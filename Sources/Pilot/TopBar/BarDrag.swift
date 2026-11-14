@@ -79,8 +79,17 @@ final class BarDrag {
             let next = others.filter { $0.minX >= frame.maxX }.map(\.minX).min(), before = others.filter { $0.maxX <= frame.minX }.map(\.maxX).max()
             return frame.width + (next.map { $0 - frame.maxX } ?? before.map { frame.minX - $0 } ?? 8)
         }
+        // A member's report outlives a move out of its group (the ones left never report again): one counts only while
+        // its items are still in that group and it lies inside the group's slot as drawn now; the rest go.
+        func place(_ group: Int) -> (side: TopBarSide, index: Int)? { store.settings.topBarPlace(group > 1 ? .group(group) : .kind(.group)) }
+        func current(_ key: MemberKey, _ member: (items: [BarTrayItem], frame: CGRect)) -> Bool {
+            guard member.items.allSatisfy({ store.settings.entry(for: $0)?.groupNumber == key.group }), let spot = place(key.group),
+                  let slot = frames.frames[.init(screen: key.screen, side: spot.side, index: spot.index)] else { return false }
+            return slot.minX <= member.frame.midX && member.frame.midX <= slot.maxX
+        }
+        members = members.filter { current($0.key, $0.value) }
         if let hit = members.first(where: { $0.key.screen == screen && $0.value.frame.width > 0 && $0.value.frame.contains(point) }),
-           let spot = store.settings.topBarPlace(hit.key.group > 1 ? .group(hit.key.group) : .kind(.group)) {
+           let spot = place(hit.key.group) {
             let mates = members.filter { $0.key.screen == screen && $0.key.group == hit.key.group && $0.key != hit.key }.map(\.value.frame)
             press = (Piece(screen: screen, items: hit.value.items, side: spot.side, slot: spot.index, group: hit.key.group, member: hit.key.index,
                            frame: hit.value.frame, room: room(hit.value.frame, among: mates)), point.x, size)

@@ -131,7 +131,7 @@ struct DockIconDragged: ViewModifier {
         content
             .offset(x: drag?.offset(app: index, slot: slot) ?? 0)
             .zIndex(drag?.lifts(app: index) == true ? 1 : 0)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if drag?.dragging == false { drag?.icons[id] = $0 } }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { drag?.icons[id] = $0 }
     }
 }
 
@@ -144,7 +144,7 @@ struct DockDragged: ViewModifier {
         content
             .offset(x: drag.offset(widget: slot))
             .zIndex(drag.piece == .widget(slot) ? 1 : 0)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if !drag.dragging { drag.frames[slot] = $0 } }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { drag.frames[slot] = $0 }
     }
 }
 
