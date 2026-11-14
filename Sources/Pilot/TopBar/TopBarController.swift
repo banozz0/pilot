@@ -276,8 +276,9 @@ final class TopBarWindows: TopBarPanels {
         let background = store.background.shown(transparency: look.transparency)
         let inked = TopBarColour.ink(store.colour, style: tokens, background: background, wallpaper: wallpaper, look: look).tokens
         panel.appearance = inked.inked ? NSAppearance(named: inked.dark ? .darkAqua : .aqua) : look.appearance(for: .topBar)
-        // A Pills side's window shows no glass of its own: each pill draws its ground (TopBarStrip's BarPill).
-        let glass = background == .glass && store.topBarConfiguration?.preset != .pills
+        // An island's or a Pills side's window shows no glass of its own: each island and each pill draws its own Liquid
+        // Glass in its outline (TopBarStrip), so the glass's edge follows the flares instead of a mask cutting it.
+        let glass = background == .glass && store.topBarConfiguration?.preset.islands != true
         (panel.contentView as? MaterialBackdrop)?.show(glass ? .glass : .solid,
                                                          tint: TopBarColour.tint(store.colour, style: tokens, look: look), blur: look.glassBlur)
     }
@@ -324,8 +325,11 @@ final class TopBarWindows: TopBarPanels {
                 let panel = panels[key] ?? make(key)
                 panels[key] = panel
                 panel.contentView?.wantsLayer = true
-                // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners.
-                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills || $0.isAttached ? 0 : $0.radius } ?? 0
+                // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners. A
+                // one-window bar's glass takes the same corners, so its own edge is drawn round them.
+                let radius = configuration.map { $0.preset == .pills || $0.isAttached ? 0 : $0.radius } ?? 0
+                panel.contentView?.layer?.cornerRadius = radius
+                (panel.contentView as? MaterialBackdrop)?.cornerRadius = radius
                 panel.contentView?.layer?.maskedCorners = BarIslandShape.corners(configuration)
                 panel.contentView?.layer?.masksToBounds = true
                 if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
@@ -389,8 +393,8 @@ final class TopBarWindows: TopBarPanels {
         place(panel, of: key, wanted: true)
     }
 
-    /// An attached island window clipped to its grown outline (BarIslandShape.mask), so the glass behind it takes the
-    /// flared shape; Floating, its rounded corners alone.
+    /// An attached island window clipped to its grown outline (BarIslandShape.mask), the same outline its glass draws in;
+    /// Floating, its rounded corners alone.
     private func clipToOutline(_ panel: TopBarPanel) {
         guard let layer = panel.contentView?.layer else { return }
         let bounds = CGRect(origin: .zero, size: panel.frame.size)

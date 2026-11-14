@@ -431,7 +431,14 @@ final class MaterialBackdrop: NSView {
     let content: NSView
     /// The material's view behind the content, nil when Solid.
     private(set) var effect: NSView?
-    private let cornerRadius: CGFloat
+    /// The material's corners. A bar window whose corners change with its preset sets it again, so the glass draws its
+    /// own rounded edge, not one a layer clip cuts.
+    var cornerRadius: CGFloat {
+        didSet {
+            guard cornerRadius != oldValue else { return }
+            if let glass = effect as? NSGlassEffectView { glass.cornerRadius = cornerRadius } else { effect?.layer?.cornerRadius = cornerRadius }
+        }
+    }
 
     /// `cornerRadius` rounds the material to a panel's corners; a window's own frame rounds it otherwise. The material
     /// stays live whether or not its window is key (Sven, 2026-10-17: it went solid as the window lost focus).
