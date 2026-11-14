@@ -89,7 +89,6 @@ struct DockView: View {
                 hold(kinds, asked, widgets)
                 dock.drag.frames = dock.drag.frames.filter { widgets.contains($0.key) }
             }
-            .onChange(of: size, initial: true) { dock.drag.widgetGap = DockFaceMetrics.widgetGap * DockScale.of(size) }
             .onChange(of: options) { hold(kinds, asked, widgets) }
             .onDisappear {
                 sources.readings.hold([], replacing: &held)
@@ -101,14 +100,8 @@ struct DockView: View {
 
     static let holder = "dock"
 
-    /// One widget, where it is told to the drag at rest and moved by it while one is dragged (spec drag-reorder).
     private func widget(_ slot: DockSlot, _ reader: DockWidgetSources) -> some View {
-        let drag = dock.drag
-        // The offset before the report, which then keeps the widget's place at rest.
-        return DockWidgetView(slot: slot, reader: reader, store: store, dock: dock)
-            .offset(x: drag.offset(widget: slot))
-            .zIndex(drag.piece == .widget(slot) ? 1 : 0)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if !drag.dragging { drag.frames[slot] = $0 } }
+        DockWidgetView(slot: slot, reader: reader, store: store, dock: dock).modifier(DockDragged(slot: slot, drag: dock.drag))
     }
 
     /// The widgets' readers held, their extensions asked for the dock even where no bar places them, and Calendar read
@@ -122,6 +115,36 @@ struct DockView: View {
 
     private func follow(_ widgets: [DockSlot]) {
         if widgets.contains(.widget(.nextEvent)) || widgets.contains(.widget(.timeline)) { calendar.follow(now: sources.readings.now) } else { calendar.stop() }
+    }
+}
+
+/// One icon, where it is told to the drag and moved by it while one is dragged (spec drag-reorder): only this reads
+/// the drag's distance, so a move redraws the dragged icon, not the pill. The offset comes before the report, which
+/// then keeps the icon's place.
+struct DockIconDragged: ViewModifier {
+    let drag: DockDrag?
+    let index: Int
+    let slot: CGFloat
+    let id: String
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: drag?.offset(app: index, slot: slot) ?? 0)
+            .zIndex(drag?.lifts(app: index) == true ? 1 : 0)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if drag?.dragging == false { drag?.icons[id] = $0 } }
+    }
+}
+
+/// One widget, as DockIconDragged for an icon.
+struct DockDragged: ViewModifier {
+    let slot: DockSlot
+    let drag: DockDrag
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: drag.offset(widget: slot))
+            .zIndex(drag.piece == .widget(slot) ? 1 : 0)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if !drag.dragging { drag.frames[slot] = $0 } }
     }
 }
 
@@ -281,15 +304,19 @@ struct DockStrip<Widgets: View>: View {
             ForEach(Array(apps.enumerated()), id: \.element.dragID) { i, app in
                 DockAppIcon(app: app, icon: icon, scale: fit.scrolls ? 1 : scale(at: CGFloat(i) * (icon + gap) + icon / 2, icon: icon),
                             windows: windows(app), tiler: tiler, dock: dock, tint: tint, tintPoints: icon * CGFloat(magnify.scale))
-                    .offset(x: drag?.offset(app: i) ?? 0)
-                    .zIndex(drag?.piece == .app(key: app.key, from: i) ? 1 : 0)
+                    .modifier(DockIconDragged(drag: drag, index: i, slot: icon + gap, id: app.dragID))
             }
         }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if drag?.dragging != true { drag?.row = $0 } }
-        .onChange(of: apps, initial: true) { if drag?.dragging != true { drag?.apps = apps } }
+        .onChange(of: apps, initial: true) {
+            guard let drag, !drag.dragging else { return }
+            drag.apps = apps
+            let ids = Set(apps.map(\.dragID))
+            drag.icons = drag.icons.filter { ids.contains($0.key) }
+        }
         .onChange(of: fit, initial: true) {
             drag?.slot = icon + gap
-            drag?.scrolls = fit.scrolls
+            drag?.widgetGap = DockFaceMetrics.widgetGap * DockScale.of(size)
         }
         .onChange(of: drag?.dragging == true) { _, now in
             if !now, leftWhileDragging { hover(.ended) }

@@ -181,18 +181,11 @@ struct TopBarSlotView: View {
                                              appIcon: kind == .focusedApp ? sources.observers.focusedApp?.icon : nil,
                                              windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
                                              focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
-                    if inBar, !preview, let group = slot.groupNumber, members.indices.contains(i) {
-                        // A group's member drags along its group or out of it (BarDrag): told where it is at rest.
+                    if inBar {
                         Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
                             .buttonStyle(.kitPress)
-                            .offset(x: drag.offset(member: i, group: group, on: screen))
-                            .zIndex(drag.piece?.group == group && drag.piece?.member == i ? 1 : 0)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BarFrames.space)) } action: { [drag, screen] in
-                                drag.report($0, items: members[i], group: group, index: i, on: screen)
-                            }
-                    } else if inBar {
-                        Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
-                            .buttonStyle(.kitPress)
+                            .modifier(BarMemberDragged(drag: drag, screen: screen, group: preview ? nil : slot.groupNumber, index: i,
+                                                       items: members.indices.contains(i) ? members[i] : []))
                     } else {
                         Button { perform(target.click, kinds: each.kinds) } label: { parts }.buttonStyle(.plain)
                     }
@@ -1228,6 +1221,29 @@ struct TimerButtons<Drawn: View>: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A group's member as a drag to rearrange sees it (spec drag-reorder): told where it is drawn, moved along its group
+/// or out of it; nothing outside a group or on the Menu bar page's strip.
+private struct BarMemberDragged: ViewModifier {
+    let drag: BarDrag
+    let screen: String
+    let group: Int?
+    let index: Int
+    let items: [BarTrayItem]
+
+    func body(content: Content) -> some View {
+        if let group, !items.isEmpty {
+            content
+                .offset(x: drag.offset(member: index, group: group, on: screen))
+                .zIndex(drag.piece?.group == group && drag.piece?.member == index ? 1 : 0)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BarFrames.space)) } action: { [drag, screen, items, index] in
+                    drag.report($0, items: items, group: group, index: index, on: screen)
+                }
+        } else {
+            content
         }
     }
 }

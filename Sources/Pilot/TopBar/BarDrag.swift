@@ -52,11 +52,11 @@ final class BarDrag {
     @ObservationIgnored private var drop: BarDrop?
     @ObservationIgnored private var press: (piece: Piece, x: CGFloat, size: CGSize)?
 
-    init(store: BarItemsStore? = nil) { self.store = store }
+    init() {}
 
     /// A render's mid-drag state (DragRenders).
-    init(rendering piece: Piece, dx: CGFloat, target: Target?, sides: [TopBarSide: [BarSlot]]) {
-        (self.piece, self.dx, self.target, self.sides) = (piece, dx, target, sides)
+    init(rendering piece: Piece, dx: CGFloat, target: Target?) {
+        (self.piece, self.dx, self.target) = (piece, dx, target)
     }
 
     var dragging: Bool { piece != nil }
@@ -80,7 +80,7 @@ final class BarDrag {
             return frame.width + (next.map { $0 - frame.maxX } ?? before.map { frame.minX - $0 } ?? 8)
         }
         if let hit = members.first(where: { $0.key.screen == screen && $0.value.frame.width > 0 && $0.value.frame.contains(point) }),
-           let spot = place(of: hit.key.group, in: sides) {
+           let spot = store.settings.topBarPlace(hit.key.group > 1 ? .group(hit.key.group) : .kind(.group)) {
             let mates = members.filter { $0.key.screen == screen && $0.key.group == hit.key.group && $0.key != hit.key }.map(\.value.frame)
             press = (Piece(screen: screen, items: hit.value.items, side: spot.side, slot: spot.index, group: hit.key.group, member: hit.key.index,
                            frame: hit.value.frame, room: room(hit.value.frame, among: mates)), point.x, size)
@@ -96,7 +96,8 @@ final class BarDrag {
     func moved(to point: CGPoint) {
         guard let press else { return }
         if piece == nil {
-            drop = Self.drop(sides, frames: frames, screen: press.piece.screen, size: press.size)
+            let screen = press.piece.screen
+            drop = BarDrop(sides, size: press.size) { [frames] in frames.frames[.init(screen: screen, side: $0, index: $1)] }
             piece = press.piece
             BarPanel.shared.close()
         }
@@ -109,10 +110,12 @@ final class BarDrag {
     func released(at point: CGPoint) {
         if let piece, let target, let store {
             var s = store.settings
-            Self.apply(piece, target, to: &s, members: groupMembers(target, on: piece.screen))
-            if s != store.settings { withAnimation(.spring(duration: 0.25, bounce: 0)) { store.settings = s } }
+            var members: [[BarTrayItem]] = []
+            if case .group(let number, _) = target { members = memberFrames(number, on: piece.screen).map(\.items) }
+            Self.apply(piece, target, to: &s, members: members)
+            if s != store.settings { withAnimation(DockDrag.settle) { store.settings = s } }
         }
-        withAnimation(.spring(duration: 0.25, bounce: 0)) { (piece, dx, target) = (nil, 0, nil) }
+        withAnimation(DockDrag.settle) { (piece, dx, target) = (nil, 0, nil) }
         (press, drop) = (nil, nil)
     }
 
@@ -144,48 +147,35 @@ final class BarDrag {
         return drop.target(x: Double(x), y: Double(y), dragging: piece.group == nil ? first : nil).map { .side($0.side, $0.index) }
     }
 
-    /// The offset of the slot at `index` of `side` on `screen`'s bar.
+    /// The offset of the slot at `index` of `side` on `screen`'s bar; each side keeps its anchor.
     func offset(side: TopBarSide, index: Int, on screen: String) -> CGFloat {
-        guard let piece, piece.screen == screen else { return 0 }
-        if piece.group == nil, piece.side == side, piece.slot == index { return dx }
-        let leaving = piece.group == nil && piece.side == side ? piece.slot : nil
+        let slot = piece?.group == nil && piece?.side == side ? piece?.slot : nil
         var entering: Int?
         if case .side(let to, let at)? = target, to == side { entering = at }
-        return CGFloat(DragGap.barShift(side, j: index, leaving: leaving, entering: entering, width: Double(piece.room)))
+        return offset(side, index, dragged: slot, entering: entering, on: screen)
     }
 
     /// The offset of the member at `index` of group `group`: the group holds its left end, as the left side does.
     func offset(member index: Int, group: Int, on screen: String) -> CGFloat {
-        guard let piece, piece.screen == screen else { return 0 }
-        if piece.group == group, piece.member == index { return dx }
-        let leaving = piece.group == group ? piece.member : nil
         var entering: Int?
         if case .group(let number, let at)? = target, number == group { entering = at }
-        return CGFloat(DragGap.barShift(.left, j: index, leaving: leaving, entering: entering, width: Double(piece.room)))
+        return offset(.left, index, dragged: piece?.group == group ? piece?.member : nil, entering: entering, on: screen)
     }
 
-    /// Whether the slot at `index` of `side` is the one dragged, drawn over the rest.
+    /// The piece at `index` of a row anchored at `anchor` on `screen`: the dragged one (at `dragged`) follows the
+    /// pointer, the rest open the gap at `entering`.
+    private func offset(_ anchor: TopBarSide, _ index: Int, dragged: Int?, entering: Int?, on screen: String) -> CGFloat {
+        guard let piece, piece.screen == screen else { return 0 }
+        if dragged == index { return dx }
+        return CGFloat(DragGap.shift(anchor, j: index, leaving: dragged, entering: entering, width: Double(piece.room)))
+    }
+
+    /// Whether the slot at `index` of `side` is dragged or holds the dragged member, drawn over the rest.
     func lifts(side: TopBarSide, index: Int, on screen: String) -> Bool {
-        piece.map { $0.screen == screen && $0.group == nil && $0.side == side && $0.slot == index } ?? false
-    }
-
-    /// Whether the dragged member is in the slot at `index` of `side`, so that slot is drawn over the rest.
-    func holds(side: TopBarSide, index: Int, on screen: String) -> Bool {
-        piece.map { $0.screen == screen && $0.group != nil && $0.side == side && $0.slot == index } ?? false
+        piece.map { $0.screen == screen && $0.side == side && $0.slot == index } ?? false
     }
 
     // MARK: Reading the bar
-
-    /// The bar's slots as BarDrop takes them, from where `screen`'s bar drew them, as the Menu bar page's strip does.
-    static func drop(_ sides: [TopBarSide: [BarSlot]], frames: BarFrames, screen: String, size: CGSize) -> BarDrop {
-        let slots = TopBarSide.allCases.map { side in
-            (side, (sides[side] ?? []).enumerated().map { i, slot in
-                let rect = frames.frames[.init(screen: screen, side: side, index: i)].flatMap { $0.width > 0 && $0.maxX > 0 ? $0 : nil } ?? .zero
-                return BarDrop.Slot(item: slot.item, minX: rect.minX, maxX: rect.maxX)
-            })
-        }
-        return BarDrop(sides: Dictionary(uniqueKeysWithValues: slots), width: size.width, height: size.height)
-    }
 
     private func slot(at point: CGPoint, on screen: String, in sides: [TopBarSide: [BarSlot]]) -> (side: TopBarSide, index: Int, frame: CGRect)? {
         for side in TopBarSide.allCases {
@@ -196,20 +186,8 @@ final class BarDrag {
         return nil
     }
 
-    private func place(of group: Int, in sides: [TopBarSide: [BarSlot]]) -> (side: TopBarSide, index: Int)? {
-        for side in TopBarSide.allCases {
-            if let index = (sides[side] ?? []).firstIndex(where: { $0.groupNumber == group }) { return (side, index) }
-        }
-        return nil
-    }
-
     private func memberFrames(_ group: Int, on screen: String) -> [(items: [BarTrayItem], frame: CGRect)] {
         members.filter { $0.key.screen == screen && $0.key.group == group && $0.value.frame.width > 0 }.sorted { $0.key.index < $1.key.index }.map(\.value)
-    }
-
-    private func groupMembers(_ target: Target, on screen: String) -> [[BarTrayItem]] {
-        guard case .group(let number, _) = target else { return [] }
-        return memberFrames(number, on: screen).map(\.items)
     }
 }
 
@@ -218,9 +196,9 @@ final class BarDrag {
 final class BarPanelDrag: PanelDrag {
     let screen: String
     weak var host: NSView?
-    let drag: BarDrag
+    let drag = BarDrag.shared
 
-    init(screen: String, host: NSView, drag: BarDrag = .shared) { (self.screen, self.host, self.drag) = (screen, host, drag) }
+    init(screen: String, host: NSView) { (self.screen, self.host) = (screen, host) }
 
     func pressed(at point: CGPoint) -> Bool { drag.pressed(at: point, on: screen, size: host?.bounds.size ?? .zero) }
     func moved(to point: CGPoint) { drag.moved(to: point) }

@@ -414,14 +414,13 @@ public struct DockSettings: Codable, Equatable, Sendable {
     /// name after the ones it does in the order they came. Finder stays first, as in the Dock.
     public func arranged(_ apps: [DockApp]) -> [DockApp] {
         guard !order.isEmpty else { return apps }
-        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
-        func sorted(_ run: [DockApp]) -> [DockApp] {
-            run.enumerated().sorted { a, b in
-                (a.element.key == DockPins.finder.key ? -1 : rank[a.element.key] ?? .max, a.offset)
-                    < (b.element.key == DockPins.finder.key ? -1 : rank[b.element.key] ?? .max, b.offset)
-            }.map(\.element)
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: min), finder = DockPins.finder.key
+        // Each app ranked once: its run (pins first), its place in the order (Finder ahead of all), then where it came.
+        let ranked = apps.enumerated().map { i, app in
+            let key = app.key
+            return (run: app.pinned ? 0 : 1, rank: key == finder ? -1 : rank[key] ?? .max, at: i)
         }
-        return sorted(apps.filter(\.pinned)) + sorted(apps.filter { !$0.pinned })
+        return ranked.sorted { ($0.run, $0.rank, $0.at) < ($1.run, $1.rank, $1.at) }.map { apps[$0.at] }
     }
 
     /// The places an app can be dragged to in `apps` (as `arranged` shows them): its own run, the pins or the running

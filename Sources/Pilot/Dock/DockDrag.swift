@@ -14,33 +14,42 @@ final class DockDrag: PanelDrag {
         case widget(DockSlot)
     }
 
-    /// The pill as last drawn at rest, in the box's space (DockPill.space, the host's own): the icons' row, one icon's
-    /// place (icon and gap), whether the row scrolls, the apps in order, each widget's frame, the widgets' gap. Reported
-    /// by the views while nothing is dragged and read at a press, so a report never redraws the pill.
+    /// The pill as last drawn, in the box's space (DockPill.space, the host's own): each icon's frame by its app's id,
+    /// the icons' row, one icon's place at rest (icon and gap), the apps in order, each widget's frame, the widgets' gap.
+    /// Reported by the views while nothing is dragged and read at a press, so a report never redraws the pill.
+    @ObservationIgnored var icons: [String: CGRect] = [:]
     @ObservationIgnored var row: CGRect = .zero
     @ObservationIgnored var slot: CGFloat = 0
-    @ObservationIgnored var scrolls = false
     @ObservationIgnored var apps: [DockApp] = []
     @ObservationIgnored var frames: [DockSlot: CGRect] = [:]
     @ObservationIgnored var widgetGap: CGFloat = 0
     @ObservationIgnored weak var host: NSView?
     @ObservationIgnored weak var dock: DockController?
 
-    /// The piece being dragged and how far along; nil at rest.
+    /// Where a widget lands: a side of the apps and its place among that side's others.
+    struct Landing: Equatable {
+        let side: TopBarSide
+        let index: Int
+    }
+
+    /// The piece being dragged, how far along, and where it would land now (set only when that changes, so only the
+    /// dragged piece follows each move); nil at rest.
     private(set) var piece: Piece?
     private(set) var dx: CGFloat = 0
+    private(set) var appLanding: Int?
+    private(set) var widgetLanding: Landing?
     /// What a press picked, before it moves far enough to be a drag.
     @ObservationIgnored private var press: (piece: Piece, x: CGFloat)?
-    /// The rest geometry as the drag began.
+    /// As the drag began: the widgets on each side, and the places the dragged app may go.
     @ObservationIgnored private var start: (left: [DockSlot], right: [DockSlot])?
+    @ObservationIgnored private var reach: ClosedRange<Int>?
 
-    init(dock: DockController? = nil) { self.dock = dock }
-
-    /// A render's mid-drag state (DragRenders): `piece` dragged `dx` along the pill drawn with `apps` and `widgets`.
-    init(rendering piece: Piece, dx: CGFloat, apps: [DockApp], row: CGRect, slot: CGFloat, left: [DockSlot] = [], right: [DockSlot] = [],
-         frames: [DockSlot: CGRect] = [:], widgetGap: CGFloat = 0) {
-        (self.apps, self.row, self.slot, self.frames, self.widgetGap) = (apps, row, slot, frames, widgetGap)
-        (self.piece, self.dx, start) = (piece, dx, (left, right))
+    /// A render's mid-drag state (DragRenders): `piece` dragged `dx` along a pill whose widgets are `left` and `right`,
+    /// its geometry as the pill last reported it.
+    func stage(_ piece: Piece, dx: CGFloat, left: [DockSlot] = [], right: [DockSlot] = []) {
+        (self.piece, start) = (piece, (left, right))
+        if case .app(let key, _) = piece { reach = DockSettings.reach(of: key, in: apps) }
+        follow(dx)
     }
 
     var dragging: Bool { piece != nil }
@@ -53,10 +62,10 @@ final class DockDrag: PanelDrag {
 
     // MARK: The window's press
 
+    /// An icon under the pointer, by the frame it is drawn at (magnified or not), else a widget.
     func pressed(at point: CGPoint) -> Bool {
         press = nil
-        if !scrolls, slot > 0, row.contains(point), !apps.isEmpty {
-            let i = min(Int((point.x - row.minX) / slot), apps.count - 1)
+        if let i = apps.firstIndex(where: { icons[$0.dragID]?.contains(point) == true }) {
             if DockSettings.reach(of: apps[i].key, in: apps) != nil { press = (.app(key: apps[i].key, from: i), point.x) }
         } else if let hit = frames.first(where: { $0.value.contains(point) }) {
             press = (.widget(hit.key), point.x)
@@ -69,66 +78,72 @@ final class DockDrag: PanelDrag {
         if piece == nil {
             guard let settings = dock?.settings else { return }
             start = (settings.widgets(on: .left), settings.widgets(on: .right))
+            if case .app(let key, _) = press.piece { reach = DockSettings.reach(of: key, in: apps) }
             piece = press.piece
             BarPanel.shared.close()
         }
-        dx = point.x - press.x
+        follow(point.x - press.x)
     }
 
     /// The move and the gap closing in one animation: each icon and widget, known by its own id, slides from where the
     /// drag drew it to its new place.
     func released(at point: CGPoint) {
-        let app = appTarget, widget = widgetTarget
-        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+        withAnimation(DockDrag.settle) {
             switch piece {
-            case .app(let key, _)?: if let app { dock?.settings.moveApp(key, to: app, among: apps) }
-            case .widget(let slot)?: if let widget { dock?.settings.place(slot, on: widget.side, at: widget.index) }
+            case .app(let key, _)?: if let appLanding { dock?.settings.moveApp(key, to: appLanding, among: apps) }
+            case .widget(let slot)?: if let widgetLanding { dock?.settings.place(slot, on: widgetLanding.side, at: widgetLanding.index) }
             case nil: break
             }
-            (piece, dx) = (nil, 0)
+            (piece, dx, appLanding, widgetLanding) = (nil, 0, nil, nil)
         }
-        (press, start) = (nil, nil)
+        (press, start, reach) = (nil, nil, nil)
     }
+
+    /// How a drop settles, the dock's and the bar's.
+    static let settle = Animation.spring(duration: 0.25, bounce: 0)
 
     // MARK: Where it lands, and the gap
 
-    /// The dragged app's place now.
-    var appTarget: Int? {
-        guard case .app(let key, let from) = piece, let reach = DockSettings.reach(of: key, in: apps) else { return nil }
-        return DragGap.place(from: from, dx: Double(dx), slot: Double(slot), reach: reach)
+    /// `dx` along, and where the piece lands there: an app `dx` along places `slot` wide, held to its run; a widget left
+    /// of the apps' middle on the left, else the right, before the first of that side's others whose middle is right of it.
+    private func follow(_ dx: CGFloat) {
+        self.dx = dx
+        switch piece {
+        case .app(_, let from)?:
+            let to = reach.map { DragGap.place(from: from, dx: Double(dx), slot: Double(slot), reach: $0) }
+            if to != appLanding { appLanding = to }
+        case .widget(let widget)?:
+            guard let start, let frame = frames[widget] else { break }
+            let x = frame.midX + dx, side: TopBarSide = x < row.midX ? .left : .right
+            let others = (side == .left ? start.left : start.right).filter { $0 != widget }
+            let to = Landing(side: side, index: others.filter { (frames[$0]?.midX ?? 0) < x }.count)
+            if to != widgetLanding { widgetLanding = to }
+        case nil: break
+        }
     }
 
-    /// The dragged widget's side and place there now: left of the apps' middle the left, else the right, before the
-    /// first of that side's others whose middle is right of the pointer.
-    var widgetTarget: (side: TopBarSide, index: Int)? {
-        guard case .widget(let widget) = piece, let start, let frame = frames[widget] else { return nil }
-        let x = frame.midX + dx, side: TopBarSide = x < row.midX ? .left : .right
-        let others = (side == .left ? start.left : start.right).filter { $0 != widget }
-        return (side, others.filter { (frames[$0]?.midX ?? 0) < x }.count)
+    /// Whether the app at `index` is the one dragged, drawn over the rest.
+    func lifts(app index: Int) -> Bool {
+        if case .app(_, let from)? = piece { return from == index }
+        return false
     }
 
-    /// The offset of the app at `index` in the row.
-    func offset(app index: Int) -> CGFloat {
+    /// The offset of the app at `index` in a row of places `slot` wide, as the pill draws it now.
+    func offset(app index: Int, slot: CGFloat) -> CGFloat {
         guard case .app(_, let from) = piece else { return 0 }
         if index == from { return dx }
-        let to = appTarget ?? from
-        return CGFloat(DragGap.shift(index < from ? index : index - 1, from: from, to: to, width: Double(slot)))
+        return CGFloat(DragGap.shift(.left, j: index, leaving: from, entering: appLanding ?? from, width: Double(slot)))
     }
 
     /// The offset of a widget, or of the apps with their hairlines (nil): every piece between the dragged widget's old
-    /// place and its new one along the pill slides by its width, so one crossing the apps carries them too.
+    /// place and its new one along the pill (the left widgets, the apps, the right widgets) slides by its width, so one
+    /// crossing the apps carries them too.
     func offset(widget: DockSlot?) -> CGFloat {
-        guard case .widget(let dragged) = piece, let start, let to = widgetTarget, let frame = frames[dragged] else { return 0 }
+        guard case .widget(let dragged) = piece, let start, let to = widgetLanding, let frame = frames[dragged] else { return 0 }
         if widget == dragged { return dx }
-        // The pill's pieces without the dragged one: the left widgets, the apps, the right widgets.
-        let left = start.left.filter { $0 != dragged }, right = start.right.filter { $0 != dragged }
-        let from = start.left.firstIndex(of: dragged) ?? left.count + 1 + (start.right.firstIndex(of: dragged) ?? 0)
-        let target = to.side == .left ? to.index : left.count + 1 + to.index
-        var k = left.count
-        if let widget {
-            guard let at = left.firstIndex(of: widget) ?? right.firstIndex(of: widget).map({ left.count + 1 + $0 }) else { return 0 }
-            k = at
-        }
-        return CGFloat(DragGap.shift(k, from: from, to: target, width: Double(frame.width + widgetGap)))
+        let pill: [DockSlot?] = start.left + [nil] + start.right
+        guard let j = pill.firstIndex(of: widget), let from = pill.firstIndex(of: dragged) else { return 0 }
+        let target = to.side == .left ? to.index : start.left.filter { $0 != dragged }.count + 1 + to.index
+        return CGFloat(DragGap.shift(.left, j: j, leaving: from, entering: target, width: Double(frame.width + widgetGap)))
     }
 }

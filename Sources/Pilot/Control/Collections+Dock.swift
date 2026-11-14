@@ -32,8 +32,15 @@ extension ControlVerbs {
                              usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock visualizer [<seconds>] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app> | pilot dock move <app> --index <n> | pilot dock move <widget> [--side left|right] --index <n>   (<app>: a bundle id or a name)") { call throws(ControlError) in
             // Read for the answer alone: the pill keeps what it shows.
             let dock = try up(), args = call.arguments(), dockPins = dock.readPins(), byApp = Dictionary(grouping: windows(), by: \.bundleId)
-            // While on, the running apps the pill draws (the ones it follows); off, read now.
-            let apps = DockController.apps(dock.settings, pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil)
+            // While on, the running apps the pill draws (the ones it follows); off, read now. In Pilot's order as it is.
+            let list = { DockController.apps(dock.settings, pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil) }
+            let apps = list()
+            /// An app by its bundle id or its name.
+            func app(_ name: String, in apps: [DockApp]) -> DockApp? { apps.first { $0.bundleID == name || $0.name.caseInsensitiveCompare(name) == .orderedSame } }
+            let sides = { () -> JSONValue in
+                .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
+                         "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) })])
+            }
             if args.positional.first == "widgets" {
                 // And what else could go in: each installed extension with a top bar item no widget reads, not in the dock yet.
                 let more = DockWidgetSources.barExtensions().map { DockSlot.extensionItem($0.id) }.filter { !dock.settings.widgets.contains($0) }
@@ -59,8 +66,7 @@ extension ControlVerbs {
                     guard let side = TopBarSide(rawValue: word), side != .centre else { throw ControlError(.badValue, "a side is left or right, not \(word)") }
                     dock.settings.move(slot, to: side)
                 }
-                return .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
-                                "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) })])
+                return sides()
             }
             if args.positional.first == "visualizer" {
                 // pilot dock visualizer [<seconds>]: what the visualizer does now (rice round), read after waiting up to 10 s,
@@ -96,15 +102,15 @@ extension ControlVerbs {
                 // pilot dock move <app> --index <n> | <widget> [--side left|right] --index <n>: what a drag's drop does
                 // (spec drag-reorder), through the same moves.
                 let name = try args.word(1, "app or widget"), index = try Self.index(args.value("index"))
-                let app = apps.first { $0.bundleID == name || $0.name.caseInsensitiveCompare(name) == .orderedSame }
+                let app = app(name, in: apps)
                 // An app and a widget may share a name (Weather): --side, or no app by it, makes it the widget.
-                if app == nil || args.value("side") != nil, let slot = DockSlot(name: name), dock.settings.widgets.contains(slot) {
+                if app == nil || args.value("side") != nil {
+                    let slot = try widget(name)
+                    guard dock.settings.widgets.contains(slot) else { throw ControlError(.badValue, "\(slot.name) is not in the dock") }
                     let side = try Self.side(args.value("side")) ?? dock.settings.side(slot)
                     guard side != .centre else { throw ControlError(.badValue, "a widget's side is left or right; the centre is the apps'") }
                     dock.settings.place(slot, on: side, at: index ?? .max)
-                    return .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
-                                    "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) }),
-                                    "widgets": .array(dock.settings.widgets.map { .string($0.name) })])
+                    return sides()
                 }
                 guard let app else {
                     throw ControlError(.badValue, "no app or widget \(name) in the dock: a pin or a running app by bundle id or name, or a widget pilot list dock-widgets lists")
@@ -112,15 +118,14 @@ extension ControlVerbs {
                 guard let index else { throw ControlError(.badRequest, "pilot dock move <app> --index <n>, its place from 0 as pilot dock lists the apps") }
                 guard let reach = DockSettings.reach(of: app.key, in: apps) else { throw ControlError(.badValue, "Finder stays first, as in the Dock") }
                 dock.settings.moveApp(app.key, to: index, among: apps)
-                let now = DockController.apps(dock.settings, pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil)
-                return .object(["apps": .array(now.map { .string($0.name) }), "order": .array(dock.settings.order.map(JSONValue.string)),
+                return .object(["apps": .array(list().map { .string($0.name) }), "order": .array(dock.settings.order.map(JSONValue.string)),
                                 "reach": .string("\(reach.lowerBound)...\(reach.upperBound)")])
             }
             if let sub = args.positional.first {
                 let name = try args.word(1, "app")
                 // A pin taken out of Pilot's dock is still the macOS Dock's, so keep finds it.
                 let taken = dockPins.map { DockApp(bundleID: $0.bundleID, url: $0.url, name: $0.name, pinned: false, pid: nil, windows: 0, front: false) }
-                guard let app = (apps + taken).first(where: { $0.bundleID == name || $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                guard let app = app(name, in: apps + taken) else {
                     throw ControlError(.badValue, "no app \(name) in the dock: a pin or a running app, by bundle id or name")
                 }
                 switch sub {

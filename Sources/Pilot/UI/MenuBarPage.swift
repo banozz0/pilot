@@ -315,13 +315,7 @@ struct MenuBarPage: View {
 
     /// The top bar's slots as the strip drew them, as BarDrop takes them.
     private func topDrop(_ top: [TopBarSide: [BarSlot]]) -> BarDrop {
-        let sides = TopBarSide.allCases.map { side in
-            (side, (top[side] ?? []).enumerated().map { i, slot in
-                let rect = topFrames[side]?[i].flatMap { $0.width > 0 && $0.maxX > 0 ? $0 : nil } ?? .zero
-                return BarDrop.Slot(item: slot.item, minX: rect.minX, maxX: rect.maxX)
-            })
-        }
-        return BarDrop(sides: Dictionary(uniqueKeysWithValues: sides), width: topSize.width, height: topSize.height)
+        BarDrop(top, size: topSize) { topFrames[$0]?[$1] }
     }
 
     /// The macOS menu bar: Pilot's items on the right, beside the system's own; with Both, only what stays there. Short of

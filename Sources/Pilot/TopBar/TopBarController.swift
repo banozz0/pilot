@@ -525,11 +525,11 @@ final class TopBarPanel: NSPanel {
     /// The press while the left button is down over a piece: where it began, and whether it has become a drag.
     private var press: (start: CGPoint, dragging: Bool)?
 
-    /// A press goes on to SwiftUI until it moves DragGap.threshold, so a click stays a click. Past it the item's button
+    /// A press goes on to SwiftUI until it moves MouseDragTap.clickSlop, so a click stays a click. Past it the item's button
     /// is let go with a release far outside it (a button does nothing for a release off itself), and the drag owns the
     /// moves and the release. True when the event was the drag's.
     private func dragged(_ event: NSEvent, _ drag: any PanelDrag) -> Bool {
-        guard let host = drag.host else { return false }
+        guard [.leftMouseDown, .leftMouseDragged, .leftMouseUp].contains(event.type), let host = drag.host else { return false }
         let local = host.convert(event.locationInWindow, from: nil)
         let point = host.isFlipped ? local : CGPoint(x: local.x, y: host.bounds.height - local.y)
         switch event.type {
@@ -539,7 +539,7 @@ final class TopBarPanel: NSPanel {
         case .leftMouseDragged:
             guard let press else { return false }
             if !press.dragging {
-                guard hypot(point.x - press.start.x, point.y - press.start.y) >= DragGap.threshold else { return false }
+                guard hypot(point.x - press.start.x, point.y - press.start.y) > MouseDragTap.clickSlop else { return false }
                 self.press = (press.start, true)
                 if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: -100_000, y: -100_000), modifierFlags: [],
                                                timestamp: event.timestamp, windowNumber: windowNumber, context: nil, eventNumber: 0,

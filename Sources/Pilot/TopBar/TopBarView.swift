@@ -31,10 +31,7 @@ struct TopBarView: View {
                     trailing: !kinds.contains(.capture) && recorder.isActive ? AnyView(RecordingControl(recorder: recorder)) : nil,
                     live: dictation.inBar ? AnyView(DictationBarItem(overlay: dictation)) : nil, liveSide: dictation.setup.barSide,
                     overflow: AnyView(TopBarOverflow(screen: screen, sides: sides, sources: sources, store: store, frames: frames)),
-                    moved: { [drag, screen] side, index in
-                        (drag.offset(side: side, index: index, on: screen),
-                         drag.lifts(side: side, index: index, on: screen) || drag.holds(side: side, index: index, on: screen))
-                    }) {
+                    moved: { [drag, screen] side, index in (drag.offset(side: side, index: index, on: screen), drag.lifts(side: side, index: index, on: screen)) }) {
             TopBarSlot(slot: $0, screen: screen, sources: sources, store: store)
         }
             // Here, not where the panel is made: the bar lives on, and a body follows the Look page's theme and style.
@@ -292,13 +289,12 @@ struct TopBarStrip<Slot: View>: View {
             if let placed, first { placed }
             ForEach(TopBarSide.allCases, id: \.self) { side in
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
-                    let ruled = rules[side]?.contains(index) == true, shift = moved?(side, index)
+                    let ruled = rules[side]?.contains(index) == true
                     slot(item)
                         .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: look))
                         .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
                         // Before the report, which then keeps the slot's place at rest while a drag moves it.
-                        .offset(x: shift?.offset ?? 0)
-                        .zIndex(shift?.lifted == true ? 1 : 0)
+                        .modifier(BarSlotMoved(side: side, index: index, moved: moved))
                         .reported(report.map { report in { report(side, index, $0) } })
                         .layoutValue(key: TopBarRow.Side.self, value: side)
                         .layoutValue(key: TopBarRow.Folds.self, value: item.kind.folds)
@@ -339,6 +335,19 @@ struct TopBarStrip<Slot: View>: View {
     @ViewBuilder private func islandGround(ground: UInt32, tone: TopBarColour.Toned?) -> some View {
         if background == .solid { colour == .theme ? TopBarColour.themeGround(style) : Color(Paint(ground)) }
         else { TopBarColour.toneGround(tone, background: background) }
+    }
+}
+
+/// A slot moved by a drag to rearrange (spec drag-reorder): only this reads the drag, so a move redraws the slots
+/// that shift, not the strip.
+private struct BarSlotMoved: ViewModifier {
+    let side: TopBarSide
+    let index: Int
+    let moved: ((TopBarSide, Int) -> (offset: CGFloat, lifted: Bool))?
+
+    func body(content: Content) -> some View {
+        let shift = moved?(side, index)
+        content.offset(x: shift?.offset ?? 0).zIndex(shift?.lifted == true ? 1 : 0)
     }
 }
 
