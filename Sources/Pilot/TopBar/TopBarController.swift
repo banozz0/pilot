@@ -379,7 +379,8 @@ final class TopBarWindows: TopBarPanels {
             place(panel, of: key, wanted: false)
             return
         }
-        clip.crop = grown
+        // A window already where it goes is left alone (TopBarPanel.put): no frame set from inside a layout pass for nothing.
+        if clip.crop != grown { clip.crop = grown }
         panel.pin(frame)
         clipToOutline(panel)
         place(panel, of: key, wanted: true)
@@ -457,7 +458,9 @@ final class TopBarPanel: NSPanel {
     func pin(_ frame: NSRect) {
         pinned = frame
         refused = nil
-        snapBack()
+        pushedTo = nil
+        pushes = 0
+        put(frame)
     }
 
     /// Inside its own put-back: the resize that putting back makes comes here again and is left alone.
@@ -465,9 +468,32 @@ final class TopBarPanel: NSPanel {
     /// The pinned frame AppKit would not take (its constraints held the window to another size): kept as AppKit has it
     /// until the next pin, never put back again.
     private var refused: NSRect?
+    /// Where something else last moved it since the last pin, and how many times in a row.
+    private var pushedTo: NSRect?
+    private var pushes = 0
 
+    /// A move or resize by anyone else. Put back, unless it is AppKit holding the window to its own frame: a frame within
+    /// a point of Pilot's (its Auto Layout rounding a hosting view's fractional subviews), or the same frame a third time
+    /// in a row. Putting back against that from inside AppKit's constraint pass marks the window for another pass each
+    /// time until AppKit throws (build 2480 at launch on Sven's Mac, 2026-11-14: the dock pinned 1739 wide, AppKit
+    /// holding it at 1738, "put back at 1739" 106 times in 70 ms, then NSGenericException from
+    /// _postWindowNeedsUpdateConstraints). Kept as AppKit has it until the next pin.
     @objc private func snapBack() {
         guard let pinned, frame != pinned, !snapping, refused != pinned else { return }
+        if frame == pushedTo { pushes += 1 } else { (pushedTo, pushes) = (frame, 1) }
+        let near = abs(frame.minX - pinned.minX) <= 1 && abs(frame.minY - pinned.minY) <= 1
+            && abs(frame.width - pinned.width) <= 1 && abs(frame.height - pinned.height) <= 1
+        if near || pushes > 2 {
+            refused = pinned
+            tblog.error("top bar kept at \(String(describing: self.frame), privacy: .public): AppKit holds it there, not at \(String(describing: pinned), privacy: .public)")
+            return
+        }
+        put(pinned)
+    }
+
+    /// Puts it at `pinned`, once.
+    private func put(_ pinned: NSRect) {
+        guard frame != pinned, !snapping else { return }
         // Logged, so whatever moves a bar shows in the log rather than being quietly undone.
         tblog.notice("top bar moved to \(String(describing: self.frame), privacy: .public), put back at \(String(describing: pinned), privacy: .public)")
         snapping = true

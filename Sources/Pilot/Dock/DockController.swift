@@ -271,9 +271,12 @@ final class DockWindow: DockPanels {
     func fit(_ size: CGSize) {
         guard let panel, let screen = NSScreen.screens.first, size.width > 0 else { return }
         // The pill is held to DockWindow.widest(); only a hover's box at the widest can reach past the screen: held to it.
-        let width = min(size.width.rounded(.up), screen.frame.width)
+        // On whole pixels of the screen, the nearest: rounded up, a box 1738.4 wide asked for 1739 where AppKit held the
+        // window at 1738 (build 2480's launch crash, TopBarPanel.snapBack).
+        let scale = screen.backingScaleFactor
+        let width = min((size.width * scale).rounded() / scale, screen.frame.width)
         let frame = NSRect(x: (screen.frame.midX - width / 2).rounded(), y: screen.frame.minY + DockSize.margin(placement()),
-                           width: width, height: size.height.rounded(.up))
+                           width: width, height: (size.height * scale).rounded() / scale)
         guard frame != fitted else { return }
         fitted = frame
         panel.pin(frame)
