@@ -26,6 +26,8 @@ struct WallpaperBlock: View {
     let part: Part
     enum Part { case all, front, more }
     @State private var lit: Lit?
+    /// Why the theme in use could not take the folder, or its own wallpapers back.
+    @State private var themeFolderProblem: String?
     private enum Lit: Equatable { case screen(String), workspace(String) }
 
     /// A screen by its display UUID, and the workspace it shows (Q333): that workspace's row lights while each workspace
@@ -56,6 +58,7 @@ struct WallpaperBlock: View {
         static let scope = "Which screens the Next wallpaper key and Previous change: only the screen the front window is on, or every screen at once, each to its own next image. Each screen's Next on the front always changes that screen alone."
         static let interval = "Steps every screen to its next image on its own. Waits while the screen is locked or asleep."
         static let screen = "This screen's wallpaper now and, dimmed, the one Next gives. Previous and Next step this screen alone."
+        static let themeFolder = "On, every theme you apply sets this folder's images in place of its own: wide ones on wide screens, tall ones on tall screens, as a theme's own sit side by side. Off, the theme in use brings its own wallpapers back."
     }
 
     var body: some View {
@@ -142,6 +145,52 @@ struct WallpaperBlock: View {
         BlockRow {
             label("Screens", Info.scope)
             Segments(selection: $settings.scope, options: [(.focusedScreen, "Screen in front"), (.everyScreen, "Every screen")], label: "Screens")
+        }
+        BlockRow { themeFolderRow }
+    }
+
+    /// Use my wallpaper folder for every theme (Sven 2026-11-14): the switch and its folder. A change applies the theme in
+    /// use again, as a theme card's press does, so its screens take the folder's images, or the theme's own once off.
+    private var themeFolderRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                label("Use my wallpaper folder for every theme", Info.themeFolder)
+                Button(settings.themeFolder == nil ? "Choose…" : "Change…") { chooseThemeFolder() }.buttonStyle(.pilot)
+                Toggle("Use my wallpaper folder for every theme", isOn: Binding(get: { settings.themeOverride != nil }, set: { on in
+                    if on, settings.themeFolder == nil { chooseThemeFolder(); return }
+                    settings.themeFolderOn = on; reapplyTheme()
+                })).toggleStyle(.pilotSwitch).labelsHidden()
+            }
+            if let folder = settings.themeFolder {
+                Text(Self.chipName(folder)).font(ink.mono(12)).foregroundStyle(settings.themeFolderOn ? ink.text2 : ink.muted)
+                    .lineLimit(1).truncationMode(.middle).help(folder)
+            }
+            if let themeFolderProblem { FinePrint(text: themeFolderProblem, color: ink.red) }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func chooseThemeFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        panel.directoryURL = settings.themeFolder.map { URL(filePath: $0) } ?? WallpaperCycle.standardFolder.deletingLastPathComponent()
+        panel.prompt = "Use"
+        panel.message = "Pick the folder every theme takes its wallpapers from: wide and tall images side by side."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settings.themeFolder = url.standardizedFileURL.path; settings.themeFolderOn = true
+        reapplyTheme()
+    }
+
+    /// The theme in use, applied again with the switch as it is now; none applied, nothing changes until the next apply.
+    private func reapplyTheme() {
+        themeFolderProblem = nil
+        Task { @MainActor in
+            do {
+                let owner = try ThemeCoordinator.production()
+                guard let id = try owner.appliedTheme().id else { return }
+                _ = try await owner.press(id)
+                NotificationCenter.default.post(name: WallpaperSwitch.changed, object: nil)
+            } catch { themeFolderProblem = String(describing: error) }
         }
     }
 

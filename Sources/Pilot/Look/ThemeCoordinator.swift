@@ -64,6 +64,7 @@ final class ThemeCoordinator {
             detect: isTestRun ? nil : { ThemeCoordinator.detectApps(home: NSHomeDirectory()) },  // A test host never reaches real configs.
             cursorIsSystem: { CursorSets.shared.set == .macOS },
             ghostexColours: isTestRun ? nil : GhostexColours.effects(), appsHome: isTestRun ? nil : NSHomeDirectory())
+        owner.wallpaperFolder = { WallpaperSettings.shared.themeOverride }
         owner.shipped = Shipped(wallpapers: ShippedWallpapers(root: support.appending(path: "wallpapers").path, source: CatalogueSource.live), index: {
             let model = ExtensionCatalogueModel.shared
             await model.open()
@@ -179,6 +180,9 @@ final class ThemeCoordinator {
         let index: @MainActor () async throws -> ExtensionCatalogue.Index
     }
     var shipped: Shipped?
+    /// Use my wallpaper folder for every theme: the folder an apply sets in place of the pack's pictures, nil while it is
+    /// off (WallpaperSettings.themeOverride); nil in tests and fixtures.
+    var wallpaperFolder: @MainActor () -> String? = { nil }
     /// What the ledger and recovery may name: stored bindings plus the detected destinations an Apply took on.
     private func selection() throws -> LocalSelection {
         var local = try stored()
@@ -1496,6 +1500,12 @@ final class ThemeCoordinator {
     func plan(_ id: String?) async throws -> ThemePlan {
         // Ghostex answers through a child process, awaited before anything else is read, so the rest plans in one main-actor turn.
         let ghostex = try await ghostexColours?.read()
+        // Use my wallpaper folder for every theme: the folder's pictures, read off the main thread (it runs the tap), in
+        // place of the pack's, so a shipped pack's are never fetched.
+        if id != nil, try following().wallpapers, let folder = wallpaperFolder() {
+            let pictures = try await Task.detached { try ThemePackStore.folderPictures(folder) }.value
+            return try plan(id, ghostex: ghostex, folder: pictures)
+        }
         var note: String?
         if let id { note = await fetchShipped(id) }
         return try plan(id, ghostex: ghostex, shippedNote: note)
@@ -1518,10 +1528,16 @@ final class ThemeCoordinator {
             return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded. \(ExtensionCatalogue.Problem.reason(error))"
         }
     }
-    private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil) throws -> ThemePlan {
+    /// `folder`: the person's wallpaper folder's pictures, which this plan sets in place of the pack's.
+    private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil,
+                      folder: (images: [String], portraits: Set<String>)? = nil) throws -> ThemePlan {
         guard try state("pending").bytes == nil else { throw ThemeFailure("pending recovery; restart/recover before planning") }
         let (recordFile, kept) = try ledger()
-        let loaded = try id.map { try shipped?.wallpapers.picturing(store.load($0)) ?? store.load($0) }, (local, notes) = try effective(for: loaded?.pack)
+        let loaded = try id.map { id in
+            let pack = try store.load(id)
+            if let folder { return pack.picturing(folder.images, portraits: folder.portraits) }
+            return try shipped?.wallpapers.picturing(pack) ?? pack
+        }, (local, notes) = try effective(for: loaded?.pack)
         let gone = goneRoots(try stored(), claims: kept.claims)
         var record = kept
         record.claims.removeAll { gone.contains($0.root) }
@@ -1662,7 +1678,7 @@ final class ThemeCoordinator {
         guard wallpaperState?.preferences["cycling"] != .bool(true) else { throw ThemeFailure("wallpaper cycle in progress; plan again") }
         let components = try following()
         let nativePlan = try appearancePlan(loaded?.pack, old: appearanceOwnership(record, current: native?.read()), following: components)
-        let unpictured = loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false
+        let unpictured = folder == nil && (loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false)
         let (wallpapers, keptWallpapers, heldWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured)
         if loaded != nil, cursorIsSystem(), components.cursor != false, nativePlan.1?.cursor != true {
             warnings.append(Self.cursorSkipped)

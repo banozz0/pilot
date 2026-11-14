@@ -23,8 +23,29 @@ public struct ThemePackStore: Sendable {
         /// This pack with `other`'s wallpapers: a shipped pack with the pictures its catalogue copy brought
         /// (ShippedWallpapers). Its revision stays its own, which Apply checks the shipped pack against.
         public func picturing(_ other: Loaded) -> Loaded {
-            Loaded(folder: folder, pack: pack, revision: revision, factory: factory, images: other.images, portraits: other.portraits, preview: preview)
+            picturing(other.images, portraits: other.portraits)
         }
+        /// This pack with other images: a person's own folder in place of the pack's (Use my wallpaper folder for every
+        /// theme, Sven 2026-11-14). Its revision stays the pack's.
+        public func picturing(_ images: [String], portraits: Set<String>) -> Loaded {
+            Loaded(folder: folder, pack: pack, revision: revision, factory: factory, images: images, portraits: portraits, preview: preview)
+        }
+    }
+
+    /// The images of a person's wallpaper folder and below, by name, and which are tall, each read from its header alone:
+    /// a theme apply's pictures while Use my wallpaper folder for every theme is on. A wide and a tall image sit side by
+    /// side, as in a pack, and each screen gets its own shape's. A missing or empty folder refuses, so an apply never
+    /// silently keeps the theme's.
+    public static func folderPictures(_ path: String) throws -> (images: [String], portraits: Set<String>) {
+        var directory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &directory), directory.boolValue else {
+            throw ThemeFailure("Your wallpaper folder \(path) is not there. Pick another, or turn Use my wallpaper folder for every theme off.")
+        }
+        let images = WallpaperCycle.sortedByName(WallpaperCycle.images(in: URL(fileURLWithPath: path)))
+        guard !images.isEmpty else {
+            throw ThemeFailure("Your wallpaper folder \(path) has no images. Add some, pick another, or turn Use my wallpaper folder for every theme off.")
+        }
+        return (images.map(\.path), Set(images.filter { ImageShapes.read($0) == .portrait }.map(\.path)))
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
 
