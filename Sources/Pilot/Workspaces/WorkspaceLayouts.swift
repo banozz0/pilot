@@ -42,11 +42,13 @@ final class WorkspaceLayouts {
     /// Each workspace's layout row under its new number (Sven's Q233); the deleted workspace's goes.
     func renumber(_ r: WorkspaceRenumber) { layouts = r.rekeyed(layouts) }
 
-    /// Cycle layout: the focused workspace's next preset, named in a tip.
-    func cycle() {
+    /// Cycle layout: a workspace's next preset in LayoutPreset.cycle, named in a tip. The key cycles the focused
+    /// workspace; a bar's click names the one its screen shows (layouts round 1), since on a second display the focused
+    /// one is the other screen's.
+    func cycle(_ named: String? = nil) {
         Task {
             await tiler.perform("workspaces.cycleLayout") { _ in
-                guard let workspace = tiler.focused else { throw NoFocusedWorkspace() }
+                guard let workspace = named ?? tiler.focused else { throw NoFocusedWorkspace() }
                 var layout = layout(workspace)
                 let preset = LayoutPreset.next(after: layout.preset)
                 layout.preset = preset

@@ -799,6 +799,9 @@ struct TopBarWorkspacesView: View {
     let tiler: TilerService
     /// The numbers, with app or icons.
     var style = BarStyle.numbers
+    /// Each workspace's ready layout, and the cycle a click on the shown one runs (layouts round 1).
+    var layout: @MainActor (String) -> LayoutPreset? = { _ in nil }
+    var cycleLayout: @MainActor (String) -> Void = { _ in }
 
     var body: some View {
         let items = TopBarWorkspaces.items(occupied: tiler.occupied.map(\.name), focused: tiler.focused,
@@ -816,18 +819,22 @@ struct TopBarWorkspacesView: View {
             ForEach(Array(ordered.enumerated()), id: \.element.name) { index, item in
                 let workspace = occupied[item.name] ?? OccupiedWorkspace(name: item.name, apps: [])
                 let app = style == .withApp ? workspace.apps.first : nil
-                let name = Text(app.map { "\(item.name) \($0)" } ?? item.name)
                 let current = shownHere ? item.isShownHere : item.isFocused
-                let button = Button { tiler.go(item.name, from: "topbar") } label: {
+                // The shown one draws its ready layout in place of its number (Q234); one with none keeps its number.
+                let glyph = (inTopBar ? current : item.isShownHere) ? layout(item.name) : nil
+                let name = label(item, app: app, glyph: glyph)
+                // A click on the one this screen shows cycles its layout, never the focused one's (Q233); any other goes there.
+                let button = Button { current ? cycleLayout(item.name) : tiler.go(item.name, from: "topbar") } label: {
                     if !inTopBar {
                         boxed(name, item, app: app)
                     } else if tokens.kind == .toybox {
-                        ToyWorkspaceChip(label: BarParts.workspaceLabel(item.name, app: app), current: current, focused: item.isFocused,
-                                         workspace: style == .icons ? workspace : nil)
+                        ToyWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app ?? "", current: current,
+                                         focused: item.isFocused, workspace: style == .icons ? workspace : nil, glyph: glyph)
                             .barTarget("Workspace \(item.name)", inset: 0)
                     } else if tokens.kind == .instrument {
-                        InstrumentWorkspaceChip(label: BarParts.workspaceLabel(item.name, app: app), current: current, focused: item.isFocused,
-                                                occupied: occupied[item.name] != nil, workspace: style == .icons ? workspace : nil)
+                        InstrumentWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app ?? "", current: current,
+                                                focused: item.isFocused, occupied: occupied[item.name] != nil,
+                                                workspace: style == .icons ? workspace : nil, glyph: glyph)
                             .barHoverTarget("Workspace \(item.name)")
                             .frame(maxHeight: .infinity).contentShape(.rect)
                     } else if style == .icons {
@@ -836,7 +843,7 @@ struct TopBarWorkspacesView: View {
                         underlined(name, item, current: current)
                     }
                 }
-                .accessibilityLabel("Workspace \(item.name)")
+                .accessibilityLabel(glyph.map { "Workspace \(item.name), \($0.label)" } ?? "Workspace \(item.name)")
                 Group { if inTopBar { button.buttonStyle(.kitPress) } else { button.buttonStyle(.plain) } }
                     .instrumentRuleBefore(index == elsewhere, gap: InstrumentBar.chipGap)
             }
@@ -844,9 +851,21 @@ struct TopBarWorkspacesView: View {
         .padding(.horizontal, instrument ? InstrumentBar.chipGap : 0)
     }
 
+    /// A workspace's number, with its app in that style; `glyph`'s picture in place of the number.
+    @ViewBuilder private func label(_ item: TopBarWorkspaces.Item, app: String?, glyph: LayoutPreset?) -> some View {
+        if let glyph {
+            HStack(spacing: 4) {
+                LayoutGlyph(preset: glyph)
+                if let app { Text(app) }
+            }
+        } else {
+            Text(app.map { "\(item.name) \($0)" } ?? item.name)
+        }
+    }
+
     /// The Strip's number (design JJPiA9o30SA direction A): the current one in the text colour over a 2 pt underline,
     /// the accent while it has the focus.
-    private func underlined(_ name: Text, _ item: TopBarWorkspaces.Item, current: Bool) -> some View {
+    private func underlined(_ name: some View, _ item: TopBarWorkspaces.Item, current: Bool) -> some View {
         name.foregroundStyle(tokens.color(current ? \.text : \.text2))
             .frame(minWidth: 10)
             .padding(.horizontal, BarMetrics.numberInset).frame(maxHeight: .infinity)
@@ -859,7 +878,7 @@ struct TopBarWorkspacesView: View {
     /// The icons style's workspace (direction B's left island): its number, then its apps' icons; the current one on a
     /// raised pill ringed in the accent while it has the focus (muted while another screen has it), its icons at full
     /// strength.
-    private func island(_ name: Text, _ item: TopBarWorkspaces.Item, current: Bool, workspace: OccupiedWorkspace) -> some View {
+    private func island(_ name: some View, _ item: TopBarWorkspaces.Item, current: Bool, workspace: OccupiedWorkspace) -> some View {
         let pill = RoundedRectangle(cornerRadius: Theme.radius(6), style: .continuous)
         return HStack(spacing: 6) {
             name.monospacedDigit().foregroundStyle(tokens.color(current ? \.text : \.text2))
@@ -872,7 +891,7 @@ struct TopBarWorkspacesView: View {
     }
 
     /// Design round 4's number, square-cornered in the menu bar's preview: 17 pt, the shown one filled.
-    private func boxed(_ name: Text, _ item: TopBarWorkspaces.Item, app: String?) -> some View {
+    private func boxed(_ name: some View, _ item: TopBarWorkspaces.Item, app: String?) -> some View {
         name.font(Theme.mono(11, weight: .semibold))
             .padding(.horizontal, app == nil ? 0 : 5)
             .frame(minWidth: 17, minHeight: 17)

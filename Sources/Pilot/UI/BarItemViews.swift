@@ -166,7 +166,8 @@ struct TopBarSlotView: View {
         case .otherApps(let oneButton):
             TopBarMenuApps(apps: sources.readings.menuApps, oneButton: oneButton)
         case .appMenus: TopBarAppMenus(menus: sources.readings.appMenus)
-        case .workspaces(let style): TopBarWorkspacesView(screen: screen, tiler: sources.observers.tiler, style: style)
+        case .workspaces(let style):
+            TopBarWorkspacesView(screen: screen, tiler: sources.observers.tiler, style: style, layout: sources.layout, cycleLayout: sources.cycleLayout)
         case .modes: TopBarStatusLights(lights: sources.readings.statusLights) { perform(slot.click) }
         case .parts(let targets, _):
             // The top bar's targets are apart by their insets.

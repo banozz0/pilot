@@ -246,15 +246,18 @@ struct ToyWorkspaceChip: View {
     let current: Bool
     let focused: Bool
     var workspace: OccupiedWorkspace?
+    /// The shown workspace's layout, drawn in place of its number (layouts round 1); `label` is then its app or nothing.
+    var glyph: LayoutPreset?
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         HStack(spacing: 5) {
-            Text(label).font(ToyFace.nunito(800, 11.5)).monospacedDigit().lineLimit(1)
+            if let glyph { LayoutGlyph(preset: glyph) }
+            if glyph == nil || !label.isEmpty { Text(label).font(ToyFace.nunito(800, 11.5)).monospacedDigit().lineLimit(1) }
             if let workspace, !workspace.apps.isEmpty { WorkspaceAppIcons(workspace: workspace, lit: current) }
         }
         .foregroundStyle(current ? (focused ? style.color(\.onAccent) : style.color(\.text)) : style.color(\.text2))
-        .padding(.horizontal, label.count > 1 || workspace != nil ? 5 : 0)
+        .padding(.horizontal, label.count > 1 || workspace != nil || glyph != nil ? 5 : 0)
         .frame(minWidth: 18, minHeight: 18)
         .background(current ? (focused ? style.color(\.accent) : style.color(\.raised)) : style.color(\.sunken), in: shape)
         .overlay { if current { shape.strokeBorder(style.color(\.outline), lineWidth: 2) } }

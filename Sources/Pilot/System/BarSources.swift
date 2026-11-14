@@ -41,6 +41,10 @@ struct BarSources {
     var setBluetooth: @MainActor (Bool) -> Void = { SystemModule.setBluetooth($0) }
     /// Runs a registered action by its id, as the menu's rows do; a fake in tests.
     var runAction: @MainActor (String) -> Void = { Engine.shared?.action($0)?.run() }
+    /// A workspace's ready layout, which the workspace its screen shows draws as a glyph, and the click there that cycles
+    /// it (layouts round 1); fakes in tests.
+    var layout: @MainActor (String) -> LayoutPreset? = { Engine.shared?.layouts.layout($0).preset }
+    var cycleLayout: @MainActor (String) -> Void = { Engine.shared?.layouts.cycle($0) }
 
     func inputs(for entries: [BarEntry]) -> BarInputs {
         var i = BarInputs()
