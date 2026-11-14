@@ -73,10 +73,10 @@ extension ControlVerbs {
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
         register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); sets the island presets Attached (hung from the screen's top edge) or Floating; moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits every group, --group one; --group puts it in a group of its own number, each its own pill), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar attached on|off | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar attached on|off | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] [--index n] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("group", help: "group: the group it joins, 1 the Group (the default), 2 and on one more, each its own pill, made where the item is if new; new is the next free number. ungroup: the group it splits"),
-                                     .init("index", help: "move: before the item now at this place on that side, from 0"),
+                                     .init("index", help: "move: before the item now at this place on that side, from 0; group: before the member now at this place in the group, from 0"),
                                      .init("onto", help: "move: where this item is in the bars' order, as a drag on the page's preview"),
                                      .init("placement", help: "clear, restore: the bar it acts on, \(Self.cases(BarPlacement.self)) (the one the Menu bar page shows)")],
                              schema: { .object([
@@ -134,7 +134,9 @@ extension ControlVerbs {
                 let item = try Self.groupItem(word, reach)
                 var joined = bar().settings
                 let number = try Self.groupNumber(args.value("group"), next: joined.nextGroup) ?? 1
-                guard joined.group(item, into: number) else {
+                // --index: its place among the group's members, as a drag inside the group drops it (spec drag-reorder).
+                let placed = try Self.index(args.value("index")).map { joined.place(item, inGroup: number, at: $0) } ?? joined.group(item, into: number)
+                guard placed else {
                     throw ControlError(.badValue, "\(word) cannot join the Group: it takes \(BarKind.allCases.filter(\.groupable).map(\.rawValue).joined(separator: ", ")) and any extension's bar item by its id, while the Group is on")
                 }
                 return Self.change(item, in: bar(), reach) { $0 = joined }
@@ -387,12 +389,12 @@ extension ControlVerbs {
         return kind
     }
 
-    private static func side(_ word: String?) throws(ControlError) -> TopBarSide? {
+    static func side(_ word: String?) throws(ControlError) -> TopBarSide? {
         guard let word else { return nil }
         return try choice(word, "--side")
     }
 
-    private static func index(_ word: String?) throws(ControlError) -> Int? {
+    static func index(_ word: String?) throws(ControlError) -> Int? {
         guard let word else { return nil }
         guard let index = Int(word), index >= 0 else { throw ControlError(.badValue, "--index is a place from 0, not \(word)") }
         return index

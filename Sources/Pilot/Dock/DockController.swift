@@ -46,6 +46,8 @@ final class DockController {
     }
     /// The visualizer (rice round): on while the dock shows and its switch is on.
     let visualizer: DockVisualizer
+    /// Drag to rearrange (spec drag-reorder): the pill's apps and widgets, dragged on the pill itself.
+    @ObservationIgnored let drag = DockDrag()
     /// The macOS Dock's own pins, as last read.
     private(set) var dockPins: [DockPin] = []
     /// The dock's pins: the Dock's, less the ones taken out, then the ones kept (DockSettings.pinned).
@@ -71,6 +73,7 @@ final class DockController {
         self.panels = panels
         state = defaults.data(forKey: Self.switchKey).flatMap { try? JSONDecoder().decode(DockSwitch.self, from: $0) } ?? .off
         settings = defaults.data(forKey: Self.settingsKey).flatMap { try? JSONDecoder().decode(DockSettings.self, from: $0) } ?? DockSettings()
+        drag.dock = self
     }
 
     var isOn: Bool { state.isOn }
@@ -197,9 +200,10 @@ final class DockController {
     /// The Dock's pins as last read, or read now while the dock is off.
     private var current: [DockPin] { dockPins.isEmpty ? readPins() : dockPins }
 
-    /// The icons: pins, then the other running apps, each with its windows from Pilot's tiler (`byApp`, by bundle id).
-    static func apps(pins: [DockPin], running: [DockRunning], byApp: [String: [AeroWindow]], front: String?) -> [DockApp] {
-        DockApps.list(pins: pins, running: running, windows: byApp.mapValues(\.count), front: front)
+    /// The icons: pins, then the other running apps, each run in Pilot's own order (`settings.order`, drag-reorder), each
+    /// with its windows from Pilot's tiler (`byApp`, by bundle id).
+    static func apps(_ settings: DockSettings, pins: [DockPin], running: [DockRunning], byApp: [String: [AeroWindow]], front: String?) -> [DockApp] {
+        settings.arranged(DockApps.list(pins: pins, running: running, windows: byApp.mapValues(\.count), front: front))
     }
 
     /// The observers dump's line.
@@ -234,6 +238,8 @@ final class DockWindow: DockPanels {
     var make: () -> NSView = { NSView() }
     /// Where the pill stands: on the screen's bottom edge, or over it (rice round).
     var placement: () -> DockPlacement = { .attached }
+    /// The pill's drag to rearrange, driven by the window's left button (TopBarPanel.drag).
+    weak var drag: DockDrag?
 
     /// One above the Dock's own level, so its auto-hidden slide-up shows under the pill, not over it.
     static let level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
@@ -247,6 +253,8 @@ final class DockWindow: DockPanels {
             host.frame.size = host.fittingSize
             let panel = TopBarWindows.panel(host, level: Self.level)
             panel.title = "Pilot dock"
+            drag?.host = host
+            panel.drag = drag
             self.panel = panel
             fit(host.frame.size)
         }

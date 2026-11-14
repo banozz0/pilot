@@ -16,6 +16,7 @@ struct TopBarView: View {
     var recorder = Recorder.shared
     var wallpapers = BarWallpapers.shared
     var dictation = DictationOverlay.shared
+    var drag = BarDrag.shared
     /// The items this bar holds readers for: the ones it shows, from appearing to going.
     @State private var held: Set<BarKind> = []
 
@@ -29,7 +30,11 @@ struct TopBarView: View {
                     // never follows the recorder then.
                     trailing: !kinds.contains(.capture) && recorder.isActive ? AnyView(RecordingControl(recorder: recorder)) : nil,
                     live: dictation.inBar ? AnyView(DictationBarItem(overlay: dictation)) : nil, liveSide: dictation.setup.barSide,
-                    overflow: AnyView(TopBarOverflow(screen: screen, sides: sides, sources: sources, store: store, frames: frames))) {
+                    overflow: AnyView(TopBarOverflow(screen: screen, sides: sides, sources: sources, store: store, frames: frames)),
+                    moved: { [drag, screen] side, index in
+                        (drag.offset(side: side, index: index, on: screen),
+                         drag.lifts(side: side, index: index, on: screen) || drag.holds(side: side, index: index, on: screen))
+                    }) {
             TopBarSlot(slot: $0, screen: screen, sources: sources, store: store)
         }
             // Here, not where the panel is made: the bar lives on, and a body follows the Look page's theme and style.
@@ -239,6 +244,9 @@ struct TopBarStrip<Slot: View>: View {
     /// The Menu bar page's preview: the centre island may leave the middle (TopBarRow.packed), and only the bar's ground
     /// is cut to its shape, so each piece's − above it shows whole (Sven on build 2372).
     var preview = false
+    /// Drag to rearrange (spec drag-reorder): each slot's offset while a piece is dragged, and whether it is drawn over
+    /// the rest; nil (the page's preview) moves nothing.
+    var moved: ((TopBarSide, Int) -> (offset: CGFloat, lifted: Bool))? = nil
     @ViewBuilder let slot: (BarSlot) -> Slot
 
     var body: some View {
@@ -284,10 +292,13 @@ struct TopBarStrip<Slot: View>: View {
             if let placed, first { placed }
             ForEach(TopBarSide.allCases, id: \.self) { side in
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
-                    let ruled = rules[side]?.contains(index) == true
+                    let ruled = rules[side]?.contains(index) == true, shift = moved?(side, index)
                     slot(item)
                         .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: look))
                         .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
+                        // Before the report, which then keeps the slot's place at rest while a drag moves it.
+                        .offset(x: shift?.offset ?? 0)
+                        .zIndex(shift?.lifted == true ? 1 : 0)
                         .reported(report.map { report in { report(side, index, $0) } })
                         .layoutValue(key: TopBarRow.Side.self, value: side)
                         .layoutValue(key: TopBarRow.Folds.self, value: item.kind.folds)

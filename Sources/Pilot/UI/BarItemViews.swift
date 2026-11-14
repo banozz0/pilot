@@ -120,10 +120,12 @@ struct TopBarSlotView: View {
     let store: BarItemsStore
     /// The slot's own view, so its popover hangs under it.
     @State private var anchor = ScreenAnchor.Box()
+    var drag = BarDrag.shared
 
     /// What the slot shows: its own view (other apps, workspace numbers), its parts, or nothing (a battery not read).
     private enum Shows {
-        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([BarParts.KindTarget], tooltip: String), nothing
+        /// `members`: in a group, what each target moves when dragged (spec drag-reorder); empty otherwise.
+        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([BarParts.KindTarget], members: [[BarTrayItem]], tooltip: String), nothing
     }
 
     var body: some View {
@@ -168,10 +170,10 @@ struct TopBarSlotView: View {
         case .appMenus: TopBarAppMenus(menus: sources.readings.appMenus)
         case .workspaces(let style): TopBarWorkspacesView(screen: screen, tiler: sources.observers.tiler, style: style)
         case .modes: TopBarStatusLights(lights: sources.readings.statusLights) { perform(slot.click) }
-        case .parts(let targets, _):
+        case .parts(let targets, let members, _):
             // The top bar's targets are apart by their insets.
             HStack(spacing: inBar ? 0 : 6) {
-                ForEach(Array(targets.enumerated()), id: \.offset) { _, each in
+                ForEach(Array(targets.enumerated()), id: \.offset) { i, each in
                     let target = each.target
                     let kind = slot.entries.first?.kind, instrument = style.kind == .instrument
                     // Instrument's alone read the window's title and the timer's title, so no other style redraws for them.
@@ -179,7 +181,16 @@ struct TopBarSlotView: View {
                                              appIcon: kind == .focusedApp ? sources.observers.focusedApp?.icon : nil,
                                              windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
                                              focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
-                    if inBar {
+                    if inBar, !preview, let group = slot.groupNumber, members.indices.contains(i) {
+                        // A group's member drags along its group or out of it (BarDrag): told where it is at rest.
+                        Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
+                            .buttonStyle(.kitPress)
+                            .offset(x: drag.offset(member: i, group: group, on: screen))
+                            .zIndex(drag.piece?.group == group && drag.piece?.member == i ? 1 : 0)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BarFrames.space)) } action: { [drag, screen] in
+                                drag.report($0, items: members[i], group: group, index: i, on: screen)
+                            }
+                    } else if inBar {
                         Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
                             .buttonStyle(.kitPress)
                     } else {
@@ -195,8 +206,13 @@ struct TopBarSlotView: View {
     /// item one; in the Group the readings are one and each other item its own (BarParts.groupTargets).
     private func parts() -> Shows {
         let inputs = sources.inputs(for: slot.entries)
-        let targets = Self.targets(slot, inputs, settings: store.settings)
-        return targets.isEmpty ? .nothing : .parts(targets, tooltip: BarTooltip.text(slot, inputs))
+        guard slot.isGroup else {
+            let targets = Self.targets(slot, inputs, settings: store.settings)
+            return targets.isEmpty ? .nothing : .parts(targets, members: [], tooltip: BarTooltip.text(slot, inputs))
+        }
+        let runs = BarParts.groupRuns(slot.entries, inputs)
+        return runs.isEmpty ? .nothing : .parts(runs.map { ($0.target, $0.entries.map(\.kind)) }, members: runs.map { $0.entries.map(\.item) },
+                                                tooltip: BarTooltip.text(slot, inputs))
     }
 
     /// A slot drawn from its parts: its targets now, none while it has nothing to show. The dock asks it too, so a widget
@@ -209,7 +225,7 @@ struct TopBarSlotView: View {
     /// Workspace numbers read only the focused one, so a window opening redraws no tooltip.
     private func tooltip(_ shows: Shows) -> String {
         switch shows {
-        case .parts(_, let tooltip): return tooltip
+        case .parts(_, _, let tooltip): return tooltip
         case .workspaces:
             var i = BarInputs()
             i.focusedWorkspace = sources.observers.tiler.focused

@@ -28,12 +28,12 @@ extension ControlVerbs {
             guard let dock = dock() else { throw ControlError(.notReady, "Pilot's dock is not up yet; ask again in a moment") }
             return dock
         }
-        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); visualizer reads what the visualizer does now (dock.visualizer, off by default): whether the output device runs, what the now-playing reader says, the gate, the tap, whether the bars move or lie flat, and the bars nearest the pill, after waiting the seconds given (up to 10); placement (dock.placement, attached or floating) and tint (dock.tint, off or theme) are settings; stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. Style and magnification are dock.style and dock.magnify.",
-                             usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock visualizer [<seconds>] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app>   (<app>: a bundle id or a name)") { call throws(ControlError) in
+        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); visualizer reads what the visualizer does now (dock.visualizer, off by default): whether the output device runs, what the now-playing reader says, the gate, the tap, whether the bars move or lie flat, and the bars nearest the pill, after waiting the seconds given (up to 10); placement (dock.placement, attached or floating) and tint (dock.tint, off or theme) are settings; stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. move is a drag's drop (spec drag-reorder): an app to a place among the apps (its own run, the pins or the running apps, never before Finder), saved as Pilot's own order, the macOS Dock's never written; a widget to a place on a side. Style and magnification are dock.style and dock.magnify.",
+                             usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock visualizer [<seconds>] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app> | pilot dock move <app> --index <n> | pilot dock move <widget> [--side left|right] --index <n>   (<app>: a bundle id or a name)") { call throws(ControlError) in
             // Read for the answer alone: the pill keeps what it shows.
             let dock = try up(), args = call.arguments(), dockPins = dock.readPins(), byApp = Dictionary(grouping: windows(), by: \.bundleId)
             // While on, the running apps the pill draws (the ones it follows); off, read now.
-            let apps = DockController.apps(pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil)
+            let apps = DockController.apps(dock.settings, pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil)
             if args.positional.first == "widgets" {
                 // And what else could go in: each installed extension with a top bar item no widget reads, not in the dock yet.
                 let more = DockWidgetSources.barExtensions().map { DockSlot.extensionItem($0.id) }.filter { !dock.settings.widgets.contains($0) }
@@ -92,6 +92,30 @@ extension ControlVerbs {
                 for _ in 0..<30 where extras.files[stack] == nil { try? await Task.sleep(for: .milliseconds(100)) }
                 return .array((extras.files[stack] ?? []).map { .object(["name": .string($0.name), "folder": .string($0.url.deletingLastPathComponent().lastPathComponent)]) })
             }
+            if args.positional.first == "move" {
+                // pilot dock move <app> --index <n> | <widget> [--side left|right] --index <n>: what a drag's drop does
+                // (spec drag-reorder), through the same moves.
+                let name = try args.word(1, "app or widget"), index = try Self.index(args.value("index"))
+                let app = apps.first { $0.bundleID == name || $0.name.caseInsensitiveCompare(name) == .orderedSame }
+                // An app and a widget may share a name (Weather): --side, or no app by it, makes it the widget.
+                if app == nil || args.value("side") != nil, let slot = DockSlot(name: name), dock.settings.widgets.contains(slot) {
+                    let side = try Self.side(args.value("side")) ?? dock.settings.side(slot)
+                    guard side != .centre else { throw ControlError(.badValue, "a widget's side is left or right; the centre is the apps'") }
+                    dock.settings.place(slot, on: side, at: index ?? .max)
+                    return .object(["left": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
+                                    "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) }),
+                                    "widgets": .array(dock.settings.widgets.map { .string($0.name) })])
+                }
+                guard let app else {
+                    throw ControlError(.badValue, "no app or widget \(name) in the dock: a pin or a running app by bundle id or name, or a widget pilot list dock-widgets lists")
+                }
+                guard let index else { throw ControlError(.badRequest, "pilot dock move <app> --index <n>, its place from 0 as pilot dock lists the apps") }
+                guard let reach = DockSettings.reach(of: app.key, in: apps) else { throw ControlError(.badValue, "Finder stays first, as in the Dock") }
+                dock.settings.moveApp(app.key, to: index, among: apps)
+                let now = DockController.apps(dock.settings, pins: dock.settings.pinned(dockPins), running: dock.isOn ? dock.running : DockController.runningApps(), byApp: byApp, front: nil)
+                return .object(["apps": .array(now.map { .string($0.name) }), "order": .array(dock.settings.order.map(JSONValue.string)),
+                                "reach": .string("\(reach.lowerBound)...\(reach.upperBound)")])
+            }
             if let sub = args.positional.first {
                 let name = try args.word(1, "app")
                 // A pin taken out of Pilot's dock is still the macOS Dock's, so keep finds it.
@@ -119,6 +143,7 @@ extension ControlVerbs {
                 "room": .array(dock.room.map { .object(["screen": .string($0.monitor), "height": .number(Double($0.height))]) }),
                 "widgets": .array(dock.settings.widgets.map { .string($0.name) }),
                 "leftOfApps": .array(dock.settings.widgets(on: .left).map { .string($0.name) }),
+                "order": .array(dock.settings.order.map(JSONValue.string)),
                 "problem": dock.problem.map(JSONValue.string) ?? .null,
                 "apps": .array(apps.map { app in
                     .object(["name": .string(app.name), "bundleID": app.bundleID.map(JSONValue.string) ?? .null, "pinned": .bool(app.pinned),

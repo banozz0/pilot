@@ -363,6 +363,9 @@ final class TopBarWindows: TopBarPanels {
         content.sizingOptions = []
         let body: NSView = key.side == nil ? content : TopBarIslandClip(content)
         let panel = Self.panel(MaterialBackdrop(content: body), level: level)
+        // Drag to rearrange on the bar (spec drag-reorder), in the row's own space.
+        BarDrag.shared.store = store
+        panel.drag = BarPanelDrag(screen: key.screen, host: content)
         Self.applyLook(.shared, store: store, wallpaper: BarWallpapers.shared.strips[key.screen], to: panel)
         return panel
     }
@@ -512,8 +515,60 @@ final class TopBarPanel: NSPanel {
 
     override func sendEvent(_ event: NSEvent) {
         if let anchor = ScreenAnchor.AnchorView.taking(event, in: contentView) { return anchor.take(event) }
+        if let drag, dragged(event, drag) { return }
         super.sendEvent(event)
     }
+
+    /// Drag to rearrange (spec drag-reorder): the dock's or the bar's pieces, read off the left button here rather than
+    /// by a SwiftUI gesture, which would fight each item's button for the press. Nil takes no drag.
+    var drag: (any PanelDrag)?
+    /// The press while the left button is down over a piece: where it began, and whether it has become a drag.
+    private var press: (start: CGPoint, dragging: Bool)?
+
+    /// A press goes on to SwiftUI until it moves DragGap.threshold, so a click stays a click. Past it the item's button
+    /// is let go with a release far outside it (a button does nothing for a release off itself), and the drag owns the
+    /// moves and the release. True when the event was the drag's.
+    private func dragged(_ event: NSEvent, _ drag: any PanelDrag) -> Bool {
+        guard let host = drag.host else { return false }
+        let local = host.convert(event.locationInWindow, from: nil)
+        let point = host.isFlipped ? local : CGPoint(x: local.x, y: host.bounds.height - local.y)
+        switch event.type {
+        case .leftMouseDown:
+            press = drag.pressed(at: point) ? (point, false) : nil
+            return false
+        case .leftMouseDragged:
+            guard let press else { return false }
+            if !press.dragging {
+                guard hypot(point.x - press.start.x, point.y - press.start.y) >= DragGap.threshold else { return false }
+                self.press = (press.start, true)
+                if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: -100_000, y: -100_000), modifierFlags: [],
+                                               timestamp: event.timestamp, windowNumber: windowNumber, context: nil, eventNumber: 0,
+                                               clickCount: 1, pressure: 0) { super.sendEvent(up) }
+            }
+            drag.moved(to: point)
+            return true
+        case .leftMouseUp:
+            defer { press = nil }
+            guard press?.dragging == true else { return false }
+            drag.released(at: point)
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// What a bar or dock window's drag drives (spec drag-reorder): points in `host`'s own space, top left at its corner,
+/// the space its SwiftUI view reports its pieces' frames in.
+@MainActor
+protocol PanelDrag: AnyObject {
+    var host: NSView? { get }
+    /// The left button went down here: whether a piece is under it, so a drag may start.
+    func pressed(at point: CGPoint) -> Bool
+    /// The pointer moved past the threshold, then each move after.
+    func moved(to point: CGPoint)
+    /// The drop.
+    func released(at point: CGPoint)
 }
 
 /// Each island window holds the existing full row at its original coordinates, cropped to that final group.

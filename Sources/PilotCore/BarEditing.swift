@@ -194,6 +194,18 @@ extension BarSettings {
         return true
     }
 
+    /// A drop inside group `number` (spec drag-reorder): the item joins it, as `group(_:into:)` does, unless it is in it
+    /// already, then goes before the member now at `index` of the group's others as the top bar draws them, or last past
+    /// the end. False where it cannot join.
+    @discardableResult public mutating func place(_ item: BarTrayItem, inGroup number: Int, at index: Int) -> Bool {
+        guard entry(for: item)?.groupNumber == number || group(item, into: number) else { return false }
+        let members = (slots(in: .topBar, topBarOn: true).first { $0.groupNumber == number }?.entries ?? []).map(\.item).filter { $0 != item }
+        let rest = entries.filter { $0.item != item }, index = max(index, 0)
+        if index < members.count, let at = rest.firstIndex(where: { $0.item == members[index] }) { move(item, to: at) }
+        else if let last = members.last, let at = rest.firstIndex(where: { $0.item == last }) { move(item, to: at + 1) }
+        return true
+    }
+
     /// The groups an item can join now, in the top bar: the Group while it is on, then each one more, by number.
     public var groupNumbers: [Int] { (entry(.group).on ? [1] : []) + moreGroups.sorted() }
 

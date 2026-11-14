@@ -331,18 +331,24 @@ public enum BarParts {
     /// target opening their popover together, as the Group's click did, every other item its own targets with its own
     /// click, each with the items its click is for.
     public static func groupTargets(_ entries: [BarEntry], _ i: BarInputs) -> [KindTarget] {
-        var targets: [KindTarget] = []
+        groupRuns(entries, i).map { ($0.target, $0.entries.map(\.kind)) }
+    }
+
+    /// The same, each target with the members it draws, so a drag of one (spec drag-reorder) moves those members: an
+    /// extension's item by its own id, a run of readings together.
+    public static func groupRuns(_ entries: [BarEntry], _ i: BarInputs) -> [(target: BarTarget, entries: [BarEntry])] {
+        var targets: [(target: BarTarget, entries: [BarEntry])] = []
         for entry in entries {
             guard let parts = parts(entry, i) else { continue }
             guard entry.kind.group == .readings else {
-                targets += Self.targets([parts], click: entry.kind.click).map { ($0, [entry.kind]) }
+                targets += Self.targets([parts], click: entry.kind.click).map { ($0, [entry]) }
                 continue
             }
-            if let last = targets.last, last.kinds.allSatisfy({ $0.group == .readings }) {
+            if let last = targets.last, last.entries.allSatisfy({ $0.kind.group == .readings }) {
                 targets[targets.count - 1].target.parts.append(parts)
-                targets[targets.count - 1].kinds.append(entry.kind)
+                targets[targets.count - 1].entries.append(entry)
             } else {
-                targets.append((BarTarget(parts: [parts], click: .popover), [entry.kind]))
+                targets.append((BarTarget(parts: [parts], click: .popover), [entry]))
             }
         }
         return targets

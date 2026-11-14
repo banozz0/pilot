@@ -54,15 +54,15 @@ struct DockView: View {
         let reader = DockWidgetSources(sources: sources, extensionBar: extensionBar, calendar: calendar, options: options)
         let reach = size.reach(magnify)
         let byApp = Dictionary(grouping: tiler.windows, by: \.bundleId)
-        let apps = DockController.apps(pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
+        let apps = DockController.apps(dock.settings, pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
         // Each widget is a view of its own, so a reading's tick redraws its widget, not the pill.
         let left = dock.settings.widgets(on: .left), right = dock.settings.widgets(on: .right)
         DockStrip(size: size, apps: apps, hasWidgets: !right.isEmpty, maxWidth: DockWindow.widest(),
                   windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock, style: dock.settings.style, magnify: magnify,
                   origin: hovering ? CGFloat(reach.width) / 2 : 0, onHover: { hovering = $0 },
-                  placement: dock.settings.placement, tint: dock.settings.tint,
-                  leftWidgets: left.isEmpty ? nil : AnyView(ForEach(left, id: \.self) { slot in DockWidgetView(slot: slot, reader: reader, store: store, dock: dock) })) {
-            ForEach(right, id: \.self) { slot in DockWidgetView(slot: slot, reader: reader, store: store, dock: dock) }
+                  placement: dock.settings.placement, tint: dock.settings.tint, drag: dock.drag,
+                  leftWidgets: left.isEmpty ? nil : AnyView(ForEach(left, id: \.self) { slot in widget(slot, reader) })) {
+            ForEach(right, id: \.self) { slot in widget(slot, reader) }
         }
             .environment(\.inTopBar, true)
             // The bar's Item colours, so a widget's warning and alert read as they do in the bar (amber, red), not
@@ -85,7 +85,11 @@ struct DockView: View {
             .styled(.topBar)
             .pilotTheme()
             .onAppear { hold(kinds, asked, widgets) }
-            .onChange(of: widgets) { hold(kinds, asked, widgets) }
+            .onChange(of: widgets) {
+                hold(kinds, asked, widgets)
+                dock.drag.frames = dock.drag.frames.filter { widgets.contains($0.key) }
+            }
+            .onChange(of: size, initial: true) { dock.drag.widgetGap = DockFaceMetrics.widgetGap * DockScale.of(size) }
             .onChange(of: options) { hold(kinds, asked, widgets) }
             .onDisappear {
                 sources.readings.hold([], replacing: &held)
@@ -96,6 +100,16 @@ struct DockView: View {
     }
 
     static let holder = "dock"
+
+    /// One widget, where it is told to the drag at rest and moved by it while one is dragged (spec drag-reorder).
+    private func widget(_ slot: DockSlot, _ reader: DockWidgetSources) -> some View {
+        let drag = dock.drag
+        // The offset before the report, which then keeps the widget's place at rest.
+        return DockWidgetView(slot: slot, reader: reader, store: store, dock: dock)
+            .offset(x: drag.offset(widget: slot))
+            .zIndex(drag.piece == .widget(slot) ? 1 : 0)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if !drag.dragging { drag.frames[slot] = $0 } }
+    }
 
     /// The widgets' readers held, their extensions asked for the dock even where no bar places them, and Calendar read
     /// (never asked) while a Calendar widget shows.
@@ -138,20 +152,24 @@ struct DockStrip<Widgets: View>: View {
     var tint: DockIconTint = .off
     /// The widgets set on the left of the apps (Sven, 2026-11-13), behind their own hairline; nil with none there.
     var leftWidgets: AnyView? = nil
+    /// Drag to rearrange (spec drag-reorder): the gap it opens, and magnification paused while it lasts; nil draws none.
+    var drag: DockDrag? = nil
     @ViewBuilder let widgets: () -> Widgets
     @State private var hoverX: CGFloat?
     @State private var widgetsWidth: CGFloat = 0
     @State private var leftWidth: CGFloat = 0
     @State private var leaving: Task<Void, Never>?
+    /// The pointer left while a drag held it: the box shrinks once the drag ends.
+    @State private var leftWhileDragging = false
 
     init(size: DockSize, apps: [DockApp], hasWidgets: Bool, maxWidth: CGFloat, windows: @escaping (DockApp) -> [AeroWindow] = { _ in [] },
          tiler: TilerService? = nil, dock: DockController? = nil, style: TopBarBackground = .glass, magnify: DockMagnification = .medium,
          backing: ((AnyView) -> AnyView)? = nil, origin: CGFloat = 0, onHover: @escaping (Bool) -> Void = { _ in },
-         hoverApp: Int? = nil, placement: DockPlacement = .floating, tint: DockIconTint = .off, leftWidgets: AnyView? = nil,
+         hoverApp: Int? = nil, placement: DockPlacement = .floating, tint: DockIconTint = .off, drag: DockDrag? = nil, leftWidgets: AnyView? = nil,
          @ViewBuilder widgets: @escaping () -> Widgets) {
         self.size = size; self.apps = apps; self.hasWidgets = hasWidgets; self.maxWidth = maxWidth; self.windows = windows
         self.tiler = tiler; self.dock = dock; self.style = style; self.magnify = magnify; self.backing = backing; self.origin = origin
-        self.onHover = onHover; self.placement = placement; self.tint = tint; self.leftWidgets = leftWidgets; self.widgets = widgets
+        self.onHover = onHover; self.placement = placement; self.tint = tint; self.drag = drag; self.leftWidgets = leftWidgets; self.widgets = widgets
         let icon = CGFloat(size.icon), gap = (icon * DockPill.gapRatio).rounded()
         _hoverX = State(initialValue: hoverApp.map { CGFloat($0) * (icon + gap) + icon / 2 })
     }
@@ -188,7 +206,11 @@ struct DockStrip<Widgets: View>: View {
         let fit = DockFit.fit(apps: apps.count, icon: size.icon, gapRatio: DockPill.gapRatio, fixed: fixed, available: Double(maxWidth))
         // Bottom-aligned: magnified icons grow upward, and the hairline and widgets stay on the rest icons' line.
         let iconLine = CGFloat(DockSize.bottom + DockSize.lane + DockSize.laneGap)
+        // A widget dragged across the apps carries them and their hairlines along (DockDrag.offset(widget:)); its own
+        // row is drawn over the rest.
+        let shift = drag?.offset(widget: nil) ?? 0, raised = drag?.widgetSide
         let rule = Rectangle().fill(ink.text.opacity(0.22)).frame(width: 1, height: size.icon * 0.62).frame(height: size.icon).padding(.bottom, iconLine)
+            .offset(x: shift)
         let row = HStack(alignment: .bottom, spacing: 0) {
             if let leftWidgets {
                 widgetRow(leftWidgets, width: $leftWidth)
@@ -196,9 +218,10 @@ struct DockStrip<Widgets: View>: View {
                     .padding(.leading, DockPill.ends + 2)
                     .padding(.trailing, 12)
                     .padding(.bottom, iconLine)
+                    .zIndex(raised == .left ? 1 : 0)
                 rule.padding(.trailing, 12)
             }
-            icons(fit).padding(.horizontal, DockPill.ends)
+            icons(fit).padding(.horizontal, DockPill.ends).offset(x: shift).zIndex(drag?.dragging == true && raised == nil ? 1 : 0)
             if hasWidgets {
                 rule.padding(.trailing, 12)
                 widgetRow(AnyView(widgets()), width: $widgetsWidth)
@@ -206,6 +229,7 @@ struct DockStrip<Widgets: View>: View {
                     .padding(.leading, 12)
                     .padding(.bottom, iconLine)
                     .padding(.trailing, DockPill.ends + 2)
+                    .zIndex(raised == .right ? 1 : 0)
             }
         }
         .frame(height: size.pill, alignment: .bottom)
@@ -252,11 +276,23 @@ struct DockStrip<Widgets: View>: View {
     @ViewBuilder
     private func icons(_ fit: DockFit) -> some View {
         let icon = CGFloat(fit.icon), gap = (icon * DockPill.gapRatio).rounded()
+        // Each icon known by its app, so a drop slides it to its new place (spec drag-reorder).
         let row = HStack(alignment: .bottom, spacing: gap) {
-            ForEach(Array(apps.enumerated()), id: \.offset) { i, app in
+            ForEach(Array(apps.enumerated()), id: \.element.dragID) { i, app in
                 DockAppIcon(app: app, icon: icon, scale: fit.scrolls ? 1 : scale(at: CGFloat(i) * (icon + gap) + icon / 2, icon: icon),
                             windows: windows(app), tiler: tiler, dock: dock, tint: tint, tintPoints: icon * CGFloat(magnify.scale))
+                    .offset(x: drag?.offset(app: i) ?? 0)
+                    .zIndex(drag?.piece == .app(key: app.key, from: i) ? 1 : 0)
             }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(DockPill.space)) } action: { if drag?.dragging != true { drag?.row = $0 } }
+        .onChange(of: apps, initial: true) { if drag?.dragging != true { drag?.apps = apps } }
+        .onChange(of: fit, initial: true) {
+            drag?.slot = icon + gap
+            drag?.scrolls = fit.scrolls
+        }
+        .onChange(of: drag?.dragging == true) { _, now in
+            if !now, leftWhileDragging { hover(.ended) }
         }
         .padding(.top, DockSize.top)
         .padding(.bottom, DockSize.bottom)
@@ -277,6 +313,12 @@ struct DockStrip<Widgets: View>: View {
     /// The pointer over the row, from the rest row's first icon. Leaving waits a beat before the box shrinks, so the
     /// window's resize under the pointer never flickers the hover off and on.
     private func hover(_ phase: HoverPhase) {
+        // A drag holds the box as it is: shrinking it under the pointer would move every piece the drag measured.
+        leftWhileDragging = false
+        if drag?.dragging == true {
+            if case .ended = phase { leftWhileDragging = true }
+            return
+        }
         switch phase {
         case .active(let at):
             leaving?.cancel()
@@ -296,7 +338,7 @@ struct DockStrip<Widgets: View>: View {
 
     /// The Dock's bell: up to `magnify` at the pointer, falling to none three icons either side.
     private func scale(at centre: CGFloat, icon: CGFloat) -> CGFloat {
-        guard let x = hoverX else { return 1 }
+        guard let x = hoverX, drag?.dragging != true else { return 1 }
         let d = abs(x - centre) / (icon * CGFloat(DockSize.reachIcons))
         guard d < 1 else { return 1 }
         return 1 + CGFloat(magnify.scale - 1) * (cos(d * .pi) + 1) / 2
@@ -480,6 +522,7 @@ extension DockWindow {
     /// The pill the window shows: the dock's apps and widgets, fitting the window to its size.
     func draw(_ dock: DockController, observers: EngineObservers, sources: BarSources) {
         placement = { [weak dock] in dock?.settings.placement ?? .attached }
+        drag = dock.drag
         // The closure holds only these four, never the Engine.
         make = { [weak self] in
             let host = NSHostingView(rootView: DockView(dock: dock, tiler: observers.tiler, observers: observers, sources: sources, store: .shared,

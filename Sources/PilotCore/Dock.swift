@@ -77,6 +77,9 @@ public struct DockApp: Equatable, Sendable {
     }
 
     public var running: Bool { pid != nil }
+    /// Its identity in the dock's row: its key, and a running app that is not kept its process too, so two of one app
+    /// never share one.
+    public var dragID: String { pinned ? key : "\(key)#\(pid ?? 0)" }
     /// What Pilot's own pin list knows it by, as DockPin.key.
     public var key: String { bundleID ?? url?.path(percentEncoded: false) ?? name }
     /// The dots under it: one per window, at most three; a running app with no window listed keeps one, as the Dock's does.
@@ -361,6 +364,10 @@ public struct DockSettings: Codable, Equatable, Sendable {
     public var placement: DockPlacement = .attached
     public var tint: DockIconTint = .theme
     public var visualizer = false
+    /// The apps in Sven's order (spec drag-reorder, 2026-11-14), by DockApp.key, as a drag last left them: the ones named
+    /// come first in their run, the rest after in the Dock's order, so a pin new to the macOS Dock lands last. The
+    /// macOS Dock's own list is never written.
+    public var order: [String] = []
 
     public init(size: DockSize = .medium, widgets: [DockSlot] = DockSlot.defaults) { self.size = size; self.widgets = widgets }
 
@@ -400,6 +407,40 @@ public struct DockSettings: Codable, Equatable, Sendable {
         placement = (try? c.decodeIfPresent(DockPlacement.self, forKey: .placement)) ?? .attached
         tint = (try? c.decodeIfPresent(DockIconTint.self, forKey: .tint)) ?? .theme
         visualizer = (try? c.decodeIfPresent(Bool.self, forKey: .visualizer)) ?? false
+        order = (try? c.decodeIfPresent([String].self, forKey: .order)) ?? []
+    }
+
+    /// The apps in Pilot's order: the pins, then the running apps, each run sorted by `order`, the apps it does not
+    /// name after the ones it does in the order they came. Finder stays first, as in the Dock.
+    public func arranged(_ apps: [DockApp]) -> [DockApp] {
+        guard !order.isEmpty else { return apps }
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
+        func sorted(_ run: [DockApp]) -> [DockApp] {
+            run.enumerated().sorted { a, b in
+                (a.element.key == DockPins.finder.key ? -1 : rank[a.element.key] ?? .max, a.offset)
+                    < (b.element.key == DockPins.finder.key ? -1 : rank[b.element.key] ?? .max, b.offset)
+            }.map(\.element)
+        }
+        return sorted(apps.filter(\.pinned)) + sorted(apps.filter { !$0.pinned })
+    }
+
+    /// The places an app can be dragged to in `apps` (as `arranged` shows them): its own run, the pins or the running
+    /// apps, never before Finder. Nil for Finder, which stays first, or an app not there.
+    public static func reach(of key: String, in apps: [DockApp]) -> ClosedRange<Int>? {
+        guard key != DockPins.finder.key, let from = apps.firstIndex(where: { $0.key == key }) else { return nil }
+        let pinned = apps[from].pinned, run = apps.indices.filter { apps[$0].pinned == pinned }
+        let finder = apps.first.map { $0.pinned && $0.key == DockPins.finder.key } ?? false
+        return max(run.first!, pinned && finder ? 1 : 0)...run.last!
+    }
+
+    /// A drop of the app `key` at `index` among `apps` (as `arranged` shows them), held to its own run: the order
+    /// becomes every app shown now, so an app gone since the last drag drops out of it.
+    public mutating func moveApp(_ key: String, to index: Int, among apps: [DockApp]) {
+        guard let reach = Self.reach(of: key, in: apps), let from = apps.firstIndex(where: { $0.key == key }) else { return }
+        var keys = apps.map(\.key)
+        keys.remove(at: from)
+        keys.insert(key, at: min(max(index, reach.lowerBound), reach.upperBound))
+        order = keys
     }
 
     /// A widget's side of the apps: left or right (the top bar's sides; never the centre, which is the apps').
@@ -412,6 +453,19 @@ public struct DockSettings: Codable, Equatable, Sendable {
     public mutating func move(_ widget: DockSlot, to side: TopBarSide) {
         left.removeAll { $0 == widget }
         if side == .left { left.append(widget) }
+    }
+
+    /// A widget's drop (spec drag-reorder): on `side`, before the widget now at `index` of that side's others, or last
+    /// there past the end. The one order and the left set both change, so the Dock page lists the same order.
+    public mutating func place(_ widget: DockSlot, on side: TopBarSide, at index: Int) {
+        guard widgets.contains(widget) else { return }
+        move(widget, to: side)
+        let others = widgets(on: side == .left ? .left : .right).filter { $0 != widget }
+        widgets.removeAll { $0 == widget }
+        let index = max(index, 0)
+        if index < others.count, let at = widgets.firstIndex(of: others[index]) { widgets.insert(widget, at: at) }
+        else if let last = others.last, let at = widgets.firstIndex(of: last) { widgets.insert(widget, at: at + 1) }
+        else { widgets.append(widget) }
     }
 
     /// Turns `widget` on, at `index` in the order (the end when nil or past it).
