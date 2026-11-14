@@ -1,4 +1,5 @@
 import PilotCore
+import QuartzCore
 import SwiftUI
 
 /// One screen's bar (cards agent-bo-95422850, 851, 910, 911 and 914): the bar items placed in the top bar on three sides,
@@ -262,13 +263,17 @@ struct TopBarStrip<Slot: View>: View {
                         // A zero final width draws no fill or stroke, including when every saved item is hidden. A Pills
                         // side draws nothing: its pills are its ground.
                         if !pills, proxy.size.width > 0, proxy.size.height > 0 {
+                            let shape = BarIslandShape.of(configuration)
                             islandGround(ground: ground, tone: tone)
                                 .background { if glassPreview, background == .glass { BarGlassGround(colour: colour) } }
-                                .clipShape(.rect(cornerRadius: configuration.radius))
+                                .clipShape(shape)
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                    shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                        .edgeRingCut(shape.edge, width: configuration.border)
                                         .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
                                 }
+                                // Attached: the ground reaches past the island by its flares, which run into the edge.
+                                .padding(.horizontal, -BarIslandShape.flare(configuration))
                         }
                     }
                     .allowsHitTesting(false)
@@ -298,7 +303,8 @@ struct TopBarStrip<Slot: View>: View {
         .environment(\.barGround, tone.map { ($0.tone.ground, inked.dark) })
         .inked(inked)
         .font(toybox ? ToyBar.font : style.font(\.caption))
-        .padding(.horizontal, islands ? 0 : configuration?.padding ?? 6).padding(.vertical, islands || toybox ? 0 : 3)
+        // Attached islands keep their flares' room at the row's ends, inside the bar's window.
+        .padding(.horizontal, islands ? configuration.map(BarIslandShape.flare) ?? 0 : configuration?.padding ?? 6).padding(.vertical, islands || toybox ? 0 : 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(.named(BarFrames.space))
         .background {
@@ -338,24 +344,61 @@ private struct BarPill: ViewModifier {
 
     func body(content: Content) -> some View {
         if let configuration {
-            let shape = RoundedRectangle(cornerRadius: configuration.radius, style: .circular)
+            let shape = BarIslandShape.of(configuration, style: .circular)
             let ground = Color(Paint(TopBarColour.ground(colour, style: style)))
             content
                 .padding(.horizontal, configuration.padding)
                 .frame(maxHeight: .infinity)
                 .background {
-                    switch background {
-                    case .solid: shape.fill(colour == .theme ? TopBarColour.themeGround(style) : ground)
-                    case .glass: shape.fill(ground.opacity(Double(look.map(TopBarColour.tintAlpha) ?? 55) / 100))
-                    case .clear: shape.fill(TopBarColour.clearGround)
+                    Group {
+                        switch background {
+                        case .solid: shape.fill(colour == .theme ? TopBarColour.themeGround(style) : ground)
+                        case .glass: shape.fill(ground.opacity(Double(look.map(TopBarColour.tintAlpha) ?? 55) / 100))
+                        case .clear: shape.fill(TopBarColour.clearGround)
+                        }
                     }
+                    .padding(.horizontal, -BarIslandShape.flare(configuration))
                 }
                 // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
                 // its ends offscreen (the bar look round).
-                .overlay { shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border) }
+                .overlay {
+                    shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
+                        .edgeRingCut(shape.edge, width: configuration.border)
+                        .padding(.horizontal, -BarIslandShape.flare(configuration))
+                }
         } else {
             content
         }
+    }
+}
+
+/// An island's or a pill's outline: four rounded corners Floating; Attached, grown out of the screen's top edge, its
+/// sides flaring into it through concave fillets, the dock's Attached turned over (Sven, 2026-11-13, Q224; the flare on
+/// build 2479, 2026-11-14, W52 Q220). One shape for both (GrownEdgeShape).
+enum BarIslandShape {
+    static func of(_ configuration: BarPresetConfiguration, style: RoundedCornerStyle = .circular) -> GrownEdgeShape {
+        GrownEdgeShape(edge: configuration.isAttached ? .top : nil, radius: configuration.radius, flare: flare(configuration), style: style)
+    }
+
+    /// How far an attached island's or pill's ground reaches past it on each side into the edge; none Floating. A pill's
+    /// flares take the gap to its neighbour, so two neighbours' flares meet at the edge and the pills read as grown out of
+    /// one band (half the gap left them too small to see, 3 pt).
+    static func flare(_ configuration: BarPresetConfiguration) -> CGFloat {
+        guard configuration.isAttached else { return 0 }
+        return GrownEdgeShape.flare(radius: configuration.radius, room: configuration.preset == .pills ? configuration.spacing : .infinity)
+    }
+
+    /// The island windows' own corners (TopBarWindows.show), which clip the glass Floating. Attached windows clip to the
+    /// grown outline instead (`mask`).
+    static func corners(_ configuration: BarPresetConfiguration?) -> CACornerMask {
+        [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    }
+
+    /// An attached island window's clip, its grown outline in the layer's own space (y up, so the top edge is max-Y: the
+    /// bottom-edge outline in a flipped drawing). Nil Floating, and for Pills, whose pills draw their own grounds.
+    static func mask(_ configuration: BarPresetConfiguration?, bounds: CGRect) -> CGPath? {
+        guard let configuration, configuration.isAttached, configuration.preset != .pills else { return nil }
+        return GrownEdgeShape(edge: .bottom, radius: configuration.radius, flare: flare(configuration), style: .circular).path(in: bounds).cgPath
     }
 }
 

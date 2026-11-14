@@ -794,14 +794,8 @@ extension BarKind {
         case .focusedApp: "macwindow"
         case .otherApps: "ellipsis.circle"
         case .appMenus: "filemenu.and.selection"
-        case .cpu: "cpu"
-        case .memory: "square.stack.3d.up"
-        case .network: "network"
-        case .graphics: "display"
-        case .storage: "cylinder"
-        case .heat: "thermometer.medium"
-        case .battery: "battery.75"
-        case .bluetoothBatteries: "headphones"
+        // The readings: their stat's, which the dock's System stats draws too.
+        case .cpu, .memory, .network, .graphics, .storage, .heat, .battery, .bluetoothBatteries: stat?.symbol ?? "gauge"
         case .keepAwake: "cup.and.saucer"
         case .power: "power"
         case .volume: "speaker.wave.2"
@@ -899,12 +893,25 @@ struct BarPresetControls: View {
                 Text("Full bar").tag("legacy")
                 ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
             }
+            if let config = store.settings.preset, config.preset.islands {
+                // Attached or Floating (Sven, 2026-11-13, Q224), the dock's same choice: hung from the screen's top edge,
+                // or floating under it as before.
+                Picker("Islands", selection: Binding(get: { store.settings.preset?.isAttached ?? false }, set: { on in
+                    do { try store.setAttached(on); problem = "" } catch { problem = String(describing: error) }
+                })) {
+                    Text("Attached").tag(true)
+                    Text("Floating").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .help("Attached hangs each island from the screen's top edge, square on top and rounded below. Floating leaves a gap above it.")
+            }
             if let config = store.settings.preset {
                 // The sizes behind one fold, closed until opened (Sven, 2026-11-12): the preset's defaults are the bar.
                 KitFold(title: "Adjust sizes") {
                     // Each row reads the preset again, never with `!`: picking Full bar clears it, and a row can redraw
                     // before this branch goes (build 2276 trapped there).
-                    ForEach(BarItemsStore.geometryFields, id: \.0) { field in
+                    // Attached keeps no top margin, so its row goes while the islands hang from the edge.
+                    ForEach(BarItemsStore.geometryFields.filter { $0.0 != "topMargin" || !config.isAttached }, id: \.0) { field in
                         Stepper(field.1 + " · " + String(format: field.0 == "border" ? "%.1f pt" : "%.0f pt", (store.settings.preset ?? config)[keyPath: field.2]), value: Binding(get: {
                             store.settings.preset?[keyPath: field.2] ?? 0
                         }, set: { value in

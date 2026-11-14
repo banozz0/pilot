@@ -314,11 +314,14 @@ extension Extension {
         public static let longest = 24
 
         public let text: String, tone: Tone?, blocks: [Block], gauges: [Gauge]
+        /// What Pilot's dock draws for it (ADR 0010, 2026-11-13): optional; an answer without them is drawn from its text
+        /// or gauges, and the top bar never reads them.
+        public let faces: [Face]
 
-        public init(text: String, tone: Tone? = nil, blocks: [Block] = [], gauges: [Gauge] = []) {
+        public init(text: String, tone: Tone? = nil, blocks: [Block] = [], gauges: [Gauge] = [], faces: [Face] = []) {
             let line = text.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
             self.text = line.count > Self.longest ? String(line.prefix(Self.longest - 1)) + "…" : line
-            self.tone = tone; self.blocks = blocks; self.gauges = Array(gauges.prefix(Gauge.most))
+            self.tone = tone; self.blocks = blocks; self.gauges = Array(gauges.prefix(Gauge.most)); self.faces = Array(faces.prefix(Face.most))
         }
 
         /// Whether the item draws: a text or a gauge to show.
@@ -331,6 +334,36 @@ extension Extension {
         /// The strongest tone it carries, its own or a gauge's: alert over warn over fine.
         public var loudest: Tone? {
             ([tone] + gauges.map(\.tone)).compactMap { $0 }.max { $0.rank < $1.rank }
+        }
+    }
+
+    /// One face of a bar answer in Pilot's dock (ADR 0010, amended 2026-11-13): a short `label` drawn in small capitals
+    /// over its `value`, beside an SF Symbol `symbol` (the extension's icon without one), the value in its `tone`. At most
+    /// four per answer; a label of at most 16 characters, a value of at most 24.
+    public struct Face: Equatable, Sendable {
+        public static let most = 4, longestLabel = 16, longestValue = 24
+
+        public let label: String, value: String, tone: Tone?, symbol: String?
+
+        public init(label: String, value: String, tone: Tone? = nil, symbol: String? = nil) {
+            self.label = String(label.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.longestLabel))
+            self.value = String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.longestValue))
+            self.tone = tone
+            self.symbol = symbol.flatMap { $0.isEmpty ? nil : $0 }
+        }
+
+        /// A face line: nil without a value.
+        init?(_ json: JSONValue) {
+            guard case .object(let o) = json else { return nil }
+            let string = { (key: String) -> String? in if case .string(let s)? = o[key] { s } else { nil } }
+            self.init(label: string("label") ?? "", value: string("value") ?? "", tone: string("tone").flatMap(Tone.init(rawValue:)), symbol: string("symbol"))
+            guard !value.isEmpty else { return nil }
+        }
+
+        /// The faces in a bar line's `faces`, the broken ones skipped, the first four.
+        static func faces(_ value: JSONValue?) -> [Face] {
+            guard case .array(let raw)? = value else { return [] }
+            return Array(raw.compactMap(Face.init).prefix(most))
         }
     }
 
@@ -640,7 +673,7 @@ extension ExtensionRun {
     }
 
     private struct SurfaceLine: Decodable {
-        let type: String, text: String?, tone: String?, blocks: [Extension.Block.Line]?, gauges: JSONValue?, refresh: JSONValue?
+        let type: String, text: String?, tone: String?, blocks: [Extension.Block.Line]?, gauges: JSONValue?, faces: JSONValue?, refresh: JSONValue?
     }
 
     /// The answer in what a surface's command printed: the first error message wins, else the last blocks message (a
@@ -657,7 +690,8 @@ extension ExtensionRun {
                 last = .blocks(Extension.Block.blocks(message.blocks), refresh: Extension.Block.refresh(message.refresh))
             case ("bar", .bar):
                 last = .bar(Extension.BarAnswer(text: message.text ?? "", tone: message.tone.flatMap(Extension.Tone.init(rawValue:)),
-                                                blocks: Extension.Block.blocks(message.blocks), gauges: Extension.Gauge.gauges(message.gauges)))
+                                                blocks: Extension.Block.blocks(message.blocks), gauges: Extension.Gauge.gauges(message.gauges),
+                                                faces: Extension.Face.faces(message.faces)))
             default: continue
             }
         }

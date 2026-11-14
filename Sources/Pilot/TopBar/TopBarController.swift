@@ -325,12 +325,19 @@ final class TopBarWindows: TopBarPanels {
                 panels[key] = panel
                 panel.contentView?.wantsLayer = true
                 // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners.
-                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills ? 0 : $0.radius } ?? 0
+                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills || $0.isAttached ? 0 : $0.radius } ?? 0
+                panel.contentView?.layer?.maskedCorners = BarIslandShape.corners(configuration)
                 panel.contentView?.layer?.masksToBounds = true
                 if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
                     clip.canvas = frame
                     clip.needsLayout = true
                     clip.layoutSubtreeIfNeeded()
+                    // The canvas moved (Attached or Floating, a screen change, the menu strip measured again): each island
+                    // follows it now. Before, an island window moved only when its own row changed size, as the row's
+                    // rect inside the canvas is the same either way, so Attached islands kept Floating's frame 8 pt below
+                    // the top until an item changed width (Sven on build 2479; his log: middle and right islands kept
+                    // y 1396 while the left one went to 1404 when its width changed).
+                    if clip.crop.width > 0 { placeIsland(key, rect: clip.reported) }
                 } else {
                     panel.pin(frame)
                     place(panel, of: key, wanted: true)
@@ -364,13 +371,34 @@ final class TopBarWindows: TopBarPanels {
         guard store.topBarConfiguration?.preset.islands == true, let panel = panels[key],
               let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip else { return }
         // The final row rectangle drives the crop, window bounds and input region together. No full-width window.
-        guard let frame = BarPresetGeometry.islandFrame(rect, in: clip.canvas) else {
+        // Attached: as wide again as the flares the island's ground reaches out by, which the row keeps room for.
+        clip.reported = rect
+        let flare = store.topBarConfiguration.map(BarIslandShape.flare) ?? 0
+        let grown = rect.width > 0 ? rect.insetBy(dx: -flare, dy: 0) : rect
+        guard let frame = BarPresetGeometry.islandFrame(grown, in: clip.canvas) else {
             place(panel, of: key, wanted: false)
             return
         }
-        clip.crop = rect
+        // A window already where it goes is left alone (TopBarPanel.put): no frame set from inside a layout pass for nothing.
+        if clip.crop != grown { clip.crop = grown }
         panel.pin(frame)
+        clipToOutline(panel)
         place(panel, of: key, wanted: true)
+    }
+
+    /// An attached island window clipped to its grown outline (BarIslandShape.mask), so the glass behind it takes the
+    /// flared shape; Floating, its rounded corners alone.
+    private func clipToOutline(_ panel: TopBarPanel) {
+        guard let layer = panel.contentView?.layer else { return }
+        let bounds = CGRect(origin: .zero, size: panel.frame.size)
+        if let path = BarIslandShape.mask(store.topBarConfiguration, bounds: bounds) {
+            let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+            mask.frame = bounds
+            mask.path = path
+            layer.mask = mask
+        } else if layer.mask != nil {
+            layer.mask = nil
+        }
     }
 
     func cover(_ screens: Set<String>) {
@@ -430,7 +458,9 @@ final class TopBarPanel: NSPanel {
     func pin(_ frame: NSRect) {
         pinned = frame
         refused = nil
-        snapBack()
+        pushedTo = nil
+        pushes = 0
+        put(frame)
     }
 
     /// Inside its own put-back: the resize that putting back makes comes here again and is left alone.
@@ -438,9 +468,32 @@ final class TopBarPanel: NSPanel {
     /// The pinned frame AppKit would not take (its constraints held the window to another size): kept as AppKit has it
     /// until the next pin, never put back again.
     private var refused: NSRect?
+    /// Where something else last moved it since the last pin, and how many times in a row.
+    private var pushedTo: NSRect?
+    private var pushes = 0
 
+    /// A move or resize by anyone else. Put back, unless it is AppKit holding the window to its own frame: a frame within
+    /// a point of Pilot's (its Auto Layout rounding a hosting view's fractional subviews), or the same frame a third time
+    /// in a row. Putting back against that from inside AppKit's constraint pass marks the window for another pass each
+    /// time until AppKit throws (build 2480 at launch on Sven's Mac, 2026-11-14: the dock pinned 1739 wide, AppKit
+    /// holding it at 1738, "put back at 1739" 106 times in 70 ms, then NSGenericException from
+    /// _postWindowNeedsUpdateConstraints). Kept as AppKit has it until the next pin.
     @objc private func snapBack() {
         guard let pinned, frame != pinned, !snapping, refused != pinned else { return }
+        if frame == pushedTo { pushes += 1 } else { (pushedTo, pushes) = (frame, 1) }
+        let near = abs(frame.minX - pinned.minX) <= 1 && abs(frame.minY - pinned.minY) <= 1
+            && abs(frame.width - pinned.width) <= 1 && abs(frame.height - pinned.height) <= 1
+        if near || pushes > 2 {
+            refused = pinned
+            tblog.error("top bar kept at \(String(describing: self.frame), privacy: .public): AppKit holds it there, not at \(String(describing: pinned), privacy: .public)")
+            return
+        }
+        put(pinned)
+    }
+
+    /// Puts it at `pinned`, once.
+    private func put(_ pinned: NSRect) {
+        guard frame != pinned, !snapping else { return }
         // Logged, so whatever moves a bar shows in the log rather than being quietly undone.
         tblog.notice("top bar moved to \(String(describing: self.frame), privacy: .public), put back at \(String(describing: pinned), privacy: .public)")
         snapping = true
@@ -469,6 +522,8 @@ final class TopBarIslandClip: NSView {
     let content: NSView
     var canvas = CGRect.zero { didSet { place() } }
     var crop = CGRect.zero { didSet { place() } }
+    /// The island's row as last reported, before its flares: placed again whenever the canvas moves.
+    var reported = CGRect.zero
     init(_ content: NSView) {
         self.content = content
         super.init(frame: .zero)

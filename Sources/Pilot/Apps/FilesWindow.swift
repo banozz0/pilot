@@ -48,9 +48,11 @@ final class FilesWindows {
         }
     }
 
-    /// Cmd+N: another window, on `folder` (the shown one) or Downloads, a step down and right of the last.
-    func newWindow(_ folder: URL? = nil) {
+    /// Cmd+N: another window, on `folder` (the shown one) or Downloads, a step down and right of the last; `selecting`
+    /// an item in it picked once it lists (the dock's Show in Files).
+    func newWindow(_ folder: URL? = nil, selecting item: URL? = nil) {
         let model = FilesModel(folder: folder ?? FilesModel.start)
+        model.reveal = item?.standardizedFileURL
         model.newWindow = { [weak self] in self?.newWindow($0) }
         let host = NSHostingView(rootView: FilesView(model: model).styled(.window).pilotTheme().pilotWindowStyles())
         let w = AppWindowController.makeWindow(content: host, size: Self.size, minSize: Self.minSize)
@@ -363,6 +365,11 @@ final class FilesModel {
         if let anchor, !ids.contains(anchor) { self.anchor = active }
     }
 
+    /// An item to pick once the folder first lists (the dock's Show in Files), then forgotten; `revealed` is the one
+    /// picked so, which the list or grid scrolls to.
+    @ObservationIgnored var reveal: URL?
+    private(set) var revealed: FolderItem.ID?
+
     /// The search field shows; its words search the shown folder and everything under it.
     var searching = false { didSet { if !searching { query = ""; searchFocused = false } } }
     /// The search field has the keys: Cmd+K, I, O, Down and Up are the field's then, not the window's.
@@ -576,6 +583,11 @@ final class FilesModel {
             case .failure(let error): (listing, problem) = (nil, WidgetFolderModel.problem(error))
             }
             if hits == nil { pruneSelection() }
+            if let reveal, let item = shown.first(where: { $0.url.standardizedFileURL == reveal }) {
+                selected = item.id
+                revealed = item.id
+                self.reveal = nil
+            }
             took(devices, volume: volume)
         }
     }
@@ -1912,8 +1924,11 @@ private struct FilesContent: View {
             .font(ink.mono(10.5, weight: .medium)).tracking(1.2).foregroundStyle(ink.muted).lineLimit(1)
             .padding(.horizontal, 24).frame(height: 30)
             ink.line.frame(height: 1)
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) { ForEach(model.shown) { FilesRow(item: $0, model: model) } }.padding(.horizontal, 8).padding(.vertical, 6)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 0) { ForEach(model.shown) { FilesRow(item: $0, model: model) } }.padding(.horizontal, 8).padding(.vertical, 6)
+                }
+                .onChange(of: model.revealed) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
             }
         }
     }
@@ -1935,11 +1950,14 @@ private struct FilesContent: View {
     }
 
     private var grid: some View {
-        ScrollView(.vertical) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 12, alignment: .top)], spacing: 12) {
-                ForEach(model.shown) { FilesTile(item: $0, model: model) }
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 12, alignment: .top)], spacing: 12) {
+                    ForEach(model.shown) { FilesTile(item: $0, model: model) }
+                }
+                .padding(16)
             }
-            .padding(16)
+            .onChange(of: model.revealed) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
         }
     }
 

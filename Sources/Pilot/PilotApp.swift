@@ -190,10 +190,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Text files with unsaved edits were asked about already: NSApplication's terminate reviews the open documents
     /// (TextWindows, T49) before it asks here.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // A recording running or closing is finished first, so quitting never loses it (story 192); at most 10 s.
-        let recorder = Recorder.shared
-        if recorder.isActive || recorder.closing != nil {
-            var replied = false
+        // A recording running or closing is finished first, so quitting never loses it (story 192); with the dock's
+        // switch on, Sven's Dock auto-hide goes back first (spec pilot-dock). Both at once, then quit; at most 10 s.
+        let recorder = Recorder.shared, dock = Engine.shared?.dock
+        let recording = recorder.isActive || recorder.closing != nil, docked = dock?.isOn == true
+        if recording || docked {
+            var replied = false, waiting = (recording ? 1 : 0) + (docked ? 1 : 0)
             let reply = { @MainActor in
                 guard !replied else { return }
                 replied = true
@@ -201,7 +203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SystemSampler.shared.saveMinutes()
                 sender.reply(toApplicationShouldTerminate: true)
             }
-            recorder.stop(then: reply)
+            let done = { @MainActor in
+                waiting -= 1
+                if waiting == 0 { reply() }
+            }
+            if recording { recorder.stop(then: done) }
+            if docked, let dock { Task { @MainActor in await dock.restoreForQuit(); done() } }
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { MainActor.assumeIsolated { reply() } }
             return .terminateLater
         }

@@ -32,6 +32,7 @@ extension SettingsSchema {
             schema.registerRings(engine.rings.store)
             schema.registerPart2(settings: engine.settings, list: engine.workspaceList, snapshots: engine.snapshots, block: engine.pilotBlock,
                                  bar: .shared, topBar: engine.topBar, wallpaper: .shared, recommendations: .shared, pilotSwitch: engine.pilotSwitch)
+            schema.registerDock(engine.dock)
         } else {
             log.error("settings: asked before the engine was up, so General and part 2's keys are missing until Pilot restarts")
         }

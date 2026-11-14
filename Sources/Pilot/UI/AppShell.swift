@@ -123,6 +123,8 @@ struct PageView: View {
         case .tiling: TilingSettingsView()
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
+        // Pilot's dock's own page (round 4).
+        case .dock: DockPage()
         case .pilotMenu: PilotMenuPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }

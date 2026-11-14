@@ -195,9 +195,15 @@ struct TopBarSlotView: View {
     /// item one; in the Group the readings are one and each other item its own (BarParts.groupTargets).
     private func parts() -> Shows {
         let inputs = sources.inputs(for: slot.entries)
-        let targets = slot.isGroup ? BarParts.groupTargets(slot.entries, inputs)
-            : BarParts.parts(slot, inputs, settings: store.settings).map { BarParts.targets($0, click: slot.click).map { ($0, slot.kinds) } } ?? []
+        let targets = Self.targets(slot, inputs, settings: store.settings)
         return targets.isEmpty ? .nothing : .parts(targets, tooltip: BarTooltip.text(slot, inputs))
+    }
+
+    /// A slot drawn from its parts: its targets now, none while it has nothing to show. The dock asks it too, so a widget
+    /// with nothing to show leaves no empty sub-pill (spec pilot-dock).
+    static func targets(_ slot: BarSlot, _ inputs: BarInputs, settings: BarSettings) -> [BarParts.KindTarget] {
+        slot.isGroup ? BarParts.groupTargets(slot.entries, inputs)
+            : BarParts.parts(slot, inputs, settings: settings).map { BarParts.targets($0, click: slot.click).map { ($0, slot.kinds) } } ?? []
     }
 
     /// Workspace numbers read only the focused one, so a window opening redraws no tooltip.

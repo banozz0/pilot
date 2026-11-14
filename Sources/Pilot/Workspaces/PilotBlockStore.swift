@@ -82,6 +82,12 @@ final class PilotBlockStore {
         if !written { throw NotWritten(reason: lastError ?? "unknown") }
     }
 
+    /// The dock's room at the foot of its screen (spec pilot-dock), as the top bar's above.
+    func writeDock(_ room: [PilotBlock.BarInset]) async throws {
+        let written = await withCheckedContinuation { done in edit({ $0.dock = room }) { done.resume(returning: $0) } }
+        if !written { throw NotWritten(reason: lastError ?? "unknown") }
+    }
+
     struct NotWritten: Error, CustomStringConvertible {
         let reason: String
         var description: String { reason }

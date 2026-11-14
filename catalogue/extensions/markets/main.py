@@ -56,6 +56,7 @@ SPARK = 16  # a row's line, in bars
 BAR_SPARK = 6  # the menu bar's line
 LONGEST = 24  # Pilot's bar text
 GAUGES = 3  # Pilot's gauges a bar item
+DOCK_FACES = 4  # Pilot's dock faces a bar item
 GAUGE_TEXT = 6
 GAUGE_LABEL = 5  # Pilot's gauge label since 2026-10-16; an older Pilot cuts it to two
 BARS = "▁▂▃▄▅▆▇█"
@@ -1027,17 +1028,32 @@ def turn(folder, count, advance):
     return max(now, 0) % count
 
 
+def dock_faces(rows, show):
+    """Pilot's dock (ADR 0010, amended 2026-11-13): a face per symbol the bar shows now, its symbol over its price, its
+    change or both as the bar's parts say, in its tone; an older Pilot reads no faces."""
+    faces = []
+    for r in rows[:DOCK_FACES]:
+        parts = [text for part, text in r.parts(dict(show, symbol=False), "text") if part != "symbol"] if r.quote else []
+        face = {"label": r.symbol, "value": " ".join(parts) or "–",
+                "symbol": "chart.line.downtrend.xyaxis" if r.tone == "alert" else "chart.line.uptrend.xyaxis"}
+        if r.tone:
+            face["tone"] = r.tone
+        faces.append(face)
+    return faces
+
+
 def bar_face(want, board, folder):
-    """The bar line: its text, or gauges with no text, and its tone."""
+    """The bar line: its text, or gauges with no text, and its tone; and the same symbols as faces for Pilot's dock."""
     rows = board.pinned
     if not rows:
         return {"text": "📈 –", "tone": "warn"}
     if want["rotate"] and len(rows) > 1:
         rows = [rows[turn(folder, len(rows), advance=True)]]
+    faces = dock_faces(rows, want["show"])
     shown = [r for r in rows if r.quote]
     if want["style"] == "bars" and shown:
-        return {"text": "", "gauges": [r.gauge(want["show"]) for r in shown[:GAUGES]]}
-    face = {"text": fitted(rows, want["show"], want["style"])}
+        return {"text": "", "gauges": [r.gauge(want["show"]) for r in shown[:GAUGES]], "faces": faces}
+    face = {"text": fitted(rows, want["show"], want["style"]), "faces": faces}
     found = shared_tone(rows)
     if found:
         face["tone"] = found

@@ -55,6 +55,12 @@ final class BarMenu: NSObject {
         case separator
     }
 
+    /// Shows `rows` under `view` (over it at the screen's foot) and returns once the menu closes; a pick runs after that.
+    static func show(_ rows: [Row], under view: NSView) {
+        let owner = BarMenu()
+        owner.pop(owner.menu(rows: rows), under: view, gap: 4)
+    }
+
     /// Shows `rows` at `point`, in AppKit's screen coordinates, and returns once the menu closes; a pick runs after that.
     static func pop(_ rows: [Row], at point: NSPoint) {
         let owner = BarMenu()
@@ -108,7 +114,14 @@ final class BarMenu: NSObject {
     }
 
     /// Hangs `menu` `gap` under `view`.
+    /// Under `view`; over it instead when it sits in its screen's lower half (the dock's icons and widgets, spec
+    /// pilot-dock), its foot at the view's top, as a bar popover rises there (BarPanelPlacement.rises).
     private func pop(_ menu: NSMenu, under view: NSView, gap: CGFloat = 0) {
+        if let item = view.screenFrame, let screen = (view.window?.screen ?? NSScreen.main)?.frame, BarPanelPlacement.rises(item: item, screen: screen) {
+            // Placed and kept on its screen as a rising bar panel is (BarPanelPlacement.frame): its top is the frame's.
+            let frame = BarPanelPlacement.frame(item: item, size: menu.size, screen: screen)
+            return pop(menu, at: NSPoint(x: frame.minX, y: frame.maxY + gap), in: nil)
+        }
         pop(menu, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + gap : -gap), in: view)
     }
 
