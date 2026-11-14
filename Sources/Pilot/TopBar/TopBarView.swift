@@ -1,4 +1,5 @@
 import PilotCore
+import QuartzCore
 import SwiftUI
 
 /// One screen's bar (cards agent-bo-95422850, 851, 910, 911 and 914): the bar items placed in the top bar on three sides,
@@ -262,11 +263,13 @@ struct TopBarStrip<Slot: View>: View {
                         // A zero final width draws no fill or stroke, including when every saved item is hidden. A Pills
                         // side draws nothing: its pills are its ground.
                         if !pills, proxy.size.width > 0, proxy.size.height > 0 {
+                            let shape = BarIslandShape.of(configuration)
                             islandGround(ground: ground, tone: tone)
                                 .background { if glassPreview, background == .glass { BarGlassGround(colour: colour) } }
-                                .clipShape(.rect(cornerRadius: configuration.radius))
+                                .clipShape(shape)
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                    shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                        .attachedRing(configuration)
                                         .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
                                 }
                         }
@@ -338,7 +341,7 @@ private struct BarPill: ViewModifier {
 
     func body(content: Content) -> some View {
         if let configuration {
-            let shape = RoundedRectangle(cornerRadius: configuration.radius, style: .circular)
+            let shape = BarIslandShape.of(configuration, style: .circular)
             let ground = Color(Paint(TopBarColour.ground(colour, style: style)))
             content
                 .padding(.horizontal, configuration.padding)
@@ -352,10 +355,35 @@ private struct BarPill: ViewModifier {
                 }
                 // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
                 // its ends offscreen (the bar look round).
-                .overlay { shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border) }
+                .overlay { shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border).attachedRing(configuration) }
         } else {
             content
         }
+    }
+}
+
+/// An island's or a pill's outline: four rounded corners Floating; Attached, square where it meets the screen's top edge
+/// and rounded below, the dock's Attached turned over (Sven, 2026-11-13, Q224).
+enum BarIslandShape {
+    static func of(_ configuration: BarPresetConfiguration, style: RoundedCornerStyle = .circular) -> UnevenRoundedRectangle {
+        let r = configuration.radius, top = configuration.isAttached ? 0 : r
+        return UnevenRoundedRectangle(topLeadingRadius: top, bottomLeadingRadius: r, bottomTrailingRadius: r, topTrailingRadius: top, style: style)
+    }
+
+    /// The island windows' own corners (TopBarWindows.show), which clip the glass: the bottom two alone when attached.
+    /// A layer-backed view's layer is not flipped, so its bottom corners are the min-Y ones.
+    static func corners(_ configuration: BarPresetConfiguration?) -> CACornerMask {
+        configuration?.isAttached == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+            : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    }
+}
+
+extension View {
+    /// An attached island's ring leaves out its top edge: that edge is the screen's.
+    @ViewBuilder func attachedRing(_ configuration: BarPresetConfiguration) -> some View {
+        if configuration.isAttached {
+            mask { VStack(spacing: 0) { Color.clear.frame(height: configuration.border); Color.black } }
+        } else { self }
     }
 }
 
