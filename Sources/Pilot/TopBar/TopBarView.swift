@@ -174,7 +174,9 @@ struct TopBarDropItem: View {
         return HStack(spacing: 5) {
             Image(systemName: BarParts.dropSymbol(entry.kind)).font(.system(size: 11, weight: .semibold))
             if entry.style == .iconName {
-                Text(entry.kind.title.uppercased()).font(font).tracking(0.8).lineLimit(1).fixedSize()
+                // Tracking 1: a whole-point advance in Iosevka (5) and JetBrains Mono (6) at 10 pt, so every letter sits
+                // the same on a 1x screen's pixels; 0.8 left them at mixed half-pixel phases (Sven, 2026-11-14).
+                Text(entry.kind.title.uppercased()).font(font).tracking(1).lineLimit(1).fixedSize()
             }
         }
         .foregroundStyle(ink)
@@ -765,18 +767,20 @@ struct TopBarRow: Layout {
             fold()
         }
         // Centred on the row while that clears both sides, else in the middle of the room between them, so it never reads
-        // as one of a side's items.
+        // as one of a side's items. Every x lands on a whole point, rounded down so the right side never passes the row's end, a pixel at 1x and 2x: an island an odd width wide
+        // centred at x .5, its window rounded by AppKit while its row kept the half point, and every glyph in it drew half
+        // a pixel off on Sven's 1x ultrawide (2026-11-14, "TERMINAL" and "ASK AI" soft).
         let (lo, hi) = span(), centred = (room - c()) / 2
         let centreX = onMiddle ? centred : (lo...max(lo, hi)).contains(centred) ? centred : max(lo, (lo + hi) / 2)
         var x: [TopBarSide: [CGFloat?]] = [:]
-        let more = overflows() ? room - rightSide() + padding : nil
+        let more = overflows() ? (room - rightSide() + padding).rounded(.down) : nil
         for (s, start) in [(TopBarSide.left, padding), (.centre, centreX + padding), (.right, room - padding - side(sized[.right, default: []][kept(.right)]))] {
             let all = sized[s] ?? [], keep = kept(s)
             var at = start
             x[s] = all.indices.map { i in
                 guard keep.contains(i), !island || all[i] > 0 else { return nil }
                 defer { at += all[i] > 0 ? all[i] + spacing : 0 }
-                return at
+                return at.rounded(.down)
             }
         }
         var plan = Plan(x: x, width: sized, more: more, moreWidth: measuredMore)
@@ -788,7 +792,8 @@ struct TopBarRow: Layout {
                 }
                 if s == .right, let at = more { spans.append(CGRect(x: at, y: 0, width: measuredMore, height: height)) }
                 if let first = spans.first {
-                    plan.groups[s] = spans.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -padding, dy: 0)
+                    // Out to whole points, so the island's window and crop (TopBarWindows.placeIsland) start on a pixel.
+                    plan.groups[s] = spans.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -padding, dy: 0).integral
                 }
             }
         }
