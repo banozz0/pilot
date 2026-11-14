@@ -2,11 +2,12 @@
 # A release a stranger downloads (SH4, notes §9): the signed release build in a DMG, the DMG signed, and its checksum.
 #   Scripts/release.sh <version>     e.g. 0.2.0; writes build/Pilot-<version>.dmg, its .sha256, a copy as build/Pilot.dmg, build/updates/appcast.xml
 #                                    and the terminal pack, build/PilotTerminal-<sha8>.zip (T76)
-# With a Developer ID identity (SIGN_ID="Developer ID Application: …") it notarizes too: the app, zipped, then the DMG, each
-# through notarytool submit --wait with the keychain profile pilot-notary (NOTARY_PROFILE overrides it), each stapled, and
-# checked with stapler and spctl as Gatekeeper sees a download (accepted, source=Notarized Developer ID). A rejected
-# submission prints notarytool's log. Any other identity (the self-signed "Pilot Release", the default) skips notarization,
-# so spctl rejects that DMG and its first launch goes through Open Anyway (Q318).
+# It signs with the keychain's one "Developer ID Application" identity, found by find-identity so no name is written here,
+# and falls back to the self-signed "Pilot Release" when there is none; SIGN_ID picks another. With Developer ID it notarizes
+# too: the app, zipped, then the DMG, each through notarytool submit --wait with the keychain profile pilot-notary
+# (NOTARY_PROFILE overrides it), each stapled, and checked with stapler and spctl as Gatekeeper sees a download (accepted,
+# source=Notarized Developer ID). A rejected submission prints notarytool's log. Any other identity skips notarization, so
+# spctl rejects that DMG and its first launch goes through Open Anyway (Q318).
 # It never publishes, uploads or tags anything: putting the files on a release page is Sven's call.
 # Sparkle's public key (SH5, SH6) is Pilot's own, printed by generate_keys on 2026-10-19, kept in Packaging/sparkle-public-key.txt (the
 # commit guard reads a key in a script line as a credential, Q545); SPARKLE_ED_KEY overrides it. Of build-app.sh's inputs, PILOT_DEV, SPARKLE_FEED and
@@ -20,7 +21,14 @@ ROOT=${0:a:h:h}
 VERSION=${1:?usage: Scripts/release.sh <version>}
 OUT=$ROOT/build
 DMG=$OUT/Pilot-$VERSION.dmg
-ID=${SIGN_ID:-Pilot Release}
+if [[ -n ${SIGN_ID:-} ]]; then
+  ID=$SIGN_ID
+else
+  DEVIDS=(${(f)"$(security find-identity -v -p codesigning 2>/dev/null | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' | sort -u)"})
+  (( ${#DEVIDS} <= 1 )) || { echo "error: ${#DEVIDS} Developer ID Application identities in the keychain; set SIGN_ID to the one that signs Pilot" >&2; exit 1; }
+  ID=${DEVIDS[1]:-Pilot Release}
+fi
+echo "signing with: $ID"
 NOTARY=0; [[ $ID == "Developer ID Application:"* ]] && NOTARY=1
 PROFILE=${NOTARY_PROFILE:-pilot-notary}
 [[ $VERSION =~ '^[0-9]+\.[0-9]+(\.[0-9]+)?$' ]] || { echo "error: $VERSION is not a version like 0.2.0" >&2; exit 1; }
