@@ -15,13 +15,17 @@ enum DockPill {
     /// The hover's coordinate space, DockView's box, which never moves on screen as the icons grow.
     static let space = "dock"
 
-    /// The pill's outline: attached, its top corners round and its bottom ones square on the screen's edge, as the
-    /// reference's (rice round, Q222); floating, every corner round.
-    static func shape(_ placement: DockPlacement) -> UnevenRoundedRectangle {
-        let foot = placement == .attached ? 0 : radius
-        return UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: foot, bottomTrailingRadius: foot, topTrailingRadius: radius,
-                                      style: .continuous)
+    /// Attached's fillets into the screen's edge (attached round 2): as round as the corners allow, 16.
+    static let flare = GrownEdgeShape.flare(radius: radius)
+
+    /// The pill's outline: attached, grown out of the screen's bottom edge, its sides flaring into it through concave
+    /// fillets (Sven on build 2479, W52 Q220; the top bar islands' shape too); floating, every corner round.
+    static func shape(_ placement: DockPlacement) -> GrownEdgeShape {
+        GrownEdgeShape(edge: placement == .attached ? .bottom : nil, radius: radius, flare: flare)
     }
+
+    /// The room each flare takes beside the pill's ends.
+    static func flareRun(_ placement: DockPlacement) -> CGFloat { placement == .attached ? flare : 0 }
 }
 
 /// The dock on screen: the pill at rest, and while the pointer is over its icons a taller, wider box, so magnified icons
@@ -161,7 +165,7 @@ struct DockStrip<Widgets: View>: View {
         let n = CGFloat(apps.count), small = CGFloat(DockFit.smallest), gap = (small * DockPill.gapRatio).rounded()
         let icons = n > 0 ? n * small + (n - 1) * gap : 0
         let sides = CGFloat((hasWidgets ? 1 : 0) + (leftWidgets == nil ? 0 : 1))
-        return max(maxWidth * 0.4, maxWidth - 2 * DockPill.ends - sides * (DockPill.ends + 2 + Self.hairline) - icons)
+        return max(maxWidth * 0.4, maxWidth - 2 * DockPill.ends - 2 * DockPill.flareRun(placement) - sides * (DockPill.ends + 2 + Self.hairline) - icons)
     }
 
     /// Each side's room: its own width while both fit the widgets' room, else that room shared by their widths, so the
@@ -174,9 +178,10 @@ struct DockStrip<Widgets: View>: View {
     /// The left side's run before the icons: its end, its widgets as shown, and its hairline.
     private var leftRun: CGFloat { leftWidgets == nil ? 0 : DockPill.ends + 2 + min(leftWidth, room(leftWidth)) + Self.hairline }
 
-    /// What the pill spends besides its icons: its ends, the hairlines and the widgets as they show.
+    /// What the pill spends besides its icons: its ends, its flares, the hairlines and the widgets as they show.
     private var fixed: Double {
-        Double(2 * DockPill.ends + leftRun + (hasWidgets ? Self.hairline + min(widgetsWidth, room(widgetsWidth)) + DockPill.ends + 2 : 0))
+        Double(2 * DockPill.ends + 2 * DockPill.flareRun(placement) + leftRun
+               + (hasWidgets ? Self.hairline + min(widgetsWidth, room(widgetsWidth)) + DockPill.ends + 2 : 0))
     }
 
     var body: some View {
@@ -204,6 +209,10 @@ struct DockStrip<Widgets: View>: View {
             }
         }
         .frame(height: size.pill, alignment: .bottom)
+        // Attached: room either side for the fillets that flare into the screen's edge, inside the ground.
+        .padding(.horizontal, DockPill.flareRun(placement))
+        // The widgets' measures follow the icons' size (Sven on build 2479: at Small they stayed Medium's).
+        .environment(\.dockScale, DockScale.of(size))
         let shape = DockPill.shape(placement)
         let shown = style.shown(transparency: Look.shared.transparency)
         Group {
@@ -213,8 +222,8 @@ struct DockStrip<Widgets: View>: View {
         // Pilot's Frost draws one (Sven on build 2470). Clear is nothing, as the top bar's: no ring either.
         .overlay {
             switch shown {
-            case .solid: shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1)
-            case .glass: shape.strokeBorder(.white.opacity(0.18), lineWidth: 1).litEdge(shape, .white.opacity(0.38))
+            case .solid: shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1).edgeRingCut(shape.edge, width: 1)
+            case .glass: shape.strokeBorder(.white.opacity(0.18), lineWidth: 1).litEdge(shape, .white.opacity(0.38)).edgeRingCut(shape.edge, width: 1)
             case .clear: EmptyView()
             }
         }
@@ -225,7 +234,7 @@ struct DockStrip<Widgets: View>: View {
     /// width is measured on the row itself, never the scroll's frame, so the fit never feeds back on itself.
     @ViewBuilder
     private func widgetRow(_ content: AnyView, width: Binding<CGFloat>) -> some View {
-        let row = HStack(spacing: DockFaceMetrics.widgetGap) { content }
+        let row = HStack(spacing: DockFaceMetrics.widgetGap * DockScale.of(size)) { content }
             .fixedSize()
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width.wrappedValue = $0 }
         let room = room(width.wrappedValue)
@@ -273,7 +282,7 @@ struct DockStrip<Widgets: View>: View {
             leaving?.cancel()
             leaving = nil
             if hoverX == nil { onHover(true) }
-            hoverX = at.x - origin - leftRun - DockPill.ends
+            hoverX = at.x - origin - DockPill.flareRun(placement) - leftRun - DockPill.ends
         case .ended:
             hoverX = nil
             leaving?.cancel()

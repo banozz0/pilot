@@ -52,6 +52,21 @@ struct DockRiceRenders {
                                 to: dir.appendingPathComponent("rice-\(theme)-\(name)-\(playing ? "playing" : "silent").png"), wait: 1.5)
             }
         }
+
+        // Attached round 2 (Sven on build 2479, 2026-11-14): the flared edge in each style, and the widgets at each size
+        // in one ratio to the icons, on his ultrawide with the default widgets and sixteen apps.
+        look.themeID = "tokyo-night"
+        let tokens = StyleTokens.of(look.style, theme: look.theme)
+        let glassTint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let crowd = DockRenders.apps(16)
+        for (name, style, dockSize) in [("glass-medium", TopBarBackground.glass, DockSize.medium), ("solid-medium", .solid, .medium), ("clear-medium", .clear, .medium),
+                                        ("glass-small", .glass, .small), ("glass-large", .glass, .large)] {
+            let scene = Scene(wall: Self.env["PILOT_DOCK_WALL"].flatMap(NSImage.init(contentsOfFile:)), screen: DockRenders.ultrawide,
+                              size: CGSize(width: DockRenders.ultrawide.width, height: 260), glassTint: glassTint,
+                              accent: Color(nsColor: Self.colour(look.theme.accent)), apps: crowd, widgets: true, placement: .attached,
+                              left: frame.left.heights, right: frame.right.heights, style: style, dockSize: dockSize)
+            try writeRender(scene.body.styled(.topBar, look: look).pilotTheme(look: look), to: dir.appendingPathComponent("edge-\(name).png"), wait: 1.5)
+        }
     }
 
     static func colour(_ hex: UInt32) -> NSColor {
@@ -71,8 +86,10 @@ struct DockRiceRenders {
         let widgets: Bool
         let placement: DockPlacement
         let left: [Float]?, right: [Float]?
+        var style: TopBarBackground = .glass
+        var dockSize: DockSize = .medium
 
-        static let tallest = CGFloat(DockSize.medium.tallestBar)
+        var tallest: CGFloat { CGFloat(dockSize.tallestBar) }
 
         /// The rest pill's width, measured from a strip drawn alone.
         @MainActor var pillWidth: CGFloat {
@@ -80,7 +97,7 @@ struct DockRiceRenders {
         }
 
         @MainActor var strip: some View {
-            DockStrip(size: .medium, apps: apps, hasWidgets: widgets, maxWidth: size.width - 2 * DockPill.sideMargin, style: .glass,
+            DockStrip(size: dockSize, apps: apps, hasWidgets: widgets, maxWidth: size.width - 2 * DockPill.sideMargin, style: style,
                       backing: { AnyView($0) }, placement: placement, tint: .theme) {
                 if widgets {
                     ForEach(Array(DockRenders.widgets.enumerated()), id: \.offset) { _, pair in DockWidgetBodyView(widget: pair.0, shown: pair.1) }
@@ -90,7 +107,7 @@ struct DockRiceRenders {
         }
 
         @MainActor func backdrop(bars pill: CGFloat) -> some View {
-            let path = DockBarsPath.path(width: size.width, pill: pill, tallest: Self.tallest, left: left, right: right)
+            let path = DockBarsPath.path(width: size.width, pill: pill, tallest: tallest, left: left, right: right)
             return ZStack(alignment: .bottom) {
                 Group {
                     if let wall {
@@ -102,8 +119,8 @@ struct DockRiceRenders {
                 .frame(width: screen.width, height: screen.height)
                 .frame(width: size.width, height: size.height, alignment: .bottom).clipped()
                 // The window's own path, y 0 at the foot, flipped into SwiftUI's space.
-                Path(path).applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: Self.tallest)).fill(accent)
-                    .frame(width: size.width, height: Self.tallest)
+                Path(path).applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: tallest)).fill(accent)
+                    .frame(width: size.width, height: tallest)
             }
             .frame(width: size.width, height: size.height)
         }
@@ -126,9 +143,12 @@ struct DockRiceRenders {
             let shape = DockPill.shape(placement)
             return ZStack(alignment: .bottom) {
                 ground
-                Image(nsImage: blurred(ground)).resizable().frame(width: size.width, height: size.height).overlay(glassTint)
-                    .mask(shape.frame(width: pill, height: CGFloat(DockSize.medium.pill)).padding(.bottom, margin)
-                        .frame(width: size.width, height: size.height, alignment: .bottom))
+                // Glass's stand-in only on Glass: Solid and Clear draw their own ground (DockBacking).
+                if style == .glass {
+                    Image(nsImage: blurred(ground)).resizable().frame(width: size.width, height: size.height).overlay(glassTint)
+                        .mask(shape.frame(width: pill, height: CGFloat(dockSize.pill)).padding(.bottom, margin)
+                            .frame(width: size.width, height: size.height, alignment: .bottom))
+                }
                 strip.padding(.bottom, margin)
             }
             .frame(width: size.width, height: size.height)

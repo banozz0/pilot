@@ -62,12 +62,17 @@ struct BarAttachedRenders {
         sources.extensionBar.stop()
         defer { sources.readings.hold([], replacing: &held) }
 
+        // Attached round 2 (Sven on build 2479, 2026-11-14): the flared edge in each Background, as his own (Glass) and
+        // Solid and Clear; Floating once in his own.
+        let own = store.background
+        defer { store.background = own }
         for preset in [BarPreset.threeIslands, .pills] {
             try store.choosePreset(preset.rawValue)
-            for attached in [false, true] {
+            for (attached, background) in [(false, own), (true, TopBarBackground.glass), (true, .solid), (true, .clear)] {
+                store.background = background
                 try store.setAttached(attached)
                 let config = try #require(store.topBarConfiguration)
-                let name = "\(preset.rawValue)-\(attached ? "attached" : "floating")"
+                let name = "\(preset.rawValue)-\(attached ? "attached-\(background.rawValue)" : "floating")"
                 // Where the window goes on his display, and on a MacBook's notched one (its menu strip 32 high).
                 let frame = config.frame(screen: Self.screen)
                 let notched = CGRect(x: 0, y: 0, width: 1512, height: 982), notchFrame = config.frame(screen: notched, notchHeight: 32)
