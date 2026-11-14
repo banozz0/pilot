@@ -178,7 +178,10 @@ echo -n 'APPL????' > "$APP/Contents/PkgInfo"
 #   Pilot.app (Packaging/Pilot.entitlements)
 #     automation.apple-events           the System Events calls (sleep, restart, dark mode) run in a child osascript, and
 #                                       TCC checks the app responsible for it
-#     device.audio-input                Captures' Microphone sound (Recorder) and the microphone ask (PilotDictation, pilot permit)
+#     device.audio-input                Captures' Microphone sound (Recorder) and the microphone ask (PilotDictation, pilot permit);
+#                                       the dock visualizer's process tap (DockAudio) is read as an aggregate device's input
+#                                       too, and needs no grant of its own: Apple's tap sample asks only for Info.plist's
+#                                       NSAudioCaptureUsageDescription (System Audio Recording Only)
 #     personal-information.calendars   the clock's events and reminders (ClockCalendar's EventKit; it covers reminders too)
 #     personal-information.location    Wi-Fi network names in Setup (CoreWLANSystem's CLLocationManager)
 #   pilot-dictate (Packaging/pilot-dictate.entitlements)
@@ -187,8 +190,7 @@ echo -n 'APPL????' > "$APP/Contents/PkgInfo"
 # process), library validation off (every dlopen is a system framework or the pack, signed by this same team), DYLD
 # variables (none read; MallocSpaceEfficient is libmalloc's, which reads it under the hardened runtime too). Sparkle's
 # Autoupdate and Updater.app, the Python extensions' /usr/bin/python3 children and the web-app template need nothing: a
-# stamped web app is signed again without the runtime (WebAppStamper), and the process tap the dock visualizer would use
-# is not in the code yet.
+# stamped web app is signed again without the runtime (WebAppStamper).
 SIGN=(--force --sign "$ID")
 ENTITLE=() DICTATE_ENTITLE=()
 if [[ $ID == "Developer ID Application:"* ]]; then
