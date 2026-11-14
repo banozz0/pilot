@@ -331,7 +331,7 @@ final class PilotNotifications {
 
     /// The bell's click and its action: the drawer, what arrived in memory only.
     func toggleDrawer() {
-        guard active else { return presenter?.say("Notifications in Pilot are off: Pilot › Notifications") ?? () }
+        guard active else { return presenter?.say("Notifications in Pilot are off: Menu bar › Notifications") ?? () }
         markRead()
         presenter?.toggleDrawer()
     }

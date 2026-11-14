@@ -20,7 +20,8 @@ struct FileSearchBlock: View {
     static let listNote = "Never indexed, so never found, even with hidden files shown. A name leaves out every folder so named; ~/ means one folder in your home. iCloud Drive stays searchable inside ~/Library. A change reads your home folder again at the next file search."
 
     var body: some View {
-        searchBlock
+        // The spot a link or the search lands on, on Files' front.
+        searchBlock.id(AppSection.fileSearch)
         ImageTextBlock(text: text, counts: counts, clear: clear)
     }
 

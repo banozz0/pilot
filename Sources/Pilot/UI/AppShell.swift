@@ -141,12 +141,8 @@ struct PageView: View {
         case .snippets: SnippetsSettingsView()
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
-            switch section {
-            case .fileSearch: KitPage { FileSearchBlock(settings: .shared) }
-            case .duplicates: DuplicatesView()
-            case .folders: FolderDesignsView()
-            default: ConvertPage()
-            }
+            // File search and Duplicates are places on the front (settings tidy), which the window scrolls to.
+            if section == .folders { FolderDesignsView() } else { ConvertPage() }
         case .install:
             switch section {
             case .webApps: WebAppsSettingsView()

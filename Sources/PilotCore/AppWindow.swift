@@ -130,7 +130,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         switch self {
         case .binds: "Keyboard"
         case .menu: "Your menu"
-        case .files: "Convert"
+        case .files: "Files"
         case .configs: "Apps"
         case .ai: "Chat"
         case .captures: "Capture"
@@ -336,9 +336,11 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Menu's parts (C3): every ability Pilot has (story 155, was Binds › Abilities), the rows' aliases and the quicklinks
     /// (were on Defaults).
     case abilities, aliases, quicklinks
-    /// Files' tab: what the menu's file search leaves out (Menu's until Sven 2026-10-10).
+    /// Files' place on its front: what the menu's file search leaves out (Menu's until Sven 2026-10-10; a tab until the
+    /// settings tidy, Sven 2026-11-14).
     case fileSearch
-    /// Files' tab: identical files and the space they take, moved to the Trash on a yes (Homy-style Files, T5).
+    /// Files' place on its front: identical files and the space they take, moved to the Trash on a yes (Homy-style Files,
+    /// T5; a tab until the settings tidy).
     case duplicates
     /// Files' tab: folders dressed in Pilot's designs or a picture, and Reset (P43).
     case folders
@@ -392,7 +394,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
     case hyperKey, status, data
-    /// Pilot's front: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications).
+    /// Menu bar's place: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications),
+    /// beside the bell's item (on Pilot's front until the settings tidy, Sven 2026-11-14).
     case notifications
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
@@ -443,7 +446,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
-        case .permissions, .about, .hyperKey, .status, .data, .notifications: .general
+        case .permissions, .about, .hyperKey, .status, .data: .general
+        case .notifications: .menuBar
         case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .appsForKeys: .openWith
@@ -497,7 +501,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
-                                                     .voiceWords, .installLists]
+                                                     .voiceWords, .installLists, .fileSearch, .duplicates]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }

@@ -2,9 +2,11 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Files' first tab, Convert (Sven 2026-10-10: "the file converter is mentioned nowhere; it's a very good feature we
-/// will be shipping"): story 139 said in full: a drop zone that converts what lands on it, the two ways in from Finder
-/// and Hyper+Space, every format by kind and the two tools some need. Its second tab is File search (was Menu's).
+/// Files' first tab (Sven 2026-10-10: "the file converter is mentioned nowhere; it's a very good feature we will be
+/// shipping"): story 139 said in full: a drop zone that converts what lands on it, the two ways in from Finder and
+/// Hyper+Space, every format by kind and the two tools some need. File search and Duplicates follow as blocks, tabs of
+/// their own until the settings tidy (Sven 2026-11-14: "files pages look so empty"); Folders keeps its tab, as its
+/// gallery scrolls on its own.
 struct ConvertPage: View {
     @Environment(\.ink) private var ink
     /// Hands dropped or chosen files to Convert's picker; a render passes one that records them.
@@ -13,20 +15,22 @@ struct ConvertPage: View {
     @State private var tools: Set<ConvertTool>?
     @State private var targeted = false
 
-    static let intro = "Convert pictures, video, sound and documents on this Mac. Nothing is uploaded."
-    static let introInfo = "The new file lands beside the old one."
+    static let intro = "Convert files, choose what file search skips and find duplicates, all on this Mac. Nothing is uploaded."
+    static let introInfo = "A converted file lands beside the old one."
 
     static let otherWays = "Or in Finder: right-click, Services › Convert with Pilot…; in Hyper+Space: ⌘K on a file, Convert to…"
 
     var body: some View {
-        KitPage(intro: Self.intro, info: Self.introInfo) {
+        KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {
             KitBlock(title: "Convert", symbol: "arrow.triangle.2.circlepath") {
                 dropZone
                 // The two other ways in, one line under the drop zone (simplify-pages T5).
                 Text(Self.otherWays).font(ink.ui(12)).foregroundStyle(ink.muted).padding(.bottom, 10)
             }
             KitBlock(title: "Formats", symbol: "list.bullet") { formats }
-        }
+            FileSearchBlock(settings: .shared)
+            DuplicatesView()
+        } }
         .task { tools = Self.installedTools() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             let now = Self.installedTools()

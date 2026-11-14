@@ -7,7 +7,7 @@ import SwiftUI
 /// in Raycast and Ice (Sven 2026-10-10: "it should be like the Pilot general app"). Its front (simplify-pages T8): who Pilot
 /// is, its mark, name, version and build, whether this build is current with Check for updates, and Support; the
 /// permission when it is missing (Home links here); then, back from its More (pages round 4, Sven's Q106), the Hyper key
-/// with where it sits and its options, Startup, what runs, other apps' notifications, every permission Pilot asks for
+/// with where it sits and its options, Startup, what runs, a pointer to Notifications on Menu bar, every permission Pilot asks for
 /// with its fix, Pilot's data (its folder and the pilot command) and About. What the overlay shows lives on Keys ›
 /// Overlay, export and import on Keys › More › Export and import, the helpers on Install › Helpers (page map, Sven
 /// 2026-10-17), AI on its own page, the quick-notes folder on Notes; the on/off switch on Home and in the dropdown.
@@ -35,10 +35,6 @@ struct GeneralPage: View {
     /// Support (Sven 2026-10-10): Pilot's GitHub Sponsors page.
     static let supportURL = URL(string: "https://github.com/sponsors/banozz0")!
     /// Accessibility's ⓘ, on Needs you and on Permissions.
-    static let showInInfo = "Floating: a bell you can drag, with each card in the bottom right. Top bar: a bell item in Pilot's top bar "
-        + "with the count of new ones; each card drops under it and a click lists what arrived."
-    static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
-        + "window, as widgets do. A new card still pops up above apps while it shows."
     static let accessibilityInfo = "Keys and windows: the Hyper key, every bind and the tiler run on it, so Pilot asks it first."
 
     /// `acknowledgementsOpen` is for the renders; the app always opens the page with the list closed.
@@ -56,7 +52,7 @@ struct GeneralPage: View {
                 hyperKeys(focused: granted).id(AppSection.hyperKey)
                 startup
                 status.id(AppSection.status)
-                notifications.id(AppSection.notifications)
+                notifications
                 permissions(granted).id(AppSection.permissions)
                 data.id(AppSection.data)
                 about.id(AppSection.about)
@@ -308,37 +304,13 @@ struct GeneralPage: View {
 
     // MARK: Notifications
 
-    /// Other apps' notifications as Pilot's cards (spec notifications.html): off by default, nothing runs until it's on.
+    /// Notifications live on Menu bar beside the bell's item (settings tidy, Sven 2026-11-14): one line here says where.
     private var notifications: some View {
-        @Bindable var settings = NotificationSettings.shared
-        let placement = settings.placement
-        return KitBlock(title: "Notifications", symbol: "bell") {
+        KitBlock(title: "Notifications", symbol: "bell") {
             BlockRow(first: true) {
-                Toggle("Show other apps' notifications in Pilot", isOn: $settings.enabled)
-                    .toggleStyle(.pilotSwitchRow(info: "Reads each notification macOS shows, through Accessibility, and draws a Pilot card where Show in says, with a bell and a list of what arrived. Their words stay in memory, are never saved or sent, and macOS keeps its own copy. Do Not Disturb still silences them. It relies on how macOS builds Notification Center, so a macOS update can break it."))
-            }
-            if settings.enabled {
-                BlockRow {
-                    HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
-                    Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
-                }
-                if settings.showIn == .topBar && placement == .floating {
-                    BlockRow {
-                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on in Menu bar.")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                if placement == .floating {
-                    BlockRow {
-                        HStack(spacing: 6) { Text("Layer"); InfoMark(text: Self.layerInfo) }.frame(maxWidth: .infinity, alignment: .leading)
-                        Segments(selection: $settings.layer, options: NotificationSettings.Layer.allCases.map { ($0, $0.label) }, label: "Layer")
-                    }
-                }
-            }
-            BlockRow {
-                Toggle("Hide macOS's own banner", isOn: $settings.hideMacBanners)
-                    .toggleStyle(.pilotSwitchRow(info: "Moves Notification Center's banners off screen while a Pilot card shows. Nothing is lost: the notification is still in macOS's Notification Center. A notification Pilot can't fully handle, like a reply, keeps macOS's banner."))
-                    .disabled(!settings.enabled)
+                Text("Other apps' notifications as Pilot's cards, beside the bell").foregroundStyle(ink.text2)
+                Spacer()
+                AccentLink(title: "In Menu bar") { AppWindowController.shared.open(.notifications) }
             }
         }
     }
