@@ -2,11 +2,14 @@ import Foundation
 
 /// A banner's style, from its AXSubrole. Since macOS 26 every one is a view in Notification Center's one full-screen host
 /// window, and a new one only shows as AXLayoutChanged.
-public enum NotificationKind: String, Sendable {
+public enum NotificationKind: String, Sendable, Codable {
     case banner = "AXNotificationCenterBanner"
     case alert = "AXNotificationCenterAlert"
     case bannerStack = "AXNotificationCenterBannerStack"
     case alertStack = "AXNotificationCenterAlertStack"
+    /// One of macOS's own banners drawn by Control Center rather than Notification Center (a screen-capture privacy hint,
+    /// 2026-11-14): no AX subrole marks it, so this one is Pilot's name.
+    case system = "PilotControlCenterBanner"
 }
 
 /// The action names Notification Center translates, every language's, from its own strings; the reader tells the app's
@@ -35,7 +38,8 @@ public struct NotificationVocabulary: Sendable, Equatable {
     }
 }
 
-/// One notification as Accessibility shows it. Its words stay in memory: never logged, stored or sent anywhere.
+/// One notification as Accessibility shows it. Its words are never logged or sent anywhere; the drawer's copy is saved
+/// on the Mac only (`NotificationStore`).
 public struct NotificationRead: Sendable, Equatable, Identifiable {
     public let id: String
     public let kind: NotificationKind
@@ -47,6 +51,7 @@ public struct NotificationRead: Sendable, Equatable, Identifiable {
     public let actions: [String]
     /// A button that opens a text field: the notification stays in macOS's banner.
     public let opensReply: Bool
+    public var isSystem: Bool { kind == .system }
 }
 
 /// What one walk of Notification Center found.
@@ -105,7 +110,7 @@ public enum NotificationReader {
         return found
     }
 
-    /// AXIdentifier, or the kind and words for one without: such a key lives only in memory, for as long as it is up.
+    /// AXIdentifier, or the kind and words for one without, hashed so the key shows none of them.
     static func key(of banner: any NotificationElement) -> String {
         if let id = banner.identifier, !id.isEmpty { return id }
         return "anon-\(banner.subrole ?? "")-\(banner.attributedDescription ?? "")".hashed
@@ -150,6 +155,106 @@ public enum NotificationReader {
     /// Drops invisible marks (WhatsApp's U+200E) and the spaces round the words.
     static func clean(_ text: String) -> String {
         String(String.UnicodeScalarView(text.unicodeScalars.filter { !$0.properties.isDefaultIgnorableCodePoint })).trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// macOS's own banners that Control Center draws instead of Notification Center: a screen-capture privacy hint ("“App”
+/// Is Accessing Your Screen", 2026-11-14), shown in its SystemBannerWindow. The same window also carries the volume and
+/// brightness sliders, battery, charging and listening-mode banners, and its menu extras open module windows, so a
+/// window is a card only by positive signs: two lines of text or more, and nothing a person sets (no slider, switch,
+/// field, list or menu).
+public extension NotificationReader {
+    static let systemApp = "macOS"
+    static let systemPrefix = "cc-"
+    /// Roles that mark a control surface, never a banner.
+    static let systemControls: Set<String> = [
+        "AXSlider", "AXCheckBox", "AXSwitch", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXComboBox", "AXTextField",
+        "AXTextArea", "AXScrollArea", "AXTable", "AXOutline", "AXList", "AXMenu", "AXMenuItem", "AXLevelIndicator",
+        "AXValueIndicator", "AXProgressIndicator", "AXIncrementor", "AXDisclosureTriangle", "AXTabGroup",
+    ]
+    static let systemDepth = 8
+    static let systemNodes = 120
+
+    /// One Control Center window's shape: its roles and lines of text, counted, never a word.
+    struct SystemShape: Sendable, Equatable {
+        public var role: String, subrole: String, texts: Int, roles: [String: Int], controls: Bool
+        public var isBanner: Bool { texts >= 2 && !controls }
+        /// For the log: shape only.
+        public var line: String {
+            "\(role)/\(subrole) texts=\(texts) controls=\(controls) roles=" + roles.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
+        }
+    }
+
+    /// One Control Center window as a walk found it: the banner it holds, if it is one, and its shape.
+    struct SystemWindow {
+        public let window: any NotificationElement
+        public let read: NotificationRead?
+        public let shape: SystemShape
+    }
+
+    /// Every Control Center window, each walked once; nil reads are not banners.
+    static func systemWindows(_ app: any NotificationElement) -> [SystemWindow] {
+        (app.windows ?? []).map(systemWindow)
+    }
+
+    /// The window holding the banner with `id`, read afresh.
+    static func systemWindow(id: String, in app: any NotificationElement) -> (any NotificationElement)? {
+        systemWindows(app).first { $0.read?.id == id }?.window
+    }
+
+    static func isSystem(id: String) -> Bool { id.hasPrefix(systemPrefix) }
+
+    /// Calls `body` on each element under `root`, depth first, at most `systemDepth` deep and `systemNodes` in all.
+    private static func visit(_ root: any NotificationElement, _ body: (any NotificationElement) -> Void) {
+        var budget = systemNodes
+        func walk(_ element: any NotificationElement, _ depth: Int) {
+            guard depth <= systemDepth, budget > 0 else { return }
+            budget -= 1
+            body(element)
+            element.children.forEach { walk($0, depth + 1) }
+        }
+        walk(root, 0)
+    }
+
+    private static func systemWindow(_ window: any NotificationElement) -> SystemWindow {
+        var texts: [String] = [], roles: [String: Int] = [:], controls = false
+        visit(window) { element in
+            let role = element.role ?? "?"
+            roles[role, default: 0] += 1
+            if systemControls.contains(role) { controls = true }
+            if role == "AXStaticText", let words = (element.value ?? element.attributedDescription).map(clean), !words.isEmpty { texts.append(words) }
+        }
+        let shape = SystemShape(role: window.role ?? "?", subrole: window.subrole ?? "-", texts: texts.count, roles: roles, controls: controls)
+        guard shape.isBanner else { return SystemWindow(window: window, read: nil, shape: shape) }
+        let title = texts[0], body = texts.dropFirst().joined(separator: " ")
+        let read = NotificationRead(id: systemPrefix + (title + "\n" + body).hashed, kind: .system, app: systemApp, title: title,
+                                    subtitle: "", body: body, actions: [], opensReply: false)
+        return SystemWindow(window: window, read: read, shape: shape)
+    }
+
+    /// A card's press on a Control Center banner: Close presses its own dismiss button, Open the banner itself.
+    static func pressSystem(_ action: NotificationPress, id: String, in app: any NotificationElement, vocabulary: NotificationVocabulary) -> NotificationPressResult {
+        guard let window = systemWindow(id: id, in: app) else { return .gone }
+        var buttons: [any NotificationElement] = [], pressable: [any NotificationElement] = []
+        visit(window) { element in
+            if element.role == "AXButton" { buttons.append(element) } else if element.actionNames.contains("AXPress") { pressable.append(element) }
+        }
+        let closing = vocabulary.close.union(["Dismiss"])
+        let target: (any NotificationElement)?, raw: String
+        switch action {
+        case .close:
+            let named = buttons.first { b in [b.identifier, b.attributedDescription].contains { $0.map { closing.contains($0) } ?? false } }
+                ?? buttons.first { $0.actionNames.contains { closing.contains(Notifications.name($0)) } }
+            target = named ?? (buttons.count == 1 ? buttons[0] : nil)
+            raw = target?.actionNames.first { closing.contains(Notifications.name($0)) } ?? "AXPress"
+        case .open:
+            target = pressable.first
+            raw = "AXPress"
+        case .button:
+            return .refused
+        }
+        guard let target else { return .refused }
+        return target.perform(raw) ? .done : .refused
     }
 }
 
@@ -203,7 +308,7 @@ public extension NotificationReader {
     }
 }
 
-/// One notification as Pilot keeps it, in memory only.
+/// One notification as Pilot keeps it; the drawer's are saved across a relaunch (`NotificationFeed.Saved`).
 public struct NotificationEntry: Sendable, Equatable, Identifiable {
     public let id: String
     public var kind: NotificationKind
@@ -226,6 +331,15 @@ public struct NotificationEntry: Sendable, Equatable, Identifiable {
         id = read.id; kind = read.kind; app = read.app; title = read.title; subtitle = read.subtitle; body = read.body
         actions = read.actions; arrived = date; leftToMacOS = read.opensReply
     }
+
+    /// A saved row, read back after a relaunch: its banner's state is unknown until the first walk finds it again.
+    init(saved: NotificationFeed.SavedEntry) {
+        id = saved.id; kind = saved.kind; app = saved.app; title = saved.title
+        subtitle = saved.subtitle; body = saved.body; actions = []; arrived = saved.arrived; live = false; inDrawer = true
+        leftToMacOS = false
+    }
+
+    public var isSystem: Bool { kind == .system }
 
     func differs(from read: NotificationRead) -> Bool {
         title != read.title || subtitle != read.subtitle || body != read.body || actions != read.actions
@@ -256,13 +370,37 @@ public struct NotificationFeed: Sendable {
     private var entries: [NotificationEntry] = []
     public private(set) var unread = 0
     private var seen: [String] = []
-    /// The last walk found a banner Pilot holds no live entry for: one that was already up when the setting went on.
-    private var uncovered = false
 
     public init() {}
 
+    /// What a relaunch keeps: the drawer's rows, at most `drawerLimit`, with only what a row shows (no buttons, no
+    /// Accessibility ids beyond the key), and the unread count.
+    public struct Saved: Codable, Sendable, Equatable {
+        public var entries: [SavedEntry]
+        public var unread: Int
+        public init(entries: [SavedEntry] = [], unread: Int = 0) { (self.entries, self.unread) = (entries, unread) }
+    }
+
+    public struct SavedEntry: Codable, Sendable, Equatable {
+        public var id: String, kind: NotificationKind, app: String?, title: String, subtitle: String, body: String, arrived: Date
+    }
+
+    public var saved: Saved {
+        Saved(entries: drawer.prefix(Self.drawerLimit).map {
+            SavedEntry(id: $0.id, kind: $0.kind, app: $0.app, title: $0.title, subtitle: $0.subtitle, body: $0.body, arrived: $0.arrived)
+        }, unread: unread)
+    }
+
+    /// The drawer as a relaunch left it: every row not live until a walk finds its banner still up, which then comes back
+    /// as its card with no second row.
+    public init(restoring saved: Saved) {
+        entries = saved.entries.prefix(Self.drawerLimit).map(NotificationEntry.init(saved:))
+        unread = min(max(saved.unread, 0), entries.count)
+        remember(entries.map(\.id))
+    }
+
     public var live: [NotificationEntry] { entries.filter(\.live) }
-    /// Newest first, at most `drawerLimit`; gone when the setting goes off or Pilot quits.
+    /// Newest first, at most `drawerLimit`; kept across a relaunch, gone when the setting goes off.
     public var drawer: [NotificationEntry] { entries.filter(\.inDrawer) }
     /// The cards to draw: up now and not left to macOS.
     public var cards: [NotificationEntry] { live.filter { !$0.leftToMacOS } }
@@ -272,12 +410,6 @@ public struct NotificationFeed: Sendable {
         public var gone: [String] = []
         public var changed = false
         public var isEmpty: Bool { arrived.isEmpty && gone.isEmpty && !changed }
-    }
-
-    /// Marks what is already up as known, so switching on doesn't replay it.
-    public mutating func seed(_ reading: NotificationReading) {
-        remember(reading.banners.map(\.id))
-        uncovered = !reading.banners.isEmpty
     }
 
     /// Takes one walk. An open panel's walk, or one Notification Center didn't answer (a timeout, a locked screen), says
@@ -311,21 +443,23 @@ public struct NotificationFeed: Sendable {
             }
         }
         trimDrawer()
-        uncovered = reading.banners.contains { read in !entries.contains { $0.id == read.id && $0.live } }
         return change
     }
 
+    /// Control Center's banners with a card now: their windows go off screen while the switch is on.
+    public var systemCards: [NotificationEntry] { cards.filter(\.isSystem) }
+
     /// macOS's host window may go off screen: every banner in it has a card, and all of them fit.
     public var canPark: Bool {
-        let up = live
-        return !uncovered && !up.isEmpty && up.count <= Self.cardLimit && up.allSatisfy { !$0.leftToMacOS }
+        let up = live.filter { !$0.isSystem }
+        return !up.isEmpty && up.count <= Self.cardLimit && up.allSatisfy { !$0.leftToMacOS }
     }
 
     /// Where macOS's host window should be. `allowed`: the switch is on and its own panel, which shares the window, is closed.
     public func parking(allowed: Bool) -> NotificationParking {
         guard allowed else { return .restore }
         if canPark { return .park }
-        return live.isEmpty && !uncovered ? .restoreAfterHold : .restore
+        return live.isEmpty ? .restoreAfterHold : .restore
     }
 
     /// A press Pilot couldn't finish, or a reply that opened: macOS's banner takes over for this one.

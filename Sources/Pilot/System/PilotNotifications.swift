@@ -5,8 +5,8 @@ import os
 import PilotCore
 
 /// Show other apps' notifications Pilot's way (spec notifications.html): off until switched on, and while off nothing here
-/// runs: no observer, no timer, no lookup. Notification text never leaves memory; logs and `pilot` reads carry shape and
-/// counts only. There is nothing to honour Focus with and nothing to read for it: Pilot acts only on banners macOS itself
+/// runs: no observer, no timer, no lookup. Notification text is never logged or sent; the drawer is saved on the Mac only
+/// (`NotificationStore`, deleted when the setting goes off), and logs and `pilot` reads carry shape and counts only. There is nothing to honour Focus with and nothing to read for it: Pilot acts only on banners macOS itself
 /// shows, so Do Not Disturb holds by construction.
 @Observable @MainActor
 final class NotificationSettings {
@@ -87,6 +87,9 @@ final class PilotNotifications {
     /// Where parked; far enough to be wholly off screen on any display arrangement.
     static let parkY: CGFloat = -9999
     static let parkedKey = "notifications.parkedFrom"
+    /// How soon to look again while a Control Center banner is up: only its window's creation is observed, so this is how
+    /// its going is seen.
+    static let systemLook = Duration.seconds(1)
 
     private let settings = NotificationSettings.shared
     private let defaults = UserDefaults.pilot()
@@ -106,7 +109,17 @@ final class PilotNotifications {
     /// Off once Pilot quits: a park move checks it last, so none lands after the quit's put-back.
     private nonisolated let parkAllowed = OSAllocatedUnfairLock(initialState: true)
     private var attachedPID: pid_t = 0
-    private var seeded = false
+    /// The first walk since switching on or launching: it logs what it found, banners already up included.
+    private var firstWalk = true
+    private let store = NotificationStore.standard
+    /// What was last written, so a walk that changed only what's live writes nothing.
+    private var lastSaved: NotificationFeed.Saved?
+    private let saving = DispatchQueue(label: "dev.banozz.pilot.notifications.save", qos: .utility)
+    /// Control Center banners moved off screen, by id, and where each was.
+    private var systemParked: [String: CGPoint] = [:]
+    private var systemLookTask: Task<Void, Never>?
+    /// The last Control Center window shapes logged, so a repeat isn't logged again.
+    private var lastSystemShapes: [NotificationReader.SystemShape] = []
 
     private(set) var feed = NotificationFeed()
     private(set) var active = false
@@ -136,6 +149,14 @@ final class PilotNotifications {
         settingsChanged()
     }
 
+    /// The sandbox's relaunch: memory dropped as a quit drops it, then started again from the saved drawer.
+    func relaunchForSandbox() {
+        guard active else { return }
+        saving.sync {}  // the last save lands first, as it would before a quit
+        stop(keepSaved: true)
+        start()
+    }
+
     func settingsChanged() {
         settings.enabled ? start() : stop()
         syncParking()
@@ -148,13 +169,18 @@ final class PilotNotifications {
         guard let source else { return lastError = "no source" }
         active = true
         lastError = nil
-        seeded = false
+        firstWalk = true
+        // The drawer as the last run left it: rows not live until a walk finds their banners still up.
+        let saved = store.load()
+        lastSaved = saved
+        feed = saved.map(NotificationFeed.init(restoring:)) ?? NotificationFeed()
         Task.detached(priority: .utility) { [weak self] in
             let words = source.vocabulary()
             await MainActor.run { self?.vocabulary = words }
         }
         attach(source)
         presenter?.begin()
+        if !feed.drawer.isEmpty { publish(save: false) }
         // NSWorkspace's launch notification isn't dependable for an agent app across sleep, so a slow look at the pid, on
         // only while the setting is, catches a Notification Center that came back under a new one.
         let timer = Timer(timeInterval: Self.watchInterval, repeats: true) { _ in
@@ -177,7 +203,8 @@ final class PilotNotifications {
         slog.notice("notifications: on, attached=\(self.attached, privacy: .public) pid=\(self.attachedPID, privacy: .public)")
     }
 
-    private func stop() {
+    /// `keepSaved`: a relaunch, not the setting going off, so the saved drawer stays.
+    private func stop(keepSaved: Bool = false) {
         guard active else { return }
         active = false
         watchTimer?.invalidate()
@@ -189,6 +216,10 @@ final class PilotNotifications {
         sweepTask?.cancel()
         sweepTask = nil
         sweepWanted = false
+        systemLookTask?.cancel()
+        systemLookTask = nil
+        restoreSystem(Array(systemParked), wait: false)
+        systemParked = [:]
         source?.detach()
         attached = false
         attachedPID = 0
@@ -197,6 +228,11 @@ final class PilotNotifications {
         restoreHost(wait: false)
         presenter?.end()
         feed = NotificationFeed()
+        if !keepSaved {
+            let store = store
+            lastSaved = nil
+            saving.async { store.delete() }
+        }
         slog.notice("notifications: off")
     }
 
@@ -204,6 +240,8 @@ final class PilotNotifications {
     func quitting() {
         parkAllowed.withLock { $0 = false }  // a park still in flight won't move it after this
         cancelPutBackRetry()
+        if !systemParked.isEmpty { restoreSystem(Array(systemParked), wait: true) }
+        systemParked = [:]
         guard active || parkedFrom != nil || savedPark != nil || moving else { return }
         if moving { usleep(300_000) }  // let a move already under way land, then put it back
         let to = parkedFrom ?? savedPark
@@ -256,34 +294,65 @@ final class PilotNotifications {
     private func sweep() async {
         guard let source else { return }
         let words = vocabulary
-        let reading = await Task.detached(priority: .utility) {
-            source.root().map { NotificationReader.read($0, vocabulary: words) } ?? NotificationReading()
+        let (reading, shapes) = await Task.detached(priority: .utility) { () -> (NotificationReading, [NotificationReader.SystemShape]) in
+            var reading = source.root().map { NotificationReader.read($0, vocabulary: words) } ?? NotificationReading()
+            // Control Center's own banners join Notification Center's, read only when its walk answered: an unanswered one
+            // changes nothing anyway.
+            guard reading.answered, !reading.panelOpen, let system = source.systemRoot() else { return (reading, []) }
+            let windows = NotificationReader.systemWindows(system)
+            reading.banners += windows.compactMap(\.read)
+            return (reading, windows.map(\.shape))
         }.value
         guard active else { return }
+        if !shapes.isEmpty, shapes != lastSystemShapes {
+            // Shape only, never a word: how Control Center's windows looked, so the next banner it draws shows its make-up.
+            for shape in shapes { slog.notice("notifications: control center window \(shape.line, privacy: .public) banner=\(shape.isBanner, privacy: .public)") }
+        }
+        lastSystemShapes = shapes
         sweeps += 1
         hostPosition = reading.hostPosition
         hostFound = reading.hostFound
         panelOpen = reading.panelOpen
         // Off screen while Pilot isn't parking it: a crash, or a restore macOS refused. Every answered walk puts it back.
         if reading.answered, parkedFrom == nil, !moving, let y = reading.hostPosition?.y, y <= Self.parkY + 1 { recoverStrandedHost() }
-        if !seeded {
-            guard reading.answered else { return }  // a blind first walk can't say what was already up; no host window is none
-            seeded = true
-            feed.seed(reading)
-            slog.notice("notifications: seeded banners=\(reading.banners.count, privacy: .public) hostFound=\(reading.hostFound, privacy: .public)")
-            return
-        }
+        // A banner already up at launch or at switching on is new to the feed, so it becomes a card like any other; one the
+        // saved drawer holds goes live again with no second row.
+        let first = firstWalk && reading.answered
+        if first { firstWalk = false }
         let change = feed.update(reading, at: .now)
         syncParking()
+        syncSystemParking()
+        if feed.live.contains(where: \.isSystem) { lookAgainSoon() }
+        let system = reading.banners.filter(\.isSystem).count
+        if first {
+            slog.notice("notifications: first walk banners=\(reading.banners.count, privacy: .public) system=\(system, privacy: .public) hostFound=\(reading.hostFound, privacy: .public) cards=\(self.feed.cards.count, privacy: .public) drawer=\(self.feed.drawer.count, privacy: .public)")
+        }
         guard !change.isEmpty else { return }
-        slog.notice("notifications: sweep banners=\(reading.banners.count, privacy: .public) new=\(change.arrived.count, privacy: .public) gone=\(change.gone.count, privacy: .public) cards=\(self.feed.cards.count, privacy: .public) leftToMacOS=\(self.feed.live.filter(\.leftToMacOS).count, privacy: .public)")
+        slog.notice("notifications: sweep banners=\(reading.banners.count, privacy: .public) system=\(system, privacy: .public) new=\(change.arrived.count, privacy: .public) gone=\(change.gone.count, privacy: .public) cards=\(self.feed.cards.count, privacy: .public) leftToMacOS=\(self.feed.live.filter(\.leftToMacOS).count, privacy: .public)")
         publish()
         // A walk losing a banner is often a timeout, and nothing else would look again until the next layout change.
         if !change.gone.isEmpty { sweepSoon() }
     }
 
-    private func publish() {
+    private func publish(save: Bool = true) {
         presenter?.update(cards: feed.cards, drawer: feed.drawer, unread: feed.unread)
+        guard save, active, feed.saved != lastSaved else { return }
+        let saved = feed.saved, store = store
+        lastSaved = saved
+        saving.async {
+            do { try store.save(saved) } catch { slog.error("notifications: drawer not saved: \(error.localizedDescription, privacy: .public)") }
+        }
+    }
+
+    /// While a Control Center banner is up: a walk a second from now, which sees it go.
+    private func lookAgainSoon() {
+        guard systemLookTask == nil else { return }
+        systemLookTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.systemLook)
+            guard let self, !Task.isCancelled else { return }
+            self.systemLookTask = nil
+            self.sweepSoon()
+        }
     }
 
     // MARK: - Actions
@@ -293,10 +362,13 @@ final class PilotNotifications {
     func press(_ action: NotificationPress, id: String) {
         guard let source else { return }
         let words = vocabulary
+        let system = NotificationReader.isSystem(id: id)
         Task.detached(priority: .userInitiated) { [weak self] in
-            let result = source.root().map { NotificationReader.press(action, id: id, in: $0, vocabulary: words) } ?? .gone
+            let result = system
+                ? source.systemRoot().map { NotificationReader.pressSystem(action, id: id, in: $0, vocabulary: words) } ?? .gone
+                : source.root().map { NotificationReader.press(action, id: id, in: $0, vocabulary: words) } ?? .gone
             await MainActor.run { self?.pressed(action, id: id, result) }
-            guard result == .done, case .button = action else { return }
+            guard !system, result == .done, case .button = action else { return }
             // A button can open a reply field in Notification Center's banner, which only macOS can finish.
             try? await Task.sleep(for: .milliseconds(350))
             let field = source.root().map { NotificationReader.hasField(id: id, in: $0) } ?? false
@@ -310,7 +382,7 @@ final class PilotNotifications {
         if result == .refused {
             leaveToMacOS(id, "macOS didn't take that: use its banner")
         }
-        if result == .gone, action == .open { openApp(id) }
+        if result == .gone, action == .open, !NotificationReader.isSystem(id: id) { openApp(id) }
         if result == .gone { sweepSoon() }  // the card is out of date: the banner has left
     }
 
@@ -318,6 +390,7 @@ final class PilotNotifications {
         feed.leaveToMacOS(id)
         publish()
         syncParking()
+        syncSystemParking()
         presenter?.say(tip)
     }
 
@@ -329,7 +402,7 @@ final class PilotNotifications {
 
     // MARK: - The drawer
 
-    /// The bell's click and its action: the drawer, what arrived in memory only.
+    /// The bell's click and its action: the drawer, what arrived, kept across a relaunch.
     func toggleDrawer() {
         guard active else { return presenter?.say("Notifications in Pilot are off: Menu bar › Notifications") ?? () }
         markRead()
@@ -507,6 +580,52 @@ final class PilotNotifications {
         putBack(to: savedPark)
     }
 
+    /// Control Center's banners with a card go off screen while the switch is on, each its own window; one that loses its
+    /// card (left to macOS, the switch off) goes back where it was. A banner that left took its window with it.
+    private func syncSystemParking() {
+        let want: Set<String> = active && settings.hideMacBanners ? Set(feed.systemCards.map(\.id)) : []
+        let park = want.subtracting(systemParked.keys)
+        let up = Set(feed.live.map(\.id))
+        let back = systemParked.filter { !want.contains($0.key) && up.contains($0.key) }
+        systemParked = systemParked.filter { want.contains($0.key) }
+        if !back.isEmpty { restoreSystem(Array(back), wait: false) }
+        guard !park.isEmpty, let source else { return }
+        let y = Self.parkY, allowed = parkAllowed
+        Task.detached(priority: .utility) { [weak self] in
+            var moved: [(String, CGPoint)] = [], refused = 0
+            if let app = source.systemRoot() {
+                for id in park where allowed.withLock({ $0 }) {
+                    guard let window = NotificationReader.systemWindow(id: id, in: app), let at = window.position, at.y > y + 1 else { continue }
+                    if window.setPosition(CGPoint(x: at.x, y: y)) { moved.append((id, at)) } else { refused += 1 }
+                }
+            }
+            await MainActor.run { self?.systemMoved(moved, refused: refused) }
+        }
+    }
+
+    private func systemMoved(_ moved: [(String, CGPoint)], refused: Int) {
+        for (id, at) in moved { systemParked[id] = at }
+        if !moved.isEmpty { slog.notice("notifications: control center banners hidden=\(moved.count, privacy: .public)") }
+        if refused > 0 { lastError = "macOS refused moving its Control Center banner" }
+        // The card or the switch may have changed while the move ran.
+        syncSystemParking()
+    }
+
+    /// Puts Control Center banners back where they were; `wait` for a quit, which must not outrun the moves.
+    private func restoreSystem(_ windows: [(key: String, value: CGPoint)], wait: Bool) {
+        guard let source, !windows.isEmpty else { return }
+        slog.notice("notifications: control center banners back=\(windows.count, privacy: .public)")
+        let move: @Sendable () -> Void = {
+            guard let app = source.systemRoot() else { return }
+            let found = NotificationReader.systemWindows(app)
+            for (id, at) in windows { _ = found.first { $0.read?.id == id }?.window.setPosition(at) }
+        }
+        guard wait else { return DispatchQueue.global(qos: .utility).async(execute: move) }
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async { move(); done.signal() }
+        _ = done.wait(timeout: .now() + 1)
+    }
+
     // MARK: - Reads
 
     /// `pilot status --part notifications`: shape and counts, never a word of a notification.
@@ -519,6 +638,7 @@ final class PilotNotifications {
             "accessibility": .bool(AXIsProcessTrusted()), "timers": .number(Double(timers)), "workspaceObservers": .number(Double(workspaceWatch.count)),
             "hostFound": .bool(hostFound), "panelOpen": .bool(panelOpen), "hostParked": .bool(parkedFrom != nil), "sweeps": .number(Double(sweeps)),
             "live": .number(Double(feed.live.count)), "cards": .number(Double(feed.cards.count)),
+            "systemCards": .number(Double(feed.systemCards.count)), "systemParked": .number(Double(systemParked.count)),
             "leftToMacOS": .number(Double(feed.live.filter(\.leftToMacOS).count)), "drawer": .number(Double(feed.drawer.count)), "unread": .number(Double(feed.unread)),
             "lastError": lastError.map(JSONValue.string) ?? .null,
         ])

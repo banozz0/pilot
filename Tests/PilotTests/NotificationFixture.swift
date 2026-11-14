@@ -6,7 +6,8 @@ import SwiftUI
 
 /// The sandbox's Notification Center (a harness, not a test): `tree.json` in a throwaway folder stands in for the
 /// Accessibility tree, `pid` for its process, and what the watcher does is appended to `events.jsonl`. Rewriting the tree
-/// and bumping `generation` is a banner arriving.
+/// and bumping `generation` is a banner arriving. `cc-tree.json` is Control Center's tree (none: not running), where
+/// macOS draws its own privacy hints; a node's `key` names it for the moves.
 @MainActor
 enum NotificationFixture {
     static func install(_ folder: String) {
@@ -20,6 +21,7 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
     let folder: URL
     private let lock = NSLock()
     private var host: CGPoint?
+    private var systemMoves: [String: CGPoint] = [:]
     @MainActor private var watch: Task<Void, Never>?
 
     nonisolated init(_ folder: URL) { self.folder = folder }
@@ -45,6 +47,9 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
         get { lock.withLock { host } }
         set { lock.withLock { host = newValue } }
     }
+
+    func systemPosition(_ key: String) -> CGPoint? { lock.withLock { systemMoves[key] } }
+    func moveSystem(_ key: String, to point: CGPoint) { lock.withLock { systemMoves[key] = point } }
 
     func currentPID() -> pid_t { pid_t(text("pid") ?? "") ?? 0 }
     func stillRunning(_ pid: pid_t) -> Bool { pid > 0 && currentPID() == pid }
@@ -130,6 +135,9 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
             case ("button"?, 3): PilotNotifications.shared.press(.button(words[1]), id: words[2])
             case ("bell-drop"?, 5): bellDrop(display: words[1], x: Double(words[2]) ?? 0, y: Double(words[3]) ?? 0, side: Double(words[4]) ?? 0)
             case ("bell"?, 2): bellPlace(display: words[1])
+            case ("relaunch"?, 1):
+                record(["event": "relaunch"])
+                PilotNotifications.shared.relaunchForSandbox()
             case ("drawer-closed"?, 3): bellPlaces.keepDrawerSize(CGSize(width: Double(words[1]) ?? 0, height: Double(words[2]) ?? 0))
             default: record(["event": "bad-command"])
             }
@@ -145,6 +153,13 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
             hostPosition = nil
             try? FileManager.default.removeItem(at: file("host-back"))
         }
+        return NotificationFixtureNode(tree, source: self)
+    }
+
+    func systemRoot() -> (any NotificationElement)? {
+        guard let data = try? Data(contentsOf: file("cc-tree.json")),
+              let tree = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        record(["event": "read-system"])
         return NotificationFixtureNode(tree, source: self)
     }
 
@@ -174,12 +189,18 @@ final class NotificationFixtureNode: NotificationElement {
     var isExpanded: Bool { node["expanded"] as? Bool ?? false }
 
     var position: CGPoint? {
-        if subrole == NotificationReader.hostSubrole, let moved = source.hostPosition { return moved }
+        if let key = node["key"] as? String, let moved = source.systemPosition(key) { return moved }
+        if node["key"] == nil, subrole == NotificationReader.hostSubrole, let moved = source.hostPosition { return moved }
         guard let xy = node["position"] as? [Double], xy.count == 2 else { return nil }
         return CGPoint(x: xy[0], y: xy[1])
     }
 
     func setPosition(_ point: CGPoint) -> Bool {
+        if let key = node["key"] as? String {
+            source.record(["event": "move-system", "key": key, "x": point.x, "y": point.y])
+            source.moveSystem(key, to: point)
+            return true
+        }
         source.record(["event": "move", "x": point.x, "y": point.y, "subrole": subrole ?? ""])
         guard !source.has("refuse-move") else { return false }
         source.hostPosition = point
