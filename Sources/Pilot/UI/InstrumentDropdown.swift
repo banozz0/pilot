@@ -12,6 +12,9 @@ struct InstrumentDropdown: View {
     let switches: QuickSwitches
     let option: Bool
     var layout: DropdownLayoutStore = .shared
+    /// Who held secure input as the dropdown opened: the panel takes the keyboard, which can end the field's secure input
+    /// a second later, and Make a password must stay put while it is reached for.
+    @State private var heldAtOpen = Engine.shared?.secureInput.holder
 
     var body: some View {
         let optional = Set(layout.layout.shown).intersection(Dropdown.Layout.optional)
@@ -30,8 +33,7 @@ struct InstrumentDropdown: View {
     private struct Reading: Equatable { let blocks: Set<Dropdown.Block>; let extensions: [String] }
 
     private var panel: some View {
-        let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
-                                         tilerRunning: engine.observers.tiler.isAnswering, lastError: engine.lastError)
+        let problems = engine.homeProblems(secureInput: engine.secureInput.holder ?? heldAtOpen)
         let commands = self.commands
         return DropdownPanelFace(values: values(problems, commands: commands), reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) {
             act($0, problems: problems, commands: commands)
@@ -65,6 +67,7 @@ struct InstrumentDropdown: View {
         values.layerName = layerKeys.label
         values.problems = problems.map { problem in
             switch (problem.kind, problem.place) {
+            case _ where problem.action != nil: .init(title: problem.title, detail: problem.detail, button: "Make a password")
             case (.accessibility, _): .init(title: problem.title, detail: problem.detail, button: "Allow")
             case (.tiler, _): .init(title: problem.title, detail: problem.detail, button: "Restart")
             case (_, _?): .init(title: problem.title, detail: problem.detail, button: "Open", fixes: false)
@@ -114,6 +117,12 @@ struct InstrumentDropdown: View {
         case .arrange: BarPanel.shared.close(); AppWindowController.shared.open(AppPlace(.menuBar))
         case .fix(let i):
             guard problems.indices.contains(i) else { return }
+            // Closed first, so the keyboard goes back to the password field for ⌘V.
+            if let id = problems[i].action {
+                BarPanel.shared.close()
+                engine.action(id)?.run()
+                return
+            }
             switch (problems[i].kind, problems[i].place) {
             case (.accessibility, _): OnboardingWindow.openPermissions()
             case (.tiler, _): engine.startTiler()

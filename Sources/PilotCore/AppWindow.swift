@@ -847,15 +847,29 @@ public enum HomeProblems {
         public let title: String
         public var detail: String?
         public var place: AppPlace?
+        /// The action its button runs in place of opening `place`: Generate a password while a password field has the
+        /// keyboard, as Hyper can't reach it there (Sven, 2026-11-14).
+        public var action: String?
     }
 
-    /// `secureInput`: who holds secure input while it is on, nil while it is off.
+    /// The password generator's action, offered on the password field problem.
+    public static let passwordAction = "apps.generatePassword"
+
+    /// `secureInput`: who holds secure input while it is on, nil while it is off. `password`: the generator is listed, so
+    /// a password field still open (not one an app that quit left locked) offers it.
     public static func list(accessibilityGranted: Bool, secureInput: SecureInputHolder?, tilerRunning: Bool,
-                            lastError: String?) -> [Problem] {
+                            lastError: String?, password: Bool = false) -> [Problem] {
         var list: [Problem] = []
         if !accessibilityGranted { list.append(Problem(kind: .accessibility, title: "Accessibility is not granted", detail: "Pilot sees no keys until it is", place: AppPlace(.general))) }
         // Accessibility's Grant is Needs you on Pilot's front until it is granted; Password field lock is on its Status.
-        if let secureInput { list.append(Problem(kind: .secureInput, title: secureInput.title, detail: secureInput.detail, place: AppPlace(.status))) }
+        if let secureInput {
+            var problem = Problem(kind: .secureInput, title: secureInput.title, detail: secureInput.detail, place: AppPlace(.status))
+            if password, secureInput.fieldOpen {
+                problem.action = passwordAction
+                problem.detail = "\(secureInput.detail). Make a password copies one; ⌘V puts it in the field"
+            }
+            list.append(problem)
+        }
         if !tilerRunning {
             list.append(Problem(kind: .tiler, title: "\(tilerName) is not running",
                                 detail: "Tiling and workspaces are off", place: AppPlace(.tiling)))
@@ -878,6 +892,9 @@ public enum SecureInputHolder: Sendable, Equatable {
 
     /// The fix when the named app is no help: quit whichever app has a password field open, else log out.
     static let unstick = "Quit the app with a password field open (a password manager, say); logging out always clears it"
+
+    /// A password field may still be open: not when the app that turned it on quit.
+    public var fieldOpen: Bool { if case .quit = self { false } else { true } }
 
     /// Home's line adds ", so Hyper waits."
     public var title: String {

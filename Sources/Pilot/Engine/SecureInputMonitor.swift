@@ -27,6 +27,10 @@ final class SecureInputMonitor: ScreenPausing {
     /// screen.
     @ObservationIgnored var onTip: ((String) -> Void)?
     @ObservationIgnored private var tipped: [String: Date] = [:]
+    /// Generate a password is listed: the first tip of a run says where it is, as its Hyper bind can't fire in the field
+    /// (Sven, 2026-11-14).
+    @ObservationIgnored var offersPassword: () -> Bool = { false }
+    @ObservationIgnored private var pointed = false
     /// Secure input came on or off: the tap is blind while it is on, so a Hyper release may be lost.
     @ObservationIgnored var onChange: ((Bool) -> Void)?
     nonisolated static let pilot = "Pilot"
@@ -102,7 +106,9 @@ final class SecureInputMonitor: ScreenPausing {
         let at = now()
         if let last = tipped[app ?? ""], at.timeIntervalSince(last) < 3600 { return }
         tipped[app ?? ""] = at
-        onTip?(app.map { "A password field in \($0) has the keyboard, so Hyper waits" } ?? "A password field has the keyboard, so Hyper waits")
+        let line = app.map { "A password field in \($0) has the keyboard, so Hyper waits" } ?? "A password field has the keyboard, so Hyper waits"
+        if !pointed, offersPassword() { pointed = true; onTip?(line + ". Pilot's menu-bar icon has Make a password") }
+        else { onTip?(line) }
     }
 
     /// The process that last turned secure input on: kCGSSessionSecureInputPID on this user's IOConsoleUsers entry, the

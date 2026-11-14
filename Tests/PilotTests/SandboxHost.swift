@@ -37,6 +37,9 @@ struct SandboxHost {
         ImageViewer.onScreen = false
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
+        // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows
+        // what the dropdown offers there.
+        if ProcessInfo.processInfo.environment["PILOT_SANDBOX_SECURE"] == "1" { engine.secureInput.seed(active: true) }
         // PILOT_SANDBOX_DOCK=<folder>: a fake macOS Dock (DockFixture); without it every dock switch refuses, and the dock never draws.
         DockFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DOCK"], on: engine.dock)
         // PILOT_SANDBOX_BINDS=<file>: a copy of a bind file as this run's bind file, loaded again so the engine's load (and
