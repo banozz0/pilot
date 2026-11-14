@@ -473,6 +473,7 @@ final class Engine {
             log.notice("secure input: \(text, privacy: .public)")
             HUD.tip(text, seconds: 5)
         }
+        secureInput.offersPassword = { [unowned self] in isListed(HomeProblems.passwordAction) }
         secureInput.start()
         tap.setSecureInput(secureInput.isActive)
         settings.applyLaunchAtLogin()
@@ -621,8 +622,14 @@ final class Engine {
 
     /// Home's Needs you, as Home and the dropdown list it.
     var homeProblems: [HomeProblems.Problem] {
-        HomeProblems.list(accessibilityGranted: gate.isTrusted, secureInput: secureInput.holder, tilerRunning: observers.tiler.isAnswering,
-                          lastError: lastError)
+        homeProblems(secureInput: secureInput.holder)
+    }
+
+    /// As above with `secureInput` as its holder: the dropdown keeps the one it opened with, as taking the keyboard from
+    /// the password field may turn secure input off while its Make a password is reached for.
+    func homeProblems(secureInput holder: SecureInputHolder?) -> [HomeProblems.Problem] {
+        HomeProblems.list(accessibilityGranted: gate.isTrusted, secureInput: holder, tilerRunning: observers.tiler.isAnswering,
+                          lastError: lastError, password: isListed(HomeProblems.passwordAction))
     }
 
     #if DEBUG

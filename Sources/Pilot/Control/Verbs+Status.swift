@@ -179,7 +179,7 @@ final class ControlStatus {
         case (_, nil): nil
         }
         return .object(["kind": .string(String(describing: p.kind)), "title": .string(p.title), "detail": json(p.detail),
-                        "fix": json(fix)])
+                        "fix": json(fix), "action": json(p.action)])
     }
 
     /// Onboarding's Permissions as its window fills it, each row with whether it is done.
