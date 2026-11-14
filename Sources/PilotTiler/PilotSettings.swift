@@ -26,7 +26,7 @@ extension TilerSettings {
         // speed; the block's new width and speed still decode, hidden, and set nothing. A column is a half or (layouts round
         // 1, Sven 2026-11-14) a third of the screen, as many as the strip shows on it.
         scrollingWidths = block.scrolling.widths.map { CGFloat($0.fraction) }
-        scrollingAutomaticWidth = 1 / CGFloat(min(max(block.scrolling.onScreen, 2), 3))
+        scrollingAutomaticWidth = CGFloat(block.scrolling.columnWidth)
         scrollingNewWidth = scrollingAutomaticWidth
         scrollingSliver = CGFloat(block.scrolling.sliver)
         scrollingGlide = Strip.glide

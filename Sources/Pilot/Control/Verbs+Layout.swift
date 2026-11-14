@@ -50,7 +50,7 @@ extension ControlVerbs {
                     let tiles = (preset == .scrolling ? StripPreview.frames(n, look: strip, focus: focus, in: size) : preset.tiles(n, in: area)).map { tile in
                         JSONValue.array([tile.minX, tile.minY, tile.width, tile.height].map { .number(($0 * 10).rounded() / 10) })
                     }
-                    let reading = preset.tree(n, in: preset.room(n, in: area).size)?.reading ?? Array(0..<n)
+                    let reading = preset.reading(of: Array(0..<n), in: size)
                     return JSONValue.object(["windows": .number(Double(n)), "tiles": .array(tiles), "reads": .array(reading.map { .number(Double($0 + 1)) })])
                 }
                 var answer: [String: JSONValue] = ["layout": .string(preset.rawValue), "label": .string(preset.label),

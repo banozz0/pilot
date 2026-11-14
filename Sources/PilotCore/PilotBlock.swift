@@ -65,6 +65,9 @@ public struct PilotBlock: Codable, Equatable, Sendable {
 
         public static let onScreenRange = 2...3
 
+        /// A column's automatic width, a share of the screen: a half, or a third with three on screen.
+        public var columnWidth: Double { 1 / Double(min(max(onScreen, Self.onScreenRange.lowerBound), Self.onScreenRange.upperBound)) }
+
         /// The sliver Settings and `pilot set` allow, in points.
         public static let sliverRange = 1...20
     }

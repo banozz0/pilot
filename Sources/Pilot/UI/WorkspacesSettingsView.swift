@@ -396,6 +396,7 @@ struct StripLookPictures: View {
                     }
                     .padding(6)
                     .background(ink.text.opacity(hovered == look ? 0.06 : 0), in: .rect(cornerRadius: ink.radius(7)))
+                    .animation(Kit.change, value: hovered)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.kitPress)
@@ -424,6 +425,7 @@ struct StripLookPictures: View {
             .frame(width: screen.width, height: screen.height, alignment: .topLeading)
         }
         return ZStack {
+            shape.fill(ink.background)
             columns(true)
             columns(false).clipShape(shape)
             shape.strokeBorder(on ? ink.accent : ink.line2, lineWidth: on ? 1.5 : 1)

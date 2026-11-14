@@ -10,7 +10,7 @@ extension Workspace {
         let layout = try rootTilingContainer.layout
         let padded = workspaceMonitor.visibleRectPaddedByOuterGaps
         // Centred main keeps its main in the middle half (layouts round 1): with one or two windows its tiles take part of it.
-        let rect = layout == .stage && !unhidingColumns ? padded.leavingShelf() : unhidingColumns ? padded : try arrangedRoom(padded)
+        let rect = unhidingColumns ? padded : layout == .stage ? padded.leavingShelf() : try arrangedRoom(padded)
         // If monitors are aligned vertically and the monitor below has smaller width, then macOS may not allow the
         // window on the upper monitor to take full width. rect.height - 1 resolves this problem
         // But I also faced this problem in monitors horizontal configuration. ¯\_(ツ)_/¯

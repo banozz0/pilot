@@ -73,11 +73,11 @@ extension Workspace {
         try root.bind(parts, sideways: sideways, extent: room, windows)
     }
 
-    /// The part of `padded` this workspace's tiles take: its arrangement's room (LayoutPreset.room), all of it but for
-    /// Centred main with one or two windows.
+    /// The part of `padded` this workspace's tiles take: its arrangement's room (LayoutPreset.room, which alone says
+    /// which presets keep a margin), all of it with none.
     @MainActor
     func arrangedRoom(_ padded: Rect) throws -> Rect {
-        guard let kept = arrangements[name], kept.preset == .centred else { return padded }
+        guard let kept = arrangements[name] else { return padded }
         return kept.preset.room(try rootTilingContainer.allLeafWindowsRecursive.count, in: padded.cgRect).engineRect
     }
 
