@@ -102,11 +102,11 @@ struct WorkspaceEditorModelTests {
     @Test("The preview keeps each placed app at its real size and draws the next app's spot as a strip where it joins: under its column, under rows, right of columns and own sizes")
     func previewStrip() {
         let area = CGRect(x: 0, y: 0, width: 300, height: 200)
-        // Main + stack, three apps: the main keeps the whole height, the stack shrinks above the strip.
+        // Main + stack, three apps: the fourth halves the bottom right sideways (Sven's split), so the strip takes its right.
         let main = Self.draft(["A", "B", "C"], layout: .mainStack).preview(in: area, strip: 40)
-        #expect(main.apps == [CGRect(x: 0, y: 0, width: 150, height: 200), CGRect(x: 150, y: 0, width: 150, height: 80),
-                              CGRect(x: 150, y: 80, width: 150, height: 80)])
-        #expect(main.next == CGRect(x: 150, y: 160, width: 150, height: 40))
+        #expect(main.apps == [CGRect(x: 0, y: 0, width: 150, height: 200), CGRect(x: 150, y: 0, width: 150, height: 100),
+                              CGRect(x: 150, y: 100, width: 110, height: 100)])
+        #expect(main.next == CGRect(x: 260, y: 100, width: 40, height: 100))
         // One app under main + stack: the next one starts the stack, so the strip runs down the right.
         let one = Self.draft(["A"], layout: .mainStack).preview(in: area, strip: 40)
         #expect(one.apps == [CGRect(x: 0, y: 0, width: 260, height: 200)] && one.next == CGRect(x: 260, y: 0, width: 40, height: 200))

@@ -102,7 +102,8 @@ public struct InProcessTiler: TilerRunning {
     public func setLayouts(_ layouts: [String: WorkspaceLayout]) {
         arrangements = layouts.reduce(into: [:]) { kept, entry in
             guard let preset = entry.value.preset else { return }
-            kept[entry.key] = WorkspaceArrangement(preset, auto: entry.value.auto, order: arrangements[entry.key]?.order ?? [])
+            let was = arrangements[entry.key]
+            kept[entry.key] = WorkspaceArrangement(preset, auto: entry.value.auto, order: was?.order ?? [], built: was?.built)
         }
     }
 
@@ -111,7 +112,8 @@ public struct InProcessTiler: TilerRunning {
         guard isRunning else { throw TilerNotRunning() }
         _ = try await session("layout-preset") {
             guard let target = Workspace.existing(byName: workspace) else { throw TilerCallRefused(command: [workspace]) }
-            let tiled = try target.rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
+            // In open order as last built (Sven's split and Centred main read otherwise), so a cycle keeps the windows' places.
+            let tiled = try arrangements[workspace]?.openOrder(on: target) ?? target.rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
             let first = focus.windowOrNil.map(\.windowId).flatMap { tiled.contains($0) ? [$0] : nil } ?? []
             try target.arrange(WorkspaceArrangement(preset, auto: arrangements[workspace]?.auto ?? false,
                                                     order: first + tiled.filter { !first.contains($0) }))

@@ -8,11 +8,26 @@ public struct WorkspaceArrangement: Equatable, Sendable {
     var preset: LayoutPreset
     var auto: Bool
     var order: [UInt32]
+    /// How the tree read its windows when `arrange` last built it (layouts round 1): what open order is followed from,
+    /// whatever the preset since. A record of the build, not part of the arrangement's identity.
+    var built: [UInt32]?
 
-    init(_ preset: LayoutPreset, auto: Bool, order: [UInt32]) {
+    init(_ preset: LayoutPreset, auto: Bool, order: [UInt32], built: [UInt32]? = nil) {
         self.preset = preset
         self.auto = auto
         self.order = order
+        self.built = built
+    }
+
+    public static func == (a: Self, b: Self) -> Bool { a.preset == b.preset && a.auto == b.auto && a.order == b.order }
+
+    /// Its windows in open order as `workspace`'s tree holds them now (LayoutPreset.openOrder): closed ones out, a swap
+    /// since kept, new ones last. Every reader of an arranged tree goes through it, since Sven's split and Centred main
+    /// read in another order than they open.
+    @MainActor
+    func openOrder(on workspace: Workspace) throws -> [UInt32] {
+        LayoutPreset.openOrder(order, built: built ?? preset.reading(of: order, in: workspace.areaSize),
+                               reading: try workspace.rootTilingContainer.allLeafWindowsRecursive.map(\.windowId))
     }
 }
 
@@ -27,6 +42,7 @@ extension Workspace {
     func arrange(_ kept: WorkspaceArrangement) throws {
         arrangements[name] = kept
         try arrange(kept.preset, order: kept.order)
+        arrangements[name]?.built = try rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
     }
 
     @MainActor
@@ -52,10 +68,7 @@ extension Workspace {
 
     /// The room the workspace's tiles share, which its trees cut by its shape and weigh their tiles in.
     @MainActor
-    var areaSize: CGSize {
-        let area = workspaceMonitor.visibleRectPaddedByOuterGaps
-        return CGSize(width: area.width, height: area.height)
-    }
+    var areaSize: CGSize { workspaceMonitor.visibleRectPaddedByOuterGaps.size }
 }
 
 extension TilingContainer {
@@ -88,9 +101,10 @@ extension TilingContainer {
             case .grid: return BindingData(parent: try nextGridColumn(), adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
             case .centred: return try nextCentredSlot() ?? last
             case .mainStack, .dwindle:
-                let windows = allLeafWindowsRecursive, size = nodeWorkspace?.areaSize ?? .zero
-                guard let (target, sideways) = kept.preset.growth(adding: windows.count, in: size) else { return last }
-                let order = kept.preset.openOrder(kept.order, reading: windows.map(\.windowId), in: size)
+                let windows = allLeafWindowsRecursive
+                guard let workspace = nodeWorkspace, let (target, sideways) = kept.preset.growth(adding: windows.count, in: workspace.areaSize)
+                else { return last }
+                let order = try kept.openOrder(on: workspace)
                 guard order.indices.contains(target), let window = windows.first(where: { $0.windowId == order[target] }),
                       let parent = window.parent as? TilingContainer else { return last }
                 return try parent.halving(window, sideways ? .h : .v)
@@ -107,10 +121,7 @@ extension TilingContainer {
             try window.setWeight(orientation, half)
             return BindingData(parent: self, adaptiveWeight: half, index: try window.ownIndex.orFault() + 1)
         }
-        let place = try window.unbindFromParent()
-        let pair = try TilingContainer(parent: self, adaptiveWeight: place.adaptiveWeight, orientation, .tiles, index: place.index)
-        try window.bind(to: pair, adaptiveWeight: 1, index: INDEX_BIND_LAST)
-        return BindingData(parent: pair, adaptiveWeight: 1, index: INDEX_BIND_LAST)
+        return BindingData(parent: try stack([window], orientation), adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
     }
 
     /// Centred main's next window: the third a column of its own on the left; then the right and the left in turn, each
@@ -135,20 +146,20 @@ extension TilingContainer {
         return try stack([foot])
     }
 
-    /// `nodes`, children of this container, moved into a new vertical stack in the first one's place and at its weight;
-    /// each keeps its height when this container already stacked them.
+    /// `nodes`, children of this container, moved into a new stack (or row, `orientation` .h) in the first one's place
+    /// and at its weight; each keeps its size along it when this container already ran that way.
     @MainActor
-    private func stack(_ nodes: [TreeNode]) throws -> TilingContainer {
-        let heights = try nodes.map { orientation == .v ? try $0.getWeight(.v) : 1 }
+    private func stack(_ nodes: [TreeNode], _ orientation: Orientation = .v) throws -> TilingContainer {
+        let sizes = try nodes.map { self.orientation == orientation ? try $0.getWeight(orientation) : 1 }
         let place = try nodes[0].unbindFromParent()
-        let stack = try TilingContainer.newVTiles(parent: self, adaptiveWeight: place.adaptiveWeight, index: place.index)
-        for (node, height) in zip(nodes, heights) { try node.bind(to: stack, adaptiveWeight: height, index: INDEX_BIND_LAST) }
+        let stack = try TilingContainer(parent: self, adaptiveWeight: place.adaptiveWeight, orientation, .tiles, index: place.index)
+        for (node, size) in zip(nodes, sizes) { try node.bind(to: stack, adaptiveWeight: size, index: INDEX_BIND_LAST) }
         return stack
     }
 }
 
 /// Before layout: each auto workspace whose tiled windows changed is rebuilt, the windows it had in their open order as
-/// the tree now holds them (a swap since is kept; LayoutPreset.openOrder), new ones after. A workspace whose window is being dragged waits for the release.
+/// the tree now holds them (a swap since is kept; WorkspaceArrangement.openOrder), new ones after. A workspace whose window is being dragged waits for the release.
 @MainActor
 func arrangeAutoWorkspaces() throws {
     for (name, var kept) in arrangements where kept.auto {
@@ -156,7 +167,7 @@ func arrangeAutoWorkspaces() throws {
         let tiled = try workspace.rootTilingContainer.allLeafWindowsRecursive.map(\.windowId)
         guard tiled.count != kept.order.count || Set(tiled) != Set(kept.order),
               currentlyManipulatedWithMouseWindowId.map(tiled.contains) != true else { continue }
-        kept.order = kept.preset.openOrder(kept.order, reading: tiled, in: workspace.areaSize)
+        kept.order = try kept.openOrder(on: workspace)
         try workspace.arrange(kept)
     }
 }

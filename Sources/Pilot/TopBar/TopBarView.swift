@@ -828,11 +828,11 @@ struct TopBarWorkspacesView: View {
                     if !inTopBar {
                         boxed(name, item, app: app)
                     } else if tokens.kind == .toybox {
-                        ToyWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app ?? "", current: current,
+                        ToyWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app, current: current,
                                          focused: item.isFocused, workspace: style == .icons ? workspace : nil, glyph: glyph)
                             .barTarget("Workspace \(item.name)", inset: 0)
                     } else if tokens.kind == .instrument {
-                        InstrumentWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app ?? "", current: current,
+                        InstrumentWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app, current: current,
                                                 focused: item.isFocused, occupied: occupied[item.name] != nil,
                                                 workspace: style == .icons ? workspace : nil, glyph: glyph)
                             .barHoverTarget("Workspace \(item.name)")

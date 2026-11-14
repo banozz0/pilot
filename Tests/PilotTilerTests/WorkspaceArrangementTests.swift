@@ -128,6 +128,12 @@ extension TilerTreeTests {
             #expect(arrangements.keys.sorted() == [name])
             try await tiler.arrange(name, as: .mainStack)
             #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(2), .v_tiles(windows([1, 3]))]))
+            // Cycling on from Centred main, which reads 3, 2, 1, keeps the open order (layouts round 1).
+            try await tiler.arrange(name, as: .centred)
+            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles(windows([3, 2, 1])))
+            try await tiler.arrange(name, as: .grid)
+            #expect(arrangements[name]?.order == [2, 1, 3])
+            try await tiler.arrange(name, as: .mainStack)
             // A later settings change keeps the order that build made.
             tiler.setLayouts([name: WorkspaceLayout(preset: .columns, auto: true)])
             #expect(arrangements[name] == WorkspaceArrangement(.columns, auto: true, order: [2, 1, 3]))

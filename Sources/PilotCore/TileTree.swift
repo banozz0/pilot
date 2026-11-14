@@ -30,7 +30,7 @@ public indirect enum TileTree: Equatable, Sendable {
 
     /// Each window's tile in `area`, by its place in open order, with whether its split stacks it.
     public func slots(in area: CGRect) -> [(rect: CGRect, stacked: Bool)] {
-        var found: [Int: (rect: CGRect, stacked: Bool)] = [:]
+        var found = Array(repeating: (rect: CGRect.zero, stacked: false), count: reading.count)
         func walk(_ node: TileTree, _ rect: CGRect, stacked: Bool) {
             switch node {
             case .window(let index): found[index] = (rect, stacked)
@@ -46,7 +46,7 @@ public indirect enum TileTree: Equatable, Sendable {
             }
         }
         walk(self, area, stacked: false)
-        return found.keys.sorted().compactMap { found[$0] }
+        return found
     }
 
     /// This tree with window `target`'s tile halved, `sideways` or top and bottom, window `new` taking the second half.

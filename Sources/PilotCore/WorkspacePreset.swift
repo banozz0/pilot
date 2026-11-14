@@ -323,13 +323,21 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     }
 
     /// The popup's preview (mockup E): each placed app at the size it really gets, and the next app's spot as a strip
-    /// `strip` thick where that app would join: at the foot of the column it would stack into (main + stack's stack,
-    /// rows, a grid's last column), else down the right as a new column; the whole area when nothing is placed. On
+    /// `strip` thick where that app would join: along the far side of the tile main + stack or dwindle halves for it, at
+    /// the foot of the column it would stack into (rows, a grid's last column, a centred main's side), else down the
+    /// right as a new column; the whole area when nothing is placed. On
     /// scrolling's strip past one app, the spot is the strip's next column.
     public func preview(in area: CGRect, strip: CGFloat) -> (apps: [CGRect], next: CGRect) {
         let all = tiles(in: area, next: true)
         guard let joins = all.last, !apps.isEmpty else { return ([], area) }
         if layout == .scrolling, apps.count > 1 { return (all.dropLast(), joins) }
+        // Main + stack and dwindle halve a tile: the strip takes that tile's far side, the way it is cut.
+        if let (target, sideways) = layout?.growth(adding: apps.count, in: area.size) {
+            var placed = tiles(in: area)
+            let (next, rest) = placed[target].divided(atDistance: strip, from: sideways ? .maxXEdge : .maxYEdge)
+            placed[target] = rest
+            return (placed, next)
+        }
         if joins.height >= area.height - 0.5 {
             let (next, rest) = area.divided(atDistance: strip, from: .maxXEdge)
             return (tiles(in: rest), next)

@@ -34,7 +34,7 @@ func dropPlan(_ window: Window, at point: CGPoint) throws -> DropPlan? {
     let root = try target.rootTilingContainer
     if var kept = arrangements[target.name], kept.auto {
         // Its windows in open order, the order dropOrder's slots and the landing's tiles go by.
-        let tiled = kept.preset.openOrder(kept.order, reading: root.allLeafWindowsRecursive.map(\.windowId), in: target.areaSize)
+        let tiled = try kept.openOrder(on: target)
         kept.order = kept.order(dropping: window.windowId, at: point, among: tiled, in: target.workspaceMonitor.visibleRectPaddedByOuterGaps,
                                 columns: kept.columnFrames(tiled))
         return .arrange(target, kept, tiled: tiled)

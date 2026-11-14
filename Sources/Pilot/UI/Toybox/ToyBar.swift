@@ -242,22 +242,23 @@ private struct ToyBadge: View {
 /// one sun with an ink outline while it has the focus, the surface outlined while another screen has it.
 struct ToyWorkspaceChip: View {
     @Environment(\.style) private var style
-    let label: String
+    /// Its number (and app); nil when the glyph stands alone.
+    let label: String?
     let current: Bool
     let focused: Bool
     var workspace: OccupiedWorkspace?
-    /// The shown workspace's layout, drawn in place of its number (layouts round 1); `label` is then its app or nothing.
+    /// The shown workspace's layout, drawn in place of its number (layouts round 1); `label` is then its app or nil.
     var glyph: LayoutPreset?
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         HStack(spacing: 5) {
             if let glyph { LayoutGlyph(preset: glyph) }
-            if glyph == nil || !label.isEmpty { Text(label).font(ToyFace.nunito(800, 11.5)).monospacedDigit().lineLimit(1) }
+            if let label { Text(label).font(ToyFace.nunito(800, 11.5)).monospacedDigit().lineLimit(1) }
             if let workspace, !workspace.apps.isEmpty { WorkspaceAppIcons(workspace: workspace, lit: current) }
         }
         .foregroundStyle(current ? (focused ? style.color(\.onAccent) : style.color(\.text)) : style.color(\.text2))
-        .padding(.horizontal, label.count > 1 || workspace != nil || glyph != nil ? 5 : 0)
+        .padding(.horizontal, (label?.count ?? 0) > 1 || workspace != nil || glyph != nil ? 5 : 0)
         .frame(minWidth: 18, minHeight: 18)
         .background(current ? (focused ? style.color(\.accent) : style.color(\.raised)) : style.color(\.sunken), in: shape)
         .overlay { if current { shape.strokeBorder(style.color(\.outline), lineWidth: 2) } }

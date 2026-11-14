@@ -96,7 +96,15 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
     /// Which tile window `k` halves on `tree`, the first `k` windows' tree, and which way: Sven's split names its first
     /// five, the rest (and dwindle's) halve the newest tile along its longer side.
     private func growth(_ k: Int, of tree: TileTree, in size: CGSize) -> (target: Int, sideways: Bool) {
-        if self == .mainStack, let named = [1: (0, true), 2: (1, false), 3: (2, true), 4: (1, true)][k] { return named }
+        if self == .mainStack {
+            switch k {
+            case 1: return (0, true)
+            case 2: return (1, false)
+            case 3: return (2, true)
+            case 4: return (1, true)
+            default: break
+            }
+        }
         let tile = tree.slots(in: CGRect(origin: .zero, size: size))[k - 1].rect
         return (k - 1, tile.width >= tile.height)
     }
@@ -108,14 +116,19 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
         return growth(n, of: tree, in: size)
     }
 
-    /// `order`, a workspace's windows in open order as last built, followed through `reading`, its windows as the tree
-    /// reads them now: a closed one drops out, a swap since swaps their places, a new one goes last. Sven's split and
-    /// Centred main read in another order than they open (5 reads 1, 2, 5, 3, 4), so the tree's reading alone would
-    /// reshuffle them on every rebuild.
-    public func openOrder<ID: Hashable>(_ order: [ID], reading: [ID], in size: CGSize) -> [ID] {
+    /// `order`'s windows as this preset's tree for them reads them at `size`: what a build of `order` reads, when the
+    /// tiler kept no reading of its own.
+    public func reading<ID>(of order: [ID], in size: CGSize) -> [ID] {
+        (tree(order.count, in: size)?.reading ?? Array(order.indices)).map { order[$0] }
+    }
+
+    /// `order`, a workspace's windows in open order as last built, followed from `built`, how its tree read them then, to
+    /// `reading`, how it reads them now: a closed one drops out, a swap since swaps their places, a new one goes last.
+    /// Sven's split and Centred main read in another order than they open (5 reads 1, 2, 5, 3, 4), so the tree's reading
+    /// alone would reshuffle them on every rebuild.
+    public static func openOrder<ID: Hashable>(_ order: [ID], built: [ID], reading: [ID]) -> [ID] {
         let kept = Set(order), now = reading.filter(kept.contains), still = Set(now)
-        let built = (tree(order.count, in: size)?.reading ?? Array(order.indices)).map { order[$0] }.filter(still.contains)
-        let moved = Dictionary(zip(built, now), uniquingKeysWith: { first, _ in first })
+        let moved = Dictionary(zip(built.filter(still.contains), now), uniquingKeysWith: { first, _ in first })
         return order.filter(still.contains).map { moved[$0] ?? $0 } + reading.filter { !kept.contains($0) }
     }
 
@@ -156,9 +169,8 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
     /// column past the screen.
     private func slots(_ n: Int, in area: CGRect) -> [(rect: CGRect, stacked: Bool)] {
         guard n > 0 else { return [] }
-        if let tree = tree(n, in: area.size) { return tree.slots(in: area) }
         switch self {
-        case .columns, .rows, .mainStack, .dwindle, .centred, .grid: return []
+        case .columns, .rows, .mainStack, .dwindle, .centred, .grid: return tree(n, in: area.size)?.slots(in: area) ?? []
         case .scrolling:
             guard n > 1 else { return [(area, false)] }
             let shown = Self.shownColumns, peek = area.width * min(0.08, 0.25 / CGFloat(max(1, n - shown)))

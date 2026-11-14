@@ -5,8 +5,7 @@ extension ControlVerbs {
     /// `layout` (layouts round 1, spec Projects/Pilot/specs/layouts-round1.html): the ready layouts and their cycle, and
     /// the tiles a layout gives 1 to n windows on a screen, read from the same tree the tiler builds. Reads only: a
     /// workspace's layout is `pilot add layouts`, its cycle the Cycle layout action and the bar's click.
-    func registerLayout(screen: @escaping @MainActor () -> CGSize = { NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900) }) {
-        let words = LayoutPreset.allCases.map(\.rawValue)
+    func registerLayout() {
         register(ControlVerb("layout", help: "The ready layouts, which ones Cycle layout and a click on the shown workspace in the top bar go through, "
                              + "and in what order; tiles lists each window's tile, x, y, width and height in points from the top left, for 1 to "
                              + "--windows windows (6) on a screen of --screen (the main display's room), and the order the tiler's tree reads them.",
@@ -26,8 +25,7 @@ extension ControlVerbs {
                 }
                 return .object(["cycle": .array(LayoutPreset.cycle.map { .string($0.label) }), "next": .array(next)])
             case "tiles":
-                let word = try args.word(1, "layout: \(words.joined(separator: ", "))")
-                guard let preset = LayoutPreset(rawValue: word) else { throw ControlError(.badValue, "no layout \(word); layouts: \(words.joined(separator: ", "))") }
+                let preset: LayoutPreset = try Self.choice(try args.word(1, "layout: \(Self.cases(LayoutPreset.self))"), "layout")
                 let most = try args.value("windows").map { word throws(ControlError) in
                     guard let n = Int(word), (1...12).contains(n) else { throw ControlError(.badValue, "--windows: \(word) is not 1 to 12") }
                     return n
@@ -36,7 +34,7 @@ extension ControlVerbs {
                     let parts = word.split(separator: "x").compactMap { Double($0) }
                     guard parts.count == 2, parts.allSatisfy({ $0 >= 100 }) else { throw ControlError(.badValue, "--screen: \(word) is not <width>x<height>, each 100 or more") }
                     return CGSize(width: parts[0], height: parts[1])
-                } ?? screen()
+                } ?? NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
                 let area = CGRect(origin: .zero, size: size)
                 let counts = (1...most).map { n in
                     let tiles = preset.tiles(n, in: area).map { tile in
