@@ -27,10 +27,14 @@ enum WebSearchReader {
     static let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
 
     /// The file that holds `browser`'s engine (a Chromium profile's Preferences, a Firefox profile's search.json.mozlz4);
-    /// nil for Safari and the rest, whose engine is not read from a file.
-    nonisolated static func settingsFile(browser: (name: String, bundleID: String), support: URL = support) -> URL? {
+    /// nil for Safari and the rest, whose engine is not read from a file. A Chromium profile only with Full Disk Access:
+    /// Chrome guards its folder as its own app data, so without it macOS refuses the read and shows "Data Access Blocked"
+    /// naming Pilot (build 2495, 2026-11-14); the browser's own first engine stands in, unread.
+    nonisolated static func settingsFile(browser: (name: String, bundleID: String), support: URL = support,
+                                         fullDiskAccess: Bool) -> URL? {
         switch WebSearch.family(bundleID: browser.bundleID) {
         case .chromium(let folder, _):
+            guard fullDiskAccess else { return nil }
             let root = support.appending(path: folder)
             return root.appending(path: WebSearch.chromiumProfile(localState: try? Data(contentsOf: root.appending(path: "Local State"))))
                 .appending(path: "Preferences")
@@ -46,17 +50,17 @@ enum WebSearchReader {
 
     /// What decides the choice without reading it: the browser and its settings file's date, so the menu reads the
     /// engine again only when either changed (Pilot stays lean, story 142).
-    nonisolated static func stamp(browser: (name: String, bundleID: String)?, support: URL = support) -> String {
+    nonisolated static func stamp(browser: (name: String, bundleID: String)?, support: URL = support, fullDiskAccess: Bool) -> String {
         guard let browser else { return "" }
-        let date = settingsFile(browser: browser, support: support)
+        let date = settingsFile(browser: browser, support: support, fullDiskAccess: fullDiskAccess)
             .flatMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
         return "\(browser.bundleID) \(date?.timeIntervalSince1970 ?? 0)"
     }
 
     /// The default browser's engine, from its settings under `support` (Application Support); Google when it reads none.
-    nonisolated static func read(browser: (name: String, bundleID: String)?, support: URL = support) -> Choice {
+    nonisolated static func read(browser: (name: String, bundleID: String)?, support: URL = support, fullDiskAccess: Bool) -> Choice {
         guard let browser else { return Choice(engine: WebSearch.google, browser: nil) }
-        let data = settingsFile(browser: browser, support: support).flatMap { try? Data(contentsOf: $0) }
+        let data = settingsFile(browser: browser, support: support, fullDiskAccess: fullDiskAccess).flatMap { try? Data(contentsOf: $0) }
         switch WebSearch.family(bundleID: browser.bundleID) {
         case .safari:
             return Choice(engine: WebSearch.safari, browser: browser.name)

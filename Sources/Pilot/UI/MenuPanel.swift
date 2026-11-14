@@ -555,9 +555,10 @@ final class PilotMenu {
         let browser = WebSearchReader.defaultBrowser(), known = webSearchStamp, kept = webSearch
         Task { [weak self] in
             let (stamp, choice) = await Task.detached(priority: .userInitiated) { () -> (String, WebSearchReader.Choice) in
-                let stamp = WebSearchReader.stamp(browser: browser)
+                let access = FileIndex.hasFullDiskAccess()
+                let stamp = WebSearchReader.stamp(browser: browser, fullDiskAccess: access)
                 if stamp == known, let kept { return (stamp, kept) }
-                return (stamp, WebSearchReader.read(browser: browser))
+                return (stamp, WebSearchReader.read(browser: browser, fullDiskAccess: access))
             }.value
             guard let self, let model = self.model else { return }
             self.webSearch = choice
@@ -1609,7 +1610,7 @@ final class PilotMenu {
             guard let calendar = Engine.shared?.barSources.readings.calendar else { return }
             Task { HUD.tip(await calendar.add(event), seconds: 3) }
         case .searchWeb(let query):
-            let choice = webSearch ?? WebSearchReader.read(browser: WebSearchReader.defaultBrowser())
+            let choice = webSearch ?? WebSearchReader.read(browser: WebSearchReader.defaultBrowser(), fullDiskAccess: FileIndex.hasFullDiskAccess())
             close(restoreFocus: false)
             WebSearchReader.open(query, with: choice)
             mlog.notice("menu: search the web with \(choice.via, privacy: .public)")
