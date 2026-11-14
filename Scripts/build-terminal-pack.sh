@@ -15,7 +15,7 @@
 # that dylib, before anything is pinned or copied (T76 review).
 set -euo pipefail
 ROOT=${0:a:h:h}
-ID=${SIGN_ID:-Pilot Release}
+ID=$("$ROOT/Scripts/sign-id.sh")  # the identity that signs Pilot (build-app.sh passes its own as SIGN_ID)
 LIB=$ROOT/.build/ghosttykit/libghostty.a
 HEADER=$ROOT/Sources/CGhostty/ghostty.h
 API=$ROOT/Sources/CGhostty/ghostty-api.h  # the calls Pilot makes, the one list the exports and GhosttyAPI's dlsym table read
@@ -78,7 +78,9 @@ if ! cached; then
   xcrun clang -dynamiclib -arch arm64 -mmacosx-version-min=26.0 -install_name @rpath/libghostty.dylib \
     -Wl,-u,_${^names} -Wl,-exported_symbols_list,$WORK/exports.txt -Wl,-dead_strip $LIB $LINKS -o $WORK/libghostty.dylib
   strip -x $WORK/libghostty.dylib
-  codesign --force --sign "$ID" --identifier dev.banozz.pilot.terminal $WORK/libghostty.dylib
+  # A Developer ID signature gets a secure timestamp, so it still checks out once the certificate expires (build-app.sh).
+  STAMP=(); [[ $ID == "Developer ID Application:"* ]] && STAMP=(--timestamp)
+  codesign --force --sign "$ID" $STAMP --identifier dev.banozz.pilot.terminal $WORK/libghostty.dylib
   sha=$(shasum -a 256 $WORK/libghostty.dylib | cut -d' ' -f1)
   # The dylib alone at the zip's top level; no extended attributes or resource forks ride along (its signature is in it).
   ditto -c -k --norsrc --noextattr --noqtn --noacl $WORK/libghostty.dylib $WORK/PilotTerminal-${sha[1,8]}.zip
@@ -112,7 +114,13 @@ extension TerminalPack {
 }"
 # Written only when it changes, so an unchanged pack rebuilds nothing.
 [[ -f $PIN && $(<$PIN) == "$pin" ]] || print -r -- "$pin" >$PIN
-# Only this key's pack is kept: another key's (an older libghostty, recipe or certificate) and any half-built one go.
-for old in $PACKS/*(N/); do [[ ${old:t} == $key ]] || rm -rf $old; done
+# One pack per certificate is kept: this certificate's older keys (an older libghostty or recipe) and any half-built one
+# go, and another certificate's pack stays, so a Developer ID release and a "Pilot Release" test build never rebuild
+# (and re-hash) each other's pack.
+for old in $PACKS/*(N/); do
+  [[ ${old:t} == $key ]] && continue
+  if [[ ${old:t} == *.part || ! -f $old/libghostty.dylib ]] \
+    || codesign --verify -R="certificate leaf = H\"$LEAF\"" $old/libghostty.dylib 2>/dev/null; then rm -rf $old; fi
+done
 echo "terminal pack ${zip:t}: $(( $(stat -f %z $dylib) / 1000 )) kB, zipped $(( $(stat -f %z $zip) / 1000 )) kB, ${#names} calls, signed by $LEAF"
 echo "terminal pack cache: $CACHE"

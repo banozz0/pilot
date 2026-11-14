@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Builds Pilot.app into build/ and signs it. TCC trusts a signed bundle, never a bare binary (ADR 0001).
-#   Scripts/build-app.sh            release build, signed with the self-signed "Pilot Release" certificate
+#   Scripts/build-app.sh            release build, signed by Scripts/sign-id.sh's pick (Developer ID, else "Pilot Release")
 #   SIGN_ID="<identity>" Scripts/build-app.sh   another identity; SIGN_ID=- signs ad hoc
 #   CONFIG=debug Scripts/build-app.sh
 #   SPARKLE_ED_KEY=<generate_keys -p> Scripts/build-app.sh   a release that updates through Sparkle (SH6), naming no checkout
@@ -12,10 +12,11 @@ ROOT=${0:a:h:h}
 CONFIG=${CONFIG:-release}
 APP="$ROOT/build/Pilot.app"
 cd "$ROOT"
-# One certificate signs every build, debug and release (SH3, notes §9): its designated requirement is the certificate's
-# hash, so TCC keeps Pilot's grants from build to build and no name or email is in it. No fallback to another identity:
-# a different signature would drop every grant. Checked first, before minutes of building.
-ID=${SIGN_ID:-Pilot Release}
+# One certificate signs every build, debug and release (SH3, notes §9), so TCC keeps Pilot's grants from build to build:
+# Scripts/sign-id.sh's pick, the keychain's Developer ID identity as releases are signed (Q225), else "Pilot Release". No
+# name is written here, and nothing falls back once the pick is made: a different signature would drop every grant.
+# Checked first, before minutes of building.
+ID=$("$ROOT/Scripts/sign-id.sh")
 if [[ $ID != - ]] && ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$ID\""; then
   echo "no \"$ID\" code-signing identity in the keychain; set SIGN_ID to yours, or SIGN_ID=- for ad hoc (TCC asks again after every build)" >&2; exit 1
 fi
@@ -171,21 +172,48 @@ cp "$ROOT/Packaging/pilot-agent.md" "$APP/Contents/Resources/"  # the AI helper'
 cp -R "$ROOT/Packaging/skills" "$APP/Contents/Resources/skills"  # the AI's skills: the Skills list, pilot guide <topic>, /extension's prompt (AISkills)
 cp -R "$ROOT/Packaging/widgets" "$APP/Contents/Resources/widgets"  # the desk widgets' look kit (kit/) and the six desk-* widget folders, each with its own copy of the kit (ADR 0016)
 echo -n 'APPL????' > "$APP/Contents/PkgInfo"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.webapp "$APP/Contents/Helpers/PilotWebApp"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.files "$APP/Contents/Helpers/pilot-files"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.text "$APP/Contents/Helpers/pilot-text"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.dictate "$APP/Contents/Helpers/pilot-dictate"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.cli "$APP/Contents/Helpers/pilot"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.mcp "$APP/Contents/Helpers/pilot-mcp"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.upscale "$APP/Contents/Helpers/pilot-upscale"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.agent-shell "$APP/Contents/Helpers/pilot-agent-shell"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.media "$APP/Contents/Helpers/pilot-media.dylib"
+# A Developer ID identity signs what notarization accepts (release.sh): the hardened runtime and a secure timestamp on
+# every piece, and the entitlements below. The self-signed "Pilot Release" and ad hoc builds keep neither: a certificate
+# with no Team ID fails the hardened runtime's library validation on the terminal pack Pilot dlopens (TerminalPack).
+# The grants the hardened runtime withholds unless entitled, each traced to the code that needs it (2026-11-14):
+#   Pilot.app (Packaging/Pilot.entitlements)
+#     automation.apple-events           the System Events calls (sleep, restart, dark mode) run in a child osascript, and
+#                                       TCC checks the app responsible for it
+#     device.audio-input                Captures' Microphone sound (Recorder) and the microphone ask (PilotDictation, pilot permit);
+#                                       the dock visualizer's process tap (DockAudio) is read as an aggregate device's input
+#                                       too, and needs no grant of its own: Apple's tap sample asks only for Info.plist's
+#                                       NSAudioCaptureUsageDescription (System Audio Recording Only)
+#     personal-information.calendars   the clock's events and reminders (ClockCalendar's EventKit; it covers reminders too)
+#     personal-information.location    Wi-Fi network names in Setup (CoreWLANSystem's CLLocationManager)
+#   pilot-dictate (Packaging/pilot-dictate.entitlements)
+#     device.audio-input                it opens the microphone itself (AVAudioEngine's input) while dictating
+# None asked for: JIT and unsigned memory (WebKit's JIT runs in its own WebContent processes; no JavaScriptCore in
+# process), library validation off (every dlopen is a system framework or the pack, signed by this same team), DYLD
+# variables (none read; MallocSpaceEfficient is libmalloc's, which reads it under the hardened runtime too). Sparkle's
+# Autoupdate and Updater.app, the Python extensions' /usr/bin/python3 children and the web-app template need nothing: a
+# stamped web app is signed again without the runtime (WebAppStamper).
+SIGN=(--force --sign "$ID")
+ENTITLE=() DICTATE_ENTITLE=()
+if [[ $ID == "Developer ID Application:"* ]]; then
+  SIGN+=(--options runtime --timestamp)
+  ENTITLE=(--entitlements "$ROOT/Packaging/Pilot.entitlements")
+  DICTATE_ENTITLE=(--entitlements "$ROOT/Packaging/pilot-dictate.entitlements")
+fi
+codesign $SIGN --identifier dev.banozz.pilot.webapp "$APP/Contents/Helpers/PilotWebApp"
+codesign $SIGN --identifier dev.banozz.pilot.files "$APP/Contents/Helpers/pilot-files"
+codesign $SIGN --identifier dev.banozz.pilot.text "$APP/Contents/Helpers/pilot-text"
+codesign $SIGN $DICTATE_ENTITLE --identifier dev.banozz.pilot.dictate "$APP/Contents/Helpers/pilot-dictate"
+codesign $SIGN --identifier dev.banozz.pilot.cli "$APP/Contents/Helpers/pilot"
+codesign $SIGN --identifier dev.banozz.pilot.mcp "$APP/Contents/Helpers/pilot-mcp"
+codesign $SIGN --identifier dev.banozz.pilot.upscale "$APP/Contents/Helpers/pilot-upscale"
+codesign $SIGN --identifier dev.banozz.pilot.agent-shell "$APP/Contents/Helpers/pilot-agent-shell"
+codesign $SIGN --identifier dev.banozz.pilot.media "$APP/Contents/Helpers/pilot-media.dylib"
 # Sparkle inside out, in its own documented order: the installer, its progress app, then the framework.
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
-codesign --force --sign "$ID" "$SPARKLE/Versions/B/Autoupdate"
-codesign --force --sign "$ID" "$SPARKLE/Versions/B/Updater.app"
-codesign --force --sign "$ID" "$SPARKLE"
-codesign --force --sign "$ID" --identifier dev.banozz.pilot "$APP"
+codesign $SIGN "$SPARKLE/Versions/B/Autoupdate"
+codesign $SIGN "$SPARKLE/Versions/B/Updater.app"
+codesign $SIGN "$SPARKLE"
+codesign $SIGN $ENTITLE --identifier dev.banozz.pilot "$APP"
 codesign --verify --strict --deep "$APP"  # a broken signature fails the build
 if [[ $ID != - ]]; then
   /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
