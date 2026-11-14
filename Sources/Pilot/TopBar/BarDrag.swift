@@ -133,7 +133,10 @@ final class BarDrag {
     static func apply(_ piece: Piece, _ target: Target, to s: inout BarSettings, members: [[BarTrayItem]]) {
         switch target {
         case .side(let side, let index):
-            for (k, item) in piece.items.enumerated() { s.place(item, on: side, at: index + k) }
+            // Pilot's icon never takes a place of its own: out of its group it goes back to the left's lead.
+            for (k, item) in piece.items.enumerated() {
+                if item.kind?.pinned == true { s.ungroup(item) } else { s.place(item, on: side, at: index + k) }
+            }
         case .group(let number, let index):
             // The group's entries without the dragged ones, so the member at `index` of the others is found by its first.
             let others = members.filter { $0.first.map { !piece.items.contains($0) } ?? false }

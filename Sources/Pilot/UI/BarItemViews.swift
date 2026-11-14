@@ -124,8 +124,15 @@ struct TopBarSlotView: View {
 
     /// What the slot shows: its own view (other apps, workspace numbers), its parts, or nothing (a battery not read).
     private enum Shows {
-        /// `members`: in a group, what each target moves when dragged (spec drag-reorder); empty otherwise.
-        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([BarParts.KindTarget], members: [[BarTrayItem]], tooltip: String), nothing
+        /// `members`: in a group, what each piece moves when dragged (spec drag-reorder); empty otherwise.
+        case otherApps(oneButton: Bool), appMenus, workspaces(BarStyle), modes, parts([Piece], members: [[BarTrayItem]], tooltip: String), nothing
+    }
+
+    /// One piece of a slot drawn from its parts: a target, or in a group a member drawing a view of its own
+    /// (BarKind.drawsOwnView), drawn as that view.
+    private enum Piece {
+        case target(BarParts.KindTarget)
+        case own(BarEntry)
     }
 
     var body: some View {
@@ -173,21 +180,27 @@ struct TopBarSlotView: View {
         case .parts(let targets, let members, _):
             // The top bar's targets are apart by their insets.
             HStack(spacing: inBar ? 0 : 6) {
-                ForEach(Array(targets.enumerated()), id: \.offset) { i, each in
-                    let target = each.target
-                    let kind = slot.entries.first?.kind, instrument = style.kind == .instrument
-                    // Instrument's alone read the window's title and the timer's title, so no other style redraws for them.
-                    let parts = BarPartsView(items: target.parts, capsule: slot.isGroup && !inBar,
-                                             appIcon: kind == .focusedApp ? sources.observers.focusedApp?.icon : nil,
-                                             windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
-                                             focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
-                    if inBar {
-                        Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
-                            .buttonStyle(.kitPress)
-                            .modifier(BarMemberDragged(drag: drag, screen: screen, group: preview ? nil : slot.groupNumber, index: i,
-                                                       items: members.indices.contains(i) ? members[i] : []))
-                    } else {
-                        Button { perform(target.click, kinds: each.kinds) } label: { parts }.buttonStyle(.plain)
+                ForEach(Array(targets.enumerated()), id: \.offset) { i, piece in
+                    let dragged = BarMemberDragged(drag: drag, screen: screen, group: inBar && !preview ? slot.groupNumber : nil, index: i,
+                                                   items: members.indices.contains(i) ? members[i] : [])
+                    switch piece {
+                    case .own(let entry):
+                        TopBarSlotView(slot: .item(entry), screen: screen, sources: sources, store: store).modifier(dragged)
+                    case .target(let each):
+                        let target = each.target
+                        let kind = slot.entries.first?.kind, instrument = style.kind == .instrument
+                        // Instrument's alone read the window's title and the timer's title, so no other style redraws for them.
+                        let parts = BarPartsView(items: target.parts, capsule: slot.isGroup && !inBar,
+                                                 appIcon: kind == .focusedApp ? sources.observers.focusedApp?.icon : nil,
+                                                 windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
+                                                 focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
+                        if inBar {
+                            Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
+                                .buttonStyle(.kitPress)
+                                .modifier(dragged)
+                        } else {
+                            Button { perform(target.click, kinds: each.kinds) } label: { parts }.buttonStyle(.plain)
+                        }
                     }
                 }
             }
@@ -201,11 +214,26 @@ struct TopBarSlotView: View {
         let inputs = sources.inputs(for: slot.entries)
         guard slot.isGroup else {
             let targets = Self.targets(slot, inputs, settings: store.settings)
-            return targets.isEmpty ? .nothing : .parts(targets, members: [], tooltip: BarTooltip.text(slot, inputs))
+            return targets.isEmpty ? .nothing : .parts(targets.map(Piece.target), members: [], tooltip: BarTooltip.text(slot, inputs))
         }
-        let runs = BarParts.groupRuns(slot.entries, inputs)
-        return runs.isEmpty ? .nothing : .parts(runs.map { ($0.target, $0.entries.map(\.kind)) }, members: runs.map { $0.entries.map(\.item) },
-                                                tooltip: BarTooltip.text(slot, inputs))
+        // The members in order: a run of those drawn from parts as BarParts.groupRuns has them, each one with a view of
+        // its own as itself.
+        var pieces: [Piece] = [], members: [[BarTrayItem]] = [], run: [BarEntry] = []
+        func flush() {
+            for each in BarParts.groupRuns(run, inputs) {
+                pieces.append(.target((each.target, each.entries.map(\.kind))))
+                members.append(each.entries.map(\.item))
+            }
+            run = []
+        }
+        for entry in slot.entries {
+            guard entry.kind.drawsOwnView else { run.append(entry); continue }
+            flush()
+            pieces.append(.own(entry))
+            members.append([entry.item])
+        }
+        flush()
+        return pieces.isEmpty ? .nothing : .parts(pieces, members: members, tooltip: BarTooltip.text(slot, inputs))
     }
 
     /// A slot drawn from its parts: its targets now, none while it has nothing to show. The dock asks it too, so a widget

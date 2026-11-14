@@ -166,7 +166,16 @@ public enum BarKind: String, Codable, CaseIterable, Sendable {
     /// layout's. The readings are in it until taken out.
     /// Ask AI and Terminal too (Sven on build 2433: "ask ai and terminal cant be grouped, is that normal?"): in a group
     /// each is still its own button, toggling its drop (TopBarSlotView.perform).
-    public var groupable: Bool { [.readings, .power, .controls].contains(group) || [.timer, .clock, .capture, .focusedApp, .askAI, .terminal].contains(self) }
+    /// Now every item but the layout's own (spacer, divider, the groups), the old Extensions slot and the unreleased pill
+    /// (Sven on build 2495: "workspaces, pilot icon and current app cant be grouped for some reason"): one drawing a view
+    /// of its own keeps that view in the group (`drawsOwnView`), and Pilot's icon, pinned, still leads the macOS menu bar
+    /// and comes back to the left's lead when taken out.
+    public var groupable: Bool { ![.spacer, .divider, .group, .extensions, .pill].contains(self) }
+
+    /// Drawn in the top bar by a view of its own, not from its parts: a group draws it as that view among its members
+    /// (TopBarSlotView), so the workspaces keep a button each, the app's menus a menu each, the status lights and other
+    /// apps theirs, and the notifications' bell its card's anchor.
+    public var drawsOwnView: Bool { [.workspaces, .appMenus, .otherApps, .modes, .notifications].contains(self) }
 
     /// The readings the Group starts with when it is put on with nothing in it (round 4's three).
     static let groupStarters: [BarKind] = [.cpu, .memory, .network]

@@ -268,9 +268,11 @@ extension BarSettings {
             if case .group(let id) = item { return self.drop(group: id, on: drop, placement: placement) }
             return false
         }
+        // Onto a group's outline any groupable item joins, Pilot's icon too; anywhere else Pilot never moves.
+        if case .group(let number) = drop { return group(.kind(kind), into: number) }
         guard !kind.pinned else { return false }
         switch (drop, placement) {
-        case (.group(let number), _): return group(.kind(kind), into: number)
+        case (.group, _): return false
         case (.top(let side, let index), .topBar):
             set(kind, in: .topBar, on: true)
             place(kind, on: side, at: index)
