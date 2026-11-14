@@ -70,6 +70,9 @@ public enum AeroCommand: Equatable, Sendable {
     case flatten(workspace: String)
     case setRootLayout(workspace: String, String)
     case move(id: Int, Direction)
+    /// A workspace preset's ready layout (layouts round 1): the engine builds `windows`, then the workspace's other tiles,
+    /// as the layout's tree at its shares, which no move or join can give.
+    case arrange(workspace: String, LayoutPreset, windows: [Int])
     /// The Window shelf's click on a minimized window (ADR 0015, Q690): macOS restores it onto the workspace it was
     /// minimized from, and it takes the focus, so that workspace's stage.
     case unminimize(id: Int)
@@ -126,6 +129,7 @@ public enum AeroCommand: Equatable, Sendable {
         case .setPinned(let id, let on): ["pin", "--window-id", String(id), on ? "on" : "off"]
         case .flatten(let workspace): ["flatten-workspace-tree", "--workspace", workspace]
         case .setRootLayout(let workspace, let layout): ["layout", "--workspace", workspace, "--root", layout]
+        case .arrange(let workspace, let preset, let windows): ["arrange", "--workspace", workspace, preset.rawValue] + windows.map(String.init)
         case .move(let id, let d): ["move", "--window-id", String(id), "--boundaries-action", "stop", d.rawValue]
         case .unminimize(let id): ["unminimize", "--window-id", String(id)]
         }

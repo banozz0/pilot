@@ -68,6 +68,12 @@ func perform(_ command: AeroCommand) async throws -> String {
             guard let layout = TilerLayout(rawValue: raw) else { throw refused }
             return try done(Workspace.get(byName: name).setRootLayout(toggling: [layout]))
         case .move(let id, let direction): return try done(window(id).move(CardinalDirection(direction)))
+        case .arrange(let name, let preset, let ids):
+            // A workspace that keeps this preset keeps the order too, so its next rebuild starts from it.
+            let order = ids.compactMap(UInt32.init(exactly:))
+            if var kept = arrangements[name], kept.preset == preset { kept.order = order; arrangements[name] = kept }
+            try Workspace.get(byName: name).arrange(preset, order: order)
+            return ""
         case .unminimize(let id): return try done(await window(id).unminimize())
     }
 }

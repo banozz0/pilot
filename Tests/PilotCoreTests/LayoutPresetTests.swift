@@ -27,23 +27,50 @@ struct LayoutPresetTests {
                 + [.balanceSizes(workspace: "2")])
     }
 
-    /// Moody's REJECT http://localhost:8228/p/vYVjANm3a1s: joining window 4 to the stack nests it, and the tiler's
-    /// opposite-orientation normalization turns the inner pair sideways; a window moved left into a container goes inside
-    /// it (MoveCommand.deepMoveIn), so the stack stays one column.
-    @Test("Main + stack: the first window, then 2 and 3 joined into a column beside it, each later window moved into it; equal sizes make it 50 %")
-    func mainStack() {
-        #expect(LayoutPreset.mainStack.commands(workspace: "1", windows: [1, 2, 3, 4, 5])
-                == [.flatten(workspace: "1"), .setRootLayout(workspace: "1", "h_tiles")] + Self.order([1, 2, 3, 4, 5], .right)
-                + [.joinWith(id: 3, .left), .move(id: 4, .left), .move(id: 5, .left), .balanceSizes(workspace: "1")])
-        #expect(!LayoutPreset.mainStack.commands(workspace: "1", windows: [1, 2]).contains { if case .joinWith = $0 { true } else { false } })
+    /// Layouts round 1's tiles on a 3440 × 1440 screen, gapless, `[x, y, width, height]` by open order, each count as the
+    /// pick page (~/pages/pilot-layouts-round1.html) draws it at a tenth.
+    static func tiles(_ preset: LayoutPreset, _ n: Int) -> [[Double]] {
+        preset.tiles(n, in: CGRect(x: 0, y: 0, width: 3440, height: 1440)).map { [$0.minX, $0.minY, $0.width, $0.height].map { (Double($0) * 10).rounded() / 10 } }
     }
 
-    @Test("Grid: windows paired into columns, 2×2 for four, the odd one alone")
+    /// Sven's split (Q231) keeps halving from 6 (Q232 B); dwindle halves the newest tile along its longer side; centred
+    /// main puts the rest either side, right first. Each is one engine arrange, no moves; the open order survives a close
+    /// and follows a swap, though the split reads 1, 2, 5, 3, 4.
+    @Test("Main + stack, dwindle and centred main: the pick page's tiles at 1 to 6 windows, one arrange, open order kept")
+    func mainStack() {
+        let main: [Double] = [0, 0, 1720, 1440], whole: [Double] = [0, 0, 3440, 1440]
+        #expect(Self.tiles(.mainStack, 1) == [whole])
+        #expect(Self.tiles(.mainStack, 2) == [main, [1720, 0, 1720, 1440]])
+        #expect(Self.tiles(.mainStack, 3) == [main, [1720, 0, 1720, 720], [1720, 720, 1720, 720]])
+        #expect(Self.tiles(.mainStack, 4) == [main, [1720, 0, 1720, 720], [1720, 720, 860, 720], [2580, 720, 860, 720]])
+        #expect(Self.tiles(.mainStack, 5) == [main, [1720, 0, 860, 720], [1720, 720, 860, 720], [2580, 720, 860, 720], [2580, 0, 860, 720]])
+        #expect(Self.tiles(.mainStack, 6) == [main, [1720, 0, 860, 720], [1720, 720, 860, 720], [2580, 720, 860, 720], [2580, 0, 430, 720],
+                                              [3010, 0, 430, 720]])
+        #expect(Self.tiles(.dwindle, 3) == [main, [1720, 0, 860, 1440], [2580, 0, 860, 1440]])
+        #expect(Self.tiles(.dwindle, 6) == [main, [1720, 0, 860, 1440], [2580, 0, 860, 720], [2580, 720, 430, 720], [3010, 720, 430, 360],
+                                            [3010, 1080, 430, 360]])
+        #expect(Self.tiles(.centred, 2) == [main, [1720, 0, 1720, 1440]])
+        #expect(Self.tiles(.centred, 3) == [[860, 0, 1720, 1440], [2580, 0, 860, 1440], [0, 0, 860, 1440]])
+        #expect(Self.tiles(.centred, 6) == [[860, 0, 1720, 1440], [2580, 0, 860, 480], [0, 0, 860, 720], [2580, 480, 860, 480], [0, 720, 860, 720],
+                                            [2580, 960, 860, 480]])
+        #expect(LayoutPreset.mainStack.commands(workspace: "1", windows: [1, 2, 3]) == [.arrange(workspace: "1", .mainStack, windows: [1, 2, 3])])
+        #expect(AeroCommand.arrange(workspace: "1", .dwindle, windows: [4, 5]).arguments == ["arrange", "--workspace", "1", "dwindle", "4", "5"])
+        let size = CGSize(width: 3440, height: 1440)
+        #expect(LayoutPreset.mainStack.tree(5, in: size)?.reading == [0, 1, 4, 2, 3])
+        #expect(LayoutPreset.mainStack.openOrder([1, 2, 3, 4, 5], reading: [1, 2, 5, 3, 4], in: size) == [1, 2, 3, 4, 5])
+        #expect(LayoutPreset.mainStack.openOrder([1, 2, 3, 4, 5], reading: [1, 5, 3, 4], in: size) == [1, 3, 4, 5])
+        #expect(LayoutPreset.mainStack.openOrder([1, 2, 3, 4, 5], reading: [1, 2, 3, 5, 4], in: size) == [1, 2, 5, 4, 3])
+        #expect(LayoutPreset.centred.openOrder([1, 2, 3], reading: [3, 1, 2, 7], in: size) == [1, 2, 3, 7])
+        #expect(LayoutPreset.mainStack.growth(adding: 4, in: size)! == (1, true))
+        #expect(LayoutPreset.dwindle.growth(adding: 2, in: size)! == (1, true))
+    }
+
+    @Test("Grid: two side by side, then columns of two, 2×2 for four, the odd one alone; one arrange")
     func grid() {
-        #expect(LayoutPreset.grid.commands(workspace: "1", windows: [1, 2, 3, 4]).filter { if case .joinWith = $0 { true } else { false } }
-                == [.joinWith(id: 2, .left), .joinWith(id: 4, .left)])
-        #expect(LayoutPreset.grid.commands(workspace: "1", windows: [1, 2, 3]).filter { if case .joinWith = $0 { true } else { false } }
-                == [.joinWith(id: 2, .left)])
+        #expect(Self.tiles(.grid, 2) == [[0, 0, 1720, 1440], [1720, 0, 1720, 1440]])
+        #expect(Self.tiles(.grid, 3) == [[0, 0, 1720, 720], [0, 720, 1720, 720], [1720, 0, 1720, 1440]])
+        #expect(Self.tiles(.grid, 4) == [[0, 0, 1720, 720], [0, 720, 1720, 720], [1720, 0, 1720, 720], [1720, 720, 1720, 720]])
+        #expect(LayoutPreset.grid.commands(workspace: "1", windows: [1, 2, 3, 4]) == [.arrange(workspace: "1", .grid, windows: [1, 2, 3, 4])])
     }
 
     /// Scrolling layout spec: every window a column on the strip, each at its own width; equal sizes mean nothing there.
@@ -73,20 +100,21 @@ struct LayoutPresetTests {
 
     @Test("One window needs no moves; no window needs nothing")
     func few() {
-        #expect(LayoutPreset.grid.commands(workspace: "3", windows: [5])
+        #expect(LayoutPreset.columns.commands(workspace: "3", windows: [5])
                 == [.flatten(workspace: "3"), .setRootLayout(workspace: "3", "h_tiles"), .balanceSizes(workspace: "3")])
         #expect(LayoutPreset.columns.commands(workspace: "3", windows: []).isEmpty)
     }
 
-    /// Cycle layout (workspaces.cycleLayout) walks this order; scrolling sits where its predecessor was, stage after it (ADR 0015).
-    @Test("The cycle: main + stack, columns, rows, grid, scrolling, stage, and round again; a workspace with none starts at main + stack")
+    /// Cycle layout (workspaces.cycleLayout) and the bar's click walk this order (layouts round 1, Q235): Rows and Columns
+    /// are out of it, still in the editor; stage after scrolling (ADR 0015).
+    @Test("The cycle: main + stack, dwindle, centred main, grid, scrolling, stage, and round again; none, rows or columns start at main + stack")
     func cycle() {
-        #expect(LayoutPreset.allCases.map(\.label) == ["Main + stack", "Columns", "Rows", "Grid", "Scrolling", "Stage"])
-        #expect(LayoutPreset.next(after: nil) == .mainStack)
+        #expect(LayoutPreset.allCases.map(\.label) == ["Main + stack", "Dwindle", "Centred main", "Columns", "Rows", "Grid", "Scrolling", "Stage"])
+        #expect(LayoutPreset.next(after: nil) == .mainStack && LayoutPreset.next(after: .rows) == .mainStack && LayoutPreset.next(after: .columns) == .mainStack)
         var walked: [LayoutPreset] = []
         var preset: LayoutPreset? = nil
         for _ in 0..<7 { preset = LayoutPreset.next(after: preset); walked.append(preset!) }
-        #expect(walked == [.mainStack, .columns, .rows, .grid, .scrolling, .stage, .mainStack])
+        #expect(walked == [.mainStack, .dwindle, .centred, .grid, .scrolling, .stage, .mainStack])
     }
 
     @Test("A rebuild is one tiler eval: the commands in order, separated by ;, an argument with a space quoted")

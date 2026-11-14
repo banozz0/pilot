@@ -358,13 +358,18 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
         let across = ["left", "middle", "right"], down = ["top", "middle", "bottom"]
         switch layout {
         case .mainStack: return index == 0 ? "main" : "stack \(index)"
+        case .dwindle: return n == 1 ? "whole screen" : "tile \(index + 1)"
+        case .centred:
+            if n < 3 { return along(index, of: n, across, "column") }
+            return index == 0 ? "centre" : index % 2 == 1 ? "right \((index + 1) / 2)" : "left \(index / 2)"
         case .rows: return along(index, of: n, down, "row")
         case .columns: return along(index, of: n, across, "column")
         case .scrolling: return n == 1 ? "whole screen" : "column \(index + 1)"
         case .stage: return index == 0 ? "stage" : "shelf \(index)"
         case nil: return "\(along(index, of: n, across, "column")), \(apps[index].percent) %"
         case .grid:
-            // LayoutPreset's grid: columns of two, the last alone when the count is odd.
+            // LayoutPreset's grid: two side by side, then columns of two, the last alone when the count is odd.
+            if n == 2 { return across[index * 2] }
             let columns = (n + 1) / 2, column = index / 2
             let side = columns > 1 ? along(column, of: columns, across, "column") : nil
             let height = n - 2 * column > 1 ? (index % 2 == 0 ? "top" : "bottom") : nil

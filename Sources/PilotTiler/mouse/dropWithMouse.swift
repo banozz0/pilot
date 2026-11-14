@@ -19,7 +19,7 @@ func startDrag(_ window: Window) {
 
 /// What a release at a point does with the dragged window, decided once for the drop and its preview (dropLanding).
 enum DropPlan {
-    /// An auto workspace rebuilt in the slot its layout has under the point (PilotCore's dropOrder); `tiled` is its order now.
+    /// An auto workspace rebuilt in the slot its layout has under the point (PilotCore's dropOrder); `tiled` is its open order now.
     case arrange(Workspace, WorkspaceArrangement, tiled: [UInt32])
     /// Another workspace: AeroSpace's rule, bound beside the window under the point, on the side of the point.
     case insert(TilingContainer, index: Int)
@@ -33,7 +33,8 @@ func dropPlan(_ window: Window, at point: CGPoint) throws -> DropPlan? {
     let target = point.monitorApproximation.activeWorkspace
     let root = try target.rootTilingContainer
     if var kept = arrangements[target.name], kept.auto {
-        let tiled = root.allLeafWindowsRecursive.map(\.windowId)
+        // Its windows in open order, the order dropOrder's slots and the landing's tiles go by.
+        let tiled = kept.preset.openOrder(kept.order, reading: root.allLeafWindowsRecursive.map(\.windowId), in: target.areaSize)
         kept.order = kept.order(dropping: window.windowId, at: point, among: tiled, in: target.workspaceMonitor.visibleRectPaddedByOuterGaps,
                                 columns: kept.columnFrames(tiled))
         return .arrange(target, kept, tiled: tiled)

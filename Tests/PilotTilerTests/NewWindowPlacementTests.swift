@@ -2,7 +2,7 @@
 import PilotCore
 import Testing
 
-/// Sven's Q122: a new window lands where its workspace's layout puts it (main + stack: the foot of the stack), with Keep
+/// Sven's Q122: a new window lands where its workspace's layout puts it (main + stack: the tile its split halves), with Keep
 /// this layout on or off. Keep only decides whether the workspace is built again as windows come and go.
 extension TilerTreeTests {
     @MainActor
@@ -28,7 +28,7 @@ extension TilerTreeTests {
         }
 
         /// One more window lands in the tree the layout builds for one more, from 0 to 4 windows, Keep on and off.
-        @Test(arguments: [false, true], [LayoutPreset.mainStack, .columns, .rows, .grid])
+        @Test(arguments: [false, true], [LayoutPreset.mainStack, .dwindle, .centred, .columns, .rows, .grid])
         func aNewWindowLandsWhereTheLayoutPutsIt(auto: Bool, preset: LayoutPreset) async throws {
             for n in 0...4 {
                 try setUpWorkspacesForTests()
@@ -38,14 +38,14 @@ extension TilerTreeTests {
             }
         }
 
-        /// Main + stack 1 | 2, 3 with the main widened by hand and Keep off: 4 joins the foot of the stack, the sizes stay.
+        /// Main + stack 1 | 2, 3 with the main widened by hand and Keep off: 4 halves 3 sideways (Sven's split), the sizes stay.
         @Test func keepOffLeavesTheSizes() async throws {
             let (workspace, windows) = try arranged(.mainStack, 3, auto: false)
             let main = windows[0]
             try main.setWeight(.h, 3)
             try await openWindow(4, on: workspace)
             #expect(try workspace.rootTilingContainer.layoutDescription ==
-                .h_tiles([.window(1), .v_tiles([.window(2), .window(3), .window(4)])]))
+                .h_tiles([.window(1), .v_tiles([.window(2), .h_tiles([.window(3), .window(4)])])]))
             #expect(try main.getWeight(.h) == 3)
         }
     }
