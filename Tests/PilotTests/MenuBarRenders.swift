@@ -202,7 +202,7 @@ struct MenuBarRenders {
         #expect(row.arrange(widths, room: 600).x[.centre] == [155])
         // A point short: the right side's innermost item that draws goes, the outer one stays.
         plan = row.arrange(widths, room: 425)
-        #expect(plan.x[.right] == [nil, nil, 385] && plan.x[.left] == [0, 36] && plan.x[.centre] == [162.5])
+        #expect(plan.x[.right] == [nil, nil, 385] && plan.x[.left] == [0, 36] && plan.x[.centre] == [163])   // 162.5 on a whole point
         // Short of room for the right side at all: then the left's innermost; the clock stays even when nothing else fits.
         plan = row.arrange(widths, room: 150)
         #expect(plan.x[.right] == [nil, nil, nil] && plan.x[.left] == [0, nil] && plan.x[.centre] == [46])
@@ -250,7 +250,7 @@ struct MenuBarRenders {
         #expect(plan.more == nil && plan.x[.right] == [754, 754, 960])
         // The 200 goes: the overflow item sits first on the right side, 6 before the 40 that stays.
         plan = row.arrange(widths, room: 425, more: 20)
-        #expect(plan.x[.right] == [nil, nil, 385] && plan.more == 359 && plan.x[.centre] == [162.5])
+        #expect(plan.x[.right] == [nil, nil, 385] && plan.more == 359 && plan.x[.centre] == [163])
         // At 230 the 40 alone would fit, but not beside the overflow item: it goes too, and the overflow holds both.
         #expect(row.arrange(widths, room: 230).x[.right] == [nil, nil, 190])
         plan = row.arrange(widths, room: 230, more: 20)
