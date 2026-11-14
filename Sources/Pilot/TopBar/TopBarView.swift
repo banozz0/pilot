@@ -174,7 +174,9 @@ struct TopBarDropItem: View {
         return HStack(spacing: 5) {
             Image(systemName: BarParts.dropSymbol(entry.kind)).font(.system(size: 11, weight: .semibold))
             if entry.style == .iconName {
-                Text(entry.kind.title.uppercased()).font(font).tracking(0.8).lineLimit(1).fixedSize()
+                // Tracking 1: a whole-point advance in Iosevka (5) and JetBrains Mono (6) at 10 pt, so every letter sits
+                // the same on a 1x screen's pixels; 0.8 left them at mixed half-pixel phases (Sven, 2026-11-14).
+                Text(entry.kind.title.uppercased()).font(font).tracking(1).lineLimit(1).fixedSize()
             }
         }
         .foregroundStyle(ink)
