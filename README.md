@@ -49,15 +49,14 @@ the provider you pick.
 
 1. [Download `Pilot.dmg`](https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg), open it and drag Pilot
    to Applications.
-2. Open Pilot. macOS says Apple could not verify it, because Pilot is open source and not notarized: click Done. Within
-   the hour, open System Settings › Privacy & Security, click **Open Anyway** beside Pilot and enter your login password.
+2. Open Pilot. macOS asks once whether to open an app downloaded from the Internet: click **Open**.
 3. Pick your Hyper key in Pilot's setup and allow Accessibility. Hyper+Space opens the menu.
 
-Updates install from inside Pilot, signed with the same certificate, so the warning never comes back and your
-permissions stay.
+Pilot is signed with Apple's Developer ID and notarized by Apple. Updates install from inside Pilot and keep your
+permissions.
 
 <details>
-<summary>Permissions, the Terminal route and checking the download</summary>
+<summary>Permissions and checking the download</summary>
 
 - **Accessibility:** Pilot needs it to see your keys and move windows; nothing works without it.
 - **Full Disk Access** for file search in the menu, and **System Events** for sleep, restart and dark mode.
@@ -69,8 +68,7 @@ permissions stay.
 Caps Lock as Hyper: tapped alone it is Escape, and Shift+Caps Lock still types capitals. Password fields are blind to
 every key tap on macOS, Pilot's included: your binds do not work while one has focus.
 
-From Terminal instead of step 2: `xattr -dr com.apple.quarantine /Applications/Pilot.app`. Check the download against
-the `.sha256` beside it on the Releases page: `shasum -a 256 -c Pilot.dmg.sha256`.
+Check the download against the `.sha256` beside it on the Releases page: `shasum -a 256 -c Pilot.dmg.sha256`.
 </details>
 
 ## Build from source
