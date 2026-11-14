@@ -8,16 +8,23 @@ public enum BarPanelPlacement {
 
     /// The panel's frame for content of `size`. Its top stays at the item's bottom whatever the height, below the menu
     /// bar: a panel taller than the room runs off the screen's bottom, never up under the bar (card agent-bo-95422983).
+    /// An item in the screen's lower half (the dock's, spec pilot-dock) has its panel rise above it instead, its foot at
+    /// the item's top.
     public static func frame(item: CGRect, size: CGSize, screen: CGRect) -> CGRect {
-        let x = item.midX - PopoverMetrics.arrowPoint
-        return CGRect(x: min(max(x, screen.minX + margin), screen.maxX - size.width - margin), y: item.minY - size.height,
-                      width: size.width, height: size.height)
+        let x = min(max(item.midX - PopoverMetrics.arrowPoint, screen.minX + margin), screen.maxX - size.width - margin)
+        let y = rises(item: item, screen: screen) ? item.maxY : item.minY - size.height
+        return CGRect(x: x, y: y, width: size.width, height: size.height)
     }
+
+    /// Whether a panel for `item` rises above it: the item sits in the screen's lower half.
+    public static func rises(item: CGRect, screen: CGRect) -> Bool { item.midY < screen.midY }
 
     /// The most height a panel hung under `item` may take on a screen whose visible frame (under the menu bar, above the
     /// Dock) is `visible`: down to its foot, less the margin; never under 200, so a short screen still shows something.
+    /// A panel rising from the dock may take up to the visible frame's top.
     public static func room(item: CGRect, visible: CGRect) -> CGFloat {
-        max(min(item.minY, visible.maxY) - visible.minY - margin, 200)
+        if item.midY < visible.midY { return max(visible.maxY - max(item.maxY, visible.minY) - margin, 200) }
+        return max(min(item.minY, visible.maxY) - visible.minY - margin, 200)
     }
 
     /// Whether a click at `point` (screen coordinates) closes the panel: anywhere but the panel and its own item, whose

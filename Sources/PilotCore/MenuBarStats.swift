@@ -35,6 +35,19 @@ public enum MenuBarStats {
             case .bluetooth: "Bluetooth batteries"
             }
         }
+        /// Its SF Symbol, on the top bar's page and in the dock's System stats.
+        public var symbol: String {
+            switch self {
+            case .cpu: "cpu"
+            case .gpu: "display"
+            case .ram: "square.stack.3d.up"
+            case .disk: "cylinder"
+            case .sensors: "thermometer.medium"
+            case .network: "network"
+            case .battery: "battery.75"
+            case .bluetooth: "headphones"
+            }
+        }
         /// The few letters a graph item shows beside its line.
         public var short: String {
             switch self {

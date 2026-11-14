@@ -28,6 +28,8 @@ final class ExtensionBar {
 
     /// The items, by their extensions' titles; an item asked for the first time has neither answer nor problem.
     private(set) var items: [Item] = []
+    /// A round has read the folder: an extension missing from `items` since is not installed (the dock's Set up).
+    private(set) var listed = false
 
     /// What `place` draws: the items placed there with something to show.
     func faces(in place: BarPlace) -> [ExtensionBarFace] { items.filter { shows($0.id, place) }.compactMap(\.face) }
@@ -151,6 +153,7 @@ final class ExtensionBar {
             }
         }
         if next != items { items = next }
+        if !listed { listed = true }
         // The soonest due, never under the floor.
         let waits = extensions.filter { shown.contains($0.id) }.compactMap { ext in ext.bar.map { bar in
             Int((asked[ext.id].map { Double(bar.every) - now().timeIntervalSince($0) } ?? 0).rounded(.up))

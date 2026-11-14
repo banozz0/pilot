@@ -471,9 +471,14 @@ def inline(item):
 
 
 def bar(run):
-    cache, wanted, _, now = current(run, BAR_FRESH)
+    cache, wanted, running, now = current(run, BAR_FRESH)
     if not cache.get("fetched"):
-        send({"type": "bar", "text": ""})
+        # Never fetched and the last try failed (gh missing or not signed in): an error, so Pilot's bar shows nothing
+        # and its dock shows Set up; while the first fetch runs, nothing yet.
+        if cache.get("error") and not running:
+            send({"type": "error", "text": cache["error"]})
+        else:
+            send({"type": "bar", "text": ""})
         return
     waiting, _, runs, _ = counts(cache, wanted, now)
     # Quiet unless something needs Sven: red CI first, then reviews waiting.

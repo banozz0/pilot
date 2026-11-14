@@ -13,7 +13,7 @@ import Foundation
 /// Install for a page of its own after Configs (Sven, 2026-11-01: "for fonts i think its better to have its own page").
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -27,6 +27,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .workspaces: "Workspaces"
         case .tiling: "Tiling"
         case .menuBar: "Menu bar"
+        case .dock: "Dock"
         case .pilotMenu: "Pilot menu"
         case .look: "Look"
         case .system: "System"
@@ -60,6 +61,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .workspaces: "square.grid.2x2"
         case .tiling: "rectangle.split.3x1"
         case .menuBar: "menubar.rectangle"
+        case .dock: "dock.rectangle"
         case .pilotMenu: "list.bullet.below.rectangle"
         case .look: "paintpalette"
         case .system: "slider.horizontal.3"
@@ -90,7 +92,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
-        case .menu, .menuBar, .pilotMenu, .general, .activity: 3
+        case .menu, .menuBar, .dock, .pilotMenu, .general, .activity: 3
         case .install, .extensions, .files, .stats, .fonts, .repos: 4
         case .openWith, .configs, .notes: 5
         }
@@ -188,6 +190,7 @@ public enum AppPage: String, CaseIterable, Sendable {
                         "check for updates", "support", "sponsor"]
         case .ai: ["ai", "ask", "chat", "quick ai", "claude", "ask claude", "ai chat"]
         case .extensions: ["extension", "preference", "password", "permission", "extensions folder"]
+        case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "magnification", "magnify", "dock size", "auto-hide", "pins", "keep in dock"]
         case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note"]
         // The front's words; the rest moved with their controls to Voice's More places (simplify-pages T12).
         case .voice: ["dictation", "dictate", "read aloud", "speech", "speak", "voice", "text to speech", "tts", "speed", "speech to text",
@@ -212,7 +215,8 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .keys: [.binds]
         case .launcher: [.menu]
         // Pilot menu beside Menu bar: what the menu under Pilot's icon shows (Sven, 2026-11-12, Q182: Menu bar was crowded).
-        case .desktop: [.workspaces, .tiling, .menuBar, .pilotMenu, .look, .widgets]
+        // Dock beside Menu bar, its own page (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop").
+        case .desktop: [.workspaces, .tiling, .menuBar, .dock, .pilotMenu, .look, .widgets]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘5 opens it; Clipboard, Notes, Files, Voice;
         // Open with first in Apps, so ⌘7 opens it.
         case .mac: [.upkeep, .system, .activity, .stats]

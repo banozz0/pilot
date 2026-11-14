@@ -14,9 +14,13 @@ extension TilerSettings {
         }
         let bars = heights.map { PerMonitorValue(description: $0.description, value: outer + $0.value) }
         topBar = heights.isEmpty ? .constant(0) : .perMonitor(heights, default: 0)
+        // Pilot's dock (spec pilot-dock): its room at the foot of its screen, in the bottom gap.
+        let docks = block.dock.compactMap { dock in
+            MonitorDescription.pattern(PilotBlock.namePattern([dock.monitor])).map { PerMonitorValue(description: $0, value: outer + dock.height) }
+        }
         gaps = Gaps(
             inner: .init(vertical: inner, horizontal: inner),
-            outer: .init(left: .constant(outer), bottom: .constant(outer), top: bars.isEmpty ? .constant(outer) : .perMonitor(bars, default: outer), right: .constant(outer)),
+            outer: .init(left: .constant(outer), bottom: docks.isEmpty ? .constant(outer) : .perMonitor(docks, default: outer), top: bars.isEmpty ? .constant(outer) : .perMonitor(bars, default: outer), right: .constant(outer)),
         )
         // Spec scrolling-layout T8 (Sven's Q42 and Q43, 2026-10-12): widths fit the window count and the strip glides at one
         // speed; the block's new width and speed still decode, hidden, and set nothing.

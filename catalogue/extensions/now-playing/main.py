@@ -227,14 +227,16 @@ def ask_source(track, path, deadline):
     return False
 
 
-def artwork(track, folder, deadline):
+def artwork(track, folder, deadline, ask=True):
     """The track's thumbnail in base64: from Now Playing's own artwork, else from its source, asked once a track (a
-    `.none` file remembers a source with none, so a popover asked every few seconds asks it once); None without."""
+    `.none` file remembers a source with none, so a popover asked every few seconds asks it once); None without. With
+    `ask` off (the bar) no source is asked, so no Automation prompt comes from a background run: only Now Playing's own
+    artwork or one the popover already fetched."""
     source = track.get("artwork")
     if not source:
         source = os.path.join(folder, "art-%s.img" % art_key(track))
         none = source[:-len(".img")] + ".none"
-        if not os.path.isfile(source) and not os.path.isfile(none):
+        if ask and not os.path.isfile(source) and not os.path.isfile(none):
             found = ask_source(track, source, deadline)
             if found is False:
                 open(none, "w").close()
@@ -389,8 +391,9 @@ def art_folder(run):
     return folder
 
 
-def answer(run, budget, art=True):
-    """(what plays or None, its blocks, the trouble or None); `art` reads the artwork, which only the popover shows."""
+def answer(run, budget, art=True, ask=True):
+    """(what plays or None, its blocks, the trouble or None), the track's row with its artwork when `art`: the popover
+    shows it, and Pilot's dock draws the bar answer's; `ask` lets its source be asked for it (the popover only)."""
     deadline = time.monotonic() + budget
     folder = art_folder(run) if art else ""
     try:
@@ -399,12 +402,12 @@ def answer(run, budget, art=True):
         return None, drawable(run, [{"type": "note", "text": trouble_words(trouble), "icon": "info"}]), trouble
     if track is None:
         return None, [{"type": "markdown", "text": "Nothing is playing: play something in any app or browser tab."}], None
-    return track, [track_section(track, artwork(track, folder, deadline) if folder else None)], None
+    return track, [track_section(track, artwork(track, folder, deadline, ask) if folder else None)], None
 
 
 def bar(run):
     popover = run.get("surface") == "popover"
-    track, blocks, trouble = answer(run, BUDGET["popover" if popover else "bar"], art=popover)
+    track, blocks, trouble = answer(run, BUDGET["popover" if popover else "bar"], ask=popover)
     if popover:
         playing = track is not None and track["playing"]
         send({"type": "blocks", "blocks": blocks, "refresh": REFRESH["playing" if playing else "idle"]})
