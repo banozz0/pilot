@@ -15,7 +15,7 @@
 # that dylib, before anything is pinned or copied (T76 review).
 set -euo pipefail
 ROOT=${0:a:h:h}
-ID=${SIGN_ID:-Pilot Release}
+ID=$("$ROOT/Scripts/sign-id.sh")  # the identity that signs Pilot (build-app.sh passes its own as SIGN_ID)
 LIB=$ROOT/.build/ghosttykit/libghostty.a
 HEADER=$ROOT/Sources/CGhostty/ghostty.h
 API=$ROOT/Sources/CGhostty/ghostty-api.h  # the calls Pilot makes, the one list the exports and GhosttyAPI's dlsym table read

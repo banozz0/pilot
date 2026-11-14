@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Builds Pilot.app into build/ and signs it. TCC trusts a signed bundle, never a bare binary (ADR 0001).
-#   Scripts/build-app.sh            release build, signed with the self-signed "Pilot Release" certificate
+#   Scripts/build-app.sh            release build, signed by Scripts/sign-id.sh's pick (Developer ID, else "Pilot Release")
 #   SIGN_ID="<identity>" Scripts/build-app.sh   another identity; SIGN_ID=- signs ad hoc
 #   CONFIG=debug Scripts/build-app.sh
 #   SPARKLE_ED_KEY=<generate_keys -p> Scripts/build-app.sh   a release that updates through Sparkle (SH6), naming no checkout
@@ -12,10 +12,11 @@ ROOT=${0:a:h:h}
 CONFIG=${CONFIG:-release}
 APP="$ROOT/build/Pilot.app"
 cd "$ROOT"
-# One certificate signs every build, debug and release (SH3, notes §9): its designated requirement is the certificate's
-# hash, so TCC keeps Pilot's grants from build to build and no name or email is in it. No fallback to another identity:
-# a different signature would drop every grant. Checked first, before minutes of building.
-ID=${SIGN_ID:-Pilot Release}
+# One certificate signs every build, debug and release (SH3, notes §9), so TCC keeps Pilot's grants from build to build:
+# Scripts/sign-id.sh's pick, the keychain's Developer ID identity as releases are signed (Q225), else "Pilot Release". No
+# name is written here, and nothing falls back once the pick is made: a different signature would drop every grant.
+# Checked first, before minutes of building.
+ID=$("$ROOT/Scripts/sign-id.sh")
 if [[ $ID != - ]] && ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$ID\""; then
   echo "no \"$ID\" code-signing identity in the keychain; set SIGN_ID to yours, or SIGN_ID=- for ad hoc (TCC asks again after every build)" >&2; exit 1
 fi

@@ -97,7 +97,8 @@ with; `PILOT_DEV=1` builds without updates. It also builds the terminal pack (`S
 signed libghostty Pilot downloads on the first Hyper+T, into `build/`. `swift build` works on its own; `swift test`'s
 terminal suites need libghostty built, and build the pack themselves when it is missing.
 
-`SIGN_ID` defaults to the `Pilot Release` certificate and stops when it is not in your keychain. Name your own (a
+`SIGN_ID` defaults to your keychain's one Developer ID Application identity (`Scripts/sign-id.sh`), else the
+`Pilot Release` certificate, and stops when that is not in your keychain. Name your own (a
 self-signed Code Signing certificate from Keychain Access › Certificate Assistant, or an Apple Development identity),
 or sign ad hoc with `SIGN_ID=-`. macOS ties Accessibility and Full Disk Access to the signature: with a real identity
 the grants survive every rebuild; with an ad-hoc one, remove Pilot from Privacy & Security › Accessibility (and Full
