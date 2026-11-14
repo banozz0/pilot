@@ -325,13 +325,19 @@ final class TopBarWindows: TopBarPanels {
                 panels[key] = panel
                 panel.contentView?.wantsLayer = true
                 // A pill rounds itself inside its side's window (TopBarStrip), so that window keeps square corners.
-                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills ? 0 : $0.radius } ?? 0
+                panel.contentView?.layer?.cornerRadius = configuration.map { $0.preset == .pills || $0.isAttached ? 0 : $0.radius } ?? 0
                 panel.contentView?.layer?.maskedCorners = BarIslandShape.corners(configuration)
                 panel.contentView?.layer?.masksToBounds = true
                 if let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip {
                     clip.canvas = frame
                     clip.needsLayout = true
                     clip.layoutSubtreeIfNeeded()
+                    // The canvas moved (Attached or Floating, a screen change, the menu strip measured again): each island
+                    // follows it now. Before, an island window moved only when its own row changed size, as the row's
+                    // rect inside the canvas is the same either way, so Attached islands kept Floating's frame 8 pt below
+                    // the top until an item changed width (Sven on build 2479; his log: middle and right islands kept
+                    // y 1396 while the left one went to 1404 when its width changed).
+                    if clip.crop.width > 0 { placeIsland(key, rect: clip.reported) }
                 } else {
                     panel.pin(frame)
                     place(panel, of: key, wanted: true)
@@ -365,13 +371,33 @@ final class TopBarWindows: TopBarPanels {
         guard store.topBarConfiguration?.preset.islands == true, let panel = panels[key],
               let clip = (panel.contentView as? MaterialBackdrop)?.content as? TopBarIslandClip else { return }
         // The final row rectangle drives the crop, window bounds and input region together. No full-width window.
-        guard let frame = BarPresetGeometry.islandFrame(rect, in: clip.canvas) else {
+        // Attached: as wide again as the flares the island's ground reaches out by, which the row keeps room for.
+        clip.reported = rect
+        let flare = store.topBarConfiguration.map(BarIslandShape.flare) ?? 0
+        let grown = rect.width > 0 ? rect.insetBy(dx: -flare, dy: 0) : rect
+        guard let frame = BarPresetGeometry.islandFrame(grown, in: clip.canvas) else {
             place(panel, of: key, wanted: false)
             return
         }
-        clip.crop = rect
+        clip.crop = grown
         panel.pin(frame)
+        clipToOutline(panel)
         place(panel, of: key, wanted: true)
+    }
+
+    /// An attached island window clipped to its grown outline (BarIslandShape.mask), so the glass behind it takes the
+    /// flared shape; Floating, its rounded corners alone.
+    private func clipToOutline(_ panel: TopBarPanel) {
+        guard let layer = panel.contentView?.layer else { return }
+        let bounds = CGRect(origin: .zero, size: panel.frame.size)
+        if let path = BarIslandShape.mask(store.topBarConfiguration, bounds: bounds) {
+            let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+            mask.frame = bounds
+            mask.path = path
+            layer.mask = mask
+        } else if layer.mask != nil {
+            layer.mask = nil
+        }
     }
 
     func cover(_ screens: Set<String>) {
@@ -470,6 +496,8 @@ final class TopBarIslandClip: NSView {
     let content: NSView
     var canvas = CGRect.zero { didSet { place() } }
     var crop = CGRect.zero { didSet { place() } }
+    /// The island's row as last reported, before its flares: placed again whenever the canvas moves.
+    var reported = CGRect.zero
     init(_ content: NSView) {
         self.content = content
         super.init(frame: .zero)

@@ -6,6 +6,7 @@ import SwiftUI
 /// "extensions dont look clear in dock"): a 24 pt glyph beside small capitals in text2 over a 17 pt semibold value, in
 /// full ink, a warning amber and an alert red. Not the bar's 12 pt parts scaled up.
 enum DockFaceMetrics {
+    /// Medium's measures; every widget face multiplies them by the dock's scale (DockScale).
     static let glyph: CGFloat = 24
     static let value: CGFloat = 17
     /// Between faces of one widget, and between widgets.
@@ -183,6 +184,8 @@ struct DockWidgetView: View {
 /// A widget's body as drawn: its faces side by side, its timeline, or a Set up face.
 struct DockWidgetBodyView: View {
     @Environment(\.ink) private var ink
+    /// The dock's size against Medium's (DockScale): every measure below scales with the icons.
+    @Environment(\.dockScale) private var k
     /// Its name and symbol, drawn on its Set up face.
     let title: String
     let symbol: String
@@ -193,7 +196,7 @@ struct DockWidgetBodyView: View {
     var body: some View {
         switch shown {
         case .faces(let faces):
-            HStack(spacing: DockFaceMetrics.faceGap) {
+            HStack(spacing: DockFaceMetrics.faceGap * k) {
                 ForEach(Array(faces.enumerated()), id: \.offset) { _, face in
                     if let act, let action = face.action { DockFaceButton(face: face) { act(action, $0) } } else { DockFaceView(face: face) }
                 }
@@ -252,6 +255,8 @@ struct DockLiveStack: View {
 /// One face: its glyph beside small capitals over the value (treatment B).
 struct DockFaceView: View {
     @Environment(\.ink) private var ink
+    /// The dock's size against Medium's (DockScale): every measure below scales with the icons.
+    @Environment(\.dockScale) private var k
     let face: DockFace
     /// Set up: the glyph quiet, the words in full ink (never the accent, which is red on some themes).
     var setUp = false
@@ -266,9 +271,9 @@ struct DockFaceView: View {
 
     /// A toggle: its glyph in a round button, lit in the accent while on, dimmed while it cannot be read.
     private func toggle(_ on: Bool?) -> some View {
-        Image(systemName: glyphName).font(.system(size: 15, weight: .semibold))
+        Image(systemName: glyphName).font(.system(size: 15 * k, weight: .semibold))
             .foregroundStyle(on == true ? ink.onAccent : on == nil ? ink.text2 : ink.text)
-            .frame(width: 36, height: 36)
+            .frame(width: 36 * k, height: 36 * k)
             .background(Circle().fill(on == true ? ink.accent : ink.text.opacity(0.10)))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(face.label) \(face.value)")
@@ -278,17 +283,17 @@ struct DockFaceView: View {
 
     /// Flip cards: the label over each digit on a card of its own, the separators between them bare.
     private var flip: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(face.label.uppercased()).font(ink.mono(10, weight: .semibold)).tracking(0.6).foregroundStyle(ink.text2).lineLimit(1)
-            HStack(spacing: 2) {
+        VStack(alignment: .leading, spacing: 3 * k) {
+            Text(face.label.uppercased()).font(ink.mono(10 * k, weight: .semibold)).tracking(0.6 * k).foregroundStyle(ink.text2).lineLimit(1)
+            HStack(spacing: 2 * k) {
                 ForEach(Array(face.value.enumerated()), id: \.offset) { _, character in
                     if character.isNumber {
-                        Text(String(character)).font(.system(size: 18, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(ink.text)
-                            .frame(width: 16, height: 24)
-                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ink.text.opacity(0.12)))
+                        Text(String(character)).font(.system(size: 18 * k, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(ink.text)
+                            .frame(width: 16 * k, height: 24 * k)
+                            .background(RoundedRectangle(cornerRadius: 4 * k, style: .continuous).fill(ink.text.opacity(0.12)))
                             .overlay(Rectangle().fill(ink.text.opacity(0.18)).frame(height: 1))
                     } else {
-                        Text(String(character)).font(.system(size: 16, weight: .bold)).foregroundStyle(ink.text2)
+                        Text(String(character)).font(.system(size: 16 * k, weight: .bold)).foregroundStyle(ink.text2)
                     }
                 }
             }
@@ -308,14 +313,14 @@ struct DockFaceView: View {
     }
 
     private var words: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 9 * k) {
             glyph
-            VStack(alignment: .leading, spacing: 1) {
-                Text(face.label.uppercased()).font(ink.mono(10, weight: .semibold)).tracking(0.6).foregroundStyle(ink.text2).lineLimit(1)
-                Text(face.value).font(ink.ui(DockFaceMetrics.value, .semibold)).monospacedDigit()
+            VStack(alignment: .leading, spacing: 1 * k) {
+                Text(face.label.uppercased()).font(ink.mono(10 * k, weight: .semibold)).tracking(0.6 * k).foregroundStyle(ink.text2).lineLimit(1)
+                Text(face.value).font(ink.ui(DockFaceMetrics.value * k, .semibold)).monospacedDigit()
                     .foregroundStyle(setUp ? ink.text : toneInk ?? ink.text).lineLimit(1)
             }
-            .frame(maxWidth: 190, alignment: .leading)
+            .frame(maxWidth: 190 * k, alignment: .leading)
         }
         .fixedSize()
         .accessibilityElement(children: .ignore)
@@ -332,7 +337,7 @@ struct DockFaceView: View {
     }
 
     @ViewBuilder private var glyph: some View {
-        let g = DockFaceMetrics.glyph
+        let g = DockFaceMetrics.glyph * k
         switch face.glyph {
         case .symbol(let name, let multicolor):
             Image(systemName: name).font(.system(size: g * 0.86, weight: .medium))
@@ -341,12 +346,12 @@ struct DockFaceView: View {
         case .provider(let icon):
             ProviderGlyph(icon: icon).fill(icon.brand ?? ink.text).frame(width: g * 0.9, height: g * 0.9).frame(width: g, height: g)
         case .day(let weekday, let date):
-            VStack(spacing: -1) {
-                Text(weekday).font(.system(size: 8, weight: .bold)).foregroundStyle(BarLevelInk.status(\.problem, on: nil))
-                Text(date).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(ink.text)
+            VStack(spacing: -1 * k) {
+                Text(weekday).font(.system(size: 8 * k, weight: .bold)).foregroundStyle(BarLevelInk.status(\.problem, on: nil))
+                Text(date).font(.system(size: 15 * k, weight: .semibold)).monospacedDigit().foregroundStyle(ink.text)
             }
-            .frame(width: g + 8, height: g + 8)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ink.text.opacity(0.10)))
+            .frame(width: g + 8 * k, height: g + 8 * k)
+            .background(RoundedRectangle(cornerRadius: 7 * k, style: .continuous).fill(ink.text.opacity(0.10)))
         case .image(let data):
             Group {
                 if let image = NSImage(data: data) {
@@ -355,33 +360,33 @@ struct DockFaceView: View {
                     Image(systemName: "music.note").font(.system(size: g * 0.5, weight: .semibold)).foregroundStyle(ink.text)
                 }
             }
-            .frame(width: g + 8, height: g + 8)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(width: g + 8 * k, height: g + 8 * k)
+            .clipShape(RoundedRectangle(cornerRadius: 6 * k, style: .continuous))
         case .emoji(let text):
             Text(text).font(.system(size: g * 0.82)).frame(width: g, height: g)
         case .analog(let hour, let minute):
             ZStack {
-                Circle().stroke(ink.text.opacity(0.35), lineWidth: 1.5)
-                Capsule().fill(ink.text).frame(width: 2, height: g * 0.26).offset(y: -g * 0.13).rotationEffect(.degrees(hour * 30))
-                Capsule().fill(ink.text).frame(width: 1.5, height: g * 0.38).offset(y: -g * 0.19).rotationEffect(.degrees(minute * 6))
-                Circle().fill(ink.accent).frame(width: 3, height: 3)
+                Circle().stroke(ink.text.opacity(0.35), lineWidth: 1.5 * k)
+                Capsule().fill(ink.text).frame(width: 2 * k, height: g * 0.26).offset(y: -g * 0.13).rotationEffect(.degrees(hour * 30))
+                Capsule().fill(ink.text).frame(width: 1.5 * k, height: g * 0.38).offset(y: -g * 0.19).rotationEffect(.degrees(minute * 6))
+                Circle().fill(ink.accent).frame(width: 3 * k, height: 3 * k)
             }
             .frame(width: g, height: g)
         case .gauge(let share):
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).stroke(ink.text.opacity(0.45), lineWidth: 1.5)
-                RoundedRectangle(cornerRadius: 2).fill(toneInk ?? ink.text).frame(width: max(2, (g * 1.1 - 4) * share)).padding(2)
+                RoundedRectangle(cornerRadius: 3 * k).stroke(ink.text.opacity(0.45), lineWidth: 1.5 * k)
+                RoundedRectangle(cornerRadius: 2 * k).fill(toneInk ?? ink.text).frame(width: max(2 * k, (g * 1.1 - 4 * k) * share)).padding(2 * k)
             }
             .frame(width: g * 1.1, height: g * 0.55).frame(height: g)
         case .dots(let filled, let count):
-            HStack(spacing: 2) {
-                ForEach(0..<count, id: \.self) { i in Circle().fill(i < filled ? toneInk ?? ink.text : ink.text.opacity(0.18)).frame(width: 5, height: 5) }
+            HStack(spacing: 2 * k) {
+                ForEach(0..<count, id: \.self) { i in Circle().fill(i < filled ? toneInk ?? ink.text : ink.text.opacity(0.18)).frame(width: 5 * k, height: 5 * k) }
             }
             .frame(height: g)
         case .ring(let share):
             ZStack {
-                Circle().stroke(ink.text.opacity(0.18), lineWidth: 2.5)
-                Circle().trim(from: 0, to: share).stroke(ink.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round)).rotationEffect(.degrees(-90))
+                Circle().stroke(ink.text.opacity(0.18), lineWidth: 2.5 * k)
+                Circle().trim(from: 0, to: share).stroke(ink.accent, style: StrokeStyle(lineWidth: 2.5 * k, lineCap: .round)).rotationEffect(.degrees(-90))
             }
             .frame(width: g * 0.82, height: g * 0.82).frame(width: g, height: g)
         }
@@ -392,31 +397,44 @@ struct DockFaceView: View {
 /// colour, now a line in the ink, the bar spanning 8 to 20 or wider for an event outside them.
 struct DockTimelineView: View {
     @Environment(\.ink) private var ink
+    /// The dock's size against Medium's (DockScale): every measure below scales with the icons.
+    @Environment(\.dockScale) private var k
     let timeline: DockTimeline
 
     var body: some View {
-        let width = DockFaceMetrics.timelineWidth
-        HStack(spacing: 9) {
-            Image(systemName: "calendar.day.timeline.left").font(.system(size: DockFaceMetrics.glyph * 0.86, weight: .medium))
-                .foregroundStyle(ink.text).frame(width: DockFaceMetrics.glyph, height: DockFaceMetrics.glyph)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(timeline.label.uppercased()).font(ink.mono(10, weight: .semibold)).tracking(0.6).foregroundStyle(ink.text2).lineLimit(1)
+        let width = DockFaceMetrics.timelineWidth * k, glyph = DockFaceMetrics.glyph * k
+        HStack(spacing: 9 * k) {
+            Image(systemName: "calendar.day.timeline.left").font(.system(size: glyph * 0.86, weight: .medium))
+                .foregroundStyle(ink.text).frame(width: glyph, height: glyph)
+            VStack(alignment: .leading, spacing: 5 * k) {
+                Text(timeline.label.uppercased()).font(ink.mono(10 * k, weight: .semibold)).tracking(0.6 * k).foregroundStyle(ink.text2).lineLimit(1)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(ink.text.opacity(0.14)).frame(width: width, height: 12)
+                    Capsule().fill(ink.text.opacity(0.14)).frame(width: width, height: 12 * k)
                     ForEach(Array(timeline.spans.enumerated()), id: \.offset) { _, span in
                         let start = timeline.at(span.start) * width, end = timeline.at(span.end) * width
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        RoundedRectangle(cornerRadius: 3 * k, style: .continuous)
                             .fill(span.colour.map { Color($0) } ?? ink.accent)
-                            .frame(width: max(3, end - start), height: 12)
+                            .frame(width: max(3 * k, end - start), height: 12 * k)
                             .offset(x: start)
                     }
-                    Capsule().fill(ink.text).frame(width: 2, height: 18).offset(x: timeline.at(timeline.now) * width - 1)
+                    Capsule().fill(ink.text).frame(width: 2 * k, height: 18 * k).offset(x: timeline.at(timeline.now) * width - 1)
                 }
-                .frame(width: width, height: 18, alignment: .leading)
+                .frame(width: width, height: 18 * k, alignment: .leading)
             }
         }
         .fixedSize()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(timeline.label), \(timeline.spans.map(\.title).joined(separator: ", "))")
     }
+}
+
+/// The widgets' measures against the icons (Sven on build 2479, 2026-11-14: at Small "the widgets still show much larger
+/// then the app icons"): DockFaceMetrics are Medium's, and each size scales them by its icon over Medium's, so a widget
+/// keeps one ratio to the icons at Small, Medium and Large.
+enum DockScale {
+    static func of(_ size: DockSize) -> CGFloat { CGFloat(size.icon / DockSize.medium.icon) }
+}
+
+extension EnvironmentValues {
+    @Entry var dockScale: CGFloat = 1
 }
