@@ -44,6 +44,14 @@ final class WallpaperSettings: ScreenPausing {
     /// wide one cropped to its middle on a portrait screen (Sven 2026-10-19, Q329). On until changed.
     var fitShape: Bool { didSet { defaults.set(fitShape, forKey: Self.fitShapeKey) } }
     var order: WallpaperCycle.Order { didSet { defaults.set(order.rawValue, forKey: Self.orderKey) } }
+    /// Use my wallpaper folder for every theme (Sven 2026-11-14): on, every theme apply sets this folder's images, wide
+    /// and tall picked by each screen's shape, in place of the theme's own; off, a theme brings its own again. Off until
+    /// changed, and only read while a folder is picked.
+    var themeFolderOn: Bool { didSet { defaults.set(themeFolderOn, forKey: Self.themeFolderOnKey) } }
+    /// The folder that switch uses; nil until one is picked.
+    var themeFolder: String? { didSet { defaults.set(themeFolder, forKey: Self.themeFolderKey) } }
+    /// The folder a theme apply takes in place of the theme's own: the picked one while the switch is on.
+    var themeOverride: String? { themeFolderOn ? themeFolder : nil }
     /// The shuffle's seed: the same order until Shuffle again, so Previous goes back.
     private(set) var seed: UInt64 { didSet { defaults.set(String(seed), forKey: Self.seedKey) } }
     var scope: WallpaperCycle.Scope { didSet { defaults.set(scope.rawValue, forKey: Self.scopeKey) } }
@@ -67,7 +75,8 @@ final class WallpaperSettings: ScreenPausing {
                        foldersKey = "wallpaper.folders",
                        screenSourcesKey = "wallpaper.screenSources", fitShapeKey = "wallpaper.fitShape",
                        workspacesKey = "wallpaper.workspaces", workspaceSourcesKey = "wallpaper.workspaceSources",
-                       workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites"
+                       workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites",
+                       themeFolderOnKey = "wallpaper.themeFolderOn", themeFolderKey = "wallpaper.themeFolder"
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
@@ -82,6 +91,8 @@ final class WallpaperSettings: ScreenPausing {
         workspaceImages = (defaults.dictionary(forKey: Self.workspaceImagesKey) as? [String: String]) ?? [:]
         favourites = defaults.stringArray(forKey: Self.favouritesKey) ?? []
         fitShape = defaults.object(forKey: Self.fitShapeKey) as? Bool ?? true
+        themeFolderOn = defaults.bool(forKey: Self.themeFolderOnKey)
+        themeFolder = defaults.string(forKey: Self.themeFolderKey)
         order = defaults.string(forKey: Self.orderKey).flatMap(WallpaperCycle.Order.init) ?? .name
         seed = defaults.string(forKey: Self.seedKey).flatMap(UInt64.init) ?? UInt64.random(in: 1...UInt64.max)
         scope = defaults.string(forKey: Self.scopeKey).flatMap(WallpaperCycle.Scope.init) ?? .focusedScreen

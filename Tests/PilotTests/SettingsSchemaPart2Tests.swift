@@ -100,7 +100,8 @@ struct SettingsSchemaPart2Tests {
     static let computedOverDefaults: Set = ["update.selfUpdatingCasks"]
 
     static func sample(_ setting: SettingKey) -> (word: String, value: JSONValue)? {
-        if setting.key == "notes.folder" {
+        // Any folder that exists: the notes one stands in for the wallpaper folder every theme uses.
+        if setting.key == "notes.folder" || setting.key == "wallpaper.themeFolder" {
             let path = notesFolder.path(percentEncoded: false)
             return (path, .string(path))
         }
@@ -113,7 +114,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 53)
+        #expect(rig.schema.keys.count == 55)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
