@@ -2,19 +2,27 @@
 # A release a stranger downloads (SH4, notes §9): the signed release build in a DMG, the DMG signed, and its checksum.
 #   Scripts/release.sh <version>     e.g. 0.2.0; writes build/Pilot-<version>.dmg, its .sha256, a copy as build/Pilot.dmg, build/updates/appcast.xml
 #                                    and the terminal pack, build/PilotTerminal-<sha8>.zip (T76)
-# No notarization or staple (Q318): spctl rejects the DMG and the app, and the first launch goes through Open Anyway.
+# With a Developer ID identity (SIGN_ID="Developer ID Application: …") it notarizes too: the app, zipped, then the DMG, each
+# through notarytool submit --wait with the keychain profile pilot-notary (NOTARY_PROFILE overrides it), each stapled, and
+# checked with stapler and spctl as Gatekeeper sees a download (accepted, source=Notarized Developer ID). A rejected
+# submission prints notarytool's log. Any other identity (the self-signed "Pilot Release", the default) skips notarization,
+# so spctl rejects that DMG and its first launch goes through Open Anyway (Q318).
 # It never publishes, uploads or tags anything: putting the files on a release page is Sven's call.
 # Sparkle's public key (SH5, SH6) is Pilot's own, printed by generate_keys on 2026-10-19, kept in Packaging/sparkle-public-key.txt (the
 # commit guard reads a key in a script line as a credential, Q545); SPARKLE_ED_KEY overrides it. Of build-app.sh's inputs, PILOT_DEV, SPARKLE_FEED and
 # CONFIG are pinned, so an exported one never ships a placeholder key, a test feed or a debug build; the GhosttyKit build's
 # (GHOSTTY_TAG, GHOSTTYKIT_WORK, ZIG, GHOSTTY_LIB_DIR) still pass through.
 # RELEASE_ANY_BRANCH=1 skips the main-branch check, for testing this script in a detached worktree only.
+# RELEASE_SKIP_APPCAST=1 stops before the appcast, for testing notarization without generate_appcast reading Sparkle's
+# private key from the login Keychain; such a run is no release.
 set -euo pipefail
 ROOT=${0:a:h:h}
 VERSION=${1:?usage: Scripts/release.sh <version>}
 OUT=$ROOT/build
 DMG=$OUT/Pilot-$VERSION.dmg
 ID=${SIGN_ID:-Pilot Release}
+NOTARY=0; [[ $ID == "Developer ID Application:"* ]] && NOTARY=1
+PROFILE=${NOTARY_PROFILE:-pilot-notary}
 [[ $VERSION =~ '^[0-9]+\.[0-9]+(\.[0-9]+)?$' ]] || { echo "error: $VERSION is not a version like 0.2.0" >&2; exit 1; }
 export SPARKLE_ED_KEY=${SPARKLE_ED_KEY:-$(<"$ROOT/Packaging/sparkle-public-key.txt")}
 # Checked before minutes of building. Main and a clean tree: the DMG holds exactly a commit on main, and PilotCommit
@@ -29,6 +37,28 @@ if [[ $(git -C "$ROOT" rev-parse --is-shallow-repository) == true ]]; then
   echo "error: shallow clone; its build number would be wrong (git fetch --unshallow)" >&2; exit 1
 fi
 command -v dmgbuild >/dev/null || { echo "error: dmgbuild is missing; install it with: uv tool install dmgbuild" >&2; exit 1; }
+if (( NOTARY )) && ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
+  echo "error: notarytool cannot use the keychain profile $PROFILE; store it with: xcrun notarytool store-credentials $PROFILE" >&2; exit 1
+fi
+STAGE=$(mktemp -d "${TMPDIR:-/tmp}/pilot-release.XXXXXX")
+MNT=$STAGE/mnt
+trap '[[ -d $MNT ]] && hdiutil detach -quiet "$MNT" 2>/dev/null; rm -rf "$STAGE"' EXIT
+# Apple's notary service on one file: waits for its verdict, keeps its log, and stops the release on anything but Accepted,
+# printing the log. An accepted one still prints the log's issues (warnings that do not reject it).
+notarize() {
+  local out id state log
+  out=$(xcrun notarytool submit "$1" --keychain-profile "$PROFILE" --wait --output-format json 2>&1) || true
+  id=$(python3 -I -c 'import json, sys; print(json.loads(sys.argv[1]).get("id", ""))' "$out" 2>/dev/null || true)
+  state=$(python3 -I -c 'import json, sys; print(json.loads(sys.argv[1]).get("status", ""))' "$out" 2>/dev/null || true)
+  [[ -n $id ]] || { echo "error: notarytool submit of ${1:t} failed: $out" >&2; exit 1; }
+  log=$STAGE/notary-$id.json
+  xcrun notarytool log "$id" --keychain-profile "$PROFILE" "$log" >/dev/null 2>&1 || true
+  echo "notarized ${1:t}: $state (submission $id)"
+  if [[ $state != Accepted ]]; then
+    echo "error: Apple's notary service did not accept ${1:t}; its log:" >&2; cat "$log" >&2 2>/dev/null || true; exit 1
+  fi
+  python3 -I -c 'import json, sys; [print("notary issue:", i.get("path"), "-", i.get("message")) for i in json.load(open(sys.argv[1])).get("issues") or []]' "$log" 2>/dev/null || true
+}
 
 env -u PILOT_DEV -u SPARKLE_FEED CONFIG=release PILOT_VERSION=$VERSION SIGN_ID=$ID "$ROOT/Scripts/build-app.sh"
 APP=$OUT/Pilot.app
@@ -49,15 +79,28 @@ if /usr/libexec/PlistBuddy -c "Print :PilotTerminalURL" "$APP/Contents/Info.plis
   echo "error: the bundle names a PilotTerminalURL; a release fetches its terminal from its release page" >&2; exit 1
 fi
 
+# Notarized and stapled before it goes in the DMG, which mounts read-only: the ticket then rides inside the app, so a
+# copy dragged to Applications opens offline too.
+if (( NOTARY )); then
+  ditto -c -k --keepParent "$APP" "$STAGE/Pilot.zip"
+  notarize "$STAGE/Pilot.zip"
+  xcrun stapler staple -q "$APP"
+  xcrun stapler validate -q "$APP"
+fi
+
 # The DMG: the app and a link to Applications to drag it onto, in the install window drawn in Packaging/dmg (SH24).
 # dmgbuild lays that window out without Finder (Scripts/dmg-settings.py) and copies the app with ditto, which keeps the
 # extended attributes that hold pilot-agent-shell's signature (a script signs into xattrs, notes §1).
-STAGE=$(mktemp -d "${TMPDIR:-/tmp}/pilot-release.XXXXXX")
-MNT=$STAGE/mnt
-trap '[[ -d $MNT ]] && hdiutil detach -quiet "$MNT" 2>/dev/null; rm -rf "$STAGE"' EXIT
 dmgbuild -s "$ROOT/Scripts/dmg-settings.py" -D app="$APP" -D root="$ROOT" Pilot "$DMG" >"$STAGE/dmgbuild.log" 2>&1 \
   || { cat "$STAGE/dmgbuild.log" >&2; exit 1; }
-codesign --force --sign "$ID" --identifier dev.banozz.pilot.dmg "$DMG"
+STAMP=(); (( NOTARY )) && STAMP=(--timestamp)
+codesign --force --sign "$ID" $STAMP --identifier dev.banozz.pilot.dmg "$DMG"
+# The DMG's own submission and staple come before its checksum and the appcast's signature: stapling rewrites its bytes.
+if (( NOTARY )); then
+  notarize "$DMG"
+  xcrun stapler staple -q "$DMG"
+  xcrun stapler validate -q "$DMG"
+fi
 
 # Checked as a stranger gets it: the image is whole, and the app inside still verifies with every helper's signature.
 hdiutil verify -quiet "$DMG"
@@ -65,6 +108,11 @@ codesign --verify --strict "$DMG"
 mkdir "$MNT"
 hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$MNT" "$DMG"
 codesign --verify --strict --deep "$MNT/Pilot.app"
+if (( NOTARY )); then
+  xcrun stapler validate -q "$MNT/Pilot.app"
+  spctl -a -t open --context context:primary-signature -v "$DMG"
+  spctl -a -vv "$MNT/Pilot.app"
+fi
 hdiutil detach -quiet "$MNT" && rmdir "$MNT"
 
 # shasum -a 256 -c Pilot-<version>.dmg.sha256, run beside the download, checks it.
@@ -75,6 +123,10 @@ echo "checksum $DMG.sha256"
 cp "$DMG" "$OUT/Pilot.dmg"
 (cd "$OUT" && shasum -a 256 Pilot.dmg >Pilot.dmg.sha256)
 echo "unversioned $OUT/Pilot.dmg and Pilot.dmg.sha256"
+
+if [[ ${RELEASE_SKIP_APPCAST:-} == 1 ]]; then
+  echo "RELEASE_SKIP_APPCAST=1: stopped before the appcast; this is a test run, not a release"; exit 0
+fi
 
 # The appcast (SH7): generate_appcast signs the DMG with Sparkle's private key from the login Keychain (SH5) and writes
 # its item, sparkle:version from CFBundleVersion and sparkle:minimumSystemVersion from LSMinimumSystemVersion (27.0).
