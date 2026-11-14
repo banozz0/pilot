@@ -43,15 +43,20 @@ struct BarCrispRenders {
         let narrow: [BarSlot] = [.item(settings.entry(.terminal)), .item(settings.entry(.askAI))]
         let variants: [(String, [BarSlot])] = [("drops", drops), ("drops-clock", drops + [.item(settings.entry(.clock))]),
                                                ("narrow-clock", narrow + [.item(settings.entry(.clock))]),
-                                               ("odd", drops + [.item(settings.entry(.clock))])]
+                                               ("odd", drops + [.item(settings.entry(.clock))]),
+                                               ("right-half", drops)]
         for (name, items) in variants {
-            let odd = name == "odd"
+            let odd = name == "odd", right = name == "right-half"
             var reported: CGRect?
-            let strip = TopBarStrip(sides: [.centre: items], configuration: config, reportIsland: { side, rect in
-                if side == .centre { reported = rect }
+            // "right-half": the drops on the right side asked half a point wider (SwiftUI sizes it on whole pixels at 1x), its
+            // window kept inside the canvas: arrange() rounds x down, so the group never passes the row's end.
+            var rightGroup: CGRect?
+            let strip = TopBarStrip(sides: right ? [.right: items] : [.centre: items], configuration: config, reportIsland: { side, rect in
+                if side == (right ? .right : .centre) { reported = rect }
+                if side == .right { rightGroup = rect }
             }) {
                 TopBarSlot(slot: $0, screen: "Studio", sources: sources, store: .shared, lights: BarDropLights(open: []))
-                    .padding(.trailing, odd && $0 == items.last ? 1 : 0)
+                    .padding(.trailing, odd && $0 == items.last ? 1 : right && $0 == items.last ? 0.5 : 0)
             }
             let host = NSHostingView(rootView: strip.styled(.topBar, look: look).pilotTheme(look: look))
             host.sizingOptions = []
@@ -64,6 +69,11 @@ struct BarCrispRenders {
             defer { window.close() }
             clip.layoutSubtreeIfNeeded()
             PanelTestSupport.pump(0.6)
+            if right {
+                let grown = rightGroup.map { $0.insetBy(dx: -BarIslandShape.flare(config), dy: 0) }
+                print("bar-crisp right-half: right group \(String(describing: rightGroup)) window frame \(String(describing: BarPresetGeometry.islandFrame(grown, in: canvas)))")
+                #expect(BarPresetGeometry.islandFrame(grown, in: canvas) != nil, "the right island's window would go")
+            }
             let rect = try #require(reported)
             // As TopBarWindows.placeIsland crops it; the window takes AppKit's whole-pixel size.
             let grown = rect.insetBy(dx: -BarIslandShape.flare(config), dy: 0)
