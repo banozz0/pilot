@@ -75,7 +75,7 @@ struct HomeRenders {
     static func seedPresets() throws {
         var contents = WorkspacePresetStore.Contents()
         let app = { (bundle: String, name: String) in WorkspacePreset.App(bundleId: bundle, name: name, percent: 50) }
-        contents.assign(WorkspacePreset(name: "Work", apps: [app("com.madda.ghostex.gpui", "Ghostex"), app("com.mitchellh.ghostty", "Ghostty")], layout: .columns), to: "1")
+        contents.assign(WorkspacePreset(name: "Work", apps: [app("com.madda.ghostex.gpui", "Ghostex"), app("com.mitchellh.ghostty", "Ghostty")], layout: .scrolling), to: "1")
         contents.assign(WorkspacePreset(name: "Chat", apps: [app("com.tdesktop.Telegram", "Telegram"), app("app.zen-browser.zen", "Zen")], layout: .mainStack), to: "2")
         contents.assign(WorkspacePreset(name: "Music", apps: [app("rocks.spotifast.Spotifast", "Spotify")], layout: nil), to: "4")
         try FileManager.default.createDirectory(at: WorkspacePresetStore.standard.url.deletingLastPathComponent(), withIntermediateDirectories: true)

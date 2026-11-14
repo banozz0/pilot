@@ -20,6 +20,11 @@ extension SettingsSchema {
             .choice("tiling.scrolling.centre", "Centre the focused column on a scrolling strip", page: "workspaces",
                     PilotBlock.CentreMode.allCases, standard: .never, read: { block.block.scrolling.centre },
                     write: { mode throws(ControlError) in try await block.written { $0.scrolling.centre = mode } }),
+            // Settings' three Scrolling pictures (layouts round 1): thirds, centred or halves sets the columns a screen
+            // holds and the centring together.
+            .choice("tiling.scrolling.look", "A scrolling strip's look: three columns on screen, one centred, or two on screen", page: "workspaces",
+                    PilotBlock.StripLook.allCases, standard: .halves, read: { block.block.scrolling.look },
+                    write: { look throws(ControlError) in try await block.written { $0.scrolling.look = look } }),
             .choice("windows.dragModifier", "Hold to move or resize with the mouse", page: "tiling", DragModifier.allCases,
                     standard: .default, read: { settings.dragModifier }, write: { settings.dragModifier = $0 }),
             .choice("shelf.pictures", "The Window shelf's window pictures (Stills and Live ask Screen Recording)", page: "tiling",

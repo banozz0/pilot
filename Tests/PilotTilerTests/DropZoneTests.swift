@@ -143,7 +143,7 @@ extension TilerTreeTests {
 
         @Test func autoWorkspaceInTheSameOrderShowsNothing() throws {
             let (left, _) = try twoMonitors()
-            arrangements = [left.name: WorkspaceArrangement(.columns, auto: true, order: [1, 2])]
+            arrangements = [left.name: WorkspaceArrangement(.mainStack, auto: true, order: [1, 2])]
             #expect(try landing(dragging: 1, at: CGPoint(x: 100, y: 500)) == nil)
             #expect(try dropLanding(at: CGPoint(x: 1800, y: 500)) == Rect(topLeftX: 960, topLeftY: 0, width: 960, height: 1080))
         }

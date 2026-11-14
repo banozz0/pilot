@@ -14,7 +14,7 @@ struct WorkspaceEditorModelTests {
     static func draft(_ apps: [String], layout: LayoutPreset? = nil) -> WorkspacePresetDraft {
         var draft = WorkspacePresetDraft(nil, workspace: "1")
         // Placed under a ready layout first: under Your widths each app would take one of the three empty spots.
-        draft.layout = .columns
+        draft.layout = .rows
         for app in apps { draft.add(bundleId: "com.apple.\(app.lowercased())", name: app) }
         draft.layout = layout
         return draft
@@ -24,7 +24,7 @@ struct WorkspaceEditorModelTests {
     func oldFile() throws {
         let old = #"{"name":"Work","apps":[{"bundleId":"a","name":"A","percent":100}],"layout":"columns"}"#
         let preset = try JSONDecoder().decode(WorkspacePreset.self, from: Data(old.utf8))
-        #expect(preset.openMissing && preset.apps.map(\.atLogin) == [false] && preset.layout == .columns)
+        #expect(preset.openMissing && preset.apps.map(\.atLogin) == [false] && preset.layout == .scrolling)
         var changed = preset
         changed.openMissing = false
         changed.apps[0].atLogin = true
@@ -75,7 +75,7 @@ struct WorkspaceEditorModelTests {
         own.resize(divider: 0, to: 70)
         #expect(own.tiles(in: CGRect(x: 0, y: 0, width: 200, height: 100)) == [CGRect(x: 0, y: 0, width: 140, height: 100), CGRect(x: 140, y: 0, width: 60, height: 100)])
         // The next app's spot: the layout drawn for one more app, the last tile the dashed one.
-        #expect(Self.draft(["A", "B"], layout: .columns).tiles(in: area, next: true).map(\.width) == [100, 100, 100])
+        #expect(Self.draft(["A", "B"], layout: .scrolling).tiles(in: area, next: true).map(\.width) == [100, 100, 100])
         #expect(WorkspacePresetDraft(nil, workspace: "1").tiles(in: area).isEmpty)
     }
 
@@ -130,8 +130,8 @@ struct WorkspaceEditorModelTests {
     func places() {
         func places(_ draft: WorkspacePresetDraft) -> [String] { draft.apps.indices.map(draft.place) }
         #expect(places(Self.draft(["A", "B", "C"], layout: .mainStack)) == ["main", "stack 1", "stack 2"])
-        #expect(places(Self.draft(["A", "B"], layout: .columns)) == ["left", "right"])
-        #expect(places(Self.draft(["A", "B", "C", "D"], layout: .columns)) == ["column 1", "column 2", "column 3", "column 4"])
+        #expect(places(Self.draft(["A", "B"], layout: .scrolling)) == ["column 1", "column 2"])
+        #expect(places(Self.draft(["A", "B", "C"], layout: .centred)) == ["centre", "right 1", "left 1"])
         #expect(places(Self.draft(["A", "B", "C"], layout: .rows)) == ["top", "middle", "bottom"])
         #expect(places(Self.draft(["A", "B", "C"], layout: .grid)) == ["top left", "bottom left", "right"])
         #expect(places(Self.draft(["A", "B", "C", "D", "E", "F", "G", "H"], layout: .grid)).suffix(3) == ["column 3, bottom", "column 4, top", "column 4, bottom"])
@@ -148,7 +148,7 @@ struct WorkspaceEditorModelTests {
         let draft = WorkspacePresetDraft.fresh(workspace: "3", row: WorkspaceLayout(preset: .rows, auto: false))
         #expect(draft.name.isEmpty && draft.apps.isEmpty && draft.layout == .rows && !draft.keepLayout)
         #expect(draft.problem == "Name the preset")
-        #expect(WorkspacePresetDraft.fresh(workspace: "3", row: nil).layout == .columns)
+        #expect(WorkspacePresetDraft.fresh(workspace: "3", row: nil).layout == .scrolling)
         #expect(WorkspacePresetDraft.fresh(workspace: "3", row: nil).keepsLayout)
         // A row with no layout preset has no Auto to keep (the Workspaces page greys it out): Keep this layout starts on.
         #expect(WorkspacePresetDraft.fresh(workspace: "3", row: WorkspaceLayout(preset: nil, auto: false)).keepsLayout)
@@ -156,13 +156,13 @@ struct WorkspaceEditorModelTests {
 
     @Test("Keep this layout follows the workspace's auto, is off under own sizes, and saving sets the row's auto to it")
     func keepLayout() {
-        var draft = WorkspacePresetDraft(nil, workspace: "1", row: WorkspaceLayout(preset: .columns, auto: true))
+        var draft = WorkspacePresetDraft(nil, workspace: "1", row: WorkspaceLayout(preset: .scrolling, auto: true))
         #expect(draft.layout == nil && !draft.keepsLayout)
         draft.layout = .grid
         #expect(draft.keepsLayout)
         draft.keepLayout = false
         #expect(!draft.keepsLayout)
-        let row = WorkspaceLayout(preset: .columns, auto: true)
+        let row = WorkspaceLayout(preset: .scrolling, auto: true)
         let ready = WorkspacePreset(name: "w", apps: [], layout: .grid)
         #expect(row.saving(ready, auto: false) == WorkspaceLayout(preset: .grid, auto: false))
         #expect(row.saving(ready) == WorkspaceLayout(preset: .grid, auto: true))
@@ -170,7 +170,7 @@ struct WorkspaceEditorModelTests {
 
     @Test("The draft carries open what is missing and At login into the preset it saves")
     func carried() {
-        var draft = Self.draft(["Ghostty", "Zen"], layout: .columns)
+        var draft = Self.draft(["Ghostty", "Zen"], layout: .scrolling)
         draft.openMissing = false
         draft.setAtLogin(true, at: 0)
         #expect(draft.preset?.openMissing == false && draft.preset?.apps.map(\.atLogin) == [true, false])
@@ -181,17 +181,17 @@ struct WorkspaceEditorModelTests {
     func openMissingOff() async throws {
         let tiler = Fake.FakeTiler(windows: [Fake.window(10, "Finder", workspace: "2"), Fake.window(11, "TextEdit", workspace: "1")], focused: "2")
         let opener = Fake.FakeOpener(tiler, lands: "2")
-        var preset = WorkspacePreset(name: "Work", apps: [Fake.app("Finder"), Fake.app("TextEdit"), Fake.app("Notes")], layout: .columns)
+        var preset = WorkspacePreset(name: "Work", apps: [Fake.app("Finder"), Fake.app("TextEdit"), Fake.app("Notes")], layout: .scrolling)
         preset.openMissing = false
         let outcome = try await Fake.apply(preset, tiler, opener)
         #expect(opener.opened.isEmpty && outcome.opened.isEmpty && outcome.missing.isEmpty)
         #expect(tiler.moves == [.moveWindow(id: 11, toWorkspace: "2")])
-        #expect(tiler.evals.last == LayoutPreset.columns.commands(workspace: "2", windows: [10, 11]))
+        #expect(tiler.evals.last == LayoutPreset.scrolling.commands(workspace: "2", windows: [10, 11]))
     }
 
     static func contents() -> WorkspacePresetStore.Contents {
         var contents = WorkspacePresetStore.Contents()
-        var work = WorkspacePreset(name: "Work", apps: [Fake.app("Ghostty"), Fake.app("Zen")], layout: .columns)
+        var work = WorkspacePreset(name: "Work", apps: [Fake.app("Ghostty"), Fake.app("Zen")], layout: .scrolling)
         work.apps[0].atLogin = true
         var chat = WorkspacePreset(name: "Chat", apps: [Fake.app("Telegram"), Fake.app("Ghostty")], layout: nil)
         chat.apps[0].atLogin = true

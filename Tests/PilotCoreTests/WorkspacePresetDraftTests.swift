@@ -78,7 +78,7 @@ struct WorkspacePresetDraftTests {
 
     @Test("Saving a ready layout sets the workspace's layout row to it, auto kept; own sizes take the preset off, so auto has nothing to rebuild, and keep auto")
     func layoutRow() {
-        let row = WorkspaceLayout(preset: .columns, auto: true)
+        let row = WorkspaceLayout(preset: .scrolling, auto: true)
         let ready = WorkspacePreset(name: "w", apps: [], layout: .grid)
         #expect(row.saving(ready) == WorkspaceLayout(preset: .grid, auto: true))
         let own = WorkspacePreset(name: "w", apps: [], layout: nil)

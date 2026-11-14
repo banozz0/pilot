@@ -11,6 +11,8 @@ public struct TilerSettings: Equatable, Sendable {
     /// width; how much of a column past an open edge stays on screen, in points; how long a strip scroll glides (nil jumps).
     var scrollingWidths: [CGFloat] = [1.0 / 3, 1.0 / 2, 2.0 / 3, 1]
     var scrollingNewWidth: CGFloat = 1.0 / 3
+    /// Pilot: every column's width once a window comes or goes, a half, or a third with Settings' Three on screen.
+    var scrollingAutomaticWidth: CGFloat = Strip.automaticWidth
     var scrollingSliver: CGFloat = 5
     var scrollingGlide: Duration? = .milliseconds(350)
     /// Pilot (scrolling layout T9): when the strip centres the focused column.

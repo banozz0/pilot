@@ -29,7 +29,7 @@ extension TilerTreeTests {
 
         /// One more window lands in the tree the layout builds for one more, from 0 to 5 windows (the split's sixth halves
         /// the newest tile), Keep on and off.
-        @Test(arguments: [false, true], [LayoutPreset.mainStack, .dwindle, .centred, .columns, .rows, .grid])
+        @Test(arguments: [false, true], [LayoutPreset.mainStack, .centred, .rows, .grid])
         func aNewWindowLandsWhereTheLayoutPutsIt(auto: Bool, preset: LayoutPreset) async throws {
             for n in 0...5 {
                 try setUpWorkspacesForTests()

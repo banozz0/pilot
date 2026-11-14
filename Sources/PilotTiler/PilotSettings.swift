@@ -23,9 +23,11 @@ extension TilerSettings {
             outer: .init(left: .constant(outer), bottom: docks.isEmpty ? .constant(outer) : .perMonitor(docks, default: outer), top: bars.isEmpty ? .constant(outer) : .perMonitor(bars, default: outer), right: .constant(outer)),
         )
         // Spec scrolling-layout T8 (Sven's Q42 and Q43, 2026-10-12): widths fit the window count and the strip glides at one
-        // speed; the block's new width and speed still decode, hidden, and set nothing.
+        // speed; the block's new width and speed still decode, hidden, and set nothing. A column is a half or (layouts round
+        // 1, Sven 2026-11-14) a third of the screen, as many as the strip shows on it.
         scrollingWidths = block.scrolling.widths.map { CGFloat($0.fraction) }
-        scrollingNewWidth = Strip.automaticWidth
+        scrollingAutomaticWidth = 1 / CGFloat(min(max(block.scrolling.onScreen, 2), 3))
+        scrollingNewWidth = scrollingAutomaticWidth
         scrollingSliver = CGFloat(block.scrolling.sliver)
         scrollingGlide = Strip.glide
         scrollingCentre = block.scrolling.centre

@@ -366,12 +366,9 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
         let across = ["left", "middle", "right"], down = ["top", "middle", "bottom"]
         switch layout {
         case .mainStack: return index == 0 ? "main" : "stack \(index)"
-        case .dwindle: return n == 1 ? "whole screen" : "tile \(index + 1)"
         case .centred:
-            if n < 3 { return along(index, of: n, across, "column") }
             return index == 0 ? "centre" : index % 2 == 1 ? "right \((index + 1) / 2)" : "left \(index / 2)"
         case .rows: return along(index, of: n, down, "row")
-        case .columns: return along(index, of: n, across, "column")
         case .scrolling: return n == 1 ? "whole screen" : "column \(index + 1)"
         case .stage: return index == 0 ? "stage" : "shelf \(index)"
         case nil: return "\(along(index, of: n, across, "column")), \(apps[index].percent) %"
@@ -391,11 +388,11 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
     }
 
     /// A workspace with no preset yet (mockup E's new workspace): no name, so the field shows its example; the
-    /// workspace's own layout, else Columns; Keep this layout from its auto, on when the row has no layout to keep.
+    /// workspace's own layout, else Scrolling (Columns went, 2026-11-14); Keep this layout from its auto, on when the row has no layout to keep.
     public static func fresh(workspace: String, row: WorkspaceLayout?) -> WorkspacePresetDraft {
         var draft = WorkspacePresetDraft(nil, workspace: workspace, row: row)
         draft.name = ""
-        draft.layout = row?.preset ?? .columns
+        draft.layout = row?.preset ?? .scrolling
         draft.keepLayout = row?.preset == nil || row?.auto == true
         return draft
     }
@@ -431,7 +428,7 @@ extension WorkspaceLayout {
 ///    app is opened; nothing opens for an app that has a window anywhere, so no duplicates;
 /// 2. opened apps get up to `launchWait` for a window, moved in if an app rule put it elsewhere;
 /// 3. one `tiler eval`: preset windows tiled, then a ready layout's commands (LayoutPreset) over the preset's
-///    windows in list order and the workspace's other tiles after them; own sizes take the columns layout, then, after a
+///    windows in list order and the workspace's other tiles after them; own sizes lay them side by side (LayoutPreset.sideBySide), then, after a
 ///    settle, resizes from the frames on screen so each preset tile gets its percent of the space the other tiles leave.
 @MainActor
 public struct WorkspacePresetApply {
@@ -503,7 +500,8 @@ public struct WorkspacePresetApply {
         let ids = placed.map(\.id)
         let tile: [AeroCommand] = here.filter { $0.isFloating && ids.contains($0.id) }.map { .setFloating(id: $0.id, false) }
         let tiles = ids + here.filter { !$0.isFloating && !ids.contains($0.id) }.map(\.id)
-        try await tiler.run(.eval(tile + (preset.layout ?? .columns).commands(workspace: workspace, windows: tiles)))
+        try await tiler.run(.eval(tile + (preset.layout.map { $0.commands(workspace: workspace, windows: tiles) }
+                                          ?? LayoutPreset.sideBySide(workspace: workspace, windows: tiles))))
         guard preset.layout == nil else { return outcome }
 
         try await Task.sleep(for: timing.settle)

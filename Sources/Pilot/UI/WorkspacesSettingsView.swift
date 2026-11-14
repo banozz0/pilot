@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import PilotCore
+import PilotTiler
 
 /// Workspaces in the editor's look (card agent-bo-95423003, Sven 2026-10-07: "i explicitly said how it should look so i
 /// can customise each workspace ... why is half the screen empty"; simplify-pages T18): Add and Delete (Sven 2026-10-17:
@@ -300,8 +301,8 @@ extension View {
     }
 }
 
-/// The scrolling layout's centre mode and column rules (spec scrolling-layout T9, T11; Sven via coordinator 21,
-/// 2026-10-20): under the editor while the picked workspace's layout is Scrolling (Sven 2026-10-30), while Tiling's
+/// The scrolling layout's strip picture and column rules (spec scrolling-layout T9, T11; Sven via coordinator 21,
+/// 2026-10-20; the pictures, layouts round 1, Sven 2026-11-14): under the editor while the picked workspace's layout is Scrolling (Sven 2026-10-30), while Tiling's
 /// Scrolling block stays hidden (Q43).
 /// A rule added here changes nothing until its width or focus does.
 struct WorkspaceScrollingBlock: View {
@@ -311,8 +312,7 @@ struct WorkspaceScrollingBlock: View {
     var given: [(name: String, bundle: String)]? = nil
     @State private var apps: [(name: String, bundle: String)] = []
 
-    static let info = "For workspaces in the Scrolling layout: where the strip puts the column you focus, and apps whose column keeps its own width or whose new windows leave focus where it was."
-    static let centres = PilotBlock.CentreMode.allCases.map { (value: $0, title: $0.title) }
+    static let info = "For workspaces in the Scrolling layout: how many columns the screen holds and whether the one you focus sits in the middle, and apps whose column keeps its own width or whose new windows leave focus where it was."
     static let widths: [(value: PilotBlock.ColumnWidth?, title: String)] = [(nil, "Automatic")] + PilotBlock.ColumnWidth.allCases.map { ($0, $0.title) }
 
     var body: some View {
@@ -321,9 +321,8 @@ struct WorkspaceScrollingBlock: View {
             InfoMark(text: Self.info)
         } content: {
             BlockRow(first: true) {
-                Text("Centre the focused column").lineLimit(1)
-                Spacer()
-                Segments(selection: block.binding(\.scrolling.centre), options: Self.centres, label: "Centre the focused column")
+                StripLookPictures(picked: block.block.scrolling.look) { look in block.edit { $0.scrolling.look = look } }
+                Spacer(minLength: 0)
             }
             ForEach(rules, id: \.appId) { rule in
                 let name = shown.first { $0.bundle == rule.appId }?.name ?? AppsModule.displayName(rule.appId)
@@ -360,6 +359,79 @@ struct WorkspaceScrollingBlock: View {
         block.edit { block in
             if let i = block.scrolling.apps.firstIndex(where: { $0.appId == app }) { change(&block.scrolling.apps[i]) }
         }
+    }
+}
+
+/// Scrolling's three pictures in place of its centre words (layouts round 1, Sven 2026-11-14): three columns on screen
+/// and a fourth to scroll to; the focused one in the middle with the others to its sides; two on screen and a third to
+/// scroll to. Each is the real strip (StripPreview) on a small screen, the focused column stronger, what is scrolled off
+/// faint past the screen's edges; the picked one lit in the accent, its name bold.
+struct StripLookPictures: View {
+    @Environment(\.ink) private var ink
+    let picked: PilotBlock.StripLook
+    let pick: (PilotBlock.StripLook) -> Void
+    @State private var hovered: PilotBlock.StripLook?
+
+    static let screen = CGSize(width: 84, height: 48)
+    /// Room either side of the screen for the columns scrolled off.
+    static let margin: CGFloat = 16
+
+    /// Each picture's columns and the focused one.
+    static func shown(_ look: PilotBlock.StripLook) -> (count: Int, focus: Int) {
+        switch look {
+        case .thirds: (4, 0)
+        case .centred: (3, 1)
+        case .halves: (3, 0)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(PilotBlock.StripLook.allCases, id: \.self) { look in
+                let on = look == picked
+                Button { pick(look) } label: {
+                    VStack(spacing: 5) {
+                        picture(look, on: on)
+                        Text(look.title).font(.system(size: 12, weight: on ? .semibold : .regular)).foregroundStyle(on ? ink.text : ink.text2).lineLimit(1)
+                    }
+                    .padding(6)
+                    .background(ink.text.opacity(hovered == look ? 0.06 : 0), in: .rect(cornerRadius: ink.radius(7)))
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.kitPress)
+                .onHover { inside in hovered = inside ? look : hovered == look ? nil : hovered }
+                .accessibilityLabel("Scrolling: \(look.title)")
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+    }
+
+    private func picture(_ look: PilotBlock.StripLook, on: Bool) -> some View {
+        let (count, focus) = Self.shown(look), screen = Self.screen
+        let frames = StripPreview.frames(count, look: look, focus: focus, in: screen)
+        let shape = RoundedRectangle(cornerRadius: ink.radius(4), style: .continuous)
+        let columns = { (faint: Bool) in
+            ZStack(alignment: .topLeading) {
+                ForEach(frames.indices, id: \.self) { i in
+                    let r = frames[i].insetBy(dx: 1.5, dy: 4)
+                    RoundedRectangle(cornerRadius: ink.radius(2), style: .continuous)
+                        .fill(i == focus ? (on ? ink.accent.opacity(0.75) : ink.text2.opacity(0.6)) : (on ? ink.accent.opacity(0.35) : ink.line2))
+                        .opacity(faint ? 0.35 : 1)
+                        .frame(width: r.width, height: r.height)
+                        .offset(x: r.minX, y: r.minY)
+                }
+            }
+            .frame(width: screen.width, height: screen.height, alignment: .topLeading)
+        }
+        return ZStack {
+            columns(true)
+            columns(false).clipShape(shape)
+            shape.strokeBorder(on ? ink.accent : ink.line2, lineWidth: on ? 1.5 : 1)
+        }
+        .frame(width: screen.width, height: screen.height)
+        .padding(.horizontal, Self.margin)
+        .clipped()
+        .accessibilityHidden(true)
     }
 }
 

@@ -63,13 +63,22 @@ extension Workspace {
         for child in root.children { try child.unbindFromParent() }
         root.layout = switch preset { case .scrolling: .scrolling; case .stage: .stage; default: .tiles }
         // The root has no container above to flip. A strip or a stage is a column per window, as is a lone window.
-        guard let tree = preset.tree(windows.count, in: areaSize), case .split(let sideways, let parts) = tree else {
+        let room = preset.room(windows.count, in: CGRect(origin: .zero, size: areaSize)).size
+        guard let tree = preset.tree(windows.count, in: room), case .split(let sideways, let parts) = tree else {
             root.changeOrientation(preset == .rows ? .v : .h)
             for window in windows { try window.bind(to: root, adaptiveWeight: 1, index: INDEX_BIND_LAST) }
             return
         }
         root.changeOrientation(sideways ? .h : .v)
-        try root.bind(parts, sideways: sideways, extent: areaSize, windows)
+        try root.bind(parts, sideways: sideways, extent: room, windows)
+    }
+
+    /// The part of `padded` this workspace's tiles take: its arrangement's room (LayoutPreset.room), all of it but for
+    /// Centred main with one or two windows.
+    @MainActor
+    func arrangedRoom(_ padded: Rect) throws -> Rect {
+        guard let kept = arrangements[name], kept.preset == .centred else { return padded }
+        return kept.preset.room(try rootTilingContainer.allLeafWindowsRecursive.count, in: padded.cgRect).engineRect
     }
 
     /// The room the workspace's tiles share, which its trees cut by its shape and weigh their tiles in.
@@ -96,17 +105,17 @@ extension TilingContainer {
     }
 
     /// Where one more tiled window goes on this root, arranged as `kept`: the slot `arrange` gives the last of its
-    /// windows, reshaping the tree around the windows already there, which keep their sizes. Main + stack and dwindle
-    /// halve the tile their tree names; centred main stacks it on its side; grid on its last column. A tree changed by
+    /// windows, reshaping the tree around the windows already there, which keep their sizes. Main + stack halves the
+    /// tile its tree names; centred main stacks it on its side; grid on its last column. A tree changed by
     /// hand since is taken as it is.
     @MainActor
     func nextSlot(_ kept: WorkspaceArrangement) throws -> BindingData {
         let last = BindingData(parent: self, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         switch kept.preset {
-            case .columns, .rows, .scrolling, .stage: return last
+            case .rows, .scrolling, .stage: return last
             case .grid: return BindingData(parent: try nextGridColumn(), adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
             case .centred: return try nextCentredSlot() ?? last
-            case .mainStack, .dwindle:
+            case .mainStack:
                 let windows = allLeafWindowsRecursive
                 guard let workspace = nodeWorkspace, let (target, sideways) = kept.preset.growth(adding: windows.count, in: workspace.areaSize)
                 else { return last }

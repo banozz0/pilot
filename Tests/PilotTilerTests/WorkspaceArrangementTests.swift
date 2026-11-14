@@ -56,16 +56,12 @@ extension TilerTreeTests {
                     start += weight
                 }
             }
-            try walk(workspace.rootTilingContainer, area)
+            try walk(workspace.rootTilingContainer, preset.room(n, in: area))
             for (i, tile) in preset.tiles(n, in: area).enumerated() {
                 let frame = try #require(frames[UInt32(i + 1)])
                 #expect(abs(frame.minX - tile.minX) < 0.5 && abs(frame.minY - tile.minY) < 0.5 && abs(frame.width - tile.width) < 0.5
                         && abs(frame.height - tile.height) < 0.5, "\(preset) with \(n): window \(i + 1) at \(frame), its tile \(tile)")
             }
-        }
-
-        @Test(arguments: 1...5) func columns(n: Int) throws {
-            try expectArranged(.columns, n, .h_tiles(windows(1...n)))
         }
 
         @Test(arguments: 1...5) func rows(n: Int) throws {
@@ -115,8 +111,8 @@ extension TilerTreeTests {
 
         @Test func orderIsKept() throws {
             let workspace = try scrambled(3)
-            try workspace.arrange(.columns, order: [3, 1, 2])
-            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles(windows([3, 1, 2])))
+            try workspace.arrange(.rows, order: [3, 1, 2])
+            #expect(try workspace.rootTilingContainer.layoutDescription == .v_tiles(windows([3, 1, 2])))
         }
 
         @Test func pilotsPresetIsBuiltFocusedFirst() async throws {
@@ -135,8 +131,8 @@ extension TilerTreeTests {
             #expect(arrangements[name]?.order == [2, 1, 3])
             try await tiler.arrange(name, as: .mainStack)
             // A later settings change keeps the order that build made.
-            tiler.setLayouts([name: WorkspaceLayout(preset: .columns, auto: true)])
-            #expect(arrangements[name] == WorkspaceArrangement(.columns, auto: true, order: [2, 1, 3]))
+            tiler.setLayouts([name: WorkspaceLayout(preset: .scrolling, auto: true)])
+            #expect(arrangements[name] == WorkspaceArrangement(.scrolling, auto: true, order: [2, 1, 3]))
             await #expect(throws: TilerCallRefused.self) { try await tiler.arrange("nowhere", as: .rows) }
         }
 
@@ -189,10 +185,10 @@ extension TilerTreeTests {
         @Test func manualAndDraggedWorkspacesAreLeftAlone() throws {
             let workspace = try scrambled(2)
             let before = try workspace.layoutDescription
-            arrangements = [name: WorkspaceArrangement(.columns, auto: false, order: [])]
+            arrangements = [name: WorkspaceArrangement(.rows, auto: false, order: [])]
             try arrangeAutoWorkspaces()
             #expect(try workspace.layoutDescription == before)
-            arrangements = [name: WorkspaceArrangement(.columns, auto: true, order: [])]
+            arrangements = [name: WorkspaceArrangement(.rows, auto: true, order: [])]
             currentlyManipulatedWithMouseWindowId = 2
             defer { currentlyManipulatedWithMouseWindowId = nil }
             try arrangeAutoWorkspaces()

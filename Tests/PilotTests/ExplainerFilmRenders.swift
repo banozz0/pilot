@@ -867,7 +867,7 @@ struct ExplainerFilmRenders {
         // The film's workspaces: the browser and Ghostty on 1, Notes on 2, Music on 4.
         var presets = WorkspacePresetStore.Contents()
         let app = { (bundle: String, name: String) in WorkspacePreset.App(bundleId: bundle, name: name, percent: 50) }
-        presets.assign(WorkspacePreset(name: "Work", apps: [app("com.apple.Safari", "Safari"), app("com.mitchellh.ghostty", "Ghostty")], layout: .columns), to: "1")
+        presets.assign(WorkspacePreset(name: "Work", apps: [app("com.apple.Safari", "Safari"), app("com.mitchellh.ghostty", "Ghostty")], layout: .scrolling), to: "1")
         presets.assign(WorkspacePreset(name: "Writing", apps: [app("com.apple.Notes", "Notes")], layout: .mainStack), to: "2")
         presets.assign(WorkspacePreset(name: "Music", apps: [app("com.apple.Music", "Music")], layout: nil), to: "4")
         try FileManager.default.createDirectory(at: WorkspacePresetStore.standard.url.deletingLastPathComponent(), withIntermediateDirectories: true)

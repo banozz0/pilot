@@ -36,22 +36,51 @@ public struct PilotBlock: Codable, Equatable, Sendable {
         public var speed: ScrollSpeed
         public var centre: CentreMode
         public var apps: [ColumnRule]
+        /// How many columns fill the screen, 2 or 3 (layouts round 1, Sven 2026-11-14): a column without a width of its own
+        /// is that share of it. Two was the only one before (Q42).
+        public var onScreen: Int
         public init(widths: [ColumnWidth] = [.third, .half, .twoThirds, .full], newWidth: ColumnWidth = .third, sliver: Int = 5,
-                    speed: ScrollSpeed = .smooth, centre: CentreMode = .never, apps: [ColumnRule] = []) {
+                    speed: ScrollSpeed = .smooth, centre: CentreMode = .never, apps: [ColumnRule] = [], onScreen: Int = 2) {
             self.widths = widths; self.newWidth = newWidth; self.sliver = sliver; self.speed = speed; self.centre = centre; self.apps = apps
+            self.onScreen = onScreen
         }
 
-        /// Settings saved before T9 have no `centre` (never), before T11 no `apps`.
+        /// Settings saved before T9 have no `centre` (never), before T11 no `apps`, before layouts round 1 no `onScreen` (2).
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.init(widths: try c.decode([ColumnWidth].self, forKey: .widths), newWidth: try c.decode(ColumnWidth.self, forKey: .newWidth),
                       sliver: try c.decode(Int.self, forKey: .sliver), speed: try c.decode(ScrollSpeed.self, forKey: .speed),
                       centre: try c.decodeIfPresent(CentreMode.self, forKey: .centre) ?? .never,
-                      apps: try c.decodeIfPresent([ColumnRule].self, forKey: .apps) ?? [])
+                      apps: try c.decodeIfPresent([ColumnRule].self, forKey: .apps) ?? [],
+                      onScreen: try c.decodeIfPresent(Int.self, forKey: .onScreen) ?? 2)
         }
+
+        /// The settings' picture of the strip, Sven's three (2026-11-14): three columns on screen and scroll for the
+        /// fourth; one centred with the others to its sides (centre always, two to a screen); two on screen and scroll
+        /// for the third. Picking one sets `onScreen` and `centre`.
+        public var look: StripLook {
+            get { centre == .always ? .centred : onScreen == 3 ? .thirds : .halves }
+            set { onScreen = newValue.onScreen; centre = newValue.centre }
+        }
+
+        public static let onScreenRange = 2...3
 
         /// The sliver Settings and `pilot set` allow, in points.
         public static let sliverRange = 1...20
+    }
+
+    /// The scrolling strip's three pictures in Settings (Scrolling.look).
+    public enum StripLook: String, Codable, CaseIterable, Sendable {
+        case thirds, centred, halves
+        public var title: String {
+            switch self {
+            case .thirds: "Three on screen"
+            case .centred: "One centred"
+            case .halves: "Two on screen"
+            }
+        }
+        public var onScreen: Int { self == .thirds ? 3 : 2 }
+        public var centre: CentreMode { self == .centred ? .always : .never }
     }
 
     /// A column's width as a share of the monitor's usable width, by the word Settings and `pilot set` show.

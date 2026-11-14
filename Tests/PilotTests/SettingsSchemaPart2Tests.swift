@@ -113,7 +113,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: Self.notesFolder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 52)
+        #expect(rig.schema.keys.count == 53)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -245,7 +245,7 @@ struct SettingsSchemaPart2Tests {
     ]
 
     /// A blob whose fields are keys under other names.
-    static let blobs: [String: [String]] = ["pilotBlock": ["tiling.gaps.on", "tiling.gaps.inner", "tiling.gaps.outer", "tiling.scrolling.centre"],
+    static let blobs: [String: [String]] = ["pilotBlock": ["tiling.gaps.on", "tiling.gaps.inner", "tiling.gaps.outer", "tiling.scrolling.centre", "tiling.scrolling.look"],
                                             "topBar.switch": ["topBar.on"],
                                             "stats.views": ["stats.layout", "stats.show"] + StatsCard.allCases.map { "stats.card.\($0.rawValue)" }]
     /// Lists a collection verb edits (`pilot list`, `add`, `remove`).

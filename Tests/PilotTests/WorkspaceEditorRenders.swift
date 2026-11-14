@@ -79,7 +79,7 @@ struct WorkspaceEditorRenders {
         contents.assign(WorkspacePreset(name: "Read", apps: [Self.app("Zen", percent: 25), Self.app("Obsidian", percent: 25),
                                                              Self.app("Visual Studio Code", percent: 25), Self.app("Ghostty", percent: 25)],
                                         layout: .scrolling), to: "4")
-        contents.presets["Chat"] = WorkspacePreset(name: "Chat", apps: [Self.app("Telegram", percent: 50), Self.app("WhatsApp", percent: 50)], layout: .columns)
+        contents.presets["Chat"] = WorkspacePreset(name: "Chat", apps: [Self.app("Telegram", percent: 50), Self.app("WhatsApp", percent: 50)], layout: .scrolling)
         // 5: main + stack with nothing in it, Sven's 2026-10-30 screenshot; 6: main + stack with one app. Both draw the
         // layout's empty spots.
         contents.assign(WorkspacePreset(name: "Solo", apps: [Self.app("Ghostty", percent: 100)], layout: .mainStack), to: "6")

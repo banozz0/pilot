@@ -34,12 +34,12 @@ struct LayoutGlyph: View {
     let preset: LayoutPreset
     static let size = CGSize(width: 16, height: 11)
 
-    /// Enough windows to tell each apart: Main + stack's 2x2 half and Dwindle's spiral show at five.
+    /// Enough windows to tell each apart: Main + stack's 2x2 half shows at five.
     static func count(_ preset: LayoutPreset) -> Int {
         switch preset {
-        case .mainStack, .dwindle: 5
+        case .mainStack: 5
         case .grid, .scrolling: 4
-        case .centred, .columns, .rows, .stage: 3
+        case .centred, .rows, .stage: 3
         }
     }
 

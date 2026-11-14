@@ -146,7 +146,8 @@ func landing(of plan: DropPlan, for window: Window) throws -> Rect? {
                 return try target.rootTilingContainer.stripLanding(of: window, at: slot, among: others, on: target.workspaceMonitor)
             }
             let area = target.workspaceMonitor.visibleRectPaddedByOuterGaps
-            let frame = try target.rootTilingContainer.lastAppliedLayoutPhysicalRect ?? area
+            // Centred main's root takes only its room; its tiles are cut from the whole area, room and all.
+            let frame = kept.preset == .centred ? area : try target.rootTilingContainer.lastAppliedLayoutPhysicalRect ?? area
             let inner = ResolvedGaps(gaps: config.gaps, monitor: target.workspaceMonitor).inner
             return kept.preset.tiles(kept.order.count, in: frame.cgRect)[slot].engineRect.inset(within: frame, by: inner)
         case .insert(let parent, let index):

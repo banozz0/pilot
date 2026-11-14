@@ -6,8 +6,8 @@ import Testing
 /// while Sven looks at another, Save writing a preset, or the layout alone when no app is placed.
 @Suite("Workspace page drafts")
 struct WorkspacePageDraftsTests {
-    static let work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "a", name: "A", percent: 50), .init(bundleId: "b", name: "B", percent: 50)], layout: .columns)
-    static let row = WorkspaceLayout(preset: .columns, auto: true)
+    static let work = WorkspacePreset(name: "Work", apps: [.init(bundleId: "a", name: "A", percent: 50), .init(bundleId: "b", name: "B", percent: 50)], layout: .scrolling)
+    static let row = WorkspaceLayout(preset: .scrolling, auto: true)
 
     @Test("Untouched, a workspace shows its saved preset and is not edited; an edit sticks per workspace until it matches again")
     func edits() {
@@ -45,10 +45,10 @@ struct WorkspacePageDraftsTests {
         draft.name = ""
         #expect(WorkspacePageDrafts.save(draft, workspace: "1", hadPreset: true) == .layout(.init(preset: .rows, auto: true), removePreset: true))
         var fresh = WorkspacePresetDraft.fresh(workspace: "3", row: nil)
-        #expect(WorkspacePageDrafts.save(fresh, workspace: "3", hadPreset: false) == .layout(.init(preset: .columns, auto: true), removePreset: false))
+        #expect(WorkspacePageDrafts.save(fresh, workspace: "3", hadPreset: false) == .layout(.init(preset: .scrolling, auto: true), removePreset: false))
         fresh.add(bundleId: "a", name: "A")
         #expect(WorkspacePageDrafts.save(fresh, workspace: "3", hadPreset: false)
-                == .preset(WorkspacePreset(name: "Workspace 3", apps: [.init(bundleId: "a", name: "A", percent: 100)], layout: .columns), keepLayout: true))
+                == .preset(WorkspacePreset(name: "Workspace 3", apps: [.init(bundleId: "a", name: "A", percent: 100)], layout: .scrolling), keepLayout: true))
         fresh.layout = nil
         fresh.setPercent(90, at: 0)
         #expect(WorkspacePageDrafts.save(fresh, workspace: "3", hadPreset: false) == .refused("Sizes add up to 90 %, not 100 %"))

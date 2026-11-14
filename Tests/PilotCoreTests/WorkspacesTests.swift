@@ -88,7 +88,7 @@ struct WorkspacesTests {
         let r = WorkspaceRenumber(deleting: "2", from: Workspaces.names(4))
         let app = WorkspacePreset.App(bundleId: "a", name: "A", percent: 100)
         var contents = WorkspacePresetStore.Contents()
-        contents.assign(WorkspacePreset(name: "Chat", apps: [app], layout: .columns), to: "2")
+        contents.assign(WorkspacePreset(name: "Chat", apps: [app], layout: .scrolling), to: "2")
         contents.assign(WorkspacePreset(name: "Read", apps: [app], layout: .rows), to: "3")
         contents.assign(WorkspacePreset(name: "Workspace 4", apps: [app], layout: nil), to: "4")
         let next = contents.renumbered(r)
