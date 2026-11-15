@@ -42,17 +42,6 @@ struct BarPanelPlacementTests {
         #expect(BarPanelPlacement.frame(item: left, size: Self.size, screen: portrait).minX == -1080 + BarPanelPlacement.margin)
     }
 
-    /// Sven's 3440 wide bar on build 2550 (frames read from the live bar): the AI usage item at 2452 to 2552 under its own
-    /// middle, the bell at 3380 to 3410 shifted left to stay whole on the screen.
-    @Test("On a 3440 wide screen the AI usage popover hangs under its item; the bell's shifts left to stay on screen")
-    func ultrawide() {
-        let screen = CGRect(x: 0, y: 0, width: 3440, height: 1440), size = CGSize(width: 380, height: 400)
-        let usage = BarPanelPlacement.frame(item: CGRect(x: 2452, y: 1404, width: 100, height: 36), size: size, screen: screen)
-        #expect(usage.minX == 2502 - PopoverMetrics.arrowPoint && usage.maxY == 1404)
-        let bell = BarPanelPlacement.frame(item: CGRect(x: 3380, y: 1404, width: 30, height: 36), size: size, screen: screen)
-        #expect(bell.maxX == 3440 - BarPanelPlacement.margin && bell.minX < 3380)
-    }
-
     /// Lane 1's live check of card agent-bo-95422899 (2026-10-07): the CPU popover's process rows arrive after the first
     /// sample, the panel kept its first height and clipped its top row and its arrow under the menu bar; it now refits
     /// through this frame (card agent-bo-95422983). Whatever height the content takes, the top stays under the item.

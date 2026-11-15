@@ -118,8 +118,6 @@ struct TopBarSlotView: View {
     let screen: String
     let sources: BarSources
     let store: BarItemsStore
-    /// What its popovers hang from; a test's own, so none shows.
-    var panel = BarPanel.shared
     /// The slot's own view, so its popover hangs under it; in a group each member hangs from its own (PieceAnchor).
     @State private var anchor = ScreenAnchor.Box()
     var drag = BarDrag.shared
@@ -276,11 +274,11 @@ struct TopBarSlotView: View {
         // Ask AI or Terminal in a group: its own button, toggling its drop as its own item does (Sven on build 2433).
         if let one, slot.isGroup, let drop = one.drop { return BarDropLights.shared.toggle(drop) }
         if case .extension(let id) = click {
-            return panel.toggle(extension: id, under: view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
+            return BarPanel.shared.toggle(extension: id, under: view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }
         if click == .menu { return showMenu(sources.clickMenu(one ?? slot.kind, store: store), under: view) }
         guard click == .popover else { return sources.perform(click) }
-        panel.toggle(kinds, under: view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
+        BarPanel.shared.toggle(kinds, under: view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
     }
 
     /// The right-click menu, or `rows` in its place (Capture's click menu, under its own view in a group).
