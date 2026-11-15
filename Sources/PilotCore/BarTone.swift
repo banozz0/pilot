@@ -43,6 +43,14 @@ public struct BarTone: Equatable, Sendable {
     /// its rim carries the glass. A cell under untinted glass is toned down to at least this, so the glass reads as the
     /// Dock's, not as a grey plate.
     public static let dockVeil = 0.05
+    /// How the macOS Dock's veil fades with the desk under it: the whole dockVeil up to the near-black Sven's dock and
+    /// islands stand on (grey 37), where it was read and matched; none by a mid-tone desk, the jade horse's foot
+    /// (35, 50, 38), which the macOS Dock shows as it is (36, 53, 40), where the whole veil left Pilot's lifted to
+    /// 48, 60, 51 (Sven on build 2564: "darker, more opaque grey-green slab"). In a line between the two (unverified
+    /// there); past it a cell is toned to the desk's own luminance, a bright one further by the curve and glassFloor.
+    /// The mask is black, so it gets the luminance right but cannot give back the colour and grain the glass's white
+    /// veil takes: on a mid tone Pilot's still reads a little greyer than the Dock's.
+    public static let dockVeilFull = 0.0185, dockVeilGone = 0.028
     /// The least contrast the ink keeps over untinted clear glass: past the menu bar's curve (which leaves white text at
     /// 1.84 : 1 over a white desktop, fine for the menu bar's 13 pt titles), the dock's and the islands' small captions and
     /// values keep 3 : 1, as Apple's dimming under clear glass does (about 35 % over a bright desktop). Sven on build
@@ -50,7 +58,8 @@ public struct BarTone: Equatable, Sendable {
     public static let glassFloor = 3.0
 
     /// The tone of `grid` for the theme's ink side (`prefersWhite`), seen through Glass's `tint` at `share` when given,
-    /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil on white ink and to glassFloor
+    /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil under white ink (fading from a
+    /// near-black desk to none on a mid tone, dockVeilFull to dockVeilGone) and to glassFloor
     /// against the ink; nil for an empty grid.
     public static func make(_ grid: WallpaperStrip.Grid, prefersWhite: Bool, tint: [Double]? = nil, share: Double = 0,
                             glass: Bool = false) -> BarTone? {
@@ -67,7 +76,10 @@ public struct BarTone: Equatable, Sendable {
             // black, so luminance by about its 2.2 power; under white, about the same in lightness.
             if prefersWhite {
                 var want = 1.05 / toned(1.05 / (l + 0.05)) - 0.05
-                if glass { want = min(want, Contrast.luminance(Contrast.mix([255, 255, 255], desk, dockVeil)), 1.05 / glassFloor - 0.05) }
+                if glass {
+                    let hold = min(max((dockVeilGone - Contrast.luminance(desk)) / (dockVeilGone - dockVeilFull), 0), 1)
+                    want = min(want, Contrast.luminance(Contrast.mix([255, 255, 255], desk, dockVeil * hold)), 1.05 / glassFloor - 0.05)
+                }
                 let a = want < l ? 1 - pow(max(want, 0) / l, 1 / 2.2) : 0
                 (alpha[i], after[i]) = (UInt8((a * 255).rounded()), min(l, want))
             } else {

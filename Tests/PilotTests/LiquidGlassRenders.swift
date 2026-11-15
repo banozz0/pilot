@@ -151,6 +151,12 @@ struct LiquidGlassRenders {
             let left = shows * (1 - a), ratio = Contrast.ratio([255, 255, 255], [left, left, left])
             lines.append(String(format: "%4d  %11.1f  %10.2f  %5.1f  %6.2f : 1", grey, shows, a, left, ratio))
         }
+        // The jade horse's foot, where the macOS Dock shows the desk as it is (36, 53, 40; Sven on build 2564).
+        let jade: [Double] = [35, 50, 38]
+        let jadeTone = try #require(BarTone.make(WallpaperStrip.Grid(width: 1, height: 1, rgb: jade.map { UInt8($0) }), prefersWhite: true, glass: true))
+        let ja = Double(jadeTone.alpha[0]) / 255
+        let jadeLeft = jade.map { ($0 + BarTone.glassVeil * (255 - $0)) * (1 - ja) }
+        lines.append(String(format: "jade (35 50 38): tone-alpha %.2f, left %.0f %.0f %.0f  (macOS Dock 36 53 40)", ja, jadeLeft[0], jadeLeft[1], jadeLeft[2]))
         try lines.joined(separator: "\n").write(to: dir.appendingPathComponent("predicted.txt"), atomically: true, encoding: .utf8)
     }
 
