@@ -182,18 +182,21 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// An extension's bar popover on the top bar's Glass while Look › Glass is on (Sven 2026-10-25, Q474), tinted as the
-    /// menu's (Look.glassTint, Transparency's ground strength), its fills see-through as the menu's; solid when Glass is
-    /// off, at Transparency 0 or in Toybox. Applied outside its KitPopover, which draws the glass.
+    /// A bar popover on the top bar's Glass while Look › Glass is on: an extension's first (Sven 2026-10-25, Q474), every
+    /// bar dropdown since (BarPanelWindow.present; Liquid Glass round 3, Sven on build 2550: "stats dropdowns aren't
+    /// glass, neither are the system ones"). Tinted as the menu's (Look.glassTint, Transparency's ground strength), its
+    /// fills see-through as the menu's; solid when Glass is off, at Transparency 0 or in Toybox. Applied outside its
+    /// KitPopover, which draws the glass; once is enough, so one nested in another does nothing more.
     func extensionGlass(_ look: Look = .shared) -> some View { modifier(ExtensionGlass(look: look)) }
 }
 
 private struct ExtensionGlass: ViewModifier {
     @Environment(\.style) private var style
+    @Environment(\.popoverGlass) private var given
     let look: Look
 
     func body(content: Content) -> some View {
-        if look.extensionGlass {
+        if look.extensionGlass, given == nil {
             content.environment(\.popoverGlass, look.glassTint(on: .barPopovers))
                 .environment(\.windowLayers, look.layers)
                 .environment(\.style, style.seeThrough(look.layers))

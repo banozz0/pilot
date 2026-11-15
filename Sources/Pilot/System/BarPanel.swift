@@ -89,9 +89,9 @@ final class BarPanel: NSObject {
     }
 }
 
-/// The real panel: borderless and non-activating, over the menu bar's level, KitPopover's chrome on the panels'
-/// material (Look's Panels setting, Glass at its strength by default; MaterialBackdrop, the app window's own) clipped to
-/// the popover's shape. Closed by a click outside it, by Escape, or by BarPanel.
+/// The real panel: borderless and non-activating, over the menu bar's level, KitPopover's chrome on the bar popovers'
+/// material (Look's Panels setting): on Glass the face is the glass itself (extensionGlass, GlassFace), cut to the
+/// popover's shape. Closed by a click outside it, by Escape, or by BarPanel.
 @MainActor
 final class BarPanelWindow: BarPanelPresenting {
     var closed: () -> Void = {}
@@ -107,7 +107,10 @@ final class BarPanelWindow: BarPanelPresenting {
         let screen = display?.frame ?? .zero
         // A popover that can grow (an extension's chat) keeps inside the room under its item, above the Dock.
         let room = display.map { BarPanelPlacement.room(item: item, visible: $0.visibleFrame) }
-        let panel = Self.keyPanel(content.environment(\.barPopoverRoom, room), surface: .barPopovers, level: .popUpMenu) { BarPanelPlacement.frame(item: item, size: $0, screen: screen) }
+        // Every dropdown on the bar's glass while Look's Glass is on, as an extension's (extensionGlass): its face is the glass.
+        let panel = Self.keyPanel(content.extensionGlass().environment(\.barPopoverRoom, room), surface: .barPopovers, level: .popUpMenu) {
+            BarPanelPlacement.frame(item: item, size: $0, screen: screen)
+        }
         // Set, so its clear pixels take the mouse too, as the bar's and its drops' (TopBarWindows.make, BarDrops): the
         // popover's glass draws no pixel of its own, and a click on it went through to the wallpaper, where macOS shows the
         // desktop. Only the bar's dropdown: the notification cards float over the front app, whose clicks between them
