@@ -1268,37 +1268,43 @@
   if (hero) { const check = () => { const r = hero.getBoundingClientRect(); if (r.top < innerHeight * .85 && r.bottom > 0) { site.classList.add('go'); removeEventListener('scroll', check); } }; addEventListener('scroll', check, { passive: true }); requestAnimationFrame(check); setTimeout(check, 400); }
   const film = $('#film'), play = $('#play'); if (film && play) play.addEventListener('click', () => { film.controls = true; film.play().catch(() => {}); play.remove(); });
 
-  /* ------------------------------------------------ the shader: Glow (Sven, Q571), one fixed canvas behind every page.
-     A slow haze in the theme's accent, heavier toward the right, drawn at 40 % of CSS pixels and stretched (a haze needs no
-     detail), at most 30 frames a second, paused in a hidden tab, one still frame with reduced motion, none under 600 px.
-     A theme change rolls the new theme in from the swatch you pressed (Sven, 2026-11-14: "barely visible when
-     changing themes" once 76f2af9's muted themes replaced the vivid ones): the page is revealed in a widening circle (a view
-     transition) and the haze's front travels on its edge in the new accent, behind it the new colour, ahead of it the old. */
+  /* ------------------------------------------------ the shader: Liquid (Sven, 2026-11-15, Q260 S2; Glow before it, Q571),
+     one fixed canvas behind every page. The haze's fbm warped hard into pools of the theme's accent and of a second hue 40
+     degrees round from it, each with a glossy edge, drifting slowly; clear behind the hero's text on the left, stronger
+     toward the right and the top. Drawn at 40 % of CSS pixels and stretched, at most 30 frames a second, paused in a
+     hidden tab, one still frame with reduced motion; on phones too since Q261, there at a flat 45 % so text keeps reading
+     (0.7 ms a frame on an M4 at desktop size, 1.2 ms on a CPU renderer at phone size, round 3's bench).
+     A theme change rolls the new theme in from the swatch you pressed (Sven, 2026-11-14): the page is revealed in a widening
+     circle (a view transition) and a ring travels on its edge in the new accent, behind it the new colours, ahead the old. */
   const cv = $('#shader');
   const hasShader = !!cv;
   let mode = hasShader ? 'glow' : 'off', gl = null, raf = 0, last = 0, t0 = performance.now(), uni = {}, TK = null;
   let swell = null;   // a theme change in flight: { from: tokens, x, y (CSS px), t: start, d: ms, far: CSS px to the farthest corner }
   const easeOut = (k) => 1 - (1 - k) ** 3;
   const FS = `precision mediump float;
-uniform vec2 R; uniform float T; uniform float Y; uniform vec3 C; uniform float A;
-uniform vec3 C0; uniform float A0; uniform vec2 P; uniform float F; uniform float K;
+uniform vec2 R; uniform float T; uniform float Y; uniform vec3 C; uniform vec3 C2; uniform vec3 C0; uniform vec3 C20;
+uniform float L; uniform float N; uniform vec2 P; uniform float F; uniform float K;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1., 0.)), f.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), f.x), f.y); }
 float fbm(vec2 p){ float v = 0., a = .5; for (int i = 0; i < 4; i++) { v += a * n(p); p = p * 2.03 + 17.; a *= .5; } return v; }
 void main(){
   vec2 uv = gl_FragCoord.xy / R;
-  vec2 p = vec2(uv.x * R.x / R.y, uv.y - Y) * 1.3; float t = T * .05;
-  vec2 q = vec2(fbm(p + vec2(t, 0.)), fbm(p + vec2(3.1, -t)));
-  float f = fbm(p + q * 1.6 + vec2(t * .7, -t * .5));
-  float m = .3 + .7 * smoothstep(.2, .95, uv.x);
-  float r = length(gl_FragCoord.xy - P), w = R.y * .07;
-  float inside = 1. - smoothstep(F - w, F + w * .3, r);
-  float d = (r - F) / w;   // no pow: GLSL ES leaves pow undefined for a negative base
+  vec2 p = vec2(uv.x * R.x / R.y, uv.y - Y) * .9; float t = T * .04;
+  vec2 q = vec2(fbm(p + vec2(t, 0.)), fbm(p + vec2(5.2, -t)));
+  vec2 r = vec2(fbm(p + q * 2.4 + vec2(1.7, 9.2) + t), fbm(p + q * 2.4 + vec2(8.3, 2.8) - t));
+  float f = fbm(p + r * 2.2);
+  float pool = smoothstep(.46, .52, f), pool2 = smoothstep(.55, .6, r.x) * (1. - pool);
+  float e = f - .52, gloss = smoothstep(0., .02, e) * smoothstep(.06, .02, e);
+  float rr = length(gl_FragCoord.xy - P), w = R.y * .07;
+  float inside = 1. - smoothstep(F - w, F + w * .3, rr);
+  float d = (rr - F) / w;   // no pow: GLSL ES leaves pow undefined for a negative base
   float ring = exp(-d * d) * K;
-  vec3 col = mix(C0, C, inside);
-  float a = smoothstep(.42, .92, f) * m * mix(A0, A, inside) * (1. + 1.6 * ring) + ring * (.18 + .3 * f);
-  a = min(a, .6);
-  gl_FragColor = vec4(col * a, a);
+  vec3 c1 = mix(C0, C, inside), c2 = mix(C20, C2, inside);
+  vec3 col = c1 * pool + c2 * pool2 + mix(c1, vec3(1.), .5) * gloss * .5;
+  float m = N > .5 ? .45 : smoothstep(.36, .8, uv.x) * (.55 + .45 * uv.y);
+  float a = (pool * .75 + pool2 * .6 + gloss * .4) * m * (L > .5 ? .5 : .7);
+  float ra = ring * (.18 + .3 * f);
+  gl_FragColor = vec4(min(col, 1.) * a + c1 * ra, min(a + ra, .85));
 }`;
   const VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }';
   const tokens = () => {
@@ -1318,7 +1324,13 @@ void main(){
     const cr = (a) => { const p = Y(t3), q = Y(mix(a)); return (Math.max(p, q) + .05) / (Math.min(p, q) + .05); };
     let want = .06; while (want < .3 && dE(want) < .11) want += .005;
     let cap = .06; while (cap < .3 && cr((cap + .005) / 2) >= 4.5) cap += .005;
-    return { c, a: Math.max(floor, Math.min(want, cap)) };
+    // The second hue: the accent turned 40 degrees round the wheel (HSL), at least as saturated as 55 %.
+    const [r0, g0, b0] = c, mx = Math.max(r0, g0, b0), mn = Math.min(r0, g0, b0), l = (mx + mn) / 2, dd = mx - mn;
+    let hh = 0, sat = 0;
+    if (dd) { sat = dd / (1 - Math.abs(2 * l - 1)); hh = (mx === r0 ? ((g0 - b0) / dd) % 6 : mx === g0 ? (b0 - r0) / dd + 2 : (r0 - g0) / dd + 4) * 60; }
+    hh = (hh + 40 + 360) % 360; sat = Math.max(sat, .55);
+    const kk = (nn) => (nn + hh / 30) % 12, aa = sat * Math.min(l, 1 - l), ch = (nn) => l - aa * Math.max(-1, Math.min(kk(nn) - 3, Math.min(9 - kk(nn), 1)));
+    return { c, c2: [ch(0), ch(8), ch(4)], light: dark ? 0 : 1, a: Math.max(floor, Math.min(want, cap)) };
   };
   const retoken = () => { TK = tokens(); };
   const init = () => {
@@ -1330,7 +1342,7 @@ void main(){
     gl.useProgram(prog);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    ['R', 'T', 'Y', 'C', 'A', 'C0', 'A0', 'P', 'F', 'K'].forEach(k => uni[k] = gl.getUniformLocation(prog, k));
+    ['R', 'T', 'Y', 'C', 'C2', 'C0', 'C20', 'L', 'N', 'P', 'F', 'K'].forEach(k => uni[k] = gl.getUniformLocation(prog, k));
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); return true;
   };
   const size = () => { cv.width = Math.max(1, Math.round(innerWidth * .4)); cv.height = Math.max(1, Math.round(innerHeight * .4)); if (gl) gl.viewport(0, 0, cv.width, cv.height); };
@@ -1338,11 +1350,11 @@ void main(){
   const frame = (tt) => {
     if (!gl) return; window.__frames++; const k = TK || (TK = tokens());
     gl.uniform2f(uni.R, cv.width, cv.height); gl.uniform1f(uni.T, tt); gl.uniform1f(uni.Y, reduced ? 0 : scrollY / innerHeight * .35);
-    gl.uniform3fv(uni.C, k.c); gl.uniform1f(uni.A, k.a);
+    gl.uniform3fv(uni.C, k.c); gl.uniform3fv(uni.C2, k.c2); gl.uniform1f(uni.L, k.light); gl.uniform1f(uni.N, innerWidth < 600 ? 1 : 0);
     // the swell: progress k0 eases out; its front sits where the page's circle is (both from the same ease and corner)
     const s = cv.width / innerWidth, w = swell, k0 = w ? Math.min(1, (performance.now() - w.t) / w.d) : 1;
     if (w && k0 >= 1) swell = null;
-    gl.uniform3fv(uni.C0, w ? w.from.c : k.c); gl.uniform1f(uni.A0, w ? w.from.a : k.a);
+    gl.uniform3fv(uni.C0, w ? w.from.c : k.c); gl.uniform3fv(uni.C20, w ? w.from.c2 : k.c2);
     gl.uniform2f(uni.P, w ? w.x * s : 0, w ? cv.height - w.y * s : 0); gl.uniform1f(uni.F, w ? easeOut(k0) * w.far * s : 2 * (cv.width + cv.height));   // at rest: past every pixel, inside mediump's range
     gl.uniform1f(uni.K, w ? (1 - k0) ** .6 : 0);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1350,7 +1362,7 @@ void main(){
   const loop = (now) => { raf = 0; if (mode === 'off' || document.hidden) return; if (swell || now - last >= 33) { last = now; frame((now - t0) / 1000); } raf = requestAnimationFrame(loop); };
   const apply = () => {
     if (!hasShader) return; cancelAnimationFrame(raf); raf = 0;
-    const off = mode === 'off' || innerWidth < 600;
+    const off = mode === 'off';   // phones too since Q261
     document.documentElement.classList.toggle('no-fx', off);
     if (off || !gl) return; size();
     if (reduced) frame(2.2); else raf = requestAnimationFrame(loop);
