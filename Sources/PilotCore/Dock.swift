@@ -90,6 +90,25 @@ public struct DockApp: Equatable, Sendable {
 
 public enum DockClick: String, Equatable, Sendable { case activate, focusWindow, listWindows }
 
+/// A click on an app as it is pressed (Sven on build 2540: a minimized app's click did nothing, the menu's Open worked):
+/// the dock's listing follows workspace changes only, so a window minimized since still counts, and focusing it is
+/// refused. `minimized` is the app's windows the tiler holds minimized now, the last the one minimized last: they are
+/// taken out first, and with none left open that one comes back, as the macOS Dock brings it back.
+public enum DockPress: Equatable, Sendable {
+    case activate
+    case focus(Int)
+    case list([AeroWindow])
+    case unminimize(Int)
+
+    public static func of(_ windows: [AeroWindow], minimized: [AeroWindow]) -> DockPress {
+        let held = Set(minimized.map(\.id))
+        let open = windows.filter { !held.contains($0.id) && !$0.isMinimized }
+        if open.count >= 2 { return .list(open) }
+        if let one = open.first { return .focus(one.id) }
+        return minimized.last.map { .unminimize($0.id) } ?? .activate
+    }
+}
+
 /// An app's right-click menu in the dock (Sven on build 2454): Open, its windows, Show in Files (Pilot's own, Sven
 /// 2026-11-13: "show in finder should probably show in pilots finder"), Keep in Dock or Remove
 /// from Dock (Pilot's own pins), Quit. Sections, a separator between each.
