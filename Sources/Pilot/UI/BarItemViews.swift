@@ -118,7 +118,9 @@ struct TopBarSlotView: View {
     let screen: String
     let sources: BarSources
     let store: BarItemsStore
-    /// The slot's own view, so its popover hangs under it.
+    /// What its popovers hang from; a test's own, so none shows.
+    var panel = BarPanel.shared
+    /// The slot's own view, so its popover hangs under it; in a group each member hangs from its own (PieceAnchor).
     @State private var anchor = ScreenAnchor.Box()
     var drag = BarDrag.shared
 
@@ -195,12 +197,17 @@ struct TopBarSlotView: View {
                                                  appIcon: kind == .focusedApp ? sources.observers.focusedApp?.icon : nil,
                                                  windowTitle: instrument && kind == .focusedApp ? sources.observers.focusedWindowTitle : nil,
                                                  focus: instrument && kind == .timer ? InstrumentBarFocus(sources.timer) : nil)
-                        if inBar {
-                            Button { perform(target.click, kinds: each.kinds) } label: { parts.barTarget(tooltip(shows)) }
-                                .buttonStyle(.kitPress)
-                                .modifier(dragged)
-                        } else {
-                            Button { perform(target.click, kinds: each.kinds) } label: { parts }.buttonStyle(.plain)
+                        // A group's member hangs its popover from its own frame, not the whole group's: Sven's AI usage
+                        // dropdown hung 128 pt right of its item, under the middle of a group of seven (build 2550).
+                        PieceAnchor { piece in
+                            let under = slot.isGroup ? piece : nil
+                            if inBar {
+                                Button { perform(target.click, kinds: each.kinds, under: under) } label: { parts.barTarget(tooltip(shows)) }
+                                    .buttonStyle(.kitPress)
+                                    .modifier(dragged)
+                            } else {
+                                Button { perform(target.click, kinds: each.kinds, under: under) } label: { parts }.buttonStyle(.plain)
+                            }
                         }
                     }
                 }
@@ -257,8 +264,10 @@ struct TopBarSlotView: View {
         }
     }
 
-    /// A click on a target for `kinds`: the slot's items, or in the Group the one item (or run of readings) clicked.
-    private func perform(_ click: BarClick, kinds: [BarKind]? = nil) {
+    /// A click on a target for `kinds`: the slot's items, or in the Group the one item (or run of readings) clicked, its
+    /// popover under `piece`'s view (a group member's own), else under the slot.
+    private func perform(_ click: BarClick, kinds: [BarKind]? = nil, under piece: ScreenAnchor.Box? = nil) {
+        let view = piece?.view ?? anchor.view
         let kinds = kinds ?? slot.kinds, one = kinds.count == 1 ? kinds.first : nil
         // Option on the item's own click does its Option-click (Volume mutes); a part with a click of its own keeps it.
         if let one, click == one.click, NSEvent.modifierFlags.contains(.option), let option = one.optionClick {
@@ -267,22 +276,31 @@ struct TopBarSlotView: View {
         // Ask AI or Terminal in a group: its own button, toggling its drop as its own item does (Sven on build 2433).
         if let one, slot.isGroup, let drop = one.drop { return BarDropLights.shared.toggle(drop) }
         if case .extension(let id) = click {
-            return BarPanel.shared.toggle(extension: id, under: anchor.view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
+            return panel.toggle(extension: id, under: view, AnyView(ExtensionItemPopover(id: id, bar: sources.extensionBar)))
         }
-        if click == .menu { return showMenu(sources.clickMenu(one ?? slot.kind, store: store)) }
+        if click == .menu { return showMenu(sources.clickMenu(one ?? slot.kind, store: store), under: view) }
         guard click == .popover else { return sources.perform(click) }
-        BarPanel.shared.toggle(kinds, under: anchor.view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
+        panel.toggle(kinds, under: view, AnyView(BarPopover(kinds: kinds, sources: sources, store: store)))
     }
 
-    /// The right-click menu, or `rows` in its place (Capture's click menu).
-    private func showMenu(_ rows: [BarMenuRow]? = nil) {
-        guard let view = anchor.view else { return }
+    /// The right-click menu, or `rows` in its place (Capture's click menu, under its own view in a group).
+    private func showMenu(_ rows: [BarMenuRow]? = nil, under piece: NSView? = nil) {
+        guard let view = piece ?? anchor.view else { return }
         // Keyed by what the slot is, so an extension's own item moves and goes on its own (spec pilot-1.1 T50).
         let item = slot.item
         BarMenu.show(rows ?? sources.menu(item, in: .topBar, store: store), under: view) { [sources, store] action in
             sources.perform(action, on: item, store: store) { perform(.popover) }
         }
     }
+}
+
+/// A group member's own view, held for its popover to hang from (TopBarSlotView.perform). Its anchor takes no right-click
+/// or scroll, so the slot's anchor keeps the group's menu and TopBarPanel.reached still finds the slot's edges.
+private struct PieceAnchor<Content: View>: View {
+    @State private var box = ScreenAnchor.Box()
+    @ViewBuilder let content: (ScreenAnchor.Box) -> Content
+
+    var body: some View { content(box).background(ScreenAnchor(box: box)) }
 }
 
 extension EnvironmentValues {
