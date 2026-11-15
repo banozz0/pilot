@@ -120,7 +120,7 @@ struct AIChatToolEventsTests {
         let first = AIChat.Agent.claudeArguments(prompt: "/App/pilot-agent.md", session: nil, model: nil, effort: .low)
         #expect(first == ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "Bash",
                           "--allowedTools", "Bash(pilot *)", "--permission-mode", "dontAsk", "--strict-mcp-config", "--restricted",
-                          "--safe-mode", "--append-system-prompt-file", "/App/pilot-agent.md", "--effort", "low"])
+                          "--safe-mode", "--disable-slash-commands", "--append-system-prompt-file", "/App/pilot-agent.md", "--effort", "low"])
         #expect(first.contains("--restricted") && first.contains("--safe-mode") && !first.contains("--bare"))
         let next = AIChat.Agent.claudeArguments(prompt: "/App/pilot-agent.md", session: "s1", model: "sonnet", effort: .high)
         #expect(next.suffix(6) == ["--effort", "high", "--resume", "s1", "--model", "sonnet"])
@@ -131,7 +131,7 @@ struct AIChatToolEventsTests {
         let files = AIChat.Agent.claudeArguments(prompt: "/App/pilot-extension-agent.md", session: nil, model: "haiku", effort: .low, reach: .files)
         #expect(files == ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "Bash,Read,Write,Edit",
                           "--allowedTools", "Bash(pilot *)", "Read", "Write", "Edit", "--permission-mode", "dontAsk", "--strict-mcp-config",
-                          "--restricted", "--safe-mode", "--append-system-prompt-file", "/App/pilot-extension-agent.md", "--effort", "low",
+                          "--restricted", "--safe-mode", "--disable-slash-commands", "--append-system-prompt-file", "/App/pilot-extension-agent.md", "--effort", "low",
                           "--model", "haiku"])
         #expect(!files.contains { $0.contains("python") })
         let app = URL(filePath: "/App")

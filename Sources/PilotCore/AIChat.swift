@@ -354,12 +354,14 @@ extension AIChat {
         /// Edit join, allowed by name, since dontAsk refuses a tool no rule allows; `--restricted` confines them to the
         /// working folder, refusing an absolute path, `../` or a symlink out of it (probe B, 2026-10-12). The answer style
         /// goes as a second appended prompt, after the file's (both kept, claude 2.1.325, tried 2026-11-15).
+        /// `--disable-slash-commands`: --safe-mode leaves Claude Code's own skills on, and a message starting "/simplify"
+        /// ran its code review instead of Pilot's guide (tried 2026-11-16).
         public static func claudeArguments(prompt: String, session: String?, model: String?, effort: AIEffort, reach: Reach = .pilot,
                                            style: AnswerStyle? = nil) -> [String] {
             let files = reach == .files ? ["Read", "Write", "Edit"] : []
             return ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", (["Bash"] + files).joined(separator: ","),
                     "--allowedTools", "Bash(pilot *)"] + files + ["--permission-mode", "dontAsk", "--strict-mcp-config", "--restricted",
-                    "--safe-mode", "--append-system-prompt-file", prompt, "--effort", effort.rawValue]
+                    "--safe-mode", "--disable-slash-commands", "--append-system-prompt-file", prompt, "--effort", effort.rawValue]
                 + (style.map { ["--append-system-prompt", $0.instructions] } ?? [])
                 + (session.map { ["--resume", $0] } ?? []) + (model.map { ["--model", $0] } ?? [])
         }

@@ -122,7 +122,7 @@ def claude_arguments(prompt, session, model, effort, files, style=None):
     tools = ['Bash'] + (['Read', 'Write', 'Edit'] if files else [])
     return (['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--tools', ','.join(tools),
              '--allowedTools', 'Bash(pilot *)'] + tools[1:] + ['--permission-mode', 'dontAsk', '--strict-mcp-config', '--restricted',
-             '--safe-mode', '--append-system-prompt-file', str(prompt), '--effort', effort]
+             '--safe-mode', '--disable-slash-commands', '--append-system-prompt-file', str(prompt), '--effort', effort]
             + (['--append-system-prompt', style] if style else [])
             + (['--resume', session] if session else []) + (['--model', model] if model else []))
 
