@@ -73,7 +73,7 @@ struct WidgetsPageRenders {
             look.style = style
             for glass in [false, true] {
                 look.glass = glass
-                let page = MonitorsGround { WidgetsPage(model: model, reads: false, previews: previews) }
+                let page = MonitorsGround { WidgetsPage(model: model, reads: false, previews: previews, displays: [Self.display]) }
                     .styled(.page(.widgets)).frame(width: 1000, height: 3300).pilotTheme(look: look)
                 try RestyledRenders.writeTrimmed(rendered(page), from: 0,
                                                  to: dir.appending(path: "widgets-page-\(style.rawValue)-\(glass ? "glass" : "solid").png"))
@@ -84,6 +84,115 @@ struct WidgetsPageRenders {
             let shot = try rendered(question)
             try #require(shot.representation(using: .png, properties: [:])).write(to: dir.appending(path: "trust-question-\(style.rawValue).png"))
         }
+    }
+
+    /// Sven's 34-inch display, its room less a 34 pt top bar and a 72 pt dock.
+    static let display = WidgetsDisplay(uuid: nil, name: "Main display", main: true, frame: CGRect(x: 0, y: 0, width: 3440, height: 1440),
+                                        room: CGRect(x: 0, y: 34, width: 3440, height: 1440 - 34 - 72))
+
+    /// Sven's desktop on 2026-11-15 (his screenshot), as fractions of his display and sizes in points.
+    static let desk: [(String, Double, Double, Double, Double)] = [
+        ("desk-weather", 0.006, 0.048, 375, 370), ("desk-calendar", 0.12, 0.048, 375, 370),
+        (ReadyWidgets.nowPlaying, 0.006, 0.32, 262, 203), (ReadyWidgets.launcher, 0.0875, 0.32, 430, 203),
+        (ReadyWidgets.github, 0.006, 0.475, 375, 245), (ReadyWidgets.ci, 0.12, 0.475, 375, 245),
+        (ReadyWidgets.thisMac, 0.006, 0.67, 542, 370), (ReadyWidgets.folder, 0.17, 0.67, 765, 370),
+        ("desk-todo", 0.755, 0.048, 318, 310), ("desk-ai-usage", 0.852, 0.048, 482, 310),
+        (ReadyWidgets.markets, 0.755, 0.28, 318, 258), (ReadyWidgets.notes, 0.852, 0.28, 482, 258),
+        (ReadyWidgets.repos, 0.87, 0.475, 440, 200),
+    ]
+
+    /// The desktop map (Sven, 2026-11-15, Q252 B), from a store laid out like Sven's desktop on the grid, one widget on
+    /// Home, one of his own and one locked: Instrument with Glass on, Dracula and Porcelain, at the page's width in the
+    /// window's first size (716) and its least (688, the list folded away), Weather picked; Home's switch; then Add, which
+    /// must land on free cells clear of the rest, written to `widgets-map/add.txt`. Toybox once.
+    /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> PILOT_RESOURCES=Packaging swift test --filter WidgetsPageRenders/map`
+    @Test("The desktop map, light and dark, at 1000 and 760, Home, and Add on free cells",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func map() async throws {
+        let dir = try WidgetRenders.dir().deletingLastPathComponent().appending(path: "widgets-map")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        let store = try DeskWidgetRenders.store()
+        try FileManager.default.createDirectory(at: store.widgets, withIntermediateDirectories: true)
+        let mine = try WidgetRenders.make(store, "standup", """
+            {"id": "standup", "title": "Stand-up timer", "icon": "⏱️", "description": "Minutes left in today's stand-up.",
+             "data": {"command": ["./left.sh"], "every": 30}, "settings": [{"name": "minutes", "type": "number", "default": 15}]}
+            """, files: ["left.sh": "#!/bin/sh\necho '{}'\n"])
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mine.folder.appending(path: "left.sh").path)
+        try store.setTrust(.madeHere, for: mine)
+        _ = try WidgetRenders.make(store, "weather-page", """
+            {"id": "weather-page", "title": "Weather page", "icon": "🌦️", "description": "From the gallery: a page and a feed.", "draw": "html",
+             "data": {"command": ["./feed.sh", "--city", "Valletta"], "every": 600}, "hosts": ["api.open-meteo.com"]}
+            """, files: ["index.html": "<p>weather</p>", "feed.sh": "#!/bin/sh\necho '{}'\n"])
+        let display = Self.display, grid = Widget.Grid(area: display.room)
+        var placements = Self.desk.map { Widget.Placement(widget: $0.0, screen: nil, x: $0.1, y: $0.2, width: $0.3, height: $0.4) }
+        for (i, cell) in grid.pack(placements.map { $0.frame(on: display.frame) }).enumerated() { placements[i].land(on: grid.rect(cell), screen: display.frame) }
+        placements[0].values = ["city": .string("Valletta"), "units": .string("celsius")]
+        placements[11].workspace = "2"
+        placements.append(Widget.Placement(widget: ReadyWidgets.clock, screen: nil, x: 0, y: 0, width: 280, height: 130, home: true))
+        try store.save(placements)
+        let model = WidgetsPageModel()
+        model.store = store
+        model.reload()
+        let weather = try #require(model.placements.first { $0.widget == "desk-weather" })
+        let clock = try #require(model.placements.first { $0.onHome })
+
+        let look = Look.shared
+        let saved = (look.themeID, look.style, look.glass)
+        defer { (look.themeID, look.style, look.glass) = saved }
+        func shoot(_ name: String, width: CGFloat, selected: String?, home: Bool = false, previews: WidgetPreviews) throws {
+            let page = MonitorsGround {
+                WidgetsPage(model: model, reads: false, previews: previews, displays: [display], selected: selected, home: home)
+            }
+            .styled(.page(.widgets)).frame(width: width, height: 2400).pilotTheme(look: look)
+            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appending(path: "\(name).png"))
+        }
+        look.style = .instrument
+        look.glass = true
+        for (scheme, theme) in [("dark", "dracula"), ("light", "porcelain")] {
+            look.themeID = theme
+            let previews = try await Self.previews(model, store: store, look: look)
+            try shoot("map-\(scheme)-1000", width: 716, selected: weather.id, previews: previews)
+            try shoot("map-\(scheme)-760", width: 688, selected: weather.id, previews: previews)
+            try shoot("home-\(scheme)-1000", width: 716, selected: clock.id, home: true, previews: previews)
+        }
+        // Add from the list: the first free cells nearest the room's top left, clear of every other widget.
+        let note = try #require(ReadyWidgets.widget(ReadyWidgets.note))
+        // Snap to grid off for the save, so the desk does not put it on this Mac's own display's grid instead.
+        let snapped = WidgetSnap.shared.on
+        WidgetSnap.shared.on = false
+        let added = model.add(note, on: display)
+        WidgetSnap.shared.on = snapped
+        let placement = try #require(model.placements.first { $0.id == added })
+        let frame = placement.frame(on: display.frame), cell = grid.cell(nearest: frame)
+        let others = model.placements.filter { !$0.onHome && $0.id != added }.map { grid.cell(nearest: $0.frame(on: display.frame)) }
+        #expect(grid.holds(frame) && !others.contains { $0.overlaps(cell) }, "Add landed on a taken cell: \(cell.line)")
+        try "added \(note.id) at cell \(cell.line), on the grid: \(grid.holds(frame)), overlaps: \(others.filter { $0.overlaps(cell) }.map(\.line))\n"
+            .write(to: dir.appending(path: "add.txt"), atomically: true, encoding: .utf8)
+        look.themeID = "dracula"
+        let previews = try await Self.previews(model, store: store, look: look)
+        try shoot("map-dark-added", width: 716, selected: added, previews: previews)
+        look.style = .toybox
+        look.themeID = "tokyo-night"
+        try shoot("map-toybox-1000", width: 716, selected: weather.id, previews: try await Self.previews(model, store: store, look: look))
+    }
+
+    /// Each widget's preview in the theme of the moment, with fixed data.
+    static func previews(_ model: WidgetsPageModel, store: WidgetStore, look: Look) async throws -> WidgetPreviews {
+        let previews = WidgetPreviews()
+        previews.prepare(ReadyWidgets.all + model.installed, store: store)
+        for widget in ReadyWidgets.inCode {
+            previews.models[widget.id]?.blocks = WidgetRenders.blocks(widget)
+            if widget.data == .nowPlaying { previews.models[widget.id]?.nowPlaying = WidgetRenders.playing() }
+            if widget.menuField != nil { previews.models[widget.id]?.tiles = Array(WidgetRenders.tiles.prefix(4)); previews.models[widget.id]?.message = nil }
+            if widget.actionsField != nil { previews.models[widget.id]?.picked = WidgetRenders.picked }
+        }
+        for widget in ReadyWidgets.desk {
+            var data = try DeskWidgetRenders.fixture(widget.id)
+            if case .object(var fields) = data { fields["theme"] = DeskWidgetRenders.theme(look.theme); data = .object(fields) }
+            if let shot = await WidgetPreviews.shot(store.widget(widget.id) ?? widget, store: store, data: data) { previews.shots[widget.id] = shot }
+        }
+        return previews
     }
 
     /// The builder (T24): its sheet in each style, and the folders it writes for a reading and for a program, put in the

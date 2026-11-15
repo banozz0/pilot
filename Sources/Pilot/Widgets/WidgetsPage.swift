@@ -106,10 +106,27 @@ final class WidgetsPageModel {
 
     /// Add to Home: a new placement on Pilot's Home page, at the widget's own size, shown there at once (HomeLayout
     /// shows a new widget row); it runs only while Home draws it.
-    func addHome(_ widget: Widget) {
+    @discardableResult func addHome(_ widget: Widget) -> String {
         var all = store.placements()
-        all.append(.new(widget, after: all.count, home: true))
+        let placement = Widget.Placement.new(widget, after: all.count, home: true)
+        all.append(placement)
         save(all, done: "\(widget.title) is on Home, the first page of Pilot's window; Edit Home moves and sizes it.")
+        return placement.id
+    }
+
+    /// Add on the Widgets page's map (Q252 B): a new placement on `display`'s first free cells, nearest its room's top
+    /// left, at the widget's own size in whole cells, Snap to grid on or off; its id, so the page picks it.
+    @discardableResult func add(_ widget: Widget, on display: WidgetsDisplay) -> String {
+        var all = store.placements()
+        let grid = Widget.Grid(area: display.room)
+        let others = all.filter(display.holds).map { $0.frame(on: display.frame) }
+        var placement = Widget.Placement.new(widget, after: all.count, screen: display.uuid)
+        let start = CGRect(x: display.room.minX, y: display.room.minY, width: widget.size.width, height: widget.size.height)
+        if let cell = grid.pack(others + [start]).last { placement.land(on: grid.rect(cell), screen: display.frame) }
+        all.append(placement)
+        let on = placement.workspace.map { "workspace \($0)" } ?? "an empty workspace"
+        save(all, done: "\(widget.title) is on \(display.name); it shows on \(on) or with Show desktop.")
+        return placement.id
     }
 
     /// Edit widget's Save: the placement's own settings (a password the widget's, in the Keychain) and its workspace; it
@@ -207,39 +224,67 @@ final class WidgetsPageModel {
 
 }
 
-/// Look's Widgets page (T20): Pilot's ready widgets, yours with their trust, and what is on the desktop and on Home, with
-/// Add to desktop, Add to Home, Edit widget (each placement's own settings), Trust this widget, Duplicate to edit, Show
-/// folder, Uninstall and Import (a folder or .zip, or one dropped on the page). Each widget's own
-/// CPU and memory are not shown: a page's WebContent process is not Pilot's to attribute, so the row says what runs.
+/// Look's Widgets page (T20; the desktop map, Sven 2026-11-15, Q252 B): the main display drawn small with each widget
+/// where it sits on the grid, Snap to grid on the map; a click on one shows its own settings under the map, saved as
+/// they are set; Home's widgets the same behind the Desktop / Home switch; and every widget to add in a list, Add
+/// putting it on the map's first free cells (or on Home). Trust this widget, Duplicate to edit, Show folder, Uninstall
+/// and Import (a folder or .zip, or one dropped on the page) as before. Each widget's own CPU and memory are not shown:
+/// a page's WebContent process is not Pilot's to attribute.
 struct WidgetsPage: View {
     @Environment(\.ink) private var ink
     @Bindable var model: WidgetsPageModel
     /// False in a render: nothing is read, and the model's rows are drawn as they are.
     var reads = true
-    /// Each card's preview, read as the page opens (a render hands its own, filled).
+    /// Each widget's preview, read as the page opens (a render hands its own, filled).
     var previews: WidgetPreviews = .shared
+    /// The displays the map may draw; nil reads the Mac's (a render hands its own).
+    var displays: [WidgetsDisplay]?
+    @Bindable private var snap = WidgetSnap.shared
+    @State private var home = false
+    @State private var selected: String?
+    @State private var displayID: String?
 
-    init(model: WidgetsPageModel = .shared, reads: Bool = true, previews: WidgetPreviews = .shared) {
-        self.model = model; self.reads = reads; self.previews = previews
+    init(model: WidgetsPageModel = .shared, reads: Bool = true, previews: WidgetPreviews = .shared, displays: [WidgetsDisplay]? = nil,
+         selected: String? = nil, home: Bool = false) {
+        self.model = model; self.reads = reads; self.previews = previews; self.displays = displays
+        _selected = State(initialValue: selected); _home = State(initialValue: home)
     }
 
-    static let intro = "Widgets on the desktop, on an empty workspace, or on Home."
-    static let introInfo = "They show while Show desktop holds the windows out too. Hyper+drag moves one, Hyper+right-drag resizes it, on whole cells of a grid while Snap to grid is on; a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
+    static let intro = "Your desktop as it is. Click a widget to change it, or add one from the list."
+    static let introInfo = "Widgets show on an empty workspace, or while Show desktop holds the windows out. On the desktop, Hyper+drag moves one and Hyper+right-drag resizes it, on whole cells of the grid while Snap to grid is on; a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
+    static let snapInfo = "Desktop widgets move and resize a whole cell at a time, so their edges and gaps line up; the grid shows faintly while you drag one. Turned on, the ones already there go to the nearest free cells."
 
     var body: some View {
+        let shown = displays ?? WidgetsDisplay.live()
+        let display = shown.first { $0.id == displayID } ?? shown.first
         KitPage(intro: Self.intro, info: Self.introInfo) {
-            if let note = model.note { Text(note).font(ink.ui(12)).foregroundStyle(ink.muted).padding(.top, 6) }
-            ready
-            // Your widgets waits until it holds something (simplify-pages T3); New widget is on Widgets. On the desktop
-            // and On Home are one Placed list (simplify-pages T19).
-            if !model.installed.isEmpty || !model.broken.isEmpty { yours }
-            placing
-            placed
+            if let note = model.note { Text(note).font(ink.ui(12)).foregroundStyle(ink.text2).padding(.top, 6) }
+            VStack(alignment: .leading, spacing: 10) {
+                header(shown, display)
+                if home {
+                    WidgetsHomeTiles(placements: model.placements.filter(\.onHome), widget: model.widget, selected: $selected)
+                } else if let display {
+                    WidgetsMap(display: display, placements: model.placements.filter(display.holds), widget: model.widget,
+                               snap: snap.on, selected: $selected)
+                }
+            }
+            .padding(.top, 8)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 20) {
+                    inspector.frame(minWidth: 400, maxWidth: .infinity, alignment: .topLeading)
+                    list(display).frame(width: 290)
+                }
+                VStack(alignment: .leading, spacing: 20) {
+                    inspector
+                    list(display)
+                }
+            }
+            .padding(.top, 16).padding(.bottom, 20)
         }
         .task {
             guard reads else { return }
             model.reload()
-            // Each card's preview, in the style and Glass of the moment, before it is added.
+            // Each widget's preview, in the style and Glass of the moment, before it is added.
             await previews.load(ReadyWidgets.all + model.installed, store: model.store)
         }
         .onDisappear { if reads { previews.drop() } }
@@ -253,161 +298,48 @@ struct WidgetsPage: View {
         .modifier(WidgetsPageSheets(model: model))
     }
 
-    private var ready: some View {
-        KitBlock(title: "Widgets", symbol: "square.grid.2x2", note: "Pilot's own, read-only and trusted; off until you add one.") {
-            newWidget
-        } content: {
-            CardGrid(minimum: 260, spacing: 8, stretch: true) {
-                ForEach(ReadyWidgets.all, id: \.id) { card($0, ready: true) }
-            }
-            .padding(.vertical, 10)
-        }
-        .pageWide()
-    }
-
-    private var yours: some View {
-        KitBlock(title: "Your widgets", symbol: "folder") {
-            VStack(alignment: .leading, spacing: 8) {
-                CardGrid(minimum: 300, spacing: 8, stretch: true) {
-                    ForEach(model.installed, id: \.id) { card($0, ready: false) }
-                }
-                ForEach(model.broken, id: \.folder) { broken in
-                    HStack(spacing: 6) {
-                        Chip(text: "doesn't read", color: ink.yellow)
-                        Text("\(broken.folder): \(broken.why)").font(ink.ui(11.5)).foregroundStyle(ink.muted).lineLimit(2)
+    /// Desktop or Home with their counts, the display and its size (a menu with more than one), Snap to grid.
+    private func header(_ shown: [WidgetsDisplay], _ display: WidgetsDisplay?) -> some View {
+        let onDesk = model.placements.count { !$0.onHome }, onHome = model.placements.count(where: \.onHome)
+        return HStack(spacing: 12) {
+            Segments(selection: Binding(get: { home }, set: { home = $0; selected = nil }),
+                     options: [(false, "Desktop \(onDesk)"), (true, "Home \(onHome)")], label: "Desktop or Home")
+            if !home, let display {
+                if shown.count > 1 {
+                    Menu("\(display.name) · \(display.size)") {
+                        ForEach(shown) { one in Button("\(one.name) · \(one.size)") { displayID = one.id; selected = nil } }
                     }
+                    .fixedSize()
+                } else {
+                    Text("\(display.name) · \(display.size)").font(ink.ui(11.5)).foregroundStyle(ink.text2).lineLimit(1)
                 }
             }
-            .padding(.vertical, 10)
-        }
-        .pageWide()
-    }
-
-    /// Every way to a widget of your own, in one menu: the AI chat, the builder, an import, the folder.
-    private var newWidget: some View {
-        Menu {
-            Button("Create with AI") { AIChatPanel.shared.show(typing: WidgetMaker.command + " ") }
-                .help("Opens the AI chat with /widget typed: describe the widget, or paste or drop a picture of one")
-            Button("New widget…") { model.building = true }.help("Pick a look and a source; no AI needed")
-            Button("Import…") { model.chooseFolder() }.help("A widget folder or .zip; or drop one on this page")
-            Divider()
-            Button("Show folder") { model.showFolder() }
-        } label: {
-            Label("New widget", systemImage: "plus")
-        }
-        .menuStyle(.button).buttonStyle(.pilot).fixedSize()
-    }
-
-    /// Snap to grid (Sven, 2026-11-15): on puts the desktop's widgets on the grid now.
-    private var placing: some View {
-        @Bindable var snap = WidgetSnap.shared
-        return KitBlock(title: "Placing", symbol: "square.grid.3x3") {
-            BlockRow(first: true) {
-                Toggle("Snap to grid", isOn: $snap.on).toggleStyle(.pilotSwitchRow(info: Self.snapInfo))
-            }
-        }
-    }
-
-    static let snapInfo = "Desktop widgets move and resize a whole cell at a time, so their edges and gaps line up; the grid shows faintly while you drag one. Turned on, the ones already there go to the nearest free cells."
-
-    /// Every widget placed, on the desktop first, then on Home (simplify-pages T19: were two blocks).
-    private var placed: some View {
-        KitBlock(title: "Placed", symbol: "macwindow",
-                 note: "On the desktop, or on Home, where each runs only while Home draws it; Edit Home moves, sizes and hides those.") {
-            VStack(alignment: .leading, spacing: 6) {
-                if model.placements.isEmpty {
-                    Text("Nothing yet: Add to desktop or Add to Home on any widget above.").font(ink.ui(12)).foregroundStyle(ink.muted)
-                }
-                ForEach(model.placements.filter { !$0.onHome } + model.placements.filter(\.onHome), id: \.id) { placement in
-                    row(placement) {
-                        Text(placement.onHome ? "On Home" : "On the desktop, at \(Int(placement.x * 100)) %, \(Int(placement.y * 100)) % of \(placement.screen == nil ? "the main display" : "its display")")
-                            .font(ink.ui(11.5)).foregroundStyle(ink.muted)
-                        Spacer(minLength: 6)
-                        if !placement.onHome { workspacePicker(placement) }
-                    }
-                }
-            }
-            .padding(.vertical, 10)
-        }
-    }
-
-    /// A placement's row: its widget, what `detail` says, then Edit… and Remove.
-    private func row(_ placement: Widget.Placement, @ViewBuilder detail: () -> some View) -> some View {
-        HStack(spacing: 8) {
-            let widget = model.widget(placement.widget)
-            Text(widget?.icon ?? "🧩")
-            Text(widget?.title ?? placement.widget).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text)
-            detail()
-            Button("Edit…") { model.editing = placement.id }.buttonStyle(.pilot).help("Edit widget: this one's own settings")
-            Button("Remove") { model.remove(placement) }.buttonStyle(.pilot)
-        }
-    }
-
-    /// Every workspace, or one: the workspace it is kept to stays listed even when the tiler no longer keeps it.
-    private func workspacePicker(_ placement: Widget.Placement) -> some View {
-        let names = model.workspaces(keeping: placement.workspace)
-        return Menu(placement.workspace.map { "Workspace \($0)" } ?? "All workspaces") {
-            Button("All workspaces") { model.show(placement, on: nil) }
-            Divider()
-            ForEach(names, id: \.self) { name in Button("Workspace \(name)") { model.show(placement, on: name) } }
-        }
-        .fixedSize().help("Where it shows: on every empty workspace, or on one only")
-    }
-
-    /// A widget as a card: its preview, its icon, title, what feeds it and its trust, then its buttons.
-    private func card(_ widget: Widget, ready: Bool) -> some View {
-        let trust = model.trust[widget.id] ?? .locked
-        return VStack(alignment: .leading, spacing: 6) {
-            if let tile = previews.models[widget.id] {
-                WidgetPreview(widget: widget, model: tile, shot: previews.shots[widget.id])
-            } else {
-                WidgetPreview.ground(Look.shared.theme).frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            HStack(spacing: 8) {
-                Text(widget.icon).font(.system(size: 20))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(widget.title).font(ink.ui(13, .semibold)).foregroundStyle(ink.text).lineLimit(1)
-                    Text(Self.feeds(widget)).font(ink.ui(11)).foregroundStyle(ink.muted).lineLimit(1)
-                }
-                Spacer(minLength: 6)
-                if ready { Chip(text: "Pilot's") }
-                else if trust == .locked { Chip(text: "locked", color: ink.yellow, symbol: "lock.fill") }
-                else { Chip(text: trust == .madeHere ? "made here" : "trusted", color: ink.green) }
-            }
-            if let description = widget.description {
-                Text(description).font(ink.ui(11.5)).foregroundStyle(ink.text2).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            }
-            // Where it is placed, as chips, so a placed widget never reads as one still to add (Sven, build 3).
-            let (desk, home) = (model.placed(widget.id), model.placed(widget.id, home: true))
-            if desk + home > 0 {
+            Spacer(minLength: 8)
+            if !home {
                 HStack(spacing: 6) {
-                    if desk > 0 { Chip(text: desk == 1 ? "On the desktop" : "On the desktop ×\(desk)", color: ink.green, symbol: "checkmark") }
-                    if home > 0 { Chip(text: home == 1 ? "On Home" : "On Home ×\(home)", color: ink.green, symbol: "checkmark") }
+                    Text("Snap to grid").font(ink.ui(12.5)).foregroundStyle(ink.text).fixedSize()
+                    InfoMark(text: Self.snapInfo)
+                    Toggle("Snap to grid", isOn: $snap.on).toggleStyle(.pilotSwitch).labelsHidden()
                 }
             }
-            HStack(spacing: 6) {
-                Button(desk > 0 ? "Add another" : "Add to desktop") { model.add(widget) }.buttonStyle(.pilot)
-                    .help(desk > 0 ? "Put another copy on the desktop, with settings of its own" : "Put it on the desktop")
-                Button("Add to Home") { model.addHome(widget) }.buttonStyle(.pilot)
-                if !ready, trust == .locked, WidgetAsks.runsOnShow(widget) || WidgetAsks.acts(widget) { Button("Trust this widget…") { model.asking = widget.id }.buttonStyle(.pilot) }
-                Menu {
-                    Button("Duplicate to edit") { model.duplicate(widget) }
-                    if !ready {
-                        Button("Show folder") { model.showFolder(widget) }
-                        Divider()
-                        Button("Uninstall…", role: .destructive) { model.uninstalling = widget.id }
-                    }
-                } label: { Image(systemName: "ellipsis") }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            }
         }
-        .padding(.horizontal, 11).padding(.vertical, 9)
-        .innerCard()
     }
 
-    /// "Blocks · reading cpu, memory", "Page · command every 60 s".
-    static func feeds(_ widget: Widget) -> String {
-        "\(widget.draw == .html ? "Page" : "Blocks") · \(widget.data.label)"
+    @ViewBuilder private var inspector: some View {
+        if let placement = model.placements.first(where: { $0.id == selected && $0.onHome == home }), let widget = model.widget(placement.widget) {
+            WidgetsInspector(model: model, placement: placement, widget: widget, previews: previews)
+        } else {
+            Text(home ? "Click a widget above to change it." : "Click a widget on the map to change it.")
+                .font(ink.ui(12)).foregroundStyle(ink.text2)
+        }
+    }
+
+    private func list(_ display: WidgetsDisplay?) -> some View {
+        WidgetsAddList(model: model, home: home) { widget in
+            if home { selected = model.addHome(widget) }
+            else if let display { selected = model.add(widget, on: display) }
+            else { model.add(widget) }
+        }
     }
 }
 
