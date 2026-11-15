@@ -203,7 +203,7 @@ public enum GhostexInterface {
             let target = Int(channel)
             return Double((0...255).last { workArea($0, step) == target } ?? (0...255).min { abs(workArea($0, step) - target) < abs(workArea($1, step) - target) }!)
         }
-        return ColourAnswer.hex(Contrast.hex(channels))
+        return String(format: "#%06X", Contrast.hex(channels))
     }
 
     /// One channel of Ghostex's work area for a tint channel: its step toward white in Float, rounded half up.

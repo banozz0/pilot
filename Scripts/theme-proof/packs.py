@@ -181,7 +181,8 @@ def run(seam_only=False, fixes_only=False):
         f.stop(); f.start(); assert f.call('theme','status')['selected']['id']=='dracula'
         assert f.restore()['status']=='restored'; restored(f); assert f.factory_snapshot()==f.factory
         f.stop(); allows=[x for x in (f.root/f'host-{f.counter}.log').read_text().splitlines() if x.startswith('THEME Allow asked:')]  # The host's log is complete only once it stops.
-        assert allows and any('Wallpaper on Display 1' in x and (str(f.root/'app') in x or str(f.root/'app').replace(os.path.expanduser('~'),'~',1) in x) for x in allows),allows
+        # Several screens fold into one "Wallpaper on N screens" line (ThemeAllowText); one names its display.
+        assert allows and any(re.search(r'Wallpaper on (Display 1|\d+ screens)', x) and (str(f.root/'app') in x or str(f.root/'app').replace(os.path.expanduser('~'),'~',1) in x) for x in allows),allows
         for raw in raw_words+f.settings['wallpaperBindings']: assert not any(raw in x for x in allows),(raw,allows)
         f.start()
         passed('exact existing Tokyo Night/Dracula native colours, graphs, selection and all three app ANSI/syntax mappings; fixed style geometry/type; matching shape assignments; pins/timer/order/shuffle/fit/workspace preferences untouched; A->B->restart->Restore recovers original baseline')

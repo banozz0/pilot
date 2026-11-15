@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import struct
 import subprocess
 import time
 import uuid
@@ -1686,8 +1687,19 @@ def ghostex_interface(passed):
     def calls(f):
         log = f.root / 'state/ghostex-effects.jsonl'
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
-    def tint(pack):  # A dark pack's panel colour, a light pack's ground (Sven on 2189: a near-black ground read as Ghostex's default).
-        return pack['palette'].get('lighter_background', pack['palette']['background']) if pack['dark'] else pack['palette']['background']
+    def tint(pack):
+        """ThemePlan.tint (Sven on 2363): the tint whose step toward white, 1 % dark and 25 % light in Float as Ghostex
+        draws its work area, lands on the pack's ground."""
+        f32 = lambda x: struct.unpack('f', struct.pack('f', x))[0]
+        step = f32(0.01 if pack['dark'] else 0.25)
+        def work(c):
+            v = f32(c)
+            return int(f32(f32(v + f32(f32(255 - v) * step)) + 0.5) // 1)
+        ground = pack['palette']['background'].lstrip('#')
+        def channel(target):
+            hits = [c for c in range(256) if work(c) == target]
+            return hits[-1] if hits else min(range(256), key=lambda c: abs(work(c) - target))
+        return '#' + ''.join(f'{channel(int(ground[i:i + 2], 16)):02X}' for i in (0, 2, 4))
     def wanted(pack):
         colour = tint(pack)
         return dict(zip(keys, ['dark-2' if pack['dark'] else 'plain-light', 'custom', 'custom', colour, colour, 'dark' if pack['dark'] else 'light', -24, -24]))
@@ -1698,7 +1710,7 @@ def ghostex_interface(passed):
         assert f.call('theme', 'status')['apps']['ghostexFound'] is True
         plan = f.call('theme', 'plan', 'apply', 'a')
         line = [w for w in plan['review']['changes'] if w.startswith('Ghostex window and sidebar')]
-        assert line and 'Terminal colours stay' in line[0] and tint(f.packs[0]) in line[0] and 'Dark mode colour' in line[0] and 'Sidebar colourfulness' in line[0], plan['review']
+        assert line and 'Terminal colours stay' in line[0] and f.packs[0]['palette']['background'] in line[0] and 'Dark mode colour' in line[0] and 'Sidebar colourfulness' in line[0], plan['review']
         assert [c['key'] for c in plan['ghostex']] == [k for k in keys if wanted(f.packs[0])[k] != original[k]], plan['ghostex']
         assert values(f) == original and not calls(f), 'Preview wrote'
         f.controls(allow='no'); f.call('theme', 'apply', plan['id'], ok=False); f.controls()
