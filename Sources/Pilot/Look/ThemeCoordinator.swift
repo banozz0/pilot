@@ -6,7 +6,7 @@ import Darwin
 /// The only theme mutation route. Synchronous commit/recovery on MainActor cannot interleave across an Allow suspension.
 @Observable @MainActor
 final class ThemeCoordinator {
-    private static var live: ThemeCoordinator?
+    fileprivate static var live: ThemeCoordinator?
     /// An isolated test run's folder is under /var/folders, a link the pack store's no-follow walk refuses, and its real
     /// /private/var is what ThemeFiles' link resolving (Foundation's) gives back as /var: no folder there serves both. So
     /// the sandbox host takes PILOT_SANDBOX_THEMES=<a throwaway folder with no link in its path> for the theme system, and
@@ -2480,6 +2480,9 @@ struct ThemeFixture: Decodable {
             coordinator.shipped = ThemeCoordinator.Shipped(wallpapers: ShippedWallpapers(root: config.root + "/wallpapers", source: source),
                                           index: { try ExtensionCatalogue.index(await source.fetch(ExtensionCatalogue.indexPath, ExtensionCatalogue.indexLimit)) })
         }
+        // Look › Catalogue's model reads production(): in the fixture that is this coordinator, so theme catalogue and get
+        // stand and install in the fixture's packs, never the test process's own library (skills-test, 2026-11-16).
+        ThemeCoordinator.live = coordinator
         let verbs = ControlVerbs(); verbs.registerCore(); verbs.registerThemes { coordinator }
         if env["PILOT_THEME_CAROUSEL"] == "1" {  // T8's proof only.
             let carousel = WallpaperCarousel.Source.fixture(coordinator, root: config.root)
