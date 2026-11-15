@@ -138,8 +138,11 @@ final class BarDropClip: NSView {
 
 /// The terminal's drop around its shell's view (C frames, design cards 6, 10, 11): the header (`>_ Terminal  zsh ·
 /// ~/code/pilot`, its key and hide), a rule, the shell on the drop's ground, a hairline down the sides and round the
-/// bottom, no shadow; square at the top under the bar and the style's pop corner at the bottom. The shell's view keeps
-/// the keyboard: the header and the edge take no keys, and the edge no clicks.
+/// bottom, no shadow; square at the top under the bar and the style's pop corner at the bottom. On Look's Glass the
+/// ground is Ask AI's glass (AIChatPanel.backdrop) and the glass's rim its edge, so the two drops match (Liquid Glass
+/// round 3, Sven on build 2550: the terminal stood solid beside Ask AI's glass); the shell draws its own ground over it,
+/// at the opacity Sven's Ghostty config gives it. The shell's view keeps the keyboard: the header and the edge take no
+/// keys, and the edge no clicks.
 @MainActor
 final class TerminalDropChrome: NSView {
     @Observable @MainActor
@@ -155,6 +158,8 @@ final class TerminalDropChrome: NSView {
     private let top: NSView
     private let rule = NSView()
     private let edge: Edge
+    /// Ask AI's glass under everything, on Look's Glass; nil when the drop is solid.
+    private let glass: MaterialBackdrop?
     private var pending = false
 
     /// `body` (the shell's view) under the header; `detail` says what runs where, read again by `refresh`.
@@ -169,16 +174,18 @@ final class TerminalDropChrome: NSView {
         host.sizingOptions = []
         top = host
         edge = Edge(radius: radius, colour: NSColor(ink.windowLine), width: ink.stroke)
+        glass = look.material(on: .quickAI) == .glass ? AIChatPanel.backdrop(NSView(), look: look) : nil
+        edge.isHidden = glass != nil
         super.init(frame: body.frame)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(ink.surface).cgColor
+        layer?.backgroundColor = glass == nil ? NSColor(ink.surface).cgColor : nil
         layer?.cornerRadius = radius
         layer?.cornerCurve = .continuous
         layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]   // the bottom ones: this view is not flipped
         layer?.masksToBounds = true
         rule.wantsLayer = true
         rule.layer?.backgroundColor = NSColor(ink.line).cgColor
-        for view in [body, top, rule, edge] { addSubview(view) }
+        for view in [glass, body, top, rule, edge].compactMap({ $0 }) { addSubview(view) }
         place()
     }
 
@@ -256,6 +263,7 @@ final class TerminalDropChrome: NSView {
         let side = BarDropHeader.inset, air: CGFloat = 10
         body.frame = CGRect(x: side, y: air, width: max(0, w - side * 2), height: max(0, bounds.height - h - 1 - air * 2))
         edge.frame = bounds
+        glass?.frame = bounds
     }
 
     /// The hairline down the sides and round the bottom, over everything; clicks go through it.
