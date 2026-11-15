@@ -34,9 +34,13 @@ public enum AgentTool {
     ] }
 
     /// What one command hands back, at most this many UTF-8 bytes. Claude Code's shell tool (2.1.325, measured
-    /// 2026-11-15) keeps an answer of up to 30,000 bytes whole and saves a longer one to a file, showing only its first 2 KB,
-    /// which an agent allowed nothing but `pilot` can never read: the `pilot` an agent runs (PILOT_AGENT) cuts first.
-    public static let resultLimit = 30_000
+    /// 2026-11-15 and 16) keeps an answer of up to 30,000 bytes whole and saves a longer one to a file, showing only its
+    /// first 2 KB, which an agent allowed nothing but `pilot` can never read: the `pilot` an agent runs (PILOT_AGENT) cuts
+    /// first. Its limit counts UTF-8 bytes of what the command printed, not characters: 30,000 ASCII bytes came back whole,
+    /// 30,001 went to a file, and so did 10,100 en dashes (10,100 characters, 30,098 bytes). What it wraps around the
+    /// output counts too (an "Exit code" line and stderr on a failure; a trailing newline it trims), so the cut keeps
+    /// 2,000 bytes clear of it.
+    public static let resultLimit = 28_000
 
     /// `text` whole when it fits `resultLimit`, else its head and its tail around a "… N KB cut …" line: a plan's id, a
     /// summary or an error may sit at either end.
