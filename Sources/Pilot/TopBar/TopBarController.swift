@@ -367,6 +367,11 @@ final class TopBarWindows: TopBarPanels {
         content.sizingOptions = []
         let body: NSView = key.side == nil ? content : TopBarIslandClip(content)
         let panel = Self.panel(MaterialBackdrop(content: body), level: level)
+        // Set, so its clear pixels take the mouse too (as GapHandlePanels'). Left at AppKit's default, a clear window takes
+        // a click only on a pixel it draws, and the glass draws none of its own: a click on an item's padding, between a
+        // glyph's strokes or on a flare went through to the wallpaper, and macOS showed the desktop (Sven, 2026-11-15; 35 of
+        // 630 points over his right island's end reached Pilot). The dock, which shares panel(_:level:), keeps the default.
+        panel.ignoresMouseEvents = false
         // Drag to rearrange on the bar (spec drag-reorder), in the row's own space.
         BarDrag.shared.store = store
         panel.drag = BarPanelDrag(screen: key.screen, host: content)
