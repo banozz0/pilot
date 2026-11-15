@@ -315,9 +315,6 @@ struct TopBarStrip<Slot: View>: View {
             if let trailing { trailing.layoutValue(key: TopBarRow.Side.self, value: .right) }
             if let overflow { overflow.layoutValue(key: TopBarRow.Overflow.self, value: true) }
         }
-        // Pills on Glass: every pill's glass in one container, which renders them in one pass (Apple: "for the best
-        // rendering performance"); spacing 0, so pills apart stay apart and only touching flares join at the edge.
-        .modifier(GlassBatch(on: pilled && background == .glass && !glassPreview && look != nil))
         .environment(\.inTopBar, true)
         .environment(\.barItemColours, itemColours)
         .environment(\.barGround, tone.map { ($0.tone.ground, inked.dark) })
@@ -359,15 +356,6 @@ struct TopBarStrip<Slot: View>: View {
     private var margin: CGFloat { CGFloat(configuration?.horizontalMargin ?? 0) }
 }
 
-/// Its content's Liquid Glass shapes in one GlassEffectContainer while `on`.
-private struct GlassBatch: ViewModifier {
-    let on: Bool
-
-    func body(content: Content) -> some View {
-        if on { GlassEffectContainer(spacing: 0) { content } } else { content }
-    }
-}
-
 /// A slot moved by a drag to rearrange (spec drag-reorder): only this reads the drag, so a move redraws the slots
 /// that shift, not the strip.
 private struct BarSlotMoved: ViewModifier {
@@ -386,7 +374,10 @@ private struct BarSlotMoved: ViewModifier {
 /// Liquid Glass in its outline (TopBarColour.liquidGlass; the window behind a Pills side shows none), the colour at Look's
 /// Transparency share where no Look is given (the renders). On Glass and Clear each pill tones the wallpaper under it
 /// as the islands do (`tone`; Sven on build 2577: "pills glass look how they look", washed out over a bright sky), and
-/// Clear keeps the ring (Sven on build 2577). Nil `configuration` leaves the slot as it is.
+/// Clear keeps the ring (Sven on build 2577). Each pill's glass stands on its own behind its item, as an island's does,
+/// in no GlassEffectContainer: a container renders only views carrying glassEffect with their glass behind them, and the
+/// items, beside the glass rather than on it, went under it, lensed and frosted (Sven on build 2587: muddy pills, their
+/// words ghosted above and below). Nil `configuration` leaves the slot as it is.
 private struct BarPill: ViewModifier {
     @Environment(\.style) private var style
     let configuration: BarPresetConfiguration?

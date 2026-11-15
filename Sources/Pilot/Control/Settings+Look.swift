@@ -73,12 +73,12 @@ extension SettingsSchema {
         ])
     }
 
-    /// Look's Material (W77): glass, solid or clear sets the top bar's Background, the dock's style and Look's Glass at once;
+    /// Look's Material (W77): glass, solid or clear sets the top bar's Background, the dock's style and Look's Glass and Blur at once;
     /// custom is read once one of them was changed on its own, and refuses as a value. It needs the bar and the dock, so it is
     /// registered with the engine's keys.
     func registerMaterial(_ material: LookMaterialStores) {
         register([
-            .choice("look.material", "Material: glass, solid or clear sets the top bar, its dropdowns, the dock, Pilot's windows and panels and the desktop widgets at once (clear: Pilot's windows, panels and widgets glass); custom once one was changed on its own",
+            .choice("look.material", "Material: glass, solid or clear sets the top bar, its dropdowns, the dock, Pilot's windows and panels and the desktop widgets at once (glass: their regular glass, look.glassBlur full; clear: their clear glass, look.glassBlur light; the bar's dropdowns and drops stay glass); custom once one was changed on its own",
                     page: "look", LookMaterial.allCases, standard: .custom,
                     read: { material.material }, write: { value throws(ControlError) in try material.pick(value) }),
         ])

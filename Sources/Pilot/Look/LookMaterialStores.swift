@@ -2,7 +2,7 @@ import Foundation
 import PilotCore
 
 /// Look's Material (LookMaterial, W77) on the stores it reads and sets: the top bar's Background, the dock's style and
-/// Look's Glass. The Look page and `pilot get|set look.material` go through it; a render passes its own stores.
+/// Look's Glass and Blur. The Look page and `pilot get|set look.material` go through it; a render passes its own stores.
 @MainActor
 struct LookMaterialStores {
     let look: Look
@@ -16,7 +16,7 @@ struct LookMaterialStores {
     /// The stored switches, never what is drawn now: Reduce transparency, Transparency 0 % or Toybox draw Glass solid
     /// without making the material read Custom.
     var surfaces: LookMaterial.Surfaces {
-        .init(bar: bar.background, dock: dock?.settings.style ?? DockSettings().style, glass: look.glass)
+        .init(bar: bar.background, dock: dock?.settings.style ?? DockSettings().style, glass: look.glass, blur: look.glassBlur)
     }
 
     var material: LookMaterial { LookMaterial(surfaces) }
@@ -32,5 +32,6 @@ struct LookMaterialStores {
         if bar.background != surfaces.bar { bar.background = surfaces.bar }
         if let dock, dock.settings.style != surfaces.dock { dock.settings.style = surfaces.dock }
         if look.glass != surfaces.glass { look.glass = surfaces.glass }
+        if let blur = surfaces.blur, look.glassBlur != blur { look.glassBlur = blur }
     }
 }

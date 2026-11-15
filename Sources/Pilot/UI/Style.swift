@@ -69,6 +69,9 @@ extension EnvironmentValues {
     /// The glass's tint behind a panel's face (Glass everywhere, Sven 2026-10-19, Q356): set by styled(_:) on the
     /// Hyper+Space menu, clipboard history and quick notes while Look's Glass is on; nil elsewhere, solid.
     @Entry var glassFace: NSColor? = nil
+    /// A bar dropdown's or drop's glass (StyleSurface.barPopovers, .barDrop), set by styled(_:): regular at any blur
+    /// (GlassBlur.dropdown), never Light's clear glass.
+    @Entry var dropdownGlass = false
 }
 
 extension NSFont.Weight {
@@ -140,6 +143,7 @@ private struct Styled: ViewModifier {
             .transformEnvironment(\.font) { if surface.scale != 1 { $0 = .system(size: 13 * surface.scale) } }
             .environment(\.windowLayers, layers)
             .environment(\.glassFace, look.glassFace(surface) ? look.glassTint(on: surface) : nil)
+            .environment(\.dropdownGlass, surface == .barPopovers || surface == .barDrop)
     }
 }
 
@@ -275,13 +279,16 @@ private struct PopSurfaceFace: ViewModifier {
 /// The top bar's material as a SwiftUI background: an NSGlassEffectView in Look's Blur's style, tinted, at `cornerRadius`
 /// (the same view MaterialBackdrop puts behind the window and the bar), or at Blur Off the tint alone. Offscreen the glass
 /// draws a flat grey: Sven's screen proves it.
-/// Nil `tint` is clear glass (a bar popover's, PopoverGlass), and nothing at Blur Off.
+/// Nil `tint` is clear glass (a bar popover's, PopoverGlass), and nothing at Blur Off. A bar dropdown or drop
+/// (dropdownGlass) wears regular glass at Light too.
 struct GlassFace: View {
+    @Environment(\.dropdownGlass) private var dropdown
     let tint: NSColor?
     let cornerRadius: CGFloat
 
     var body: some View {
-        if let style = Look.shared.glassBlur.effectStyle {
+        let blur = Look.shared.glassBlur
+        if let style = (dropdown ? blur.dropdown : blur).effectStyle {
             GlassEffect(tint: tint, cornerRadius: cornerRadius, style: style)
         } else if let tint {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Color(nsColor: tint))
@@ -293,6 +300,10 @@ extension GlassBlur {
     /// The glass's style at this blur, nil at Off: AppKit's for MaterialBackdrop and GlassFace, SwiftUI's for the widgets.
     var effectStyle: NSGlassEffectView.Style? { self == .off ? nil : self == .light ? .clear : .regular }
     var glass: Glass? { self == .off ? nil : self == .light ? .clear : .regular }
+    /// A bar dropdown's or drop's blur: Full's regular glass wherever there is glass. Words in a list over clear glass
+    /// would not read (Sven, 2026-11-15), so Light's clear glass (Look's Material Clear) stays on the windows, panels and
+    /// widgets, and the dropdowns stay Solid or Glass.
+    var dropdown: GlassBlur { self == .off ? .off : .full }
 }
 
 /// macOS draws glass in a window without focus as inactive: on Light a blur of 10 and no refraction where a focused window

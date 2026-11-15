@@ -393,8 +393,9 @@ final class AIChatPanel {
     static func backdrop(_ host: NSView, look: Look) -> MaterialBackdrop {
         let radius = radius(look)
         let backdrop = MaterialBackdrop(content: host, cornerRadius: radius)
-        // Untinted, as the bar's dropdowns (PopoverGlass): the tint only at Blur Off, where it is the face.
-        backdrop.show(look.material(on: .barDrop), tint: look.glassTint(on: .barDrop), tintsGlass: false)
+        // Untinted, as the bar's dropdowns (PopoverGlass): the tint only at Blur Off, where it is the face. Regular glass
+        // at Light too, as theirs (GlassBlur.dropdown).
+        backdrop.show(look.material(on: .barDrop), tint: look.glassTint(on: .barDrop), blur: look.glassBlur.dropdown, tintsGlass: false)
         backdrop.effect?.frame.size.height += radius
         return backdrop
     }
