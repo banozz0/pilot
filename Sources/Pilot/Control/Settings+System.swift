@@ -45,12 +45,14 @@ extension SettingsSchema {
             // No page row since Q113: on, as it ships.
             .bool("wallpaper.fitShape", "Only images that fit the screen, on unless set here: off, every screen steps through every image", page: "look",
                   standard: true, read: { wallpaper.fitShape }, write: { wallpaper.fitShape = $0 }),
-            // Use my wallpaper folder for every theme (Sven 2026-11-14): only stored here; the page's switch also applies the
-            // theme in use again, through Allow, while a set never acts on the Mac.
+            // Use my wallpaper folder for every theme (Sven 2026-11-14): stored here, and a collection the theme listed file by
+            // file becomes the folder (ThemeCoordinator.adoptWallpaperFolder; no screen changes). The page's switch also
+            // applies the theme in use again, through Allow, while a set never changes a screen.
             .bool("wallpaper.themeFolderOn", "Use my wallpaper folder for every theme: on, a theme apply sets wallpaper.themeFolder's images (wide and tall by each screen's shape) in place of the theme's own; off, the theme's own",
-                  page: "look", standard: false, read: { wallpaper.themeFolderOn }, write: { wallpaper.themeFolderOn = $0 }),
+                  page: "look", standard: false, read: { wallpaper.themeFolderOn }, write: { wallpaper.themeFolderOn = $0; ThemeCoordinator.adoptOwnedWallpaperFolder() }),
             .text("wallpaper.themeFolder", "The wallpaper folder every theme uses while wallpaper.themeFolderOn is on; empty for none", page: "look", standard: "",
-                  read: { wallpaper.themeFolder ?? "" }, write: { path throws(ControlError) in wallpaper.themeFolder = path.isEmpty ? nil : try Self.folder(path) }),
+                  read: { wallpaper.themeFolder ?? "" }, write: { path throws(ControlError) in wallpaper.themeFolder = path.isEmpty ? nil : try Self.folder(path)
+                      ThemeCoordinator.adoptOwnedWallpaperFolder() }),
             // The page's picker: a minute count it does not list would show as no pick.
             .choice("wallpaper.interval", "Change on their own, every minutes (0 never)", page: "look",
                     WallpaperCycle.intervals.map(String.init), standard: "0",

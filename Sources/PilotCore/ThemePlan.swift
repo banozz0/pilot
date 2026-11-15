@@ -58,6 +58,9 @@ public struct ThemePlan: Sendable {
     public let warnings: [String]
     public let wallpaperState: ThemeWallpaperState?
     public let wallpapers: [ThemeWallpaperMutation]
+    /// How many images the collection holds when it lists a folder rather than its files (Use my wallpaper folder for
+    /// every theme); nil when it lists the images themselves.
+    public let wallpaperImages: Int?
     /// Wallpaper the person changed since the theme set it: their choice stays, and only Pilot's claim on it goes.
     public let keptWallpapers: [ThemeWallpaperTarget]
     /// Wallpaper claims carried as they are: a shipped pack whose pictures are not here leaves those screens alone, and
@@ -76,12 +79,12 @@ public struct ThemePlan: Sendable {
     public let ghostexClaims: [ThemeSettingClaim]
     public let apps: [ThemeAppBinding]
     public init(id: String, packID: String?, revision: String?, binding: ThemeBinding, style: String, ledger: ThemeSnapshot,
-                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], keptFiles: [ThemeClaim] = [], keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
+                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], wallpaperImages: Int? = nil, keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], keptFiles: [ThemeClaim] = [], keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
         self.id = id; self.packID = packID; self.revision = revision; self.binding = binding; self.style = style
         self.zed = zed; self.zedOptOut = zedOptOut; self.observations = observations
         self.obsidian = obsidian; self.obsidianOptOut = obsidianOptOut
         self.ledger = ledger; self.protectedLegacy = protectedLegacy; self.mutations = mutations; self.selection = selection; self.warnings = warnings
-        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.keptFiles = keptFiles; self.keptLook = keptLook
+        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.wallpaperImages = wallpaperImages; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.keptFiles = keptFiles; self.keptLook = keptLook
         self.reloads = reloads
         self.ghostexState = ghostexState; self.ghostex = ghostex; self.ghostexClaims = ghostexClaims; self.apps = apps
     }

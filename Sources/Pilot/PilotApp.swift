@@ -72,6 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ScreenEvents.shared.start(pausing: [SystemSampler.shared, ClipboardHistory.shared, WallpaperSettings.shared, WidgetDesk.shared] + engine)
         // Look › Wallpaper's Change on its own (story 160): a timer only while an interval is set.
         WallpaperSettings.shared.schedule()
+        // Use my wallpaper folder for every theme: a collection an earlier theme apply listed file by file shows as the folder.
+        ThemeCoordinator.adoptOwnedWallpaperFolder()
         // Defaults › Folders' GIFs folder, handed to Stickers before the menu first lists it.
         _ = PilotFolders.shared
         // Pictures waiting in Your folder designs' To add join Your designs, off the main thread (T61).

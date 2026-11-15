@@ -98,6 +98,9 @@ extension ControlVerbs {
                     return try await owner.fixturePress(words[1] == "restore" ? nil : words[1])
                 case "fixture-cycle" where words.count == 3:
                     return try await owner.fixtureCycle(display: words[1], selection: words[2])
+                case "fixture-folder" where words.count == 2:
+                    let adopted = try owner.fixtureFolder(words[1] == "off" ? nil : words[1])
+                    return .object(["adopted": .bool(adopted), "wallpaperOwned": try themeJSON(owner.wallpaperClaims())])
                 case "fixture-style" where words.count == 2:
                     return try owner.fixtureStyle(words[1])
                 case "fixture-colour" where words.count == 2:

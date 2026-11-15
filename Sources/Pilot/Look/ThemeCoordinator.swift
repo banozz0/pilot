@@ -1010,7 +1010,7 @@ final class ThemeCoordinator {
         let observed = try wallpaper?.read()
         guard Self.stillTheme(claims[index], now: .image(before), among: claims),
               let collection = claims.first(where: { $0.target == .sources }), case .sources(let images) = collection.last,
-              images.contains(after), try observed?.value(.sources) == collection.last,
+              Self.holds(images, after), try observed?.value(.sources) == collection.last,
               try observed?.value(.display(display)) == .image(before) else {
             throw ThemeFailure("wallpaper cycle ownership conflict; later choice preserved")
         }
@@ -1036,6 +1036,60 @@ final class ThemeCoordinator {
             if try ledger().0.bytes == bytes, try wallpaper?.read().value(.display(display)) == .image(after) { return true }
             throw error
         }
+    }
+
+    /// Use my wallpaper folder for every theme, without a theme apply (Sven 2026-11-15): while the switch is on and the
+    /// theme still owns a collection that lists the folder's files one by one (an apply before build 2528 set it so),
+    /// the collection becomes the folder itself, one entry in Images from. Only a collection wholly inside the folder,
+    /// and only while every claimed screen still shows one of its images, so the theme keeps owning what it owned; the
+    /// screens stay as they are. Journaled as a cycle step is. True when it changed.
+    @discardableResult func adoptWallpaperFolder() throws -> Bool {
+        guard let folder = wallpaperFolder(), !busy, try state("pending").bytes == nil, try following().wallpapers else { return false }
+        let (file, old) = try ledger()
+        guard var claims = old.wallpapers, let index = claims.firstIndex(where: { $0.target == .sources }),
+              case .sources(let images) = claims[index].last, !images.isEmpty, images != [folder],
+              images.allSatisfy({ Self.holds([folder], $0) }),
+              claims.allSatisfy({ claim in
+                  guard case .display = claim.target, case .image(let path?) = claim.last else { return true }
+                  return Self.holds([folder], path)
+              }),
+              let observed = try wallpaper?.read(), try observed.value(.sources) == claims[index].last else { return false }
+        let change = ThemeWallpaperMutation(target: .sources, before: claims[index].last, after: .sources([folder]))
+        claims[index] = .init(target: .sources, original: claims[index].original, last: .sources([folder]))
+        var next = old
+        next.epoch += 1
+        next.wallpapers = claims
+        let bytes = try ThemeDigest.encoded(next)
+        let journal = ThemeJournal(schema: 1, beforeLedger: file.bytes, afterLedger: bytes, mutations: [], wallpapers: [change])
+        _ = try ThemeFiles.write(ThemeDigest.encoded(journal), over: state("pending"))
+        do {
+            try writeWallpaper(change)
+            _ = try ThemeFiles.write(bytes, over: file)
+            _ = try ThemeFiles.write(nil, over: state("pending"))
+            return true
+        } catch {
+            _ = try recover()
+            if try ledger().0.bytes == bytes, try wallpaper?.read().value(.sources) == change.after { return true }
+            throw error
+        }
+    }
+
+    /// At launch and after a set of the switch or its folder, once a theme owns the wallpaper: the collection an earlier
+    /// apply listed file by file becomes the folder.
+    static func adoptOwnedWallpaperFolder() {
+        guard WallpaperSettings.shared.themeOverride != nil,
+              FileManager.default.fileExists(atPath: support.appending(path: "state/ownership.json").path) else { return }
+        do { try production().adoptWallpaperFolder() }
+        catch { looklog.error("wallpaper folder not adopted: \(String(describing: error), privacy: .public)") }
+    }
+
+    /// The fixture's switch: `path` as Use my wallpaper folder for every theme's folder (nil turns it off), then what a
+    /// set of it does.
+    func fixtureFolder(_ path: String?) throws -> Bool {
+        guard let fixtureRoot else { throw ThemeFailure("fixture host required") }
+        guard path.map({ $0.hasPrefix(fixtureRoot + "/") }) ?? true else { throw ThemeFailure("fixture folder outside root") }
+        wallpaperFolder = { path }
+        return try adoptWallpaperFolder()
     }
 
     /// The main-thread proof (coordinator's brief): "child" waits on a real child process the way production waits on
@@ -1213,15 +1267,21 @@ final class ThemeCoordinator {
         if now == claim.last { return true }
         guard case .sources(let images)? = claims.first(where: { $0.target == .sources })?.last else { return false }
         switch (claim.target, now) {
-        case (.display, .image(let path?)): return images.contains(path)
-        case (.sources, .sources(let paths)): return !paths.isEmpty && paths.allSatisfy(images.contains)
+        case (.display, .image(let path?)): return holds(images, path)
+        case (.sources, .sources(let paths)): return !paths.isEmpty && paths.allSatisfy { holds(images, $0) }
         default: return false
         }
     }
 
+    /// Whether a theme's collection holds `path`: listed itself, or inside a listed folder (Use my wallpaper folder for
+    /// every theme sets the folder, not its files). Paths only, so nothing reads the disk on the main thread.
+    private static func holds(_ collection: [String], _ path: String) -> Bool {
+        collection.contains { path == $0 || path.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
+    }
+
     /// `keep`: a shipped pack whose pictures are not here (ShippedWallpapers) leaves every screen as it is: the claims
     /// still the theme's are held as the ledger has them, with no mutation, so Restore still puts each original back.
-    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?, keep: Bool = false) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget], held: [ThemeWallpaperClaim]) {
+    private func wallpaperPlan(_ loaded: ThemePackStore.Loaded?, record: ThemeLedger, state: ThemeWallpaperState?, keep: Bool = false, collection: [String]? = nil) throws -> (changes: [ThemeWallpaperMutation], kept: [ThemeWallpaperTarget], held: [ThemeWallpaperClaim]) {
         let claims = record.wallpapers ?? []
         guard let state else {
             guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [], [])
@@ -1239,7 +1299,7 @@ final class ThemeCoordinator {
         var changes: [ThemeWallpaperMutation] = []
         // With their own collection in place, the theme's images would have nothing to cycle from: none are set.
         if let loaded, !loaded.images.isEmpty, !kept.contains(.sources) {
-            changes.append(.init(target: .sources, before: .sources(state.sources), after: .sources(loaded.images)))
+            changes.append(.init(target: .sources, before: .sources(state.sources), after: .sources(collection ?? loaded.images)))
             let order = state.preferences["order"]?.string.flatMap(WallpaperCycle.Order.init) ?? .name
             let seed = state.preferences["seed"]?.string.flatMap(UInt64.init) ?? 0
             let fit = state.preferences["fitShape"] == .bool(true)
@@ -1348,7 +1408,7 @@ final class ThemeCoordinator {
         for change in plan.wallpapers {
             switch change.target {
             case .sources:
-                if case .sources(let paths) = change.after { entries.append(.init(name: "Wallpaper collection: \(paths.count) images")) }
+                if case .sources(let paths) = change.after { entries.append(.init(name: "Wallpaper collection: \(plan.wallpaperImages ?? paths.count) images")) }
             case .display(let id):
                 unnamed += 1
                 entries.append(.init(name: "Wallpaper on \(wallpaper?.name(id) ?? "Display \(unnamed)")", screen: true))
@@ -1504,7 +1564,7 @@ final class ThemeCoordinator {
         // place of the pack's, so a shipped pack's are never fetched.
         if id != nil, try following().wallpapers, let folder = wallpaperFolder() {
             let pictures = try await Task.detached { try ThemePackStore.folderPictures(folder) }.value
-            return try plan(id, ghostex: ghostex, folder: pictures)
+            return try plan(id, ghostex: ghostex, folder: (folder, pictures.images, pictures.portraits))
         }
         var note: String?
         if let id { note = await fetchShipped(id) }
@@ -1528,9 +1588,10 @@ final class ThemeCoordinator {
             return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded. \(ExtensionCatalogue.Problem.reason(error))"
         }
     }
-    /// `folder`: the person's wallpaper folder's pictures, which this plan sets in place of the pack's.
+    /// `folder`: the person's wallpaper folder and its pictures, which this plan sets in place of the pack's. The collection
+    /// becomes the folder itself, so Images from shows it as one entry; the pictures pick each screen's image.
     private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil,
-                      folder: (images: [String], portraits: Set<String>)? = nil) throws -> ThemePlan {
+                      folder: (path: String, images: [String], portraits: Set<String>)? = nil) throws -> ThemePlan {
         guard try state("pending").bytes == nil else { throw ThemeFailure("pending recovery; restart/recover before planning") }
         let (recordFile, kept) = try ledger()
         let loaded = try id.map { id in
@@ -1679,7 +1740,8 @@ final class ThemeCoordinator {
         let components = try following()
         let nativePlan = try appearancePlan(loaded?.pack, old: appearanceOwnership(record, current: native?.read()), following: components)
         let unpictured = folder == nil && (loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false)
-        let (wallpapers, keptWallpapers, heldWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured)
+        let (wallpapers, keptWallpapers, heldWallpapers) = try wallpaperPlan(components.wallpapers ? loaded : nil, record: record, state: wallpaperState, keep: unpictured,
+                                                                             collection: folder.map { [$0.path] })
         if loaded != nil, cursorIsSystem(), components.cursor != false, nativePlan.1?.cursor != true {
             warnings.append(Self.cursorSkipped)
         }
@@ -1695,7 +1757,7 @@ final class ThemeCoordinator {
         let appObservations = try custom.map { try ThemeFiles.read(root: $0.app, path: "Contents/Info.plist") }
         let plan = ThemePlan(id: UUID().uuidString, packID: id, revision: loaded?.revision, binding: binding, style: style(),
                              ledger: recordFile, protectedLegacy: legacy, zed: local.zed, zedOptOut: local.zedOptOut, observations: targets + appObservations + [try state("bindings"), try state("components")],
-                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
+                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, wallpaperImages: folder?.images.count, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
         if plans.count >= 32 { plans.removeAll() }
         plans[plan.id] = (plan, try context(), nativePlan.0, nativePlan.1)
         return plan
