@@ -62,7 +62,7 @@ extension BarItemsStore {
 
     func setGeometry(_ key: String, value: Double) throws(ControlError) {
         try requireWritable()
-        guard var config = settings.preset else { throw ControlError(.badValue, "choose a bar preset before editing geometry") }
+        guard var config = settings.preset else { throw ControlError(.badValue, "Full strip Attached keeps the screen's own sizes: set it Floating, or choose another preset, to adjust them") }
         guard let field = Self.geometryFields.first(where: { $0.0 == key }) else { throw ControlError(.badValue, "unknown bar geometry") }
         config[keyPath: field.2] = value
         do { try config.validate() } catch { throw ControlError(.outOfRange, String(describing: error)) }

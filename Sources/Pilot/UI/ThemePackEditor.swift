@@ -191,7 +191,8 @@ struct ThemePackEditor: View {
             }
             Picker("Bar preset suggestion", selection: Binding(get: { draft.pack.barPreset?.rawValue ?? "none" }, set: { draft.pack.barPreset = BarPreset(rawValue: $0) })) {
                 Text("Keep personal layout").tag("none")
-                ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                // A pack suggests Full strip as its Floating, the one with sizes to carry.
+                ForEach(BarPreset.allCases, id: \.self) { Text($0 == .floatingStrip ? "Full strip, Floating" : $0.title).tag($0.rawValue) }
             }
             Text("A theme applies the material and bar layout it carries; Restore default puts yours back. Items, their order and fonts stay personal.").foregroundStyle(ink.text2)
         }.frame(maxWidth: .infinity, alignment: .leading)
