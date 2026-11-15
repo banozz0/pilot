@@ -10,6 +10,8 @@ let docklog = Logger(subsystem: "dev.banozz.pilot", category: "dock")
 protocol DockPanels: AnyObject {
     func show()
     func hide()
+    /// Keeps the dock out of sight while its screen is on a fullscreen Space, made and placed, and brings it back.
+    func cover(_ covered: Bool)
 }
 
 /// Pilot's dock (spec Projects/Pilot/specs/pilot-dock.html; look A, Sven 2026-11-13, Q199, Q200): off by default. On saves
@@ -31,6 +33,10 @@ final class DockController {
     @ObservationIgnored var panels: any DockPanels
     /// The tiler's name for the dock's screen, the main one (spec: main screen only in v1).
     @ObservationIgnored var screen: @MainActor () -> String? = { NSScreen.screens.first?.localizedName }
+    /// The dock's screen as the window server's Spaces layout names it (TopBarGeometry.fullscreen).
+    @ObservationIgnored var screenID: @MainActor () -> String? = { NSScreen.screens.first?.displayUUID }
+    /// Out of sight, with the visualizer off, while the dock's screen is on a fullscreen Space (as the top bar).
+    private(set) var covered = false
 
     /// Saved after each switch, so a relaunch shows the dock and off still puts back the auto-hide it found.
     private(set) var state: DockSwitch {
@@ -96,12 +102,34 @@ final class DockController {
         }
     }
 
-    /// On screen: the pins read, the running apps followed as apps launch and quit, the pill shown.
+    /// On screen: the pins read, the running apps followed as apps launch and quit, the pill shown, unless its screen is
+    /// on a fullscreen Space now.
     private func shown() {
         dockPins = readPins()
         followRunning()
+        coverFullscreen()
         panels.show()
         listen()
+        // Only the workspace's centre posts Space changes: entering or leaving fullscreen, or a swipe to another Space.
+        tokens.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                                                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.coverFullscreen() }
+        })
+    }
+
+    /// Whether the dock's screen is on a fullscreen app's Space (or Split View's) now, read fresh. The pill and the bars
+    /// join every Space, and `.fullScreenNone` only stops them going fullscreen themselves, so they showed over a
+    /// fullscreen app (Sven on build 2564).
+    var fullscreen: Bool { TopBarGeometry.fullscreen(screenID(), spaces: DisplaySpaces.layout()) }
+
+    /// Hides the pill and the visualizer on a fullscreen Space and brings them back off it; the tiler's room stays.
+    private func coverFullscreen() {
+        let now = state.isOn && fullscreen
+        guard now != covered else { return }
+        covered = now
+        panels.cover(now)
+        listen()
+        docklog.notice("dock \(now ? "hidden on" : "back off", privacy: .public) a fullscreen Space")
     }
 
     /// The visualizer on while the dock shows and its switch is on, its bars as tall as the size makes them.
@@ -111,7 +139,7 @@ final class DockController {
             visualizer.set(false)
             visualizer.tallest = tallest
         }
-        visualizer.set(state.isOn && settings.visualizer)
+        visualizer.set(state.isOn && settings.visualizer && !covered)
     }
 
     /// The visualizer's switch: on asks macOS for System Audio Recording Only now, on this press, by starting a tap for
@@ -147,6 +175,7 @@ final class DockController {
         tokens = []
         runningWatch?.invalidate()
         runningWatch = nil
+        covered = false
         panels.hide()
         visualizer.set(false)
     }
@@ -230,10 +259,13 @@ final class DockController {
     }
 }
 
-/// The dock's one window: a borderless, non-activating panel at the foot of the main screen, centred, as wide as the pill.
+/// The dock's one window: a borderless, non-activating panel at the foot of the main screen, centred, as wide as the pill;
+/// on every Space but a fullscreen app's (`cover`).
 @MainActor
 final class DockWindow: DockPanels {
     private var panel: TopBarPanel?
+    /// The dock's screen is on a fullscreen Space: the panel stays made and placed, out of sight.
+    private var covered = false
     /// The pill's view; set once the controller it draws exists (Engine).
     var make: () -> NSView = { NSView() }
     /// Where the pill stands: on the screen's bottom edge, or over it (rice round).
@@ -260,7 +292,13 @@ final class DockWindow: DockPanels {
         }
         guard let panel else { return }
         panel.appearance = Look.shared.appearance(for: .topBar)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        if !covered, !panel.isVisible { panel.orderFrontRegardless() }
+    }
+
+    func cover(_ covered: Bool) {
+        self.covered = covered
+        guard let panel else { return }
+        if covered { panel.orderOut(nil) } else if !panel.isVisible { panel.orderFrontRegardless() }
     }
 
     /// The widest the pill may be: the dock's screen less DockPill.sideMargin each side.
@@ -270,6 +308,7 @@ final class DockWindow: DockPanels {
         panel?.orderOut(nil)
         panel = nil
         fitted = nil
+        covered = false
     }
 
     private var fitted: NSRect?
@@ -296,4 +335,5 @@ final class DockWindow: DockPanels {
 final class DockNoWindow: DockPanels {
     func show() {}
     func hide() {}
+    func cover(_ covered: Bool) {}
 }
