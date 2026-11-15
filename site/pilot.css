@@ -443,6 +443,16 @@
 .gauges .gv { margin-top: 8px; font: 500 22px/1 var(--mono); letter-spacing: -.02em; }
 .gauges .gv small { font-size: 11px; color: var(--m-fg3); margin-left: 4px; }
 
+/* Between phone and wide, the groups would stand far taller than a loop beside them (617 px beside 333 at 1024), so the loop
+   spans the hero and the two groups sit side by side under it (Q244: never a small box beside a tall list). */
+@container site (min-width: 821px) and (max-width: 1259px) {
+  .site .hmain { grid-template-columns: 1fr; gap: 36px; }
+  .site .hcut { order: -1; }
+  .site .hgroups { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px 40px; }
+  .site .hrest { grid-column: 1 / -1; margin-top: 0; }
+  .site .hrows li { grid-template-columns: 1fr; gap: 1px; }
+}
+
 /* the phone: the screen stands taller, keys go three a row, second panes drop */
 @container site (max-width: 820px) {
   .site .w { width: calc(100% - 32px); }
