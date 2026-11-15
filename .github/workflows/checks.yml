@@ -1,10 +1,16 @@
 # Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request only (never
 # the _target trigger, which runs with the base repo's rights), with a read-only token and no secrets, and no text a
-# pull request controls (title, body, branch name) is ever written into a run: line. GitHub runs the pull request's own
-# copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset (spec T27:
-# Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
+# pull request controls (title, body, branch name, file names) is ever written into a run: line. GitHub runs the pull
+# request's own copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset
+# (spec T27: Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
 # .gitleaks.toml (gitleaks' defaults when the base has none, never the pull request's), ignores gitleaks:allow comments
 # and every .gitleaksignore, and reads each merge against its first parent.
+#
+# The catalogue jobs (spec T19) run when a pull request touches catalogue/: check.py, the index rebuilt and compared,
+# and the catalogue's tests on macOS's own /usr/bin/python3 (3.9), the Python every extension runs on. A pull request
+# from a fork that touches catalogue/ may change only pack folders (catalogue/extensions/<id>/, catalogue/themes/<id>/),
+# catalogue/index.json and catalogue/tests/test_*.py: never the checker, the index builder or the test harness it is
+# judged by, so the copies that run are main's own.
 name: Checks
 on:
   pull_request:
@@ -49,3 +55,95 @@ jobs:
           "$RUNNER_TEMP/bin/gitleaks" git --no-banner --redact --verbose -c "$RUNNER_TEMP/gitleaks.toml" \
             --ignore-gitleaks-allow --gitleaks-ignore-path "$RUNNER_TEMP/no-ignore" \
             --log-opts="--diff-merges=first-parent $BASE..$HEAD" "$gitdir"
+
+  changes:
+    name: Catalogue scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      catalogue: ${{ steps.scope.outputs.catalogue }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: What the change touches
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          FROM: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # NUL-separated and unquoted, so a path with any byte in it is read as itself (quotePath would put a non-ASCII
+          # path in quotes and hide it from a catalogue/ match).
+          # Into a file first, so a failing diff fails the step instead of reading as no change.
+          git -c core.quotePath=false diff -z --no-renames --name-only "$BASE...$HEAD" > "$RUNNER_TEMP/changed" || exit 1
+          changed=()
+          while IFS= read -r -d '' f; do changed+=("$f"); done < "$RUNNER_TEMP/changed"
+          catalogue=false
+          for f in "${changed[@]}"; do case "$f" in catalogue/*) catalogue=true ;; esac; done
+          echo "catalogue=$catalogue" >> "$GITHUB_OUTPUT"
+          if [ "$catalogue" = false ]; then echo "Nothing in catalogue/ changed."; exit 0; fi
+          # A pack from a fork comes alone: only pack folders, the index and test files. Each other path is printed escaped
+          # after a prefix, so no file name can start a workflow command (::stop-commands:: and the like).
+          if [ "$FROM" != "$REPO" ]; then
+            outside=0
+            for f in "${changed[@]}"; do
+              case "$f" in
+                catalogue/extensions/?*/?*|catalogue/themes/?*/?*|catalogue/index.json) continue ;;
+                catalogue/tests/test_*.py) rest=${f#catalogue/tests/}; [[ "$rest" != */* ]] && continue ;;
+              esac
+              printf 'outside a pack: %q\n' "$f"; outside=1
+            done
+            if [ "$outside" = 1 ]; then
+              echo "::error::A pull request from a fork that changes catalogue/ may change only pack folders, catalogue/index.json and catalogue/tests/test_*.py; the paths above are outside them."
+              exit 1
+            fi
+          fi
+          echo "catalogue/ changed; the catalogue checks run."
+
+  catalogue:
+    name: Catalogue (check.py and tests)
+    needs: changes
+    if: needs.changes.outputs.catalogue == 'true'
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      PY: /usr/bin/python3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Python
+        run: |
+          "$PY" --version
+          python3 --version
+      - name: check.py
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set +e; "$PY" -B catalogue/scripts/check.py --author "$AUTHOR" --base "$BASE"; code=$?; set -e
+          # 2: no problems, but a pack someone else first sent is changed: a warning for Sven's read, not a failure.
+          if [ "$code" = 2 ]; then echo "::warning::check.py flagged a pack first sent by someone else: Sven reads it before merge"; exit 0; fi
+          exit "$code"
+      - name: index.json is the one build-index.py writes
+        if: ${{ !cancelled() }}
+        run: |
+          "$PY" -B catalogue/scripts/build-index.py
+          git diff --exit-code --stat -- catalogue/index.json || { echo "::error::catalogue/index.json is stale: run python3 catalogue/scripts/build-index.py and commit it"; exit 1; }
+      - name: Tests on /usr/bin/python3
+        if: ${{ !cancelled() }}
+        env:
+          PILOT_EXT_PYTHON: /usr/bin/python3
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          "$PY" -m unittest discover -s catalogue/tests
+      - name: Tests on the runner's python3
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s catalogue/tests
