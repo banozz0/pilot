@@ -279,8 +279,8 @@ final class TopBarWindows: TopBarPanels {
         // An island's or a Pills side's window shows no glass of its own: each island and each pill draws its own Liquid
         // Glass in its outline (TopBarStrip), so the glass's edge follows the flares instead of a mask cutting it.
         let glass = background == .glass && store.topBarConfiguration?.preset.islands != true
-        (panel.contentView as? MaterialBackdrop)?.show(glass ? .glass : .solid,
-                                                         tint: TopBarColour.tint(store.colour, style: tokens, look: look), blur: look.glassBlur)
+        (panel.contentView as? MaterialBackdrop)?.show(glass ? .glass : .solid, tint: TopBarColour.tint(store.colour, style: tokens, look: look),
+                                                         blur: look.glassBlur, tintsGlass: TopBarColour.tintsGlass(store.colour))
     }
 
     /// The tokens the bar draws in (the topBar surface's style).

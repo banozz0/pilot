@@ -41,7 +41,7 @@ struct DragRenders {
     private func dock(_ dir: URL, look: Look) throws {
         let screen = DockRenders.laptop, apps = DockRenders.apps(12)
         let tokens = StyleTokens.of(look.style, theme: look.theme)
-        let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let tint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
         let desk = DockRenders.Desk(wall: nil, screen: screen, size: CGSize(width: screen.width, height: 150))
         // Four widgets, so their row fits and does not scroll (a scrolling row clips what is dragged out of it).
         let widgets = Array(DockRenders.widgets.prefix(4))

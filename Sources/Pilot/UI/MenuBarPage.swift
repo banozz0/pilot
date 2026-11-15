@@ -764,7 +764,7 @@ struct MenuBarPage: View {
 }
 
 /// A Glass top bar's ground on the page, as the bar's window paints it (TopBarWindows.applyLook): glass in its ink's
-/// light or dark, tinted with the bar's colour at Look's Transparency. The strip itself draws no ground on Glass, so
+/// light or dark, tinted with the bar's colour at Look's Transparency where its glass is (TopBarColour.tintsGlass). The strip itself draws no ground on Glass, so
 /// without this a colour's ink (dark, on Sven's near-white) sat faint on the page's dark desk (Sven on build 58).
 struct BarGlassGround: View {
     @Environment(\.style) private var style
@@ -772,7 +772,7 @@ struct BarGlassGround: View {
 
     var body: some View {
         Rectangle().fill(.bar)
-            .overlay(Color(nsColor: TopBarColour.tint(colour, style: style, look: .shared)))
+            .overlay(TopBarColour.glassTint(colour, style: style, look: .shared) ?? .clear)
             .environment(\.colorScheme, TopBarColour.tokens(colour, style: style).dark ? .dark : .light)
     }
 }

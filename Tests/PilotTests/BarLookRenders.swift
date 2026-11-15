@@ -137,12 +137,14 @@ struct BarLookRenders {
             }
         }
 
-        /// A bar on the wallpaper where its window puts it: a preset's at its margins, the full bar edge to edge.
+        /// A bar on the wallpaper where its window puts it: a preset's at its margins, the full bar edge to edge. `live` passes
+        /// Look, so a Glass island draws its own Liquid Glass as the app's does (LiquidGlassRenders).
         func bar(_ sides: [TopBarSide: [BarSlot]], config: BarPresetConfiguration?, height: Double = BarLookRenders.strip, settings: BarSettings? = nil,
-                 background: TopBarBackground = .solid, pill: @escaping () -> AnyView = { AnyView(EmptyView()) }, below: CGFloat = 10) -> AnyView {
+                 background: TopBarBackground = .solid, pill: @escaping () -> AnyView = { AnyView(EmptyView()) }, below: CGFloat = 10,
+                 live: Bool = false) -> AnyView {
             let s = settings ?? self.settings
             let side = CGFloat(config?.horizontalMargin ?? 0), top = CGFloat(config?.topMargin ?? 0), h = CGFloat(config?.height ?? height)
-            let strip = TopBarStrip(sides: sides, configuration: config, background: background) { self.slot($0, settings: s, pill: pill) }
+            let strip = TopBarStrip(sides: sides, configuration: config, look: live ? look : nil, background: background) { self.slot($0, settings: s, pill: pill) }
                 .styled(.topBar, look: look)
                 .frame(width: BarLookRenders.width - 2 * side, height: h)
                 .padding(.horizontal, side).padding(.top, top).padding(.bottom, below)

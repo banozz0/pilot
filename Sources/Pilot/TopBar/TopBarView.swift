@@ -523,7 +523,8 @@ enum TopBarColour {
     }
 
     /// How a Glass or Clear bar tones the wallpaper `strip` under it, as the macOS menu bar does (Sven, Q254): Glass
-    /// sees it through its tint at Look's Transparency, Clear as it is. Nil on Solid, in Toybox (every slot is an
+    /// sees it through its tint at Look's Transparency, Clear as it is. Where the glass carries no tint (tintsGlass) that
+    /// tint stands in for the glass's own dimming, which in the theme's dark or light is at least as strong. Nil on Solid, in Toybox (every slot is an
     /// opaque island in its own ink, ToyIsland) and while the strip is not read, which leaves the bar as before. Made
     /// once per strip, side and tint, never per draw.
     static func tone(_ strip: WallpaperStrip.Grid?, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
@@ -577,14 +578,30 @@ enum TopBarColour {
 
     /// An island's or a pill's own Liquid Glass on a Glass bar (the liquid-glass branch, Sven 2026-11-14: "like mac os
     /// liquid glass"): drawn in its outline, flares and all, so the glass's own edge and refraction follow the shape, where
-    /// the window-wide glass under a mask cut them; in the bar's tint, in Look's Blur, the tint alone at Off. Solid and
-    /// Clear draw nothing here. Offscreen it draws nothing (renders pass no `look`, or the page's glassPreview).
+    /// the window-wide glass under a mask cut them; in Look's Blur, tinted only as glassTint says, the tint alone at Off.
+    /// Solid and Clear draw nothing here. Offscreen it draws nothing (renders pass no `look`, or the page's glassPreview).
     @ViewBuilder static func liquidGlass(in shape: GrownEdgeShape, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
                                          look: Look) -> some View {
         if background == .glass {
-            let tint = Color(nsColor: tint(colour, style: style, look: look))
-            if let glass = look.glassBlur.glass { Color.clear.glassEffect(glass.tint(tint), in: shape) } else { shape.fill(tint) }
+            if let glass = look.glassBlur.glass {
+                Color.clear.glassEffect(glass.tint(glassTint(colour, style: style, look: look)), in: shape)
+            } else {
+                shape.fill(Color(nsColor: tint(colour, style: style, look: look)))
+            }
         }
+    }
+
+    /// Whether Liquid Glass on `colour` carries a tint (Liquid Glass, round 2, Sven 2026-11-15 on build 2527: "look at the
+    /// dock bro mac os own glass looks so much cooler"). Apple's glass has no colour of its own; any tint makes it stained
+    /// glass, the prominent button's look (HIG › Color › Liquid Glass color), and the theme's ground laid in at Look's
+    /// Transparency, 15 % even, drew the dock and the islands as a flat dark slab. So the theme's colour leaves the glass
+    /// clear, as the macOS Dock's, its colour in the items and the ink; a colour picked for the bar keeps its stained glass.
+    /// Blur Off, which has no glass, still draws `tint`.
+    static func tintsGlass(_ colour: ColourChoice) -> Bool { colour != .theme }
+
+    /// The tint for Liquid Glass on `colour`, nil for none (tintsGlass): the dock's, the islands', the pills', their stand-ins.
+    static func glassTint(_ colour: ColourChoice, style: StyleTokens, look: Look) -> Color? {
+        tintsGlass(colour) ? Color(nsColor: tint(colour, style: style, look: look)) : nil
     }
 
     /// The glass's tint on a Glass bar: its colour at Look's Transparency, whether Look's own Glass is on or not.
@@ -596,7 +613,8 @@ enum TopBarColour {
     /// the bar goes solid (TopBarBackground.shown), 55 % at the default 33 % as before, down to `least` at 100 %, in a line
     /// between each. 50 % is 45, 77 % 29. `least` was the window ground's least (42 %) until the liquid-glass branch
     /// (coordinator's call for Sven, 2026-11-14, a change to Q714 for his check): 15 %, toward the light tint macOS's own
-    /// Liquid Glass wears, so high Transparency reads as glass, not frosted colour. Bar, islands, pills and dock.
+    /// Liquid Glass wears, so high Transparency reads as glass, not frosted colour. Bar, islands, pills and dock at Blur Off
+    /// and on a picked colour; the theme's colour leaves the glass untinted (tintsGlass).
     static let least = 15.0
     static func tintAlpha(_ look: Look) -> Int { tintAlpha(transparency: look.transparency) }
     static func tintAlpha(transparency: Int) -> Int {
