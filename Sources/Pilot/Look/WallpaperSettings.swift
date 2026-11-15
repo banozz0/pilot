@@ -161,6 +161,9 @@ final class WallpaperSettings: ScreenPausing {
     /// Marks the theme `id` a favourite, or unmarks it; true when it is one after.
     @discardableResult func toggleThemeFavourite(_ id: String) -> Bool { Self.toggle(id, in: &themeFavourites) }
 
+    /// A deleted theme leaves the favourites with it.
+    func forgetThemeFavourite(_ id: String) { themeFavourites.removeAll { $0 == id } }
+
     private static func toggle(_ key: String, in list: inout [String]) -> Bool {
         if let at = list.firstIndex(of: key) { list.remove(at: at); return false }
         list.append(key)

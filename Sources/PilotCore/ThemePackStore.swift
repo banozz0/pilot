@@ -190,6 +190,9 @@ public struct ThemePackStore: Sendable {
     public static func pilotsOwn(_ name: String) -> ThemeFailure {
         ThemeFailure("\(name) is one of Pilot's own themes, so it can't be deleted. Only packs you made or imported can.")
     }
+    /// Every pack in the library by id, read as `browse` reads them: manifests and picture headers, never a decode
+    /// (Look › Themes and `pilot theme list` took seconds decoding every 4K picture). A pack that does not browse
+    /// refuses the list, as before; Apply's `load` still checks each picture whole.
     public func list() throws -> [ThemePack] {
         let roots = Set([root, writableRoot] + [factoryRoot].compactMap { $0 })
         let names = try roots.flatMap { path -> [String] in
@@ -205,7 +208,7 @@ public struct ThemePackStore: Sendable {
             let checked = try PackDirectory(path); _ = checked
             return try FileManager.default.contentsOfDirectory(atPath: path).filter(ThemePack.validID)
         }
-        return try Set(names).sorted().map { try load($0).pack }
+        return try Set(names).sorted().compactMap { try browse($0, shape: ImageShapes.read)?.pack }
     }
 }
 

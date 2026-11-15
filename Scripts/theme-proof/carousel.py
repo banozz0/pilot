@@ -313,6 +313,18 @@ def themes(passed):
         assert f.call('carousel', '--mode', 'themes', '--favourites')['images'] == ['dracula', 'tokyo-night']
         passed('themes: favourites read back through pilot: three themes marked, one unmarked, Tab lists Dracula and Tokyo Night by title; the wallpapers keep their own; an unlisted pack is refused; they survive a restart')
 
+        # Deleting a favourite pack of your own takes it out of the favourites too.
+        mine = f.root / 'user-packs/mine'
+        mine.mkdir(parents=True)
+        (mine / 'manifest.json').write_text(json.dumps(dict(f.pack, id='mine', title='Mine', wallpapers=[])))
+        f.call('carousel', 'favourite', 'mine', '--mode', 'themes')
+        assert f.call('carousel', '--mode', 'themes', '--favourites')['images'] == ['dracula', 'mine', 'tokyo-night']
+        assert f.call('theme', 'delete', 'mine')['deleted'] == 'mine'
+        gone = f.call('carousel', '--mode', 'themes', '--favourites')
+        assert gone['favourites'] == ['tokyo-night', 'dracula'] and gone['images'] == ['dracula', 'tokyo-night'], gone
+        assert 'mine' not in [p['id'] for p in f.call('theme', 'list')]
+        passed('themes: deleting a favourite pack of your own (pilot theme delete mine) takes it out of the theme favourites')
+
         # Tokyo Night applied through the carousel, after its Allow.
         assert f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes')['status'] == 'applied'
         marked = f.call('carousel', '--mode', 'themes')

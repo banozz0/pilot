@@ -134,7 +134,7 @@ struct WallpaperSettingsTests {
             for line in ["Wallpaper", "LG HDR WQHD", "3 of 12", "not in the cycle", "12 ima", "Pictures/Omarchy", "dunes.jpg", "Shuffle again",
                          "Every screen", "Every hour", "Own folders for", "Nothing", "Each screen", "Each workspace", "Screens",
                          "Use my wallpaper folder for every theme", "Pictures/Every theme"] + own {
-                #expect(text.localizedCaseInsensitiveContains(line), "\(name): \(line) missing, read: \(text)")
+                #expect(ocrReads(text, line), "\(name): \(line) missing, read: \(text)")
             }
             if folders != .eachScreen { #expect(!text.contains("Portraits"), "\(name): a screen's own folders show only while each has its own") }
             if folders != .eachWorkspace { #expect(!text.contains("Forest"), "\(name): a workspace's own folders show only while each has its own") }
