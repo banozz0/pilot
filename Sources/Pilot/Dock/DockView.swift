@@ -399,7 +399,8 @@ struct DockBacking<S: Shape>: ViewModifier {
 }
 
 /// One app: its icon on nothing (no tile behind any icon), an accent dot under it while it runs, the front app's a wider
-/// capsule. A click opens it, focuses its one window, or lists its windows over it to pick one.
+/// capsule. A click opens it, focuses its one window, lists its windows over it to pick one, or with every window
+/// minimized brings back the one minimized last (DockPress).
 struct DockAppIcon: View {
     @Environment(\.ink) private var ink
     let app: DockApp
@@ -446,17 +447,29 @@ struct DockAppIcon: View {
         .accessibilityLabel(app.front ? "\(app.name), in front" : app.running ? "\(app.name), open" : app.name)
     }
 
+    /// Read as it is pressed (DockPress): a window minimized since the dock's listing is left out, and with none open the one
+    /// minimized last comes back onto its workspace.
     private func open() {
-        let mine = windows
-        switch app.click {
-        case .listWindows:
+        guard app.running, let tiler else { return press(.of(windows, minimized: [])) }
+        Task { press(.of(windows, minimized: await minimized(tiler))) }
+    }
+
+    private func press(_ press: DockPress) {
+        switch press {
+        case .list(let open):
             BarPanel.shared.toggle(dock: app.bundleID ?? app.name, under: anchor.view,
-                                   AnyView(DockWindowList(app: app.name, windows: mine) { id in focus(id) }))
-        case .focusWindow:
-            if let id = mine.first?.id { focus(id) } else { activate() }
-        case .activate:
-            activate()
+                                   AnyView(DockWindowList(app: app.name, windows: open) { id in focus(id) }))
+        case .focus(let id): focus(id)
+        case .unminimize(let id):
+            BarPanel.shared.close()
+            if let tiler { Task { await run(.unminimize(id: id), "dock.unminimize:\(id)", tiler) } }
+        case .activate: activate()
         }
+    }
+
+    /// The app's windows the tiler holds minimized now, the one minimized last at the end.
+    private func minimized(_ tiler: TilerService) async -> [AeroWindow] {
+        ((try? await tiler.runner.windows(.minimized)) ?? []).filter { $0.pid == app.pid }
     }
 
     /// The right-click menu (Sven on build 2454): Open, its windows, Show in Files, Keep in Dock or Remove from Dock
@@ -482,10 +495,21 @@ struct DockAppIcon: View {
         }
     }
 
+    /// A window from the list or the menu: one minimized since the listing is restored, not focused (which is refused).
     private func focus(_ id: Int) {
         BarPanel.shared.close()
         guard let tiler else { return activate() }
-        Task { await tiler.perform("dock.focusWindow:\(id)") { try await $0.run(.focusWindow(id: id)) } }
+        Task {
+            let held = await minimized(tiler).contains { $0.id == id }
+            await run(held ? .unminimize(id: id) : .focusWindow(id: id), held ? "dock.unminimize:\(id)" : "dock.focusWindow:\(id)", tiler)
+        }
+    }
+
+    /// A tiler call; refused (the window gone or not yet moved by the tiler), the app is brought forward as Open does.
+    private func run(_ command: AeroCommand, _ id: String, _ tiler: TilerService) async {
+        await tiler.perform(id) { runner in
+            do { try await runner.run(command) } catch let refused as any AeroCallRefusal { activate(); throw refused }
+        }
     }
 
     /// Opens the app, or brings it forward when it runs: macOS activates an app it is asked to open.

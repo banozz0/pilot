@@ -84,11 +84,31 @@ public struct DockApp: Equatable, Sendable {
     public var key: String { bundleID ?? url?.path(percentEncoded: false) ?? name }
     /// The dots under it: one per window, at most three; a running app with no window listed keeps one, as the Dock's does.
     public var dots: Int { running ? min(max(windows, 1), DockApps.mostDots) : 0 }
-    /// What a click does: open or bring it forward, focus its one window, or list its windows to pick one.
+    /// What a click does by the dock's listing: open or bring it forward, focus its one window, or list its windows to
+    /// pick one. The press itself reads the minimized windows again (DockPress), so a window minimized since is restored.
     public var click: DockClick { windows >= 2 ? .listWindows : windows == 1 ? .focusWindow : .activate }
 }
 
 public enum DockClick: String, Equatable, Sendable { case activate, focusWindow, listWindows }
+
+/// A click on an app as it is pressed (Sven on build 2540: a minimized app's click did nothing, the menu's Open worked):
+/// the dock's listing follows workspace changes only, so a window minimized since still counts, and focusing it is
+/// refused. `minimized` is the app's windows the tiler holds minimized now, the last the one minimized last: they are
+/// taken out first, and with none left open that one comes back, as the macOS Dock brings it back.
+public enum DockPress: Equatable, Sendable {
+    case activate
+    case focus(Int)
+    case list([AeroWindow])
+    case unminimize(Int)
+
+    public static func of(_ windows: [AeroWindow], minimized: [AeroWindow]) -> DockPress {
+        let held = Set(minimized.map(\.id))
+        let open = windows.filter { !held.contains($0.id) && !$0.isMinimized }
+        if open.count >= 2 { return .list(open) }
+        if let one = open.first { return .focus(one.id) }
+        return minimized.last.map { .unminimize($0.id) } ?? .activate
+    }
+}
 
 /// An app's right-click menu in the dock (Sven on build 2454): Open, its windows, Show in Files (Pilot's own, Sven
 /// 2026-11-13: "show in finder should probably show in pilots finder"), Keep in Dock or Remove
