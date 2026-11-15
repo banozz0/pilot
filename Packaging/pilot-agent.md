@@ -37,7 +37,7 @@ follow them. Otherwise read one with `pilot guide <name>` when its job comes up,
 - Something in Pilot does not work: `pilot guide troubleshoot`.
 - Creating or changing a theme pack: `pilot guide theme`.
 - Offering, installing or running an extension: `pilot guide catalogue`.
-- Sending a finished extension to Pilot's catalogue: `pilot guide publish`.
+- Sending a finished extension or theme to Pilot's catalogue: `pilot guide publish`.
 
 Answer briefly, in plain words; use Markdown only for code and command names. No preamble and no offers to help
 further.

@@ -198,7 +198,7 @@ extension ControlVerbs {
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
     ] + (CataloguePublish.available ? [
-        ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow."),
+        ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; from a fork on your GitHub account when you cannot push to the catalogue's repo."),
     ] : [])
 
     /// `pilot ext …`: make an extension from a template, check and run it, install it from a folder or Pilot's catalogue or
@@ -236,7 +236,7 @@ extension ControlVerbs {
             case "publish" where CataloguePublish.available:
                 let id = try args.word(1, "id")
                 guard let ext = tools.installed(id) else { throw ControlError(.badValue, "no extension \(id) is installed") }
-                let plan = try await CataloguePublish.plan(ext)
+                let plan = try await CataloguePublish.plan(.extensionPack(ext))
                 return try await tools.gate.allow(plan.ask, peer: call.peer) { () throws(ControlError) in try await CataloguePublish.publish(plan) }
             case let other: throw ControlError(.badValue, "no ext \(other); subcommands: \(subcommands.joined(separator: ", "))")
             }
