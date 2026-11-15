@@ -108,6 +108,11 @@ final class BarPanelWindow: BarPanelPresenting {
         // A popover that can grow (an extension's chat) keeps inside the room under its item, above the Dock.
         let room = display.map { BarPanelPlacement.room(item: item, visible: $0.visibleFrame) }
         let panel = Self.keyPanel(content.environment(\.barPopoverRoom, room), surface: .barPopovers, level: .popUpMenu) { BarPanelPlacement.frame(item: item, size: $0, screen: screen) }
+        // Set, so its clear pixels take the mouse too, as the bar's and its drops' (TopBarWindows.make, BarDrops): the
+        // popover's glass draws no pixel of its own, and a click on it went through to the wallpaper, where macOS shows the
+        // desktop. Only the bar's dropdown: the notification cards float over the front app, whose clicks between them
+        // stay its own, and the Carousel closes as a click elsewhere takes the key.
+        panel.ignoresMouseEvents = false
         self.panel = panel
         // A click anywhere but the panel and its item closes it (BarPanelPlacement.clickCloses); one on the item reaches
         // its button, which toggles through BarPanel.
@@ -115,7 +120,7 @@ final class BarPanelWindow: BarPanelPresenting {
             MainActor.assumeIsolated { self?.closeFromOutside() }
         } as Any)
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
-            // Escape is used up; a click is passed on whatever it does here.
+            // Escape is used up; a click is passed on whatever it does here, but for one that closes from the panel's clear room.
             let swallow: Bool = MainActor.assumeIsolated {
                 guard let self, let panel = self.panel else { return false }
                 if event.type == .keyDown {
@@ -124,9 +129,14 @@ final class BarPanelWindow: BarPanelPresenting {
                     if let escape = (panel as? KeyPanel)?.escape { escape() } else { self.closeFromOutside() }
                     return true
                 }
-                let onPanel = event.window === panel || self.menuOpen || BarPanel.keepsOpen(.panel, at: NSEvent.mouseLocation)
-                if BarPanelPlacement.clickCloses(at: NSEvent.mouseLocation, onPanel: onPanel, item: item) { self.closeFromOutside() }
-                return false
+                // On the panel means on its face: a click in the clear room round a face for its shadow (keyPanel's
+                // margins) reaches the panel now, and still closes it, used up so nothing under it takes it.
+                let mouse = NSEvent.mouseLocation, inPanel = event.window === panel
+                let onFace = inPanel && PopSurface.face(panel.frame, (panel as? KeyPanel)?.margins ?? NSEdgeInsetsZero).contains(mouse)
+                let onPanel = onFace || self.menuOpen || BarPanel.keepsOpen(.panel, at: mouse)
+                guard BarPanelPlacement.clickCloses(at: mouse, onPanel: onPanel, item: item) else { return false }
+                self.closeFromOutside()
+                return inPanel
             }
             return swallow ? nil : event
         } as Any)
