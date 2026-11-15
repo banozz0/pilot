@@ -204,9 +204,9 @@ def run(seam_only=False,fixes_only=False):
         # Save replaces inode-bound resource generations. Never normalize their freshness
         # revisions away: compare all plans against the same final generation instead.
         plans=[f.cli('theme','plan','apply',pack['id']),f.cli('theme','plan','apply',pack['id']),m.call('pilot theme plan apply '+pack['id'])]
-        canonical=[{k:v for k,v in p.items() if k!='id'} for p in plans]
+        canonical=[{k:v for k,v in p.items() if k not in ('id','apply')} for p in plans]
         assert canonical[0]==canonical[1]==canonical[2]
-        (f.root/'parity.json').write_text(json.dumps(dict(generations=generations,portableResources=portable_resources,plans=plans,canonical=canonical,normalization='Portable manifest/assets compare exactly. Plans share the final inode-bound resource generation; remove ONLY top-level plan id. No revisions, paths or resource bytes removed.'),indent=2))
+        (f.root/'parity.json').write_text(json.dumps(dict(generations=generations,portableResources=portable_resources,plans=plans,canonical=canonical,normalization='Portable manifest/assets compare exactly. Plans share the final inode-bound resource generation; remove ONLY top-level plan id and apply (the command that carries it). No revisions, paths or resource bytes removed.'),indent=2))
         assert set(x['bindingID'] for x in plans[0]['changes'] if x['bindingID'])==set(x['id'] for x in f.mappings)
         assert len(plans[0]['wallpapers'])>0 and plans[0]['native'] is not None
         assert f.effect_snapshot()==before
