@@ -416,6 +416,10 @@ private struct BarPill: ViewModifier {
                         }
                     }
                     .padding(.horizontal, -BarIslandShape.flare(configuration))
+                    // Drawn, never hit, as the islands' grounds (TopBarStrip). The toned ground lays the whole screen's
+                    // mask, from its left edge, behind each pill: clipShape cuts what it draws, not what it takes, so a
+                    // later pill's ground lay over every pill before it and ate their clicks (Sven on build 2588).
+                    .allowsHitTesting(false)
                 }
                 // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
                 // its ends offscreen (the bar look round).
@@ -423,6 +427,7 @@ private struct BarPill: ViewModifier {
                     shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
                         .edgeRingCut(shape.edge, width: configuration.border)
                         .padding(.horizontal, -BarIslandShape.flare(configuration))
+                        .allowsHitTesting(false)
                 }
         } else {
             content
