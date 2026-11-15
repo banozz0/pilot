@@ -13,6 +13,10 @@ Offer what exists before making anything new:
 - `pilot ext catalogue <words>`: Pilot's catalogue, searched. Nothing found: search once more with other words for the
   same job before saying none fits.
 
+A theme is not an extension: `pilot theme catalogue` lists the theme packs, each with its standing (one Pilot has
+built in needs no download), and `pilot theme get <id>` installs one after Allow. Switching to a theme follows
+`pilot guide theme`.
+
 Installing one from the catalogue: `pilot ext get <id>`; Pilot asks the user first. Running one: `pilot ext run <action>`,
 also asked first.
 

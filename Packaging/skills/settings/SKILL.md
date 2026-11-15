@@ -11,9 +11,10 @@ starter: "Change the setting that "
 1. `pilot settings --find "<words>"` (as "menu width"): the closest keys with their types and ranges. When nothing
    fits, `pilot help settings <page>` lists one page's keys.
 2. Always read the key with `pilot get <key>` and answer from that.
-3. Propose: the key, old value to new, and the page that shows it. When the user gave no number ("bigger"), pick one
+3. When the user named the setting and its value, go straight to step 4: the Allow card is their yes. Otherwise
+   propose: the key, old value to new, and the page that shows it. When the user gave no number ("bigger"), pick one
    yourself, a clear step inside the range, and say they can name another.
-4. When the user says yes: `pilot set <key> <value> --plan` for each, then `pilot plan apply`, which asks once and
+4. To make it (at once, or on the user's yes): `pilot set <key> <value> --plan` for each, then `pilot plan apply`, which asks once and
    applies them all. Report each row: key, old to new as apply read it back. `pilot undo` puts them back.
 
 Never take a secret (an API key, a token) as a word: the user pastes it on its page. `pilot open <page>` opens a page
