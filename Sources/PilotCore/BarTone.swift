@@ -35,20 +35,34 @@ public struct BarTone: Equatable, Sendable {
         return a.out + (b.out - a.out) * (contrast - a.in) / (b.in - a.in)
     }
 
-    /// The tone of `grid` for the theme's ink side (`prefersWhite`), seen through Glass's `tint` at `share` when given;
-    /// nil for an empty grid.
-    public static func make(_ grid: WallpaperStrip.Grid, prefersWhite: Bool, tint: [Double]? = nil, share: Double = 0) -> BarTone? {
+    /// What untinted clear Liquid Glass adds to the desktop it shows, as a white veil over it (Liquid Glass round 3, Sven
+    /// 2026-11-15 on build 2550, read on his screen): Pilot's dock and islands lift every dark wallpaper by 12.5 %
+    /// of the way to white (24 to 54, 37 to 64 at 1x), regular glass by the same (7 to 39 on round 2's reading).
+    public static let glassVeil = 0.125
+    /// The veil the macOS Dock's glass shows over the same near-black wallpaper (6 to 18): its desktop stays dark and
+    /// its rim carries the glass. A cell under untinted glass is toned down to at least this, so the glass reads as the
+    /// Dock's, not as a grey plate.
+    public static let dockVeil = 0.05
+
+    /// The tone of `grid` for the theme's ink side (`prefersWhite`), seen through Glass's `tint` at `share` when given,
+    /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil on white ink; nil for an
+    /// empty grid.
+    public static func make(_ grid: WallpaperStrip.Grid, prefersWhite: Bool, tint: [Double]? = nil, share: Double = 0,
+                            glass: Bool = false) -> BarTone? {
         guard grid.width > 0, grid.height > 0 else { return nil }
         let ink = prefersWhite ? white : dark, inkL = Contrast.luminance(Contrast.rgb(ink))
         var alpha = [UInt8](repeating: 0, count: grid.width * grid.height), after = [Double](repeating: 0, count: alpha.count)
         for i in alpha.indices {
             var cell = [Double(grid.rgb[i * 3]), Double(grid.rgb[i * 3 + 1]), Double(grid.rgb[i * 3 + 2])]
+            let desk = cell
             if let tint { cell = Contrast.mix(tint, cell, share) }
+            if glass { cell = Contrast.mix([255, 255, 255], cell, glassVeil) }
             let l = Contrast.luminance(cell)
             // The luminance the curve asks for, then the mask's share that gets there: sRGB scales by (1 - a) under
             // black, so luminance by about its 2.2 power; under white, about the same in lightness.
             if prefersWhite {
-                let want = 1.05 / toned(1.05 / (l + 0.05)) - 0.05
+                var want = 1.05 / toned(1.05 / (l + 0.05)) - 0.05
+                if glass { want = min(want, Contrast.luminance(Contrast.mix([255, 255, 255], desk, dockVeil))) }
                 let a = want < l ? 1 - pow(max(want, 0) / l, 1 / 2.2) : 0
                 (alpha[i], after[i]) = (UInt8((a * 255).rounded()), min(l, want))
             } else {
@@ -123,22 +137,22 @@ public enum WallpaperStrip {
     /// Screen points per cell: half the menu bar's own detail, which the mask's smoothing (TopBarColour.toneGround) hides.
     public static let cell = 2.0
 
-    /// The strip `strip` points high along the top of a `screen`-sized screen, a cell every `cell` points; nil when the
-    /// picture cannot be read.
-    public static func grid(_ url: URL, screen: CGSize, strip: Double, placement: Placement = .init()) -> Grid? {
+    /// The strip `strip` points high along the top of a `screen`-sized screen, a cell every `cell` points, or with its
+    /// top `y` points down (the dock's, along the foot); nil when the picture cannot be read.
+    public static func grid(_ url: URL, screen: CGSize, strip: Double, y: Double = 0, placement: Placement = .init()) -> Grid? {
         guard let read = WallpaperBrightness.rgba(url, maxSize: 2048, always: true) else { return nil }
-        return grid(pixels: read.bytes, width: read.width, height: read.height, screen: screen, strip: strip, placement: placement)
+        return grid(pixels: read.bytes, width: read.width, height: read.height, screen: screen, strip: strip, y: y, placement: placement)
     }
 
     /// The same from RGBA pixels, top row first: each cell the mean of the pixels under it, the fill colour where the
     /// picture does not reach.
-    static func grid(pixels: [UInt8], width w: Int, height h: Int, screen: CGSize, strip: Double, placement: Placement) -> Grid {
+    static func grid(pixels: [UInt8], width w: Int, height h: Int, screen: CGSize, strip: Double, y top: Double = 0, placement: Placement) -> Grid {
         let shown = rect(image: CGSize(width: w, height: h), screen: screen, placement: placement)
         let (cw, ch) = (max(1, Int((screen.width / cell).rounded())), max(1, Int((strip / cell).rounded())))
         let (bw, bh) = (screen.width / Double(cw), strip / Double(ch)), sx = Double(w) / shown.width, sy = Double(h) / shown.height
         var rgb = [UInt8](repeating: 0, count: cw * ch * 3)
         for cy in 0..<ch { for cx in 0..<cw {
-            let box = CGRect(x: Double(cx) * bw, y: Double(cy) * bh, width: bw, height: bh).intersection(shown)
+            let box = CGRect(x: Double(cx) * bw, y: top + Double(cy) * bh, width: bw, height: bh).intersection(shown)
             var mean = placement.fill
             if !box.isNull, box.width > 0, box.height > 0 {
                 let x0 = max(0, Int((box.minX - shown.minX) * sx)), x1 = min(w, max(x0 + 1, Int(((box.maxX - shown.minX) * sx).rounded(.up))))

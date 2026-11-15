@@ -13,6 +13,11 @@ final class BarWallpapers {
 
     /// Each screen's strip, by its name; none while its picture cannot be read.
     private(set) var strips: [String: WallpaperStrip.Grid] = [:]
+    /// The strip along the foot of the dock's screen, as high as the dock's room, which its glass tones (DockBacking);
+    /// nil while no Glass or Clear dock follows it or its picture cannot be read.
+    private(set) var dock: WallpaperStrip.Grid?
+    @ObservationIgnored private var dockRead: Source?
+    @ObservationIgnored private var dockHeight: Double?
     /// What each screen's strip was read from, so an event that changed nothing reads nothing.
     @ObservationIgnored private var read: [String: Source] = [:]
     @ObservationIgnored private var screens: [TopBarGeometry.Screen] = []
@@ -22,12 +27,25 @@ final class BarWallpapers {
         let url: URL
         let size: CGSize
         let strip: Double
+        var y = 0.0
         let placement: WallpaperStrip.Placement
     }
 
     /// Reads the strips under `screens`' bars and follows them from then on.
     func follow(_ screens: [TopBarGeometry.Screen]) {
         self.screens = screens
+        observe()
+        refresh()
+    }
+
+    /// Reads the strip `height` points high along the foot of the dock's screen and follows it; nil stops.
+    func followDock(_ height: Double?) {
+        dockHeight = height
+        observe()
+        refreshDock()
+    }
+
+    private func observe() {
         if observers.isEmpty {
             let workspace = NSWorkspace.shared.notificationCenter, app = NotificationCenter.default
             observers = [(workspace, NSWorkspace.activeSpaceDidChangeNotification), (app, NSApplication.didChangeScreenParametersNotification),
@@ -37,7 +55,6 @@ final class BarWallpapers {
                 })
             }
         }
-        refresh()
     }
 
     /// Reads each screen whose picture, size or strip changed; forgets screens gone.
@@ -59,6 +76,25 @@ final class BarWallpapers {
                 guard read[name] == source, strips[name] != grid else { return }
                 strips[name] = grid
             }
+        }
+        refreshDock()
+    }
+
+    /// The dock's strip, read again when its screen's picture or size or the dock's room changed (DockWindow's screen).
+    private func refreshDock() {
+        guard let height = dockHeight, let ns = NSScreen.screens.first, let url = WallpaperSwitch.current(on: ns) else {
+            (dockRead, dock) = (nil, nil)
+            return
+        }
+        let source = Source(url: url, size: ns.frame.size, strip: height, y: ns.frame.height - height, placement: Self.placement(ns))
+        guard dockRead != source else { return }
+        dockRead = source
+        Task {
+            let grid = await Task.detached {
+                WallpaperStrip.grid(source.url, screen: source.size, strip: source.strip, y: source.y, placement: source.placement)
+            }.value
+            guard dockRead == source, dock != grid else { return }
+            dock = grid
         }
     }
 
