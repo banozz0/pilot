@@ -275,14 +275,15 @@ private struct PopSurfaceFace: ViewModifier {
 /// The top bar's material as a SwiftUI background: an NSGlassEffectView in Look's Blur's style, tinted, at `cornerRadius`
 /// (the same view MaterialBackdrop puts behind the window and the bar), or at Blur Off the tint alone. Offscreen the glass
 /// draws a flat grey: Sven's screen proves it.
+/// Nil `tint` is clear glass (a bar popover's, PopoverGlass), and nothing at Blur Off.
 struct GlassFace: View {
-    let tint: NSColor
+    let tint: NSColor?
     let cornerRadius: CGFloat
 
     var body: some View {
         if let style = Look.shared.glassBlur.effectStyle {
             GlassEffect(tint: tint, cornerRadius: cornerRadius, style: style)
-        } else {
+        } else if let tint {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Color(nsColor: tint))
         }
     }
@@ -298,8 +299,10 @@ extension GlassBlur {
 /// has no blur, the smear Sven saw on widgets (never key) and on every window he left. It asks the window one private
 /// question, so on Light every Pilot window answers active there, in this one place. The top bar's and the dock's windows
 /// (TopBarPanel) answer active at every blur, as macOS's own menu bar and Dock draw their glass: they never take focus, so
-/// on Full they always drew inactive glass (the liquid-glass branch, Sven 2026-11-14). Other windows keep macOS's answer at
-/// Full and Off. Only the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as
+/// on Full they always drew inactive glass (the liquid-glass branch, Sven 2026-11-14). So do the bar's dropdowns and drops
+/// (KeyPanel.activeGlass): Pilot is never the active app, so on Full they drew inactive glass, blurred and without
+/// refraction, a frosted slab (bar dropdowns round 4, Sven on build 2564). Other windows keep macOS's answer at Full and
+/// Off. Only the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as
 /// they are. A macOS without the selector simply keeps its inactive glass.
 @MainActor enum GlassFocus {
     static func install() {
@@ -308,7 +311,9 @@ extension GlassBlur {
         typealias Answer = @convention(c) (NSWindow, Selector) -> Bool
         let original = unsafeBitCast(method_getImplementation(method), to: Answer.self)
         let answer: @convention(block) (NSWindow) -> Bool = { window in
-            window is TopBarPanel || (Thread.isMainThread && MainActor.assumeIsolated { Look.shared.glassBlur == .light })
+            window is TopBarPanel || (Thread.isMainThread && MainActor.assumeIsolated {
+                Look.shared.glassBlur == .light || (window as? KeyPanel)?.activeGlass == true
+            })
                 || original(window, selector)
         }
         method_setImplementation(method, imp_implementationWithBlock(answer))
@@ -330,7 +335,7 @@ extension GlassBlur {
 }
 
 private struct GlassEffect: NSViewRepresentable {
-    let tint: NSColor
+    let tint: NSColor?
     let cornerRadius: CGFloat
     let style: NSGlassEffectView.Style
 

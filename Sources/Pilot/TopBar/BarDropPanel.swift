@@ -68,6 +68,7 @@ final class BarDrops {
         panel.contentView = content
         panel.appearance = appearance
         panel.title = title   // what Accessibility and the tiler's list-windows read
+        panel.activeGlass = true   // the bar's glass draws active; so do its drops' (GlassFocus)
         // Set, so its clear pixels take the mouse too, as the bar's (TopBarWindows.make): its glass draws no pixel of its
         // own, and a click on it went through to the wallpaper, where macOS shows the desktop.
         panel.ignoresMouseEvents = false

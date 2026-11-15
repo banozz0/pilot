@@ -172,6 +172,7 @@ final class BarPanelWindow: BarPanelPresenting {
         panel.contentView = backdrop
         panel.appearance = Look.shared.appearance(for: surface)
         panel.margins = margins
+        panel.activeGlass = surface == .barPopovers
         panel.level = level
         panel.refusesKey = !takesKey  // a notification card never takes it: the app in front keeps its typing
         panel.orderFrontRegardless()
@@ -209,6 +210,8 @@ final class KeyPanel: NSPanel {
     var margins = NSEdgeInsetsZero
     /// Clicks reach it but it never becomes key: a surface that must leave the keyboard with the app in front.
     var refusesKey = false
+    /// Its glass draws active, as the bar's own (GlassFocus): a bar dropdown or drop, whose Pilot is never the active app.
+    var activeGlass = false
     override var canBecomeKey: Bool { !refusesKey }
 
     override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {

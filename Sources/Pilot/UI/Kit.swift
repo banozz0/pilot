@@ -1062,7 +1062,7 @@ struct KitPopover<Content: View>: View {
             .foregroundStyle(style.color(\.text))
             .tint(style.color(\.text2))
             .background {
-                if let glass { GlassFace(tint: glass, cornerRadius: style.radii.pop) } else { shape.fill(style.color(\.panel)) }
+                if let glass { GlassFace(tint: glass.tint, cornerRadius: style.radii.pop) } else { shape.fill(style.color(\.panel)) }
             }
             .overlay { if glass == nil, let ring = style.depth.pop.ring { shape.strokeBorder(Color(ring)) } }
             .clipShape(shape)

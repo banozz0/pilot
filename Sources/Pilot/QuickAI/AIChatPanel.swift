@@ -387,13 +387,14 @@ final class AIChatPanel {
     /// The notch's corner: the style's pop corner.
     static func radius(_ look: Look) -> CGFloat { CGFloat(look.chromeTokens(.quickAI).radii.pop) }
 
-    /// `host` over Look's Glass in its style (solid in Toybox), tinted as every Pilot glass is (Look.glassTint, the top
-    /// bar's, Q356). The glass rounds every corner and reaches a radius above the panel, so its top corners fall
+    /// `host` over Look's Glass in its style (solid in Toybox), clear as the bar's dropdowns (Look.glassTint only at Blur
+    /// Off, Q356). The glass rounds every corner and reaches a radius above the panel, so its top corners fall
     /// outside the window and the notch stays square at the top with no mask.
     static func backdrop(_ host: NSView, look: Look) -> MaterialBackdrop {
         let radius = radius(look)
         let backdrop = MaterialBackdrop(content: host, cornerRadius: radius)
-        backdrop.show(look.material(on: .quickAI), tint: look.glassTint(on: .quickAI))
+        // Untinted, as the bar's dropdowns (PopoverGlass): the tint only at Blur Off, where it is the face.
+        backdrop.show(look.material(on: .quickAI), tint: look.glassTint(on: .quickAI), tintsGlass: false)
         backdrop.effect?.frame.size.height += radius
         return backdrop
     }
