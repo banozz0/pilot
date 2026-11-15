@@ -119,8 +119,9 @@ extension ControlVerbs {
             let words = arguments.positional
             guard words.count == 2 else { throw ControlError(.badRequest, "pilot set <key> <value>: one key and one value (quote a value with spaces)") }
             let setting = try schema().setting(words[0])
-            _ = try setting.value(words[1])
-            return .init("Set \(setting.key)", old: ControlPlan.word(try schema().get(setting.key)) ?? "none", new: words[1],
+            // The new value in the old one's words: "on → off", never "on → false".
+            let value = try setting.value(words[1])
+            return .init("Set \(setting.key)", old: ControlPlan.word(try schema().get(setting.key)) ?? "none", new: ControlPlan.word(value) ?? words[1],
                          asks: setting.confirms ? Self.settingAsk(setting.key, words[1]) : nil,
                          readback: ControlRequest(verb: "get", args: [setting.key]))
         }, inverse: { call throws(ControlError) in
