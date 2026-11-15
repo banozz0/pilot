@@ -7,9 +7,11 @@ import Foundation
 /// stands against that ink: one already at about 3.5 : 1 to white shows as it is, a brighter one is pulled down along
 /// a curve, white wallpaper to 1.84 : 1, so the wallpaper's own picture stays and only its light spots dim. Pilot reads
 /// the picture's file (WallpaperStrip.Grid), so it tones each cell under its bar by the same curve, as a mask over the
-/// bar's ground: black under white ink, white under dark (the mirror, for a light theme; macOS's Light Mode unmeasured).
+/// bar's ground: black under white ink, white under dark (the mirror, for a light theme over a light wallpaper; macOS's
+/// Light Mode unmeasured). Over a dark wallpaper a light theme's ink turns white too (prefersWhite, Sven 2026-11-15, Q288).
 public struct BarTone: Equatable, Sendable {
-    /// The bar's ink: white or near-black (Contrast.readableInk's pair), the theme's side.
+    /// The bar's ink: white or near-black (Contrast.readableInk's pair): white for a dark theme, and for a light one over a
+    /// dark wallpaper (prefersWhite).
     public let ink: UInt32
     /// The mask's share over each cell, 0 to 255, row by row, top first, the grid's size.
     public let alpha: [UInt8]
@@ -61,16 +63,30 @@ public struct BarTone: Equatable, Sendable {
     /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil under white ink (fading from a
     /// near-black desk to none on a mid tone, dockVeilFull to dockVeilGone) and to glassFloor
     /// against the ink; nil for an empty grid.
+    /// A wallpaper cell as the bar shows it: through Glass's `tint` at `share`, or lifted by untinted clear glass.
+    public static func seen(_ cell: [Double], tint: [Double]? = nil, share: Double = 0, glass: Bool = false) -> [Double] {
+        var cell = cell
+        if let tint { cell = Contrast.mix(tint, cell, share) }
+        if glass { cell = Contrast.mix([255, 255, 255], cell, glassVeil) }
+        return cell
+    }
+
+    /// The ink side a bar takes over `grid`: white for a dark theme (`dark`); for a light theme, white where the wallpaper
+    /// as the bar shows it (its median cell, through the glass's tint or veil) reads white better than near-black, else
+    /// near-black. Sven, 2026-11-15, Q288: the mirror of macOS's dark-mode curve (Q254, Pilot 1.0) left a light theme's
+    /// near-black text at 1.9 : 1 over a dark wallpaper on Clear, where white reads at 16 : 1.
+    public static func prefersWhite(_ grid: WallpaperStrip.Grid, dark: Bool, tint: [Double]? = nil, share: Double = 0, glass: Bool = false) -> Bool {
+        dark || Contrast.readableInk(on: Contrast.hex(seen(grid.median, tint: tint, share: share, glass: glass))) == white
+    }
+
     public static func make(_ grid: WallpaperStrip.Grid, prefersWhite: Bool, tint: [Double]? = nil, share: Double = 0,
                             glass: Bool = false) -> BarTone? {
         guard grid.width > 0, grid.height > 0 else { return nil }
         let ink = prefersWhite ? white : dark, inkL = Contrast.luminance(Contrast.rgb(ink))
         var alpha = [UInt8](repeating: 0, count: grid.width * grid.height), after = [Double](repeating: 0, count: alpha.count)
         for i in alpha.indices {
-            var cell = [Double(grid.rgb[i * 3]), Double(grid.rgb[i * 3 + 1]), Double(grid.rgb[i * 3 + 2])]
-            let desk = cell
-            if let tint { cell = Contrast.mix(tint, cell, share) }
-            if glass { cell = Contrast.mix([255, 255, 255], cell, glassVeil) }
+            let desk = [Double(grid.rgb[i * 3]), Double(grid.rgb[i * 3 + 1]), Double(grid.rgb[i * 3 + 2])]
+            let cell = seen(desk, tint: tint, share: share, glass: glass)
             let l = Contrast.luminance(cell)
             // The luminance the curve asks for, then the mask's share that gets there: sRGB scales by (1 - a) under
             // black, so luminance by about its 2.2 power; under white, about the same in lightness.
@@ -149,7 +165,13 @@ public enum WallpaperStrip {
     public struct Grid: Equatable, Sendable {
         public let width, height: Int
         public let rgb: [UInt8]
-        public init(width: Int, height: Int, rgb: [UInt8]) { self.width = width; self.height = height; self.rgb = rgb }
+        /// The cell of median luminance, as red, green and blue from 0 to 255: what a bar's ink side is picked for.
+        public let median: [Double]
+        public init(width: Int, height: Int, rgb: [UInt8]) {
+            self.width = width; self.height = height; self.rgb = rgb
+            let cells = (0..<min(width * height, rgb.count / 3)).map { [Double(rgb[$0 * 3]), Double(rgb[$0 * 3 + 1]), Double(rgb[$0 * 3 + 2])] }
+            median = cells.isEmpty ? [0, 0, 0] : cells.sorted { Contrast.luminance($0) < Contrast.luminance($1) }[cells.count / 2]
+        }
     }
 
     /// Screen points per cell: half the menu bar's own detail, which the mask's smoothing (TopBarColour.toneGround) hides.

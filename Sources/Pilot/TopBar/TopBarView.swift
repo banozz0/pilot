@@ -557,7 +557,9 @@ enum TopBarColour {
         guard background != .solid, style.kind != .toybox, let strip else { return nil }
         let untinted = background == .glass && !tintsGlass(colour) && barBlur(look) != .off
         let tint = background == .glass && !untinted ? Contrast.rgb(ground(colour, style: style)) : nil, share = Double(tintAlpha(look)) / 100
-        let key = ToneKey(strip: strip, white: style.dark, tint: tint, share: tint == nil ? 0 : share, glass: untinted)
+        // A light theme's ink turns white over a dark wallpaper (BarTone.prefersWhite, Q288); a dark theme's stays white.
+        let white = BarTone.prefersWhite(strip, dark: style.dark, tint: tint, share: share, glass: untinted)
+        let key = ToneKey(strip: strip, white: white, tint: tint, share: tint == nil ? 0 : share, glass: untinted)
         if let made = made.first(where: { $0.key == key }) { return made.toned }
         guard let tone = BarTone.make(strip, prefersWhite: key.white, tint: tint, share: key.share, glass: untinted), let mask = mask(tone) else { return nil }
         made = [(key, Toned(tone: tone, mask: mask))] + made.prefix(7)
