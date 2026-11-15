@@ -33,10 +33,10 @@ func font(_ family: String, _ size: CGFloat, _ weight: NSFont.Weight) -> NSFont 
 func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
 }
-// The site's tokens (site/index.html): ground, the brand colour (the app icon's lit box, violet since Sven's Q283,
-// 2026-11-15), its edge and lip, the key's own ink (white on violet, as the site's buttons), the ink, and the second ink
-// for the quiet half of the copy.
-let ground = rgb(0xF6F6F4), brand = rgb(0x7B5CFF), brandEdge = rgb(0x7154E9), brandLip = rgb(0x694ED9), onBrand = rgb(0xFFFFFF)
+// The site's tokens (site/index.html): ground, the brand colour as the site's buttons fill it (the icon's violet, #7B5CFF
+// since Sven's Q283, 2026-11-15, deepened a hair so white reads at 4.5 : 1), its edge and lip, the key's white ink, the
+// ink, and the second ink for the quiet half of the copy.
+let ground = rgb(0xF6F6F4), brand = rgb(0x795AFA), brandEdge = rgb(0x6F52E5), brandLip = rgb(0x674CD4), onBrand = rgb(0xFFFFFF)
 let ink = rgb(0x15181C), ink2 = rgb(0x55555B)
 
 /// Drawn in points, y down, so the numbers match Finder's icon positions.
