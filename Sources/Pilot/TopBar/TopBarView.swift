@@ -279,10 +279,14 @@ struct TopBarStrip<Slot: View>: View {
                                     else if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
                                 }
                                 .clipShape(shape)
+                                // Clear draws no outline: its islands are their items alone (Sven on build 2564: "for
+                                // clear topbar maybe we can remove the outline").
                                 .overlay {
-                                    shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
-                                        .edgeRingCut(shape.edge, width: configuration.border)
-                                        .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
+                                    if background != .clear {
+                                        shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                            .edgeRingCut(shape.edge, width: configuration.border)
+                                            .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
+                                    }
                                 }
                                 // Attached: the ground reaches past the island by its flares, which run into the edge.
                                 .padding(.horizontal, -BarIslandShape.flare(configuration))
@@ -339,7 +343,7 @@ struct TopBarStrip<Slot: View>: View {
         }
         .modifier(BarClip(radius: configuration?.radius ?? 0, on: !preview))
         .overlay {
-            if let configuration, !islands {
+            if let configuration, !islands, background != .clear {
                 RoundedRectangle(cornerRadius: configuration.radius).strokeBorder(style.color(\.line), lineWidth: configuration.border)
                     .footGap(foot)
             }
@@ -381,7 +385,7 @@ private struct BarSlotMoved: ViewModifier {
 /// A Pills slot's own pill (Sven, 2026-11-12, Q177, after a Waybar picture): the bar's colour (the theme's, or the picked
 /// one) under it, its corners `radius`, a `border` ring in the accent's line colour, `padding` inside. Glass is the pill's own
 /// Liquid Glass in its outline (TopBarColour.liquidGlass; the window behind a Pills side shows none), the colour at Look's
-/// Transparency share where no Look is given (the renders), Clear only the ring.
+/// Transparency share where no Look is given (the renders); Clear draws neither ground nor ring (Sven on build 2564).
 /// Nil `configuration` leaves the slot as it is.
 private struct BarPill: ViewModifier {
     @Environment(\.style) private var style
@@ -412,9 +416,11 @@ private struct BarPill: ViewModifier {
                 // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
                 // its ends offscreen (the bar look round).
                 .overlay {
-                    shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
-                        .edgeRingCut(shape.edge, width: configuration.border)
-                        .padding(.horizontal, -BarIslandShape.flare(configuration))
+                    if background != .clear {
+                        shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
+                            .edgeRingCut(shape.edge, width: configuration.border)
+                            .padding(.horizontal, -BarIslandShape.flare(configuration))
+                    }
                 }
         } else {
             content
