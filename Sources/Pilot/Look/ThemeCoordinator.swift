@@ -1038,6 +1038,60 @@ final class ThemeCoordinator {
         }
     }
 
+    /// Use my wallpaper folder for every theme, without a theme apply (Sven 2026-11-15): while the switch is on and the
+    /// theme still owns a collection that lists the folder's files one by one (an apply before build 2528 set it so),
+    /// the collection becomes the folder itself, one entry in Images from. Only a collection wholly inside the folder,
+    /// and only while every claimed screen still shows one of its images, so the theme keeps owning what it owned; the
+    /// screens stay as they are. Journaled as a cycle step is. True when it changed.
+    @discardableResult func adoptWallpaperFolder() throws -> Bool {
+        guard let folder = wallpaperFolder(), !busy, try state("pending").bytes == nil, try following().wallpapers else { return false }
+        let (file, old) = try ledger()
+        guard var claims = old.wallpapers, let index = claims.firstIndex(where: { $0.target == .sources }),
+              case .sources(let images) = claims[index].last, !images.isEmpty, images != [folder],
+              images.allSatisfy({ Self.holds([folder], $0) }),
+              claims.allSatisfy({ claim in
+                  guard case .display = claim.target, case .image(let path?) = claim.last else { return true }
+                  return Self.holds([folder], path)
+              }),
+              let observed = try wallpaper?.read(), try observed.value(.sources) == claims[index].last else { return false }
+        let change = ThemeWallpaperMutation(target: .sources, before: claims[index].last, after: .sources([folder]))
+        claims[index] = .init(target: .sources, original: claims[index].original, last: .sources([folder]))
+        var next = old
+        next.epoch += 1
+        next.wallpapers = claims
+        let bytes = try ThemeDigest.encoded(next)
+        let journal = ThemeJournal(schema: 1, beforeLedger: file.bytes, afterLedger: bytes, mutations: [], wallpapers: [change])
+        _ = try ThemeFiles.write(ThemeDigest.encoded(journal), over: state("pending"))
+        do {
+            try writeWallpaper(change)
+            _ = try ThemeFiles.write(bytes, over: file)
+            _ = try ThemeFiles.write(nil, over: state("pending"))
+            return true
+        } catch {
+            _ = try recover()
+            if try ledger().0.bytes == bytes, try wallpaper?.read().value(.sources) == change.after { return true }
+            throw error
+        }
+    }
+
+    /// At launch and after a set of the switch or its folder, once a theme owns the wallpaper: the collection an earlier
+    /// apply listed file by file becomes the folder.
+    static func adoptOwnedWallpaperFolder() {
+        guard WallpaperSettings.shared.themeOverride != nil,
+              FileManager.default.fileExists(atPath: support.appending(path: "state/ownership.json").path) else { return }
+        do { try production().adoptWallpaperFolder() }
+        catch { looklog.error("wallpaper folder not adopted: \(String(describing: error), privacy: .public)") }
+    }
+
+    /// The fixture's switch: `path` as Use my wallpaper folder for every theme's folder (nil turns it off), then what a
+    /// set of it does.
+    func fixtureFolder(_ path: String?) throws -> Bool {
+        guard let fixtureRoot else { throw ThemeFailure("fixture host required") }
+        guard path.map({ $0.hasPrefix(fixtureRoot + "/") }) ?? true else { throw ThemeFailure("fixture folder outside root") }
+        wallpaperFolder = { path }
+        return try adoptWallpaperFolder()
+    }
+
     /// The main-thread proof (coordinator's brief): "child" waits on a real child process the way production waits on
     /// osascript and Ghostex, "block" holds the main thread the way a synchronous wait would. Nothing else waits.
     nonisolated static func fixtureWait(_ how: String?) async throws {
