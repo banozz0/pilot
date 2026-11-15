@@ -24,35 +24,44 @@
 .site .top > .still-old { display: none; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--t1) 7%, transparent) 0 5px, transparent 6px) 0 0 / 28px 28px; -webkit-mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); mask-image: radial-gradient(45% 70% at 88% 0%, #000, transparent 80%); }
 .site .w.wide { width: min(1240px, 100% - 64px); }
 .site .hero { padding: 40px 0 96px; }
-/* The rows and the loop share their own grid, above Pilot. (Sven 2026-11-06). */
-.site .hmain { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+/* The two groups and the loop share their own grid, under Pilot. (Sven 2026-11-06); the loop takes 1.4 parts so it stands as
+   tall as the groups beside it (round 2, Sven 2026-11-15, Q244 A). */
+.site .hmain { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 48px; align-items: start; }
 .site .keyline { margin-top: 26px; font: 600 clamp(20px, 2.2cqi, 26px)/1.3 var(--sans); letter-spacing: -.025em; color: var(--t1); }
 .site .keyline .kc { font-size: 1.9em; vertical-align: -.2em; margin: 0 .06em; }
 .site .keyline .dim { color: var(--t3); }
-/* The hero's struck tools (Sven 2026-11-03, Q794, Q795: variant B, its own strike): each tool in t2 at 500 weight with a thin t3
-   line drawn apart from the letters, so the word reads through it; beside it, what Pilot does in its place. */
-.site .hlead { font: 500 16px/1.4 var(--sans); color: var(--t2); }
-.site .hrows { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line); }
-.site .hrows li { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 16px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
-.site .hrows s { position: relative; justify-self: start; white-space: nowrap; font: 500 18px/1.3 var(--sans); letter-spacing: -.02em; color: var(--t2); text-decoration: none; }
-.site .hrows s::after { content: ""; position: absolute; left: 0; right: 0; top: 56%; height: 1.5px; background: var(--t3); transform-origin: left center; }
-.site .hrows span { font: 400 14px/1.4 var(--sans); color: var(--t3); text-wrap: pretty; }
+/* The hero's two groups (Sven 2026-11-15, Q244 A): a head, then four one-line rows, each a link to its area beside what it does.
+   The other tools Pilot replaces keep the struck look of the old rows (Q794, Q795: t2 words, a thin t3 line apart from them). */
+.site .hgroups { display: grid; gap: 26px; }
+.site .hg h2 { margin: 0; font: 600 21px/1.2 var(--sans); letter-spacing: -.025em; color: var(--t1); text-wrap: balance; }
+.site .hrows { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.site .hrows li { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.site .hrows a { justify-self: start; font: 500 15.5px/1.3 var(--sans); letter-spacing: -.015em; color: var(--t1); text-decoration: none; }
+@media (hover: hover) { .site .hrows a:hover { text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; } }
+.site .hrows span { font: 400 13.5px/1.4 var(--sans); color: var(--t3); text-wrap: pretty; }
+.site .hrest { margin-top: -6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font: 400 13.5px/1.5 var(--sans); color: var(--t3); }
+.site .hrest s { position: relative; white-space: nowrap; color: var(--t2); text-decoration: none; }
+.site .hrest s::after { content: ""; position: absolute; left: 0; right: 0; top: 56%; height: 1.5px; background: var(--t3); transform-origin: left center; }
+.site .hrest a { white-space: nowrap; color: var(--t1); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
 .site .hname { margin-top: 20px; font: 560 clamp(38px, 3.6cqi, 50px)/1 var(--sans); letter-spacing: -.04em; }
 .site .hname .logo { width: .78em; height: .78em; vertical-align: -.08em; margin-right: .16em; }
 .site .hero .cap { margin-top: 14px; max-width: 520px; font: 400 16.5px/1.55 var(--sans); color: var(--t2); }
-/* Pilot. and the caption open the hero, right under the nav, above the rows and the loop (Sven 2026-11-06). */
-.site .htop { margin-bottom: 56px; }
+/* Pilot. and the caption open the hero, right under the nav, above the groups and the loop (Sven 2026-11-06); the theme picker
+   stands beside them, over the loop (Sven 2026-11-14 and 15, Q240, Q244). */
+.site .htop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-areas: "name themes" "cap themes"; gap: 0 48px; align-items: end; margin-bottom: 44px; }
+.site .htop .hname { grid-area: name; }
+.site .htop .cap { grid-area: cap; }
 .site .htop .hname { margin-top: 0; font-size: clamp(56px, 6.4cqi, 88px); }
 .site .htop .cap { max-width: 640px; font-size: 19px; }
-/* The loop holds still beside the rows, its foot level with the last one (Sven 2026-11-06: static, not sticky). */
-.site .hcut { margin: 0; display: grid; gap: 12px; align-self: end; }
+/* The loop holds still beside the groups, its top level with the first head (Sven 2026-11-06: static, not sticky). */
+.site .hcut { margin: 0; display: grid; gap: 12px; align-self: start; }
 .site .hcut figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font: 400 13px/1.4 var(--mono); color: var(--t3); }
 .site .hcut figcaption a { color: var(--t1); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
 .site .filmsec { margin-top: 120px; }
 .site .filmsec .film { max-width: 960px; margin-top: 32px; }
 @media (prefers-reduced-motion: no-preference) {
-  .site .hrows s::after { transform: scaleX(0); animation: strike .42s var(--ease) forwards paused; animation-delay: calc(.25s + var(--i) * .09s); }
-  .site.go .hrows s::after { animation-play-state: running; }
+  .site .hrest s::after { transform: scaleX(0); animation: strike .42s var(--ease) forwards paused; animation-delay: calc(.4s + var(--i) * .07s); }
+  .site.go .hrest s::after { animation-play-state: running; }
 }
 .site .film { margin: 0; display: grid; gap: 14px; }
 .site .film .box { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; border: 1px solid #1C1C1C; background: #080808; overflow: hidden; }
@@ -442,12 +451,13 @@
   .site .hero { padding: 28px 0 56px; }
   .site .hmain { grid-template-columns: 1fr; gap: 32px; }
   .site .hrows li { grid-template-columns: 1fr; gap: 1px; padding: 7px 0; }
-  .site .hrows s { font-size: 18px; }
-  .site .hrows span { font-size: 13.5px; line-height: 1.4; }
+  .site .hrest { margin-top: 0; }
   .site .hname { margin-top: 18px; font-size: 38px; }
   .site .hero .cap { margin-top: 12px; font-size: 15.5px; }
-  .site .hcut { position: static; }
-  .site .htop { margin-bottom: 36px; }
+  .site .hcut { position: static; order: -1; }
+  .site .htop { grid-template-columns: 1fr; grid-template-areas: "name" "cap" "themes"; margin-bottom: 28px; }
+  .site .hthemes { margin-top: 22px; }
+  .site .tryth button svg { width: 43px; }
   .site .htop .hname { font-size: 44px; }
   .site .htop .cap { font-size: 15.5px; }
   .site .filmsec { margin-top: 80px; }
@@ -963,12 +973,19 @@
 .site .navpill .btn.sm { margin: 0 0 0 6px; padding: 0 15px; }
 .site .navpill .btn.nsp { padding: 0 13px 0 11px; gap: 7px; }
 .site .hero .ctas .btn { height: 46px; padding: 0 22px; border-radius: 999px; font-size: 14.5px; }
-.tryth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; font: 400 13px/1 var(--sans); color: var(--t3); }
-.tryth span { margin-right: 4px; }
-.tryth button { all: unset; box-sizing: border-box; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle, var(--a) 0 44%, var(--b) 46%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--t1) 22%, transparent); transition: transform .15s var(--ease); }
-.tryth button[aria-pressed=true] { box-shadow: 0 0 0 2px var(--g), 0 0 0 3.5px var(--t1); }
-.tryth button:active { transform: scale(.92); }
-.tryth button:focus-visible { outline: 2px solid var(--lime-ink); outline-offset: 4px; }
+/* The theme picker (Sven 2026-11-15, Q244 A): every theme a brush stroke of its ground and accent (site.py brush_mark), on a
+   sheet of two rows; the picked one underlined in t1, its name beside "Themes". */
+.hthemes { grid-area: themes; align-self: end; min-width: 0; }
+.hthemes .hth { display: flex; align-items: center; gap: 8px; font: 500 15px/1 var(--sans); color: var(--t1); }
+.hthemes .pal { width: 20px; height: 20px; color: var(--t1); }
+.hthemes .tname { margin-left: auto; font: 400 12.5px/1 var(--mono); color: var(--t3); }
+.tryth { display: flex; flex-wrap: wrap; gap: 0 2px; margin-top: 10px; }
+.tryth button { all: unset; box-sizing: border-box; cursor: pointer; padding: 2px 0; border-radius: 8px; color: var(--t1); line-height: 0; transition: transform .16s var(--ease); }
+.tryth button svg { display: block; width: 60px; height: auto; }
+.tryth button .rg { opacity: 0; transition: opacity .16s; }
+.tryth button[aria-pressed=true] .rg { opacity: 1; }
+.tryth button:active { transform: scale(.96); }
+.tryth button:focus-visible { outline: 2px solid var(--lime-ink); outline-offset: 2px; }
 .chead { display: grid; gap: 8px; max-width: 660px; }
 .chead h2 { font: 480 clamp(30px, 3.4vw, 44px)/1.06 var(--sans); letter-spacing: -.035em; }
 .chead p { margin-top: 6px; font: 400 17px/1.55 var(--sans); color: var(--t2); }

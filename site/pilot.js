@@ -1383,6 +1383,7 @@ void main(){
     try { t ? localStorage.setItem('pilot-theme', t) : localStorage.removeItem('pilot-theme'); } catch (_) {}
     $$('.tpop [data-t]').forEach(b => b.setAttribute('aria-checked', b.dataset.t === (t || '')));
     $$('.tryth [data-t]').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === (t || '')));
+    const tn = $('.hthemes .tname'), pk = $(`.tryth [data-t="${t || ''}"]`); if (tn && pk) tn.textContent = pk.title;
     const on = $(`.tpop [data-t="${t || ''}"] .tsw`); if (on && tbtn) $('.tsw', tbtn).innerHTML = on.innerHTML;
     retoken(); if (hasShader) apply();
   };
