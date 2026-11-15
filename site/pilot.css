@@ -43,15 +43,16 @@
 .site .hrest s { position: relative; white-space: nowrap; color: var(--t2); text-decoration: none; }
 .site .hrest s::after { content: ""; position: absolute; left: 0; right: 0; top: 56%; height: 1.5px; background: var(--t3); transform-origin: left center; }
 .site .hrest a { white-space: nowrap; color: var(--t1); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
-.site .hname { margin-top: 20px; font: 560 clamp(38px, 3.6cqi, 50px)/1 var(--sans); letter-spacing: -.04em; }
-.site .hname .logo { width: .78em; height: .78em; vertical-align: -.08em; margin-right: .16em; }
+/* The wordmark in Unbounded Bold (Sven, 2026-11-15, Q258 F3), set about a seventh smaller than Geist was: it runs wide. */
+.site .hname { margin-top: 20px; font: 700 clamp(33px, 3.1cqi, 43px)/1 "Unbounded", var(--sans); letter-spacing: -.05em; }
+.site .hname .logo { width: .9em; height: .9em; vertical-align: -.12em; margin-right: .2em; }
 .site .hero .cap { margin-top: 14px; max-width: 520px; font: 400 16.5px/1.55 var(--sans); color: var(--t2); }
 /* Pilot. and the caption open the hero, right under the nav, above the groups and the loop (Sven 2026-11-06); the theme picker
    stands beside them, over the loop (Sven 2026-11-14 and 15, Q240, Q244). */
 .site .htop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-areas: "name themes" "cap themes"; gap: 0 48px; align-items: end; margin-bottom: 44px; }
 .site .htop .hname { grid-area: name; }
 .site .htop .cap { grid-area: cap; }
-.site .htop .hname { margin-top: 0; font-size: clamp(56px, 6.4cqi, 88px); }
+.site .htop .hname { margin-top: 0; font-size: clamp(48px, 5.5cqi, 76px); }
 .site .htop .cap { max-width: 640px; font-size: 19px; }
 /* The loop holds still beside the groups, its top level with the first head (Sven 2026-11-06: static, not sticky). */
 .site .hcut { margin: 0; display: grid; gap: 12px; align-self: start; }
@@ -462,13 +463,13 @@
   .site .hmain { grid-template-columns: 1fr; gap: 32px; }
   .site .hrows li { grid-template-columns: 1fr; gap: 1px; padding: 7px 0; }
   .site .hrest { margin-top: 0; }
-  .site .hname { margin-top: 18px; font-size: 38px; }
+  .site .hname { margin-top: 18px; font-size: 33px; }
   .site .hero .cap { margin-top: 12px; font-size: 15.5px; }
   .site .hcut { position: static; order: -1; }
   .site .htop { grid-template-columns: 1fr; grid-template-areas: "name" "cap" "themes"; margin-bottom: 28px; }
   .site .hthemes { margin-top: 22px; }
   .site .tryth button svg { width: 43px; }
-  .site .htop .hname { font-size: 44px; }
+  .site .htop .hname { font-size: 38px; }
   .site .htop .cap { font-size: 15.5px; }
   .site .filmsec { margin-top: 80px; }
   .site .film .box { border-radius: 12px; }
@@ -1010,7 +1011,7 @@
 .site .capR .more { position: relative; text-decoration: none; padding-bottom: 6px; }
 .site .capR .more::after { content: ""; position: absolute; left: -2px; right: -2px; bottom: -3px; height: 7px; background: var(--lime); -webkit-mask: var(--brush) 0 0 / 100% 100% no-repeat; mask: var(--brush) 0 0 / 100% 100% no-repeat; }
 .more2 { margin-top: 120px; }
-.mgrid { margin-top: 32px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mgrid { margin-top: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }   /* six cards, three over three (Q259) */
 @media (max-width: 1100px) { .mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .mcard { display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-rows: auto 1fr auto; gap: 6px 12px; padding: 18px 18px 16px; border-radius: 14px; border: 1px solid var(--line2); background: color-mix(in srgb, var(--panel) 90%, transparent); }
 .mcard .mi { grid-row: 1 / span 3; width: 26px; height: 22px; display: grid; place-items: start center; color: var(--t2); }
