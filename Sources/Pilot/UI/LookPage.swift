@@ -71,7 +71,7 @@ struct LookPage: View {
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
         static let theme = "Click a theme to try it on Pilot; nothing else changes. Apply theme sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Clear keeps this window, the panels and widgets on glass, as they need a face. Custom shows once you change one of them on its own."
-        static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and Quick AI. Off, they are solid."
+        static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and the desktop widgets. Off, they are solid. The top bar's dropdowns and drops follow its own Background."
         static let transparency = "How much of the desktop shows through the glass here, and on a Glass top bar in a colour you picked. In the theme's colour a Glass top bar and dock wear macOS's own clear glass. Both go solid at 0 %. Text stays readable however far you go."
         static let glassBlur = "How much the glass blurs the desktop behind it: Full, Light, or Off for a sharp desktop under the tint. Here and on the widgets; a Glass top bar and the dock wear the macOS Dock's clear glass at Full and Light."
         static let appsShowAs = "How every list shows an app: its icon, its name or both. Icon only shows the name on hover; search still finds it by name."
