@@ -158,11 +158,22 @@ struct ExtensionPopoverView: View {
                                title: ink.title, accent: ink.accent, muted: ink.muted, mono: ink.mono(11),
                                fit: room.map { $0 - (height - scrolled) }, scrolled: { scrolled = $0 }, holdsLinks: true) { EmptyView() }
             if page || links != nil {
-                HStack(spacing: 10) {
-                    if page { Button("Open page") { openPage(model.id) }.barButton() }
-                    Spacer(minLength: 4)
-                    // Beside Open page a link runs at once: one whose action asks first belongs in the blocks, not last.
-                    if let links { ExtensionLinksRow(links: links, compact: true) { model.perform($0) } }
+                // Beside Open page a link runs at once: one whose action asks first belongs in the blocks, not last. Where
+                // both do not fit (AI usage with its status words, "Claude minor · Codex minor"), the links go on their own
+                // row under it: kept beside it, the row's fixed width widened the whole column past the popover's face,
+                // which cut every card at its right edge (Sven on build 2564: "ai usage still looks like cutout").
+                let open = page ? Button("Open page") { openPage(model.id) }.barButton() : nil
+                let row = links.map { ExtensionLinksRow(links: $0, compact: true) { model.perform($0) } }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        open
+                        Spacer(minLength: 4)
+                        row
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        open
+                        row
+                    }
                 }
             }
         }
@@ -176,17 +187,25 @@ struct ExtensionPopoverView: View {
     }
 }
 
+/// The glass a bar popover stands on (Q474): clear Liquid Glass, as Apple's own popovers and Control Center, its `tint`
+/// only at Blur Off, where there is no glass and the tint is the face.
+struct PopoverGlass: Equatable {
+    let tint: NSColor?
+}
+
 extension EnvironmentValues {
-    /// The tint of the glass an extension's bar popover stands on (Q474); nil: KitPopover's solid face.
-    @Entry var popoverGlass: NSColor? = nil
+    /// The glass a bar popover stands on; nil: KitPopover's solid face.
+    @Entry var popoverGlass: PopoverGlass? = nil
 }
 
 extension View {
     /// A bar popover on the top bar's Glass while Look › Glass is on: an extension's first (Sven 2026-10-25, Q474), every
     /// bar dropdown since (BarPanelWindow.present; Liquid Glass round 3, Sven on build 2550: "stats dropdowns aren't
-    /// glass, neither are the system ones"). Tinted as the menu's (Look.glassTint, Transparency's ground strength), its
-    /// fills see-through as the menu's; solid when Glass is off, at Transparency 0 or in Toybox. Applied outside its
-    /// KitPopover, which draws the glass; once is enough, so one nested in another does nothing more.
+    /// glass, neither are the system ones"). Untinted, as the dock's and the bar's (TopBarColour.tintsGlass): the theme's
+    /// ground laid into the glass at Transparency's ground strength stained it a flat olive slab over a dark window (Sven
+    /// on build 2564: "stats are looking better but still not liquid glass"); the tint stays only at Blur Off, where it is
+    /// the face. Its fills see-through as the menu's; solid when Glass is off, at Transparency 0 or in Toybox. Applied
+    /// outside its KitPopover, which draws the glass; once is enough, so one nested in another does nothing more.
     func extensionGlass(_ look: Look = .shared) -> some View { modifier(ExtensionGlass(look: look)) }
 }
 
@@ -197,7 +216,7 @@ private struct ExtensionGlass: ViewModifier {
 
     func body(content: Content) -> some View {
         if look.extensionGlass, given == nil {
-            content.environment(\.popoverGlass, look.glassTint(on: .barPopovers))
+            content.environment(\.popoverGlass, PopoverGlass(tint: look.glassBlur == .off ? look.glassTint(on: .barPopovers) : nil))
                 .environment(\.windowLayers, look.layers)
                 .environment(\.style, style.seeThrough(look.layers))
         } else {
