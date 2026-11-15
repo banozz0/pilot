@@ -36,8 +36,9 @@ Pilot's extensions and themes come from `catalogue/` in this repo, and anyone ca
   PILOT_EXT_PYTHON=/usr/bin/python3 python3 -m unittest discover -s catalogue/tests
   ```
 
-  and open a pull request that changes only `catalogue/`. A debug build of Pilot (`swift build`) does these steps with
-  `pilot ext publish <id>` or `pilot theme publish <id>`, from a fork on your GitHub account when you cannot push here.
+  and open a pull request that changes only `catalogue/`. Pilot does these steps with `pilot ext publish <id>` or
+  `pilot theme publish <id>` (or /publish in Ask Pilot) when your GitHub account can push here; sending from your own
+  fork that way is in debug builds (`swift build`) only for now.
 - **Checks:** every pull request that touches `catalogue/` runs `check.py`, rebuilds the index and compares it, and
   runs the catalogue's tests on macOS's own `/usr/bin/python3`. A pull request from a fork that changes `catalogue/`
   may change nothing else: send a fix to `Sources/` on its own.

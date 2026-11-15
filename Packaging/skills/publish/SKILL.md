@@ -21,7 +21,16 @@ Read first:
 Then `pilot ext publish <id>` or `pilot theme publish <id>`. Pilot asks the user first, naming the pack, the branch, the
 repo and, when their GitHub account cannot push to the repo, their fork. On Allow it copies the pack into the clone on a
 new branch, rebuilds and checks the catalogue's index, commits, makes or finds their fork when they need one (the clone's
-remote `pilot-fork`), pushes that branch and opens a pull request. Answer with the pull request's link.
+remote `pilot-fork`), pushes that branch and opens a pull request. Answer with the pull request's link: its checks run
+there, and its owner reviews it.
+
+A theme goes as its folder in the user's themes: the manifest, its wallpapers and preview, and PROVENANCE.md saying
+where each picture comes from (send only pictures they may share). Its branch is named by the pack's revision, so send
+it again after a change. From a fork, one the catalogue already lists (one installed from Look › Catalogue) is
+refused unless the user sent it first.
+
+When their account cannot push, a release build of Pilot refuses before asking: say so, and that they can fork the repo
+and open the pull request by hand (CONTRIBUTING.md, The catalogue).
 
 When it answers that a step failed (the check's problems, a branch that exists, a clone with changes, gh not signed in),
 say what it said in plain words and the one fix. Change nothing in the clone yourself. Nothing reaches the catalogue

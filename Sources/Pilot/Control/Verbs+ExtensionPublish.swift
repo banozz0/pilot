@@ -17,13 +17,13 @@ import PilotCore
 /// the branch it was on, the new branch gone.
 @MainActor
 enum CataloguePublish {
-    /// Release builds wait (SH19) until a publish from a fork is proved against GitHub itself (public-repo T23): a
-    /// release build has no `ext publish`, no `theme publish`, no catalogue clone setting and no /publish skill; a debug
-    /// build keeps all four.
+    /// Sending from a fork waits (SH19) until it is proved against GitHub itself (public-repo T23): a release build sends
+    /// only from an account that can push to the catalogue's repo (Sven's) and refuses any other before its Allow; a
+    /// debug build forks.
     #if DEBUG
-    nonisolated static let available = true
+    static let forks = true
     #else
-    nonisolated static let available = false
+    static let forks = false
     #endif
     static let key = "extensions.catalogueClone"
     static let defaults = UserDefaults.pilot()
@@ -109,6 +109,9 @@ enum CataloguePublish {
             (repo, gh) = (github, found)
             let push = try await run(folder, found, ["api", "repos/\(github)", "--jq", ".permissions.push"], step: "gh api (sign in with gh auth login)")
             if push != "true" {
+                guard forks else {
+                    throw ControlError(.notReady, "your GitHub account cannot push to \(github), and this Pilot sends only from one that can: fork it and open a pull request by hand (CONTRIBUTING.md, The catalogue)")
+                }
                 let login = try await run(folder, found, ["api", "user", "--jq", ".login"], step: "gh api user (sign in with gh auth login)")
                 fork = login
                 if pack.kind == .themes { credit = try await unlisted(pack.id, by: login, in: folder) }
@@ -260,6 +263,10 @@ extension SettingsSchema {
                       }
                       CataloguePublish.defaults.set(folder, forKey: CataloguePublish.key)
                   }),
+        ])
+        // Read by a debug build only (CatalogueSource), so a release build never offers it.
+        #if DEBUG
+        register([
             .text(CatalogueSource.key, "Catalogue folder to read instead of GitHub", page: "extensions", standard: "",
                   read: { CatalogueSource.folder }, write: { path throws(ControlError) in
                       guard !path.isEmpty else { return CatalogueSource.defaults.removeObject(forKey: CatalogueSource.key) }
@@ -270,5 +277,6 @@ extension SettingsSchema {
                       CatalogueSource.defaults.set(folder, forKey: CatalogueSource.key)
                   }),
         ])
+        #endif
     }
 }
