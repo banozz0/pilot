@@ -204,7 +204,16 @@ struct SandboxHost {
                 } else { try? (data + Data("\n".utf8)).write(to: log) }
             }
         }
-        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, homeBlocks: homeBlocks, clipboard: clipboard))
+        // A test run's bundle has no Resources: `pilot ext new` makes its folder from the repo's templates, as the app does from its own.
+        let extensions = ExtensionTools()
+        extensions.templates = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/ext-template").standardizedFileURL
+        // And no skills: `pilot guide` reads the repo's, at each ask, so an edited skill is what the next guide answers.
+        let skills = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/skills").standardizedFileURL
+        let guides: @Sendable @MainActor () -> [AISkill] = {
+            AISkills.guides(AISkills.load { try? String(contentsOf: skills.appending(path: "\($0)/SKILL.md"), encoding: .utf8) })
+        }
+        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, homeBlocks: homeBlocks, clipboard: clipboard,
+                                                                              extensions: extensions, guides: guides))
         #expect(served.start())
         defer { served.stop() }
         try Data().write(to: hold)

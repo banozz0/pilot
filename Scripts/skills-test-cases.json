@@ -31,13 +31,15 @@
   {"id": "preset-small", "skill": "preset", "mode": "sandbox", "turns": ["/preset make me a small preset with just my apps and screenshots", "yes"]},
   {"id": "preset-arrows", "skill": "preset", "mode": "sandbox", "turns": ["/preset a preset built around the arrow keys for moving windows", "yes"]},
   {"id": "preset-empty", "skill": "preset", "mode": "sandbox", "turns": ["/preset"]},
-  {"id": "catalogue-theme", "skill": "catalogue", "mode": "sandbox", "catalogue": true, "turns": ["/catalogue install a theme", "the first one is fine"]},
+  {"id": "catalogue-theme", "skill": "catalogue", "mode": "theme", "turns": ["/catalogue install a theme", "the first one is fine"]},
   {"id": "catalogue-weather", "skill": "catalogue", "mode": "sandbox", "catalogue": true, "turns": ["/catalogue is there an extension for the weather?", "install it"]},
   {"id": "catalogue-stars", "skill": "catalogue", "mode": "sandbox", "catalogue": true, "turns": ["/catalogue show my GitHub stars in the bar"]},
   {"id": "extension-stars", "skill": "extension", "mode": "sandbox", "turns": ["/extension make an extension that shows my GitHub stars"]},
   {"id": "extension-ports", "skill": "extension", "mode": "sandbox", "turns": ["/extension list my open ports"]},
   {"id": "publish-ext", "skill": "publish", "mode": "sandbox", "catalogue": true,
-   "prep": [["ext", "new", "Port list", "--dir", "{root}/made"], ["ext", "install", "{root}/made/port-list"]],
+   "prep": [["ext", "new", "port-list", "--title", "Port list", "--dir", "{root}/made"], ["ext", "install", "{root}/made/port-list"]],
    "turns": ["/publish send my Port list extension to the catalogue", "my clone is at {root}/clone"]},
-  {"id": "publish-theme", "skill": "publish", "mode": "sandbox", "turns": ["/publish publish my theme Midnight to the catalogue"]}
+  {"id": "publish-theme", "skill": "publish", "mode": "sandbox", "turns": ["/publish publish my theme Midnight to the catalogue"]},
+  {"id": "widget-meters", "skill": "widget", "mode": "sandbox", "turns": ["/widget my battery and disk as two meters"]},
+  {"id": "widget-clock", "skill": "widget", "mode": "sandbox", "turns": ["/widget a big clock with today's date under it"]}
 ]

@@ -38,8 +38,9 @@ PROMPT = REPO / 'Packaging/pilot-agent.md'  # --prompt replaces it (an older cop
 CLI = REPO / '.build/debug/PilotCLI'
 HOST = ['nice', '-n', '10', 'swift', 'test', '-j', '4', '--skip-build', '--filter', 'SandboxHost']
 
-# Verbs that act on the Mac the sandbox runs on (AGENTS.md › Commands): answered as a Deny, never sent.
-ACTING = [('run',), ('system',), ('wallpaper',), ('install',), ('files',), ('model',), ('permit',), ('ai',),
+# Verbs that act on the Mac the sandbox runs on (AGENTS.md › Commands): answered as a Deny, never sent. '+' is any
+# further word: a bare `pilot permit` only reads the grants.
+ACTING = [('run',), ('system',), ('wallpaper',), ('install',), ('files',), ('model',), ('permit', '+'), ('ai',),
           ('wifi',), ('bluetooth',), ('bug',), ('open',), ('crash', '--reveal'), ('ext', 'run'), ('ext', 'publish'),
           ('theme', 'apply'), ('theme', 'restore'), ('clip', 'paste'), ('workspace', 'move'), ('workspace', 'rule'),
           ('snapshot', 'restore'), ('press',)]
@@ -52,7 +53,10 @@ plain = [w for w in words if w != '--json']
 blocked = os.environ.get('PILOT_SKILLS_BLOCK', '')
 hit = None
 for rule in json.loads(blocked or '[]'):
-    if plain and plain[0] == rule[0] and all(word in plain[1:] for word in rule[1:]):
+    # A word is positional (`theme apply`, never `theme plan apply`, a read); a flag may sit anywhere.
+    words_hit = all(plain[i + 1:i + 2] == [w] for i, w in enumerate(rule[1:]) if w != '+' and not w.startswith('--'))
+    flags_hit = all(w in plain for w in rule[1:] if w.startswith('--'))
+    if plain and plain[0] == rule[0] and words_hit and flags_hit and ('+' not in rule or plain[1:]):
         hit = rule; break
 env = dict(os.environ)
 if os.environ.get('PILOT_SKILLS_SOCKET'): env['PILOT_SOCKET'] = os.environ['PILOT_SKILLS_SOCKET']
@@ -210,10 +214,10 @@ class Theme(Host):
                                    (home / '.config/ghostex', 'settings.json', '{}\n')]:
             folder.mkdir(parents=True, exist_ok=True); (folder / name).write_text(text)
         f.settings['detectHome'] = str(home)
-        (f.root / 'catalogue/themes').mkdir(parents=True)
+        # Every pack the index lists: a get reads its files from here (43 MB; the fixture refuses a link out).
+        (f.root / 'catalogue').mkdir(parents=True)
         shutil.copy2(REPO / 'catalogue/index.json', f.root / 'catalogue/index.json')
-        for name in ['akane', 'tokyo-night']:
-            if (REPO / 'catalogue/themes' / name).is_dir(): shutil.copytree(REPO / 'catalogue/themes' / name, f.root / 'catalogue/themes' / name)
+        shutil.copytree(REPO / 'catalogue/themes', f.root / 'catalogue/themes')
         f.settings['catalogue'] = str(f.root / 'catalogue')
         f.manifest.write_text(json.dumps(f.settings))
         f.controls(allow='no' if case.get('allow') == 'deny' else 'yes', reloadAllow='yes')
@@ -242,8 +246,9 @@ def run_case(case, out, model, effort, style):
     (helpers / 'pilot').write_text(WRAPPER); (helpers / 'pilot').chmod(0o755)
     host.helpers = helpers
     claude = shutil.which('claude')
-    maker = case['turns'][0].startswith('/extension')
-    prompt = REPO / 'Packaging/skills/extension/SKILL.md' if maker else Path(PROMPT)
+    # /extension and /widget run the maker's profile on their own skill file (AgentRunner.makerTurn).
+    maker = next((m for m in ['extension', 'widget'] if case['turns'][0].startswith('/' + m)), None)
+    prompt = REPO / f'Packaging/skills/{maker}/SKILL.md' if maker else Path(PROMPT)
     work = root / ('ext-folder' if maker else 'cli'); work.mkdir()
     base = {k: v for k, v in os.environ.items() if k in ['HOME', 'USER', 'TMPDIR', 'LANG']}
     env = dict(base, PILOT_AGENT='1', PATH=f'{helpers}:{Path(claude).parent}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
@@ -263,6 +268,7 @@ def run_case(case, out, model, effort, style):
         shutil.copytree(REPO / 'catalogue', root / 'catalogue')
         prep.insert(0, ['set', 'catalogue.source', str(root / 'catalogue')])
     if case['id'].startswith('publish-ext'):
+        (root / 'made').mkdir()
         subprocess.run(['git', 'clone', '-q', '--local', str(REPO), str(root / 'clone')], check=True)
     try: host.start()
     except BaseException: host.stop(); raise
@@ -273,7 +279,8 @@ def run_case(case, out, model, effort, style):
             with (root / 'prep.log').open('a') as f: f.write(f'$ pilot {" ".join(words)}\n{done.returncode} {done.stdout}{done.stderr}\n')
         session = None
         for i, message in enumerate(fill(t) for t in case['turns']):
-            text = message if maker else skilled(message)
+            # A maker gets the idea alone (ExtensionMaker.turn), never the leading /extension or /widget.
+            text = message.split(None, 1)[1] if maker and i == 0 else message if maker else skilled(message)
             if session: text = f'({now_line()})\n\n{text}'
             args = [claude] + claude_arguments(prompt, None if maker else session, model, effort, maker, style)
             started = time.time()
@@ -330,6 +337,7 @@ def main():
     style = None if a.style == 'none' else answer_style(a.style)
     global PROMPT
     if a.prompt: PROMPT = Path(a.prompt).resolve()
+    if not Path(PROMPT).is_file(): sys.exit(f'no prompt at {PROMPT}')
     results_file = out / 'results.json'
     results = json.loads(results_file.read_text()) if results_file.exists() else {}
     for case in cases:
