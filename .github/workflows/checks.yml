@@ -1,21 +1,30 @@
-# Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request only (never
-# the _target trigger, which runs with the base repo's rights), with a read-only token and no secrets, and no text a
-# pull request controls (title, body, branch name) is ever written into a run: line. GitHub runs the pull request's own
+# Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request (never the
+# _target trigger, which runs with the base repo's rights) and on pushes to ci-proof/ branches (below), with a
+# read-only token and no secrets, and no text a pull request controls (title, body, branch name) is ever written into a
+# run: line. GitHub runs the pull request's own
 # copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset (spec T27:
 # Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
 # .gitleaks.toml (gitleaks' defaults when the base has none, never the pull request's), ignores gitleaks:allow comments
 # and every .gitleaksignore, and reads each merge against its first parent.
+#
+# The catalogue jobs (spec T19) run when a change touches catalogue/: the index rebuilt and compared, check.py, and the
+# catalogue's tests on macOS's own /usr/bin/python3 (3.9), the Python every extension runs on. A pull request from a
+# fork that touches catalogue/ may touch nothing else. A push to a ci-proof/ branch runs them too: that is how a planted
+# pack is proved without opening a pull request; its fork and --author steps run only on a pull request.
 name: Checks
 on:
   pull_request:
+  push:
+    branches: ["ci-proof/**"]
 permissions:
   contents: read
 concurrency:
-  group: checks-${{ github.event.pull_request.number }}
+  group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   secrets:
     name: Secrets (gitleaks)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -49,3 +58,88 @@ jobs:
           "$RUNNER_TEMP/bin/gitleaks" git --no-banner --redact --verbose -c "$RUNNER_TEMP/gitleaks.toml" \
             --ignore-gitleaks-allow --gitleaks-ignore-path "$RUNNER_TEMP/no-ignore" \
             --log-opts="--diff-merges=first-parent $BASE..$HEAD" "$gitdir"
+
+  changes:
+    name: Catalogue scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      catalogue: ${{ steps.scope.outputs.catalogue }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: What the change touches
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          FROM: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then range="$BASE...$HEAD"; else range="origin/main...HEAD"; fi
+          git diff --no-renames --name-only "$range" > "$RUNNER_TEMP/changed"
+          if grep -q '^catalogue/' "$RUNNER_TEMP/changed"; then
+            echo "catalogue=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalogue=false" >> "$GITHUB_OUTPUT"; echo "Nothing in catalogue/ changed."; exit 0
+          fi
+          # A pack from a fork comes alone: anything beside catalogue/ (Sources/, Scripts/, .github/) needs Sven's own read.
+          if [ "$EVENT" = pull_request ] && [ "$FROM" != "$REPO" ]; then
+            if grep -v '^catalogue/' "$RUNNER_TEMP/changed"; then
+              echo "::error::A pull request from a fork that changes catalogue/ may change nothing else; the files above are outside it."
+              exit 1
+            fi
+          fi
+          echo "catalogue/ changed; the catalogue checks run."
+
+  catalogue:
+    name: Catalogue (check.py and tests)
+    needs: changes
+    if: needs.changes.outputs.catalogue == 'true'
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      PY: /usr/bin/python3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Python
+        run: |
+          "$PY" --version
+          python3 --version
+      - name: check.py
+        env:
+          EVENT: ${{ github.event_name }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            set +e; "$PY" -B catalogue/scripts/check.py --author "$AUTHOR" --base "$BASE"; code=$?; set -e
+            # 2: no problems, but a pack someone else first sent is changed: a warning for Sven's read, not a failure.
+            if [ "$code" = 2 ]; then echo "::warning::check.py flagged a pack first sent by someone else: Sven reads it before merge"; exit 0; fi
+            exit "$code"
+          fi
+          "$PY" -B catalogue/scripts/check.py
+      - name: index.json is the one build-index.py writes
+        if: ${{ !cancelled() }}
+        run: |
+          "$PY" -B catalogue/scripts/build-index.py
+          git diff --exit-code --stat -- catalogue/index.json || { echo "::error::catalogue/index.json is stale: run python3 catalogue/scripts/build-index.py and commit it"; exit 1; }
+      - name: Tests on /usr/bin/python3
+        if: ${{ !cancelled() }}
+        env:
+          PILOT_EXT_PYTHON: /usr/bin/python3
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          "$PY" -m unittest discover -s catalogue/tests
+      - name: Tests on the runner's python3
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s catalogue/tests
