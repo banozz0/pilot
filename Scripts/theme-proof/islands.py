@@ -92,7 +92,10 @@ def run(seam_only=False, fixes_only=False):
         f.call('bar', 'preset', 'threeIslands')
         cli_geometry = f.geometry()
         f.call('bar-fixture-edit', 'preset', 'threeIslands')
-        assert f.geometry() == cli_geometry and f.personal() == {k:v for k,v in strip_saved.items() if k != 'preset'}
+        # Each preset keeps its own layout (2026-11-13): the strip's items are kept under its key, the islands start from them.
+        items = lambda s: {k:v for k,v in s.items() if k not in ('preset','layouts')}
+        assert f.geometry() == cli_geometry and items(f.personal()) == items(strip_saved)
+        assert f.personal()['layouts']['floatingStrip']['entries'] == strip_saved['entries']
         for key, value in [('height','40'), ('spacing','13'), ('horizontalMargin','27'), ('topMargin','9'), ('radius','12'), ('border','2'), ('padding','7')]:
             f.call('bar', 'geometry', key, value)
         geometry = f.geometry()

@@ -342,7 +342,8 @@ def preservation_fixes():
                         ('missing-field', json.dumps(dict(saved,preset={'preset':'floatingStrip'})).encode()),
                         ('negative-range', json.dumps(dict(saved,preset=dict(config,padding=-1))).encode()),
                         ('numeric-type', json.dumps(dict(saved,preset=dict(config,height='36'))).encode()),
-                        ('duplicate-geometry', json.dumps(dict(saved,preset=config)).replace('"height": 36','"height": 36,"height": 40').encode()),
+                        # The preset's own height, whatever its default (the floating strip's is 30 since 2026-11-12).
+                        ('duplicate-geometry', json.dumps(dict(saved,preset=config)).replace(f'"height": {json.dumps(config["height"])}',f'"height": {json.dumps(config["height"])},"height": 40',1).encode()),
                         ('duplicate-preset', (json.dumps(saved)[:-1]+',"preset":'+json.dumps(config)+'}').encode())]
             edits = [('bar','preset','legacy'), ('bar','preset','floatingStrip'), ('bar','clear'), ('bar','restore'),
                      ('bar','move','clock','--side','right'), ('bar','style','clock','time'), ('bar','spacer','30'),
@@ -353,6 +354,7 @@ def preservation_fixes():
                      ('set','bar.clockEvents','true'), ('add','bar-items','--item','wifi'), ('remove','bar-items','clock'),
                      ('add','bar-extensions','--id','fixture','--placement','topBar'), ('remove','bar-extensions','fixture'),
                      ('theme','plan','apply','a')]
+            assert b'"height": 40' in dict(variants)['duplicate-geometry'], 'duplicate-geometry payload carries no duplicate'
             for i, (label, payload) in enumerate(variants):
                 values['bar.items'] = payload
                 for key in ['bar.pilotMarkAlone','bar.extensionsApart']:
