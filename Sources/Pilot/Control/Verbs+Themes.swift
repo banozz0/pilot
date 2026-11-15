@@ -7,16 +7,22 @@ extension ControlVerbs {
     /// Native controls call this coordinator too. There is no caller approval switch or executor verb.
     func registerThemes(_ coordinator: @escaping @MainActor @Sendable () throws -> ThemeCoordinator) {
         register(ControlVerb("theme", help: "Create, edit, duplicate, delete or transfer data-only local packs (delete removes a pack you made or imported, or hides one of Pilot's own until theme get brings it back, never the theme in use or the last one), or install them from Pilot's catalogue (theme catalogue, get; every file checked against its sha256; a built-in theme's plan downloads its wallpapers from there); review exact changes before Apply/Restore. Zed, every Obsidian vault, Ghostex's window colour, VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2, btop, lazygit, Neovim, fish and Vesktop follow when found, with switches to turn each off; custom mappings need local bindings and optional reloads ask separately. A theme changes everything it carries and Restore undoes it; follow mode personal keeps macOS Light or Dark as it is. Toybox colours stay scoped. Use pilot guide theme or /theme in Ask Pilot. Installed-app refresh and CSS precedence need checking in the target app.",
-                             usage: "pilot theme list | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> [--summary] | plan restore [--summary] | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>",
-                             flags: [.init("summary", help: "a plan's id, its apply command and what it changes, without the file bytes (Allow still shows every change)", takesValue: false)]) { call throws(ControlError) in
+                             usage: "pilot theme list [--summary] | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> [--summary] | plan restore [--summary] | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>",
+                             flags: [.init("summary", help: "a plan's id, its apply command and what it changes, without the file bytes (Allow still shows every change); for list, a line a pack: id, title, dark, yours, wallpapers", takesValue: false)]) { call throws(ControlError) in
             do {
                 // --summary is a plan's alone; the rest match on the words without it.
                 let owner = try coordinator(), args = call.arguments(), summary = args.has("summary"), words = args.positional
                 switch words.first {
                 // A removed built-in theme (Look.hiddenThemes) is left out until theme get brings it back.
                 case "list" where words.count == 1:
-                    let look = Look.shared
-                    return try themeJSON(owner.store.list().filter { $0.compatible(with: owner.style()) && look.shows($0.id) })
+                    let look = Look.shared, packs = try owner.store.list().filter { $0.compatible(with: owner.style()) && look.shows($0.id) }
+                    // --summary: a line a pack, for the agent, whose tool shows 30,000 characters whole (AgentTool.cut):
+                    // every pack's whole manifest ran to 34 KB, and it could not name the user's own (skills-test).
+                    guard summary else { return try themeJSON(packs) }
+                    return .array(packs.map { pack in
+                        .object(["id": .string(pack.id), "title": .string(pack.title), "dark": .bool(pack.dark),
+                                 "yours": .bool(!owner.store.isPilots(pack.id)), "wallpapers": .number(Double(pack.wallpapers.count))])
+                    })
                 case "colours" where words.count == 1:
                     return .array(Look.shared.shownThemes(for: owner.style()).map {
                         .object(["id": .string($0.id), "title": .string($0.name)])
@@ -57,8 +63,16 @@ extension ControlVerbs {
                     try owner.export(words[1], to: words[2])
                     return .object(["exported": .string(words[2]), "applied": .bool(false)])
                 case "delete" where words.count == 2:
-                    let hidden = try owner.delete(words[1])
-                    return .object(["deleted": .string(words[1]), "applied": .bool(false), "hidden": .bool(hidden)])
+                    // Asks first, as deleting a preset does: a pack you made goes for good (skills-test: the agent deleted one
+                    // with no Allow at all). One of Pilot's own is only hidden, and says how it comes back.
+                    let id = words[1], title = (try? owner.store.load(id).pack.title) ?? id
+                    let what = owner.store.isPilots(id) ? "\(title) leaves Look and the lists; pilot theme get \(id) brings it back"
+                        : "\(title) (\(id)): its folder and pictures go, and cannot be brought back"
+                    return try await AllowPrompt.gate.allow(ControlGate.Ask("Delete theme", lines: [what]), peer: call.peer) { () throws(ControlError) in
+                        let hidden: Bool
+                        do { hidden = try owner.delete(id) } catch { throw ControlError(.badValue, String(describing: error)) }
+                        return .object(["deleted": .string(id), "applied": .bool(false), "hidden": .bool(hidden)])
+                    }
                 case "follow" where words.count == 3 && Self.themeApps[words[1]] != nil && ["on", "off"].contains(words[2]):
                     return try themeJSON(owner.stageFollows(Self.themeApps[words[1]]!, on: words[2] == "on"))
                 case "follow" where words.count == 4 && words[1] == "vault" && ["on", "off"].contains(words[3]):

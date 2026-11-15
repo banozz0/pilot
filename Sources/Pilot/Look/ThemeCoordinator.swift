@@ -1800,7 +1800,13 @@ final class ThemeCoordinator {
 
     func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false) async throws(ControlError) -> JSONValue {
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
-        guard let (plan, revision, ownership, appearance) = plans.removeValue(forKey: planID) else { throw ControlError(.badValue, "unknown/spent plan; plan again") }
+        guard let (plan, revision, ownership, appearance) = plans.removeValue(forKey: planID) else {
+            // The agent passed a pack's id here more than once (skills-test): say which id this takes.
+            if (try? store.load(planID)) != nil {
+                throw ControlError(.badValue, "\(planID) is a theme, not a plan: run pilot theme plan apply \(planID) --summary, then the apply command it answers")
+            }
+            throw ControlError(.badValue, "unknown or spent plan (a plan applies once): plan again with pilot theme plan apply <theme> --summary, or plan restore --summary")
+        }
         busy = true; defer { busy = false; removeMadeFolders() }  // Also after a throw: an empty folder from a failed Apply goes.
         do { try await fresh(plan, contextRevision: revision, appearance: appearance) }
         catch { throw ControlError(.badValue, String(describing: error)) }
@@ -2282,6 +2288,9 @@ struct ThemeFixture: Decodable {
                 return values["allow"] == "yes"
             } catch { return false }
         }
+        // Pilot's own prompt answers from this gate too: `theme get`'s install asked it, and a fixture run put a real Allow
+        // panel on the Mac's screen for its 60 s (skills-test, 2026-11-15).
+        AllowPrompt.gate.decider = gate.decider
         let fixtureCatalogue: CursorCatalogue?
         if let root = config.cursorRoot {
             guard let bytes = try ThemeFiles.read(root: root, path: "cursors.json").bytes else { throw ThemeFailure("missing fixture cursor catalogue") }

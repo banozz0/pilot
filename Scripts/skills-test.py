@@ -39,7 +39,7 @@ CLI = REPO / '.build/debug/PilotCLI'
 HOST = ['nice', '-n', '10', 'swift', 'test', '-j', '4', '--skip-build', '--filter', 'SandboxHost']
 
 # Verbs that act on the Mac the sandbox runs on (AGENTS.md › Commands): answered as a Deny, never sent.
-ACTING = [('run',), ('keys',), ('system',), ('wallpaper',), ('install',), ('files',), ('model',), ('permit',), ('ai',),
+ACTING = [('run',), ('system',), ('wallpaper',), ('install',), ('files',), ('model',), ('permit',), ('ai',),
           ('wifi',), ('bluetooth',), ('bug',), ('open',), ('crash', '--reveal'), ('ext', 'run'), ('ext', 'publish'),
           ('theme', 'apply'), ('theme', 'restore'), ('clip', 'paste'), ('workspace', 'move'), ('workspace', 'rule'),
           ('snapshot', 'restore'), ('press',)]
