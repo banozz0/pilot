@@ -221,6 +221,7 @@ final class NotificationPanels: NotificationPresenting {
         let panel = KeyPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.contentView = MaterialBackdrop(content: NSHostingView(rootView: NotificationDrawer(model: model).styled(.barPopovers).pilotTheme()))
         panel.appearance = Look.shared.appearance(for: .barPopovers)
+        panel.ignoresMouseEvents = false   // its clear pixels take the mouse too, as the bar's (TopBarWindows.make)
         rest(panel)
         panel.resizesFromFace(withoutMargins: true)
         panel.minSize = NotificationBellPlaces.drawerMin

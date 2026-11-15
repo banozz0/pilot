@@ -367,6 +367,19 @@ final class TopBarWindows: TopBarPanels {
         content.sizingOptions = []
         let body: NSView = key.side == nil ? content : TopBarIslandClip(content)
         let panel = Self.panel(MaterialBackdrop(content: body), level: level)
+        // Set, so its clear pixels take the mouse too (as GapHandlePanels'). Left at AppKit's default, a clear window takes
+        // a click only on a pixel it draws, and the glass draws none of its own: a click on an item's padding, between a
+        // glyph's strokes or on a flare went through to the wallpaper, and macOS showed the desktop (Sven, 2026-11-15; 35 of
+        // 630 points over his right island's end reached Pilot). The dock, which shares panel(_:level:), keeps the default.
+        panel.ignoresMouseEvents = false
+        // The outer windows reach for their screen's sides: the left island the left, the right island the right, a
+        // one-window bar both (TopBarPanel.reaches).
+        panel.reaches = switch key.side {
+        case nil: [.left, .right]
+        case .left: [.left]
+        case .right: [.right]
+        case .centre: []
+        }
         // Drag to rearrange on the bar (spec drag-reorder), in the row's own space.
         BarDrag.shared.store = store
         panel.drag = BarPanelDrag(screen: key.screen, host: content)
@@ -420,6 +433,7 @@ final class TopBarWindows: TopBarPanels {
         panel.wanted = wanted
         if wanted, !covered.contains(key.screen) {
             if !panel.isVisible { panel.orderFrontRegardless() }
+            panel.placeCatchers()
         } else if panel.isVisible { panel.orderOut(nil) }
     }
 
@@ -517,7 +531,85 @@ final class TopBarPanel: NSPanel {
     /// The bar sits in the menu bar's strip, where AppKit's constraint would push it below the menu bar.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 
+    override var level: NSWindow.Level {
+        didSet { catchers.values.forEach { $0.level = level } }
+    }
+
+    override func orderOut(_ sender: Any?) {
+        super.orderOut(sender)
+        catchers.values.forEach { $0.orderOut(nil) }
+    }
+
+    /// The screen sides its outermost item reaches to (Sven, 2026-11-15: a flick into the top-right corner hit the 12 pt
+    /// margin past the bell and macOS showed the desktop). A press past that item, on its padding, a flare, or in the
+    /// margin beyond the window (BarEdgeCatcher), goes to it, so the corner is the item's as on the macOS menu bar.
+    enum Reach: CaseIterable { case left, right }
+    var reaches: Set<Reach> = []
+    private var catchers: [Reach: BarEdgeCatcher] = [:]
+    /// The point the press now down goes to instead of where it is, for its drags and its release too; nil for none.
+    private var redirected: CGPoint?
+
+    /// A clear window over the room between this one and each side of its screen it reaches, from its foot to the
+    /// screen's top; none where it touches that side, or while it is out of sight.
+    func placeCatchers() {
+        for reach in Reach.allCases {
+            guard isVisible, reaches.contains(reach), let screen = screen?.frame, let room = Self.room(reach, of: frame, on: screen) else {
+                catchers[reach]?.orderOut(nil)
+                continue
+            }
+            let catcher = catchers[reach] ?? BarEdgeCatcher(bar: self)
+            catchers[reach] = catcher
+            if catcher.frame != room { catcher.setFrame(room, display: false) }
+            if !catcher.isVisible { catcher.orderFrontRegardless() }
+        }
+    }
+
+    /// The room between a bar window and its screen's `reach` side, from the window's foot to the screen's top edge.
+    static func room(_ reach: Reach, of bar: CGRect, on screen: CGRect) -> CGRect? {
+        let x = reach == .left ? screen.minX : bar.maxX
+        let width = reach == .left ? bar.minX - screen.minX : screen.maxX - bar.maxX
+        guard width >= 0.5, bar.minY < screen.maxY else { return nil }
+        return CGRect(x: x, y: bar.minY, width: width, height: screen.maxY - bar.minY)
+    }
+
+    /// The window point a press at `point` goes to: the centre of the outermost item it lies past, toward a side this
+    /// window reaches; nil on an item or between two.
+    func reached(_ point: CGPoint) -> CGPoint? {
+        guard !reaches.isEmpty else { return nil }
+        let inside = CGRect(origin: .zero, size: frame.size)
+        var items: [CGRect] = []
+        func walk(_ view: NSView) {
+            for sub in view.subviews where !sub.isHidden {
+                if let anchor = sub as? ScreenAnchor.AnchorView, anchor.rightClick != nil {
+                    // The island's clip holds the whole row: only the items inside this window count.
+                    let rect = anchor.convert(anchor.bounds, to: nil)
+                    if rect.width > 0, rect.intersects(inside) { items.append(rect) }
+                }
+                walk(sub)
+            }
+        }
+        if let contentView { walk(contentView) }
+        guard !items.contains(where: { $0.contains(point) }) else { return nil }
+        if reaches.contains(.right), let last = items.max(by: { $0.maxX < $1.maxX }), point.x >= last.maxX {
+            return CGPoint(x: last.midX, y: last.midY)
+        }
+        if reaches.contains(.left), let first = items.min(by: { $0.minX < $1.minX }), point.x <= first.minX {
+            return CGPoint(x: first.midX, y: first.midY)
+        }
+        return nil
+    }
+
+    /// `event` as it lands: a press past the outermost item, and its drags and release, moved onto that item.
+    private func redirect(_ event: NSEvent) -> NSEvent {
+        guard NSEvent.buttons.contains(event.type) else { return event }
+        if event.type == .leftMouseDown || event.type == .rightMouseDown { redirected = reached(event.locationInWindow) }
+        guard let point = redirected else { return event }
+        if event.type == .leftMouseUp || event.type == .rightMouseUp { redirected = nil }
+        return event.moved(to: point, in: self) ?? event
+    }
+
     override func sendEvent(_ event: NSEvent) {
+        let event = redirect(event)
         if let anchor = ScreenAnchor.AnchorView.taking(event, in: contentView) { return anchor.take(event) }
         if let drag, dragged(event, drag) { return }
         super.sendEvent(event)
@@ -559,6 +651,49 @@ final class TopBarPanel: NSPanel {
         default:
             return false
         }
+    }
+}
+
+/// A clear window over the margin between a bar's outer window and its screen's side (TopBarPanel.placeCatchers): it draws
+/// nothing, takes the mouse in all of it, and hands its button events on to the bar, which moves a press there onto its
+/// outermost item (TopBarPanel.reached). Before, the margin was the wallpaper's, and a click there showed the desktop.
+final class BarEdgeCatcher: NSPanel {
+    private weak var bar: TopBarPanel?
+
+    init(bar: TopBarPanel) {
+        self.bar = bar
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        title = "Pilot top bar edge"
+        level = bar.level
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = false
+        collectionBehavior = bar.collectionBehavior
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
+    }
+
+    override var canBecomeKey: Bool { false }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+
+    override func sendEvent(_ event: NSEvent) {
+        guard let bar, NSEvent.buttons.contains(event.type) else { return super.sendEvent(event) }
+        if let moved = event.moved(to: bar.convertPoint(fromScreen: convertPoint(toScreen: event.locationInWindow)), in: bar) {
+            bar.sendEvent(moved)
+        }
+    }
+}
+
+private extension NSEvent {
+    /// The left and right buttons' presses, drags and releases: what the bar's edges hand on (TopBarPanel.redirect).
+    static let buttons: Set<EventType> = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp]
+
+    /// This button event at `point` in `window`, everything else kept.
+    func moved(to point: CGPoint, in window: NSWindow) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifierFlags, timestamp: timestamp, windowNumber: window.windowNumber,
+                           context: nil, eventNumber: eventNumber, clickCount: clickCount, pressure: pressure)
     }
 }
 
