@@ -33,25 +33,25 @@ public enum AgentTool {
         "required": ["command"],
     ] }
 
-    /// What one command hands back, at most this long in UTF-16 units. Claude Code's shell tool (2.1.325, measured
-    /// 2026-11-15) keeps an answer of up to 30,000 whole and saves a longer one to a file, showing only its first 2 KB,
+    /// What one command hands back, at most this many UTF-8 bytes. Claude Code's shell tool (2.1.325, measured
+    /// 2026-11-15) keeps an answer of up to 30,000 bytes whole and saves a longer one to a file, showing only its first 2 KB,
     /// which an agent allowed nothing but `pilot` can never read: the `pilot` an agent runs (PILOT_AGENT) cuts first.
     public static let resultLimit = 30_000
 
     /// `text` whole when it fits `resultLimit`, else its head and its tail around a "… N KB cut …" line: a plan's id, a
     /// summary or an error may sit at either end.
     public static func cut(_ text: String) -> String {
-        guard text.utf16.count > resultLimit else { return text }
+        guard text.utf8.count > resultLimit else { return text }
         let room = resultLimit - 64  // The marker's line.
         var head = text.startIndex, used = 0
         while head < text.endIndex {
-            let units = text[head].utf16.count
+            let units = text[head].utf8.count
             guard used + units <= room * 2 / 3 else { break }
             used += units; head = text.index(after: head)
         }
         var tail = text.endIndex
         while tail > head {
-            let before = text.index(before: tail), units = text[before].utf16.count
+            let before = text.index(before: tail), units = text[before].utf8.count
             guard used + units <= room else { break }
             used += units; tail = before
         }
