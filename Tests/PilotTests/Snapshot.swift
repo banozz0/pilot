@@ -109,3 +109,19 @@ func recognisedText(in rep: NSBitmapImageRep) throws -> [(text: String, box: CGR
     return (request.results ?? []).sorted { $0.boundingBox.minX < $1.boundingBox.minX }
         .compactMap { result in result.topCandidates(1).first.map { ($0.string, result.boundingBox) } }
 }
+
+/// Whether OCR'd `text` holds `line`: exactly, ignoring case, or for a line of 12 characters or more with at most one
+/// character read as another (Vision reads "~/Pictures/Every theme" as "Eveiy" in some runs). A line that is missing,
+/// cut short or two characters off still fails.
+func ocrReads(_ text: String, _ line: String) -> Bool {
+    if text.localizedCaseInsensitiveContains(line) { return true }
+    let want = Array(line.lowercased())
+    guard want.count >= 12 else { return false }
+    return text.lowercased().split(separator: "\n").contains { read in
+        let got = Array(read)
+        guard got.count >= want.count else { return false }
+        return (0...(got.count - want.count)).contains { start in
+            zip(got[start..<start + want.count], want).count { $0 != $1 } <= 1
+        }
+    }
+}

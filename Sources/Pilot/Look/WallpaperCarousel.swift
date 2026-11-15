@@ -1,5 +1,7 @@
 import AppKit
 import ImageIO
+import ImageScale
+import OSLog
 import PilotCore
 import SwiftUI
 
@@ -9,8 +11,10 @@ import SwiftUI
 /// only the wallpaper, through the scheduler's ledger seam (WallpaperSwitch.pick), with no Allow. Themes mode browses the
 /// theme packs the style takes, each drawn as a desktop in its colours with the apps found on this Mac (Q26); Return is
 /// a press in Pilot, so it plans and applies the theme in one step as Look's Apply does, with no Allow (theme-system
-/// T12); `pilot carousel pick --mode themes` still asks. S switches modes. Browsing plans nothing. Listing and
-/// thumbnails run off the main thread; thumbnails exist for the visible window only and go with the panel.
+/// T12); `pilot carousel pick --mode themes` still asks. F and Tab work there too, on the theme favourites Look ›
+/// Themes' Favourite shares (Sven, build 2564). S switches modes. Browsing plans nothing. Listing and thumbnails run off
+/// the main thread; thumbnails exist for the visible window only and go with the panel, kept small on disk
+/// (CarouselThumbnails) so the next open draws at once.
 enum WallpaperCarousel {
     typealias Mode = CarouselValues.Mode
 
@@ -87,8 +91,9 @@ enum WallpaperCarousel {
                       palette: inputs.theme?.palette ?? [], theme: inputs.theme?.id, current: inputs.current)
     }
 
-    /// Themes mode's packs: every pack in the library the style takes, by title, each loaded once, with the image Apply
-    /// would put on the screen first (the same step). A pack that does not load is left out. Never on the main thread.
+    /// Themes mode's packs: every pack in the library the style takes, by title, each browsed once (its manifest and
+    /// picture headers, never a decode: Apply loads and checks it whole), with the image Apply would put on the screen
+    /// first (the same step). A pack whose manifest does not read is left out. Never on the main thread.
     nonisolated static func themes(_ inputs: Inputs) -> Listed {
         var listed = Listed(mode: .themes, images: [], source: "", palette: [], theme: inputs.applied, current: inputs.applied,
                             style: inputs.style, apps: inputs.apps)
@@ -97,10 +102,13 @@ enum WallpaperCarousel {
         let ids = Set(([store.root, store.writableRoot] + [store.factoryRoot].compactMap { $0 }).flatMap {
             ((try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? []).filter(ThemePack.validID)
         })
-        listed.cards = ids.compactMap { try? store.load($0) }.filter { $0.pack.compatible(with: inputs.style) }.map { inputs.shipped?.picturing($0) ?? $0 }.map { loaded in
-            let first = WallpaperCycle.step(loaded.images.map { URL(fileURLWithPath: $0) }, shape: { loaded.portraits.contains($0.path) ? .portrait : .landscape },
+        let shape: (URL) -> WallpaperCycle.Shape? = WallpaperSwitch.shapes.shape
+        listed.cards = ids.compactMap { id in
+            try? store.browse(id, shape: shape, keep: { $0.compatible(with: inputs.style) }).map { inputs.shipped?.browsing($0, shape: shape) ?? $0 }
+        }.map { browsed in
+            let first = WallpaperCycle.step(browsed.images.map { URL(fileURLWithPath: $0) }, shape: { browsed.portraits.contains($0.path) ? .portrait : .landscape },
                                             screen: screen, fit: inputs.fit, current: nil, forward: true)
-            return Card(pack: loaded.pack, image: first?.url.path, palette: dots(loaded.pack), preview: loaded.preview)
+            return Card(pack: browsed.pack, image: first?.url.path, palette: dots(browsed.pack), preview: browsed.preview)
         }.sorted { $0.pack.title.localizedStandardCompare($1.pack.title) == .orderedAscending }
         listed.images = listed.cards.map(\.pack.id)
         return listed
@@ -223,7 +231,8 @@ enum WallpaperCarousel {
     }
 
     /// One open's state: the mode, its listing, what search and Tab leave of it, the centre and the visible window's
-    /// thumbnails. Shown keys are image paths in Wallpapers mode and pack ids in Themes mode.
+    /// thumbnails. Shown keys are image paths in Wallpapers mode and pack ids in Themes mode, and so are each mode's
+    /// favourites. Until the mode's listing arrives it is loading, drawn as placeholders, never as empty.
     @Observable @MainActor
     final class Model {
         private(set) var mode: Mode
@@ -233,7 +242,8 @@ enum WallpaperCarousel {
         private(set) var shown: [String] = []
         var index = 0
         private(set) var thumbnails: [String: NSImage] = [:]
-        private(set) var favourites: Set<String>
+        /// This mode's favourites, as the settings keep them.
+        var favourites: Set<String> { Set(stored) }
         @ObservationIgnored private var titles: [String: String] = [:]
         /// Each title lowercased, for search.
         @ObservationIgnored private var keys: [String: String] = [:]
@@ -245,8 +255,22 @@ enum WallpaperCarousel {
         init(settings: WallpaperSettings, mode: Mode = .wallpapers) {
             self.settings = settings
             self.mode = mode
-            favourites = Set(settings.favourites)
         }
+
+        /// The mode's listing has not arrived yet: the face draws placeholders, never "No themes yet".
+        var loading: Bool { listed?.mode != mode }
+
+        /// `mode` was asked for: shown at once as loading, the last mode's items gone, until its listing arrives.
+        func expect(_ mode: Mode) {
+            guard mode != self.mode || listed == nil else { return }
+            self.mode = mode
+            listed = nil
+            thumbnails = [:]
+            refilter()
+        }
+
+        /// This mode's favourites in the order they were marked.
+        private var stored: [String] { mode == .themes ? settings.themeFavourites : settings.favourites }
 
         func load(_ listed: Listed) {
             mode = listed.mode
@@ -257,7 +281,6 @@ enum WallpaperCarousel {
             looks = cards.mapValues { WallpaperCarousel.look($0.pack, style: listed.style) }
             palettes = cards.mapValues { $0.palette.map { Color(hex: Contrast.hex($0)) } }
             thumbnails = [:]
-            if mode == .themes { favouritesOnly = false }
             self.listed = listed
             refilter()
             index = listed.current.flatMap(shown.firstIndex(of:)) ?? 0
@@ -272,7 +295,7 @@ enum WallpaperCarousel {
 
         /// Keeps the centre when it is still shown, else the first.
         private func refilter() {
-            let keep = centre, words = query?.lowercased().split(separator: " ") ?? []
+            let keep = centre, words = query?.lowercased().split(separator: " ") ?? [], favourites = favourites
             shown = (listed?.images ?? []).filter { key in
                 (!favouritesOnly || favourites.contains(key)) && words.allSatisfy { keys[key]?.contains($0) == true }
             }
@@ -289,14 +312,20 @@ enum WallpaperCarousel {
             index = (index + Int.random(in: 1..<shown.count)) % shown.count
         }
 
-        func toggleFavourite() {
-            guard mode == .wallpapers, let centre else { return }
-            settings.toggleFavourite(centre)
-            favourites = Set(settings.favourites)
+        /// F: marks or unmarks `key` (the centre without one), a wallpaper or a theme by the mode.
+        func toggleFavourite(_ key: String? = nil) {
+            guard !loading, let key = key ?? centre else { return }
+            if mode == .themes { settings.toggleThemeFavourite(key) } else { settings.toggleFavourite(key) }
             if favouritesOnly { refilter() }
         }
 
-        func toggleFavouritesOnly() { if mode == .wallpapers { favouritesOnly.toggle() } }
+        func toggleFavouritesOnly() { favouritesOnly.toggle() }
+
+        /// How many of the listed are favourites, as Tab's hint counts them.
+        var favouriteCount: Int {
+            let favourites = favourites
+            return (listed?.images ?? []).count(where: favourites.contains)
+        }
 
         /// The keys the face draws: the centre and three each side.
         var window: ArraySlice<String> {
@@ -314,6 +343,7 @@ enum WallpaperCarousel {
         }
 
         var values: CarouselValues {
+            let favourites = favourites
             let items = shown.map { key -> CarouselValues.Item in
                 let picture = image(key).flatMap { thumbnails[$0] }
                 guard mode == .themes, let pack = cards[key]?.pack else {
@@ -321,11 +351,12 @@ enum WallpaperCarousel {
                 }
                 // A pack's own picture stands alone (no look): the face draws it in place of the desktop.
                 let own = cards[key]?.preview != nil
-                return .init(title: pack.title, image: picture, current: key == listed?.current, tagline: PilotTheme.named(pack.id)?.tagline,
-                             palette: palettes[key] ?? [], look: own ? nil : looks[key], apps: listed?.apps)
+                return .init(title: pack.title, image: picture, current: key == listed?.current, favourite: favourites.contains(key),
+                             tagline: PilotTheme.named(pack.id)?.tagline, palette: palettes[key] ?? [], look: own ? nil : looks[key], apps: listed?.apps)
             }
             return CarouselValues(mode: mode, items: items, index: index, query: query, favouritesOnly: favouritesOnly,
-                                  palette: (listed?.palette ?? []).map { Color(hex: Contrast.hex($0)) }, source: listed?.source ?? "")
+                                  palette: (listed?.palette ?? []).map { Color(hex: Contrast.hex($0)) }, source: listed?.source ?? "",
+                                  loading: loading, favourites: favouriteCount)
         }
 
         /// What `pilot carousel` answers: what the face would show.
@@ -336,15 +367,17 @@ enum WallpaperCarousel {
                 "total": .number(Double(listed?.images.count ?? 0)), "count": .number(Double(shown.count)),
                 "index": .number(Double(index)), "centre": centre.map(JSONValue.string) ?? .null,
                 "current": listed?.current.map(JSONValue.string) ?? .null, "images": .array(shown.map(JSONValue.string)),
-                "favourites": .array(settings.favourites.map(JSONValue.string)), "query": query.map(JSONValue.string) ?? .null,
+                "favourites": .array(stored.map(JSONValue.string)), "query": query.map(JSONValue.string) ?? .null,
                 "favouritesOnly": .bool(favouritesOnly), "palette": .array((listed?.palette ?? []).map(JSONValue.string)),
                 "empty": .bool(shown.isEmpty)]
             if mode == .themes {
                 func name(_ app: String?) -> JSONValue { app.map(JSONValue.string) ?? .null }
                 let apps = listed?.apps ?? .init()
                 fields["apps"] = .object(["editor": name(apps.editor), "terminal": name(apps.terminal), "notes": name(apps.notes)])
+                let favourites = favourites
                 fields["themes"] = .array(shown.compactMap { cards[$0] }.map { card in
                     .object(["id": .string(card.pack.id), "title": .string(card.pack.title), "current": .bool(card.pack.id == listed?.current),
+                             "favourite": .bool(favourites.contains(card.pack.id)),
                              "image": card.image.map(JSONValue.string) ?? .null, "dark": .bool(card.pack.dark),
                              "preview": card.preview.map(JSONValue.string) ?? .null, "drawn": .bool(card.preview == nil),
                              "palette": .array(card.palette.map(JSONValue.string))])
@@ -363,6 +396,46 @@ enum WallpaperCarousel {
     }
 }
 
+private let carouselLog = Logger(subsystem: "dev.banozz.pilot", category: "carousel")
+
+/// The Carousel's thumbnails kept small on disk (Sven, build 2564: the Themes tab took long to load): a 4K HEIC takes
+/// 120 to 200 ms to shrink, a kept one a few, so only a picture new or changed since it was kept is shrunk again. Keyed by
+/// path, size, date and pixels; a kept one's date is touched when read, and the least recently used go past `limit` files.
+/// The panel still holds only the visible window's.
+enum CarouselThumbnails {
+    static let folder = isIsolatedTestRun ? PilotFolder.support.appending(path: "Caches/Carousel", directoryHint: .isDirectory)
+        : URL.cachesDirectory.appending(path: "dev.banozz.pilot/Carousel", directoryHint: .isDirectory)
+    static let limit = 300
+
+    /// `path` at most `pixels` on its long side, and whether it was kept from before; always off the main thread.
+    @concurrent static func image(_ path: String, pixels: Int) async -> (image: CGImage, kept: Bool)? {
+        let url = URL(fileURLWithPath: path)
+        guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else { return nil }
+        let key = "\(path)|\(values.fileSize ?? 0)|\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(pixels)"
+        let file = folder.appending(path: ThemeDigest.of(Data(key.utf8)))
+        if let source = CGImageSourceCreateWithURL(file as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+           let kept = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) {
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+            return (kept, true)
+        }
+        guard let made = WallpaperCarousel.thumbnail(path, pixels: pixels) else { return nil }
+        // JPEG, PNG when it has see-through parts; a write that fails only means the next open shrinks it again.
+        let clear = ![.none, .noneSkipFirst, .noneSkipLast].contains(made.alphaInfo)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? (clear ? ImageFormat.png : .jpeg).encode(made)?.write(to: file, options: .atomic)
+        return (made, false)
+    }
+
+    /// Drops the least recently used past `limit`; once per batch that made any.
+    nonisolated static func prune() {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles),
+              all.count > limit else { return }
+        let dated = all.map { ($0, (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast) }
+        for (old, _) in dated.sorted(by: { $0.1 < $1.1 }).prefix(all.count - limit) { try? fm.removeItem(at: old) }
+    }
+}
+
 /// The Carousel's window: T2's face centred on the screen in a KeyPanel, Pilot left inactive, its keys through the search
 /// panel's monitor. Made on open and dropped on close, thumbnails with it.
 @MainActor
@@ -377,15 +450,13 @@ final class WallpaperCarouselPanel {
     private var loading: Task<Void, Never>?
     /// Thumbnails being made, so a key press asks for none twice.
     private var making: Set<String> = []
-    /// The mode last asked for, set before its listing arrives, so a quick second bind compares against it.
-    private var mode: WallpaperCarousel.Mode?
     /// The apps Themes mode's previews draw, found once per open.
     private var apps: ThemePreview.Apps?
 
     /// A mode's bind: opens the Carousel in `mode` on `screen` (nil: the focused one); while it is open, the same bind
     /// closes it and the other mode's bind switches to its mode.
     func toggle(_ mode: WallpaperCarousel.Mode, on screen: NSScreen?) {
-        guard panel != nil, let shown = self.mode else { return open(mode, on: screen) }
+        guard panel != nil, let shown = model?.mode else { return open(mode, on: screen) }
         if shown == mode { close() } else { show(mode) }
     }
 
@@ -413,7 +484,8 @@ final class WallpaperCarouselPanel {
     /// Lists `mode` for the panel's screen off the main thread and shows it; browsing plans nothing.
     private func show(_ mode: WallpaperCarousel.Mode) {
         guard let model, let screen else { return }
-        self.mode = mode
+        let asked = ContinuousClock.now  // Before the main thread's inputs and apps, so the log counts them too.
+        model.expect(mode)
         let source = WallpaperCarousel.Source.live
         var inputs = WallpaperCarousel.Source.liveInputs(screen).inputs
         if mode == .themes {
@@ -427,6 +499,7 @@ final class WallpaperCarouselPanel {
             guard let self, !Task.isCancelled, self.model === model else { return }
             model.query = nil
             model.load(listed)
+            carouselLog.info("carousel: \(mode == .themes ? "themes" : "wallpapers", privacy: .public) listed \(listed.images.count) in \(Self.ms(since: asked)) ms")
             self.draw()
         }
     }
@@ -437,7 +510,7 @@ final class WallpaperCarouselPanel {
         if let resign { NotificationCenter.default.removeObserver(resign) }
         panel?.contentView = nil
         panel?.orderOut(nil)
-        (panel, monitor, resign, model, screen, loading, making, apps, mode) = (nil, nil, nil, nil, nil, nil, [], nil, nil)
+        (panel, monitor, resign, model, screen, loading, making, apps) = (nil, nil, nil, nil, nil, nil, [], nil)
     }
 
     /// The panel's keys; true when taken. While searching, letters type and Delete takes the last one back; otherwise S
@@ -459,7 +532,7 @@ final class WallpaperCarouselPanel {
             guard plain, let typed = characters, !typed.isEmpty, typed.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else { return false }
             if let query = model.query { model.query = query + typed }  // Searching, S types too.
             else if typed == "/" { model.query = "" }
-            else if typed.lowercased() == "s" { show(mode == .themes ? .wallpapers : .themes); return true }
+            else if typed.lowercased() == "s" { show(model.mode == .themes ? .wallpapers : .themes); return true }
             else if typed.lowercased() == "r" { model.random() }
             else if typed.lowercased() == "f" { model.toggleFavourite() }
             else { return true }
@@ -473,7 +546,7 @@ final class WallpaperCarouselPanel {
         switch action {
         case .select(let i): model.index = i; draw()
         case .apply: apply()
-        case .mode(let mode): if mode != self.mode { show(mode) }
+        case .mode(let mode): if mode != model.mode { show(mode) }
         case .openLook:
             let display = screen.flatMap(DisplayIdentity.uuid(of:))
             let mode = model.mode
@@ -501,7 +574,8 @@ final class WallpaperCarouselPanel {
         }
     }
 
-    /// Makes the visible window's thumbnails off the main thread, each once, and drops the rest.
+    /// Makes the visible window's thumbnails off the main thread, each once, three at a time with the centre's first (a 4K
+    /// picture's decode is tens of MB), each shown as it is ready (kept ones from CarouselThumbnails), and drops the rest.
     private func draw() {
         guard let model else { return }
         let wanted = Set(model.window.compactMap(model.image))
@@ -509,17 +583,34 @@ final class WallpaperCarouselPanel {
         let missing = wanted.subtracting(model.thumbnails.keys).subtracting(making)
         guard !missing.isEmpty else { return }
         making.formUnion(missing)
-        let pixels = Int(CarouselFace.centre.width * (panel?.backingScaleFactor ?? 2))
+        let pixels = Int(CarouselFace.centre.width * (panel?.backingScaleFactor ?? 2)), centre = model.centre.flatMap(model.image)
+        let order = missing.filter { $0 == centre } + missing.filter { $0 != centre }, started = ContinuousClock.now
         Task { [weak self] in
-            let made = await Task.detached(priority: .userInitiated) {
-                missing.compactMap { path in WallpaperCarousel.thumbnail(path, pixels: pixels).map { (path, $0) } }
-            }.value
+            var kept = 0
+            await withTaskGroup(of: (String, CGImage, Bool)?.self) { group in
+                var waiting = order[...]
+                func next() {
+                    guard let path = waiting.popFirst() else { return }
+                    group.addTask(priority: .userInitiated) { await CarouselThumbnails.image(path, pixels: pixels).map { (path, $0.image, $0.kept) } }
+                }
+                for _ in 0..<3 { next() }
+                for await made in group {
+                    next()
+                    guard let self, self.model === model, let (path, image, fromDisk) = made else { continue }
+                    kept += fromDisk ? 1 : 0
+                    if model.window.compactMap(model.image).contains(path) {
+                        model.insert([(path, NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))])
+                    }
+                }
+            }
+            if kept < missing.count { Task.detached(priority: .utility) { CarouselThumbnails.prune() } }
             guard let self, self.model === model else { return }
             self.making.subtract(missing)
-            let now = Set(model.window.compactMap(model.image))
-            model.insert(made.filter { now.contains($0.0) }.map { ($0.0, NSImage(cgImage: $0.1, size: NSSize(width: $0.1.width, height: $0.1.height))) })
+            carouselLog.info("carousel: thumbnails \(kept) kept, \(missing.count - kept) made in \(Self.ms(since: started)) ms")
         }
     }
+
+    private static func ms(since start: ContinuousClock.Instant) -> Int { Int((ContinuousClock.now - start) / .milliseconds(1)) }
 }
 
 /// The face, fed from the model as it changes.

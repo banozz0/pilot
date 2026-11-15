@@ -65,6 +65,7 @@ final class ThemeCoordinator {
             cursorIsSystem: { CursorSets.shared.set == .macOS },
             ghostexColours: isTestRun ? nil : GhostexColours.effects(), appsHome: isTestRun ? nil : NSHomeDirectory())
         owner.wallpaperFolder = { WallpaperSettings.shared.themeOverride }
+        owner.forgetFavourite = { WallpaperSettings.shared.forgetThemeFavourite($0) }
         owner.shipped = Shipped(wallpapers: ShippedWallpapers(root: support.appending(path: "wallpapers").path, source: CatalogueSource.live), index: {
             let model = ExtensionCatalogueModel.shared
             await model.open()
@@ -183,6 +184,9 @@ final class ThemeCoordinator {
     /// Use my wallpaper folder for every theme: the folder an apply sets in place of the pack's pictures, nil while it is
     /// off (WallpaperSettings.themeOverride); nil in tests and fixtures.
     var wallpaperFolder: @MainActor () -> String? = { nil }
+    /// A deleted pack's id out of the theme favourites (WallpaperSettings.themeFavourites); none in tests and fixtures
+    /// but the Carousel's recording host, which passes its own.
+    var forgetFavourite: @MainActor (String) -> Void = { _ in }
     /// What the ledger and recovery may name: stored bindings plus the detected destinations an Apply took on.
     private func selection() throws -> LocalSelection {
         var local = try stored()
@@ -915,6 +919,7 @@ final class ThemeCoordinator {
             throw ThemeFailure("\(loaded.pack.title)'s wallpaper is on screen or is what Restore puts back. Pick another wallpaper or Restore default first, then delete it.")
         }
         try store.delete(id)
+        forgetFavourite(id)
         return false
     }
 
@@ -2467,7 +2472,11 @@ struct ThemeFixture: Decodable {
                                           index: { try ExtensionCatalogue.index(await source.fetch(ExtensionCatalogue.indexPath, ExtensionCatalogue.indexLimit)) })
         }
         let verbs = ControlVerbs(); verbs.registerCore(); verbs.registerThemes { coordinator }
-        if env["PILOT_THEME_CAROUSEL"] == "1" { verbs.registerCarousel(.fixture(coordinator, root: config.root)) }  // T8's proof only.
+        if env["PILOT_THEME_CAROUSEL"] == "1" {  // T8's proof only.
+            let carousel = WallpaperCarousel.Source.fixture(coordinator, root: config.root)
+            coordinator.forgetFavourite = { carousel.settings.forgetThemeFavourite($0) }
+            verbs.registerCarousel(carousel)
+        }
         if let agentSkills { verbs.registerGuides(skills: { agentSkills }) }
         let socket = ControlSocket(path: URL(fileURLWithPath: config.socket), verbs: verbs)
         guard socket.start() else { throw ThemeFailure("fixture socket refused") }

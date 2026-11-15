@@ -49,7 +49,9 @@ public struct ThemePackStore: Sendable {
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
 
-    public func load(_ id: String) throws -> Loaded {
+    /// `id`'s manifest, read where its roots put it: the id, collision, reserved-id and containment checks load and
+    /// browse share.
+    private func opened(_ id: String) throws -> (pack: ThemePack, manifest: ThemeSnapshot, source: String, folder: String, factory: Bool) {
         guard ThemePack.validID(id) else { throw ThemeFailure("invalid pack id") }
         let fm = FileManager.default
         let userRoots = Array(Set([root, writableRoot])).sorted().filter { fm.fileExists(atPath: $0 + "/" + id) }
@@ -62,6 +64,12 @@ public struct ThemePackStore: Sendable {
         guard manifest.resolved.hasPrefix(folder + "/"), let bytes = manifest.bytes else { throw ThemeFailure("missing/escaping manifest") }
         let pack = try ThemePack.decode(bytes)
         guard pack.id == id else { throw ThemeFailure("pack folder and identity differ") }
+        return (pack, manifest, source, folder, factory)
+    }
+
+    public func load(_ id: String) throws -> Loaded {
+        let (pack, manifest, source, folder, factory) = try opened(id)
+        let fm = FileManager.default
         // Enumeration and actual image decoding execute on the asset queue, never the UI thread.
         let result = Mutex<Result<Loaded, any Error>?>(nil)
         let ready = DispatchSemaphore(value: 0)
@@ -124,6 +132,57 @@ public struct ThemePackStore: Sendable {
         ready.wait()
         return try result.withLock { try $0!.get() }
     }
+    /// What the Carousel's Themes mode shows of a pack, read without decoding a picture: never a `Loaded`, so nothing
+    /// browsed reaches Apply, which loads and checks the pack whole.
+    public struct Browsed: Sendable {
+        public let pack: ThemePack
+        public let factory: Bool
+        public var images: [String]
+        public var portraits: Set<String>
+        public let preview: String?
+    }
+
+    /// `id`'s manifest and picture paths, each shape from its header (`shape`), with load's id, collision and
+    /// containment checks but no decode, digest or asset queue (Sven, build 2564: "the themes take a bit long to load in
+    /// the carousel", every 4K picture of every pack decoded on each open). nil when `keep` leaves the pack out, read
+    /// before any picture is. A picture whose header does not read, or that leads out of the folder, refuses the pack as
+    /// load does; one whose header reads but whose data is broken shows here and is refused when the theme is applied.
+    public func browse(_ id: String, shape: (URL) -> WallpaperCycle.Shape?, keep: (ThemePack) -> Bool = { _ in true }) throws -> Browsed? {
+        let (pack, _, _, folder, factory) = try opened(id)
+        let fm = FileManager.default
+        guard keep(pack) else { return nil }
+        func inside(_ url: URL) -> String? {
+            let path = url.resolvingSymlinksInPath().path
+            return path.hasPrefix(folder + "/") ? path : nil
+        }
+        var paths: [String] = [], portraits = Set<String>()
+        for asset in pack.wallpapers {
+            let url = URL(fileURLWithPath: folder + "/" + asset)
+            guard inside(url) != nil else { throw ThemeFailure("escaping pack asset") }
+            var directory: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &directory) else { throw ThemeFailure("missing pack asset") }
+            let files = directory.boolValue ? try WallpaperCycle.images(in: url, inspect: {
+                guard inside($0) != nil else { throw ThemeFailure("escaping wallpaper folder entry") }
+            }) : [url]
+            for file in files {
+                guard let path = inside(file), let found = shape(URL(fileURLWithPath: path)) else {
+                    throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)")
+                }
+                if !paths.contains(path) { paths.append(path) }
+                if found == .portrait { portraits.insert(path) }
+            }
+        }
+        var preview: String?
+        if let picture = pack.preview {
+            guard let path = inside(URL(fileURLWithPath: folder + "/" + picture)), shape(URL(fileURLWithPath: path)) != nil else {
+                throw ThemeFailure("missing/escaping/undecodable pack picture: \(picture)")
+            }
+            preview = path
+        }
+        return Browsed(pack: pack, factory: factory, images: WallpaperCycle.sortedByName(paths.map { URL(fileURLWithPath: $0) }).map(\.path),
+                       portraits: portraits, preview: preview)
+    }
+
     /// Whether a pack ships with Pilot (its factory library).
     public func isFactory(_ id: String) -> Bool { factoryRoot.map { FileManager.default.fileExists(atPath: $0 + "/" + id) } ?? false }
     /// Pilot's own: a stock theme or a factory pack, which can't be deleted.
@@ -131,6 +190,9 @@ public struct ThemePackStore: Sendable {
     public static func pilotsOwn(_ name: String) -> ThemeFailure {
         ThemeFailure("\(name) is one of Pilot's own themes, so it can't be deleted. Only packs you made or imported can.")
     }
+    /// Every pack in the library by id, read as `browse` reads them: manifests and picture headers, never a decode
+    /// (Look › Themes and `pilot theme list` took seconds decoding every 4K picture). A pack that does not browse
+    /// refuses the list, as before; Apply's `load` still checks each picture whole.
     public func list() throws -> [ThemePack] {
         let roots = Set([root, writableRoot] + [factoryRoot].compactMap { $0 })
         let names = try roots.flatMap { path -> [String] in
@@ -146,7 +208,7 @@ public struct ThemePackStore: Sendable {
             let checked = try PackDirectory(path); _ = checked
             return try FileManager.default.contentsOfDirectory(atPath: path).filter(ThemePack.validID)
         }
-        return try Set(names).sorted().map { try load($0).pack }
+        return try Set(names).sorted().compactMap { try browse($0, shape: ImageShapes.read)?.pack }
     }
 }
 

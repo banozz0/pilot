@@ -40,6 +40,9 @@ final class WallpaperSettings: ScreenPausing {
     /// The Carousel's favourite wallpapers by path (spec desktop-controls T8), in the order they were marked; F marks or
     /// unmarks the centre one and Tab shows only these.
     private(set) var favourites: [String] { didSet { defaults.set(favourites, forKey: Self.favouritesKey) } }
+    /// The favourite themes by pack id, in the order they were marked (Sven, build 2564): F in the Carousel's Themes mode
+    /// and Favourite on a Look › Themes card mark or unmark one, and Tab shows only these there.
+    private(set) var themeFavourites: [String] { didSet { defaults.set(themeFavourites, forKey: Self.themeFavouritesKey) } }
     /// Each screen only gets images of its own shape, unless none fit; off, every screen steps through every image, a
     /// wide one cropped to its middle on a portrait screen (Sven 2026-10-19, Q329). On until changed.
     var fitShape: Bool { didSet { defaults.set(fitShape, forKey: Self.fitShapeKey) } }
@@ -75,7 +78,7 @@ final class WallpaperSettings: ScreenPausing {
                        foldersKey = "wallpaper.folders",
                        screenSourcesKey = "wallpaper.screenSources", fitShapeKey = "wallpaper.fitShape",
                        workspacesKey = "wallpaper.workspaces", workspaceSourcesKey = "wallpaper.workspaceSources",
-                       workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites",
+                       workspaceImagesKey = "wallpaper.workspaceImages", favouritesKey = "wallpaper.favourites", themeFavouritesKey = "theme.favourites",
                        themeFolderOnKey = "wallpaper.themeFolderOn", themeFolderKey = "wallpaper.themeFolder"
 
     init(defaults: UserDefaults = .pilot()) {
@@ -90,6 +93,7 @@ final class WallpaperSettings: ScreenPausing {
         workspaceSources = (defaults.dictionary(forKey: Self.workspaceSourcesKey) as? [String: [String]]) ?? [:]
         workspaceImages = (defaults.dictionary(forKey: Self.workspaceImagesKey) as? [String: String]) ?? [:]
         favourites = defaults.stringArray(forKey: Self.favouritesKey) ?? []
+        themeFavourites = defaults.stringArray(forKey: Self.themeFavouritesKey) ?? []
         fitShape = defaults.object(forKey: Self.fitShapeKey) as? Bool ?? true
         themeFolderOn = defaults.bool(forKey: Self.themeFolderOnKey)
         themeFolder = defaults.string(forKey: Self.themeFolderKey)
@@ -152,9 +156,17 @@ final class WallpaperSettings: ScreenPausing {
     }
 
     /// Marks the image at `path` a favourite, or unmarks it; true when it is one after.
-    @discardableResult func toggleFavourite(_ path: String) -> Bool {
-        if let at = favourites.firstIndex(of: path) { favourites.remove(at: at); return false }
-        favourites.append(path)
+    @discardableResult func toggleFavourite(_ path: String) -> Bool { Self.toggle(path, in: &favourites) }
+
+    /// Marks the theme `id` a favourite, or unmarks it; true when it is one after.
+    @discardableResult func toggleThemeFavourite(_ id: String) -> Bool { Self.toggle(id, in: &themeFavourites) }
+
+    /// A deleted theme leaves the favourites with it.
+    func forgetThemeFavourite(_ id: String) { themeFavourites.removeAll { $0 == id } }
+
+    private static func toggle(_ key: String, in list: inout [String]) -> Bool {
+        if let at = list.firstIndex(of: key) { list.remove(at: at); return false }
+        list.append(key)
         return true
     }
 

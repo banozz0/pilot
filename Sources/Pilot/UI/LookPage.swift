@@ -285,7 +285,9 @@ private struct ThemePackControls: View {
                      }),
                      // Right-click: Apply theme's press on that card, and Delete…'s question, so refusals read the same.
                      menu: ThemeCardMenu(apply: { id in tryOn(id); press(id) },
-                                         remove: { id in deleting = packs.first { $0.id == id } })) {
+                                         remove: { id in deleting = packs.first { $0.id == id } },
+                                         isFavourite: { WallpaperSettings.shared.themeFavourites.contains($0) },
+                                         favourite: { WallpaperSettings.shared.toggleThemeFavourite($0) })) {
             if let plan { preview(plan) }
             if !outcome.isEmpty { Text(outcome).foregroundStyle(ink.text2).textSelection(.enabled) }
             if !outcomeDetails.isEmpty {
@@ -828,7 +830,7 @@ struct ThemeSection<Detail: View, More: View>: View {
     let restore: () -> Void
     /// Whether Apply also switches macOS to the theme's Light or Dark mode (Sven Q43, on by default).
     var mode: Binding<Bool>? = nil
-    /// The cards' right-click Apply and Remove….
+    /// The cards' right-click Apply, Favourite and Remove….
     var menu: ThemeCardMenu? = nil
     @ViewBuilder var detail: Detail
     @ViewBuilder var more: More
@@ -858,8 +860,8 @@ struct ThemeCards: View {
     let picked: String
     let columns: Int
     let pick: (String) -> Void
-    /// A card's right-click Apply and Remove… (Sven: "i should be able to right click a theme in look and remove or
-    /// apply"); none without them.
+    /// A card's right-click Apply, Favourite and Remove… (Sven: "i should be able to right click a theme in look and
+    /// remove or apply"); none without them.
     var menu: ThemeCardMenu? = nil
     @FocusState private var focused: String?
 
@@ -882,6 +884,7 @@ struct ThemeCards: View {
                         .contextMenu {
                             if let menu {
                                 Button("Apply") { menu.apply(theme.id) }
+                                Button(menu.isFavourite(theme.id) ? "Remove from Favourites" : "Favourite") { menu.favourite(theme.id) }
                                 Button("Remove…", role: .destructive) { menu.remove(theme.id) }
                             }
                         }
@@ -898,10 +901,13 @@ struct ThemeCards: View {
 }
 
 /// A theme card's right-click menu: Apply, as Apply theme does, and Remove…, as More's Delete… asks; both through
-/// ThemeCoordinator, which refuses the theme in use and the last one, as Look › Catalogue's tiles do.
+/// ThemeCoordinator, which refuses the theme in use and the last one, as Look › Catalogue's tiles do. Favourite marks
+/// or unmarks it in the theme favourites the Carousel's Themes mode shows with Tab (Sven, build 2564).
 struct ThemeCardMenu {
     let apply: (String) -> Void
     let remove: (String) -> Void
+    var isFavourite: (String) -> Bool = { _ in false }
+    var favourite: (String) -> Void = { _ in }
 }
 
 /// Sven's theme card: three palette dots, a small window in the theme, the name in the theme's own display face, its
