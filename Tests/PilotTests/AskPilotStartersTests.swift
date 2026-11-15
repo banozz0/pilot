@@ -58,7 +58,8 @@ struct AskPilotStartersTests {
     func apiAgent() throws {
         for provider in [AIProvider.anthropicAPI, .ollama] {
             let agent = try #require(try SharedLook.AIRenders.settings(picked: provider).apiAgent(instructions: "Use pilot only.")).get()
-            #expect(agent.route.toolProvider == provider && agent.instructions == "Use pilot only.")
+            // The answer style follows the guide, as it does on claude's and codex's routes.
+            #expect(agent.route.toolProvider == provider && agent.instructions == "Use pilot only.\n\n" + AIChat.AnswerStyle.standard.instructions)
         }
         #expect(try SharedLook.AIRenders.settings(picked: .claudeCode).apiAgent() == nil)
         #expect(try SharedLook.AIRenders.settings(picked: .codex).apiAgent() == nil)
