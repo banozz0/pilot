@@ -1,30 +1,27 @@
-# Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request (never the
-# _target trigger, which runs with the base repo's rights) and on pushes to ci-proof/ branches (below), with a
-# read-only token and no secrets, and no text a pull request controls (title, body, branch name) is ever written into a
-# run: line. GitHub runs the pull request's own
-# copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset (spec T27:
-# Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
+# Pull request checks (public-repo spec T6). A pull request's code is untrusted: this runs on pull_request only (never
+# the _target trigger, which runs with the base repo's rights), with a read-only token and no secrets, and no text a
+# pull request controls (title, body, branch name, file names) is ever written into a run: line. GitHub runs the pull
+# request's own copy of this file, so one that edits it changes its checks: they report, and the gate is main's ruleset
+# (spec T27: Sven's review and these checks required to merge). As written here, the scan judges by the base branch's
 # .gitleaks.toml (gitleaks' defaults when the base has none, never the pull request's), ignores gitleaks:allow comments
 # and every .gitleaksignore, and reads each merge against its first parent.
 #
-# The catalogue jobs (spec T19) run when a change touches catalogue/: the index rebuilt and compared, check.py, and the
-# catalogue's tests on macOS's own /usr/bin/python3 (3.9), the Python every extension runs on. A pull request from a
-# fork that touches catalogue/ may touch nothing else. A push to a ci-proof/ branch runs them too: that is how a planted
-# pack is proved without opening a pull request; its fork and --author steps run only on a pull request.
+# The catalogue jobs (spec T19) run when a pull request touches catalogue/: check.py, the index rebuilt and compared,
+# and the catalogue's tests on macOS's own /usr/bin/python3 (3.9), the Python every extension runs on. A pull request
+# from a fork that touches catalogue/ may change only pack folders (catalogue/extensions/<id>/, catalogue/themes/<id>/),
+# catalogue/index.json and catalogue/tests/test_*.py: never the checker, the index builder or the test harness it is
+# judged by, so the copies that run are main's own.
 name: Checks
 on:
   pull_request:
-  push:
-    branches: ["ci-proof/**"]
 permissions:
   contents: read
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
   secrets:
     name: Secrets (gitleaks)
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -73,23 +70,32 @@ jobs:
       - name: What the change touches
         id: scope
         env:
-          EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           FROM: ${{ github.event.pull_request.head.repo.full_name }}
           REPO: ${{ github.repository }}
         run: |
-          if [ "$EVENT" = pull_request ]; then range="$BASE...$HEAD"; else range="origin/main...HEAD"; fi
-          git diff --no-renames --name-only "$range" > "$RUNNER_TEMP/changed"
-          if grep -q '^catalogue/' "$RUNNER_TEMP/changed"; then
-            echo "catalogue=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "catalogue=false" >> "$GITHUB_OUTPUT"; echo "Nothing in catalogue/ changed."; exit 0
-          fi
-          # A pack from a fork comes alone: anything beside catalogue/ (Sources/, Scripts/, .github/) needs Sven's own read.
-          if [ "$EVENT" = pull_request ] && [ "$FROM" != "$REPO" ]; then
-            if grep -v '^catalogue/' "$RUNNER_TEMP/changed"; then
-              echo "::error::A pull request from a fork that changes catalogue/ may change nothing else; the files above are outside it."
+          # NUL-separated and unquoted, so a path with any byte in it is read as itself (quotePath would put a non-ASCII
+          # path in quotes and hide it from a catalogue/ match).
+          changed=()
+          while IFS= read -r -d '' f; do changed+=("$f"); done < <(git -c core.quotePath=false diff -z --no-renames --name-only "$BASE...$HEAD")
+          catalogue=false
+          for f in "${changed[@]}"; do case "$f" in catalogue/*) catalogue=true ;; esac; done
+          echo "catalogue=$catalogue" >> "$GITHUB_OUTPUT"
+          if [ "$catalogue" = false ]; then echo "Nothing in catalogue/ changed."; exit 0; fi
+          # A pack from a fork comes alone: only pack folders, the index and test files. Each other path is printed escaped
+          # after a prefix, so no file name can start a workflow command (::stop-commands:: and the like).
+          if [ "$FROM" != "$REPO" ]; then
+            outside=0
+            for f in "${changed[@]}"; do
+              case "$f" in
+                catalogue/extensions/?*/?*|catalogue/themes/?*/?*|catalogue/index.json) continue ;;
+                catalogue/tests/test_*.py) rest=${f#catalogue/tests/}; [[ "$rest" != */* ]] && continue ;;
+              esac
+              printf 'outside a pack: %q\n' "$f"; outside=1
+            done
+            if [ "$outside" = 1 ]; then
+              echo "::error::A pull request from a fork that changes catalogue/ may change only pack folders, catalogue/index.json and catalogue/tests/test_*.py; the paths above are outside them."
               exit 1
             fi
           fi
@@ -114,17 +120,13 @@ jobs:
           python3 --version
       - name: check.py
         env:
-          EVENT: ${{ github.event_name }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ "$EVENT" = pull_request ]; then
-            set +e; "$PY" -B catalogue/scripts/check.py --author "$AUTHOR" --base "$BASE"; code=$?; set -e
-            # 2: no problems, but a pack someone else first sent is changed: a warning for Sven's read, not a failure.
-            if [ "$code" = 2 ]; then echo "::warning::check.py flagged a pack first sent by someone else: Sven reads it before merge"; exit 0; fi
-            exit "$code"
-          fi
-          "$PY" -B catalogue/scripts/check.py
+          set +e; "$PY" -B catalogue/scripts/check.py --author "$AUTHOR" --base "$BASE"; code=$?; set -e
+          # 2: no problems, but a pack someone else first sent is changed: a warning for Sven's read, not a failure.
+          if [ "$code" = 2 ]; then echo "::warning::check.py flagged a pack first sent by someone else: Sven reads it before merge"; exit 0; fi
+          exit "$code"
       - name: index.json is the one build-index.py writes
         if: ${{ !cancelled() }}
         run: |
