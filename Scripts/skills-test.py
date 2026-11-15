@@ -301,7 +301,10 @@ def run_case(case, out, model, effort, style):
                             for call in turn['calls']:
                                 if call['id'] == b['tool_use_id']: call.update(shown_chars=len(c), error=b.get('is_error', False), shown=c[:600])
                 if o.get('type') == 'result':
-                    turn.update(answer=o.get('result'), cost=o.get('total_cost_usd'), num_turns=o.get('num_turns'), is_error=o.get('is_error'))
+                    # total_cost_usd is the session's so far: a resumed turn's includes the turns before it.
+                    before = sum(t.get('cost') or 0 for t in summary['turns']) if session and not maker else 0
+                    turn.update(answer=o.get('result'), cost=round((o.get('total_cost_usd') or 0) - before, 6), num_turns=o.get('num_turns'),
+                                is_error=o.get('is_error'))
                     session = o.get('session_id') or session
             summary['turns'].append(turn)
             print(f"  turn {i}: {turn['seconds']}s, {len(turn['calls'])} calls, ${turn.get('cost') or 0:.3f}", flush=True)
