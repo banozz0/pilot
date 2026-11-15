@@ -43,7 +43,7 @@ struct DockRiceRenders {
         for (theme, name, wall, screen, widgets, placement) in cases {
             look.themeID = theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)
-            let glassTint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+            let glassTint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
             for playing in [true, false] where playing || placement == .attached {
                 let scene = Scene(wall: wall.flatMap(NSImage.init(contentsOfFile:)), screen: screen, size: CGSize(width: screen.width, height: 330),
                                   glassTint: glassTint, accent: Color(nsColor: Self.colour(look.theme.accent)), apps: Self.apps(), widgets: widgets,
@@ -57,7 +57,7 @@ struct DockRiceRenders {
         // in one ratio to the icons, on his ultrawide with the default widgets and sixteen apps.
         look.themeID = "tokyo-night"
         let tokens = StyleTokens.of(look.style, theme: look.theme)
-        let glassTint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let glassTint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
         let crowd = DockRenders.apps(16)
         for (name, style, dockSize) in [("glass-medium", TopBarBackground.glass, DockSize.medium), ("solid-medium", .solid, .medium), ("clear-medium", .clear, .medium),
                                         ("glass-small", .glass, .small), ("glass-large", .glass, .large)] {

@@ -86,11 +86,11 @@ final class WidgetWebView {
         mark()
     }
 
-    /// The tile under this page is Light's tinted glass (Look.widgetLightTint).
-    private var bare: Bool { seeThrough && Look.shared.widgetLightGlass }
+    /// The tile under this page is bare glass: Full's, or Light's tinted (Look.widgetBareGlass).
+    private var bare: Bool { seeThrough && Look.shared.widgetBareGlass }
 
-    /// On Light the kit's veil comes off the page and its faintest text steps up to the second text, as the clipboard's does
-    /// on glass (StyleTokens.seeThrough); any other blur keeps the kit's own. Set on `<html>`, so a widget's copy of the kit
+    /// On bare glass the kit's veil comes off the page and its faintest text steps up to the second text, as the clipboard's
+    /// does on glass (StyleTokens.seeThrough); Off and a veiled Light keep the kit's own. Set on `<html>`, so a widget's copy of the kit
     /// needs no change.
     func applyVeil() {
         let text3 = String(format: "#%06x", bare ? Look.shared.theme.text2 : Look.shared.theme.text3)

@@ -81,9 +81,11 @@ struct WidgetTile: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: DeskKit.radius, style: .continuous)
         let glass = look.glass && model.page != false
-        // Light: the clipboard panel's tint inside the glass, in place of the kit's veil over it.
+        // Light: the clipboard panel's tint inside the glass, in place of the kit's veil over it. Full: the glass alone, as
+        // the macOS Dock's: the veil, the ground at 58 % over it, drew a flat dark slab (Liquid Glass round 2, Sven
+        // 2026-11-15). Off has no glass, so the veil stays its ground (Look.widgetBareGlass).
         let tint = glass ? look.widgetLightTint : nil
-        let kit = DeskKit(look.theme, veiled: tint == nil)
+        let kit = DeskKit(look.theme, veiled: !(glass && look.widgetBareGlass))
         GeometryReader { box in
             let size = model.layout ?? Widget.SizeClass(box.size, after: held)
             Group {
@@ -120,8 +122,8 @@ struct DeskKit: Sendable {
     static let radius: CGFloat = 18
     let dark: Bool
     let text, text2, text3, accent, good, amber, problem, line2: Color
-    /// `--pk-veil`: the panel over the glass or the solid tile, the ground at 58 % on a dark theme, the surface at 66 %
-    /// on a light one; clear on Light's glass, which is tinted instead (Look.widgetLightTint).
+    /// `--pk-veil`: the panel over Blur Off's glass or the solid tile, the ground at 58 % on a dark theme, the surface at
+    /// 66 % on a light one; clear on Full's glass (untinted, as the macOS Dock's) and Light's (tinted, Look.widgetLightTint).
     let veil: Color
     /// `--pk-edge`, the panel's inset edge and the rows' hairlines; `--pk-track`, a meter's track.
     var edge: Color { text.opacity(0.09) }
@@ -896,9 +898,13 @@ extension Look {
     /// Blur is Light where the clipboard panel is glass: a widget tile then draws that panel's tint.
     var widgetLightGlass: Bool { glassBlur == .light && glassFace(.clipboard) }
 
+    /// A glass widget tile shows its glass with no veil over it: Full's, untinted as the macOS Dock's (Liquid Glass round
+    /// 2, Sven 2026-11-15: the veil drew a flat dark slab), and Light's tinted one. Off and Light by a solid clipboard keep it.
+    var widgetBareGlass: Bool { glassBlur == .full || widgetLightGlass }
+
     /// A widget tile's tint on Light: the clipboard panel's (glassTint, Transparency's ground over the canvas), so the two
     /// read alike. A tile has no card under its words, so where that ground leaves body text under the 4.5 : 1 floor it
-    /// lifts in 2 % steps. Nil on Full and Off and wherever the clipboard is solid: those keep the kit's veil.
+    /// lifts in 2 % steps. Nil on Full (bare glass, widgetBareGlass), Off and wherever the clipboard is solid (the kit's veil).
     var widgetLightTint: Color? {
         guard widgetLightGlass else { return nil }
         let tint = glassTint(on: .clipboard)

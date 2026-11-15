@@ -453,7 +453,8 @@ final class MaterialBackdrop: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError("not from a nib") }
 
-    func show(_ material: WindowMaterial, tint: NSColor, blur: GlassBlur = Look.shared.glassBlur) {
+    /// `tintsGlass` false leaves the glass untinted, `tint` only for Blur Off (TopBarColour.tintsGlass).
+    func show(_ material: WindowMaterial, tint: NSColor, blur: GlassBlur = Look.shared.glassBlur, tintsGlass: Bool = true) {
         let blur = material == .solid ? nil : blur
         // Light and Full are one glass view in two styles; Solid, Off and glass swap the view.
         if blur.map({ $0 != .off }) != effect.map({ $0 is NSGlassEffectView }) {
@@ -461,6 +462,7 @@ final class MaterialBackdrop: NSView {
             effect = blur.map(makeEffect)
         }
         if let glass = effect as? NSGlassEffectView, let style = blur?.effectStyle {
+            let tint = tintsGlass ? tint : nil
             if glass.tintColor != tint { glass.tintColor = tint }
             if glass.style != style { glass.style = style }
         } else if let layer = effect?.layer, layer.backgroundColor != tint.cgColor {

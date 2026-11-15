@@ -57,7 +57,7 @@ struct DockRenders {
         for theme in ["dracula", "porcelain"] {
             look.themeID = theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)
-            let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+            let tint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
             // Round 4: the dock's own Style, the top bar's three (Sven on build 2467), each over the wallpaper.
             let cases: [(String, CGSize, Int, Int?, TopBarBackground)] = theme == "dracula"
                 ? [("ultrawide", Self.ultrawide, 16, nil, .glass), ("ultrawide-hover", Self.ultrawide, 16, 6, .glass), ("ultrawide-solid", Self.ultrawide, 16, nil, .solid),

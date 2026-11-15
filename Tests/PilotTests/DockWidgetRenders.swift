@@ -88,7 +88,7 @@ struct DockWidgetRenders {
         defer { (look.style, look.themeID, look.glass, look.transparency) = was }
         (look.style, look.themeID, look.glass, look.transparency) = (.instrument, "dracula", true, 100)
         let tokens = StyleTokens.of(look.style, theme: look.theme)
-        let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let tint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
         let bodies = Self.bodies()
         for (name, screen) in [("all-ultrawide", R.ultrawide), ("all-laptop", R.laptop)] {
             let desk = R.Desk(wall: wall, screen: screen, size: CGSize(width: screen.width, height: 150))
@@ -143,7 +143,7 @@ struct DockWidgetRenders {
         defer { (look.style, look.themeID, look.glass, look.transparency) = was }
         (look.style, look.themeID, look.glass, look.transparency) = (.instrument, "dracula", true, 33)
         let tokens = StyleTokens.of(look.style, theme: look.theme)
-        let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
+        let tint = TopBarColour.glassTint(.theme, style: tokens, look: look) ?? .clear
         let bodies = Self.round5()
         // Two rows of a laptop-wide dock, so every face shows whole.
         for (name, part) in [("round5-a", Array(bodies.prefix(2))), ("round5-b", Array(bodies[2..<7])), ("round5-c", Array(bodies.dropFirst(7)))] {

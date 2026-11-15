@@ -265,13 +265,15 @@ struct DockStrip<Widgets: View>: View {
         Group {
             if let backing, shown == .glass { backing(AnyView(row)) } else { row.modifier(DockBacking(shape: shape, style: shown)) }
         }
-        // Solid: a ring in the ink. Glass: the macOS Dock's edge, a light inner hairline lit brighter along the top, as
-        // Pilot's Frost draws one (Sven on build 2470). Clear is nothing, as the top bar's: no ring either.
+        // Solid: a ring in the ink. Glass at Blur Off: the macOS Dock's edge, a light inner hairline lit brighter along the
+        // top, as Pilot's Frost draws one (Sven on build 2470); Liquid Glass draws its own specular rim, which a painted
+        // ring over it flattened (round 2, Sven on build 2527), so none there. Clear is nothing, as the top bar's.
         .overlay {
             switch shown {
             case .solid: shape.strokeBorder(ink.text.opacity(0.16), lineWidth: 1).edgeRingCut(shape.edge, width: 1)
-            case .glass: shape.strokeBorder(.white.opacity(0.18), lineWidth: 1).litEdge(shape, .white.opacity(0.38)).edgeRingCut(shape.edge, width: 1)
-            case .clear: EmptyView()
+            case .glass where Look.shared.glassBlur == .off:
+                shape.strokeBorder(.white.opacity(0.18), lineWidth: 1).litEdge(shape, .white.opacity(0.38)).edgeRingCut(shape.edge, width: 1)
+            case .glass, .clear: EmptyView()
             }
         }
         .fixedSize()
@@ -373,9 +375,9 @@ struct DockStrip<Widgets: View>: View {
 }
 
 /// The pill's ground, the top bar's three (TopBarBackground, as shown at Look's Transparency): Solid the theme's bar
-/// ground; Glass Liquid Glass in the bar's tint whether Look › Glass is on or not, as the bar's (Look's Blur: Full
-/// regular, Light clear, Off the tint alone); Clear nothing the eye sees, yet the gaps between icons still take the click
-/// (TopBarColour.clearGround).
+/// ground; Glass Liquid Glass whether Look › Glass is on or not, untinted as the macOS Dock's (TopBarColour.tintsGlass;
+/// clear at Full and Light as the Dock's, TopBarColour.barBlur; Off the bar's tint alone); Clear nothing the eye sees, yet the gaps between
+/// icons still take the click (TopBarColour.clearGround).
 struct DockBacking<S: Shape>: ViewModifier {
     @Environment(\.style) private var tokens
     let shape: S
@@ -387,8 +389,11 @@ struct DockBacking<S: Shape>: ViewModifier {
         case .solid: content.background(shape.fill(TopBarColour.themeGround(tokens)))
         case .clear: content.background(shape.fill(TopBarColour.clearGround))
         case .glass:
-            let tint = Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))
-            if let glass = look.glassBlur.glass { content.glassEffect(glass.tint(tint), in: shape) } else { content.background(shape.fill(tint)) }
+            if let glass = TopBarColour.barBlur(look).glass {
+                content.glassEffect(glass.tint(TopBarColour.glassTint(.theme, style: tokens, look: look)), in: shape)
+            } else {
+                content.background(shape.fill(Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))))
+            }
         }
     }
 }

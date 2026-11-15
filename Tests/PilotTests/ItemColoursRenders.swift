@@ -81,7 +81,7 @@ struct ItemColoursRenders {
     @ViewBuilder static func ground(_ background: TopBarBackground, style: StyleTokens) -> some View {
         switch background {
         case .solid: TopBarColour.themeGround(style)
-        case .glass: Color(nsColor: TopBarColour.tint(.theme, style: style, look: .shared))
+        case .glass: TopBarColour.glassTint(.theme, style: style, look: .shared) ?? .clear
         case .clear: TopBarColour.clearGround
         }
     }
