@@ -27,7 +27,10 @@ Steps, in order:
    `permissions` that say what it really touches; leave `runtime` and `requires` as the template has them.
 3. Run `pilot ext test <folder> --check` until the check passes; it runs nothing.
 4. Run `pilot ext test <folder>`: after the user presses Allow, Pilot runs each command once and answers what it
-   printed. A run that failed, or printed an error message, is a bug: fix it and test again, three tries at most.
+   printed. A run that failed, or printed an error message, is a bug: fix it and test again, three tries at most. The test
+   runs in a box: HOME is an empty temporary folder and there is no Keychain, so `gh` is signed out and the user's own
+   config is absent. A run that fails only for that (its own error message saying so) is no bug: say so, and install
+   only on the user's yes.
 5. Run `pilot ext install <folder>`. The user presses Allow in Pilot to install it.
 
 Rules:
