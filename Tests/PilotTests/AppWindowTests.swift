@@ -338,10 +338,11 @@ struct AppWindowRenders {
                 cards = Self.count(want, in: try #require(snapshot(frame, scale: 2)), fromX: fromX)
                 document.scroll(NSPoint(x: 0, y: top))
             }
-            // Instrument draws these as plain lists, empty on the fakes (Activity's processes, the catalogue, instructions,
-            // extensions, Look's theme catalogue before its index reads): no card to find. Configs and its Agents part read this Mac's files off the main thread, which
-            // never hands back while this test holds it: ConfigsListTests draws their cards from a home of its own.
-            let lists: Set = ["activity", "activity-reports", "install-catalogue", "configs", "configs-agents", "extensions", "look-themeCatalogue"]
+            // Instrument draws these as plain lists, empty on the fakes (Activity's processes, Update & Clean's reports, the
+            // catalogue, instructions, extensions, Look's theme catalogue before its index reads): no card to find. Configs and
+            // its Agents part, and Repos, read this Mac's files off the main thread, which never hands back while this test
+            // holds it: ConfigsListTests and ReposPageRenders draw their cards from a home of their own.
+            let lists: Set = ["activity", "upkeep-reports", "install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
             if cards < enough && !lists.contains(name) { withoutCards.append(name) }
         }
         // The Binds page searched (card agent-bo-95422785): each hit under its own layer's heading.
