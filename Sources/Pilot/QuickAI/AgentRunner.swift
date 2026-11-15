@@ -129,8 +129,8 @@ extension AISettings {
 /// Pilot's AI skills (P29, Sven Q268): Packaging/skills/<name>/SKILL.md, in the bundle's Resources/skills, read once, in
 /// the Skills list's order. A new skill is its file and its name here.
 enum AISkills {
-    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", "theme", ExtensionMaker.skill, WidgetMaker.skill]
-        + (CataloguePublish.available ? ["publish"] : [])
+    static let names = ["binds", "preset", "layouts", "settings", "explain", "troubleshoot", "catalogue", "theme", ExtensionMaker.skill, WidgetMaker.skill,
+                        "publish"]
     /// The guide topics before P29, which `pilot guide` still answers.
     static let renamed = ["extensions": "catalogue", "troubleshooting": "troubleshoot"]
     static let all = load()

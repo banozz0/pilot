@@ -28,7 +28,7 @@ extension SettingsSchema {
         schema.registerHiddenApps(.shared)
         schema.registerMenuRoot(.shared)
         schema.registerNotifications(.shared)
-        if CataloguePublish.available { schema.registerExtensionPublish() }
+        schema.registerExtensionPublish()
         if let engine = Engine.shared {
             schema.registerRings(engine.rings.store)
             schema.registerPart2(settings: engine.settings, list: engine.workspaceList, snapshots: engine.snapshots, block: engine.pilotBlock,

@@ -197,9 +197,8 @@ extension ControlVerbs {
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
-    ] + (CataloguePublish.available ? [
-        ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow."),
-    ] : [])
+        ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
+    ]
 
     /// `pilot ext …`: make an extension from a template, check and run it, install it from a folder or Pilot's catalogue or
     /// take it out, read its card, set its preferences (the ext-prefs collection), read what its commands answer and press its
@@ -233,10 +232,10 @@ extension ControlVerbs {
             case "act": return try await Self.actExtension(args, tools, peer: call.peer)
             case "catalogue": return try await Self.catalogue(args, tools)
             case "get": return try await Self.getExtension(args, tools, peer: call.peer)
-            case "publish" where CataloguePublish.available:
+            case "publish":
                 let id = try args.word(1, "id")
                 guard let ext = tools.installed(id) else { throw ControlError(.badValue, "no extension \(id) is installed") }
-                let plan = try await CataloguePublish.plan(ext)
+                let plan = try await CataloguePublish.plan(.extensionPack(ext))
                 return try await tools.gate.allow(plan.ask, peer: call.peer) { () throws(ControlError) in try await CataloguePublish.publish(plan) }
             case let other: throw ControlError(.badValue, "no ext \(other); subcommands: \(subcommands.joined(separator: ", "))")
             }
