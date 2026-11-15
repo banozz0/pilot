@@ -11,8 +11,8 @@ starter: "Send my extension to the catalogue: "
 Read first:
 - `pilot list extensions`: the installed extensions. Send only one the user made (with /extension or by hand), never
   one that came from the catalogue (`pilot ext catalogue` lists those).
-- `pilot theme list`: the theme packs. Send only one the user made, imported or duplicated, never one of Pilot's own
-  (Pilot refuses those) or one from the catalogue (`pilot theme catalogue`).
+- `pilot theme list --summary`: the theme packs, `yours` marking the ones to send: one the user made, imported or
+  duplicated, never one of Pilot's own (Pilot refuses those) or one from the catalogue (`pilot theme catalogue`).
 - `pilot get extensions.catalogueClone`: the folder of the user's clone of the catalogue's repo (one clone for both
   kinds). Empty means none is set: ask the user for the folder of their clone, then plan it with
   `pilot set extensions.catalogueClone <folder> --plan` and `pilot plan apply`.

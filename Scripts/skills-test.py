@@ -41,7 +41,7 @@ HOST = ['nice', '-n', '10', 'swift', 'test', '-j', '4', '--skip-build', '--filte
 # Verbs that act on the Mac the sandbox runs on (AGENTS.md › Commands): answered as a Deny, never sent. '+' is any
 # further word: a bare `pilot permit` only reads the grants.
 ACTING = [('run',), ('system',), ('wallpaper',), ('install',), ('files',), ('model',), ('permit', '+'), ('ai',),
-          ('wifi',), ('bluetooth',), ('bug',), ('open',), ('crash', '--reveal'), ('ext', 'run'), ('ext', 'publish'),
+          ('wifi',), ('bluetooth',), ('bug',), ('open',), ('crash', '--reveal'), ('ext', 'run'), ('ext', 'publish'), ('theme', 'publish'),
           ('theme', 'apply'), ('theme', 'restore'), ('clip', 'paste'), ('workspace', 'move'), ('workspace', 'rule'),
           ('snapshot', 'restore'), ('press',)]
 
