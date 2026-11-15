@@ -301,8 +301,8 @@ extension GlassBlur {
 /// (TopBarPanel) answer active at every blur, as macOS's own menu bar and Dock draw their glass: they never take focus, so
 /// on Full they always drew inactive glass (the liquid-glass branch, Sven 2026-11-14). So do the bar's dropdowns and drops
 /// (KeyPanel.activeGlass): Pilot is never the active app, so on Full they drew inactive glass, blurred and without
-/// refraction, a frosted slab (bar dropdowns round 4, Sven on build 2564). Other windows keep macOS's answer at Full and
-/// Off. Only the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as
+/// refraction, a frosted slab (bar dropdowns round 4, Sven on build 2564), and the desk widgets' (WidgetPanel), never
+/// key as the dock. Other windows keep macOS's answer at Full and Off. Only the glass reads it: traffic lights, key, main, activation and SwiftUI's controlActiveState stay as
 /// they are. A macOS without the selector simply keeps its inactive glass.
 @MainActor enum GlassFocus {
     static func install() {
@@ -311,7 +311,7 @@ extension GlassBlur {
         typealias Answer = @convention(c) (NSWindow, Selector) -> Bool
         let original = unsafeBitCast(method_getImplementation(method), to: Answer.self)
         let answer: @convention(block) (NSWindow) -> Bool = { window in
-            window is TopBarPanel || (Thread.isMainThread && MainActor.assumeIsolated {
+            window is TopBarPanel || window is WidgetPanel || (Thread.isMainThread && MainActor.assumeIsolated {
                 Look.shared.glassBlur == .light || (window as? KeyPanel)?.activeGlass == true
             })
                 || original(window, selector)

@@ -859,8 +859,10 @@ struct HomeWidget: Identifiable, Sendable {
 }
 
 /// A widget's panel: borderless, never key, below every window and above the desktop's icons, on every Space, out of
-/// Cmd+Tab and Mission Control's shuffle; the mouse passes through (Hyper+drag is the mouse tap's).
-private final class WidgetPanel: NSPanel {
+/// Cmd+Tab and Mission Control's shuffle; the mouse passes through (Hyper+drag is the mouse tap's). Its glass draws active,
+/// as the dock's (GlassFocus): never key, it drew macOS's inactive glass on Full, blurred and without refraction, a flat
+/// frosted panel (Sven on build 2564: "are they liquid glass?").
+final class WidgetPanel: NSPanel {
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
