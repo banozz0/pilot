@@ -33,8 +33,10 @@ func font(_ family: String, _ size: CGFloat, _ weight: NSFont.Weight) -> NSFont 
 func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
 }
-// The site's tokens (site/index.html): ground, lime, its edge and lip, ink, and the second ink for the quiet half of the copy.
-let ground = rgb(0xF6F6F4), lime = rgb(0xC6F432), limeEdge = rgb(0xB5E024), limeLip = rgb(0xA8D21C)
+// The site's tokens (site/index.html): ground, the brand colour (the app icon's lit box, violet since Sven's Q283,
+// 2026-11-15), its edge and lip, the key's own ink (white on violet, as the site's buttons), the ink, and the second ink
+// for the quiet half of the copy.
+let ground = rgb(0xF6F6F4), brand = rgb(0x7B5CFF), brandEdge = rgb(0x7154E9), brandLip = rgb(0x694ED9), onBrand = rgb(0xFFFFFF)
 let ink = rgb(0x15181C), ink2 = rgb(0x55555B)
 
 /// Drawn in points, y down, so the numbers match Finder's icon positions.
@@ -47,14 +49,14 @@ func draw() {
     let key = CGRect(x: (pilot.x + apps.x) / 2 - 40, y: pilot.y - 30, width: 80, height: 60)
     let radius: CGFloat = 12
     func cap(_ rect: CGRect) -> NSBezierPath { NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius) }
-    limeEdge.setFill()
+    brandEdge.setFill()
     NSBezierPath(roundedRect: key.insetBy(dx: -1, dy: -1), xRadius: radius + 1, yRadius: radius + 1).fill()
     NSGraphicsContext.saveGraphicsState()
     cap(key).addClip()
-    limeLip.setFill()
+    brandLip.setFill()
     key.fill()
-    lime.setFill()
-    cap(key.offsetBy(dx: 0, dy: -5)).fill()  // the lip: 5 pt of the darker lime left along the bottom
+    brand.setFill()
+    cap(key.offsetBy(dx: 0, dy: -5)).fill()  // the lip: 5 pt of the darker violet left along the bottom
     let shine = NSBezierPath(rect: key.insetBy(dx: -2, dy: -2))
     shine.append(cap(key.offsetBy(dx: 0, dy: 1)))
     shine.windingRule = .evenOdd
@@ -71,12 +73,12 @@ func draw() {
     glyph.lineWidth = 2.2
     glyph.lineCapStyle = .round
     glyph.lineJoinStyle = .round
-    ink.setStroke()
+    onBrand.setStroke()
     glyph.stroke()
 
     // The legend: DRAG in Geist Mono small capitals, bottom left, as HYPER sits on the site's key.
     let legendFont = font("Geist Mono", 10, .semibold)
-    let legend = NSAttributedString(string: "DRAG", attributes: [.font: legendFont, .foregroundColor: ink, .kern: 1.2])
+    let legend = NSAttributedString(string: "DRAG", attributes: [.font: legendFont, .foregroundColor: onBrand, .kern: 1.2])
     legend.draw(at: CGPoint(x: key.minX + 12, y: key.maxY - 13.5 - legendFont.ascender))
 
     // The one line of copy, centred below the labels Finder draws (about 70 to 90 pt under each icon's centre).
