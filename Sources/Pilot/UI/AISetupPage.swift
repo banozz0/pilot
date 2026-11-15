@@ -250,6 +250,15 @@ private struct AISetupMore: View {
                              options: AIChat.Reset.allCases.map { ($0, $0.title) }, label: "Start a new chat after")
                 }
             }
+            BlockRow {
+                LabelledControls {
+                    Text("Answer style")
+                    InfoMark(text: "Blocks: the outcome in bold, then short labelled blocks. Plain short: a line and a few bullets. Detailed explains. A new chat takes the change.")
+                } controls: {
+                    Segments(selection: Binding(get: { settings.answerStyle }, set: { settings.answerStyle = $0 }),
+                             options: AIChat.AnswerStyle.allCases.map { ($0, $0.title) }, label: "Answer style")
+                }
+            }
         }
     }
 }

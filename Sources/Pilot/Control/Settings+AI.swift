@@ -2,7 +2,7 @@ import Foundation
 import PilotCore
 
 extension SettingsSchema {
-    /// The AI page's keys on AISettings: the provider, its fallback and chat reset, then each provider's model, effort and
+    /// The AI page's keys on AISettings: the provider, its fallback, chat reset and answer style, then each provider's model, effort and
     /// address. The API keys stay in the Keychain: `get` says only whether one is saved; `set --stdin` saves one as Save does.
     /// The provider, the fallback and each address ask Allow from the socket (ControlVerbs.aiSettingAsk), as they decide where the chat,
     /// an extension's page and a saved key go; the AI page changes them as it always has.
@@ -16,6 +16,8 @@ extension SettingsSchema {
                     write: { word in ai.fallback = AIProvider(rawValue: word) }),
             .choice("ai.chatReset", "A new chat after", page: "ai", AIChat.Reset.allCases, standard: .standard,
                     read: { ai.chatReset }, write: { ai.chatReset = $0 }),
+            .choice("ai.answerStyle", "Answer style", page: "ai", AIChat.AnswerStyle.allCases, standard: .standard,
+                    read: { ai.answerStyle }, write: { ai.answerStyle = $0 }),
         ]
         for provider in AIProvider.allCases {
             let id = provider.rawValue

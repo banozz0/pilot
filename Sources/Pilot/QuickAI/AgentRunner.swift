@@ -28,7 +28,7 @@ extension AISettings {
         // Scripts/build-app.sh copies the prompt to Resources and the command to Contents/Helpers.
         guard let prompt = BundledJSON.url("pilot-agent", "md") else { return .failure(.failed("Pilot's agent prompt is missing from the app")) }
         return .success(AIChat.Agent(provider, path: path, prompt: prompt, helpers: Self.helpers,
-                                     model: model(for: provider)?.id, effort: effort(for: provider))!)
+                                     model: model(for: provider)?.id, effort: effort(for: provider), style: answerStyle)!)
     }
 
     /// The picked API provider with the `pilot` tool (Q193), on the CLI agents' prompt (the bundle's, unless given); nil
@@ -37,9 +37,10 @@ extension AISettings {
 
     func apiAgent(of provider: AIProvider, instructions given: String? = nil) -> Result<AIChat.APIAgent, QuickAI.Failure>? {
         guard provider.command == nil else { return nil }
-        guard let instructions = given ?? BundledJSON.url("pilot-agent", "md").flatMap({ try? String(contentsOf: $0, encoding: .utf8) }) else {
+        guard let guide = given ?? BundledJSON.url("pilot-agent", "md").flatMap({ try? String(contentsOf: $0, encoding: .utf8) }) else {
             return .failure(.failed("Pilot's agent prompt is missing from the app"))
         }
+        let instructions = guide + "\n\n" + answerStyle.instructions
         return route(of: provider).flatMap { route in
             guard let tools = route as? any AIChat.ToolRoute else { return .failure(.unsupported("\(provider.name) takes no tools")) }
             return .success(AIChat.APIAgent(tools, instructions: instructions, helpers: Self.helpers))
@@ -115,9 +116,9 @@ extension AISettings {
         guard !idea.isEmpty || picture else { return .failure(.unsupported("Say what it should make: \(example)")) }
         guard let cli = findCLI() else { return .failure(.missing) }
         guard let prompt = AISkills.url(skill) else { return .failure(.failed("Pilot's \(kind) prompt is missing from the app")) }
-        let (model, effort, helpers) = (model(for: .claudeCode)?.id, effort(for: .claudeCode), Self.helpers)
+        let (model, effort, helpers, style) = (model(for: .claudeCode)?.id, effort(for: .claudeCode), Self.helpers, answerStyle)
         return .success(ExtensionMaker.turn(folder: folder) { folder in
-            ExtensionMaker.agent(cli: cli.path, prompt: prompt, helpers: helpers, folder: folder, model: model, effort: effort)
+            ExtensionMaker.agent(cli: cli.path, prompt: prompt, helpers: helpers, folder: folder, model: model, effort: effort, style: style)
         })
     }
 
@@ -190,8 +191,9 @@ enum ExtensionMaker {
     }
 
     /// The maker's agent, its child run in `folder`; ten minutes a turn, since it writes, tests and installs.
-    static func agent(cli: String, prompt: URL, helpers: URL, folder: URL, model: String?, effort: AIEffort) -> AIChat.Agent {
-        AIChat.Agent(.claudeCode, path: cli, prompt: prompt, helpers: helpers, model: model, effort: effort, timeout: .seconds(600), reach: .files,
+    static func agent(cli: String, prompt: URL, helpers: URL, folder: URL, model: String?, effort: AIEffort,
+                      style: AIChat.AnswerStyle? = nil) -> AIChat.Agent {
+        AIChat.Agent(.claudeCode, path: cli, prompt: prompt, helpers: helpers, model: model, effort: effort, timeout: .seconds(600), reach: .files, style: style,
                      spawn: { path, arguments, environment, input, timeout, line in
             try await ChildProcess.run(path, arguments, environment: environment, input: input, directory: folder, timeout: timeout, lines: line)
         })!

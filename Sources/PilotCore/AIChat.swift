@@ -51,6 +51,61 @@ public enum AIChat {
         }
     }
 
+    /// How Ask Pilot's agent shapes its answers (Sven, 2026-11-15: "it talks a lot"): Blocks, a bold outcome and short
+    /// emoji-labelled blocks after the Ghostex coordinator's handovers, is a fresh Mac's; Plain short is the old one line and
+    /// a few bullets; Detailed explains. Its words go after the agent's prompt (Agent.style, APIAgent's instructions), so a
+    /// change reaches the next new chat: claude and codex keep a session's first prompt. Written for the chat's renderer
+    /// (BlockMarkdown): bold, `code`, `-` bullets and emoji draw, tables do not, and lines with no blank between run on.
+    public enum AnswerStyle: String, CaseIterable, Sendable {
+        case blocks, plain, detailed
+
+        public static let standard = AnswerStyle.blocks
+
+        public var title: String {
+            switch self {
+            case .blocks: "Blocks"
+            case .plain: "Plain short"
+            case .detailed: "Detailed"
+            }
+        }
+
+        /// The words the agent is given.
+        public var instructions: String {
+            let shared = "Pilot's chat draws **bold**, `code`, `-` bullets and emoji, but no tables: never write a table. "
+                + "Lines with no blank line between them run together, so put a blank line between paragraphs and before each list. "
+                + "No preamble, no list of the commands you ran, no offers to help further."
+            switch self {
+            case .blocks:
+                return """
+                How to shape every answer (the user's Answer style: Blocks):
+                - First line: the outcome in bold, one short line ("**Hyper+G now opens Ghostty.**", "**Hyper+K is free.**").
+                - Then only the blocks that have something, in this order, each its label alone on its own line with a blank line \
+                before it, then two to four short bullets under it, each starting with a capital letter:
+                  ✅ **Done** what changed, as apply read it back (old → new).
+                  👀 **Preview** what would change, waiting on the user's yes.
+                  ⚠️ **Heads up** a risk, a refusal, a denied Allow, a row that failed and why.
+                  ❓ **Needs you** always the last block: the question the user must answer, or the Allow they must press.
+                - Last line, after a blank line: 👉 the next step in a few words, only when there is one.
+                - A plain question (what a key does, a setting's value) gets the bold line and at most two bullets, no blocks.
+                - Details only when the user asks for them.
+                \(shared)
+                """
+            case .plain:
+                return """
+                How to shape every answer (the user's Answer style: Plain short): answer briefly in plain words, the outcome in \
+                one line first, then a few short bullets at most. Markdown only for code and command names. Details only when asked.
+                \(shared)
+                """
+            case .detailed:
+                return """
+                How to shape every answer (the user's Answer style: Detailed): lead with the outcome in one line, then explain: \
+                what you found, each change as apply read it back (old → new), and why, in short paragraphs and bullets.
+                \(shared)
+                """
+            }
+        }
+    }
+
     /// When the chat starts over by itself: after this long with no turn, the next open is a new chat (Sven 2026-10-10).
     public enum Reset: String, CaseIterable, Sendable {
         case never, minutes15, minutes30, hour1, hours4
@@ -270,6 +325,8 @@ extension AIChat {
         public var timeout: Duration
         /// What claude may use besides `pilot`.
         public var reach: Reach
+        /// How it shapes its answers, after the prompt; nil adds nothing.
+        public var style: AnswerStyle?
         var spawn: PlanCLI.Spawn
 
         /// What an agent turn may touch: `pilot` alone (the chat), or also the file tools (/extension, T17), which
@@ -278,10 +335,10 @@ extension AIChat {
 
         /// nil for a provider with no agent: only the two subscriptions run tools, and only claude the file tools.
         public init?(_ provider: AIProvider, path: String, prompt: URL, helpers: URL, model: String? = nil, effort: AIEffort = .low,
-                     timeout: Duration = .seconds(300), reach: Reach = .pilot, spawn: @escaping PlanCLI.Spawn = PlanCLI.child) {
+                     timeout: Duration = .seconds(300), reach: Reach = .pilot, style: AnswerStyle? = nil, spawn: @escaping PlanCLI.Spawn = PlanCLI.child) {
             guard provider == .claudeCode || provider == .codex && reach == .pilot else { return nil }
             self.provider = provider; self.path = path; self.prompt = prompt; self.helpers = helpers; self.model = model
-            self.effort = effort; self.timeout = timeout; self.reach = reach; self.spawn = spawn
+            self.effort = effort; self.timeout = timeout; self.reach = reach; self.style = style; self.spawn = spawn
         }
 
         // MARK: Command lines
@@ -295,12 +352,15 @@ extension AIChat {
         /// files; the shell and the `pilot` allow-list still work under both (probe C2, 2026-10-11). Never `--bare`,
         /// which needs an API key, not the subscription. The message goes on stdin. With `.files` (T17) Read, Write and
         /// Edit join, allowed by name, since dontAsk refuses a tool no rule allows; `--restricted` confines them to the
-        /// working folder, refusing an absolute path, `../` or a symlink out of it (probe B, 2026-10-12).
-        public static func claudeArguments(prompt: String, session: String?, model: String?, effort: AIEffort, reach: Reach = .pilot) -> [String] {
+        /// working folder, refusing an absolute path, `../` or a symlink out of it (probe B, 2026-10-12). The answer style
+        /// goes as a second appended prompt, after the file's (both kept, claude 2.1.325, tried 2026-11-15).
+        public static func claudeArguments(prompt: String, session: String?, model: String?, effort: AIEffort, reach: Reach = .pilot,
+                                           style: AnswerStyle? = nil) -> [String] {
             let files = reach == .files ? ["Read", "Write", "Edit"] : []
             return ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", (["Bash"] + files).joined(separator: ","),
                     "--allowedTools", "Bash(pilot *)"] + files + ["--permission-mode", "dontAsk", "--strict-mcp-config", "--restricted",
                     "--safe-mode", "--append-system-prompt-file", prompt, "--effort", effort.rawValue]
+                + (style.map { ["--append-system-prompt", $0.instructions] } ?? [])
                 + (session.map { ["--resume", $0] } ?? []) + (model.map { ["--model", $0] } ?? [])
         }
 
@@ -453,12 +513,13 @@ extension AIChat {
             let input = picture.map { QuickAI.message(text, image: $0) } ?? Data(text.utf8)
             let arguments: [String], environment: [String: String]
             if provider == .claudeCode {
-                arguments = Self.claudeArguments(prompt: prompt.path, session: session, model: model, effort: effort, reach: reach)
+                arguments = Self.claudeArguments(prompt: prompt.path, session: session, model: model, effort: effort, reach: reach, style: style)
                     + (picture == nil ? [] : QuickAI.pictureInput)
                 environment = Self.environment(cli: path, helpers: helpers)
             } else {
                 guard request.image == nil else { throw .unsupported("codex's agent takes no picture here") }
-                guard let instructions = try? String(contentsOf: prompt, encoding: .utf8) else { throw .failed("Pilot's agent prompt is missing") }
+                guard let guide = try? String(contentsOf: prompt, encoding: .utf8) else { throw .failed("Pilot's agent prompt is missing") }
+                let instructions = guide + (style.map { "\n\n" + $0.instructions } ?? "")
                 arguments = Self.codexArguments(directory: AICommand.folder.path, session: session, model: model, effort: effort,
                                                 instructions: instructions, helpers: helpers)
                 environment = Self.codexEnvironment(cli: path)

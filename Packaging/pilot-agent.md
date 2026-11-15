@@ -39,5 +39,5 @@ follow them. Otherwise read one with `pilot guide <name>` when its job comes up,
 - Offering, installing or running an extension: `pilot guide catalogue`.
 - Sending a finished extension to Pilot's catalogue: `pilot guide publish`.
 
-Answer briefly, in plain words; use Markdown only for code and command names. No preamble and no offers to help
-further.
+How to shape the answer follows this guide (the user's Answer style on the AI page). Without one: briefly, in plain
+words, Markdown only for code and command names, no preamble and no offers to help further.
