@@ -186,7 +186,7 @@ final class TopBarController {
 }
 
 /// The real screens: each NSScreen by the tiler's monitor name, its strip measured while the menu bar shows and
-/// remembered for when autohide leaves it 0, then held to the Full bar's least height (TopBarGeometry.fullBar).
+/// remembered for when autohide leaves it 0, then held to Full strip Attached's least height (TopBarGeometry.fullBar).
 @MainActor
 enum TopBarScreens {
     private static let key = "topBar.strips"

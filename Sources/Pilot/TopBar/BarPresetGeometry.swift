@@ -3,29 +3,44 @@ import PilotCore
 
 /// Native controls, settings handlers and the private host share these writers on the existing item store.
 extension BarItemsStore {
-    /// The geometry the top bar draws: the saved preset's, none for the Full bar. One name for every reader (the bar's
-    /// windows, its strip, the sandbox), so a preset that draws its own geometry changes it in one place.
+    /// The geometry the top bar draws: the saved preset's, none for Full strip Attached (the bar before presets). One name
+    /// for every reader (the bar's windows, its strip, the sandbox), so a preset that draws its own geometry changes it in
+    /// one place.
     var topBarConfiguration: BarPresetConfiguration? { settings.preset }
 
+    /// Whether the bar hangs from the screen's top edge: Full strip Attached is no configuration (BarPreset).
+    var barAttached: Bool { settings.preset?.isAttached ?? true }
+
+    /// Full strip's configuration: none Attached (the bar before presets), the floating strip's Floating.
+    static func fullStrip(attached: Bool) -> BarPresetConfiguration? { attached ? nil : BarPreset.floatingStrip.configuration }
+
+    /// `fullStrip` keeps Attached or Floating as the bar has it; `legacy` and `floatingStrip`, the two presets it was until
+    /// 2026-11-15, still name its Attached and its Floating.
     func choosePreset(_ id: String) throws(ControlError) {
         try requireWritable()
         // Each preset keeps its own layout (BarSettings.choose); the same one again resets its geometry alone.
-        if id == "legacy" { settings.choose(nil); return }
+        switch id {
+        case "legacy": settings.choose(nil); return
+        case BarPreset.fullStrip: settings.choose(Self.fullStrip(attached: barAttached)); return
+        default: break
+        }
         guard let preset = BarPreset(rawValue: id) else { throw ControlError(.badValue, "unknown bar preset") }
-        // Attached is the bar's, not a size: it stays through Reset sizes and a move between the island presets.
+        // Attached is the bar's, not a size: it stays through Reset sizes and a move between the presets.
         var configuration = preset.configuration
-        if preset.islands, settings.preset?.attached == true { configuration.attached = true }
+        if preset.islands, barAttached { configuration.attached = true }
         settings.choose(configuration)
     }
 
-    /// Attached or Floating (Sven, 2026-11-13, Q224): the island presets alone, as the Menu bar page offers it.
+    /// Attached or Floating (Sven, 2026-11-13, Q224): Full strip Attached is the bar before presets, Floating its floating
+    /// strip (Sven, 2026-11-15); the island presets hang from the edge or float under it.
     func setAttached(_ on: Bool) throws(ControlError) {
         try requireWritable()
-        guard var config = settings.preset, config.preset.islands else {
-            throw ControlError(.badValue, "Attached is for Three islands and Pills: choose one of them first")
+        if var config = settings.preset, config.preset.islands {
+            config.attached = on ? true : nil
+            settings.preset = config
+        } else if on != barAttached {
+            settings.choose(Self.fullStrip(attached: on))
         }
-        config.attached = on ? true : nil
-        settings.preset = config
     }
 
     func applyGeometry(_ json: String) throws(ControlError) {

@@ -279,14 +279,12 @@ struct TopBarStrip<Slot: View>: View {
                                     else if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
                                 }
                                 .clipShape(shape)
-                                // Clear draws no outline: its islands are their items alone (Sven on build 2564: "for
-                                // clear topbar maybe we can remove the outline").
+                                // Clear keeps its islands' outline (Sven on build 2577: "doesn't make sense to have no
+                                // border"); only the full-width strip goes without one there.
                                 .overlay {
-                                    if background != .clear {
-                                        shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
-                                            .edgeRingCut(shape.edge, width: configuration.border)
-                                            .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
-                                    }
+                                    shape.strokeBorder(style.color(\.line), lineWidth: configuration.border)
+                                        .edgeRingCut(shape.edge, width: configuration.border)
+                                        .footGap(foot, at: proxy.frame(in: .named(BarFrames.space)).minX)
                                 }
                                 // Attached: the ground reaches past the island by its flares, which run into the edge.
                                 .padding(.horizontal, -BarIslandShape.flare(configuration))
@@ -302,7 +300,8 @@ struct TopBarStrip<Slot: View>: View {
                 ForEach(Array((sides[side] ?? []).enumerated()), id: \.offset) { index, item in
                     let ruled = rules[side]?.contains(index) == true
                     slot(item)
-                        .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: glassPreview ? nil : look))
+                        .modifier(BarPill(configuration: pilled ? configuration : nil, background: background, colour: colour, look: glassPreview ? nil : look,
+                                          tone: tone, margin: margin))
                         .instrumentRuleBefore(ruled && !islands, gap: InstrumentBar.spacing)
                         // Before the report, which then keeps the slot's place at rest while a drag moves it.
                         .modifier(BarSlotMoved(side: side, index: index, moved: moved))
@@ -385,14 +384,18 @@ private struct BarSlotMoved: ViewModifier {
 /// A Pills slot's own pill (Sven, 2026-11-12, Q177, after a Waybar picture): the bar's colour (the theme's, or the picked
 /// one) under it, its corners `radius`, a `border` ring in the accent's line colour, `padding` inside. Glass is the pill's own
 /// Liquid Glass in its outline (TopBarColour.liquidGlass; the window behind a Pills side shows none), the colour at Look's
-/// Transparency share where no Look is given (the renders); Clear draws neither ground nor ring (Sven on build 2564).
-/// Nil `configuration` leaves the slot as it is.
+/// Transparency share where no Look is given (the renders). On Glass and Clear each pill tones the wallpaper under it
+/// as the islands do (`tone`; Sven on build 2577: "pills glass look how they look", washed out over a bright sky), and
+/// Clear keeps the ring (Sven on build 2577). Nil `configuration` leaves the slot as it is.
 private struct BarPill: ViewModifier {
     @Environment(\.style) private var style
     let configuration: BarPresetConfiguration?
     let background: TopBarBackground
     let colour: ColourChoice
     let look: Look?
+    /// The bar's tone over the wallpaper (TopBarColour.tone) and its canvas's left edge from the screen's.
+    let tone: TopBarColour.Toned?
+    let margin: CGFloat
 
     func body(content: Content) -> some View {
         if let configuration {
@@ -405,10 +408,20 @@ private struct BarPill: ViewModifier {
                     Group {
                         switch background {
                         case .solid: shape.fill(colour == .theme ? TopBarColour.themeGround(style) : ground)
-                        case .glass:
+                        case .glass where look == nil: shape.fill(ground.opacity(0.55))
+                        // No wallpaper read: the pill as before, no tone to lay.
+                        case .clear where tone == nil: shape.fill(TopBarColour.clearGround)
+                        case .glass where tone == nil:
                             if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
-                            else { shape.fill(ground.opacity(0.55)) }
-                        case .clear: shape.fill(TopBarColour.clearGround)
+                        // The island's ground (TopBarStrip.islandGround) in the pill's outline, flares and all: its tone,
+                        // laid at the pill's place on the screen, over the pill's own glass.
+                        case .glass, .clear:
+                            GeometryReader { proxy in
+                                TopBarColour.toneGround(tone, background: background, at: margin + proxy.frame(in: .named(BarFrames.space)).minX,
+                                                        rim: background == .glass ? .init(shape: AnyShape(shape), edge: shape.edge) : nil)
+                            }
+                            .background { if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) } }
+                            .clipShape(shape)
                         }
                     }
                     .padding(.horizontal, -BarIslandShape.flare(configuration))
@@ -416,11 +429,9 @@ private struct BarPill: ViewModifier {
                 // Inset by half the ring, so it stays inside the pill: a continuous capsule's strokeBorder left stubs at
                 // its ends offscreen (the bar look round).
                 .overlay {
-                    if background != .clear {
-                        shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
-                            .edgeRingCut(shape.edge, width: configuration.border)
-                            .padding(.horizontal, -BarIslandShape.flare(configuration))
-                    }
+                    shape.inset(by: configuration.border / 2).stroke(style.color(\.accentLine), lineWidth: configuration.border)
+                        .edgeRingCut(shape.edge, width: configuration.border)
+                        .padding(.horizontal, -BarIslandShape.flare(configuration))
                 }
         } else {
             content

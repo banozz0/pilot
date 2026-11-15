@@ -925,32 +925,38 @@ private enum BarReset {
 
 /// Geometry uses the same setter as pilot bar, never replaces personal items.
 struct BarPresetControls: View {
+    @Environment(\.ink) private var ink
     let store: BarItemsStore
     @State private var problem = ""
     var body: some View {
         Tile(title: "Bar layout", symbol: "menubar.rectangle") {
-            Picker("Preset", selection: Binding(get: { store.settings.preset?.preset.rawValue ?? "legacy" }, set: { value in
-                do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
-            })) {
-                Text("Full bar").tag("legacy")
-                ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
-            }
-            if let config = store.settings.preset, config.preset.islands {
-                // Attached or Floating (Sven, 2026-11-13, Q224), the dock's same choice: hung from the screen's top edge,
-                // or floating under it as before.
-                Picker("Islands", selection: Binding(get: { store.settings.preset?.isAttached ?? false }, set: { on in
-                    do { try store.setAttached(on); problem = "" } catch { problem = String(describing: error) }
+            // The page's settings rows (Clock, Dock's Look): each its own BlockRow, so the two never sit flush (Sven on
+            // build 2577: "they need more space cause they're flush into each other").
+            BlockRow(first: true) {
+                Text("Preset")
+                InfoMark(text: "The top bar's shape: Full strip, one strip the screen's width; Three islands, one island per side; Pills, each item or group its own pill.")
+                Spacer()
+                Picker("Preset", selection: Binding(get: { store.settings.shape.name }, set: { value in
+                    do { try store.choosePreset(value); problem = "" } catch { problem = String(describing: error) }
                 })) {
-                    Text("Attached").tag(true)
-                    Text("Floating").tag(false)
+                    ForEach(BarPreset.allCases, id: \.self) { Text($0.title).tag($0.name) }
                 }
-                .pickerStyle(.segmented)
-                .help("Attached hangs each island from the screen's top edge, square on top and rounded below. Floating leaves a gap above it.")
+                .labelsHidden().fixedSize()
+            }
+            // Attached or Floating (Sven, 2026-11-13, Q224), the dock's same choice: hung from the screen's top edge, or
+            // floating under it. Full strip Attached is the bar before presets, Floating its floating strip (2026-11-15).
+            BlockRow {
+                Text("Placement")
+                InfoMark(text: "Attached hangs the bar from the screen's top edge: Full strip the screen's whole width, each island or pill square on top and rounded below. Floating leaves a gap above it, every corner round.")
+                Spacer()
+                Segments(selection: Binding(get: { store.barAttached }, set: { on in
+                    do { try store.setAttached(on); problem = "" } catch { problem = String(describing: error) }
+                }), options: [(true, "Attached"), (false, "Floating")], label: "Bar placement")
             }
             if let config = store.settings.preset {
                 // The sizes behind one fold, closed until opened (Sven, 2026-11-12): the preset's defaults are the bar.
-                KitFold(title: "Adjust sizes") {
-                    // Each row reads the preset again, never with `!`: picking Full bar clears it, and a row can redraw
+                BlockRow { KitFold(title: "Adjust sizes") {
+                    // Each row reads the preset again, never with `!`: Full strip Attached clears it, and a row can redraw
                     // before this branch goes (build 2276 trapped there).
                     // Attached keeps no top margin, so its row goes while the islands hang from the edge.
                     ForEach(BarItemsStore.geometryFields.filter { $0.0 != "topMargin" || !config.isAttached }, id: \.0) { field in
@@ -963,11 +969,14 @@ struct BarPresetControls: View {
                     Button("Reset sizes") {
                         do { try store.choosePreset(config.preset.rawValue); problem = "" } catch { problem = String(describing: error) }
                     }.buttonStyle(.pilot)
-                }
+                } }
             }
-            // Each preset its own layout (Sven, 2026-11-13).
-            Text("Each preset keeps its own items, order and groups; one you open the first time starts from the bar you have now. Pack defaults and Restore are reviewed in Look.")
-            if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
+            // Each preset its own layout (Sven, 2026-11-13); a note row as Notifications' are.
+            BlockRow {
+                FinePrint(text: "Each preset keeps its own items, order and groups; one you open the first time starts from the bar you have now. Pack defaults and Restore are reviewed in Look.")
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)  // KitRow's: off the rule above.
+            }
+            if !problem.isEmpty { BlockRow { FinePrint(text: problem, color: ink.red) } }
         }
         .disabled(Look.shared.themePressing)  // A theme owns the layout: it waits while Look's Apply or Restore runs.
     }

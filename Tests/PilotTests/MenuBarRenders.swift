@@ -116,6 +116,32 @@ struct MenuBarRenders {
         }
     }
 
+    /// The Menu bar page's Bar layout block (Sven on build 2577: the Preset and Islands rows "flush into each other"):
+    /// Full strip Attached and Pills Floating, Instrument on Tokyo Night, each row its own BlockRow.
+    /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter MenuBarRenders/barLayout`
+    @Test("Bar layout: Preset and Placement rows stand apart", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func barLayout() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch real data")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menubar")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: home).appendingPathComponent("Library/Preferences"), withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let was = (look.style, look.themeID)
+        defer { (look.style, look.themeID) = was }
+        (look.style, look.themeID) = (.instrument, "tokyo-night")
+        let store = BarItemsStore(defaults: try BarFixtureDefaults(root: home, suite: "dev.banozz.pilot.bar-layout-render"), statsPrefs: { [:] })
+        for (name, preset, attached) in [("full-strip-attached", BarPreset.fullStrip, true), ("pills-floating", BarPreset.pills.name, false)] {
+            try store.choosePreset(preset)
+            try store.setAttached(attached)
+            try writeRender(BarPresetControls(store: store).frame(width: 520).padding(16).styled(.window, look: look).pilotTheme(look: look).background(Theme.background),
+                            to: dir.appendingPathComponent("bar-layout-\(name).png"))
+        }
+    }
+
     /// Sven's crowded top bar on build 2363 (three islands; on the right other apps, the status lights, eight extensions,
     /// the Group with readings and Volume in it, and more): the Top bar page at the default 1000 × 660 window and at 1920 wide, every item on the strip,
     /// which scrolls sideways where the page is narrower than the bar; three dividers, one per side. Written to

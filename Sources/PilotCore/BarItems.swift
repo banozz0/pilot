@@ -834,6 +834,12 @@ extension BarSettings {
         try preset?.validate()
         // A bar saved before each preset kept its own: what it holds is the current preset's, the others start from it.
         layouts = (try? c.decode([String: BarLayout].self, forKey: .layouts)) ?? [:]
+        // The Full bar and the floating strip became one Full strip (Sven, 2026-11-15): on either, the bar's own items are
+        // Full strip's and the other's kept layout goes; on another preset the floating strip's kept layout is Full strip's,
+        // else the Full bar's. Saved at the next change.
+        let strip = Self.layoutKey(nil), fullBar = layouts.removeValue(forKey: Self.fullBarKey)
+        if Self.layoutKey(preset?.preset) == strip { layouts[strip] = nil }
+        else if layouts[strip] == nil { layouts[strip] = fullBar }
         placeGroupedExtensions(order: decoder.userInfo[Self.extensionOrder] as? @Sendable () -> [String])
     }
 
@@ -880,10 +886,17 @@ public struct BarLayout: Codable, Equatable, Sendable {
 }
 
 extension BarSettings {
-    /// A preset's key in `layouts`: its id, legacy for the Full bar.
-    public static func layoutKey(_ preset: BarPreset?) -> String { preset?.rawValue ?? "legacy" }
+    /// A preset's key in `layouts`: its id. Full strip's Attached (nil) and Floating share one, so a switch between them
+    /// keeps the items (Sven, 2026-11-15).
+    public static func layoutKey(_ preset: BarPreset?) -> String { (preset ?? .floatingStrip).rawValue }
 
-    /// Switches to `configuration`'s preset (nil the Full bar), each keeping its own layout: the one left is kept under its
+    /// The preset the bar is on, Full strip's Attached (no configuration) as its floating strip's.
+    public var shape: BarPreset { preset?.preset ?? .floatingStrip }
+
+    /// The Full bar's layout key before it and the floating strip became Full strip (2026-11-15).
+    static let fullBarKey = "legacy"
+
+    /// Switches to `configuration`'s preset (nil Full strip Attached), each keeping its own layout: the one left is kept under its
     /// key; one kept before comes back, else the new preset starts from the layout left (Sven, 2026-11-13). The same
     /// preset again only takes the geometry.
     public mutating func choose(_ configuration: BarPresetConfiguration?) {

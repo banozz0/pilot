@@ -72,8 +72,8 @@ extension ControlVerbs {
             }))
         registerBarExtensions(bar, reach)
         registerTopBarScreens(reach)
-        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); sets the island presets Attached (hung from the screen's top edge) or Floating; moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits every group, --group one; --group puts it in a group of its own number, each its own pill), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
-                             usage: "pilot bar | pilot bar preset legacy|floatingStrip|threeIslands|pills (legacy is the Full bar) | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar attached on|off | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] [--index n] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
+        register(ControlVerb("bar", help: "What the Menu bar page says about the bars (readings this Mac lacks, items in the top bar alone, Show exact menu bar items and its Screen Recording); picks the top bar's preset (Full strip, Three islands or Pills; Full strip is the Full bar and the floating strip before 2026-11-15) and sets it Attached (hung from the screen's top edge) or Floating; moves an item, puts it in the Group or takes it out (any reading, power or controls item, the timer, the clock, Capture, the app in front, or an extension's bar item by its id; ungroup alone splits every group, --group one; --group puts it in a group of its own number, each its own pill), sets its style or the spacer's width (reset gives it back its style's), clears every item off a bar or both (Pilot's own icon stays) or restores the default items there, the bar the page shows unless --placement names one, opens the Menu bar page to drag the bar, or switches Show exact menu bar items (on asks Allow: it uses Screen Recording).",
+                             usage: "pilot bar | pilot bar preset fullStrip|threeIslands|pills | pilot bar geometry <field> <points> | pilot bar geometry <JSON> | pilot bar attached on|off | pilot bar move <item> [--side left|centre|right] [--index n] | pilot bar move <item> --onto <item> | pilot bar style <item> <style> | pilot bar group <item> [--group <n>|new] [--index n] | pilot bar ungroup [<item>] [--group <n>] | pilot bar spacer <points>|reset | pilot bar clear|restore [--placement menuBar|topBar|both] | pilot bar edit | pilot bar exact on|off",
                              flags: [.init("side", help: "move: the top bar's side it goes to"),
                                      .init("group", help: "group: the group it joins, 1 the Group (the default), 2 and on one more, each its own pill, made where the item is if new; new is the next free number. ungroup: the group it splits"),
                                      .init("index", help: "move: before the item now at this place on that side, from 0; group: before the member now at this place in the group, from 0"),
@@ -88,7 +88,7 @@ extension ControlVerbs {
             try bar().requireWritable()
             switch sub {
             case "preset":
-                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <legacy|floatingStrip|threeIslands|pills>: legacy is the Full bar") }
+                guard args.positional.count == 2, args.flags.isEmpty else { throw ControlError(.badRequest, "bar preset <fullStrip|threeIslands|pills>") }
                 try bar().choosePreset(try args.word(1, "preset"))
                 return Self.state(bar(), reach)
             case "geometry":
@@ -280,6 +280,8 @@ extension ControlVerbs {
                             (side.rawValue, JSONValue.array(slots.map { .string($0.name) }))
                         })),
                         "preset": (try? ThemeDigest.encoded(s.preset)).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) } ?? .null,
+                        // The preset as the Menu bar page names it: Full strip Attached saves no geometry (`preset` null).
+                        "shape": .object(["preset": .string(s.shape.name), "title": .string(s.shape.title), "attached": .bool(store.barAttached)]),
                         "exactMenuItems": .bool(s.exactMenuItems),
                         "needsScreenRecording": .bool(reach.lacksScreenRecording())]
         if let placement { answer["placement"] = .string(placement.rawValue) }

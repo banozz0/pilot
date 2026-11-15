@@ -5,14 +5,20 @@ import CoreGraphics
 public enum BarPreset: String, Codable, CaseIterable, Sendable {
     /// Pills (Sven, 2026-11-12, Q177, after a Waybar picture): each slot on its own pill, the Group one pill for all it
     /// holds; beside Three islands, which makes one island per side.
+    /// `floatingStrip` is Full strip Floating (Sven, 2026-11-15: "floating strip is essentially full bar just not
+    /// attached"); its id stays the saved and pack word. Full strip Attached is no configuration at all (the bar before
+    /// presets), so its look and its geometry stay the screen's (TopBarGeometry).
     case floatingStrip, threeIslands, pills
     public var title: String {
         switch self {
-        case .floatingStrip: "Floating strip"
+        case .floatingStrip: "Full strip"
         case .threeIslands: "Three islands"
         case .pills: "Pills"
         }
     }
+    /// The word the Menu bar page and `pilot bar preset` name it by: Full strip's covers both its Attached and Floating.
+    public var name: String { self == .floatingStrip ? Self.fullStrip : rawValue }
+    public static let fullStrip = "fullStrip"
     public var configuration: BarPresetConfiguration { .init(preset: self) }
     /// Draws an island per side (Three islands) or per slot (Pills), each its own window, rather than one strip.
     public var islands: Bool { self != .floatingStrip }
@@ -31,7 +37,7 @@ public struct BarPresetConfiguration: Codable, Equatable, Sendable {
     /// Attached (Sven, 2026-11-13, Q224, after a Hyprland bar: "how its attatched flush to the the very top of the screen"):
     /// each island, or each pill, hangs from the screen's top edge with square top corners and rounded bottom ones, as
     /// the dock's Attached sits on the bottom edge. Nil or false is Floating, the look before: `topMargin` below the top.
-    /// Only the island presets (Three islands, Pills) take it; the floating strip stays one floating strip.
+    /// Only the island presets (Three islands, Pills) carry it here: Full strip Attached is no configuration (BarPreset).
     public var attached: Bool?
 
     /// Whether this bar hangs from the top edge now.

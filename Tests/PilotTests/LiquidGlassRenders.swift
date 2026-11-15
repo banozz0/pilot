@@ -160,6 +160,55 @@ struct LiquidGlassRenders {
         try lines.joined(separator: "\n").write(to: dir.appendingPathComponent("predicted.txt"), atomically: true, encoding: .utf8)
     }
 
+    /// Pills on Glass and Clear over a bright sky (Sven on build 2577: "pills glass look how they look", washed out over
+    /// a blue sky with a cloud in the middle): each pill tones the sky under it as the islands do, Floating and Attached.
+    /// The tone is a plain image and draws offscreen; the glass does not, so the pictures show the tone, the ink and the
+    /// rings, never the glass's blur or rim.
+    /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter LiquidGlassRenders/pills`
+    @Test("Pills tone a bright sky under them on Glass and Clear",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func pills() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch real data")
+        testApp()
+        let dir = try ClockRenders.dir("liquid-glass")
+        let look = Look.shared
+        let was = (look.style, look.themeID, look.glass, look.transparency, look.glassBlur)
+        defer { (look.style, look.themeID, look.glass, look.transparency, look.glassBlur) = was }
+        (look.style, look.themeID, look.glass, look.transparency, look.glassBlur) = (.instrument, "dracula", true, 100, .full)
+        let tokens = StyleTokens.of(look.style, theme: look.theme)
+        let screen = DockRenders.ultrawide, cell = WallpaperStrip.cell
+        // His sky (read off the build 2577 screenshot) with a white cloud across the bar's middle.
+        let sky = Self.grid(width: screen.width, rows: 24, bright: [], fill: { x in (1500...2000).contains(x) ? [236, 238, 242] : [74, 142, 222] })
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: home).appendingPathComponent("Library/Preferences"), withIntermediateDirectories: true)
+        let defaults = try BarFixtureDefaults(root: home, suite: "dev.banozz.pilot.liquid-glass-pills")
+        defaults.set(true, forKey: BarItemsStore.markAloneKey)
+        defaults.set(try ThemeDigest.encoded(BarSettings.defaults), forKey: BarItemsStore.key)
+        let store = BarItemsStore(defaults: defaults, statsPrefs: { [:] })
+        var settings = store.settings
+        let sides = BarLookRenders.working(&settings)
+        let draw = BarLookRenders.Draw(input: BarLookRenders.inputs(), settings: settings, sources: BarLookRenders.sources(), store: store,
+                                       look: look, wall: Self.image(sky), tokens: tokens)
+        for attached in [false, true] {
+            var config = BarPreset.pills.configuration
+            config.attached = attached ? true : nil
+            let frame = config.frame(screen: CGRect(origin: .zero, size: screen))
+            for background in [TopBarBackground.glass, .clear] {
+                let bar = TopBarStrip(sides: sides, configuration: config, look: look, background: background, wallpaper: sky) { draw.slot($0, settings: settings) { AnyView(EmptyView()) } }
+                    .styled(.topBar, look: look)
+                    .frame(width: frame.width, height: frame.height)
+                    .padding(.horizontal, frame.minX).padding(.top, screen.height - frame.maxY).padding(.bottom, 10)
+                    .frame(width: screen.width, alignment: .topLeading)
+                    .background(alignment: .topLeading) {
+                        Image(decorative: Self.cgImage(sky), scale: 1)
+                            .resizable().interpolation(.none).frame(width: screen.width, height: CGFloat(sky.height) * cell)
+                    }
+                    .clipped()
+                try writeRender(bar, to: dir.appendingPathComponent("pills-sky-\(background.rawValue)-\(attached ? "attached" : "floating").png"), wait: 1.2)
+            }
+        }
+    }
+
     /// A made-up wallpaper strip `width` points wide: near-black, bright where `bright` says, in points from the left.
     static func grid(width: CGFloat, rows: Int, bright: [ClosedRange<CGFloat>], fill: ((CGFloat) -> [UInt8])? = nil) -> WallpaperStrip.Grid {
         let cols = Int(width / WallpaperStrip.cell)

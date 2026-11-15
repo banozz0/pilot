@@ -156,7 +156,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .pilotMenu: ["pilot menu", "pilot's menu", "dropdown", "menu bar icon", "blocks", "pinned", "quick switches", "running now",
                           "control centre", "control center", "extensions card"]
         case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
-                        "bar preset", "full bar", "floating strip", "three islands", "pills", "adjust sizes", "bar height"]
+                        "bar preset", "full strip", "full bar", "floating strip", "three islands", "pills", "attached", "floating", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
         case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font", "material", "glass", "light or dark"]
