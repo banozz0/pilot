@@ -105,7 +105,7 @@ struct DockView: View {
 
     /// The height of wallpaper a Glass or Clear pill tones (DockStrip.wallpaper), nil for a solid one.
     private var toneRoom: Double? {
-        dock.settings.style == .solid ? nil : Double(dock.settings.size.room(dock.settings.placement))
+        dock.settings.style == .solid ? nil : Double(dock.settings.room)
     }
 
     private func widget(_ slot: DockSlot, _ reader: DockWidgetSources) -> some View {
@@ -277,12 +277,12 @@ struct DockStrip<Widgets: View>: View {
         // On the bright stretches of a light wallpaper the widgets' labels and values washed out over clear glass, and on
         // a dark one the glass lifted the desktop into a grey plate (Sven on build 2550): the pill tones the wallpaper
         // under it as the top bar does, and its words are inked for that ground.
+        // Only the row is inked, as the bar's slots are: the pill's own ground keeps the theme's tokens.
         let (inked, toned) = TopBarColour.ink(.theme, style: tokens, background: shown, wallpaper: wallpaper, look: Look.shared)
+        let words = row.environment(\.barGround, toned.map { ($0.tone.ground, inked.dark) }).inked(inked)
         Group {
-            if let backing, shown == .glass { backing(AnyView(row)) } else { row.modifier(DockBacking(shape: shape, style: shown, toned: toned)) }
+            if let backing, shown == .glass { backing(AnyView(words)) } else { words.modifier(DockBacking(shape: shape, style: shown, toned: toned)) }
         }
-        .environment(\.barGround, toned.map { ($0.tone.ground, inked.dark) })
-        .inked(inked)
         // Solid: a ring in the ink. Glass at Blur Off: the macOS Dock's edge, a light inner hairline lit brighter along the
         // top, as Pilot's Frost draws one (Sven on build 2470); Liquid Glass draws its own specular rim, which a painted
         // ring over it flattened (round 2, Sven on build 2527), so none there. Clear is nothing, as the top bar's.
@@ -396,9 +396,9 @@ struct DockStrip<Widgets: View>: View {
 /// ground; Glass Liquid Glass whether Look › Glass is on or not, untinted as the macOS Dock's (TopBarColour.tintsGlass;
 /// clear at Full and Light as the Dock's, TopBarColour.barBlur; Off the bar's tint alone); Clear nothing the eye sees, yet the gaps between
 /// icons still take the click (TopBarColour.clearGround).
-struct DockBacking<S: Shape>: ViewModifier {
+struct DockBacking: ViewModifier {
     @Environment(\.style) private var tokens
-    let shape: S
+    let shape: GrownEdgeShape
     let style: TopBarBackground
     /// The wallpaper's tone under the pill (TopBarColour.tone), drawn inside its glass or over Clear; nil for none.
     var toned: TopBarColour.Toned? = nil
@@ -424,12 +424,9 @@ struct DockBacking<S: Shape>: ViewModifier {
     /// The tone in the pill's outline: the strip along the screen's foot, top first, the pill centred on its screen
     /// (DockWindow.fit) and standing on the strip's foot or its margin over it.
     private func ground(_ background: TopBarBackground, rim: Bool) -> some View {
-        GeometryReader { box in
-            let wide = toned.map { CGFloat($0.tone.width) * WallpaperStrip.cell } ?? box.size.width
-            TopBarColour.toneGround(toned, background: background, at: (wide - box.size.width) / 2,
-                                    height: toned.map { CGFloat($0.tone.height) * WallpaperStrip.cell }, rim: rim ? AnyShape(shape) : nil)
-        }
-        .clipShape(shape)
+        TopBarColour.toneGround(toned, background: background, at: nil, height: toned.map { CGFloat($0.tone.height) * WallpaperStrip.cell },
+                                rim: rim ? .init(shape: AnyShape(shape), edge: shape.edge) : nil)
+            .clipShape(shape)
     }
 }
 

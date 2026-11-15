@@ -273,7 +273,7 @@ struct TopBarStrip<Slot: View>: View {
                             let shape = BarIslandShape.of(configuration)
                             // Its ground runs out past the island by the flares (below).
                             let left = proxy.frame(in: .named(BarFrames.space)).minX - BarIslandShape.flare(configuration)
-                            islandGround(ground: ground, tone: tone, at: margin + left, rim: AnyShape(shape))
+                            islandGround(ground: ground, tone: tone, at: margin + left, rim: .init(shape: AnyShape(shape), edge: shape.edge))
                                 .background {
                                     if glassPreview, background == .glass { BarGlassGround(colour: colour) }
                                     else if let look { TopBarColour.liquidGlass(in: shape, background: background, colour: colour, style: style, look: look) }
@@ -327,8 +327,9 @@ struct TopBarStrip<Slot: View>: View {
         .background {
             // The preview cuts only its ground to the bar's shape (BarClip cuts the bar's whole).
             if !islands {
-                islandGround(ground: ground, tone: tone, at: margin, rim: AnyShape(.rect(cornerRadius: configuration?.radius ?? 0)))
-                    .modifier(BarClip(radius: configuration?.radius ?? 0, on: preview))
+                let radius = configuration?.radius ?? 0
+                islandGround(ground: ground, tone: tone, at: margin, rim: .init(shape: AnyShape(.rect(cornerRadius: radius))))
+                    .modifier(BarClip(radius: radius, on: preview))
             }
         }
         // One rule along the Strip's foot on a solid bar; none on Glass, whose own edge is the line there (Sven, 2026-10-10:
@@ -346,7 +347,7 @@ struct TopBarStrip<Slot: View>: View {
     }
 
     /// A side's or the bar's ground, its left edge `x` points from the screen's; `rim` its glass's outline.
-    @ViewBuilder private func islandGround(ground: UInt32, tone: TopBarColour.Toned?, at x: CGFloat, rim: AnyShape) -> some View {
+    @ViewBuilder private func islandGround(ground: UInt32, tone: TopBarColour.Toned?, at x: CGFloat, rim: TopBarColour.Rim) -> some View {
         if background == .solid { colour == .theme ? TopBarColour.themeGround(style) : Color(Paint(ground)) }
         else { TopBarColour.toneGround(tone, background: background, at: x, rim: background == .glass ? rim : nil) }
     }
@@ -541,19 +542,19 @@ enum TopBarColour {
     static func tone(_ strip: WallpaperStrip.Grid?, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
                      look: Look) -> Toned? {
         guard background != .solid, style.kind != .toybox, let strip else { return nil }
-        let clear = background == .glass && !tintsGlass(colour) && barBlur(look) != .off
-        let tint = background == .glass && !clear ? Contrast.rgb(ground(colour, style: style)) : nil, share = Double(tintAlpha(look)) / 100
-        let key = ToneKey(strip: strip, white: style.dark, tint: tint, share: tint == nil ? 0 : share, glass: clear)
+        let untinted = background == .glass && !tintsGlass(colour) && barBlur(look) != .off
+        let tint = background == .glass && !untinted ? Contrast.rgb(ground(colour, style: style)) : nil, share = Double(tintAlpha(look)) / 100
+        let key = ToneKey(strip: strip, white: style.dark, tint: tint, share: tint == nil ? 0 : share, glass: untinted)
         if let made = made.first(where: { $0.key == key }) { return made.toned }
-        guard let tone = BarTone.make(strip, prefersWhite: key.white, tint: tint, share: key.share, glass: clear), let mask = mask(tone) else { return nil }
-        made = [(key, Toned(tone: tone, mask: mask))] + made.prefix(3)
+        guard let tone = BarTone.make(strip, prefersWhite: key.white, tint: tint, share: key.share, glass: untinted), let mask = mask(tone) else { return nil }
+        made = [(key, Toned(tone: tone, mask: mask))] + made.prefix(7)
         return made[0].toned
     }
 
     private struct ToneKey: Equatable {
         let strip: WallpaperStrip.Grid, white: Bool, tint: [Double]?, share: Double, glass: Bool
     }
-    /// The last few tones made: a bar per screen, each drawn by its strip and its window.
+    /// The last few tones made: a bar per screen, each drawn by its strip and its window, and the dock's.
     private static var made: [(key: ToneKey, toned: Toned)] = []
 
     /// The tone's mask as an image, its colour at each cell's share.
@@ -578,21 +579,29 @@ enum TopBarColour {
     /// screen's tone drew as boxes behind the items, a bright stretch of sky dimmed under one workspace and a dark
     /// hill left clear under the clock (Liquid Glass round 3, Sven on build 2550: "what is this on light wallpaper").
     /// `height` the strip's in points, top first; nil stretches it over the ground (the bar's strip is its height). On
-    /// glass (`rim`) the tone fades out over the rim's glow, so the glass keeps its lit edge.
-    @ViewBuilder static func toneGround(_ toned: Toned?, background: TopBarBackground, at x: CGFloat = 0, height: CGFloat? = nil,
-                                        rim: AnyShape? = nil) -> some View {
+    /// glass (`rim`) the tone fades out over the rim's glow, so the glass keeps its lit edge. `x` nil centres the strip
+    /// on the ground (the dock's pill, centred on its screen by DockWindow.fit).
+    @ViewBuilder static func toneGround(_ toned: Toned?, background: TopBarBackground, at x: CGFloat? = 0, height: CGFloat? = nil,
+                                        rim: Rim? = nil) -> some View {
         ZStack {
             if background == .clear { clearGround }
             if let toned {
                 GeometryReader { box in
+                    let wide = CGFloat(toned.tone.width) * WallpaperStrip.cell
                     Image(decorative: toned.mask, scale: 1).resizable().interpolation(.high)
-                        .frame(width: CGFloat(toned.tone.width) * WallpaperStrip.cell, height: height ?? box.size.height)
-                        .offset(x: -x)
+                        .frame(width: wide, height: height ?? box.size.height)
+                        .offset(x: -(x ?? (wide - box.size.width) / 2))
                 }
                 .clipped()
-                .mask { if let rim { RimFade(shape: rim) } else { Color.black } }
+                .mask { if let rim { RimFade(rim: rim) } else { Color.black } }
             }
         }
+    }
+
+    /// A glass ground's outline, whose rim the tone fades out over (toneGround), and the screen's edge it grows from.
+    struct Rim {
+        let shape: AnyShape
+        var edge: GrownEdgeShape.Edge? = nil
     }
 
     /// How far in from a glass edge its tone starts: the rim's inner glow, about 6 px on the macOS Dock and on Pilot's.
@@ -681,20 +690,31 @@ enum BarMetrics {
     }
 }
 
-/// The bar cut to its shape, items and all; off in the Menu bar page's preview, where the pieces' − sit above it.
-/// A glass shape's inside, faded to nothing over its last TopBarColour.rimFade points: what the tone draws in, so the
-/// glass's own rim and its glow stay lit over a dimmed desktop.
+/// A glass shape's inside, faded to nothing over its last TopBarColour.rimFade points in three steps (a third, two
+/// thirds, all of the tone), what the tone draws in, so the glass's own rim and its glow stay lit over a dimmed desktop;
+/// the edge an attached shape grows from is the screen's and keeps its tone. Strokes, not a blur: the dock's pill
+/// changes width on every hover frame.
 private struct RimFade: View {
-    let shape: AnyShape
+    let rim: TopBarColour.Rim
 
     var body: some View {
-        shape.fill(.black)
-            .overlay { shape.stroke(.black, lineWidth: TopBarColour.rimFade * 2).blendMode(.destinationOut) }
+        let step = TopBarColour.rimFade / 3
+        rim.shape.fill(.black)
+            .overlay {
+                ZStack {
+                    rim.shape.stroke(.black.opacity(1 / 3), lineWidth: 6 * step)
+                    rim.shape.stroke(.black.opacity(1 / 2), lineWidth: 4 * step)
+                    rim.shape.stroke(.black, lineWidth: 2 * step)
+                }
+                .edgeRingCut(rim.edge, width: TopBarColour.rimFade)
+                .compositingGroup()
+                .blendMode(.destinationOut)
+            }
             .compositingGroup()
-            .blur(radius: TopBarColour.rimFade / 2)
     }
 }
 
+/// The bar cut to its shape, items and all; off in the Menu bar page's preview, where the pieces' − sit above it.
 private struct BarClip: ViewModifier {
     let radius: Double
     let on: Bool

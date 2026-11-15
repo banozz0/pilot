@@ -43,10 +43,15 @@ public struct BarTone: Equatable, Sendable {
     /// its rim carries the glass. A cell under untinted glass is toned down to at least this, so the glass reads as the
     /// Dock's, not as a grey plate.
     public static let dockVeil = 0.05
+    /// The least contrast the ink keeps over untinted clear glass: past the menu bar's curve (which leaves white text at
+    /// 1.84 : 1 over a white desktop, fine for the menu bar's 13 pt titles), the dock's and the islands' small captions and
+    /// values keep 3 : 1, as Apple's dimming under clear glass does (about 35 % over a bright desktop). Sven on build
+    /// 2550: the widgets' labels washed out on a light wallpaper.
+    public static let glassFloor = 3.0
 
     /// The tone of `grid` for the theme's ink side (`prefersWhite`), seen through Glass's `tint` at `share` when given,
-    /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil on white ink; nil for an
-    /// empty grid.
+    /// or through untinted clear glass (`glass`, glassVeil) toned down to the Dock's veil on white ink and to glassFloor
+    /// against the ink; nil for an empty grid.
     public static func make(_ grid: WallpaperStrip.Grid, prefersWhite: Bool, tint: [Double]? = nil, share: Double = 0,
                             glass: Bool = false) -> BarTone? {
         guard grid.width > 0, grid.height > 0 else { return nil }
@@ -62,11 +67,12 @@ public struct BarTone: Equatable, Sendable {
             // black, so luminance by about its 2.2 power; under white, about the same in lightness.
             if prefersWhite {
                 var want = 1.05 / toned(1.05 / (l + 0.05)) - 0.05
-                if glass { want = min(want, Contrast.luminance(Contrast.mix([255, 255, 255], desk, dockVeil))) }
+                if glass { want = min(want, Contrast.luminance(Contrast.mix([255, 255, 255], desk, dockVeil)), 1.05 / glassFloor - 0.05) }
                 let a = want < l ? 1 - pow(max(want, 0) / l, 1 / 2.2) : 0
                 (alpha[i], after[i]) = (UInt8((a * 255).rounded()), min(l, want))
             } else {
-                let want = toned((l + 0.05) / (inkL + 0.05)) * (inkL + 0.05) - 0.05
+                var want = toned((l + 0.05) / (inkL + 0.05)) * (inkL + 0.05) - 0.05
+                if glass { want = max(want, glassFloor * (inkL + 0.05) - 0.05) }
                 let v = pow(l, 1 / 2.2), w = pow(min(want, 1), 1 / 2.2)
                 let a = want > l && v < 1 ? (w - v) / (1 - v) : 0
                 (alpha[i], after[i]) = (UInt8((a * 255).rounded()), max(l, want))

@@ -129,26 +129,39 @@ struct LiquidGlassRenders {
         try writeRender(desk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look),
                         to: dir.appendingPathComponent("tone-dock.png"), wait: 1.2)
 
+        // The widgets over a light wallpaper, Sven's amber (read above the dock on build 2550) under the left half of the
+        // widgets and near-white under the rest, untoned (as before) and toned: their words must be inked for the ground.
+        let light = Self.grid(width: screen.width, rows: Int((room / cell).rounded()), bright: [], fill: { x in
+            x < 1500 ? [14, 12, 16] : x < 2000 ? [130, 89, 19] : [236, 236, 232]
+        })
+        let lightDesk = DockRenders.Desk(wall: Self.screenImage(light, screen: screen, fill: [236, 236, 232]), screen: screen, size: CGSize(width: 1640, height: 150))
+        for (name, grid) in [("untoned", nil), ("toned", light)] as [(String, WallpaperStrip.Grid?)] {
+            strip.wallpaper = grid
+            try writeRender(lightDesk.scene(strip.environment(\.inTopBar, true).environment(\.barItemColours, true), look: look),
+                            to: dir.appendingPathComponent("tone-dock-light-\(name).png"), wait: 1.2)
+        }
+
         // The model over plain greys: what clear glass shows (glassVeil) and what the tone leaves (the cap at the Dock's
         // veil, the menu bar's curve past it), against the macOS Dock over Sven's near-black (6 to 18).
-        var lines = ["grey  glass-shows  tone-alpha  left  (macOS Dock 6 -> 18)"]
+        var lines = ["grey  glass-shows  tone-alpha  left  white-on-it  (macOS Dock 6 -> 18)"]
         for grey in [6, 24, 37, 64, 128, 180, 230, 255] {
             let g = WallpaperStrip.Grid(width: 1, height: 1, rgb: [UInt8(grey), UInt8(grey), UInt8(grey)])
             let tone = try #require(BarTone.make(g, prefersWhite: true, glass: true))
             let shows = Double(grey) + BarTone.glassVeil * (255 - Double(grey)), a = Double(tone.alpha[0]) / 255
-            lines.append(String(format: "%4d  %11.1f  %10.2f  %4.1f", grey, shows, a, shows * (1 - a)))
+            let left = shows * (1 - a), ratio = Contrast.ratio([255, 255, 255], [left, left, left])
+            lines.append(String(format: "%4d  %11.1f  %10.2f  %5.1f  %6.2f : 1", grey, shows, a, left, ratio))
         }
         try lines.joined(separator: "\n").write(to: dir.appendingPathComponent("predicted.txt"), atomically: true, encoding: .utf8)
     }
 
     /// A made-up wallpaper strip `width` points wide: near-black, bright where `bright` says, in points from the left.
-    static func grid(width: CGFloat, rows: Int, bright: [ClosedRange<CGFloat>]) -> WallpaperStrip.Grid {
+    static func grid(width: CGFloat, rows: Int, bright: [ClosedRange<CGFloat>], fill: ((CGFloat) -> [UInt8])? = nil) -> WallpaperStrip.Grid {
         let cols = Int(width / WallpaperStrip.cell)
         var rgb = [UInt8]()
         for _ in 0..<rows {
             for c in 0..<cols {
                 let x = CGFloat(c) * WallpaperStrip.cell
-                rgb += bright.contains { $0.contains(x) } ? [235, 230, 220] : [14, 12, 16]
+                rgb += fill?(x) ?? (bright.contains { $0.contains(x) } ? [235, 230, 220] : [14, 12, 16])
             }
         }
         return WallpaperStrip.Grid(width: cols, height: rows, rgb: rgb)
@@ -168,11 +181,11 @@ struct LiquidGlassRenders {
     }
 
     /// A whole screen's picture, a pixel a point, with `grid` along its foot over the same near-black, as Desk fills a screen.
-    static func screenImage(_ grid: WallpaperStrip.Grid, screen: CGSize) -> NSImage {
+    static func screenImage(_ grid: WallpaperStrip.Grid, screen: CGSize, fill: [CGFloat] = [14, 12, 16]) -> NSImage {
         let (w, h) = (Int(screen.width), Int(screen.height))
         let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        ctx.setFillColor(CGColor(srgbRed: 14 / 255, green: 12 / 255, blue: 16 / 255, alpha: 1))
+        ctx.setFillColor(CGColor(srgbRed: fill[0] / 255, green: fill[1] / 255, blue: fill[2] / 255, alpha: 1))
         ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
         ctx.interpolationQuality = .none
         ctx.draw(cgImage(grid), in: CGRect(x: 0, y: 0, width: screen.width, height: CGFloat(grid.height) * WallpaperStrip.cell))

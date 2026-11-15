@@ -68,13 +68,8 @@ final class BarWallpapers {
             guard read[screen.name] != source else { continue }
             read[screen.name] = source
             let name = screen.name
-            Task {
-                let grid = await Task.detached {
-                    WallpaperStrip.grid(source.url, screen: source.size, strip: source.strip, placement: source.placement)
-                }.value
-                // A newer read for this screen wins.
-                guard read[name] == source, strips[name] != grid else { return }
-                strips[name] = grid
+            load(source, current: { [unowned self] in read[name] == source }) { [unowned self] grid in
+                if strips[name] != grid { strips[name] = grid }
             }
         }
         refreshDock()
@@ -89,12 +84,18 @@ final class BarWallpapers {
         let source = Source(url: url, size: ns.frame.size, strip: height, y: ns.frame.height - height, placement: Self.placement(ns))
         guard dockRead != source else { return }
         dockRead = source
+        load(source, current: { [unowned self] in dockRead == source }) { [unowned self] grid in
+            if dock != grid { dock = grid }
+        }
+    }
+
+    /// Reads `source`'s strip off the main thread and hands it to `apply`, unless a newer read has started (`current`).
+    private func load(_ source: Source, current: @escaping () -> Bool, apply: @escaping (WallpaperStrip.Grid?) -> Void) {
         Task {
             let grid = await Task.detached {
                 WallpaperStrip.grid(source.url, screen: source.size, strip: source.strip, y: source.y, placement: source.placement)
             }.value
-            guard dockRead == source, dock != grid else { return }
-            dock = grid
+            if current() { apply(grid) }
         }
     }
 

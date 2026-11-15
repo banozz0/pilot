@@ -157,7 +157,8 @@ final class TerminalDropChrome: NSView {
     private let detail: @MainActor () -> String
     private let top: NSView
     private let rule = NSView()
-    private let edge: Edge
+    /// The hairline edge on a solid drop; on Glass the glass's rim is the edge.
+    private let edge: Edge?
     /// Ask AI's glass under everything, on Look's Glass; nil when the drop is solid.
     private let glass: MaterialBackdrop?
     private var pending = false
@@ -173,9 +174,8 @@ final class TerminalDropChrome: NSView {
         let host = NSHostingView(rootView: TerminalDropHeader(header: header, hide: hide).styled(.quickAI, look: look).pilotTheme(look: look))
         host.sizingOptions = []
         top = host
-        edge = Edge(radius: radius, colour: NSColor(ink.windowLine), width: ink.stroke)
         glass = look.material(on: .quickAI) == .glass ? AIChatPanel.backdrop(NSView(), look: look) : nil
-        edge.isHidden = glass != nil
+        edge = glass == nil ? Edge(radius: radius, colour: NSColor(ink.windowLine), width: ink.stroke) : nil
         super.init(frame: body.frame)
         wantsLayer = true
         layer?.backgroundColor = glass == nil ? NSColor(ink.surface).cgColor : nil
@@ -262,7 +262,7 @@ final class TerminalDropChrome: NSView {
         // The shell's text in from the sides as the header's words are, a little air above and below it.
         let side = BarDropHeader.inset, air: CGFloat = 10
         body.frame = CGRect(x: side, y: air, width: max(0, w - side * 2), height: max(0, bounds.height - h - 1 - air * 2))
-        edge.frame = bounds
+        edge?.frame = bounds
         glass?.frame = bounds
     }
 
