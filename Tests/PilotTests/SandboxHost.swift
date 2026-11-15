@@ -74,10 +74,22 @@ struct SandboxHost {
         // feed; the live source is never made in a test run, so nothing on the Mac is observed or moved.
         if let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOTIFICATIONS"] { NotificationFixture.install(folder) }
         // PILOT_SANDBOX_SPACES=<file.json>: the window server's Spaces layout as a file in CGSCopyManagedDisplaySpaces' shape,
-        // read at each ask, so `pilot list top-bar-screens` shows which screens' bars a fullscreen Space hides.
+        // read at each ask, so `pilot list top-bar-screens` shows which screens' bars a fullscreen Space hides. A changed file
+        // posts the workspace's activeSpaceDidChange, as a Space change does, so `pilot dock`'s covered follows it.
         if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_SPACES"] {
             DisplaySpaces.layout = {
                 (try? Data(contentsOf: URL(filePath: file))).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] } ?? []
+            }
+            let changed = { (try? FileManager.default.attributesOfItem(atPath: file)[.modificationDate]) as? Date }
+            Task { @MainActor in
+                var seen = changed()
+                while true {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    let now = changed()
+                    guard now != seen else { continue }
+                    seen = now
+                    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: NSWorkspace.shared)
+                }
             }
         }
         // A test run's bundle has no Pilot Info.plist: the app's, so `status --part update` names the feed a bundle would, or

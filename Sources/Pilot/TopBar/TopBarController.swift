@@ -216,7 +216,7 @@ enum DisplaySpaces {
     private static let calls: (Connection, Copy)? = {
         guard let handle = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
               let connection = dlsym(handle, "CGSMainConnectionID"), let copy = dlsym(handle, "CGSCopyManagedDisplaySpaces") else {
-            tblog.error("top bar: no CGSCopyManagedDisplaySpaces, so bars stay on fullscreen Spaces")
+            tblog.error("no CGSCopyManagedDisplaySpaces, so the top bar and the dock stay on fullscreen Spaces")
             return nil
         }
         return (unsafeBitCast(connection, to: Connection.self), unsafeBitCast(copy, to: Copy.self))

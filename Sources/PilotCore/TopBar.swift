@@ -155,10 +155,14 @@ public enum TopBarGeometry {
     /// "Display Identifier" and "Current Space", whose "type" is 0 on a desktop). A display named "Main" is the one Space
     /// every screen shares (Displays have separate Spaces off). A screen on a desktop keeps its bar.
     public static func covered(_ screens: [Screen], spaces: [[String: Any]]) -> Set<String> {
+        Set(screens.filter { fullscreen($0.displayUUID, spaces: spaces) }.map(\.name))
+    }
+
+    /// Whether the display with this UUID is on a fullscreen Space now, by `covered`'s reading; the dock's screen asks it.
+    public static func fullscreen(_ displayUUID: String?, spaces: [[String: Any]]) -> Bool {
         let away = spaces.filter { (($0["Current Space"] as? [String: Any])?["type"] as? Int ?? 0) != 0 }
             .compactMap { ($0["Display Identifier"] as? String)?.uppercased() }
-        if away.contains("MAIN") { return Set(screens.map(\.name)) }
-        return Set(screens.filter { $0.displayUUID.map { away.contains($0.uppercased()) } ?? false }.map(\.name))
+        return away.contains("MAIN") || displayUUID.map { away.contains($0.uppercased()) } ?? false
     }
 }
 
