@@ -213,7 +213,7 @@ enum AppsModule {
     }
 
     /// Every app the picker can offer: name and bundle id, from the usual application folders and the rest of the home
-    /// folder (`homeApps`), plus Finder, which lives in CoreServices; no dot-named helper (.Karabiner-VirtualHIDDevice-Manager).
+    /// folder (`homeApps`), plus Finder, which lives in CoreServices itself; no dot-named helper (.Karabiner-VirtualHIDDevice-Manager).
     /// Hidden apps are left out after the scan's cache, so a hide shows at the next menu open.
     static func installedApps() -> [(name: String, bundle: String)] {
         if let scanned, scanned.stamps == stamps(scanned.folders) { return HiddenApps.shared.shown(scanned.apps, bundle: \.bundle) }
@@ -390,7 +390,10 @@ enum AppsModule {
         let image: NSImage?
         init(_ image: NSImage?) { self.image = image }
     }
-    nonisolated static let appFolders = ["/Applications", "/System/Applications", "/System/Applications/Utilities", NSHomeDirectory() + "/Applications"]
+    /// The application folders, macOS's own included: CoreServices/Applications holds Keychain Access, Directory Utility,
+    /// Archive Utility and the rest Spotlight finds there (B60).
+    nonisolated static let appFolders = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
+                                         "/System/Library/CoreServices/Applications", NSHomeDirectory() + "/Applications"]
     static let iconLimit = 400
     private static func bounded<Value>(limit: Int = iconLimit) -> NSCache<NSString, Value> {
         let cache = NSCache<NSString, Value>()
