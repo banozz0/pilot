@@ -376,7 +376,7 @@ struct DockStrip<Widgets: View>: View {
 
 /// The pill's ground, the top bar's three (TopBarBackground, as shown at Look's Transparency): Solid the theme's bar
 /// ground; Glass Liquid Glass whether Look › Glass is on or not, untinted as the macOS Dock's (TopBarColour.tintsGlass;
-/// Look's Blur: Full regular, Light clear, Off the bar's tint alone); Clear nothing the eye sees, yet the gaps between
+/// clear at Full and Light as the Dock's, TopBarColour.barBlur; Off the bar's tint alone); Clear nothing the eye sees, yet the gaps between
 /// icons still take the click (TopBarColour.clearGround).
 struct DockBacking<S: Shape>: ViewModifier {
     @Environment(\.style) private var tokens
@@ -389,7 +389,7 @@ struct DockBacking<S: Shape>: ViewModifier {
         case .solid: content.background(shape.fill(TopBarColour.themeGround(tokens)))
         case .clear: content.background(shape.fill(TopBarColour.clearGround))
         case .glass:
-            if let glass = look.glassBlur.glass {
+            if let glass = TopBarColour.barBlur(look).glass {
                 content.glassEffect(glass.tint(TopBarColour.glassTint(.theme, style: tokens, look: look)), in: shape)
             } else {
                 content.background(shape.fill(Color(nsColor: TopBarColour.tint(.theme, style: tokens, look: look))))

@@ -280,7 +280,7 @@ final class TopBarWindows: TopBarPanels {
         // Glass in its outline (TopBarStrip), so the glass's edge follows the flares instead of a mask cutting it.
         let glass = background == .glass && store.topBarConfiguration?.preset.islands != true
         (panel.contentView as? MaterialBackdrop)?.show(glass ? .glass : .solid, tint: TopBarColour.tint(store.colour, style: tokens, look: look),
-                                                         blur: look.glassBlur, tintsGlass: TopBarColour.tintsGlass(store.colour))
+                                                         blur: TopBarColour.barBlur(look), tintsGlass: TopBarColour.tintsGlass(store.colour))
     }
 
     /// The tokens the bar draws in (the topBar surface's style).

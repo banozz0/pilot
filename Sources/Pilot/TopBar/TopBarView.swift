@@ -578,12 +578,12 @@ enum TopBarColour {
 
     /// An island's or a pill's own Liquid Glass on a Glass bar (the liquid-glass branch, Sven 2026-11-14: "like mac os
     /// liquid glass"): drawn in its outline, flares and all, so the glass's own edge and refraction follow the shape, where
-    /// the window-wide glass under a mask cut them; in Look's Blur, tinted only as glassTint says, the tint alone at Off.
+    /// the window-wide glass under a mask cut them; clear glass (barBlur), tinted only as glassTint says, the tint alone at Off.
     /// Solid and Clear draw nothing here. Offscreen it draws nothing (renders pass no `look`, or the page's glassPreview).
     @ViewBuilder static func liquidGlass(in shape: GrownEdgeShape, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
                                          look: Look) -> some View {
         if background == .glass {
-            if let glass = look.glassBlur.glass {
+            if let glass = barBlur(look).glass {
                 Color.clear.glassEffect(glass.tint(glassTint(colour, style: style, look: look)), in: shape)
             } else {
                 shape.fill(Color(nsColor: tint(colour, style: style, look: look)))
@@ -598,6 +598,13 @@ enum TopBarColour {
     /// clear, as the macOS Dock's, its colour in the items and the ink; a colour picked for the bar keeps its stained glass.
     /// Blur Off, which has no glass, still draws `tint`.
     static func tintsGlass(_ colour: ColourChoice) -> Bool { colour != .theme }
+
+    /// The blur the bar's surfaces wear (dock, islands, pills, the bar's window): Light's clear glass at Full and Light, as
+    /// the macOS Dock's, Off as Look's. Full's regular glass lifts a dark desktop into a frosted grey plate: on build 2540
+    /// over Sven's near-black wallpaper (luminance 7) the dock's inside read 39 with its rim at 42 to 48, where the macOS
+    /// Dock's read 18 to 20 with its rim at 35 (round 2, Sven 2026-11-15: "still a dark flat slab"). Look's Blur keeps its
+    /// meaning for windows, panels and widgets, where Apple puts regular glass under text.
+    static func barBlur(_ look: Look) -> GlassBlur { look.glassBlur == .off ? .off : .light }
 
     /// The tint for Liquid Glass on `colour`, nil for none (tintsGlass): the dock's, the islands', the pills', their stand-ins.
     static func glassTint(_ colour: ColourChoice, style: StyleTokens, look: Look) -> Color? {
