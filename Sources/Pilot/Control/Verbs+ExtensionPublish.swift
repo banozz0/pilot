@@ -9,8 +9,10 @@ import PilotCore
 /// (catalogue/scripts/build-index.py) and checked (catalogue/scripts/check.py), one commit, a push of that branch alone
 /// and `gh pr create`. A person who cannot push (gh says so) gets a fork on their GitHub account, made or found through
 /// GitHub's fork API and kept as the clone's remote `pilot-fork`, so origin stays the catalogue's repo; the branch goes
-/// there and the pull request asks to merge `<login>:<branch>`. A theme sent from a fork without a `Pack by:` line gets
-/// one naming the login, so the gallery credits its author. Nothing reaches the catalogue's main until its owner merges.
+/// there and the pull request asks to merge `<login>:<branch>`. From a fork, a theme the catalogue's index does not list
+/// yet gets a `Pack by:` line naming the login when it has none, so the gallery credits its author; one it lists (one
+/// installed from the catalogue, say) is sent only by its own author, never re-credited. Nothing reaches the catalogue's
+/// main until its owner merges.
 /// A clone whose origin is not on GitHub is pushed to and no pull request opens. A failed step puts the clone back on
 /// the branch it was on, the new branch gone.
 @MainActor
@@ -32,7 +34,9 @@ enum CataloguePublish {
     /// Where `gh` is, as the catalogue finds it; a sandbox run may name a stand-in (PILOT_SANDBOX_GH), so a fork is proved
     /// without an account.
     static var gh: String? {
+        #if DEBUG
         if isIsolatedTestRun, let stand = ProcessInfo.processInfo.environment["PILOT_SANDBOX_GH"] { return stand }
+        #endif
         return ExtensionCatalogue.Source.ghPath()
     }
 
@@ -69,14 +73,17 @@ enum CataloguePublish {
         let origin, repo, branch, back: String
         /// gh, for a clone whose origin is on GitHub.
         let gh: String?
-        /// The person's GitHub login and their fork, "login/name", when they cannot push to `repo`; nil when they can.
-        let fork: (login: String, repo: String)?
+        /// The person's GitHub login when they cannot push to `repo`, so the branch goes to their fork; nil when they can.
+        let fork: String?
+        /// A theme from a fork that the catalogue does not list yet: its copy gets a `Pack by:` line when it has none.
+        let credit: Bool
         var github: Bool { gh != nil }
         var ask: ControlGate.Ask {
             let what = "\(pack.kind.noun) \(pack.id) \(pack.label) on branch \(branch)"
             guard github else { return ControlGate.Ask("Push a branch to \(repo)", what) }
             guard let fork else { return ControlGate.Ask("Open a pull request on \(repo)", what) }
-            return ControlGate.Ask("Open a pull request on \(repo) from your fork \(fork.repo)", what + ", pushed to \(fork.repo) (made on your GitHub account if it is not there)")
+            // GitHub picks the fork's name (an existing repo of the same name gets another), so the Allow names its owner.
+            return ControlGate.Ask("Open a pull request on \(repo) from your fork of it on @\(fork)", what + ", pushed to that fork (made on your GitHub account if it is not there)")
         }
     }
 
@@ -96,22 +103,39 @@ enum CataloguePublish {
         if (try? await git(folder, "rev-parse", "--verify", "--quiet", "refs/heads/\(branch)")) != nil {
             throw ControlError(.badValue, "branch \(branch) is already in the clone: \(pack.kind.again)")
         }
-        var (repo, gh, fork): (String, String?, (login: String, repo: String)?) = (origin, nil, nil)
+        var (repo, gh, fork, credit): (String, String?, String?, Bool) = (origin, nil, nil, false)
         if let github = Self.repo(origin) {
             guard let found = Self.gh else { throw ControlError(.notReady, "gh is not installed: it opens the pull request (brew install gh, then gh auth login)") }
             (repo, gh) = (github, found)
             let push = try await run(folder, found, ["api", "repos/\(github)", "--jq", ".permissions.push"], step: "gh api (sign in with gh auth login)")
             if push != "true" {
                 let login = try await run(folder, found, ["api", "user", "--jq", ".login"], step: "gh api user (sign in with gh auth login)")
-                fork = (login, "\(login)/\(github.split(separator: "/").last.map(String.init) ?? github)")
+                fork = login
+                if pack.kind == .themes { credit = try await unlisted(pack.id, by: login, in: folder) }
             }
         }
-        return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork)
+        return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork, credit: credit)
     }
 
-    /// "owner/name" for a GitHub remote, by ssh or https; nil for any other.
+    /// Whether the catalogue's index on origin/main leaves out theme `id`. One it lists may come from a fork only from the
+    /// author its index names: a pack installed from the catalogue is someone else's, and is never re-credited.
+    private static func unlisted(_ id: String, by login: String, in clone: URL) async throws(ControlError) -> Bool {
+        _ = try await git(clone, "fetch", "-q", "origin", "main")
+        let text = try await git(clone, "show", "origin/main:\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
+        let index: ExtensionCatalogue.Index
+        do { index = try ExtensionCatalogue.index(Data(text.utf8)) } catch {
+            throw ControlError(.badValue, "the catalogue's index on origin/main does not read: \(ExtensionCatalogue.Problem.reason(error))")
+        }
+        guard let listed = index.theme(id) else { return true }
+        guard let author = listed.author, author.lowercased() == login.lowercased() else {
+            throw ControlError(.badValue, "\(id) is in the catalogue already, \(listed.author.map { "sent by @\($0)" } ?? "one of Pilot's own"): duplicate it under a new id to send one of yours")
+        }
+        return false
+    }
+
+    /// "owner/name" for a GitHub remote, by ssh or https, github.com its host; nil for any other.
     static func repo(_ origin: String) -> String? {
-        guard let match = origin.firstMatch(of: /github\.com[:\/]([^\/\s]+\/[^\/\s]+?)(\.git)?\/?$/) else { return nil }
+        guard let match = origin.wholeMatch(of: /(?:https:\/\/(?:[^@\/\s]+@)?|ssh:\/\/git@|git@)github\.com[:\/]([^\/\s]+\/[^\/\s]+?)(\.git)?\/?/) else { return nil }
         return String(match.output.1)
     }
 
@@ -119,7 +143,7 @@ enum CataloguePublish {
         let clone = plan.clone, pack = plan.pack
         _ = try await git(clone, "fetch", "origin", "main")
         _ = try await git(clone, "switch", "-q", "-c", plan.branch, "origin/main")
-        var fork = plan.fork?.repo
+        var fork: String?
         do throws(ControlError) {
             let target = clone.appending(path: pack.path, directoryHint: .isDirectory)
             do {
@@ -127,7 +151,7 @@ enum CataloguePublish {
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try FileManager.default.copyItem(at: pack.folder, to: target)
                 try? FileManager.default.removeItem(at: target.appending(path: "__pycache__"))
-                if pack.kind == .themes, let login = plan.fork?.login { try credit(target, login) }
+                if plan.credit, let login = plan.fork { try credit(target, login) }
             } catch { throw ControlError(.badValue, "could not copy \(pack.id) into the clone: \(error.localizedDescription)") }
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/build-index.py"], step: "build-index.py")
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/check.py"], step: "check.py")
@@ -158,7 +182,7 @@ enum CataloguePublish {
             answer["pullRequest"] = .string("none: the clone's origin is not on GitHub")
             return .object(answer)
         }
-        let head = plan.fork.map { "\($0.login):\(plan.branch)" } ?? plan.branch
+        let head = plan.fork.map { "\($0):\(plan.branch)" } ?? plan.branch
         let body = "\(pack.title) \(pack.label), sent from Pilot with pilot \(pack.kind.verb) publish. catalogue/scripts/check.py passed and catalogue/index.json is rebuilt."
         let pr = try await run(clone, gh, ["pr", "create", "--repo", plan.repo, "--base", "main", "--head", head,
                                            "--title", "\(pack.id): \(pack.label)", "--body", body], step: "gh pr create")
@@ -166,14 +190,18 @@ enum CataloguePublish {
         return .object(answer)
     }
 
-    /// The person's fork, "login/name", made or found by GitHub's fork API (it answers the fork they have), and the clone's
-    /// `pilot-fork` remote pointed at it.
+    /// The person's fork, "login/name", made or found by GitHub's fork API (it answers the fork they have), held to the
+    /// owner the Allow named, and the clone's `pilot-fork` remote pointed at it by origin's protocol (ssh or https).
     private static func forked(_ plan: Plan, _ gh: String) async throws(ControlError) -> String {
-        let made = try await run(plan.clone, gh, ["api", "-X", "POST", "repos/\(plan.repo)/forks", "--jq", "[.full_name, .clone_url] | @tsv"],
+        let made = try await run(plan.clone, gh, ["api", "-X", "POST", "repos/\(plan.repo)/forks", "--jq", "[.full_name, .clone_url, .ssh_url] | @tsv"],
                                  step: "gh api forks").split(separator: "\t").map(String.init)
-        guard made.count == 2 else { throw ControlError(.badValue, "gh api forks answered no fork") }
-        if (try? await git(plan.clone, "remote", "add", forkRemote, made[1])) == nil {
-            _ = try await git(plan.clone, "remote", "set-url", forkRemote, made[1])
+        guard made.count == 3 else { throw ControlError(.badValue, "gh api forks answered no fork") }
+        guard let login = plan.fork, made[0].split(separator: "/").first?.lowercased() == login.lowercased() else {
+            throw ControlError(.badValue, "GitHub answered the fork \(made[0]), not one on @\(plan.fork ?? ""): nothing was pushed")
+        }
+        let url = plan.origin.hasPrefix("git@") || plan.origin.hasPrefix("ssh://") ? made[2] : made[1]
+        if (try? await git(plan.clone, "remote", "add", forkRemote, url)) == nil {
+            _ = try await git(plan.clone, "remote", "set-url", forkRemote, url)
         }
         return made[0]
     }
