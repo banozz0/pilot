@@ -51,14 +51,25 @@ struct RingsPage: View {
         let rings = store.rings
         let ring = current.ring.flatMap(rings.ring(id:)) ?? rings.rings.first
         KitPage(intro: Self.intro, info: Self.introInfo) {
-            HStack(alignment: .top, spacing: 12) {
-                list(rings, picked: ring?.id).frame(width: 204)
-                if let ring {
-                    preview(ring).frame(minWidth: 380, maxWidth: .infinity)
-                    inspector(ring, rings).frame(width: 268)
-                } else {
-                    Text("No ring yet. Make one with New ring.").font(ink.ui(13)).foregroundStyle(ink.muted)
-                        .frame(maxWidth: .infinity, minHeight: 200)
+            // Three columns where they fit (796 pt; the ring itself is 251, its hint line truncates, and an ideal width keeps
+            // that line from asking for more): the window's first 1000 pt leaves about 870. Narrower (760 pt leaves about
+            // 630), the wedge's inspector goes under the ring at the page's width instead of off its right edge (B48).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    list(rings, picked: ring?.id).frame(width: 204)
+                    if let ring {
+                        preview(ring).frame(minWidth: 300, idealWidth: 300, maxWidth: .infinity)
+                        inspector(ring, rings).frame(width: 268)
+                    } else {
+                        empty
+                    }
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        list(rings, picked: ring?.id).frame(width: 204)
+                        if let ring { preview(ring).frame(minWidth: 300, idealWidth: 300, maxWidth: .infinity) } else { empty }
+                    }
+                    if let ring { inspector(ring, rings).frame(maxWidth: .infinity) }
                 }
             }
             .padding(.top, 4)
@@ -77,6 +88,10 @@ struct RingsPage: View {
         } message: { ring in
             Text(Self.deleteNote(ring, engine.binds.store))
         }
+    }
+
+    private var empty: some View {
+        Text("No ring yet. Make one with New ring.").font(ink.ui(13)).foregroundStyle(ink.muted).frame(maxWidth: .infinity, minHeight: 200)
     }
 
     static let intro = "Hold a mouse button or a key for a ring of actions at the pointer; flick to one and let go."
