@@ -59,7 +59,7 @@ struct WorkspacesBody: View {
     @State private var refused: String?
 
     static let intro = "Each workspace's name, layout and apps."
-    static let introInfo = "Pick one, then click its screen to put apps in it; every change saves at once."
+    static let introInfo = "Pick one, then click its screen to put apps in it; every change saves at once. Drag an app onto another workspace to move it there, or onto another app to swap the two; its windows go along. Escape lets go."
 
     var body: some View {
         let names = list?.names ?? Workspaces.all
@@ -618,12 +618,12 @@ struct WorkspaceCard: View {
                 let r = pair.1, on = drag?.lights(name, pair.0.bundleId) == true
                 tile.fill(on ? ink.accent.opacity(0.45) : picked ? ink.accent.opacity(0.22) : ink.tile)
                     .overlay { tile.strokeBorder(on ? ink.accent : ink.outline, lineWidth: on ? 2 : 1.5) }
-                    .opacity(drag?.lifts(pair.0.bundleId, from: name) == true ? 0.35 : 1)
                     .overlay {
                         if min(r.width, r.height) >= 18 {
                             AppGlyph(bundles: [pair.0.bundleId], symbol: "app.dashed", size: min(18, min(r.width, r.height) - 6))
                         }
                     }
+                    .opacity(drag?.lifts(pair.0.bundleId, from: name) == true ? 0.35 : 1)
                     .frame(width: max(0, r.width), height: max(0, r.height))
                     .offset(x: r.minX, y: r.minY)
             }

@@ -405,7 +405,7 @@ struct WorkspaceEditorPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 PartLabel(title: "Preview", line: draft.layout == nil && draft.spotWidths.count > 1 ? "drag a line between two spots to set their widths"
-                                                                                                   : "click a spot to add or swap an app",
+                                                                                                   : "click a spot to add an app, or drag one onto another to swap",
                           info: Self.previewInfo)
                 if draft.layout == nil {
                     Spacer(minLength: 0)
