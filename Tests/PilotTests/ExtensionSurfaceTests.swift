@@ -230,7 +230,7 @@ struct ExtensionSurfaceTests {
         #expect(window.page == .extensions && window.extensionPage == nil && window.extensionFocus == "plain")
     }
 
-    @Test("⌃Tab in Extensions steps Installed, then each extension that opens a page, round to Installed; elsewhere the area's pages")
+    @Test("⌃Tab in Extensions steps Installed, then each extension that opens a page, then Launcher, the area's other page (Q289); elsewhere the area's pages")
     func nextPage() throws {
         let window = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let entries = [ExtensionPages.Link(id: "a", title: "A", icon: nil), ExtensionPages.Link(id: "b", title: "B", icon: nil)]
@@ -240,10 +240,12 @@ struct ExtensionSurfaceTests {
         window.nextPage(entries: entries)
         #expect(window.extensionPage == "b")
         window.nextPage(entries: entries)
-        #expect(window.page == .extensions && window.extensionPage == nil)
-        window.go(AppPlace(.workspaces))
+        #expect(window.page == .menu && window.extensionPage == nil)
         window.nextPage(entries: entries)
-        #expect(window.page == .tiling)
+        #expect(window.page == .extensions && window.extensionPage == nil)
+        window.go(AppPlace(.menuBar))
+        window.nextPage(entries: entries)
+        #expect(window.page == .dock)
     }
 
     @Test("The window shows an extension's page under Extensions: the sidebar marks it, not Extensions, its tabs go; any other place leaves it")

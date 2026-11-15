@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 import WebKit
 
-/// A Markdown file as GitHub shows it (Pilot 1.0.2), the one renderer for the file previews: Apps › Repos, Configs and
+/// A Markdown file as GitHub shows it (Pilot 1.0.2), the one renderer for the file previews: Developer › Repos, Configs and
 /// its Agents tab, and Show preview (FilePreviewWindow). MarkdownHTML makes the page; WebKit lays it out with JavaScript
 /// off and a CSP that loads nothing, local images inline as data URIs and remote ones as their alt text, so the page
 /// never reaches the network. A link opens in the browser; the page never navigates, and a force click previews none.

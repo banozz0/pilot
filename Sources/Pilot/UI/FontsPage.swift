@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Apps › Fonts (Sven, 2026-11-01: "for fonts i think its better to have its own page under configs in apps ... also offer
+/// Look › Fonts, in Apps until the pages split (Sven, 2026-11-15) (Sven, 2026-11-01: "for fonts i think its better to have its own page under configs in apps ... also offer
 /// more fonts to download from install catalogue"): Use fonts in, moved off Install, and a link to Install's Fonts
 /// category, where the font installs stay with every other install.
 struct FontsPage: View {

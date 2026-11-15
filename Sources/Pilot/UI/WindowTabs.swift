@@ -67,7 +67,7 @@ struct AreaStrip: View {
     }
 
     private func areas(named: Bool) -> some View {
-        HStack(spacing: named ? 4 : 2) { ForEach(AppArea.allCases, id: \.self) { item($0, named: named) } }.fixedSize()
+        HStack(spacing: named ? 4 : 2) { ForEach(AppArea.shownAll, id: \.self) { item($0, named: named) } }.fixedSize()
     }
 
     private func item(_ area: AppArea, named: Bool) -> some View {
@@ -92,7 +92,7 @@ struct AreaStrip: View {
             .contentShape(.rect)
         }
         .buttonStyle(.kitPress)
-        .help("\(area.title)  ⌘\(area.key)")
+        .help("\(area.title)  \(area.keyHint)")
         .accessibilityLabel(area.title)
         .accessibilityAddTraits(on ? .isSelected : [])
     }

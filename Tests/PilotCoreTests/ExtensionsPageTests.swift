@@ -62,10 +62,10 @@ struct ExtensionsPageTests {
         #expect(found.broken[0].problem.reason == #"id "Bad!" must be lowercase letters, digits and hyphens"#)
     }
 
-    @Test("pilot://open?page=extensions lands on the Extensions page, its own area on Cmd+9 (Sven 2026-10-16; Cmd+9 since Launcher took Cmd+3, P37)")
+    @Test("pilot://open?page=extensions lands on the Extensions page, its own area on Cmd+0 (Sven 2026-10-16) until the pages split put it in Launcher on Cmd+4 (Q289)")
     func place() throws {
         #expect(AppPlace.linked(try #require(URL(string: "pilot://open?page=extensions&extension=gh"))) == AppPlace(.extensions))
-        #expect(AppPage.extensions.area == .extensions && AppArea.extensions.key == "9")
+        #expect(AppPage.extensions.area == .launcher && AppArea.launcher.key == "4")
         #expect(AppPlace.search("preference").first == AppPlace(.extensions))
     }
 }

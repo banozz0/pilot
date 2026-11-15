@@ -4,32 +4,39 @@ import Testing
 
 @Suite("App window")
 struct AppWindowTests {
-    @Test("Twenty-eight pages in Home, eight areas and Pilot at the foot; Cmd+1 to 9 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
+    @Test("Twenty-seven pages in Home, ten areas, Developer while its switch is on, and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the areas, Cmd+, Pilot; the menu's page is Launcher in an area of its own with Extensions (P37, Q289), Windows under Keys, AI an area of its own, Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
     func pages() {
-        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Pilot menu", "Look", "System", "Activity",
+        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Windows", "Menu bar", "Dock", "Pilot menu", "Look", "System", "Activity",
                                                    "Update & Clean", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
                                                    "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
-        #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Launcher", "Desktop", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
+        #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Developer", "Pilot"])
         // Every page in exactly one area.
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
         for page in AppPage.allCases { #expect(page.area.pages.contains(page), "\(page)") }
-        #expect(AppArea.home.pages == [.home] && AppArea.keys.pages == [.binds] && AppArea.launcher.pages == [.menu])
+        #expect(AppArea.home.pages == [.home] && AppArea.keys.pages == [.binds] && AppArea.launcher.pages == [.menu, .extensions])
+        // Windows (Workspaces and Tiling, one page) under Keys, and Extensions in Launcher (Sven on Q289).
+        #expect(AppArea.windows.pages == [.workspaces] && AppArea.windows.key == "3" && AppArea.launcher.key == "4")
         // Pilot menu beside Menu bar (Sven, 2026-11-12, Q182); Dock between them, its own page (dock round 4, 2026-11-13).
-        #expect(AppArea.desktop.pages == [.workspaces, .tiling, .menuBar, .dock, .pilotMenu, .look, .widgets])
-        // Majors first (simplify-pages T11): ⌘5 opens Update & Clean, ⌘7 Open with.
+        // The split (Sven, 2026-11-15): Look and Fonts are an area of their own.
+        #expect(AppArea.desktop.pages == [.menuBar, .dock, .pilotMenu, .widgets])
+        #expect(AppArea.look.pages == [.look, .fonts])
+        // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with.
         #expect(AppArea.mac.pages == [.upkeep, .system, .activity, .stats])
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
-        #expect(AppArea.apps.pages == [.openWith, .install, .configs, .repos, .fonts])
-        // The Developer switch off (Q715) leaves Configs and Repos out of the list, Ctrl+Tab and the search.
-        #expect(AppArea.apps.pages(developer: false) == [.openWith, .install, .fonts])
-        #expect(AppArea.next(after: .install, developer: false) == .fonts && AppPlace.search("zshrc", developer: false).isEmpty)
-        // AI and Extensions are areas of their own (Sven 2026-10-16).
-        #expect(AppArea.ai.pages == [.ai] && AppArea.extensions.pages == [.extensions])
+        #expect(AppArea.apps.pages == [.openWith, .install])
+        // Configs and Repos are Developer's, an area shown only while the switch is on (Q715; the split): off, the rail,
+        // Ctrl+Tab and the search leave them out.
+        #expect(AppArea.developer.pages == [.configs, .repos] && AppArea.developer.pages(developer: false).isEmpty)
+        #expect(AppArea.main(developer: false) == AppArea.main.filter { $0 != .developer } && AppArea.main(developer: true) == AppArea.main)
+        #expect(AppArea.next(after: .install, developer: false) == .openWith && AppPlace.search("zshrc", developer: false).isEmpty)
+        // AI is an area of its own (Sven 2026-10-16), on Cmd+0.
+        #expect(AppArea.ai.pages == [.ai] && AppArea.ai.key == "0")
         #expect(AppArea.pilot.pages == [.general])
-        #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", ","])
-        #expect(AppArea.main.count == 9 && !AppArea.main.contains(.pilot))
+        #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil, ","])
+        #expect(AppArea.main.count == 11 && !AppArea.main.contains(.pilot))
         // Ctrl+Tab steps through the area's pages, round to the first; a page alone stays.
-        #expect(AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .look) == .widgets && AppArea.next(after: .widgets) == .workspaces)
+        #expect(AppArea.next(after: .pilotMenu) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
+        #expect(AppArea.next(after: .menu) == .extensions && AppArea.next(after: .extensions) == .menu && AppArea.next(after: .workspaces) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout: the rail by default, for a name it does not know and for the hub, taken out on 2026-10-11.
         #expect(WindowShape(saved: nil) == .rail && WindowShape(saved: "nope") == .rail && WindowShape(saved: "hub") == .rail)
@@ -37,18 +44,20 @@ struct AppWindowTests {
         #expect(WindowShape.allCases.map(\.title) == ["Rail and page list", "Toolbar tabs"])
         // Direction 1: Home takes the width, any other page has its area's list, which folds under 900 pt; a search shows it.
         #expect(!RailLayout.showsList(.home, width: 1440, searching: false) && RailLayout.showsList(.home, width: 1440, searching: true))
-        // AI takes the width as Home does, its tabs in the header; Extensions keeps its list, its extensions under it.
+        // AI and Windows take the width as Home does, their tabs in the header; Launcher keeps its list, the extensions under Extensions.
         #expect(!RailLayout.showsList(.ai, width: 1440, searching: false) && RailLayout.showsList(.extensions, width: 1440, searching: false))
+        #expect(!RailLayout.showsList(.workspaces, width: 1440, searching: false))
         #expect(RailLayout.showsList(.install, width: 1000, searching: false) && !RailLayout.showsList(.install, width: 760, searching: false))
-        #expect(RailLayout.showsList(.menuBar, width: 760, searching: true) && !RailLayout.showsList(.menu, width: 1440, searching: false))
-        // An area of one page takes the width as AI does: Keys (Binds), Launcher and Pilot too (Sven 2026-10-18); Extensions lists its pages.
+        #expect(RailLayout.showsList(.menuBar, width: 760, searching: true) && RailLayout.showsList(.menu, width: 1440, searching: false))
+        // An area of one page takes the width as AI does: Keys (Binds), Windows and Pilot too (Sven 2026-10-18); Launcher lists its pages.
         #expect(!RailLayout.showsList(.binds, width: 1600, searching: false) && !RailLayout.showsList(.general, width: 1440, searching: false))
         #expect(RailLayout.showsList(.binds, width: 1440, searching: true))
         #expect([760, 1000, 1440, 1600, 2000].map(RailLayout.bucket) == [800, 1000, 1440, 1440, 1440])
         #expect(RailLayout.narrow(760) && !RailLayout.narrow(900) && !RailLayout.narrow(0))
         #expect(RailLayout.listWidth(1440) == 236 && RailLayout.listWidth(1000) == 212)
-        #expect(RailLayout.hint(.mac) == "⌘5 Mac · ⌃Tab next page" && RailLayout.hint(.keys) == "⌘2 Keys" && RailLayout.hint(.pilot) == "⌘, Pilot")
-        #expect(RailLayout.hint(.extensions) == "⌘9 Extensions" && RailLayout.hint(.extensions, rows: 3) == "⌘9 Extensions · ⌃Tab next page")
+        #expect(RailLayout.hint(.mac) == "⌘7 Mac · ⌃Tab next page" && RailLayout.hint(.keys) == "⌘2 Keys" && RailLayout.hint(.pilot) == "⌘, Pilot")
+        #expect(RailLayout.hint(.ai) == "⌘0 AI" && RailLayout.hint(.windows) == "⌘3 Windows" && RailLayout.hint(.launcher) == "⌘4 Launcher · ⌃Tab next page")
+        #expect(RailLayout.hint(.developer) == "Developer · ⌃Tab next page")
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's, Activity's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
@@ -62,11 +71,12 @@ struct AppWindowTests {
         #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
         for page in [AppPage.stats, .activity] { #expect(page.tabs.isEmpty, "\(page)") }
-        #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
+        #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "Tiling", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
-        // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103).
-        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty)
+        // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103); Tiling's
+        // places on Windows' Tiling tab since the split.
+        #expect(AppPage.openWith.tabs.isEmpty && [AppSection.floatApps, .floatTitles, .motion, .focusedWindow].allSatisfy { $0.frontTab == .tiling })
         // Pilot's blocks back on its front, its More gone (pages round 4, Sven's Q106).
         #expect(AppPage.general.tabs.isEmpty)
     }
@@ -112,7 +122,10 @@ struct AppWindowTests {
         }
         // The tabs C3 moved to another page, by their old page and tab.
         let tabs: [(String, AppPlace)] = [
-            ("page=workspaces&tab=tiling", AppPlace(.tiling)), ("page=binds&tab=abilities", AppPlace(.menu, .abilities)),
+            ("page=workspaces&tab=tiling", AppPlace(.tiling)),
+            // Tiling's page before the split: its links land on Windows' Tiling tab and its blocks there.
+            ("page=tiling&tab=motion", AppPlace(.motion)), ("page=tiling&tab=tiling", AppPlace(.tiling)),
+            ("page=tiling&tab=floatApps", AppPlace(.floatApps)), ("page=binds&tab=abilities", AppPlace(.menu, .abilities)),
             ("page=install&tab=reports", AppPlace(.upkeep, .reports)), ("page=defaults&tab=configs", AppPlace(.configs)),
             ("page=defaults&tab=defaultApps", AppPlace(.openWith)), ("page=workspaces&tab=snapshots", AppPlace(.workspaceRules)),
             ("page=pilot&tab=about", AppPlace(.general, .about)), ("page=setup&section=wifi", AppPlace(.system)),

@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 /// The app window's frame (C3 page map, Sven 2026-10-10; areas 2026-10-11): the pages in their areas, a page's parts as
-/// tabs, in the picked style's frame. Cmd+1 to 8 open the areas and Cmd+, Pilot (Hyper+1 to 9 stay the tiler's
+/// tabs, in the picked style's frame. Cmd+1 to 9 and 0 open the areas and Cmd+, Pilot (Hyper+1 to 9 stay the tiler's
 /// workspaces, as the tap owns Hyper everywhere); Ctrl+Tab steps through an area's pages, Cmd+Shift+] and [ through a
 /// page's tabs; Cmd+F searches.
 struct AppWindowView: View {
@@ -64,7 +64,7 @@ private struct WindowLayout: View {
     }
 }
 
-/// Cmd+1 to 8 for the areas and Cmd+, for Pilot, each on its first page (the window's own Cmd+, wins over the main
+/// Cmd+1 to 9 and 0 for the areas and Cmd+, for Pilot, each on its first page (the window's own Cmd+, wins over the main
 /// menu's Open Pilot while it is key); Ctrl+Tab for the next page in the area, in Extensions each extension's page;
 /// Cmd+Shift+] and [ for the page's next and previous tab (P36); Cmd+F asks the frame's search to take the keyboard.
 private struct PageKeys: View {
@@ -72,8 +72,9 @@ private struct PageKeys: View {
 
     var body: some View {
         ZStack {
-            ForEach(AppArea.allCases, id: \.self) { area in
-                Button(area.title) { model.go(AppPlace(area.pages[0])) }.keyboardShortcut(KeyEquivalent(area.key), modifiers: .command)
+            // Developer has no key; its pages show only while the switch is on.
+            ForEach(AppArea.allCases.filter { $0.key != nil }, id: \.self) { area in
+                Button(area.title) { model.go(AppPlace(area.pages[0])) }.keyboardShortcut(KeyEquivalent(area.key ?? ","), modifiers: .command)
             }
             Button("Next page") { model.nextPage() }.keyboardShortcut(.tab, modifiers: .control)
             // ⌘⇧] arrives as "}" (Shift applied, as Safari's next tab declares it); "]" with ⌘⇧ never matches it.
@@ -119,8 +120,8 @@ struct PageView: View {
             } else {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
-        case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
-        case .tiling: TilingSettingsView()
+        // Windows: Workspaces and Tiling, one page (the pages split, Sven 2026-11-15).
+        case .workspaces: if section == .tiling { TilingSettingsView() } else { WorkspacesSettingsView(more: section == .workspacesMore) }
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).

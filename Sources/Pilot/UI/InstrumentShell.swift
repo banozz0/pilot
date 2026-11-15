@@ -73,27 +73,30 @@ struct InstrumentPageBar<Content: View>: View {
 
 /// The rail: the traffic lights' inset, Home and the areas, Pilot and the Hyper key at its foot; the open page's area
 /// raised with a tick in the signal colour at the rail's edge. A window too short for the areas' names drops them (P37:
-/// Launcher made nine).
+/// Launcher made nine), then packs them tighter, then scrolls (the pages split made ten, eleven with Developer).
 private struct InstrumentRail: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
 
     var body: some View {
-        ViewThatFits(in: .vertical) { rail(named: true); rail(named: false) }
+        ViewThatFits(in: .vertical) {
+            rail(named: true); rail(named: false); rail(named: false, tight: true)
+            ScrollView { rail(named: false, tight: true) }.scrollIndicators(.never)
+        }
     }
 
-    private func rail(named: Bool) -> some View {
-        VStack(spacing: 4) {
+    private func rail(named: Bool, tight: Bool = false) -> some View {
+        VStack(spacing: tight ? 2 : 4) {
             Color.clear.frame(height: 48)   // the traffic lights sit here
-            ForEach(AppArea.main, id: \.self) { item($0, named: named) }
-            Spacer(minLength: 8)
-            item(.pilot, named: named)
-            InstrumentHyperCap().padding(.top, 10).padding(.bottom, 14)
+            ForEach(AppArea.shownMain, id: \.self) { item($0, named: named, tight: tight) }
+            Spacer(minLength: tight ? 4 : 8)
+            item(.pilot, named: named, tight: tight)
+            InstrumentHyperCap().padding(.top, tight ? 6 : 10).padding(.bottom, tight ? 10 : 14)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func item(_ area: AppArea, named: Bool) -> some View {
+    private func item(_ area: AppArea, named: Bool, tight: Bool = false) -> some View {
         let on = model.page.area == area
         let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
         return Button { model.go(AppPlace(area.pages[0])) } label: {
@@ -102,14 +105,14 @@ private struct InstrumentRail: View {
                 if named { Text(area.title).styleText(\.caption).lineLimit(1).minimumScaleFactor(0.8) }
             }
             .foregroundStyle(style.color(on ? \.text : \.text3))
-            .frame(width: 58, height: named ? 50 : 36)
+            .frame(width: 58, height: named ? 50 : tight ? 31 : 36)
             .background { if on { shape.fill(style.color(\.raised)) } }
             .overlay { if on { shape.strokeBorder(style.color(\.line)) } }
             .contentShape(shape)
         }
         .buttonStyle(.plain)
         .overlay(alignment: .leading) { if on { Capsule().fill(style.color(\.accent)).frame(width: 2, height: 18).offset(x: -6) } }
-        .help("\(area.title)  ⌘\(area.key)")
+        .help("\(area.title)  \(area.keyHint)")
         .accessibilityLabel(area.title)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
@@ -157,7 +160,7 @@ private struct InstrumentPageList: View {
                 .padding(.horizontal, 10).padding(.bottom, 12)
             }
             .scrollIndicators(.never)
-            Text(RailLayout.hint(area, rows: area == .extensions ? ExtensionPages.shared.pageEntries.count : 0)).styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1)
+            Text(RailLayout.hint(area, rows: area == .launcher ? ExtensionPages.shared.pageEntries.count : 0)).styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1)
                 .padding(.horizontal, 18).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 .overlay(alignment: .top) { InstrumentRule() }
         }

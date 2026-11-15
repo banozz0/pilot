@@ -35,7 +35,7 @@ final class AppWindowModel {
     var reportPick: String?
     /// The category Install's catalogue opens on, from Fonts' Get more fonts; going anywhere else clears it.
     var catalogueCategory: String?
-    /// The repo Apps › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
+    /// The repo Developer › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
     /// opens, so a second open of the same repo starts the page on it again.
     var repoPick: String?
     var repoOpens = 0
@@ -62,8 +62,11 @@ final class AppWindowModel {
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
-        let saved = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
+        let place = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0) }
+        let saved = place?.page ?? .home
         page = saved.isDeveloper && !DeveloperPages.on ? saved.area.shown.first ?? .home : saved
+        // A page that became a tab (Tiling, the pages split) opens on that tab.
+        if let section = place?.section, section.isTab, section.page == page { sections[page] = section }
     }
 
     /// The part of `page` showing now: the one picked, else its first (a page's own content is nil).
@@ -119,7 +122,7 @@ final class AppWindowModel {
         extensionPage = id
     }
 
-    /// Shows Apps › Repos on repo `name`, as a Repos widget's row opens it.
+    /// Shows Developer › Repos on repo `name`, as a Repos widget's row opens it.
     func goRepo(_ name: String) {
         go(AppPlace(.repos))
         repoPick = name
@@ -132,13 +135,14 @@ final class AppWindowModel {
         extensionFocus = id
     }
 
-    /// ⌃Tab: the next page in the area, round to the first; in Extensions, Installed then each extension that opens a
-    /// page, as the sidebar lists them.
+    /// ⌃Tab: the next page in the area, round to the first; on Extensions (Launcher's since the pages split), Installed then
+    /// each extension that opens a page, as the sidebar lists them, then the area's next page.
     func nextPage(entries: [ExtensionPages.Link] = ExtensionPages.shared.pageEntries) {
-        guard page.area == .extensions, !entries.isEmpty else { return go(AppPlace(AppArea.next(after: page, developer: DeveloperPages.on))) }
+        let after = AppPlace(AppArea.next(after: page, developer: DeveloperPages.on))
+        guard page == .extensions, !entries.isEmpty else { return go(after) }
         let at = extensionPage.flatMap { id in entries.firstIndex { $0.id == id } }
         let next = at.map { $0 + 1 } ?? 0
-        if next < entries.count { goExtensionPage(entries[next].id) } else { go(AppPlace(.extensions)) }
+        if next < entries.count { goExtensionPage(entries[next].id) } else { go(after) }
     }
 
     /// ⌘⇧] and ⌘⇧[ (P36, design q267 A): the open page's next or previous tab, round to the first or the last; nothing on
@@ -239,7 +243,7 @@ final class AppWindowController: NSObject {
     }
     func open(_ section: AppSection) { open(AppPlace(section)) }
 
-    /// Opens the window on Apps › Repos at repo `name`: a Repos widget's row.
+    /// Opens the window on Developer › Repos at repo `name`: a Repos widget's row.
     func openRepo(_ name: String) {
         open(AppPlace(.repos))
         model.goRepo(name)
@@ -499,6 +503,10 @@ final class MaterialBackdrop: NSView {
 extension AppArea {
     /// Its pages the window lists now: the developer pages only while the switch is on.
     @MainActor var shown: [AppPage] { pages(developer: DeveloperPages.on) }
+    /// The areas the rail lists above Pilot now: Developer only while the switch is on.
+    @MainActor static var shownMain: [AppArea] { main(developer: DeveloperPages.on) }
+    /// Every area the toolbar tabs list now, Pilot last.
+    @MainActor static var shownAll: [AppArea] { shownMain + [.pilot] }
 }
 
 extension MenuRoot {

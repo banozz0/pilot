@@ -86,9 +86,9 @@ struct WindowPagesRenders {
             }
             // Pages round 4 (Sven's ticks back onto the fronts): Look's, Clipboard's, Install's, Captures' Recording and AI's
             // Setup fronts too, and the Mores that stay.
-            let fronts = [AppPage.general, .menu, .openWith, .tiling, .captures, .system, .binds, .workspaces, .voice, .look, .clipboard,
+            let fronts = [AppPage.general, .menu, .openWith, .captures, .system, .binds, .workspaces, .voice, .look, .clipboard,
                           .install].map { ($0.rawValue, AppPlace($0)) }
-                + [("captures-recording", AppPlace(.recording)), ("ai-setup", AppPlace(.aiSetup)),
+                + [("tiling", AppPlace(.tiling)), ("captures-recording", AppPlace(.recording)), ("ai-setup", AppPlace(.aiSetup)),
                    ("voice-more", AppPlace(.voiceMore)), ("workspaces-more", AppPlace(.workspacesMore)),
                    ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse)), ("menu-more", AppPlace(.menuMore)),
                    ("look-more", AppPlace(.lookMore)), ("install-more", AppPlace(.installMore))]

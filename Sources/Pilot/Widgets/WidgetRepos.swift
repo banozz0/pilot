@@ -57,7 +57,7 @@ enum WidgetRepos {
                 repo.behind > 0 ? "\(repo.behind) behind" : nil].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// A row's press: the repo on Apps › Repos while the Developer pages show, else its folder in Finder.
+    /// A row's press: the repo on Developer › Repos while the Developer pages show, else its folder in Finder.
     static func open(_ name: String) {
         guard DeveloperPages.on else {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: ConfigsModule.home.appending(path: "code/\(name)", directoryHint: .isDirectory).path)

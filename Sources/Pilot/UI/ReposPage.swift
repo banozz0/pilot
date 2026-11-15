@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Apps › Repos (Pilot 1.0.2, Sven Q716: "view all repos files etc from inside a pilot page with file trees and also file
+/// Developer › Repos (Pilot 1.0.2, Sven Q716: "view all repos files etc from inside a pilot page with file trees and also file
 /// previews"): own repos under ~/code with their branch and last commit, and a picked one's files as a tree beside a
 /// preview. Read-only (Repos); a developer page, shown only while General's Developer switch is on (Q715). Everything is
 /// read as the page shows and held in its own state, so nothing stays once it closes.

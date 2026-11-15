@@ -12,8 +12,10 @@ import Foundation
 /// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac"). Fonts left
 /// Install for a page of its own after Configs (Sven, 2026-11-01: "for fonts i think its better to have its own page").
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
+/// The pages split (Sven, 2026-11-15: "if workspaces and tiling need their own page they can be one page"): Workspaces and
+/// Tiling are one page, Windows, Tiling its tab (`tiling` in links still lands there).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, menuBar, dock, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -24,8 +26,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home: "Home"
         case .binds: "Binds"
         case .menu: "Launcher"
-        case .workspaces: "Workspaces"
-        case .tiling: "Tiling"
+        case .workspaces: "Windows"
         case .menuBar: "Menu bar"
         case .dock: "Dock"
         case .pilotMenu: "Pilot menu"
@@ -58,8 +59,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home: "house"
         case .binds: "command"
         case .menu: "text.magnifyingglass"
-        case .workspaces: "square.grid.2x2"
-        case .tiling: "rectangle.split.3x1"
+        case .workspaces: "rectangle.split.3x1"
         case .menuBar: "menubar.rectangle"
         case .dock: "dock.rectangle"
         case .pilotMenu: "list.bullet.below.rectangle"
@@ -91,7 +91,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         switch self {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
-        case .workspaces, .tiling, .system, .voice: 2
+        case .workspaces, .system, .voice: 2
         case .menu, .menuBar, .dock, .pilotMenu, .general, .activity: 3
         case .install, .extensions, .files, .stats, .fonts, .repos: 4
         case .openWith, .configs, .notes: 5
@@ -129,6 +129,7 @@ public enum AppPage: String, CaseIterable, Sendable {
     var ownTitle: String {
         switch self {
         case .binds: "Keyboard"
+        case .workspaces: "Workspaces"
         case .menu: "Your menu"
         case .files: "Files"
         case .configs: "Apps"
@@ -149,10 +150,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .files: ["convert", "converter", "format", "png", "jpg", "heic", "webp", "pdf", "mp4", "mov", "mp3", "gif", "docx", "finder",
                       "right-click", "services"]
         // The front's words; the rest moved with their parts to More (simplify-pages T18).
-        case .workspaces: ["layout", "name", "delete workspace", "add workspace", "your widths", "own sizes", "spot", "preview"]
-        // The front's words; the rest moved with their controls to Tiling's More places (simplify-pages T9).
-        case .tiling: ["gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim", "blur",
-                       "dim other windows"]
+        case .workspaces: ["windows", "workspace", "layout", "name", "delete workspace", "add workspace", "your widths", "own sizes", "spot", "preview"]
         case .pilotMenu: ["pilot menu", "pilot's menu", "dropdown", "menu bar icon", "blocks", "pinned", "quick switches", "running now",
                           "control centre", "control center", "extensions card"]
         case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
@@ -200,30 +198,40 @@ public enum AppPage: String, CaseIterable, Sendable {
 }
 
 /// The window's top level (window directions, Sven 2026-10-11, design 6D3E1T482hjVZaUkgMvvDb): Home, eight areas, and
-/// Pilot at the foot. A page shows only inside its area; Cmd+1 to 9 open the areas top to bottom, Cmd+, opens Pilot, as
+/// Pilot at the foot. A page shows only inside its area; Cmd+1 to 9 and 0 open the areas top to bottom, Cmd+, opens Pilot, as
 /// any Mac app's settings. Page names and pilot:// links stay as they were: an area is only where a page sits.
 public enum AppArea: String, CaseIterable, Sendable {
     // Pilot stays last: its key is ",", the rest count down the rail.
-    case home, keys, launcher, desktop, mac, tools, apps, ai, extensions, pilot
+    // Look left Desktop for an area of its own, and Developer took Configs and Repos from Apps, shown only while the
+    // Developer pages switch is on, last above Pilot so switching it never renumbers the keys (the pages split, Sven 2026-11-15).
+    // Windows (Workspaces and Tiling) sits under Keys, and Extensions, each command a Hyper+Space row, joined Launcher (Sven on
+    // Q289: "Workspaces and Tiling as its own page on the sidebar under Keys", and a Launcher area for the launcher's pages).
+    case home, keys, windows, launcher, desktop, look, mac, tools, apps, ai, developer, pilot
 
-    /// Its pages in order. Voice is Dictation and Read aloud (in Tools, Sven 2026-10-16); AI (the chat and its setup) and Extensions
-    /// are areas of their own, Extensions listing every installed extension under its page (Sven 2026-10-16); General
-    /// alone is Pilot. Launcher (the menu's page) left Keys for an area of its own after it (P37, Sven 2026-10-18, Q285).
+    /// Its pages in order. Voice is Dictation and Read aloud (in Tools, Sven 2026-10-16); AI (the chat and its setup) is an
+    /// area of its own (Sven 2026-10-16); General alone is Pilot. Launcher (the menu's page) left Keys for an area of its own
+    /// after it (P37, Sven 2026-10-18, Q285), and Extensions, an area of its own until the pages split, listing every installed
+    /// extension under its page, joined it there.
     public var pages: [AppPage] {
         switch self {
         case .home: [.home]
         case .keys: [.binds]
-        case .launcher: [.menu]
+        case .windows: [.workspaces]
+        case .launcher: [.menu, .extensions]
         // Pilot menu beside Menu bar: what the menu under Pilot's icon shows (Sven, 2026-11-12, Q182: Menu bar was crowded).
         // Dock beside Menu bar, its own page (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop").
-        case .desktop: [.workspaces, .tiling, .menuBar, .dock, .pilotMenu, .look, .widgets]
-        // Majors first (simplify-pages T11): Update & Clean before System, so ⌘5 opens it; Clipboard, Notes, Files, Voice;
-        // Open with first in Apps, so ⌘7 opens it.
+        // The split (Sven, 2026-11-15: "the themes and all that go into one place and the rest into another"): Desktop keeps
+        // what is on the desk and how it behaves; Look takes the theme, wallpaper, Material and cursor, and Fonts from Apps
+        // ("Fonts, I don't think it should be in Apps"). Windows left it for an area of its own under Keys (Q289).
+        case .desktop: [.menuBar, .dock, .pilotMenu, .widgets]
+        case .look: [.look, .fonts]
+        // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
+        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
         case .mac: [.upkeep, .system, .activity, .stats]
         case .tools: [.clipboard, .notes, .files, .voice, .captures, .snippets]
-        case .apps: [.openWith, .install, .configs, .repos, .fonts]
+        case .apps: [.openWith, .install]
+        case .developer: [.configs, .repos]
         case .ai: [.ai]
-        case .extensions: [.extensions]
         case .pilot: [.general]
         }
     }
@@ -232,13 +240,15 @@ public enum AppArea: String, CaseIterable, Sendable {
         switch self {
         case .home: "Home"
         case .keys: "Keys"
+        case .windows: "Windows"
         case .launcher: "Launcher"
         case .desktop: "Desktop"
+        case .look: "Look"
         case .mac: "Mac"
         case .tools: "Tools"
         case .apps: "Apps"
         case .ai: "AI"
-        case .extensions: "Extensions"
+        case .developer: "Developer"
         case .pilot: "Pilot"
         }
     }
@@ -247,27 +257,41 @@ public enum AppArea: String, CaseIterable, Sendable {
         switch self {
         case .home: "house"
         case .keys: "command"
+        case .windows: "rectangle.split.3x1"
         case .launcher: "text.magnifyingglass"
         case .desktop: "square.grid.2x2"
+        case .look: "paintpalette"
         case .mac: "slider.horizontal.3"
         case .tools: "doc.on.clipboard"
         case .apps: "shippingbox"
         case .ai: "sparkles"
-        case .extensions: "puzzlepiece.extension"
+        case .developer: "hammer"
         case .pilot: "gearshape"
         }
     }
 
-    /// The key that opens it with Cmd: "1" to "9" top to bottom, "," for Pilot at the foot.
-    public var key: Character {
-        self == .pilot ? "," : Character(String((AppArea.allCases.firstIndex(of: self) ?? 0) + 1))
+    /// The key that opens it with Cmd: "1" to "9" top to bottom, then "0" for the tenth (AI since the pages split),
+    /// "," for Pilot at the foot; Developer, shown only while its switch is on, has none.
+    public var key: Character? {
+        switch self {
+        case .pilot: ","
+        case .developer: nil
+        default:
+            (AppArea.allCases.firstIndex(of: self)).flatMap { $0 < 9 ? Character(String($0 + 1)) : $0 == 9 ? "0" : nil }
+        }
     }
+
+    /// "⌘1", or "" for an area with no key.
+    public var keyHint: String { key.map { "⌘\($0)" } ?? "" }
 
     /// Its pages the window lists: all of them while `developer` is on, else all but the developer pages.
     public func pages(developer: Bool) -> [AppPage] { developer ? pages : pages.filter { !$0.isDeveloper } }
 
     /// The areas above the foot, in order; Pilot sits apart at the foot.
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
+
+    /// The areas above the foot the window shows: Developer only while `developer` is on.
+    public static func main(developer: Bool) -> [AppArea] { main.filter { developer || $0 != .developer } }
 
     /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
     public static func next(after page: AppPage, developer: Bool = true) -> AppPage {
@@ -309,8 +333,8 @@ public enum RailLayout {
     }
 
     /// Areas of one page take the whole width, the list's one row saying nothing, its tabs in the page's header (Sven,
-    /// 2026-10-18): Home, Keys, Launcher, AI and Pilot. Extensions keeps its list, each extension's page a row in it.
-    public static func fullWidth(_ area: AppArea) -> Bool { area.pages.count == 1 && area != .extensions }
+    /// 2026-10-18): Home, Keys, Windows, AI and Pilot. Launcher keeps its list, each extension's page a row under Extensions.
+    public static func fullWidth(_ area: AppArea) -> Bool { area.pages.count == 1 }
 
     /// A measured window width kept to the widths these rules tell apart, so only crossing a line redraws a frame.
     public static func bucket(_ width: Double) -> Double {
@@ -323,7 +347,7 @@ public enum RailLayout {
     /// The list's foot: the area's key, then how to step through its pages when it has more than one; `rows` counts the
     /// rows listed under its pages that ⌃Tab steps through too (Extensions' installed extensions).
     public static func hint(_ area: AppArea, rows: Int = 0) -> String {
-        "⌘\(area.key) \(area.title)" + (area.pages.count + rows > 1 ? " · ⌃Tab next page" : "")
+        [area.keyHint, area.title].filter { !$0.isEmpty }.joined(separator: " ") + (area.pages.count + rows > 1 ? " · ⌃Tab next page" : "")
     }
 
     /// Beside a page's tabs while they fit: the key that steps to the next (P36).
@@ -436,6 +460,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// snapshot (Sven's round 3 notes on build 2300) and each workspace's monitor (pages round 4, Sven's Q97) are places on
     /// the front again.
     case workspacesMore, workspaceOpens, workspaceRules, workspaceScrolling, workspaceMonitors, workspaceSwipe
+    /// Windows' Tiling tab (the pages split, Sven 2026-11-15): Tiling's page until then, so `tiling` in a link, a saved page
+    /// or `pilot open` lands on the tab; its gaps, focused window, always-float apps and titles, and mouse and motion are
+    /// places on it.
+    case tiling
 
     public var page: AppPage {
         switch self {
@@ -448,7 +476,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data: .general
         case .notifications: .menuBar
-        case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
+        case .floatApps, .floatTitles, .motion, .focusedWindow, .tiling: .workspaces
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .appsForKeys: .openWith
         case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud: .voice
@@ -512,6 +540,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var frontTab: AppSection? {
         switch self {
         case .recordingQuality: .recording
+        case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
         case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
         case .installLists: .catalogue
         default: nil
@@ -601,6 +630,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: "Agents"
         case .aiSetup: "Setup"
         case .recording: "Recording"
+        case .tiling: "Tiling"
         case .captureHistory: "History"
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
@@ -691,6 +721,9 @@ public enum AppSection: String, CaseIterable, Sendable {
                        "agent settings", "codex", "hermes", "empryo", "opencode"]
         // Its keys, fallback and new chat are places of their own on Setup (pages round 4).
         case .aiSetup: ["provider", "api key", "model", "effort", "anthropic", "openai", "ollama", "codex", "sign in"]
+        // Tiling's page's words, with its tab (the pages split).
+        case .tiling: ["tiling", "gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim",
+                       "blur", "dim other windows"]
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "countdown", "count down", "recordings folder"]
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
@@ -728,7 +761,7 @@ public struct AppPlace: Hashable, Sendable {
         "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.stats), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),
         "convert": AppPlace(.files), "ask": AppPlace(.ai), "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
-        "instructions": AppPlace(.agents), "launcher": AppPlace(.menu),
+        "instructions": AppPlace(.agents), "launcher": AppPlace(.menu), "windows": AppPlace(.workspaces),
         // System's More, gone since its parts came back to the front (Sven, 2026-11-11, after 2276).
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
@@ -750,8 +783,11 @@ public struct AppPlace: Hashable, Sendable {
         guard let place = url.queryValue("page").flatMap(named) else { return nil }
         // System's section, a card on its front or the keyboard layout's or the mouse's place.
         if place == AppPlace(.system), let setup = SetupSection.linked(url) { return setup.place }
-        guard place.section == nil, let name = url.queryValue("tab") else { return place }
+        guard let name = url.queryValue("tab") else { return place }
+        // A tab on the page the name landed on wins even when the name was a part: `page=tiling&tab=motion`, from before
+        // Tiling became Windows' tab (the pages split), lands on the block.
         if let tab = AppSection.tab(name, on: place.page), tab.page == place.page { return AppPlace(tab) }
+        guard place.section == nil else { return place }
         return movedTabs[name] ?? place
     }
 

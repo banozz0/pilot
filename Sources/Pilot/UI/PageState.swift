@@ -16,11 +16,9 @@ struct PageState: Equatable {
             return PageState(text: "\(hyper) on Hyper · \(clashes == 1 ? "1 clash" : "\(clashes) clashes")", on: clashes == 0)
         case .workspaces:
             let tiler = engine.observers.tiler
-            guard tiler.isAnswering else { return nil }
+            // Tiling's own line until the split: a stopped tiler says so on Windows.
+            guard tiler.isAnswering else { return PageState(text: "Stopped", on: false) }
             return PageState(text: "\(tiler.occupied.count) in use" + (tiler.focused.map { " · on \($0)" } ?? ""), on: true)
-        case .tiling:
-            let on = engine.observers.tiler.isAnswering
-            return PageState(text: on ? "Running" : "Stopped", on: on)
         case .menuBar:
             let on = engine.topBar.isOn
             return PageState(text: on ? "Top bar on" : "Top bar off", on: on)

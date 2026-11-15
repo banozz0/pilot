@@ -148,7 +148,7 @@ private struct PDFPages: NSViewRepresentable {
     func updateNSView(_ view: PDFView, context: Context) {}
 }
 
-/// QuickLook's own preview of anything Pilot does not draw itself; Apps › Repos' images and PDFs too.
+/// QuickLook's own preview of anything Pilot does not draw itself; Developer › Repos' images and PDFs too.
 struct QuickLookView: NSViewRepresentable {
     let url: URL
 

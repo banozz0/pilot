@@ -78,7 +78,7 @@ struct AppWindowFrameTests {
     func windowKeys() throws {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
-        model.go(AppPlace(.workspaces))
+        model.go(AppPlace(.menuBar))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(Engine())))
         defer { window.close() }
         window.contentView?.layoutSubtreeIfNeeded()
@@ -91,7 +91,7 @@ struct AppWindowFrameTests {
             return handled
         }
         #expect(key("\t", 48, .control), "Ctrl+Tab reaches the window")
-        #expect(model.page == .tiling)
+        #expect(model.page == .dock)
         #expect(key(",", 43, .command), "the window takes Cmd+, itself")
         #expect(model.page == .general)
         #expect(key("2", 19, .command))

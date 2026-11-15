@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// One own repo under ~/code as Apps › Repos lists it (Pilot 1.0.2, Sven Q716): its name, branch and last commit's subject.
+/// One own repo under ~/code as Developer › Repos lists it (Pilot 1.0.2, Sven Q716): its name, branch and last commit's subject.
 public struct RepoSummary: Sendable, Identifiable, Equatable {
     public let name: String
     public let url: URL
@@ -10,7 +10,7 @@ public struct RepoSummary: Sendable, Identifiable, Equatable {
     public var id: String { name }
 }
 
-/// A file or folder in a repo's tree, as Apps › Repos draws it.
+/// A file or folder in a repo's tree, as Developer › Repos draws it.
 public struct RepoEntry: Sendable, Identifiable, Hashable {
     public let url: URL
     /// Its path inside the repo, "Sources/Pilot/PilotApp.swift".
@@ -34,7 +34,7 @@ public enum RepoPreview: Sendable, Equatable {
     case unreadable(String)
 }
 
-/// Apps › Repos (Pilot 1.0.2, Sven Q716): own repos under ~/code, their files as a tree and a preview. Read-only: Pilot
+/// Developer › Repos (Pilot 1.0.2, Sven Q716): own repos under ~/code, their files as a tree and a preview. Read-only: Pilot
 /// never writes into a repo, and git runs only with GIT_OPTIONAL_LOCKS=0: the page's `git log`, and the Repos widget's
 /// `status` (RepoStatus), which without it would rewrite the index. Everything is read when the page asks for it: no
 /// watcher, no polling, nothing kept once the page closes.
