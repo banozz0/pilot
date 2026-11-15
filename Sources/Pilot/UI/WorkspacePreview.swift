@@ -19,6 +19,11 @@ struct WorkspacePreview: View {
     /// Each spot's frame in the popup, for the picker.
     @Binding var spots: [WorkspaceEditor.Spot: CGRect]
     let open: (WorkspaceEditor.Spot) -> Void
+    /// The Workspaces page's drag: a tile picks its app up, and takes another's drop to trade places (Sven, 2026-11-15);
+    /// nil in the popup.
+    var drag: WorkspaceDrag? = nil
+    /// The workspace shown, which the drag's tiles belong to.
+    var workspace = ""
 
     private static let gap: CGFloat = 6, strip: CGFloat = 34
 
@@ -44,7 +49,13 @@ struct WorkspacePreview: View {
                                 remove: { withAnimation(Kit.change) { hovered = nil; draft.remove(at: i) } },
                                 hover: { inside in hovered = inside ? i : (hovered == i ? nil : hovered) })
                         .frame(width: r.width, height: r.height)
+                        .overlay { if drag?.lights(workspace, app.bundleId) == true { DropRing(radius: AddSpot.radius) } }
+                        .opacity(drag?.lifts(app.bundleId, from: workspace) == true ? 0.35 : 1)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.app(i)] = $0 }
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceDrag.space)) } action: { frame in
+                            drag?.previewTiles[.init(workspace: workspace, bundle: app.bundleId)] = frame
+                        }
+                        .dragsInWorkspaces(drag) { [workspace] _ in .init(kind: .app, bundle: app.bundleId, name: app.name, from: workspace) }
                         .position(x: r.midX, y: r.midY)
                 }
                 // The layout's empty spots, the first where the next app lands; a click on any adds to the first.
@@ -78,6 +89,7 @@ struct WorkspacePreview: View {
         .animation(Kit.change, value: draft.apps.map(\.bundleId))
         .animation(Kit.change, value: draft.layout)
     }
+
 }
 
 /// A placed app: its icon and name, where it sits (a ready layout) or its percent (own sizes); the mouse over it shows

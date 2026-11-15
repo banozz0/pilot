@@ -46,6 +46,9 @@ public enum AeroCommand: Equatable, Sendable {
     /// Show desktop (Sven, 2026-10-26): the focused workspace's windows into the hide corner, or back as they were.
     case toggleDesktop
     case swap(id: Int, Direction)
+    /// Two windows trade places in the tiler's tree, weights and all, on one workspace or across two: a tile dropped on
+    /// another app's tile on the Workspaces page (WorkspaceAppDrop).
+    case swapWindows(id: Int, with: Int)
     case resize(id: Int, Axis, by: Int)
     case flipSplit(id: Int)
     case toggleScrolling(workspace: String)
@@ -115,6 +118,7 @@ public enum AeroCommand: Equatable, Sendable {
         case .closeAllButCurrent: ["close-all-windows-but-current"]
         case .toggleDesktop: ["show-desktop"]
         case .swap(let id, let d): ["swap", "--window-id", String(id), d.rawValue]
+        case .swapWindows(let id, let other): ["swap", "--window-id", String(id), "--with-window-id", String(other)]
         case .resize(let id, let axis, let step): ["resize", "--window-id", String(id), axis.rawValue, step < 0 ? "\(step)" : "+\(step)"]
         case .flipSplit(let id): ["layout", "--window-id", String(id), "horizontal", "vertical"]
         case .toggleScrolling(let workspace): ["layout", "--workspace", workspace, "--root", "tiles", "scrolling"]

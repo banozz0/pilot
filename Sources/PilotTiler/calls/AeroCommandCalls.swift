@@ -51,6 +51,14 @@ func perform(_ command: AeroCommand) async throws -> String {
         case .closeAllButCurrent: try focus.workspace.closeAll(but: focused()); return ""
         case .toggleDesktop: try toggleShownDesktop(); return ""
         case .swap(let id, let direction): return try done(window(id).swap(CardinalDirection(direction)))
+        case .swapWindows(let id, let other):
+            try swapWindows(mruDominant: window(id), window(other))
+            // A workspace that keeps an order keeps the trade too, so its next rebuild does not undo it.
+            let (a, b) = (UInt32(id), UInt32(other))
+            for (name, kept) in arrangements where kept.order.contains(a) || kept.order.contains(b) {
+                arrangements[name]?.order = kept.order.map { $0 == a ? b : $0 == b ? a : $0 }
+            }
+            return ""
         case .resize(let id, let axis, let step): return try done(window(id).resize(axis == .width ? .h : .v, by: CGFloat(step)))
         case .flipSplit(let id): return try done(window(id).flipSplit())
         case .toggleScrolling(let name): return try done(Workspace.get(byName: name).setRootLayout(toggling: [.tiles, .scrolling]))

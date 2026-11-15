@@ -182,6 +182,8 @@ struct WorkspacePageExtras {
     let restore: () -> Void
     let deleteSnapshot: () -> Void
     let reopenApps: Binding<Bool>
+    /// The page's drag and the workspace shown: the preview's tiles and the rules' rows pick an app up (Sven, 2026-11-15).
+    var drag: (WorkspaceDrag, workspace: String)?
 }
 
 /// The editor's parts (mockup E), drawn as the popup over the window or inline on the Workspaces page (card
@@ -403,14 +405,14 @@ struct WorkspaceEditorPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 PartLabel(title: "Preview", line: draft.layout == nil && draft.spotWidths.count > 1 ? "drag a line between two spots to set their widths"
-                                                                                                   : "click a spot to add or swap an app",
+                                                                                                   : "click a spot to add an app, or drag one onto another to swap",
                           info: Self.previewInfo)
                 if draft.layout == nil {
                     Spacer(minLength: 0)
                     spotsStepper
                 }
             }
-            WorkspacePreview(draft: $draft, hovered: $hovered, picking: picking, spots: $spots, open: open)
+            WorkspacePreview(draft: $draft, hovered: $hovered, picking: picking, spots: $spots, open: open, drag: extras?.drag?.0, workspace: workspace)
                 .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -617,7 +619,7 @@ private struct RulesPart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             PartLabel(title: "Always lands here", line: "wherever it opens",
-                      info: "Apps whose windows always move to this workspace, wherever they open. The ⋯ menu moves one to another workspace or takes it off.")
+                      info: "Apps whose windows always move to this workspace, wherever they open. Drag one onto another workspace above, or use the ⋯ menu, to move it there with its windows; the menu also takes it off.")
             VStack(spacing: 0) {
                 ForEach(Array(extras.rules.enumerated()), id: \.element) { i, bundle in
                     let name = AppsModule.appName(bundle) ?? bundle
@@ -639,6 +641,10 @@ private struct RulesPart: View {
                     }
                     .frame(minHeight: 32)
                     .overlay(alignment: .top) { if i > 0 { ink.line.frame(height: 1) } }
+                    .opacity(extras.drag.map { $0.0.lifts(bundle, from: $0.workspace, .rule) } == true ? 0.35 : 1)
+                    .contentShape(.rect)
+                    // Dragged onto another workspace's card, the rule sends the app there.
+                    .dragsInWorkspaces(extras.drag?.0) { _ in extras.drag.map { .init(kind: .rule, bundle: bundle, name: name, from: $0.workspace) } }
                 }
                 AddSpot(big: false, narrow: false, on: picking, open: add).frame(height: 30)
                 .padding(.top, extras.rules.isEmpty ? 0 : 6)

@@ -33,6 +33,9 @@ struct DesktopLists {
         restore = { snapshots.restore($0) }
     }
 
+    /// A drag's drop on the Workspaces page, which `pilot workspace move` makes too.
+    var drops: WorkspaceAppDrops { WorkspaceAppDrops(presets: presets, layouts: layouts, block: block, tiler: tiler) }
+
     /// The engine's stores; nil until the engine is up.
     static var live: DesktopLists? {
         Engine.shared.map { DesktopLists(presets: $0.presets, layouts: $0.layouts, block: $0.pilotBlock, monitors: $0.workspaceMonitors,
@@ -82,6 +85,7 @@ extension ControlVerbs {
         registerBlockLists(lists)
         registerPinsAndLayouts(lists)
         registerSnapshots(lists)
+        registerDrops(lists)
         registerBar(bar)
     }
 
@@ -369,6 +373,52 @@ extension ControlVerbs {
                 lists.layouts.set(workspace, .unset)
                 return .string(workspace)
             }))
+    }
+
+    /// `pilot workspace move|rule`: what a drag on the Workspaces page drops (WorkspaceAppDrop), through the same drop.
+    private func registerDrops(_ lists: @escaping @Sendable @MainActor () throws(ControlError) -> DesktopLists) {
+        register(ControlVerb(
+            "workspace", help: "Moves an app a workspace's preset holds to another workspace, or swaps two apps' places, as a drag on the Workspaces page does: "
+                + "the presets change, an app rule that sent a moved app to the workspace it left follows it, and its windows there move along by id "
+                + "(on a swap one tiled window of each trades places in the tiler's tree). rule moves an Always lands here rule, as dragging its row does, "
+                + "the app's windows on the workspace it left going along. Answers what changed and each workspace's windows after.",
+            usage: "pilot workspace move <app> --from <n> --to <n> [--onto <app>] | pilot workspace rule <app> --to <n>",
+            flags: [.init("from", help: "move: the workspace whose preset holds the app"), .init("to", help: "the workspace it goes to"),
+                    .init("onto", help: "move: the app whose tile it is dropped on; the two trade places, on one workspace or across two")]
+        ) { call throws(ControlError) in
+            let lists = try lists()
+            let args = call.arguments()
+            let app = try Self.app(args.positional.dropFirst().first)
+            let to = try lists.workspace(args.value("to"))
+            let sub = try args.word(0, "move or rule"), drops = lists.drops, contents = lists.presets.contents
+            let from: String
+            switch sub {
+            case "move": from = try lists.workspace(args.value("from"))
+            case "rule":
+                guard let ruled = lists.block.block.rules.first(where: { $0.appId == app })?.workspace else {
+                    throw ControlError(.badValue, "no app rule for \(app)")
+                }
+                from = ruled
+            case let other: throw ControlError(.badRequest, "pilot workspace move or rule, not \(other)")
+            }
+            let drop: WorkspaceAppDrop
+            do {
+                drop = sub == "rule" ? try await drops.dropRule(app, from: from, to: to)
+                    : try await drops.drop(app, from: from, to: to, onto: args.value("onto")) {
+                        WorkspacePageDrafts.baseline($0, saved: contents.preset(for: $0), row: lists.layouts.layout($0))
+                    }
+            } catch { throw ControlError(.badValue, String(describing: error)) }
+            let windows = await drops.listed(), saved = lists.presets.contents
+            return .object([
+                "kind": .string(drop.kind.rawValue),
+                "presets": .object(Dictionary(uniqueKeysWithValues: drop.drafts.keys.map { workspace in
+                    (workspace, JSONValue.array((saved.preset(for: workspace)?.apps ?? []).map { .string($0.bundleId) }))
+                })),
+                "rules": .array(drop.rules.map(Self.row)),
+                "commands": .array(drop.commands.map { .string($0.arguments.joined(separator: " ")) }),
+                "windows": .object(Dictionary(grouping: windows, by: \.workspace).mapValues { .array($0.map { .string("\($0.id) \($0.appName)") }) }),
+            ])
+        })
     }
 
     private func registerSnapshots(_ lists: @escaping @Sendable @MainActor () throws(ControlError) -> DesktopLists) {
