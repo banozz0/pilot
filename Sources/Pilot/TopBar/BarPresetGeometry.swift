@@ -64,7 +64,8 @@ enum BarPresetGeometry {
         return CGRect(x: bar.minX + group.minX, y: bar.maxY - group.maxY, width: group.width, height: group.height)
     }
 
-    /// One panel frame for drawing, overflow and native item/popover anchors. No overlay window around the margins.
+    /// One panel frame for drawing, overflow and native item/popover anchors. No overlay window around the margins but the
+    /// side margins' clear click catchers (BarEdgeCatcher), which draw nothing.
     static func frame(_ config: BarPresetConfiguration?, screen: CGRect, strip: Double, notch: Double = 0) -> CGRect {
         config?.frame(screen: screen, notchHeight: notch) ?? TopBarGeometry.frame(screen: screen, strip: strip)
     }
