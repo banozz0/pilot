@@ -16,12 +16,23 @@ public struct ShippedWallpapers: Sendable {
     }
 
     /// Whether `loaded` is a shipped pack whose pictures come from the catalogue: built in, naming no wallpaper.
-    public static func wants(_ loaded: ThemePackStore.Loaded) -> Bool { loaded.factory && loaded.pack.wallpapers.isEmpty }
+    public static func wants(_ loaded: ThemePackStore.Loaded) -> Bool { wants(factory: loaded.factory, loaded.pack) }
+    static func wants(factory: Bool, _ pack: ThemePack) -> Bool { factory && pack.wallpapers.isEmpty }
 
     /// `loaded` with the pictures of the copy fetched for it, when it wants them and that copy is its pack; else as it is.
     public func picturing(_ loaded: ThemePackStore.Loaded) -> ThemePackStore.Loaded {
         guard Self.wants(loaded), let copy = try? Self.load(loaded.pack.id, in: root), Self.matches(copy.pack, loaded.pack), !copy.images.isEmpty else { return loaded }
         return loaded.picturing(copy)
+    }
+
+    /// `picturing` for the Carousel's browse: the fetched copy's picture paths, read without decoding one.
+    public func browsing(_ browsed: ThemePackStore.Browsed, shape: (URL) -> WallpaperCycle.Shape?) -> ThemePackStore.Browsed {
+        guard Self.wants(factory: browsed.factory, browsed.pack),
+              let copy = try? Self.store(in: root).browse(browsed.pack.id, shape: shape),
+              Self.matches(copy.pack, browsed.pack), !copy.images.isEmpty else { return browsed }
+        var pictured = browsed
+        (pictured.images, pictured.portraits) = (copy.images, copy.portraits)
+        return pictured
     }
 
     /// Fetches `theme`, the catalogue's copy of the shipped pack `shipped`, into `root/<id>` unless the copy there already
@@ -58,9 +69,12 @@ public struct ShippedWallpapers: Sendable {
     }
 
     /// The pack `id` in `folder` loaded as a shipped one, its provenance required; no user root, so a shipped id loads.
-    static func load(_ id: String, in folder: String) throws -> ThemePackStore.Loaded {
+    static func load(_ id: String, in folder: String) throws -> ThemePackStore.Loaded { try store(in: folder).load(id) }
+
+    /// The fetched copies in `folder` as factory packs, with no user roots.
+    static func store(in folder: String) -> ThemePackStore {
         let none = folder + "/.none"
-        return try ThemePackStore(root: none, writableRoot: none, factoryRoot: folder).load(id)
+        return ThemePackStore(root: none, writableRoot: none, factoryRoot: folder)
     }
 
     /// Whether `copy` is `shipped` but for its wallpapers (check.py's rule for a catalogue pack with a shipped id).

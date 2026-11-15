@@ -153,6 +153,14 @@ struct DesktopControlsRenders {
             none.palette = []
             none.source = "Your folders"
             try shot(CarouselStage(values: none, backdrop: backdrop), "carousel-a-4-no-images")
+            // Theme favourites (Sven, build 2564): Tab's favourites only, the chip and the count; loading; none marked yet.
+            var favourites = Self.themes(walls)
+            let marked: Set<String> = ["Dracula", "Tokyo Night", "Garnet"]
+            favourites.items = favourites.items.filter { marked.contains($0.title) }.map { var item = $0; item.favourite = true; return item }
+            (favourites.index, favourites.favouritesOnly, favourites.favourites) = (1, true, 3)
+            try shot(CarouselStage(values: favourites, backdrop: backdrop), "carousel-a-5-theme-favourites")
+            try shot(CarouselStage(values: CarouselValues(mode: .themes, loading: true), backdrop: backdrop), "carousel-a-6-themes-loading")
+            try shot(CarouselStage(values: CarouselValues(mode: .themes, favouritesOnly: true), backdrop: backdrop), "carousel-a-7-no-theme-favourites")
         }
     }
 

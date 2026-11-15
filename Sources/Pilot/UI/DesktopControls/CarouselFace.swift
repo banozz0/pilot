@@ -49,6 +49,10 @@ struct CarouselValues {
     var palette: [Color] = []
     /// Where the wallpapers come from, said under the name in Wallpapers mode ("Lagoon's wallpapers", "Your folders").
     var source = ""
+    /// The mode's listing has not arrived: placeholders, never the empty state.
+    var loading = false
+    /// How many of the listed are favourites, counted on Tab's hint.
+    var favourites = 0
 }
 
 /// The Carousel (spec desktop-controls T2): reference 1794159331540's large centre with its neighbours cut by the panel's
@@ -73,7 +77,7 @@ struct CarouselFace: View {
         VStack(spacing: 0) {
             header.padding(.horizontal, 22).padding(.top, 18)
             Group {
-                if values.items.isEmpty { empty } else { row }
+                if values.loading { placeholders } else if values.items.isEmpty { empty } else { row }
             }
             .frame(height: Self.centre.height + 36)
             footer.padding(.horizontal, 22).padding(.bottom, 18)
@@ -114,14 +118,17 @@ struct CarouselFace: View {
 
             if values.favouritesOnly {
                 HStack(spacing: 5) {
-                    Image(systemName: "heart.fill").font(.system(size: 9, weight: .semibold))
-                    Text("Favourites")
+                    Image(systemName: "heart.fill").font(.system(size: 9, weight: .semibold)).foregroundStyle(style.color(\.accent))
+                    Text("Favourites only")
                 }
-                .styleText(\.caption).foregroundStyle(style.color(\.text2))
+                .styleText(\.caption).foregroundStyle(style.color(\.text))
+                .padding(.horizontal, 10).frame(height: 26)
+                .background(style.color(\.raised), in: Capsule(style: .circular))
+                .overlay { Capsule(style: .circular).strokeBorder(style.color(\.line2)) }
             }
             Spacer(minLength: 0)
             if let query = values.query { search(query) }
-            Text(values.items.isEmpty ? "0" : "\(values.index + 1) / \(values.items.count)")
+            Text(values.loading ? " " : values.items.isEmpty ? "0" : "\(values.index + 1) / \(values.items.count)")
                 .font(style.font(\.mono, size: 11.5)).monospacedDigit().foregroundStyle(style.color(\.text2))
         }
     }
@@ -160,15 +167,16 @@ struct CarouselFace: View {
                 }
             }
             .frame(width: space.size.width, height: space.size.height)
-            .mask {
-                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.06),
-                                       .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
-                               startPoint: .leading, endPoint: .trailing)
-            }
+            .mask(Self.edgeFade)
         }
         .id(reduceMotion ? values.index : 0)
         .transition(.opacity)
     }
+
+    /// The row's ends fading under the panel's edges.
+    static let edgeFade = LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.06),
+                                                 .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing)
 
     /// Where an item `distance` from the centre sits and how big it is.
     /// Three slices each side; the third runs under the panel's edge.
@@ -191,7 +199,7 @@ struct CarouselFace: View {
             HStack(spacing: 5) {
                 if item.current { badge("Current") }
                 Spacer(minLength: 0)
-                if item.favourite, values.mode == .wallpapers {
+                if item.favourite {
                     Image(systemName: "heart.fill").font(.system(size: 9, weight: .semibold)).foregroundStyle(style.color(\.text))
                         .frame(width: 22, height: 22)
                         .background(style.color(\.panel).opacity(0.88), in: Circle())
@@ -208,7 +216,7 @@ struct CarouselFace: View {
                 .opacity(centre ? 1 : 0.8)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(item.title + (item.current ? ", current" : "") + (item.favourite && values.mode == .wallpapers ? ", favourite" : ""))
+        .accessibilityLabel(item.title + (item.current ? ", current" : "") + (item.favourite ? ", favourite" : ""))
         .accessibilityAddTraits(centre ? .isSelected : [])
     }
 
@@ -232,12 +240,32 @@ struct CarouselFace: View {
             .overlay { Capsule(style: .circular).strokeBorder(style.color(\.line2)) }
     }
 
+    /// The row's slots as plain cards while the mode's listing is on its way, so the panel never says it has none.
+    private var placeholders: some View {
+        GeometryReader { space in
+            ZStack {
+                ForEach(-3...3, id: \.self) { distance in
+                    let frame = Self.slot(distance), radius = distance == 0 ? style.radii.card + 2 : style.radii.card
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(style.color(\.sunken))
+                        .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(style.color(\.line)) }
+                        .frame(width: frame.size.width, height: frame.size.height)
+                        .position(x: space.size.width / 2 + frame.x, y: space.size.height / 2)
+                }
+            }
+            .mask(Self.edgeFade)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading \(values.mode.title.lowercased())")
+    }
+
     private var empty: some View {
-        FaceEmpty(symbol: values.mode == .wallpapers ? "photo.on.rectangle.angled" : "paintpalette",
+        let things = values.mode == .wallpapers ? "wallpaper" : "theme"
+        return FaceEmpty(symbol: values.mode == .wallpapers ? "photo.on.rectangle.angled" : "paintpalette",
                   title: values.query != nil ? "Nothing matches “\(values.query ?? "")”"
-                      : values.favouritesOnly ? "No favourites yet" : values.mode == .wallpapers ? "No wallpapers yet" : "No themes yet",
+                      : values.favouritesOnly ? "No favourite \(things)s yet" : values.mode == .wallpapers ? "No wallpapers yet" : "No themes yet",
                   detail: values.query != nil ? "Try another word, or press Escape to see them all."
-                      : values.favouritesOnly ? "Press F on a wallpaper to keep it here."
+                      : values.favouritesOnly ? (values.mode == .wallpapers ? "Press Tab to see them all, then F on a wallpaper to keep it here."
+                          : "Press Tab to see them all, then F on a theme, or right-click one in Look › Themes and choose Favourite.")
                       : values.mode == .wallpapers ? "Add a folder in Look › Wallpaper, or attach images to this theme."
                       : "Make a theme in Look › Themes, or add a pack with pilot theme.",
                   button: values.query == nil && !values.favouritesOnly ? "Open Look" : nil, action: { act(.openLook) })
@@ -270,15 +298,13 @@ struct CarouselFace: View {
             HStack(spacing: 13) {
                 FaceHint(keys: ["←", "→"], label: "Browse")
                 FaceHint(keys: ["↵"], label: values.mode == .wallpapers ? "Apply" : "Apply theme")
-                if values.mode == .wallpapers {
-                    FaceHint(keys: ["R"], label: "Random")
-                    FaceHint(keys: ["F"], label: "Favourite")
-                    FaceHint(keys: ["⇥"], label: "Favourites")
-                }
+                if values.mode == .wallpapers { FaceHint(keys: ["R"], label: "Random") }
+                FaceHint(keys: ["F"], label: "Favourite")
+                FaceHint(keys: ["⇥"], label: values.favouritesOnly ? "Show all" : "Favourites \(values.favourites)")
                 FaceHint(keys: ["/"], label: "Search")
                 FaceHint(keys: ["Esc"], label: "Close")
             }
-            .opacity(values.items.isEmpty ? 0.45 : 1)
+            .opacity(values.items.isEmpty || values.loading ? 0.45 : 1)
         }
     }
 }

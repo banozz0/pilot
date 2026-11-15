@@ -290,10 +290,28 @@ def themes(passed):
         tall = next(t for t in f.call('carousel', '--mode', 'themes', '--screen', 'tall')['themes'] if t['id'] == 'tokyo-night')
         assert tall['image'].endswith('tokyo-night-tall.png'), tall
         assert f.call('carousel', '--mode', 'themes', '--query', 'drac')['images'] == ['dracula']
-        assert "favourites are Wallpapers mode's" in f.call('carousel', '--mode', 'themes', '--favourites', ok=False)['error']['message']
+        assert f.call('carousel', '--mode', 'themes', '--favourites')['empty'] is True
         assert 'takes no --screen' in f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes', '--screen', 'wide', ok=False)['error']['message']
         assert watched() == before
         passed(f'themes: Themes mode lists the {len(expected)} packs the style takes ({len(expected) - 1} factory, 1 user) by title, none marked before an Apply, each with its image for the screen shape and 8 palette dots; previews draw Zed, Ghostty and Obsidian; browsing and search change nothing')
+
+        # Theme favourites (Sven, build 2564): F marks and unmarks a theme, Tab lists only them, by title; the wallpapers'
+        # favourites are their own; an unlisted pack is refused; they outlast a restart.
+        for pack in ['tokyo-night', 'dracula', 'void']:
+            f.call('carousel', 'favourite', pack, '--mode', 'themes')
+        answer = f.call('carousel', 'favourite', 'void', '--mode', 'themes')
+        assert answer['favourites'] == ['tokyo-night', 'dracula'], answer['favourites']
+        assert [t['id'] for t in answer['themes'] if t['favourite']] == ['dracula', 'tokyo-night'], answer['themes']
+        only = f.call('carousel', '--mode', 'themes', '--favourites')
+        assert only['images'] == ['dracula', 'tokyo-night'] and only['favouritesOnly'] is True and only['total'] == len(expected), only
+        assert f.call('carousel', '--screen', 'wide')['favourites'] == []
+        refused = f.call('carousel', 'favourite', 'no-such-pack', '--mode', 'themes', ok=False)
+        assert 'is not one the carousel lists' in refused['error']['message'], refused
+        assert watched() == before
+        f.stop()
+        f.start(ENV)
+        assert f.call('carousel', '--mode', 'themes', '--favourites')['images'] == ['dracula', 'tokyo-night']
+        passed('themes: favourites read back through pilot: three themes marked, one unmarked, Tab lists Dracula and Tokyo Night by title; the wallpapers keep their own; an unlisted pack is refused; they survive a restart')
 
         # Tokyo Night applied through the carousel, after its Allow.
         assert f.call('carousel', 'pick', 'tokyo-night', '--mode', 'themes')['status'] == 'applied'
@@ -334,7 +352,8 @@ def themes(passed):
         assert tree(home, vault.parent) == {k: v for k, v in before.items() if k.startswith((str(home) + '/', str(vault.parent) + '/'))}
         f.preserved()
         f.stop()
-        asks = f.allows(1)
+        assert f.allows(1) == []  # Browsing and favourites, before the restart, asked nothing.
+        asks = f.allows(2)
         assert len(asks) == 4 and sum('Apply theme' in a for a in asks) == 3 and 'Restore' in asks[3], asks
         assert not any('Tokyo Night' in a for a in asks[1:3]), asks  # Dracula twice between Tokyo Night's CLI pick and Restore: no press ask.
         passed('themes: Look\'s Restore puts back the folders and every byte of Zed, VS Code, Cursor and the vault, and the dotfiles-linked Ghostty config; four Allows asked in all (Tokyo Night, Dracula declined, Dracula, Restore), none while browsing or for the press')
