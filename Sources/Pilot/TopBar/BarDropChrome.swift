@@ -138,7 +138,7 @@ final class BarDropClip: NSView {
 
 /// The terminal's drop around its shell's view (C frames, design cards 6, 10, 11): the header (`>_ Terminal  zsh ·
 /// ~/code/pilot`, its key and hide), a rule, the shell on the drop's ground, a hairline down the sides and round the
-/// bottom, no shadow; square at the top under the bar and the style's pop corner at the bottom. On Look's Glass the
+/// bottom, no shadow; square at the top under the bar and the style's pop corner at the bottom. On the bar dropdowns' glass the
 /// ground is Ask AI's glass (AIChatPanel.backdrop) and the glass's rim its edge, so the two drops match (Liquid Glass
 /// round 3, Sven on build 2550: the terminal stood solid beside Ask AI's glass); the shell draws its own ground over it,
 /// at the opacity Sven's Ghostty config gives it. The shell's view keeps the keyboard: the header and the edge take no
@@ -159,7 +159,7 @@ final class TerminalDropChrome: NSView {
     private let rule = NSView()
     /// The hairline edge on a solid drop; on Glass the glass's rim is the edge.
     private let edge: Edge?
-    /// Ask AI's glass under everything, on Look's Glass; nil when the drop is solid.
+    /// Ask AI's glass under everything, on the bar dropdowns' glass (Look.barGlass); nil when the drop is solid.
     private let glass: MaterialBackdrop?
     private var pending = false
 
@@ -168,13 +168,13 @@ final class TerminalDropChrome: NSView {
         self.body = body
         self.detail = detail
         header = Header(detail: detail(), key: key)
-        let tokens = look.chromeTokens(.quickAI)
+        let tokens = look.chromeTokens(.barDrop)
         let ink = Ink(style: tokens)
         let radius = CGFloat(tokens.radii.pop)
-        let host = NSHostingView(rootView: TerminalDropHeader(header: header, hide: hide).styled(.quickAI, look: look).pilotTheme(look: look))
+        let host = NSHostingView(rootView: TerminalDropHeader(header: header, hide: hide).styled(.barDrop, look: look).pilotTheme(look: look))
         host.sizingOptions = []
         top = host
-        glass = look.material(on: .quickAI) == .glass ? AIChatPanel.backdrop(NSView(), look: look) : nil
+        glass = look.material(on: .barDrop) == .glass ? AIChatPanel.backdrop(NSView(), look: look) : nil
         edge = glass == nil ? Edge(radius: radius, colour: NSColor(ink.windowLine), width: ink.stroke) : nil
         super.init(frame: body.frame)
         wantsLayer = true

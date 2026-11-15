@@ -218,9 +218,9 @@ struct PilotStyleTests {
         #expect(StyleTokens.of(.instrument, theme: .standard).scaled(PilotStyle.scale).type.body.size == 14)
     }
 
-    @Test("Every page is a surface, and the window's frame, eight panels, bars and popovers, onboarding and an extension's detail")
+    @Test("Every page is a surface, and the window's frame, eight panels, bars, popovers and drops, onboarding and an extension's detail")
     func surfaces() {
-        #expect(StyleSurface.allCases.count == AppPage.allCases.count + 11)
+        #expect(StyleSurface.allCases.count == AppPage.allCases.count + 12)
     }
 
     @Test("The bundled faces are the five OFL files the styles draw with")

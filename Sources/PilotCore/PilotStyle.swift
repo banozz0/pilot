@@ -41,22 +41,23 @@ public struct ThemeStyleMemory: Codable, Sendable {
 
 /// One thing Pilot draws that a style restyles as a whole: each page of the app window, the window's own frame (its
 /// sidebar), the Hyper+Space menu, the top bar's strip (its tooltips and edit mode too), the dropdowns and
-/// popovers hung from a bar item in either bar (Pilot's dropdown, the readings', the clock's...), the hold overlay, the
-/// clipboard panel, the notes panel, the AI chat, the HUDs (tips, alerts, prompts), onboarding, and an extension's
+/// popovers hung from a bar item in either bar (Pilot's dropdown, the readings', the clock's...), the drops hung under the
+/// top bar (the terminal and Ask AI, which follow its Background, W77), the hold overlay, the clipboard panel, the notes
+/// panel, the AI chat (the selection's answer box), the HUDs (tips, alerts, prompts), onboarding, and an extension's
 /// detail view in the menu's panel (card agent-bo-95423245). The strip and its popovers are two surfaces so each can be
 /// restyled on its own (Instrument's strip before its popovers, card agent-bo-95423181, 2026-10-08).
 public enum StyleSurface: Hashable, Sendable, CaseIterable {
-    case page(AppPage), window, menu, topBar, barPopovers, overlay, clipboard, notes, quickAI, hud, onboarding, extensionDetail
+    case page(AppPage), window, menu, topBar, barPopovers, barDrop, overlay, clipboard, notes, quickAI, hud, onboarding, extensionDetail
 
     public static let allCases: [StyleSurface] = AppPage.allCases.map(StyleSurface.page)
-        + [.window, .menu, .topBar, .barPopovers, .overlay, .clipboard, .notes, .quickAI, .hud, .onboarding, .extensionDetail]
+        + [.window, .menu, .topBar, .barPopovers, .barDrop, .overlay, .clipboard, .notes, .quickAI, .hud, .onboarding, .extensionDetail]
 
     /// How much bigger the surface draws than its style's own sizes: the app window, its pages, the Hyper+Space menu and
     /// an extension's detail in it one step (PilotStyle.scale); the bar, the panels and the HUDs as they were.
     public var scale: Double {
         switch self {
         case .page, .window, .menu, .extensionDetail: PilotStyle.scale
-        case .topBar, .barPopovers, .overlay, .clipboard, .notes, .quickAI, .hud, .onboarding: 1
+        case .topBar, .barPopovers, .barDrop, .overlay, .clipboard, .notes, .quickAI, .hud, .onboarding: 1
         }
     }
 }

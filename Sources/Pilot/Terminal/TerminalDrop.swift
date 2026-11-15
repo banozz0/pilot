@@ -148,7 +148,7 @@ final class TerminalDrop {
         BarDropFace(panel: { size in
             surface.frame = CGRect(origin: .zero, size: size)
             surface.autoresizingMask = [.width, .height]
-            let panel = BarDrops.panel(surface, title: "Terminal", appearance: Look.shared.appearance(for: .quickAI))
+            let panel = BarDrops.panel(surface, title: "Terminal", appearance: Look.shared.appearance(for: .barDrop))
             panel.makeFirstResponder(surface)
             return panel
         }, keepsField: false)
