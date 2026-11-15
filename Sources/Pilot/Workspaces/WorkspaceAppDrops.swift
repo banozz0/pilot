@@ -34,18 +34,17 @@ struct WorkspaceAppDrops {
         return plan
     }
 
-    private func listed() async -> [AeroWindow] { (try? await tiler.runner.windows(.all)) ?? [] }
+    func listed() async -> [AeroWindow] { (try? await tiler.runner.windows(.all)) ?? [] }
 
     /// The rules, one edit for them all, then the tiler calls in order; the dropdown's and Home's lists read again after.
     private func carry(_ plan: WorkspaceAppDrop, _ what: String) async throws(WorkspaceAppDrop.Refused) {
         if !plan.rules.isEmpty {
             let rules = plan.rules
-            let written = await withCheckedContinuation { done in
-                block.edit({ block in
+            do {
+                try await block.written { block in
                     for rule in rules { if let i = block.rules.firstIndex(where: { $0.appId == rule.appId }) { block.rules[i] = rule } }
-                }, done: { done.resume(returning: $0) })
-            }
-            if !written { throw WorkspaceAppDrop.Refused("app rules not changed: \(block.lastError ?? "the tiler refused them")") }
+                }
+            } catch { throw WorkspaceAppDrop.Refused("app rules \(error)") }
         }
         guard !plan.commands.isEmpty else { return }
         // A window closed since the list was read stops nothing after it.

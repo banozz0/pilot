@@ -37,11 +37,14 @@ final class TilerFixture: TilerEngineRunning {
             return i
         }
         switch command {
-        case .listWindows(.all):
-            return String(decoding: try JSONSerialization.data(withJSONObject: rows), as: UTF8.self)
-        case .listWindows(.workspace(let name)):
-            return String(decoding: try JSONSerialization.data(withJSONObject: rows.filter { $0["workspace"] as? String == name }), as: UTF8.self)
-        case .listWindows, .listVisibleWorkspaces:
+        case .listWindows(let scope):
+            let listed: [[String: Any]] = switch scope {
+            case .all: rows
+            case .workspace(let name): rows.filter { $0["workspace"] as? String == name }
+            case .focused, .minimized: []
+            }
+            return String(decoding: try JSONSerialization.data(withJSONObject: listed), as: UTF8.self)
+        case .listVisibleWorkspaces:
             return "[]"
         case .moveWindow(let id, let workspace, _):
             // The tiler appends a moved window to the workspace's tree.

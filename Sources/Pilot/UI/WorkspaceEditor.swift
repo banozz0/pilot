@@ -616,10 +616,6 @@ private struct RulesPart: View {
     let picking: Bool
     let add: () -> Void
 
-    private func lifted(_ bundle: String) -> Bool {
-        if case .rule(bundle, _, _)? = extras.drag?.0.item { true } else { false }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             PartLabel(title: "Always lands here", line: "wherever it opens",
@@ -645,10 +641,10 @@ private struct RulesPart: View {
                     }
                     .frame(minHeight: 32)
                     .overlay(alignment: .top) { if i > 0 { ink.line.frame(height: 1) } }
-                    .opacity(lifted(bundle) ? 0.35 : 1)
+                    .opacity(extras.drag.map { $0.0.lifts(bundle, from: $0.workspace, .rule) } == true ? 0.35 : 1)
                     .contentShape(.rect)
                     // Dragged onto another workspace's card, the rule sends the app there.
-                    .dragsInWorkspaces(extras.drag?.0) { _ in extras.drag.map { .rule(bundle: bundle, name: name, from: $0.workspace) } }
+                    .dragsInWorkspaces(extras.drag?.0) { _ in extras.drag.map { .init(kind: .rule, bundle: bundle, name: name, from: $0.workspace) } }
                 }
                 AddSpot(big: false, narrow: false, on: picking, open: add).frame(height: 30)
                 .padding(.top, extras.rules.isEmpty ? 0 : 6)

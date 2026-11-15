@@ -111,7 +111,7 @@ struct WorkspacesPageRenders {
         }
         try write("workspaces-drag-rest.png")
         let four = try #require(drag.cards["4"], "the cards reported no frames")
-        let notes = WorkspaceDrag.Item.app(bundle: "com.apple.Notes", name: "Notes", from: "2")
+        let notes = WorkspaceDrag.Item(kind: .app, bundle: "com.apple.Notes", name: "Notes", from: "2")
         // Over workspace 4's card, clear of its (empty) screen's middle: the page's own hit says where it lands.
         let overFour = CGPoint(x: four.midX, y: four.maxY - 8)
         drag.stage(notes, at: overFour, over: drag.hit(notes, overFour))

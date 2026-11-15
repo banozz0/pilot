@@ -108,13 +108,9 @@ struct WorkspacesBody: View {
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 28)
             // The drag's own space: the cards, the preview's tiles and the pointer all measured in it.
             .coordinateSpace(.named(WorkspaceDrag.space))
-            .overlay(alignment: .topLeading) {
-                if let item = drag.item {
-                    WorkspaceDragChip(item: item, words: drag.words(title: presets.contents.title(for:)))
-                        .offset(x: drag.at.x + 14, y: drag.at.y + 12)
-                }
-            }
-            .onAppear {
+            .overlay(alignment: .topLeading) { WorkspaceDragLayer(drag: drag, title: presets.contents.title(for:)) }
+            // Set again as the workspace on screen changes, which the page's copy here reads.
+            .onChange(of: focused, initial: true) {
                 drag.hit = { [self] in hit($0, at: $1) }
                 drag.land = { [self] in land($0, on: $1) }
             }
@@ -133,14 +129,12 @@ struct WorkspacesBody: View {
         if let tile = draft(picked).apps.firstIndex(where: { drag.previewTiles[WorkspaceDrag.TileKey(workspace: picked, bundle: $0.bundleId)]?.contains(point) == true }) {
             spot = (picked, tile)
         } else if let workspace = names.first(where: { drag.cards[$0]?.contains(point) == true }) {
-            let screen = drag.screens[workspace] ?? .zero
-            let tiles = WorkspaceCard.tiles(draft(workspace), in: screen.size).map { $0.offsetBy(dx: screen.minX, dy: screen.minY) }
-            spot = (workspace, tiles.firstIndex { $0.contains(point) })
+            spot = (workspace, WorkspaceCard.tile(at: point, draft(workspace), screen: drag.screens[workspace]))
         }
         guard let spot else { return nil }
-        guard case .app(let bundle, _, let from) = item else { return spot.workspace == item.from ? nil : .workspace(spot.workspace) }
+        guard item.kind == .app else { return spot.workspace == item.from ? nil : .workspace(spot.workspace) }
         let onto = spot.tile.map { draft(spot.workspace).apps[$0] }
-        guard (try? WorkspaceAppDrop.plan(app: bundle, from: from, to: spot.workspace, onto: onto?.bundleId, draft: draft,
+        guard (try? WorkspaceAppDrop.plan(app: item.bundle, from: item.from, to: spot.workspace, onto: onto?.bundleId, draft: draft,
                                           windows: [], rules: [])) != nil else { return nil }
         return onto.map { .tile(workspace: spot.workspace, bundle: $0.bundleId, name: $0.name) } ?? .workspace(spot.workspace)
     }
@@ -157,11 +151,11 @@ struct WorkspacesBody: View {
         refused = nil
         Task {
             do {
-                switch item {
-                case .app(let bundle, _, let from):
-                    try await drops.drop(bundle, from: from, to: to, onto: onto, draft: draft) { plan in plan.drafts.keys.forEach { drafts.revert($0) } }
-                case .rule(let bundle, _, let from):
-                    try await drops.dropRule(bundle, from: from, to: to)
+                switch item.kind {
+                case .app:
+                    try await drops.drop(item.bundle, from: item.from, to: to, onto: onto, draft: draft) { plan in plan.drafts.keys.forEach { drafts.revert($0) } }
+                case .rule:
+                    try await drops.dropRule(item.bundle, from: item.from, to: to)
                 }
             } catch {
                 refused = String(describing: error)
@@ -538,15 +532,8 @@ struct WorkspaceCard: View {
     let pick: () -> Void
     @State private var hovered = false
 
-    /// A drop here moves the app in, or onto one of its apps swaps the two.
+    /// A drop here moves the app in.
     private var lit: Bool { drag?.target == .workspace(name) }
-    private func lit(_ bundle: String) -> Bool {
-        if case .tile(name, bundle, _)? = drag?.target { true } else { false }
-    }
-    /// Picked up: it fades in place while the chip carries it.
-    private func lifted(_ bundle: String) -> Bool {
-        if case .app(bundle, _, name)? = drag?.item { true } else { false }
-    }
 
     /// The screen's apps and empty spots in `size`, as the card draws them: its strip of a menu bar off the top.
     static func spots(_ draft: WorkspacePresetDraft, in size: CGSize) -> (apps: [CGRect], open: [CGRect]) {
@@ -555,9 +542,15 @@ struct WorkspaceCard: View {
         return draft.shape(in: inner) ?? (draft.tiles(in: inner), [])
     }
 
-    /// Each app's tile in a screen of `size`, in the draft's order.
+    /// Each app's tile in a screen of `size`, in the draft's order: what the card draws and a drag finds.
     static func tiles(_ draft: WorkspacePresetDraft, in size: CGSize) -> [CGRect] {
         spots(draft, in: size).apps.prefix(draft.apps.count).map { $0.insetBy(dx: 1.5, dy: 1.5) }
+    }
+
+    /// The app whose tile is under `point`, the screen at `screen` in the page's space.
+    static func tile(at point: CGPoint, _ draft: WorkspacePresetDraft, screen: CGRect?) -> Int? {
+        guard let screen else { return nil }
+        return tiles(draft, in: screen.size).firstIndex { $0.offsetBy(dx: screen.minX, dy: screen.minY).contains(point) }
     }
 
     private var toybox: Bool { ink.style.kind == .toybox }
@@ -590,23 +583,15 @@ struct WorkspaceCard: View {
             // Toybox fills its pick with the sun; the others wear their focus (Instrument's the signal's ring).
             .focusBorder(on: picked && !toybox, radius: radius)
             // A drop here moves the app in: the card lit in the accent while one would.
-            .overlay {
-                if lit {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(ink.accent.opacity(0.12))
-                        .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(ink.accent, lineWidth: 2) }
-                        .allowsHitTesting(false)
-                }
-            }
+            .overlay { if lit { DropRing(radius: radius) } }
             .contentShape(.rect)
         }
         .buttonStyle(.kitPress)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceDrag.space)) } action: { drag?.cards[name] = $0 }
         // A press on one of its tiles drags that app.
         .dragsInWorkspaces(drag) { [draft, name] start in
-            guard let screen = drag?.screens[name] else { return nil }
-            let tiles = Self.tiles(draft, in: screen.size)
-            return tiles.firstIndex { $0.offsetBy(dx: screen.minX, dy: screen.minY).contains(start) }
-                .map { .app(bundle: draft.apps[$0].bundleId, name: draft.apps[$0].name, from: name) }
+            Self.tile(at: start, draft, screen: drag?.screens[name])
+                .map { .init(kind: .app, bundle: draft.apps[$0].bundleId, name: draft.apps[$0].name, from: name) }
         }
         .help(tip)
         .onHover { hovered = $0 }
@@ -629,11 +614,11 @@ struct WorkspaceCard: View {
         return GeometryReader { g in
             let layout = Self.spots(draft, in: g.size)
             let tile = RoundedRectangle(cornerRadius: ink.radius(3), style: .continuous)
-            ForEach(Array(zip(draft.apps, layout.apps).enumerated()), id: \.offset) { i, pair in
-                let r = pair.1.insetBy(dx: 1.5, dy: 1.5), on = lit(pair.0.bundleId)
+            ForEach(Array(zip(draft.apps, Self.tiles(draft, in: g.size)).enumerated()), id: \.offset) { i, pair in
+                let r = pair.1, on = drag?.lights(name, pair.0.bundleId) == true
                 tile.fill(on ? ink.accent.opacity(0.45) : picked ? ink.accent.opacity(0.22) : ink.tile)
                     .overlay { tile.strokeBorder(on ? ink.accent : ink.outline, lineWidth: on ? 2 : 1.5) }
-                    .opacity(lifted(pair.0.bundleId) ? 0.35 : 1)
+                    .opacity(drag?.lifts(pair.0.bundleId, from: name) == true ? 0.35 : 1)
                     .overlay {
                         if min(r.width, r.height) >= 18 {
                             AppGlyph(bundles: [pair.0.bundleId], symbol: "app.dashed", size: min(18, min(r.width, r.height) - 6))

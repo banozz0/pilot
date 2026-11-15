@@ -390,29 +390,29 @@ extension ControlVerbs {
             let args = call.arguments()
             let app = try Self.app(args.positional.dropFirst().first)
             let to = try lists.workspace(args.value("to"))
-            let drop: WorkspaceAppDrop
-            switch try args.word(0, "move or rule") {
-            case "move":
-                let from = try lists.workspace(args.value("from"))
-                let contents = lists.presets.contents
-                do {
-                    drop = try await lists.drops.drop(app, from: from, to: to, onto: args.value("onto")) {
-                        WorkspacePageDrafts.baseline($0, saved: contents.preset(for: $0), row: lists.layouts.layout($0))
-                    }
-                } catch { throw ControlError(.badValue, String(describing: error)) }
+            let sub = try args.word(0, "move or rule"), drops = lists.drops, contents = lists.presets.contents
+            let from: String
+            switch sub {
+            case "move": from = try lists.workspace(args.value("from"))
             case "rule":
-                guard let from = lists.block.block.rules.first(where: { $0.appId == app })?.workspace else {
+                guard let ruled = lists.block.block.rules.first(where: { $0.appId == app })?.workspace else {
                     throw ControlError(.badValue, "no app rule for \(app)")
                 }
-                do { drop = try await lists.drops.dropRule(app, from: from, to: to) } catch { throw ControlError(.badValue, String(describing: error)) }
+                from = ruled
             case let other: throw ControlError(.badRequest, "pilot workspace move or rule, not \(other)")
             }
-            let windows = (try? await lists.tiler.runner.windows(.all)) ?? []
-            let contents = lists.presets.contents
+            let drop: WorkspaceAppDrop
+            do {
+                drop = sub == "rule" ? try await drops.dropRule(app, from: from, to: to)
+                    : try await drops.drop(app, from: from, to: to, onto: args.value("onto")) {
+                        WorkspacePageDrafts.baseline($0, saved: contents.preset(for: $0), row: lists.layouts.layout($0))
+                    }
+            } catch { throw ControlError(.badValue, String(describing: error)) }
+            let windows = await drops.listed(), saved = lists.presets.contents
             return .object([
                 "kind": .string(drop.kind.rawValue),
                 "presets": .object(Dictionary(uniqueKeysWithValues: drop.drafts.keys.map { workspace in
-                    (workspace, JSONValue.array((contents.preset(for: workspace)?.apps ?? []).map { .string($0.bundleId) }))
+                    (workspace, JSONValue.array((saved.preset(for: workspace)?.apps ?? []).map { .string($0.bundleId) }))
                 })),
                 "rules": .array(drop.rules.map(Self.row)),
                 "commands": .array(drop.commands.map { .string($0.arguments.joined(separator: " ")) }),

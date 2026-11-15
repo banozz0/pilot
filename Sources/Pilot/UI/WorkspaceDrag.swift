@@ -11,15 +11,13 @@ import SwiftUI
 final class WorkspaceDrag {
     static let space = "workspaces.drag"
 
-    enum Item: Equatable {
-        /// An app a workspace's preset holds.
-        case app(bundle: String, name: String, from: String)
-        /// An app rule: the app always lands on `from`.
-        case rule(bundle: String, name: String, from: String)
-
-        var bundle: String { switch self { case .app(let b, _, _), .rule(let b, _, _): b } }
-        var name: String { switch self { case .app(_, let n, _), .rule(_, let n, _): n } }
-        var from: String { switch self { case .app(_, _, let w), .rule(_, _, let w): w } }
+    struct Item: Equatable {
+        /// An app a workspace's preset holds, or an app rule (the app always lands on `from`).
+        enum Kind { case app, rule }
+        let kind: Kind
+        let bundle: String
+        let name: String
+        let from: String
     }
 
     enum Target: Equatable {
@@ -29,13 +27,13 @@ final class WorkspaceDrag {
         case tile(workspace: String, bundle: String, name: String)
     }
 
-    private(set) var item: Item?
-    /// The pointer, in the page's space.
-    private(set) var at: CGPoint = .zero
-    private(set) var target: Target?
-
     /// A preview tile: its workspace's app. A workspace picked before keeps its tiles here; `hit` reads the picked one's.
     struct TileKey: Hashable { let workspace: String; let bundle: String }
+
+    private(set) var item: Item?
+    private(set) var target: Target?
+    /// The pointer, in the page's space; only the chip's layer reads it, so a move redraws the chip alone.
+    private(set) var at: CGPoint = .zero
 
     /// Each card's frame and its screen's, and the preview's tiles, in the page's space: what `hit` reads.
     @ObservationIgnored var cards: [String: CGRect] = [:]
@@ -47,15 +45,15 @@ final class WorkspaceDrag {
     /// The drop; the page sets it.
     @ObservationIgnored var land: (Item, Target) -> Void = { _, _ in }
 
-    /// Escape pressed: the rest of that gesture is ignored.
-    @ObservationIgnored private var cancelled = false
+    /// The rest of this gesture is ignored: Escape was pressed, or it started where nothing picks up.
+    @ObservationIgnored private var ignored = false
     @ObservationIgnored private var escape: Any?
 
     /// The gesture moved: the first move picks `item` up, each one after finds where it would land.
     func moved(_ item: @autoclosure () -> Item?, to point: CGPoint) {
-        guard !cancelled else { return }
+        guard !ignored else { return }
         if self.item == nil {
-            guard let picked = item() else { return }
+            guard let picked = item() else { ignored = true; return }
             self.item = picked
             watchEscape()
         }
@@ -67,7 +65,7 @@ final class WorkspaceDrag {
     /// The gesture ended: dropped where it would land, else nothing.
     func ended() {
         defer { reset() }
-        guard !cancelled, let item, let target else { return }
+        guard !ignored, let item, let target else { return }
         land(item, target)
     }
 
@@ -75,22 +73,32 @@ final class WorkspaceDrag {
     func cancel() {
         guard item != nil else { return }
         reset()
-        cancelled = true
+        ignored = true
     }
 
     private func reset() {
         withAnimation(Kit.change) { item = nil; target = nil }
-        cancelled = false
+        ignored = false
         if let escape { NSEvent.removeMonitor(escape) }
         escape = nil
     }
 
     private func watchEscape() {
         escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, let self, self.item != nil else { return event }
+            guard Int64(event.keyCode) == KeyCode.escape, let self, self.item != nil else { return event }
             self.cancel()
             return nil
         }
+    }
+
+    /// The app picked up from `workspace` (a rule's row when `kind` is .rule): it fades in place while the chip carries it.
+    func lifts(_ bundle: String, from workspace: String, _ kind: Item.Kind = .app) -> Bool {
+        item?.kind == kind && item?.bundle == bundle && item?.from == workspace
+    }
+
+    /// A drop now would trade places with `bundle` on `workspace`: its tile lights.
+    func lights(_ workspace: String, _ bundle: String) -> Bool {
+        if case .tile(workspace, bundle, _)? = target { true } else { false }
     }
 
     #if DEBUG
@@ -102,7 +110,7 @@ final class WorkspaceDrag {
     }
     #endif
 
-    /// The chip under the pointer: the app, and what letting go does.
+    /// The chip's second line: what letting go does.
     func words(title: (String) -> String) -> String? {
         switch target {
         case .workspace(let workspace)?: "Move to \(title(workspace))"
@@ -113,27 +121,42 @@ final class WorkspaceDrag {
     }
 }
 
-/// The dragged app under the pointer: its icon and name, and what letting go does.
-struct WorkspaceDragChip: View {
+/// The dragged app under the pointer, its icon and name and what letting go does; nothing while no drag is under way.
+struct WorkspaceDragLayer: View {
     @Environment(\.ink) private var ink
-    let item: WorkspaceDrag.Item
-    let words: String?
+    let drag: WorkspaceDrag
+    let title: (String) -> String
 
     var body: some View {
-        HStack(spacing: 8) {
-            AppGlyph(bundles: [item.bundle], symbol: "app.dashed", size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text).lineLimit(1)
-                Text(words ?? "Drop on a workspace").font(ink.ui(11)).foregroundStyle(words == nil ? ink.muted : ink.accent).lineLimit(1)
+        if let item = drag.item {
+            let words = drag.words(title: title)
+            HStack(spacing: 8) {
+                AppGlyph(bundles: [item.bundle], symbol: "app.dashed", size: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.name).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text).lineLimit(1)
+                    Text(words ?? "Drop on a workspace").font(ink.ui(11)).foregroundStyle(words == nil ? ink.muted : ink.accent).lineLimit(1)
+                }
             }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(ink.surface, in: .rect(cornerRadius: ink.radius(9)))
+            .overlay { RoundedRectangle(cornerRadius: ink.radius(9), style: .continuous).strokeBorder(words == nil ? ink.line2 : ink.accent, lineWidth: 1.5) }
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+            .fixedSize()
+            .offset(x: drag.at.x + 14, y: drag.at.y + 12)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(ink.surface, in: .rect(cornerRadius: ink.radius(9)))
-        .overlay { RoundedRectangle(cornerRadius: ink.radius(9), style: .continuous).strokeBorder(words == nil ? ink.line2 : ink.accent, lineWidth: 1.5) }
-        .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
-        .fixedSize()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+    }
+}
+
+/// A card or a tile a drop lands on: lit in the accent.
+struct DropRing: View {
+    @Environment(\.ink) private var ink
+    let radius: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        shape.fill(ink.accent.opacity(0.14)).overlay { shape.strokeBorder(ink.accent, lineWidth: 2) }.allowsHitTesting(false)
     }
 }
 
