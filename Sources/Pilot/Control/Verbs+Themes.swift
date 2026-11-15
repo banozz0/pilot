@@ -4,10 +4,41 @@ import PilotCore
 extension ControlVerbs {
     private static let themeApps: [String: ThemeCoordinator.AppSwitch] = Dictionary(uniqueKeysWithValues: ThemeAppKind.allCases.map { ($0.rawValue, ThemeCoordinator.AppSwitch.app($0)) }).merging(["zed": .zed, "obsidian": .obsidian, "ghostex": .ghostex]) { _, new in new }
 
+    /// `theme set`'s `role=hex` words on `pack`. A bare role sets the palette, and the variant of the pack's own mode, which
+    /// must equal it; `light.<role>` or `dark.<role>` sets that variant (the palette too when it is the pack's own mode). The
+    /// hex goes without `#`, which the agent's shell gate refuses unquoted; one with it is taken too. A role the pack does
+    /// not hold, or a word that is no six-digit hex, is refused before anything is saved.
+    static func recoloured(_ pack: ThemePack, _ words: ArraySlice<String>) throws -> ThemePack {
+        var pack = pack
+        let own = pack.dark ? "dark" : "light"
+        for word in words {
+            let parts = word.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { throw ThemeFailure("\(word): give role=hex, as accent=FF9E64") }
+            var (mode, role) = (own, parts[0])
+            if let dot = role.firstIndex(of: "."), ["light", "dark"].contains(String(role[..<dot])) {
+                (mode, role) = (String(role[..<dot]), String(role[role.index(after: dot)...]))
+            }
+            let hex = parts[1].hasPrefix("#") ? String(parts[1].dropFirst()) : parts[1]
+            guard hex.count == 6, hex.allSatisfy(\.isHexDigit) else { throw ThemeFailure("\(parts[1]) is no colour: six hex digits, as FF9E64") }
+            let colour = "#" + hex.uppercased()
+            if mode == own {
+                guard pack.palette[role] != nil else {
+                    throw ThemeFailure("\(pack.id) has no role \(role); its roles: \(pack.palette.keys.sorted().joined(separator: ", "))")
+                }
+                pack.palette[role] = colour
+                if pack.variants?[own] != nil { pack.variants?[own]?[role] = colour }
+            } else {
+                guard pack.variants?[mode]?[role] != nil else { throw ThemeFailure("\(pack.id) has no \(mode) variant with role \(role)") }
+                pack.variants?[mode]?[role] = colour
+            }
+        }
+        return pack
+    }
+
     /// Native controls call this coordinator too. There is no caller approval switch or executor verb.
     func registerThemes(_ coordinator: @escaping @MainActor @Sendable () throws -> ThemeCoordinator) {
         register(ControlVerb("theme", help: "Create, edit, duplicate, delete or transfer data-only local packs (delete removes a pack you made or imported, or hides one of Pilot's own until theme get brings it back, never the theme in use or the last one), or install them from Pilot's catalogue (theme catalogue, get; every file checked against its sha256; a built-in theme's plan downloads its wallpapers from there); review exact changes before Apply/Restore. Zed, every Obsidian vault, Ghostex's window colour, VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2, btop, lazygit, Neovim, fish and Vesktop follow when found, with switches to turn each off; custom mappings need local bindings and optional reloads ask separately. A theme changes everything it carries and Restore undoes it; follow mode personal keeps macOS Light or Dark as it is. Toybox colours stay scoped. Use pilot guide theme or /theme in Ask Pilot. Installed-app refresh and CSS precedence need checking in the target app.",
-                             usage: "pilot theme list [--summary] | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> [--summary] | plan restore [--summary] | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>",
+                             usage: "pilot theme list [--summary] | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> [--summary] | plan restore [--summary] | apply <plan-id> | restore <plan-id> | set <id> <revision> <role>=<hex>… (light.<role>= or dark.<role>= for one variant) | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>",
                              flags: [.init("summary", help: "a plan's id, its apply command and what it changes, without the file bytes (Allow still shows every change); for list, a line a pack: id, title, dark, yours, wallpapers", takesValue: false)]) { call throws(ControlError) in
             do {
                 // --summary is a plan's alone; the rest match on the words without it.
@@ -50,6 +81,19 @@ extension ControlVerbs {
                         path == "PROVENANCE.md" || draft.pack.wallpapers.contains { path == $0 || path.hasPrefix($0 + "/") }
                     }
                     return try themeJSON(owner.saveDraft(draft, replacing: words.count == 4 ? words[3] : nil).pack)
+                case "set" where words.count >= 4:
+                    // A palette edit by role, so the agent never hand-writes a base64 manifest (skills-test: one save was
+                    // $1.91 and 230 s of thinking). The same validator as save, save's revision guard, nothing applied.
+                    let id = words[1]
+                    guard !owner.store.isPilots(id) else { throw ThemeFailure("\(id) is one of Pilot's own themes: pilot theme duplicate \(id) <new-id> <title> first, then set the copy") }
+                    var draft = try owner.store.draft(id)
+                    draft.pack = try Self.recoloured(draft.pack, words[3...])
+                    let bytes = try ThemeDigest.encoded(draft.pack)
+                    try ThemeLedger.validateFields(bytes, encoded: ThemeDigest.encoded(try JSONDecoder().decode(JSONValue.self, from: bytes)))
+                    draft.pack = try ThemePack.decode(bytes)
+                    let saved = try owner.saveDraft(draft, replacing: words[2])
+                    return .object(["pack": .string(id), "revision": .string(saved.revision), "palette": try themeJSON(saved.pack.palette),
+                                    "applied": .bool(false), "next": .string("pilot theme plan apply \(id) --summary shows what applying it changes")])
                 case "attach" where words.count == 4:
                     try owner.editorPath(words[2])
                     let draft = try ThemePackStore.attaching([words[2]], to: owner.store.draft(words[1]))
