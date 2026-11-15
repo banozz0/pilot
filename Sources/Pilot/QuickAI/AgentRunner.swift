@@ -117,7 +117,7 @@ extension AISettings {
         guard let cli = findCLI() else { return .failure(.missing) }
         guard let prompt = AISkills.url(skill) else { return .failure(.failed("Pilot's \(kind) prompt is missing from the app")) }
         let (model, effort, helpers, style) = (model(for: .claudeCode)?.id, effort(for: .claudeCode), Self.helpers, answerStyle)
-        return .success(ExtensionMaker.turn(folder: folder) { folder in
+        return .success(ExtensionMaker.turn(folder: folder, idea: idea) { folder in
             ExtensionMaker.agent(cli: cli.path, prompt: prompt, helpers: helpers, folder: folder, model: model, effort: effort, style: style)
         })
     }
@@ -200,13 +200,17 @@ enum ExtensionMaker {
     }
 
     /// One /extension turn in a new folder, on its own session: claude keeps a session's first prompt (AIChat.Request.text),
-    /// so it never resumes the chat's, and the chat never resumes its; the earlier turns go as text.
-    static func turn(folder: @escaping @Sendable () throws -> URL = { try folder() }, _ agent: @escaping @Sendable (URL) -> AIChat.Agent) -> AIChatModel.Turn {
+    /// so it never resumes the chat's, and the chat never resumes its; the earlier turns go as text. The message is the
+    /// `idea` alone: claude -p reads a leading "/extension" or "/widget" as its own slash command, and a skill of the user's
+    /// by that name would take the turn (seen 2026-11-15: "/widget is not an installed command in this session").
+    static func turn(folder: @escaping @Sendable () throws -> URL = { try folder() }, idea: String? = nil,
+                     _ agent: @escaping @Sendable (URL) -> AIChat.Agent) -> AIChatModel.Turn {
         { request, event throws(QuickAI.Failure) in
             let made: URL
             do { made = try folder() } catch { throw .failed("no folder to make it in: \(error.localizedDescription)") }
             var fresh = request
             fresh.session = nil
+            if let idea { fresh.message = idea.isEmpty ? "(No words: build what the picture shows.)" : idea }
             var reply = try await agent(made).turn(fresh, event: event)
             reply.session = nil
             return reply
