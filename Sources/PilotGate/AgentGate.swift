@@ -38,21 +38,22 @@ public enum AgentTool {
     /// which an agent allowed nothing but `pilot` can never read: the `pilot` an agent runs (PILOT_AGENT) cuts first.
     public static let resultLimit = 30_000
 
-    /// `text` whole when it fits `limit`, else its head and its tail around a "… N KB cut …" line: a plan's id, a
+    /// `text` whole when it fits `resultLimit`, else its head and its tail around a "… N KB cut …" line: a plan's id, a
     /// summary or an error may sit at either end.
-    public static func cut(_ text: String, limit: Int = resultLimit) -> String {
-        guard text.utf16.count > limit else { return text }
-        let room = max(0, limit - 64)  // The marker's line.
+    public static func cut(_ text: String) -> String {
+        guard text.utf16.count > resultLimit else { return text }
+        let room = resultLimit - 64  // The marker's line.
         var head = text.startIndex, used = 0
-        for (index, character) in zip(text.indices, text) {
-            guard used + character.utf16.count <= room * 2 / 3 else { break }
-            used += character.utf16.count; head = text.index(after: index)
+        while head < text.endIndex {
+            let units = text[head].utf16.count
+            guard used + units <= room * 2 / 3 else { break }
+            used += units; head = text.index(after: head)
         }
-        var tail = text.endIndex, tailUsed = 0
+        var tail = text.endIndex
         while tail > head {
-            let before = text.index(before: tail)
-            guard used + tailUsed + text[before].utf16.count <= room else { break }
-            tailUsed += text[before].utf16.count; tail = before
+            let before = text.index(before: tail), units = text[before].utf16.count
+            guard used + units <= room else { break }
+            used += units; tail = before
         }
         let kilobytes = max(1, (text[head..<tail].utf8.count + 512) / 1024)
         return String(text[..<head]) + "\n… \(kilobytes) KB cut …\n" + String(text[tail...])

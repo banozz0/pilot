@@ -11,7 +11,7 @@ extension ControlVerbs {
                              flags: [.init("summary", help: "a plan's id, its apply command and what it changes, without the file bytes (Allow still shows every change)", takesValue: false)]) { call throws(ControlError) in
             do {
                 // --summary is a plan's alone; the rest match on the words without it.
-                let owner = try coordinator(), summary = call.words.contains("--summary"), words = call.words.filter { $0 != "--summary" }
+                let owner = try coordinator(), args = call.arguments(), summary = args.has("summary"), words = args.positional
                 switch words.first {
                 // A removed built-in theme (Look.hiddenThemes) is left out until theme get brings it back.
                 case "list" where words.count == 1:
@@ -132,26 +132,21 @@ extension ThemeCoordinator {
     /// that sees only an answer's head still has the id. `summary` leaves those bytes out.
     func describe(_ plan: ThemePlan, summary: Bool = false) throws -> JSONValue {
         let operation = plan.packID == nil ? "restore" : "apply"
+        func path(_ change: ThemeMutation) -> String { change.target.root + "/" + change.target.path }
         let head: [String: JSONValue] = ["id": .string(plan.id), "operation": .string(operation), "apply": .string("pilot theme \(operation) \(plan.id)"),
                                          "pack": plan.packID.map(JSONValue.string) ?? .null, "revision": plan.revision.map(JSONValue.string) ?? .null,
                                          "review": reviewJSON(plan), "warnings": .array(plan.warnings.map(JSONValue.string)), "applied": .bool(false)]
         if summary {
-            var paths: [String] = []
-            for change in plan.mutations {
-                let path = change.target.root + "/" + change.target.path
-                if !paths.contains(path) { paths.append(path) }
-            }
+            var seen = Set<String>(), files: [JSONValue] = []
+            for change in plan.mutations where seen.insert(path(change)).inserted { files.append(.string(path(change))) }
             func count(_ n: Int) -> JSONValue { .number(Double(n)) }
-            return .object(head.merging(["files": .array(paths.map(JSONValue.string)), "native": .bool(appearanceChange(plan) != nil),
+            return .object(head.merging(["files": .array(files), "native": .bool(appearanceChange(plan) != nil),
                                          "wallpapers": count(plan.wallpapers.count), "ghostex": count(plan.ghostex.count), "reloads": count(plan.reloads.count)]) { a, _ in a })
         }
+        func text(_ bytes: Data?) -> JSONValue { bytes.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null }
         let changes: [JSONValue] = try plan.mutations.map { change in
-            let before: JSONValue = change.before.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
-            let after: JSONValue = change.after.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
-            let proposed: JSONValue = change.replacement.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
-            return .object(["path": .string(change.target.root + "/" + change.target.path), "selector": try themeJSON(change.selector),
-                            "before": before, "after": after, "proposedBytes": proposed,
-                            "bindingID": change.bindingID.map(JSONValue.string) ?? .null])
+            .object(["path": .string(path(change)), "selector": try themeJSON(change.selector), "before": text(change.before), "after": text(change.after),
+                     "proposedBytes": text(change.replacement), "bindingID": change.bindingID.map(JSONValue.string) ?? .null])
         }
         let full: [String: JSONValue] = ["changes": .array(changes), "native": try appearanceChange(plan).map(themeJSON) ?? .null,
                                          "reloads": .array(try plan.reloads.map { try themeJSON($0.binding) }),

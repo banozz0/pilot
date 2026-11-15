@@ -164,28 +164,25 @@ let code: Int32 = ok ? 0 : error?["code"] as? String == "denied" ? 4 : 1
 
 // The agent's answer is cut to what its shell tool shows whole, head and tail kept (AgentTool.cut): a longer one would
 // reach it as its first 2 KB only.
-func put(_ out: Data) {
-    guard agent, out.count > AgentTool.resultLimit, let text = String(data: out, encoding: .utf8) else {
-        FileHandle.standardOutput.write(out); return
-    }
-    FileHandle.standardOutput.write(Data(AgentTool.cut(text).utf8))
+func put(_ text: String) {
+    FileHandle.standardOutput.write(Data((agent ? AgentTool.cut(text) : text).utf8))
 }
 
 if raw {
-    put(answerLine + Data([0x0A]))
+    put(String(decoding: answerLine, as: UTF8.self) + "\n")
     exit(code)
 }
 guard ok else { fail(error?["message"] as? String ?? "Pilot answered an error with no message", code) }
 switch object["result"] {
 case nil, is NSNull: break
-case let text as String: put(Data((text.hasSuffix("\n") ? text : text + "\n").utf8))
+case let text as String: put(text.hasSuffix("\n") ? text : text + "\n")
 case let result? where printsText(terminal: isatty(STDOUT_FILENO) == 1, words: words):
     let text = readable(result)
-    if !text.isEmpty { put(Data((text + "\n").utf8)) }
+    if !text.isEmpty { put(text + "\n") }
 case _?:
     let wire = try! JSONDecoder().decode([String: WireValue].self, from: answerLine)
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     let pretty = try! encoder.encode(wire["result"] ?? .null)
-    put(pretty + Data([0x0A]))
+    put(String(decoding: pretty, as: UTF8.self) + "\n")
 }
 exit(0)
