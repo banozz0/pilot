@@ -77,8 +77,10 @@ jobs:
         run: |
           # NUL-separated and unquoted, so a path with any byte in it is read as itself (quotePath would put a non-ASCII
           # path in quotes and hide it from a catalogue/ match).
+          # Into a file first, so a failing diff fails the step instead of reading as no change.
+          git -c core.quotePath=false diff -z --no-renames --name-only "$BASE...$HEAD" > "$RUNNER_TEMP/changed" || exit 1
           changed=()
-          while IFS= read -r -d '' f; do changed+=("$f"); done < <(git -c core.quotePath=false diff -z --no-renames --name-only "$BASE...$HEAD")
+          while IFS= read -r -d '' f; do changed+=("$f"); done < "$RUNNER_TEMP/changed"
           catalogue=false
           for f in "${changed[@]}"; do case "$f" in catalogue/*) catalogue=true ;; esac; done
           echo "catalogue=$catalogue" >> "$GITHUB_OUTPUT"
