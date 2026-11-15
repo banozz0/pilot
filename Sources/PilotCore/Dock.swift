@@ -84,7 +84,8 @@ public struct DockApp: Equatable, Sendable {
     public var key: String { bundleID ?? url?.path(percentEncoded: false) ?? name }
     /// The dots under it: one per window, at most three; a running app with no window listed keeps one, as the Dock's does.
     public var dots: Int { running ? min(max(windows, 1), DockApps.mostDots) : 0 }
-    /// What a click does: open or bring it forward, focus its one window, or list its windows to pick one.
+    /// What a click does by the dock's listing: open or bring it forward, focus its one window, or list its windows to
+    /// pick one. The press itself reads the minimized windows again (DockPress), so a window minimized since is restored.
     public var click: DockClick { windows >= 2 ? .listWindows : windows == 1 ? .focusWindow : .activate }
 }
 

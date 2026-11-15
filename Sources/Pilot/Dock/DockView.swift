@@ -394,7 +394,8 @@ struct DockBacking<S: Shape>: ViewModifier {
 }
 
 /// One app: its icon on nothing (no tile behind any icon), an accent dot under it while it runs, the front app's a wider
-/// capsule. A click opens it, focuses its one window, or lists its windows over it to pick one.
+/// capsule. A click opens it, focuses its one window, lists its windows over it to pick one, or with every window
+/// minimized brings back the one minimized last (DockPress).
 struct DockAppIcon: View {
     @Environment(\.ink) private var ink
     let app: DockApp
