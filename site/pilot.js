@@ -1099,7 +1099,7 @@
       await d.click('#desk [data-tb="pilot"]', { dwell: 1600 }); await d.click('#desk [data-tb="pilot"]');
     },
   };
-  const TOUR = ['launcher', 'pilotfiles', 'look', 'windows', 'desktop', 'dictation', 'captures', 'ai', 'clipboard', 'keys', 'files', 'convert', 'menubar'];
+  const TOUR = ['look', 'desktop', 'menubar', 'launcher', 'windows', 'pilotfiles', 'dictation', 'captures', 'ai', 'clipboard', 'keys', 'files', 'convert'];   // the look first (round 3)
   const layer = studio || (areaEl && stage.isConnected ? stage : null), deskEl = $('#desk');
   if (layer && deskEl && !reduced && (studio || DEMO[cur])) {
     layer.classList.add('dlayer');
