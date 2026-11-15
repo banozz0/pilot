@@ -1012,6 +1012,7 @@
 .site .capR .more::after { content: ""; position: absolute; left: -2px; right: -2px; bottom: -3px; height: 7px; background: var(--lime); -webkit-mask: var(--brush) 0 0 / 100% 100% no-repeat; mask: var(--brush) 0 0 / 100% 100% no-repeat; }
 .more2 { margin-top: 120px; }
 .mgrid { margin-top: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }   /* six cards, three over three (Q259) */
+.more2 .mgrid.one { grid-template-columns: 1fr; margin-top: 0; }   /* round 3 plan v2: the one card left, leading into Features */
 @media (max-width: 1100px) { .mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .mcard { display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-rows: auto 1fr auto; gap: 6px 12px; padding: 18px 18px 16px; border-radius: 14px; border: 1px solid var(--line2); background: color-mix(in srgb, var(--panel) 90%, transparent); }
 .mcard .mi { grid-row: 1 / span 3; width: 26px; height: 22px; display: grid; place-items: start center; color: var(--t2); }
