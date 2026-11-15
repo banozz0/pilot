@@ -69,8 +69,8 @@ final class WidgetDesk: ScreenPausing {
     private var drags = 0
     /// The widget `over` found under a press, waiting for `grab`.
     private var hit: (String, CGRect)?
-    /// The faint grid a grab shows while Snap to grid is on (WidgetGridDesk).
-    private let gridOverlay = WidgetGridOverlay()
+    /// A grab's landing on the grid, and the faint grid it shows, while Snap to grid is on (WidgetGridDesk).
+    private let gridDrag = WidgetGridDrag()
     private var watchingTheme = false, watchingVeil = false
     /// How many tiles Home draws now of each Home placement, in the window on screen (Edit Home's carry draws a copy
     /// beside the one it hides): only a placement drawn at least once is fed and runs a page.
@@ -99,20 +99,14 @@ final class WidgetDesk: ScreenPausing {
         guard !started else { return }
         started = true
         self.tiler = tiler
-        reload()
+        // Placements from before Snap to grid, or a file edited by hand, go on the grid once at the start.
+        if WidgetSnap.shared.on { snapAll() } else { reload() }
     }
 
     /// The placements file changed (`pilot add|remove widgets`, the Widgets page): panels follow, and the desk arms or
-    /// disarms. While Snap to grid is on, any desktop placement off the grid (a new one, one placed before the setting,
-    /// a file edited by hand) goes on it first and is saved there. Before the engine started it only reads and snaps.
+    /// disarms. Before the engine started it only reads.
     func reload() {
-        var read = store.readPlacements()
-        if let current = read, WidgetSnap.shared.on {
-            let snapped = Self.snapped(current)
-            if snapped != current {
-                do { try store.save(snapped); read = snapped } catch { widgetLog.error("widgets: grid placement not saved: \(error.localizedDescription, privacy: .public)") }
-            }
-        }
+        let read = store.readPlacements()
         // A file that does not read leaves the placements as they were: nothing closes on a read that failed.
         placements = read ?? placements
         for id in Set(models.keys).subtracting(placements.map(\.id)) { close(id) }
@@ -215,10 +209,7 @@ final class WidgetDesk: ScreenPausing {
         let panel = panels[placement.id] ?? makePanel(placement)
         var placed = placement
         if let height = fittedHeights[placement.id] { placed.height = height }
-        var shown = placed.frame(on: Self.flip(screen.frame))
-        // On the grid, a fitted height too, to whole cells.
-        if WidgetSnap.shared.on { let grid = Self.grid(on: screen); shown = grid.rect(grid.cell(nearest: shown)) }
-        let frame = Self.flip(shown)
+        let frame = Self.flip(placed.frame(on: Self.flip(screen.frame)))
         // A panel under a Hyper+drag stays where the pointer has it until the drop.
         if panel.frame != frame, dragging?.id != placement.id { panel.setFrame(frame, display: false) }
         if !panel.isVisible { panel.orderFrontRegardless() }
@@ -253,7 +244,8 @@ final class WidgetDesk: ScreenPausing {
     /// Fits a placement to its content's height until Sven resizes it: then his size stays (Placement.sized).
     private func fit(_ id: String, _ height: Double) {
         guard placements.first(where: { $0.id == id })?.sized != true else { return }
-        let height = Widget.Size.clamp(height)
+        // On the grid, to whole cells, so its foot lines up too.
+        let height = Widget.Size.clamp(WidgetSnap.shared.on ? Widget.Grid.length(Widget.Grid.span(height, most: .max)) : height)
         guard abs((fittedHeights[id] ?? 0) - height) >= 2 else { return }
         fittedHeights[id] = height
         apply()
@@ -693,7 +685,7 @@ final class WidgetDesk: ScreenPausing {
         dragging = (id, point, frame, resize ? (point.x < frame.midX, point.y < frame.midY) : nil)
         (dragFrames, lastDragPoint) = (LatestWins(interval: 1.0 / 60), nil)
         drags += 1
-        showGrid(frame)
+        followGrid(frame)
         return true
     }
 
@@ -738,14 +730,14 @@ final class WidgetDesk: ScreenPausing {
             frame.origin = CGPoint(x: frame.minX + dx, y: frame.minY + dy)
             panel.setFrameOrigin(Self.flip(frame).origin)
         }
-        showGrid(frame)
+        followGrid(frame)
     }
 
     /// While Snap to grid is on, the grid under a grab's frame, the cells it would land on lit; the panel itself follows
     /// the pointer freely until the drop.
-    private func showGrid(_ frame: CGRect) {
-        guard WidgetSnap.shared.on, let dragging, let landing = landing(frame, of: dragging.id, corner: dragging.corner) else { return }
-        gridOverlay.show(landing.grid, on: landing.screen, landing: landing.grid.rect(landing.cell), below: panels[dragging.id])
+    private func followGrid(_ frame: CGRect) {
+        guard WidgetSnap.shared.on, let dragging else { return }
+        gridDrag.update(frame, of: dragging.id, corner: dragging.corner, start: dragging.frame, among: placements)
     }
 
     /// A grab whose release went by unseen (the mouse tap saw the next press of its button first): the panel goes back
@@ -754,7 +746,7 @@ final class WidgetDesk: ScreenPausing {
         guard let held = dragging else { return }
         dragging = nil
         lastDragPoint = nil
-        gridOverlay.hide()
+        gridDrag.end()
         panels[held.id]?.setFrame(Self.flip(held.frame), display: false)
         refix(held.id)
         widgetLog.notice("widgets: a grab of \(held.id, privacy: .public) ended unseen; cancelled")
@@ -770,10 +762,8 @@ final class WidgetDesk: ScreenPausing {
             && (lastDragPoint.map { hypot($0.x - held.start.x, $0.y - held.start.y) <= MouseDragTap.clickSlop } ?? true)
         if clicked { panels[held.id]?.setFrame(Self.flip(held.frame), display: false) } else if let last = lastDragPoint { move(to: last) }
         // On the grid, it lands on the cells the overlay lit.
-        if !clicked, WidgetSnap.shared.on, let panel = panels[held.id], let landing = landing(Self.flip(panel.frame), of: held.id, corner: held.corner) {
-            panel.setFrame(Self.flip(landing.grid.rect(landing.cell)), display: false)
-        }
-        gridOverlay.hide()
+        if !clicked, let landing = gridDrag.landing { panels[held.id]?.setFrame(Self.flip(landing), display: false) }
+        gridDrag.end()
         dragging = nil
         if clicked { refix(held.id); return openMenu(at: held.start) }
         guard let panel = panels[held.id], let i = placements.firstIndex(where: { $0.id == held.id }) else { return }

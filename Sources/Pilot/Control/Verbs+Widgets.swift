@@ -143,9 +143,8 @@ extension ControlVerbs {
                                                      workspace: workspace, home: home)
                 placement.values = values
                 placements.append(placement)
-                try Self.save(placements, tools)
-                // As the desk left it: on the grid while Snap to grid is on.
-                return Self.row(tools.store.placements().first { $0.id == placement.id } ?? placement)
+                // As saved: on the grid while Snap to grid is on.
+                return Self.row(try Self.save(placements, tools).first { $0.id == placement.id } ?? placement)
             },
             askerRemove: { args, _ throws(ControlError) in
                 let id = try args.word(0, "id")
@@ -157,9 +156,13 @@ extension ControlVerbs {
             }))
     }
 
-    private static func save(_ placements: [Widget.Placement], _ tools: WidgetTools) throws(ControlError) {
-        do { try tools.store.save(placements) } catch { throw ControlError(.badValue, "not saved: \(error.localizedDescription)") }
+    /// Saved as the desk places them (on the grid while Snap to grid is on), then shown; what was saved.
+    @discardableResult
+    private static func save(_ placements: [Widget.Placement], _ tools: WidgetTools) throws(ControlError) -> [Widget.Placement] {
+        let placed = WidgetDesk.placed(placements)
+        do { try tools.store.save(placed) } catch { throw ControlError(.badValue, "not saved: \(error.localizedDescription)") }
         tools.desk.reload()
+        return placed
     }
 
     private static func row(_ p: Widget.Placement) -> JSONValue {

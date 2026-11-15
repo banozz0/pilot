@@ -131,7 +131,7 @@ final class WidgetsPageModel {
     }
 
     private func save(_ placements: [Widget.Placement], done: String) {
-        do { try store.save(placements); note = done } catch { note = "Not saved: \(error.localizedDescription)" }
+        do { try store.save(WidgetDesk.placed(placements)); note = done } catch { note = "Not saved: \(error.localizedDescription)" }
         desk.reload()
         reload()
     }

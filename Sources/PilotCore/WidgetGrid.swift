@@ -19,7 +19,7 @@ extension Widget {
             public init(x: Int, y: Int, w: Int, h: Int) { (self.x, self.y, self.w, self.h) = (x, y, w, h) }
             public func overlaps(_ o: Cell) -> Bool { x < o.x + o.w && o.x < x + w && y < o.y + o.h && o.y < y + h }
             /// `col,row wxh`, as `pilot status --part widgets` gives it.
-            public var line: String { "\(x),\(y) \(w)x\(h)" }
+            public var line: String { "\(x),\(y) \(w)×\(h)" }
         }
 
         /// The grid in `area`, at least one cell each way, centred with the room left over.
@@ -27,8 +27,7 @@ extension Widget {
             self.area = area
             let fit = { (side: Double) in max(1, Int(((side - Self.gap) / Self.pitch).rounded(.down))) }
             columns = fit(area.width); rows = fit(area.height)
-            let used = { (n: Int) in Double(n) * Self.pitch - Self.gap }
-            origin = CGPoint(x: area.minX + max(0, (area.width - used(columns)) / 2), y: area.minY + max(0, (area.height - used(rows)) / 2))
+            origin = CGPoint(x: area.minX + max(0, (area.width - Self.length(columns)) / 2), y: area.minY + max(0, (area.height - Self.length(rows)) / 2))
         }
 
         /// The points `n` cells span.
@@ -68,6 +67,20 @@ extension Widget {
             return Cell(x: x, y: y, w: w, h: h)
         }
 
+        /// A resize's cells clear of `taken`: the largest that fits inside `cell`, its kept corner where it is, else
+        /// `fallback` (where the grab started), so a resize never lands on another widget.
+        public func clear(_ cell: Cell, left: Bool, top: Bool, avoiding taken: [Cell], fallback: Cell) -> Cell {
+            guard taken.contains(where: cell.overlaps) else { return cell }
+            var best: Cell?
+            for w in stride(from: cell.w, through: Self.fewest, by: -1) {
+                for h in stride(from: cell.h, through: Self.fewest, by: -1) where w * h > (best.map { $0.w * $0.h } ?? 0) {
+                    let spot = Cell(x: left ? cell.x + cell.w - w : cell.x, y: top ? cell.y + cell.h - h : cell.y, w: w, h: h)
+                    if !taken.contains(where: spot.overlaps) { best = spot }
+                }
+            }
+            return best ?? fallback
+        }
+
         /// Whether a frame is exactly its nearest cells, within half a point.
         public func holds(_ frame: CGRect) -> Bool {
             let rect = rect(cell(nearest: frame))
@@ -95,21 +108,13 @@ extension Widget {
         /// them, so none overlap while there is room. The ones already on the grid go first, so a new one never moves
         /// them; then the rest, in reading order (top to bottom, then left to right).
         public func pack(_ frames: [CGRect]) -> [Cell] {
-            let order = frames.indices.sorted {
-                (holds(frames[$0]) ? 0 : 1, frames[$0].minY, frames[$0].minX, $0) < (holds(frames[$1]) ? 0 : 1, frames[$1].minY, frames[$1].minX, $1)
+            let key = { (i: Int) in (holds(frames[i]) ? 0 : 1, frames[i].minY, frames[i].minX, i) }
+            var cells = frames.map(cell(nearest:)), taken: [Cell] = []
+            for i in frames.indices.sorted(by: { key($0) < key($1) }) {
+                cells[i] = free(cells[i], avoiding: taken)
+                taken.append(cells[i])
             }
-            var cells = [Cell?](repeating: nil, count: frames.count)
-            var taken: [Cell] = []
-            for i in order {
-                let cell = free(cell(nearest: frames[i]), avoiding: taken)
-                cells[i] = cell
-                taken.append(cell)
-            }
-            return cells.map { $0! }
+            return cells
         }
     }
-}
-
-private extension Int {
-    func clamped(_ low: Int, _ high: Int) -> Int { Swift.min(Swift.max(self, low), Swift.max(low, high)) }
 }

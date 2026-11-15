@@ -796,6 +796,12 @@ extension Widget {
             x = ((frame.minX - screen.minX) / screen.width).clamped(0, 1)
             y = ((frame.minY - screen.minY) / screen.height).clamped(0, 1)
         }
+
+        /// On `frame` of `screen`, its size too (Snap to grid's cells).
+        public mutating func land(on frame: CGRect, screen: CGRect) {
+            move(to: frame, on: screen)
+            (width, height) = (frame.width, frame.height)
+        }
     }
 
     /// What decides whether a screen's widgets show (Q592): its shown workspace has no window, or Show desktop holds the
@@ -819,6 +825,7 @@ extension Widget {
     }
 }
 
-private extension Double {
-    func clamped(_ low: Double, _ high: Double) -> Double { Swift.min(Swift.max(self, low), Swift.max(low, high)) }
+extension Comparable {
+    /// Held between `low` and `high`; `low` wins when they cross.
+    func clamped(_ low: Self, _ high: Self) -> Self { Swift.min(Swift.max(self, low), Swift.max(low, high)) }
 }

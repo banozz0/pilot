@@ -41,7 +41,7 @@ struct WidgetGridRenders {
         print("GRID \(grid.columns)x\(grid.rows) at \(grid.origin); placed \(cells.map(\.line)); lands \(landing.line)")
 
         let model = WidgetGridModel()
-        (model.grid, model.screen, model.landing) = (grid, screen, grid.rect(landing))
+        (model.grid, model.origin, model.landing) = (grid, screen.origin, grid.rect(landing))
         func tile(_ widget: Widget, _ frame: CGRect, lifted: Bool = false) -> some View {
             let tile = WidgetTileModel()
             tile.title = widget.title; tile.icon = widget.icon; tile.blocks = WidgetRenders.blocks(widget); tile.buttons = widget.buttons
