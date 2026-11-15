@@ -1,14 +1,16 @@
 import Foundation
+import PilotGate
 
 // pilot: the command that talks to the running Pilot over its control socket (ADR 0013). A dumb pipe: it sends the verb,
 // the words after it and the cwd as they are, prints the answer and exits with its code. Every verb, check and message
-// lives in Pilot, so this file never changes when a verb is added. Foundation only, never PilotCore.
+// lives in Pilot, so this file never changes when a verb is added. Foundation and PilotGate only, never PilotCore.
 //   pilot [--json] <verb> [<word>…]
 // At a terminal an answer prints as text (TextAnswer.swift); piped, redirected or with --json it prints as JSON.
 // With --stdin among the words it also reads stdin to its end and sends it once as the request's secret, never as a word
 // (`pbpaste | pilot set ai.key.openAI --stdin`): shell history and the words never hold it, and it is never printed.
 // Exits 0 ok, 1 error, 2 usage, 3 Pilot not running, 4 denied. PILOT_SOCKET replaces the socket's path, for tests.
-// PILOT_AGENT=1 (Pilot's AI agent, AIChat.Agent.environment) marks the request as the agent's, whose changes Pilot plans.
+// PILOT_AGENT=1 (Pilot's AI agent, AIChat.Agent.environment) marks the request as the agent's, whose changes Pilot plans,
+// and cuts a long answer to AgentTool.resultLimit, head and tail kept.
 // No fixed wait: the wait is the answer's. Pilot owns the clock, and an Allow prompt answers denied after 60 s.
 
 func fail(_ message: String, _ code: Int32) -> Never {
@@ -54,7 +56,8 @@ if verb == "--help" || verb == "-h" { verb = "help" }
 
 let args = Array(words.dropFirst())
 var request: [String: Any] = ["id": 1, "verb": verb, "args": args, "cwd": FileManager.default.currentDirectoryPath]
-if ProcessInfo.processInfo.environment["PILOT_AGENT"] == "1" { request["agent"] = true }
+let agent = ProcessInfo.processInfo.environment["PILOT_AGENT"] == "1"
+if agent { request["agent"] = true }
 if args.prefix(while: { $0 != "--" }).contains("--stdin") {
     // Read whole before connecting, so Pilot never waits on a slow pipe. A terminal would echo what is typed.
     // A fixed text: the words may hold the very value that belongs on stdin.
@@ -159,21 +162,27 @@ let ok = object["ok"] as? Bool == true
 let error = object["error"] as? [String: Any]
 let code: Int32 = ok ? 0 : error?["code"] as? String == "denied" ? 4 : 1
 
+// The agent's answer is cut to what its shell tool shows whole, head and tail kept (AgentTool.cut): a longer one would
+// reach it as its first 2 KB only.
+func put(_ text: String) {
+    FileHandle.standardOutput.write(Data((agent ? AgentTool.cut(text) : text).utf8))
+}
+
 if raw {
-    FileHandle.standardOutput.write(answerLine + Data([0x0A]))
+    put(String(decoding: answerLine, as: UTF8.self) + "\n")
     exit(code)
 }
 guard ok else { fail(error?["message"] as? String ?? "Pilot answered an error with no message", code) }
 switch object["result"] {
 case nil, is NSNull: break
-case let text as String: print(text, terminator: text.hasSuffix("\n") ? "" : "\n")
+case let text as String: put(text.hasSuffix("\n") ? text : text + "\n")
 case let result? where printsText(terminal: isatty(STDOUT_FILENO) == 1, words: words):
     let text = readable(result)
-    if !text.isEmpty { print(text) }
+    if !text.isEmpty { put(text + "\n") }
 case _?:
     let wire = try! JSONDecoder().decode([String: WireValue].self, from: answerLine)
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     let pretty = try! encoder.encode(wire["result"] ?? .null)
-    FileHandle.standardOutput.write(pretty + Data([0x0A]))
+    put(String(decoding: pretty, as: UTF8.self) + "\n")
 }
 exit(0)

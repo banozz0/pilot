@@ -33,13 +33,30 @@ public enum AgentTool {
         "required": ["command"],
     ] }
 
-    /// What one command hands back, at most this long: claude's shell tool cuts at the same length.
+    /// What one command hands back, at most this long in UTF-16 units. Claude Code's shell tool (2.1.325, measured
+    /// 2026-11-15) keeps an answer of up to 30,000 whole and saves a longer one to a file, showing only its first 2 KB,
+    /// which an agent allowed nothing but `pilot` can never read: the `pilot` an agent runs (PILOT_AGENT) cuts first.
     public static let resultLimit = 30_000
 
+    /// `text` whole when it fits `resultLimit`, else its head and its tail around a "… N KB cut …" line: a plan's id, a
+    /// summary or an error may sit at either end.
     public static func cut(_ text: String) -> String {
-        guard text.utf8.count > resultLimit, let end = text.index(text.startIndex, offsetBy: resultLimit, limitedBy: text.endIndex),
-              end < text.endIndex else { return text }
-        return String(text[..<end]) + "\n… (cut: \(text[end...].count) more characters)"
+        guard text.utf16.count > resultLimit else { return text }
+        let room = resultLimit - 64  // The marker's line.
+        var head = text.startIndex, used = 0
+        while head < text.endIndex {
+            let units = text[head].utf16.count
+            guard used + units <= room * 2 / 3 else { break }
+            used += units; head = text.index(after: head)
+        }
+        var tail = text.endIndex
+        while tail > head {
+            let before = text.index(before: tail), units = text[before].utf16.count
+            guard used + units <= room else { break }
+            used += units; tail = before
+        }
+        let kilobytes = max(1, (text[head..<tail].utf8.count + 512) / 1024)
+        return String(text[..<head]) + "\n… \(kilobytes) KB cut …\n" + String(text[tail...])
     }
 
     /// What every `pilot` an agent runs sees, with no shell between: the home folder, the account, the temporary folder
