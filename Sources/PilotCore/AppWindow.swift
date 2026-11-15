@@ -595,7 +595,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .cleaning: "Cleaning"
         case .aiFallback: "Fallback"
         case .aiKeys: "Keys"
-        case .aiNewChat: "New chat"
+        case .aiNewChat: "Chat"
         case .soundInput: "Input"
         case .keyboardLayout: "Keyboard layout"
         case .mouseSpeed: "Mouse"
@@ -679,7 +679,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .cleaning: ["cleaning", "lock keyboard", "keyboard lock", "clean the keyboard", "wipe"]
         case .aiFallback: ["fallback", "backup ai", "when the ai fails"]
         case .aiKeys: ["ai keys", "ask ai key", "fix text", "fix selected text", "selection tools", "selection pill"]
-        case .aiNewChat: ["new chat after", "new chat", "start a new chat", "chat resets"]
+        case .aiNewChat: ["new chat after", "new chat", "start a new chat", "chat resets", "answer style", "answer length", "short answers"]
         case .soundInput: ["input", "microphone", "mic", "input volume", "input device"]
         case .keyboardLayout: ["keyboard layout", "input source", "layout", "typing in"]
         case .mouseSpeed: ["pointer speed", "tracking speed", "mouse speed", "cursor speed", "cycle speeds"]

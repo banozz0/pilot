@@ -25,12 +25,13 @@ Read first, each once:
 - `pilot keys --free`: the Hyper keys no action holds. `pilot keys --free --mods shift` for Hyper+Shift.
 - `pilot help bind routes` only for a menu item, keystroke or shell id no action covers.
 
-Propose every bind the user asked for, one line each: key, then what it does; five when they named no number. Take
+When the user named the key and what it does, plan and apply it in this reply: the Allow card is their yes. Otherwise
+propose every bind the user asked for, one line each: key, then what it does; five when they named no number. Take
 free keys first, the mnemonic letter first (L for Linear, then the next free letter of its name). When the user names
 keys that are held (as the arrows), use them anyway: say which action each one takes the key from, and plan it with
 `--replace`. An app opens with `apps.open:<bundle id>`, a web page with `apps.web:<https url>`.
 
-When the user says yes:
+To make them (at once, or on the user's yes to your list):
 1. `pilot bind <action> <key> --plan` for each one (add `--mods shift` for Hyper+Shift, `--replace` for a held key).
    Nothing changes yet.
 2. `pilot plan apply`: Pilot shows every row on one card and the user allows them once.

@@ -14,10 +14,11 @@ Read first, only what the request needs:
   `pilot list column-rules` (an app's column width on a scrolling strip, or its new windows leaving focus where it was).
 - `pilot list apps` for bundle ids, the most recently opened first.
 
-Propose one change per line: the workspace, its apps in order, the layout and sizes, the display; or an app rule
+When the user named the exact change (the workspace and its layout, the app and its workspace), plan and apply it in
+this reply: the Allow card is their yes. Otherwise propose one change per line: the workspace, its apps in order, the layout and sizes, the display; or an app rule
 ("Slack always on 4"). `pilot help add workspace-presets` names every field.
 
-When the user says yes, plan each change, then apply once:
+To make them (at once, or on the user's yes), plan each change, then apply once:
 - `pilot add workspace-presets --workspace 3 --apps com.tinyspeck.slackmacgap,com.linear --layout columns --plan`
 - `pilot add app-rules --app <bundle id> --workspace 4 --plan`
 - `pilot add layouts --workspace 3 --layout <layout> --plan`, `pilot add monitor-pins --workspace 2 --monitor main --plan`

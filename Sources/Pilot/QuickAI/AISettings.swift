@@ -36,6 +36,11 @@ final class AISettings {
         didSet { defaults.set(chatReset.rawValue, forKey: "ai.chatReset") }
     }
 
+    /// How Ask Pilot's agent shapes its answers (AIChat.AnswerStyle); Blocks on a fresh Mac.
+    var answerStyle: AIChat.AnswerStyle {
+        didSet { defaults.set(answerStyle.rawValue, forKey: "ai.answerStyle") }
+    }
+
     /// The AI that answers when the picked one fails for usage, billing or sign-in (AIFallback, P95); nil is None, a fresh
     /// Mac's.
     var fallback: AIProvider? {
@@ -76,6 +81,7 @@ final class AISettings {
         if stored != nil && known == nil { defaults.removeObject(forKey: "ai.provider") }
         provider = known ?? .claudeCode
         chatReset = defaults.string(forKey: "ai.chatReset").flatMap(AIChat.Reset.init(rawValue:)) ?? .standard
+        answerStyle = defaults.string(forKey: "ai.answerStyle").flatMap(AIChat.AnswerStyle.init(rawValue:)) ?? .standard
         fallback = defaults.string(forKey: "ai.fallback").flatMap(AIProvider.init(rawValue:))
         for route in AIProvider.allCases {
             picked[route] = defaults.string(forKey: Self.modelKey(route))

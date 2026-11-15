@@ -151,13 +151,13 @@ extension ControlVerbs {
             if let other = planned(mouse, for: id) { throw ControlError(.taken, "\(mouse.label) is planned for \(other) already; pick another key") }
             let other = try Self.mouseClash(mouse, for: id, store, replace: args.has("replace"))
             // A mouse trigger runs one action; the action may hold other triggers, so the change reads as the trigger's.
-            return .init("Bind \(mouse.label)", old: other ?? "nothing", new: label, key: mouse.label, free: other == nil, asks: app.ask(id))
+            return .init("Bind \(mouse.label)", old: other.map { Self.label($0, engine) } ?? "nothing", new: label, key: mouse.label, free: other == nil, asks: app.ask(id))
         }
         let key = try Self.key(args, at: 1, plain: args.has("plain"))
         if let other = planned(key, for: id) { throw ControlError(.taken, "\(key.label) is planned for \(other) already; pick another key") }
         let other = store.clash(key, for: id)
         if let other, !args.has("replace") { throw Self.taken(.triggerTaken(key, by: other)) }
-        return .init("Bind \(label)", old: old, new: key.label + (other.map { ", taking it from \($0)" } ?? ""), key: key.label,
+        return .init("Bind \(label)", old: old, new: key.label + (other.map { ", taking it from \(Self.label($0, engine))" } ?? ""), key: key.label,
                      free: other == nil, asks: app.ask(id))
     }
 

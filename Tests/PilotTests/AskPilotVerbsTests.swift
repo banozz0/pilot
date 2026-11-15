@@ -65,7 +65,7 @@ struct AskPilotVerbsTests {
         rig.verbs.plan.clear()
         #expect(await Self.ask(rig, "bind", [two, "k", "--plan"] + Self.mods).error?.code == .taken)
         #expect(await Self.ask(rig, "bind", [two, "k", "--plan", "--replace"] + Self.mods).ok)
-        #expect(rig.verbs.plan.changes.first?.new == "\(key.label), taking it from \(one)")
+        #expect(rig.verbs.plan.changes.first?.new == "\(key.label), taking it from \(rig.engine.action(one)?.label ?? one)")
         #expect(await rig.ask("unbind", one, "--plan").ok && rig.store.trigger(for: one) == key)
         #expect(rig.verbs.plan.changes.last?.line == "Unbind \(rig.engine.action(one)?.label ?? one): \(key.label) → none")
     }

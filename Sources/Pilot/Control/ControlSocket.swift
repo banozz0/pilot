@@ -25,19 +25,20 @@ final class ControlSocket {
     /// Engine.registerActions. Registering reads no live state, so the tests build it too; the sandbox host hands in its own
     /// `status` reads, and may hand in a Home layout store seeded from a file.
     static func registered(status: ControlStatus = ControlStatus(), homeBlocks: HomeBlockStores = HomeBlockStores(),
-                           clipboard: ClipboardTools = ClipboardTools()) -> ControlVerbs {
+                           clipboard: ClipboardTools = ClipboardTools(), extensions: ExtensionTools = ExtensionTools(),
+                           guides: @escaping @Sendable @MainActor () -> [AISkill] = { AISkills.guides }) -> ControlVerbs {
         let verbs = ControlVerbs(plan: plan)
         verbs.registerCore()
         verbs.registerThemes { try ThemeCoordinator.production() }
         verbs.registerPlan(gate: AllowPrompt.gate)
-        verbs.registerGuides()
+        verbs.registerGuides(skills: guides)
         verbs.registerLog()
         verbs.registerSettings(.live, decide: ControlVerbs.allowPrompt)
         verbs.registerMenuCollections()
         verbs.registerDesktop()
         verbs.registerWallpaper()
         verbs.registerActions(ControlActions())
-        verbs.registerExtensions(ExtensionTools())
+        verbs.registerExtensions(extensions)
         verbs.registerWidgets(WidgetTools())
         verbs.registerAppCollections()
         verbs.registerDock()

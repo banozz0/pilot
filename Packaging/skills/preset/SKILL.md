@@ -28,7 +28,9 @@ Read first, each once:
    list), the window moves and captures they use, and the preset's name.
 2. Show the whole preset before anything changes: its name (your guess when they gave none), then "Pilot default,
    plus:" and one line per key (key, then what it does), as many as the user asked for. Pilot default already holds
-   the Pilot menu, workspaces and moving between windows: list one of those only to move it to a new key. Free keys first, the mnemonic letter first (L for Linear). A key the user names is theirs in a new preset even
+   the Pilot menu, workspaces and moving between windows: list one of those only to move it to a new key.
+   An action holds one key, so an app or capture Pilot default already keys moves when bound again: put the apps' names
+   in the `pilot actions --find` call too, and list such a line only to move it, saying from which key. Free keys first, the mnemonic letter first (L for Linear). A key the user names is theirs in a new preset even
    when Pilot default holds it: take it with `--replace` and say on its line what it takes the key from. An app opens
    with `apps.open:<bundle id>`, a web page with `apps.web:<https url>`. End with: say yes to make it, or change any line.
 3. On yes: `pilot add presets --name "<their name>" --base pilot --plan`, then `pilot plan apply`. One Allow makes it

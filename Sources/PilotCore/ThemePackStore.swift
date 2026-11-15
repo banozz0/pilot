@@ -91,7 +91,12 @@ public struct ThemePackStore: Sendable {
                             guard !files.isEmpty else { throw ThemeFailure("empty wallpaper folder; use wallpapers: [] for none") }
                         } else { files = [url] }
                         for file in files {
-                            let relative = String(file.path.dropFirst(source.count + 1))
+                            // Its path under the asset, both sides resolved alike: the folder listing hands back /private/var
+                            // for a root under /var, so cutting the root's own length off it misplaced the path (every catalogue
+                            // get failed in the theme fixture: "missing/unsafe target parent", skills-test 2026-11-16).
+                            let base = url.resolvingSymlinksInPath().path, full = file.resolvingSymlinksInPath().path
+                            guard file == url || full.hasPrefix(base + "/") else { throw ThemeFailure("escaping wallpaper folder entry") }
+                            let relative = id + "/" + asset + (file == url ? "" : "/" + String(full.dropFirst(base.count + 1)))
                             let observed = try ThemeFiles.read(root: source, path: relative)
                             guard let data = observed.bytes, observed.resolved.hasPrefix(folder + "/"),
                                   let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
