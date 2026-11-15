@@ -131,7 +131,7 @@ final class WidgetsPageModel {
     }
 
     private func save(_ placements: [Widget.Placement], done: String) {
-        do { try store.save(placements); note = done } catch { note = "Not saved: \(error.localizedDescription)" }
+        do { try store.save(WidgetDesk.placed(placements)); note = done } catch { note = "Not saved: \(error.localizedDescription)" }
         desk.reload()
         reload()
     }
@@ -224,7 +224,7 @@ struct WidgetsPage: View {
     }
 
     static let intro = "Widgets on the desktop, on an empty workspace, or on Home."
-    static let introInfo = "They show while Show desktop holds the windows out too. Hyper+drag moves one, Hyper+right-drag resizes it, a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
+    static let introInfo = "They show while Show desktop holds the windows out too. Hyper+drag moves one, Hyper+right-drag resizes it, on whole cells of a grid while Snap to grid is on; a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
 
     var body: some View {
         KitPage(intro: Self.intro, info: Self.introInfo) {
@@ -233,6 +233,7 @@ struct WidgetsPage: View {
             // Your widgets waits until it holds something (simplify-pages T3); New widget is on Widgets. On the desktop
             // and On Home are one Placed list (simplify-pages T19).
             if !model.installed.isEmpty || !model.broken.isEmpty { yours }
+            placing
             placed
         }
         .task {
@@ -296,6 +297,18 @@ struct WidgetsPage: View {
         }
         .menuStyle(.button).buttonStyle(.pilot).fixedSize()
     }
+
+    /// Snap to grid (Sven, 2026-11-15): on puts the desktop's widgets on the grid now.
+    private var placing: some View {
+        @Bindable var snap = WidgetSnap.shared
+        return KitBlock(title: "Placing", symbol: "square.grid.3x3") {
+            BlockRow(first: true) {
+                Toggle("Snap to grid", isOn: $snap.on).toggleStyle(.pilotSwitchRow(info: Self.snapInfo))
+            }
+        }
+    }
+
+    static let snapInfo = "Desktop widgets move and resize a whole cell at a time, so their edges and gaps line up; the grid shows faintly while you drag one. Turned on, the ones already there go to the nearest free cells."
 
     /// Every widget placed, on the desktop first, then on Home (simplify-pages T19: were two blocks).
     private var placed: some View {

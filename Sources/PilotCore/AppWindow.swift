@@ -191,7 +191,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .ai: ["ai", "ask", "chat", "quick ai", "claude", "ask claude", "ai chat"]
         case .extensions: ["extension", "preference", "password", "permission", "extensions folder"]
         case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "magnification", "magnify", "dock size", "auto-hide", "pins", "keep in dock"]
-        case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note"]
+        case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note", "snap to grid", "grid", "align"]
         // The front's words; the rest moved with their controls to Voice's More places (simplify-pages T12).
         case .voice: ["dictation", "dictate", "read aloud", "speech", "speak", "voice", "text to speech", "tts", "speed", "speech to text",
                       "whisper", "parakeet", "speech model", "transcribe", "microphone", "kokoro"]

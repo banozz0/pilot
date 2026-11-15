@@ -23,6 +23,7 @@ extension SettingsSchema {
         schema.registerSpeech(.shared)
         schema.registerSelection(.shared)
         schema.registerCaptures(.shared)
+        schema.registerWidgets(.shared)
         schema.registerWebApps(.shared)
         schema.registerHiddenApps(.shared)
         schema.registerMenuRoot(.shared)
