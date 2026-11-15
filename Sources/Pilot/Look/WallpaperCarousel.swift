@@ -407,8 +407,8 @@ enum CarouselThumbnails {
         : URL.cachesDirectory.appending(path: "dev.banozz.pilot/Carousel", directoryHint: .isDirectory)
     static let limit = 300
 
-    /// `path` at most `pixels` on its long side, and whether it was kept from before. Never on the main thread.
-    nonisolated static func image(_ path: String, pixels: Int) -> (image: CGImage, kept: Bool)? {
+    /// `path` at most `pixels` on its long side, and whether it was kept from before; always off the main thread.
+    @concurrent static func image(_ path: String, pixels: Int) async -> (image: CGImage, kept: Bool)? {
         let url = URL(fileURLWithPath: path)
         guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else { return nil }
         let key = "\(path)|\(values.fileSize ?? 0)|\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(pixels)"
@@ -484,6 +484,7 @@ final class WallpaperCarouselPanel {
     /// Lists `mode` for the panel's screen off the main thread and shows it; browsing plans nothing.
     private func show(_ mode: WallpaperCarousel.Mode) {
         guard let model, let screen else { return }
+        let asked = ContinuousClock.now  // Before the main thread's inputs and apps, so the log counts them too.
         model.expect(mode)
         let source = WallpaperCarousel.Source.live
         var inputs = WallpaperCarousel.Source.liveInputs(screen).inputs
@@ -492,7 +493,6 @@ final class WallpaperCarouselPanel {
             inputs.apps = apps ?? .init()
         }
         let list = mode == .themes ? WallpaperCarousel.themes : source.list, frozen = inputs
-        let asked = ContinuousClock.now
         loading?.cancel()
         loading = Task { [weak self] in
             let listed = await Task.detached(priority: .userInitiated) { list(frozen) }.value
@@ -591,7 +591,7 @@ final class WallpaperCarouselPanel {
                 var waiting = order[...]
                 func next() {
                     guard let path = waiting.popFirst() else { return }
-                    group.addTask(priority: .userInitiated) { CarouselThumbnails.image(path, pixels: pixels).map { (path, $0.image, $0.kept) } }
+                    group.addTask(priority: .userInitiated) { await CarouselThumbnails.image(path, pixels: pixels).map { (path, $0.image, $0.kept) } }
                 }
                 for _ in 0..<3 { next() }
                 for await made in group {
