@@ -39,9 +39,10 @@ let package = Package(
         // Real-ESRGAN on Core ML in a child that exits after each image (Q248), so its model and pixels never stay in Pilot;
         // Contents/Helpers/pilot-upscale.
         .executableTarget(name: "PilotUpscale", dependencies: ["ImageScale"]),
-        // The pilot command (ADR 0013): talks to the running Pilot's control socket; Foundation only. Contents/Helpers/pilot, not
-        // a target or product named pilot: on a case-insensitive disk that is the app's own Pilot.
-        .executableTarget(name: "PilotCLI"),
+        // The pilot command (ADR 0013): talks to the running Pilot's control socket; Foundation and PilotGate only (an agent's
+        // answer is cut as its tool's is). Contents/Helpers/pilot, not a target or product named pilot: on a case-insensitive
+        // disk that is the app's own Pilot.
+        .executableTarget(name: "PilotCLI", dependencies: ["PilotGate"]),
         // Codex's one tool (ADR 0013): an MCP server over stdio that runs one gated `pilot` call; Contents/Helpers/pilot-mcp.
         .executableTarget(name: "PilotMCP", dependencies: ["PilotGate"]),
         // The web-app template: one binary, the site lives in the stamped copy's Info.plist (story 86).

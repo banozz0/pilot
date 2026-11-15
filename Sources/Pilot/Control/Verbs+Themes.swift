@@ -7,9 +7,11 @@ extension ControlVerbs {
     /// Native controls call this coordinator too. There is no caller approval switch or executor verb.
     func registerThemes(_ coordinator: @escaping @MainActor @Sendable () throws -> ThemeCoordinator) {
         register(ControlVerb("theme", help: "Create, edit, duplicate, delete or transfer data-only local packs (delete removes a pack you made or imported, or hides one of Pilot's own until theme get brings it back, never the theme in use or the last one), or install them from Pilot's catalogue (theme catalogue, get; every file checked against its sha256; a built-in theme's plan downloads its wallpapers from there); review exact changes before Apply/Restore. Zed, every Obsidian vault, Ghostex's window colour, VS Code, Cursor, Windsurf, Kitty, Alacritty, WezTerm, iTerm2, btop, lazygit, Neovim, fish and Vesktop follow when found, with switches to turn each off; custom mappings need local bindings and optional reloads ask separately. A theme changes everything it carries and Restore undoes it; follow mode personal keeps macOS Light or Dark as it is. Toybox colours stay scoped. Use pilot guide theme or /theme in Ask Pilot. Installed-app refresh and CSS precedence need checking in the target app.",
-                             usage: "pilot theme list | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> | plan restore | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>", flags: []) { call throws(ControlError) in
+                             usage: "pilot theme list | list-all | colours | catalogue [refresh] | get <catalogue-id> | show <id> | check <id> | new <absolute-folder> | edit <id> <absolute-folder> <revision> | duplicate <source-id> <new-id> <title> | import <absolute-portable-file> [revision] | export <id> <absolute-new-file> | delete <id> | follow mode <pack|personal> | plan apply <id> [--summary] | plan restore [--summary] | apply <plan-id> | restore <plan-id> | save <source-id> <base64-manifest> [revision] | attach <id> <absolute-image-or-folder> <revision> | status | bind zed <absolute-config-root> | opt-out zed | bind obsidian <absolute-vault-root> <config-folder> | opt-out obsidian [absolute-vault-root] | follow <zed|obsidian|ghostex|vscode|cursor|windsurf|kitty|alacritty|wezterm|iterm2|btop|lazygit|neovim|fish|vesktop> <on|off> | follow vault <absolute-vault-root> <on|off> | bind custom <local-binding-json> | bind custom64 <base64-local-binding-json>",
+                             flags: [.init("summary", help: "a plan's id, its apply command and what it changes, without the file bytes (Allow still shows every change)", takesValue: false)]) { call throws(ControlError) in
             do {
-                let owner = try coordinator(), words = call.words
+                // --summary is a plan's alone; the rest match on the words without it.
+                let owner = try coordinator(), summary = call.words.contains("--summary"), words = call.words.filter { $0 != "--summary" }
                 switch words.first {
                 // A removed built-in theme (Look.hiddenThemes) is left out until theme get brings it back.
                 case "list" where words.count == 1:
@@ -70,9 +72,9 @@ extension ControlVerbs {
                     if words[0] == "check" { _ = try await owner.plan(words[1]) }
                     return .object(["pack": try themeJSON(loaded.pack), "revision": .string(loaded.revision), "factory": .bool(loaded.factory), "images": try themeJSON(loaded.images), "valid": .bool(true)])
                 case "plan" where words.count == 3 && words[1] == "apply":
-                    return try owner.describe(await owner.plan(words[2]))
+                    return try owner.describe(await owner.plan(words[2]), summary: summary)
                 case "plan" where words.count == 2 && words[1] == "restore":
-                    return try owner.describe(await owner.plan(nil))
+                    return try owner.describe(await owner.plan(nil), summary: summary)
                 case "apply" where words.count == 2, "restore" where words.count == 2:
                     return try await owner.apply(words[1], peer: call.peer)
                 case "bind" where words.count == 3 && words[1] == "zed":
@@ -125,17 +127,35 @@ extension ThemeCoordinator {
         func strings(_ lines: [String]) -> JSONValue { .array(lines.map(JSONValue.string)) }
         return .object(["changes": strings(words.changes), "skipped": strings(words.skipped), "details": strings(words.details), "short": strings(words.short), "next": strings(words.next), "kept": strings(words.kept)])
     }
-    func describe(_ plan: ThemePlan) throws -> JSONValue {
-        .object(["id": .string(plan.id), "operation": .string(plan.packID == nil ? "restore" : "apply"),
-                 "pack": plan.packID.map(JSONValue.string) ?? .null, "revision": plan.revision.map(JSONValue.string) ?? .null,
-                 "review": reviewJSON(plan), "changes": .array(try plan.mutations.map { change in
-                    .object(["path": .string(change.target.root + "/" + change.target.path), "selector": try themeJSON(change.selector),
-                             "before": change.before.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null,
-                             "after": change.after.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null,
-                             "proposedBytes": change.replacement.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null,
-                             "bindingID": change.bindingID.map(JSONValue.string) ?? .null])
-                 }), "native": try appearanceChange(plan).map(themeJSON) ?? .null,
-                 "reloads": .array(try plan.reloads.map { try themeJSON($0.binding) }),
-                 "wallpapers": try themeJSON(plan.wallpapers), "ghostex": try themeJSON(plan.ghostex), "warnings": .array(plan.warnings.map(JSONValue.string)), "applied": .bool(false)])
+    /// A plan as `theme plan` answers it. Keys print sorted, so `apply`, the command that applies it with its id, comes
+    /// second, before `changes`, whose before, after and proposed bytes run to 100 KB with many follower apps: an agent
+    /// that sees only an answer's head still has the id. `summary` leaves those bytes out.
+    func describe(_ plan: ThemePlan, summary: Bool = false) throws -> JSONValue {
+        let operation = plan.packID == nil ? "restore" : "apply"
+        let head: [String: JSONValue] = ["id": .string(plan.id), "operation": .string(operation), "apply": .string("pilot theme \(operation) \(plan.id)"),
+                                         "pack": plan.packID.map(JSONValue.string) ?? .null, "revision": plan.revision.map(JSONValue.string) ?? .null,
+                                         "review": reviewJSON(plan), "warnings": .array(plan.warnings.map(JSONValue.string)), "applied": .bool(false)]
+        if summary {
+            var paths: [String] = []
+            for change in plan.mutations {
+                let path = change.target.root + "/" + change.target.path
+                if !paths.contains(path) { paths.append(path) }
+            }
+            func count(_ n: Int) -> JSONValue { .number(Double(n)) }
+            return .object(head.merging(["files": .array(paths.map(JSONValue.string)), "native": .bool(appearanceChange(plan) != nil),
+                                         "wallpapers": count(plan.wallpapers.count), "ghostex": count(plan.ghostex.count), "reloads": count(plan.reloads.count)]) { a, _ in a })
+        }
+        let changes: [JSONValue] = try plan.mutations.map { change in
+            let before: JSONValue = change.before.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
+            let after: JSONValue = change.after.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
+            let proposed: JSONValue = change.replacement.map { .string(String(decoding: $0, as: UTF8.self)) } ?? .null
+            return .object(["path": .string(change.target.root + "/" + change.target.path), "selector": try themeJSON(change.selector),
+                            "before": before, "after": after, "proposedBytes": proposed,
+                            "bindingID": change.bindingID.map(JSONValue.string) ?? .null])
+        }
+        let full: [String: JSONValue] = ["changes": .array(changes), "native": try appearanceChange(plan).map(themeJSON) ?? .null,
+                                         "reloads": .array(try plan.reloads.map { try themeJSON($0.binding) }),
+                                         "wallpapers": try themeJSON(plan.wallpapers), "ghostex": try themeJSON(plan.ghostex)]
+        return .object(head.merging(full) { a, _ in a })
     }
 }
