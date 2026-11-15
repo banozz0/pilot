@@ -245,8 +245,12 @@ struct WorkspacesBody: View {
             ruled: Set(rules.map(\.appId)),
             addRule: { bundle in block.edit { $0.rules.append(.init(appId: bundle, workspace: workspace)) } },
             removeRule: { bundle in block.edit { $0.rules.removeAll { $0.appId == bundle } } },
+            // The ⋯ menu's Move to is a drop of the rule's row (coordinator, 2026-11-15): its windows there go along.
             moveRule: { bundle, other in
-                block.edit { block in if let i = block.rules.firstIndex(where: { $0.appId == bundle }) { block.rules[i].workspace = other } }
+                guard tiler != nil else {
+                    return block.edit { block in if let i = block.rules.firstIndex(where: { $0.appId == bundle }) { block.rules[i].workspace = other } }
+                }
+                land(.init(kind: .rule, bundle: bundle, name: AppsModule.appName(bundle) ?? bundle, from: workspace), on: .workspace(other))
             },
             snapshot: snapshots.saved[workspace],
             restore: { snapshots.restore(workspace) },

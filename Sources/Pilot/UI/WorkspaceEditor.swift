@@ -619,7 +619,7 @@ private struct RulesPart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             PartLabel(title: "Always lands here", line: "wherever it opens",
-                      info: "Apps whose windows always move to this workspace, wherever they open. Drag one onto another workspace above, or use the ⋯ menu, to move it; the menu also takes it off.")
+                      info: "Apps whose windows always move to this workspace, wherever they open. Drag one onto another workspace above, or use the ⋯ menu, to move it there with its windows; the menu also takes it off.")
             VStack(spacing: 0) {
                 ForEach(Array(extras.rules.enumerated()), id: \.element) { i, bundle in
                     let name = AppsModule.appName(bundle) ?? bundle
