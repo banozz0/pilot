@@ -70,6 +70,62 @@ struct WorkspacesPageRenders {
         }
         #expect(list.names == ["1"])
     }
+
+    /// Mid-drag (Sven, 2026-11-15): Notes picked up from workspace 2's card over workspace 4's card, which lights; then
+    /// over Safari's tile on workspace 1's card, which lights to swap. Staged on the page's own drag (WorkspaceDrag.stage)
+    /// once a render at rest has told it where the cards are. Instrument under Tokyo Night.
+    @Test("Workspaces mid-drag", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderDrag() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's files")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("workspaces-page")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let defaults = try #require(UserDefaults(suiteName: testSuite()))
+        let tiler = TilerService(engine: WorkspaceListTests.FakeTiler(), tip: { _ in })
+        let observers = EngineObservers(tiler: tiler)
+        let block = PilotBlockStore(tiler: tiler, defaults: defaults)
+        let monitors = WorkspaceMonitorStore(tiler: tiler, block: block, defaults: defaults)
+        let list = WorkspaceList(tiler: tiler, block: block, monitors: monitors, defaults: defaults)
+        let presets = WorkspacePresets(observers: observers, store: WorkspacePresetStore(url: PilotFolder.support.appending(path: "drag-presets-\(UUID().uuidString).json")),
+                                       defaults: defaults)
+        presets.save(WorkspacePreset(name: "Web", apps: [.init(bundleId: "com.apple.Safari", name: "Safari", percent: 50),
+                                                        .init(bundleId: "com.mitchellh.ghostty", name: "Ghostty", percent: 50)], layout: .mainStack), to: "1")
+        presets.save(WorkspacePreset(name: "Chat", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 60),
+                                                         .init(bundleId: "com.apple.Notes", name: "Notes", percent: 40)], layout: nil), to: "2")
+        let drag = WorkspaceDrag()
+        let layouts = WorkspaceLayouts(observers: observers, defaults: defaults), snapshots = WorkspaceSnapshots(observers: observers, defaults: defaults)
+        let page = {
+            WorkspacesBody(block: block, layouts: layouts, presets: presets, snapshots: snapshots, list: list, focused: "2",
+                           start: .init(apps: []), monitors: monitors, displays: [], tiler: tiler, drag: drag)
+        }
+        let look = Look.shared
+        let saved = (look.themeID, look.style)
+        defer { (look.themeID, look.style) = saved }
+        (look.themeID, look.style) = ("tokyo-night", .instrument)
+        let write = { (file: String) throws in
+            let view = MonitorsGround { page() }.styled(.page(.workspaces)).frame(width: 1100, height: 1500).pilotTheme(look: Look.shared)
+            try #require(rendered(view).representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent(file))
+        }
+        try write("workspaces-drag-rest.png")
+        let four = try #require(drag.cards["4"], "the cards reported no frames")
+        let notes = WorkspaceDrag.Item.app(bundle: "com.apple.Notes", name: "Notes", from: "2")
+        // Over workspace 4's card, clear of its (empty) screen's middle: the page's own hit says where it lands.
+        let overFour = CGPoint(x: four.midX, y: four.maxY - 8)
+        drag.stage(notes, at: overFour, over: drag.hit(notes, overFour))
+        print("DRAG over 4: \(String(describing: drag.target))")
+        #expect(drag.target == .workspace("4"))
+        try write("workspaces-drag-move.png")
+        let screen = try #require(drag.screens["1"])
+        let safari = WorkspaceCard.tiles(presets.contents.preset(for: "1").map { WorkspacePresetDraft($0, workspace: "1") }!, in: screen.size)[0]
+        let overSafari = CGPoint(x: screen.minX + safari.midX, y: screen.minY + safari.midY)
+        drag.stage(notes, at: overSafari, over: drag.hit(notes, overSafari))
+        print("DRAG over Safari: \(String(describing: drag.target))")
+        #expect(drag.target == .tile(workspace: "1", bundle: "com.apple.Safari", name: "Safari"))
+        try write("workspaces-drag-swap.png")
+    }
 }
 
 }

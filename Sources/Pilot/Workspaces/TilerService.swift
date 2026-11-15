@@ -58,7 +58,7 @@ final class TilerService {
     /// The other tiler's app runs (OtherTiler); a fake in tests.
     @ObservationIgnored private let otherTilerRunning: @MainActor () -> Bool
 
-    init(engine: any TilerEngineRunning = InProcessTiler(), tip: @escaping @MainActor (String) -> Void = { HUD.tip($0) },
+    init(engine: any TilerEngineRunning = TilerService.made(), tip: @escaping @MainActor (String) -> Void = { HUD.tip($0) },
          otherTilerRunning: @escaping @MainActor () -> Bool = { OtherTiler.isRunning }) {
         self.engine = engine
         self.tip = tip
@@ -66,6 +66,20 @@ final class TilerService {
     }
 
     var otherTilerIsRunning: Bool { otherTilerRunning() }
+
+    #if DEBUG
+    /// The sandbox host's stand-in for Pilot's tiler (PILOT_SANDBOX_TILER), set before its Engine makes this service, so
+    /// a drop on the Workspaces page moves a file's windows, never the Mac's.
+    static var standIn: (@MainActor () -> any TilerEngineRunning)?
+    #endif
+
+    /// Pilot's tiler, or the sandbox's stand-in.
+    static func made() -> any TilerEngineRunning {
+        #if DEBUG
+        if let standIn { return standIn() }
+        #endif
+        return InProcessTiler()
+    }
 
     /// What modules drive.
     var runner: any TilerRunning { engine }

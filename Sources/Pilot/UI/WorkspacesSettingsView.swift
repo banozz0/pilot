@@ -22,7 +22,7 @@ struct WorkspacesSettingsView: View {
     var body: some View {
         WorkspacesBody(block: engine.pilotBlock, layouts: engine.layouts, presets: engine.presets, snapshots: engine.snapshots,
                        list: engine.workspaceList, focused: engine.observers.tiler.focused, settings: engine.settings,
-                       monitors: engine.workspaceMonitors, more: more)
+                       monitors: engine.workspaceMonitors, tiler: engine.observers.tiler, more: more)
     }
 }
 
@@ -45,24 +45,33 @@ struct WorkspacesBody: View {
     var monitors: WorkspaceMonitorStore? = nil
     /// The displays the Monitor pick offers; renders pass their own, the app reads them live.
     var displays: [ConnectedDisplay]? = nil
+    /// Pilot's tiler, which a drop moves the windows through; nil drags nothing.
+    var tiler: TilerService? = nil
     /// The More tab (simplify-pages T18): the picked workspace's Scrolling rules, the window shelf, the monitors and the
     /// swipe. One view with the front, so the pick carries over.
     var more = false
     /// The workspace picked; a render starts it on another to show More editing it.
     @State var picked: String? = nil
     @State private var drafts = WorkspacePageDrafts()
+    /// An app or a rule dragged to another workspace or onto another app (Sven, 2026-11-15); a render stages one.
+    @State var drag = WorkspaceDrag()
+    /// Why the last drop changed nothing.
+    @State private var refused: String?
 
     static let intro = "Each workspace's name, layout and apps."
     static let introInfo = "Pick one, then click its screen to put apps in it; every change saves at once."
 
     var body: some View {
         let names = list?.names ?? Workspaces.all
-        let name = [picked, focused].compactMap { $0 }.first(where: names.contains) ?? names[0]
+        let name = shown(names)
         Group {
             if more { moreTab(name) } else { front(name, names: names) }
         }
         .savesWhenResting(drafts) { drafts.edited.forEach(save) }
     }
+
+    /// The workspace the editor shows: the one picked, else the one on screen, else the first.
+    private func shown(_ names: [String]) -> String { [picked, focused].compactMap { $0 }.first(where: names.contains) ?? names[0] }
 
     /// The front: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
     /// in their spots, rules, preset, snapshot and what opens there, then each workspace's monitor.
@@ -82,7 +91,7 @@ struct WorkspacesBody: View {
                     ForEach(names, id: \.self) { workspace in
                         WorkspaceCard(name: workspace, title: presets.contents.title(for: workspace), draft: draft(workspace),
                                       picked: workspace == name, onScreen: workspace == focused,
-                                      snapshot: snapshots.saved[workspace] != nil) {
+                                      snapshot: snapshots.saved[workspace] != nil, drag: dragging) {
                             withAnimation(Kit.change) { picked = workspace }
                         }
                     }
@@ -97,7 +106,67 @@ struct WorkspacesBody: View {
                 problems
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 28)
+            // The drag's own space: the cards, the preview's tiles and the pointer all measured in it.
+            .coordinateSpace(.named(WorkspaceDrag.space))
+            .overlay(alignment: .topLeading) {
+                if let item = drag.item {
+                    WorkspaceDragChip(item: item, words: drag.words(title: presets.contents.title(for:)))
+                        .offset(x: drag.at.x + 14, y: drag.at.y + 12)
+                }
+            }
+            .onAppear {
+                drag.hit = { [self] in hit($0, at: $1) }
+                drag.land = { [self] in land($0, on: $1) }
+            }
         } }
+    }
+
+    /// The drag while a tiler takes the drop.
+    private var dragging: WorkspaceDrag? { tiler == nil ? nil : drag }
+
+    /// Where `item` lands at `point`: the picked workspace's preview tiles, then a card, on one of its tiles or away from
+    /// them. An app lands only where its drop would change something (WorkspaceAppDrop plans it); a rule on any other
+    /// workspace's card, its tiles too.
+    private func hit(_ item: WorkspaceDrag.Item, at point: CGPoint) -> WorkspaceDrag.Target? {
+        let names = list?.names ?? Workspaces.all, picked = shown(names)
+        var spot: (workspace: String, tile: Int?)?
+        if let tile = draft(picked).apps.firstIndex(where: { drag.previewTiles[WorkspaceDrag.TileKey(workspace: picked, bundle: $0.bundleId)]?.contains(point) == true }) {
+            spot = (picked, tile)
+        } else if let workspace = names.first(where: { drag.cards[$0]?.contains(point) == true }) {
+            let screen = drag.screens[workspace] ?? .zero
+            let tiles = WorkspaceCard.tiles(draft(workspace), in: screen.size).map { $0.offsetBy(dx: screen.minX, dy: screen.minY) }
+            spot = (workspace, tiles.firstIndex { $0.contains(point) })
+        }
+        guard let spot else { return nil }
+        guard case .app(let bundle, _, let from) = item else { return spot.workspace == item.from ? nil : .workspace(spot.workspace) }
+        let onto = spot.tile.map { draft(spot.workspace).apps[$0] }
+        guard (try? WorkspaceAppDrop.plan(app: bundle, from: from, to: spot.workspace, onto: onto?.bundleId, draft: draft,
+                                          windows: [], rules: [])) != nil else { return nil }
+        return onto.map { .tile(workspace: spot.workspace, bundle: $0.bundleId, name: $0.name) } ?? .workspace(spot.workspace)
+    }
+
+    /// The drop: the presets, the rules and the windows as WorkspaceAppDrops makes them, the page's own edits of the
+    /// workspaces it saves dropped first.
+    private func land(_ item: WorkspaceDrag.Item, on target: WorkspaceDrag.Target) {
+        guard let tiler else { return }
+        let drops = WorkspaceAppDrops(presets: presets, layouts: layouts, block: block, tiler: tiler)
+        let (to, onto): (String, String?) = switch target {
+        case .workspace(let workspace): (workspace, nil)
+        case .tile(let workspace, let bundle, _): (workspace, bundle)
+        }
+        refused = nil
+        Task {
+            do {
+                switch item {
+                case .app(let bundle, _, let from):
+                    try await drops.drop(bundle, from: from, to: to, onto: onto, draft: draft) { plan in plan.drafts.keys.forEach { drafts.revert($0) } }
+                case .rule(let bundle, _, let from):
+                    try await drops.dropRule(bundle, from: from, to: to)
+                }
+            } catch {
+                refused = String(describing: error)
+            }
+        }
     }
 
     /// More's index. A row added to or moved off a block changes its count here; Scrolling's holds its 3 rules only while
@@ -147,7 +216,7 @@ struct WorkspacesBody: View {
     }
 
     @ViewBuilder private var problems: some View {
-        if let error = block.lastError ?? list?.lastError ?? snapshots.lastError ?? monitors?.lastError {
+        if let error = refused ?? block.lastError ?? list?.lastError ?? snapshots.lastError ?? monitors?.lastError {
             FinePrint(text: error, color: ink.red)
         }
     }
@@ -188,7 +257,8 @@ struct WorkspacesBody: View {
             snapshot: snapshots.saved[workspace],
             restore: { snapshots.restore(workspace) },
             deleteSnapshot: { snapshots.delete(workspace) },
-            reopenApps: $snapshots.reopenApps)
+            reopenApps: $snapshots.reopenApps,
+            drag: dragging.map { ($0, workspace) })
     }
 
     /// "Zen (2 windows), Obsidian": each app once, first seen first.
@@ -454,7 +524,7 @@ struct WorkspaceSwipeBlock: View {
 
 /// One of the workspaces' compact row of nine (Sven's Q37, simplify-pages T18): a small screen of its apps where its
 /// layout puts them over its number, its name in its tip; the picked one lit, the one on screen marked.
-private struct WorkspaceCard: View {
+struct WorkspaceCard: View {
     @Environment(\.ink) private var ink
     let name: String
     /// Its name, else "Workspace 3" (Sven 2026-10-17: a named workspace shows its name alone).
@@ -463,8 +533,32 @@ private struct WorkspaceCard: View {
     let picked: Bool
     let onScreen: Bool
     let snapshot: Bool
+    /// The page's drag: its tiles pick an app up, the card and its tiles take the drop; nil drags nothing.
+    var drag: WorkspaceDrag?
     let pick: () -> Void
     @State private var hovered = false
+
+    /// A drop here moves the app in, or onto one of its apps swaps the two.
+    private var lit: Bool { drag?.target == .workspace(name) }
+    private func lit(_ bundle: String) -> Bool {
+        if case .tile(name, bundle, _)? = drag?.target { true } else { false }
+    }
+    /// Picked up: it fades in place while the chip carries it.
+    private func lifted(_ bundle: String) -> Bool {
+        if case .app(bundle, _, name)? = drag?.item { true } else { false }
+    }
+
+    /// The screen's apps and empty spots in `size`, as the card draws them: its strip of a menu bar off the top.
+    static func spots(_ draft: WorkspacePresetDraft, in size: CGSize) -> (apps: [CGRect], open: [CGRect]) {
+        let area = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3).offsetBy(dx: 0, dy: 4)
+        let inner = CGRect(x: area.minX, y: area.minY, width: area.width, height: area.height - 4)
+        return draft.shape(in: inner) ?? (draft.tiles(in: inner), [])
+    }
+
+    /// Each app's tile in a screen of `size`, in the draft's order.
+    static func tiles(_ draft: WorkspacePresetDraft, in size: CGSize) -> [CGRect] {
+        spots(draft, in: size).apps.prefix(draft.apps.count).map { $0.insetBy(dx: 1.5, dy: 1.5) }
+    }
 
     private var toybox: Bool { ink.style.kind == .toybox }
     /// A display's width over its height, and the widest a card grows when few workspaces share the row.
@@ -495,9 +589,25 @@ private struct WorkspaceCard: View {
             .blockSurface()
             // Toybox fills its pick with the sun; the others wear their focus (Instrument's the signal's ring).
             .focusBorder(on: picked && !toybox, radius: radius)
+            // A drop here moves the app in: the card lit in the accent while one would.
+            .overlay {
+                if lit {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(ink.accent.opacity(0.12))
+                        .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(ink.accent, lineWidth: 2) }
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(.rect)
         }
         .buttonStyle(.kitPress)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceDrag.space)) } action: { drag?.cards[name] = $0 }
+        // A press on one of its tiles drags that app.
+        .dragsInWorkspaces(drag) { [draft, name] start in
+            guard let screen = drag?.screens[name] else { return nil }
+            let tiles = Self.tiles(draft, in: screen.size)
+            return tiles.firstIndex { $0.offsetBy(dx: screen.minX, dy: screen.minY).contains(start) }
+                .map { .app(bundle: draft.apps[$0].bundleId, name: draft.apps[$0].name, from: name) }
+        }
         .help(tip)
         .onHover { hovered = $0 }
         .animation(Kit.change, value: hovered)
@@ -517,14 +627,13 @@ private struct WorkspaceCard: View {
     private var screen: some View {
         let shape = RoundedRectangle(cornerRadius: ink.radius(6), style: .continuous)
         return GeometryReader { g in
-            let area = CGRect(origin: .zero, size: g.size).insetBy(dx: 3, dy: 3).offsetBy(dx: 0, dy: 4)
-            let inner = CGRect(x: area.minX, y: area.minY, width: area.width, height: area.height - 4)
-            let layout = draft.shape(in: inner) ?? (draft.tiles(in: inner), [])
+            let layout = Self.spots(draft, in: g.size)
             let tile = RoundedRectangle(cornerRadius: ink.radius(3), style: .continuous)
             ForEach(Array(zip(draft.apps, layout.apps).enumerated()), id: \.offset) { i, pair in
-                let r = pair.1.insetBy(dx: 1.5, dy: 1.5)
-                tile.fill(picked ? ink.accent.opacity(0.22) : ink.tile)
-                    .overlay { tile.strokeBorder(ink.outline, lineWidth: 1.5) }
+                let r = pair.1.insetBy(dx: 1.5, dy: 1.5), on = lit(pair.0.bundleId)
+                tile.fill(on ? ink.accent.opacity(0.45) : picked ? ink.accent.opacity(0.22) : ink.tile)
+                    .overlay { tile.strokeBorder(on ? ink.accent : ink.outline, lineWidth: on ? 2 : 1.5) }
+                    .opacity(lifted(pair.0.bundleId) ? 0.35 : 1)
                     .overlay {
                         if min(r.width, r.height) >= 18 {
                             AppGlyph(bundles: [pair.0.bundleId], symbol: "app.dashed", size: min(18, min(r.width, r.height) - 6))
@@ -543,6 +652,7 @@ private struct WorkspaceCard: View {
         .background(ink.well, in: shape)
         .overlay(alignment: .top) { ink.text.opacity(0.05).frame(height: 4).clipShape(shape) }
         .overlay { shape.strokeBorder(ink.outline, lineWidth: ink.stroke) }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceDrag.space)) } action: { drag?.screens[name] = $0 }
         .accessibilityHidden(true)
     }
 }

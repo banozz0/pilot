@@ -19,6 +19,11 @@ struct WorkspacePreview: View {
     /// Each spot's frame in the popup, for the picker.
     @Binding var spots: [WorkspaceEditor.Spot: CGRect]
     let open: (WorkspaceEditor.Spot) -> Void
+    /// The Workspaces page's drag: a tile picks its app up, and takes another's drop to trade places (Sven, 2026-11-15);
+    /// nil in the popup.
+    var drag: WorkspaceDrag? = nil
+    /// The workspace shown, which the drag's tiles belong to.
+    var workspace = ""
 
     private static let gap: CGFloat = 6, strip: CGFloat = 34
 
@@ -44,7 +49,13 @@ struct WorkspacePreview: View {
                                 remove: { withAnimation(Kit.change) { hovered = nil; draft.remove(at: i) } },
                                 hover: { inside in hovered = inside ? i : (hovered == i ? nil : hovered) })
                         .frame(width: r.width, height: r.height)
+                        .overlay { if lit(app.bundleId) { DropRing() } }
+                        .opacity(lifted(app.bundleId) ? 0.35 : 1)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.app(i)] = $0 }
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceDrag.space)) } action: { frame in
+                            drag?.previewTiles[.init(workspace: workspace, bundle: app.bundleId)] = frame
+                        }
+                        .dragsInWorkspaces(drag) { [workspace] _ in .app(bundle: app.bundleId, name: app.name, from: workspace) }
                         .position(x: r.midX, y: r.midY)
                 }
                 // The layout's empty spots, the first where the next app lands; a click on any adds to the first.
@@ -77,6 +88,24 @@ struct WorkspacePreview: View {
         .overlay { shape.strokeBorder(ink.line2) }
         .animation(Kit.change, value: draft.apps.map(\.bundleId))
         .animation(Kit.change, value: draft.layout)
+    }
+
+    private func lit(_ bundle: String) -> Bool {
+        if case .tile(workspace, bundle, _)? = drag?.target { true } else { false }
+    }
+
+    private func lifted(_ bundle: String) -> Bool {
+        if case .app(bundle, _, workspace)? = drag?.item { true } else { false }
+    }
+}
+
+/// A tile a drop would trade places with: lit in the accent.
+private struct DropRing: View {
+    @Environment(\.ink) private var ink
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: AddSpot.radius, style: .continuous)
+        shape.fill(ink.accent.opacity(0.16)).overlay { shape.strokeBorder(ink.accent, lineWidth: 2) }.allowsHitTesting(false)
     }
 }
 
