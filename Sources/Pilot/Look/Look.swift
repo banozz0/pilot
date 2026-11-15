@@ -130,11 +130,15 @@ final class Look {
 
     /// Glass while it is on, Solid whenever macOS asks for less transparency, and at Transparency 0 %: the panels', and
     /// the app window's unless its style keeps it solid (windowMaterial).
-    var effectiveMaterial: WindowMaterial { glass && !reduceTransparency && transparency > 0 ? .glass : .solid }
+    var effectiveMaterial: WindowMaterial { material(glass: glass) }
     /// The app window's own: Toybox's stays solid whatever the material (Sven, 2026-10-08), the rest take effectiveMaterial.
     var windowMaterial: WindowMaterial { material(on: .window) }
-    /// `surface`'s material where it follows Glass in its own style (the app window, the AI chat): solid in Toybox.
-    func material(on surface: StyleSurface) -> WindowMaterial { style == .toybox ? .solid : effectiveMaterial }
+    /// `surface`'s material where it follows Glass in its own style (the app window, the AI chat): solid in Toybox. The
+    /// bar's dropdowns and drops follow the top bar's Background instead (barGlass, W77).
+    func material(on surface: StyleSurface) -> WindowMaterial {
+        style == .toybox ? .solid : material(glass: surface == .barPopovers || surface == .barDrop ? barGlass : glass)
+    }
+    private func material(glass: Bool) -> WindowMaterial { glass && !reduceTransparency && transparency > 0 ? .glass : .solid }
     /// The glass's tint: `ground` at the Transparency's strength, or at `alpha` percent.
     func glassTint(_ ground: Color, alpha: Int? = nil) -> NSColor {
         NSColor(ground).withAlphaComponent(CGFloat(alpha ?? materialValues.windowAlpha) / 100)

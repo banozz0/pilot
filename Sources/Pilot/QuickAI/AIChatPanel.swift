@@ -375,33 +375,33 @@ final class AIChatPanel {
     func hide() { drops.close(.askAI) }
 
     /// The panel's content in the picked style at `size`, or filling its window with none; it draws its own notch, so no
-    /// panel chrome goes round it. Over Look's Glass its ground is clear, the glass's tint carrying it, as the other
-    /// panels' (Sven on build 23: it stayed solid).
+    /// panel chrome goes round it. On glass its ground is clear, the glass's tint carrying it, as the other panels' (Sven on
+    /// build 23: it stayed solid); a bar drop, it follows the top bar's Background as the dropdowns (Look.barGlass, W77).
     static func content(_ model: AIChatModel, size: CGSize? = size, send: @escaping () -> Void = {}, newChat: @escaping () -> Void = {},
                         look: Look = .shared) -> some View {
-        AIChatView(model: model, send: send, newChat: newChat, radius: radius(look), glass: look.material(on: .quickAI) == .glass)
+        AIChatView(model: model, send: send, newChat: newChat, radius: radius(look), glass: look.material(on: .barDrop) == .glass)
             .frame(width: size?.width, height: size?.height)
-            .styled(.quickAI, look: look).pilotTheme(look: look)
+            .styled(.barDrop, look: look).pilotTheme(look: look)
     }
 
     /// The notch's corner: the style's pop corner.
-    static func radius(_ look: Look) -> CGFloat { CGFloat(look.chromeTokens(.quickAI).radii.pop) }
+    static func radius(_ look: Look) -> CGFloat { CGFloat(look.chromeTokens(.barDrop).radii.pop) }
 
-    /// `host` over Look's Glass in its style (solid in Toybox), clear as the bar's dropdowns (Look.glassTint only at Blur
+    /// `host` on the bar dropdowns' glass (Look.barGlass: the top bar's Background; solid in Toybox), clear as they are (Look.glassTint only at Blur
     /// Off, Q356). The glass rounds every corner and reaches a radius above the panel, so its top corners fall
     /// outside the window and the notch stays square at the top with no mask.
     static func backdrop(_ host: NSView, look: Look) -> MaterialBackdrop {
         let radius = radius(look)
         let backdrop = MaterialBackdrop(content: host, cornerRadius: radius)
         // Untinted, as the bar's dropdowns (PopoverGlass): the tint only at Blur Off, where it is the face.
-        backdrop.show(look.material(on: .quickAI), tint: look.glassTint(on: .quickAI), tintsGlass: false)
+        backdrop.show(look.material(on: .barDrop), tint: look.glassTint(on: .barDrop), tintsGlass: false)
         backdrop.effect?.frame.size.height += radius
         return backdrop
     }
 
     /// `host`, the chat's face, in Ask AI's drop window on Look's Glass, without the window's shadow.
     static func makePanel(_ host: NSView, look: Look) -> KeyPanel {
-        BarDrops.panel(backdrop(host, look: look), title: "AI chat", appearance: look.appearance(for: .quickAI))
+        BarDrops.panel(backdrop(host, look: look), title: "AI chat", appearance: look.appearance(for: .barDrop))
     }
 
     /// The chat as Ask AI's drop: filling the drop as it moves between alone and beside the terminal, and its keys.

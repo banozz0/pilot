@@ -199,12 +199,12 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// A bar popover on the top bar's Glass while Look › Glass is on: an extension's first (Sven 2026-10-25, Q474), every
+    /// A bar popover on glass while the top bar's Background is (Look.extensionGlass, W77; Look › Glass with the top bar off): an extension's first (Sven 2026-10-25, Q474), every
     /// bar dropdown since (BarPanelWindow.present; Liquid Glass round 3, Sven on build 2550: "stats dropdowns aren't
     /// glass, neither are the system ones"). Untinted, as the dock's and the bar's (TopBarColour.tintsGlass): the theme's
     /// ground laid into the glass at Transparency's ground strength stained it a flat olive slab over a dark window (Sven
     /// on build 2564: "stats are looking better but still not liquid glass"); the tint stays only at Blur Off, where it is
-    /// the face. Its fills see-through as the menu's; solid when Glass is off, at Transparency 0 or in Toybox. Applied
+    /// the face. Its fills see-through as the menu's; solid on a Solid bar, at Transparency 0 or in Toybox. Applied
     /// outside its KitPopover, which draws the glass; once is enough, so one nested in another does nothing more.
     func extensionGlass(_ look: Look = .shared) -> some View { modifier(ExtensionGlass(look: look)) }
 }

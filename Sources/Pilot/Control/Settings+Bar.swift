@@ -18,7 +18,7 @@ extension SettingsSchema {
     func registerBarAppearance(_ bar: BarItemsStore) {
         let patterns = TopBarClockFormat.presets.map { "\"\($0.title)\"" }.joined(separator: ", ")
         register([
-            .choice("bar.background", "Top bar background", page: "menuBar", TopBarBackground.allCases, standard: .solid,
+            .choice("bar.background", "Top bar background; its dropdowns, drops and notification cards follow it (glass over clear)", page: "menuBar", TopBarBackground.allCases, standard: .solid,
                     read: { bar.background }, write: { value throws(ControlError) in try bar.requireWritable(); bar.background = value }),
             .colour("bar.colour", "Top bar colour", page: "menuBar", read: { bar.colour }, write: { value throws(ControlError) in try bar.requireWritable(); bar.colour = value }),
             .bool("bar.itemColours", "Item colours: the top bar's readings amber or red by load, other apps' items in their own colours",

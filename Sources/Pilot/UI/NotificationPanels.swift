@@ -431,7 +431,7 @@ struct NotificationBarDrawer: View {
 }
 
 /// The cards, newest nearest the corner when floating and nearest the bar under the top bar (the model holds the feed's
-/// order, newest first), each on the top bar's glass while Look's Glass is on, else KitPopover's panel.
+/// order, newest first), each on glass while the bar's dropdowns are (Look.extensionGlass), else KitPopover's panel.
 struct NotificationCardStack: View {
     let model: NotificationCardsModel
     var settings = NotificationSettings.shared

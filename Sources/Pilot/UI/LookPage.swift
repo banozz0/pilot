@@ -19,6 +19,8 @@ struct LookPage: View {
     let cursors: CursorSets
     /// Look › Cursor's trail and halos (P84), the same way.
     let effects: CursorEffects
+    /// Material's stores (W77): the top bar's Background, the dock's style and this look's Glass.
+    let material: LookMaterialStores
     /// The screens Wallpaper shows; nil reads this Mac's, a render passes its own so nothing is read meanwhile.
     let screens: [WallpaperScreen]?
     /// The theme columns, measured from the grid's width (calmColumns): only a change of count redraws the page.
@@ -31,13 +33,14 @@ struct LookPage: View {
     let more: Bool
 
     init(look: Look = .shared, wallpaper: WallpaperSettings = .shared, cursors: CursorSets? = nil, effects: CursorEffects? = nil,
-         screens: [WallpaperScreen]? = nil, more: Bool = false, section: AppSection? = nil, focus: WallpaperBlock.Focus? = nil,
-         landed: @escaping () -> Void = {}) {
+         material: LookMaterialStores? = nil, screens: [WallpaperScreen]? = nil, more: Bool = false, section: AppSection? = nil,
+         focus: WallpaperBlock.Focus? = nil, landed: @escaping () -> Void = {}) {
         self.more = more
         self.look = look
         self.wallpaper = wallpaper
         self.cursors = cursors ?? .of(look)
         self.effects = effects ?? .of(look)
+        self.material = material ?? .of(look)
         self.screens = screens
         self.section = section
         self.focus = focus
@@ -67,7 +70,8 @@ struct LookPage: View {
         static let menuLayout = "How Hyper+Space draws the menu: Line, which opens as Omarchy's list and grows into a wide search on the first key; Classic, Omarchy's list in JetBrains Mono; or the Rail, with the kinds and their counts beside the hits. The keys and rows are the same in all three."
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
         static let theme = "Click a theme to try it on Pilot; nothing else changes. Apply theme sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
-        static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and Quick AI. Off, they are solid."
+        static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Clear keeps this window, the panels and widgets on glass, as they need a face. Custom shows once you change one of them on its own."
+        static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and the desktop widgets. Off, they are solid. The top bar's dropdowns and drops follow its own Background."
         static let transparency = "How much of the desktop shows through the glass here, and on a Glass top bar in a colour you picked. In the theme's colour a Glass top bar and dock wear macOS's own clear glass. Both go solid at 0 %. Text stays readable however far you go."
         static let glassBlur = "How much the glass blurs the desktop behind it: Full, Light, or Off for a sharp desktop under the tint. Here and on the widgets; a Glass top bar and the dock wear the macOS Dock's clear glass at Full and Light."
         static let appsShowAs = "How every list shows an app: its icon, its name or both. Icon only shows the name on hover; search still finds it by name."
@@ -105,8 +109,16 @@ struct LookPage: View {
                     VStack(spacing: 0) {
                         // Glass with its Transparency and Blur under the switch, greyed while Glass is off (pages round 5,
                         // Sven on build 2354: "transparency and blur should maybe be with glass on main look page").
-                        KitBlock(title: "Glass") {
-                            switchRow("Glass", Info.glass, isOn: $look.glass, first: true)
+                        KitBlock(title: "Material") {
+                            // The label over its four segments, as Transparency's: the column is too narrow for both on one line.
+                            calmRow(44, first: true) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    setting("Material", Info.material)
+                                    Segments(selection: materialPick, options: LookMaterial.allCases.map { ($0, $0.title) }, label: "Material")
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            switchRow("Glass", Info.glass, isOn: $look.glass)
                             Group {
                                 // The label and value on one line, the slider under them: the column is too narrow for
                                 // all three on one.
@@ -190,6 +202,11 @@ struct LookPage: View {
         HStack(spacing: 10) { content() }
             .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
             .overlay(alignment: .top) { if !first { ink.line.frame(height: 1) } }
+    }
+
+    /// Material's pick: Glass, Solid or Clear sets every surface; Custom is only read, so picking it changes nothing.
+    private var materialPick: Binding<LookMaterial> {
+        Binding(get: { material.material }, set: { try? material.pick($0) })
     }
 
     /// A switch row: its label and ⓘ, the switch at the right; a click on the label flips it, as .pilotSwitchRow's

@@ -14,12 +14,19 @@ extension Look {
 
     /// The panels Glass reaches besides the window (Glass everywhere, Sven 2026-10-19, Q356): the Hyper+Space menu,
     /// clipboard history, quick notes and Quick AI, and an extension's detail in the menu (Sven 2026-10-25, Q474). The bar
-    /// keeps its own Background; an extension's bar popover takes Glass itself (extensionGlass); the HUDs, the other
+    /// keeps its own Background, and its dropdowns and drops follow it (extensionGlass); the HUDs, the other
     /// popovers and the rest stay solid.
-    static let glassPanels: Set<StyleSurface> = [.menu, .clipboard, .notes, .quickAI, .extensionDetail]
+    static let glassPanels: Set<StyleSurface> = [.menu, .clipboard, .notes, .quickAI, .barDrop, .extensionDetail]
 
-    /// An extension's bar popover is on Glass: Glass is on, in a style that takes it (Q474).
+    /// A bar dropdown, a drop or a notification card is on Glass (Q474): it follows the top bar's Background while the top
+    /// bar is on (W77, Sven on build 2577: "on solid menubar they also show glass"), a Clear bar's on glass as they need a
+    /// face; with the top bar off, Look's Glass. Solid as every panel is when macOS asks for less transparency, at
+    /// Transparency 0 % and in Toybox.
     var extensionGlass: Bool { material(on: .barPopovers) == .glass }
+
+    /// The Glass switch the bar's dropdowns and drops follow (material(on:)): the top bar's Background while the top bar
+    /// is on, else Look's.
+    var barGlass: Bool { BarItemsStore.shared.isTopBarOn() ? BarItemsStore.shared.background != .solid : glass }
 
     /// `surface` is a panel on Liquid Glass: one of glassPanels while Glass is on, in a style that takes it.
     func glassFace(_ surface: StyleSurface) -> Bool { Self.glassPanels.contains(surface) && material(on: surface) == .glass }

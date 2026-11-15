@@ -107,7 +107,7 @@ final class BarPanelWindow: BarPanelPresenting {
         let screen = display?.frame ?? .zero
         // A popover that can grow (an extension's chat) keeps inside the room under its item, above the Dock.
         let room = display.map { BarPanelPlacement.room(item: item, visible: $0.visibleFrame) }
-        // Every dropdown on the bar's glass while Look's Glass is on, as an extension's (extensionGlass): its face is the glass.
+        // Every dropdown on glass while the top bar's Background is (extensionGlass, W77), as an extension's: its face is the glass.
         let panel = Self.keyPanel(content.extensionGlass().environment(\.barPopoverRoom, room), surface: .barPopovers, level: .popUpMenu) {
             BarPanelPlacement.frame(item: item, size: $0, screen: screen)
         }

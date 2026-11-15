@@ -57,6 +57,21 @@ struct LookRenders {
             }
             Self.resetShared(); return
         }
+        if Self.env["PILOT_MATERIAL_RENDER"] == "1" {
+            // Material (W77) at the top of Look: picked Glass, then Custom once the top bar alone went Solid.
+            let bar = BarItemsStore(defaults: LookTests.defaults(), statsPrefs: { [:] }, extensionOrder: { [] })
+            let material = LookMaterialStores(look: look, bar: bar, dock: nil)
+            look.style = .instrument; look.themeID = "tokyo-night"
+            for (name, solidBar) in [("glass", false), ("custom", true)] {
+                try material.pick(.glass)
+                if solidBar { bar.background = .solid }
+                Self.mirror(look, spot: nil)
+                try writeRender(LookPage(look: look, material: material, screens: []).styled(.page(.look), look: look)
+                                    .frame(width: Self.page(1000), height: 420, alignment: .top).pilotTheme(look: look).background(Theme.background),
+                                to: dir.appendingPathComponent("material-\(name).png"), wait: 0.8)
+            }
+            Self.resetShared(); return
+        }
         if Self.env["PILOT_THEME_EDITOR_RENDER"] == "1" {
             let base = try #require(LookTests.themes.first)
             var pack = ThemePack(id: "lagoon-copy", title: "Lagoon copy", dark: base.dark, palette: base.colors,

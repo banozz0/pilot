@@ -148,7 +148,7 @@ struct MenuBarPage: View {
         return Tile(title: "Bar background", symbol: "paintbrush") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    label("Background", "Solid paints the bar in its colour; Glass lets the desktop show through, whatever Look's own Glass is.")
+                    label("Background", "Solid paints the bar in its colour; Glass lets the desktop show through, whatever Look's own Glass is. Its dropdowns, drops and notification cards follow it, on glass over Clear.")
                     Segments(selection: $store.background, options: TopBarBackground.allCases.map { ($0, $0.title) }, label: "Background")
                     Spacer(minLength: 0)
                 }
