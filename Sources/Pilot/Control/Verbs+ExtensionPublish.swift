@@ -141,7 +141,7 @@ enum CataloguePublish {
         let body = CataloguePullRequest.body(pack, facts)
         let title = CataloguePullRequest.title(pack, update: facts.update)
         if gh != nil, CataloguePullRequest.length(title, body) > CataloguePullRequest.longest {
-            throw ControlError(.badValue, "the pull request's title and body come to \(CataloguePullRequest.length(title, body)) characters, past the \(CataloguePullRequest.longest) GitHub takes: \(pack.kind == .themes ? "shorten the pack's PROVENANCE.md" : "trim the extension's commands and permissions")")
+            throw ControlError(.badValue, "the pull request's title and body come to \(CataloguePullRequest.length(title, body)) code points, past the \(CataloguePullRequest.longest) GitHub takes: \(pack.kind == .themes ? "shorten the pack's PROVENANCE.md" : "trim the extension's commands and permissions")")
         }
         return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork, credit: credit,
                     facts: facts, body: body, files: files)

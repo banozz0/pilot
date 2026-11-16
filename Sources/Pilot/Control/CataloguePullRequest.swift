@@ -30,14 +30,28 @@ enum CataloguePullRequest {
     static func title(_ pack: CataloguePublish.Pack, update: Bool) -> String {
         let kind = pack.kind == .themes ? "Theme" : "Extension"
         let name = pack.kind == .themes ? pack.title : "\(pack.title) \(pack.label)"
-        // A title is plain text on GitHub: one line and capped, nothing escaped.
+        // A title is plain text on GitHub: one line and capped, nothing escaped. GitHub counts code points, so the cap does
+        // too: 80 characters, and fewer when combining marks make them long, the whole title within `longestTitle`.
+        let head = "\(kind)\(update ? " update" : ""): "
         var flat = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
-        if flat.count > 80 { flat = String(flat.prefix(79)) + "…" }
-        return "\(kind)\(update ? " update" : ""): \(flat)"
+        let room = longestTitle - head.unicodeScalars.count - 1
+        if flat.count > 80 || flat.unicodeScalars.count > room {
+            var kept = ""
+            for character in flat {
+                guard kept.count < 79, kept.unicodeScalars.count + character.unicodeScalars.count <= room else { break }
+                kept.append(character)
+            }
+            flat = kept + "…"
+        }
+        return head + flat
     }
 
-    /// GitHub's cap on a pull request's body, in characters; a title and body past it are refused before the Allow.
+    /// GitHub's cap on a pull request's body, in code points (Unicode scalars, not characters: a letter with ten combining
+    /// marks is eleven); a title and body past it are refused before the Allow.
     static let longest = 65_536
+    /// GitHub's cap on a title, in code points: 256, as an issue's (a pull request is one), which GitHub does not document;
+    /// community tests (github.com/dead-claudia/github-limits) find it.
+    static let longestTitle = 256
 
     /// The body, read once in the plan and kept there: the Allow shows it (`shown`) and the publish sends it (`sent`),
     /// never read again from the pack's folder. The preview's link waits for the commit's id: `linkStart`…`linkEnd`
@@ -64,9 +78,10 @@ enum CataloguePullRequest {
         return body.replacing(/\x{1}[^\x{2}]*\x{2}/, with: "(not linked: git gave no commit id)")
     }
 
-    /// Title and body together, the body as sent (a 40-character id in place of the mark).
+    /// Title and body together in code points, as GitHub counts them, the body as sent (a 40-character id in place of the
+    /// mark).
     static func length(_ title: String, _ body: String) -> Int {
-        title.count + sent(body, commit: String(repeating: "0", count: 40)).count
+        title.unicodeScalars.count + sent(body, commit: String(repeating: "0", count: 40)).unicodeScalars.count
     }
 
     // MARK: Theme
