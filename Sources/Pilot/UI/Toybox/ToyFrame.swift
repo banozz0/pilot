@@ -54,32 +54,33 @@ private struct ToyRail: View {
     @Environment(\.style) private var style
     let model: AppWindowModel
 
-    // Too short for the tiles alone too (the pages split made ten areas), they shrink, then scroll.
+    // Too short for the tiles alone too (the pages split made ten areas, eleven with Extensions back and Developer on),
+    // they shrink, then shrink again so the window's least height, 520, still shows Pilot's tile, then scroll.
     var body: some View {
         ViewThatFits(in: .vertical) {
-            rail(named: true); rail(named: false); rail(named: false, tight: true)
-            ScrollView { rail(named: false, tight: true) }.scrollIndicators(.never)
+            rail(named: true); rail(named: false); rail(named: false, tight: true); rail(named: false, tight: true, tighter: true)
+            ScrollView { rail(named: false, tight: true, tighter: true) }.scrollIndicators(.never)
         }
     }
 
-    private func rail(named: Bool, tight: Bool = false) -> some View {
-        VStack(spacing: tight ? 2 : 6) {
-            Color.clear.frame(height: 40)   // the traffic lights sit here
-            ForEach(AppArea.shownMain, id: \.self) { item($0, named: named, tight: tight) }
+    private func rail(named: Bool, tight: Bool = false, tighter: Bool = false) -> some View {
+        VStack(spacing: tighter ? 1 : tight ? 2 : 6) {
+            Color.clear.frame(height: tighter ? 34 : 40)   // the traffic lights sit here
+            ForEach(AppArea.shownMain, id: \.self) { item($0, named: named, tight: tight, tighter: tighter) }
             Spacer(minLength: tight ? 4 : 8)
-            item(.pilot, named: named, tight: tight)
-            ToyHyperChip(rail: true).padding(.top, tight ? 4 : 8).padding(.bottom, tight ? 10 : 16)
+            item(.pilot, named: named, tight: tight, tighter: tighter)
+            ToyHyperChip(rail: true).padding(.top, tight ? 4 : 8).padding(.bottom, tighter ? 8 : tight ? 10 : 16)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func item(_ area: AppArea, named: Bool, tight: Bool = false) -> some View {
+    private func item(_ area: AppArea, named: Bool, tight: Bool = false, tighter: Bool = false) -> some View {
         let on = model.page.area == area
         return Button { model.go(AppPlace(area.pages[0])) } label: {
             VStack(spacing: 4) {
-                ToyTile(symbol: area.symbol, color: Toy.pageTile(area.pages[0], style), size: tight ? 30 : 36)
-                    .padding(3)
-                    .overlay { if on { RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(style.color(\.accent), lineWidth: 3) } }
+                ToyTile(symbol: area.symbol, color: Toy.pageTile(area.pages[0], style), size: tighter ? 26 : tight ? 30 : 36)
+                    .padding(tighter ? 2 : 3)
+                    .overlay { if on { RoundedRectangle(cornerRadius: tighter ? 12 : 15, style: .continuous).strokeBorder(style.color(\.accent), lineWidth: 3) } }
                 if named { Text(area.title).font(style.toyNunito(800, 11)).foregroundStyle(style.color(on ? \.text : \.text2)).lineLimit(1) }
             }
             .frame(width: 66).contentShape(.rect)
@@ -120,7 +121,7 @@ private struct ToyPageList: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.never)
-            Text(RailLayout.hint(area, rows: area == .launcher ? ExtensionPages.shared.pageEntries.count : 0)).font(style.toyNunito(700, 12)).foregroundStyle(style.color(\.text3)).lineLimit(1).minimumScaleFactor(0.85)
+            Text(RailLayout.hint(area, rows: area == .extensions ? ExtensionPages.shared.pageEntries.count : 0)).font(style.toyNunito(700, 12)).foregroundStyle(style.color(\.text3)).lineLimit(1).minimumScaleFactor(0.85)
                 .padding(.horizontal, 22).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .overlay(alignment: .top) {
                     Rectangle().stroke(style: StrokeStyle(lineWidth: 2, dash: [4, 4])).foregroundStyle(style.color(\.line2)).frame(height: 1)
