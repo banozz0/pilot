@@ -5,7 +5,8 @@ import SwiftUI
 /// Update & Clean's Reports (story 153; Activity's until simplify-pages T16, Update & Clean's tab until Sven, 2026-11-16),
 /// under the Update and Clean block: every Update and Clean run, newest first, the one picked opening to when it ran, how it
 /// ended, the exact command, what it was to change (Update's versions from → to, Clean's items and the space Mole freed)
-/// and what it printed. UpkeepPage reads the runs and follows one still in its terminal; this draws them.
+/// and what it printed. UpkeepPage reads the runs and the opened run's output, following one still in its terminal; this
+/// draws them.
 struct ReportsBlock: View {
     @Environment(\.ink) private var ink
     var store = ReportStore.standard
@@ -13,52 +14,37 @@ struct ReportsBlock: View {
     let records: [RunRecord]?
     /// The run opened, from a row or Update and Clean's Open report; nil opens the newest.
     @Binding var picked: String?
-    /// Counts the page's reads of the runs, so a run still writing its output is read again with them.
-    var reads = 0
-    @State private var output = ""
+    /// What the opened run printed.
+    let output: String
 
     /// The run opened: the one picked, else the newest.
-    private var shown: RunRecord? { records?.first { $0.id == picked } ?? records?.first }
+    static func shown(_ records: [RunRecord]?, picked: String?) -> RunRecord? { records?.first { $0.id == picked } ?? records?.first }
 
-    /// Two of the page's children in Toybox, so the page spaces them as any blocks; the first, tagged for a link or Open
-    /// report to land on, reads the output.
+    /// Two of the page's children in Toybox, so the page spaces them as any blocks; the runs, first, are where a link or
+    /// Open report lands.
     var body: some View {
-        if let shown {
-            if ink.isInstrument {
-                landing(InstrumentPair(level: false) { runs(shown) } right: { detail(shown) })
+        if records != nil {
+            let shown = Self.shown(records, picked: picked)
+            if ink.isInstrument, let shown {
+                InstrumentPair(level: false) { runs(shown) } right: { detail(shown) }.id(AppSection.reports)
             } else {
                 // Held at the page's width, so the runs sit under Update and Clean, never beside it (PageFlow).
-                landing(runs(shown).pageWide())
-                detail(shown).pageWide()
+                runs(shown).pageWide().id(AppSection.reports)
+                if let shown { detail(shown).pageWide() }
             }
-        } else if records != nil {
-            landing(KitBlock(title: AppSection.reports.title, symbol: "list.bullet") {
-                EmptyState(title: "No runs yet", line: "Each Update and Clean run is kept here.").padding(.vertical, 12)
-            }
-            .pageWide())
         }
     }
 
-    /// Where a link or Open report lands, and where the opened run's output is read again as the pick or a read changes it.
-    private func landing(_ block: some View) -> some View {
-        block.id(AppSection.reports)
-            .onChange(of: shown?.id, initial: true) { readOutput() }
-            .onChange(of: reads) { readOutput() }
-    }
-
-    /// Assigned only when it changed, so a 2 s read of a quiet run lays out nothing again.
-    private func readOutput() {
-        let text = shown.map { store.output($0.id) } ?? ""
-        if text != output { output = text }
-    }
-
-    private func runs(_ shown: RunRecord) -> some View {
+    private func runs(_ shown: RunRecord?) -> some View {
         KitBlock(title: AppSection.reports.title, symbol: "list.bullet") {
             Text("\(records?.count ?? 0)").font(ink.mono(11.5))
         } content: {
             VStack(spacing: 2) {
+                if records?.isEmpty == true {
+                    EmptyState(title: "No runs yet", line: "Each Update and Clean run is kept here.").padding(.vertical, 12)
+                }
                 ForEach(records ?? []) { r in
-                    let selected = r.id == shown.id
+                    let selected = r.id == shown?.id
                     Button { picked = r.id } label: {
                         KitRow(selected: selected) {
                             IconTile(icon: Self.icon(r.report.kind), size: 26)

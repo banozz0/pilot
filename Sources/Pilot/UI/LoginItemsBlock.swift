@@ -22,13 +22,9 @@ struct LoginItemsBlock: View {
     @Environment(\.ink) private var ink
     /// Held only while the block shows, so the list is let go with the page.
     @State private var model: LoginItemsModel
-    /// Seeded for a render: nothing is read or switched.
-    private let seeded: Bool
 
-    init(seeded items: [LoginItems.Item]? = nil) {
-        _model = State(initialValue: LoginItemsModel(items: items))
-        seeded = items != nil
-    }
+    /// `seeded` items (a render's) are drawn as read; nothing is read.
+    init(seeded items: [LoginItems.Item]? = nil) { _model = State(initialValue: LoginItemsModel(items: items)) }
     /// The switch waiting on its confirm.
     @State private var asking: (item: LoginItems.Item, on: Bool)?
 
@@ -45,7 +41,7 @@ struct LoginItemsBlock: View {
                 if let problem = model.problem { Text(problem).font(ink.ui(11.5)).foregroundStyle(ink.muted).padding(.vertical, 6) }
             }
         }
-        .task { if !seeded { await model.reload() } }
+        .task { await model.reload() }
         .confirmationDialog(asking.map { "Turn \($0.on ? "on" : "off") \($0.item.label)?" } ?? "",
                             isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { asked in
             Button(asked.on ? "Turn on" : "Turn off", role: asked.on ? nil : .destructive) { Task { await model.set(asked.item, on: asked.on) } }

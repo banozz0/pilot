@@ -17,8 +17,11 @@ final class LoginItemsModel {
     /// Login items System Events would not take out: their app registered them itself, so only System Settings switches them.
     private(set) var appHeld: Set<String> = []
 
+    /// Given its items (a render's), so `reload` reads nothing.
+    @ObservationIgnored private let seeded: Bool
+
     /// `items` given (a render's) is the list as read, and no read is made.
-    init(items: [LoginItems.Item]? = nil) { self.items = items }
+    init(items: [LoginItems.Item]? = nil) { self.items = items; seeded = items != nil }
 
     /// The login items Pilot took out, name to app, in Pilot's settings.
     @ObservationIgnored private let defaults = UserDefaults.pilot()
@@ -35,6 +38,7 @@ final class LoginItemsModel {
 
     /// The login items (System Events) and the launchd jobs, read side by side.
     func reload() async {
+        guard !seeded else { return }
         async let logins = Self.loginItems()
         async let jobs = Self.jobs()
         items = mark(LoginItems.sorted(withRemoved(await logins) + (await jobs)))

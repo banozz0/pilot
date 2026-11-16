@@ -12,14 +12,14 @@ struct UpkeepPage: View {
     var mole = CleanModule.mole != nil
     /// Homebrew is there for Update to read and Mole to install through; a render says which.
     var homebrew = Helper.homebrew.path() != nil
-    /// Scrolls the page to its Reports (the window's landing on `AppSection.reports`), once Open report picked the run.
-    var toReports: () -> Void = {}
+    /// Opens a place in the window: Open report goes to `AppSection.reports`, which scrolls the page there.
+    var go: (AppPlace) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
     @State private var records: [RunRecord]?
     /// The run Reports opens, from its row or Open report; nil opens the newest.
     @State private var picked: String?
-    /// Counts the reads, so a run still writing has its output read again with them.
-    @State private var reads = 0
+    /// What the opened run printed.
+    @State private var output = ""
     /// Bumped when a run begins, so the page follows it to its end.
     @State private var wake = 0
 
@@ -29,8 +29,9 @@ struct UpkeepPage: View {
     var body: some View {
         KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {
             start
-            ReportsBlock(store: store, records: records, picked: $picked, reads: reads)
+            ReportsBlock(store: store, records: records, picked: $picked, output: output)
         } }
+            .onChange(of: picked) { readOutput() }
             .task(id: wake) {
                 reload()
                 while records?.contains(where: { $0.end == .running }) == true {
@@ -42,10 +43,22 @@ struct UpkeepPage: View {
             .onReceive(NotificationCenter.default.publisher(for: ReportStore.began)) { _ in wake += 1 }
     }
 
+    /// The opened run's output is read again only when the runs changed or it is still running, so a quiet 2 s read lays
+    /// out nothing.
     private func reload() {
         let read = store.list()
-        if read != records { records = read }
-        reads += 1
+        if read != records {
+            records = read
+            readOutput()
+        } else if ReportsBlock.shown(records, picked: picked)?.end == .running {
+            readOutput()
+        }
+    }
+
+    /// Assigned only when it changed.
+    private func readOutput() {
+        let text = ReportsBlock.shown(records, picked: picked).map { store.output($0.id) } ?? ""
+        if text != output { output = text }
     }
 
     /// Update and Clean open their Hyper+Space branch, so the preview, the confirm and the run are the menu's own; Clean
@@ -86,7 +99,7 @@ struct UpkeepPage: View {
                     HStack(spacing: 6) {
                         Text("Last run \(ReportsBlock.when(last.report.started)) · \(last.summary)").font(ink.ui(11.5)).foregroundStyle(ink.text2)
                         ReportsBlock.chip(last.end, ink: ink)
-                        Button("Open report") { picked = last.id; toReports() }.buttonStyle(.link).font(ink.ui(11.5))
+                        Button("Open report") { picked = last.id; go(AppPlace(.reports)) }.buttonStyle(.link).font(ink.ui(11.5))
                     }
                 } else if records != nil {
                     Text("No run yet").font(ink.ui(11.5)).foregroundStyle(ink.text2)
