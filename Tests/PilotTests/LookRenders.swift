@@ -145,7 +145,7 @@ struct LookRenders {
         let (look, dir) = try Self.setUp()
         func shot(_ name: String) throws {
             Self.mirror(look, spot: nil)
-            try writeRender(FocusedWindowBlock(look: look).styled(.page(.workspaces), look: look).padding(.horizontal, 24)
+            try writeRender(FocusedWindowBlock(look: look).styled(.page(.tiling), look: look).padding(.horizontal, 24)
                                 .frame(width: Self.page(AppWindowController.minSize.width), height: 820, alignment: .top)
                                 .pilotTheme(look: look).background(Theme.background),
                             to: dir.appendingPathComponent("focused-window-\(name).png"), wait: 0.8)

@@ -16,7 +16,7 @@ struct SettingsSearchWindowTests {
         #expect(opened == ["Privacy & Security"] && model.query.isEmpty)
         model.query = "gaps"
         model.goToFirstResult()
-        #expect(model.page == .workspaces && model.section(of: .workspaces) == .tiling && opened.count == 1 && model.query.isEmpty)
+        #expect(model.page == .tiling && opened.count == 1 && model.query.isEmpty)
         model.query = "zzzq"
         model.goToFirstResult()
         #expect(model.query == "zzzq" && opened.count == 1)
