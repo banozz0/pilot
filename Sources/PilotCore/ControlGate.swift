@@ -21,6 +21,10 @@ public final class ControlGate {
         /// Weather 1.3.0?") and at most two short lines naming every risk the whole shows (what runs as Sven, what goes
         /// to the Trash, where it comes from). The whole stays one click away, behind Show details; nil shows it at once.
         public private(set) var summary: Summary?
+        /// Words the request sends on, shown whole in a scroll under the question: a catalogue pull request's title and
+        /// body (Sven, 2026-11-16). Only this is left out of `tooLong`; it is part of the question, so the check that it
+        /// did not change while asking covers it, and a surface escapes it as it does the detail.
+        public private(set) var message: String?
 
         public struct Summary: Equatable, Sendable {
             public let headline: String, points: [String]
@@ -36,6 +40,13 @@ public final class ControlGate {
 
         /// "Run shell: rm -rf ~/tmp".
         public var text: String { "\(title): \(detail)" }
+
+        /// This question with `message`, the words it sends on, shown in a scroll.
+        public func sending(_ message: String) -> Self {
+            var ask = self
+            ask.message = message
+            return ask
+        }
 
         /// This question led by `headline` and `points`, at most two.
         public func summed(_ headline: String, _ points: [String]) -> Self {
@@ -111,7 +122,7 @@ extension ControlGate.Ask {
     public static let longest = 1200, mostLines = 20
 
     /// Why the question cannot be shown whole; nil when it can. Its details open under its summary's headline, so that
-    /// counts too.
+    /// counts too; its `message` sits in a scroll of its own, so that does not.
     var tooLong: String? {
         let shown = text + (summary.map { "\n" + $0.headline } ?? "")
         let length = shown.unicodeScalars.count, lines = shown.unicodeScalars.count { $0 == "\n" }

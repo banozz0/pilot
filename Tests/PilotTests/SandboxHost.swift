@@ -54,7 +54,12 @@ struct SandboxHost {
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores
         // without a prompt on Sven's screen (P49's publish, against a local bare remote).
         if ProcessInfo.processInfo.environment["PILOT_SANDBOX_ALLOW"] == "1" {
-            AllowPrompt.gate.decider = { ask, _ in print("ALLOW asked: \(ask.text)"); return true }
+            AllowPrompt.gate.decider = { ask, _ in
+                print("ALLOW asked: \(ask.text)")
+                if let message = ask.message { print("ALLOW shows:\n\(AllowPromptView.message(message))\nALLOW shows end") }
+                fflush(stdout)
+                return true
+            }
         }
         // PILOT_SANDBOX_ALLOW_HOLD=<path> holds each Allow up as a prompt would, so a client can change files while it is up:
         // the nth question is printed and written to <path>.asked.<n>, and answered yes once <path>.go.<n> exists, or no

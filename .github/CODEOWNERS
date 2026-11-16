@@ -1,0 +1,6 @@
+# Code owners (public-repo spec T27): the owner reviews every pull request once the repo's ruleset requires code-owner
+# review. The later lines name the paths that check pull requests, so a change to them is plainly the owner's call.
+*                              @banozz0
+/.github/                      @banozz0
+/catalogue/scripts/            @banozz0
+/catalogue/tests/harness.py    @banozz0

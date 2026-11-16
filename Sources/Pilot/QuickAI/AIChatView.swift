@@ -239,6 +239,13 @@ private struct AIChatAsk: View {
                 Text(AllowPromptView.thing(asking.ask))
                     .font(ink.mono(11.5)).foregroundStyle(ink.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
+            if let message = asking.ask.message {
+                ScrollView {
+                    Text(verbatim: AllowPromptView.message(message)).font(ink.mono(11)).foregroundStyle(ink.text).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 220)
+            }
             Text(asking.ask.summary == nil ? AllowPromptView.warning : "Asked by \(ControlGate.Ask.visible(asking.program)). " + AllowPromptView.warning)
                 .font(ink.ui(11.5)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
