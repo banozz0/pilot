@@ -114,18 +114,18 @@ struct AllowPromptView: View {
             AnyView(Button(details ? "Hide details" : "Show details") { details.toggle() }
                 .buttonStyle(.plain).styleText(\.caption).foregroundStyle(style.color(\.text2)).padding(.trailing, 6))
         }
-        // The words the request sends on (a pull request's title and body), whole, in a scroll above the buttons.
+        // The words the request sends on (a pull request's title and body), whole, in a scroll under the buttons.
         let sent = ask.message.map { message in
             AnyView(ScrollView {
                 Text(verbatim: Self.message(message)).font(.system(size: 11, design: .monospaced)).foregroundStyle(style.color(\.text))
                     .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .frame(height: 260)
-            .background(RoundedRectangle(cornerRadius: 6).fill(style.color(\.text).opacity(0.05))))
+            .background(RoundedRectangle(cornerRadius: 6).fill(style.color(\.text).opacity(0.05)))
+            .padding(.top, 10))
         }
-        let extra: AnyView? = sent.map { sent in AnyView(VStack(alignment: .trailing, spacing: 8) { sent; toggle }) } ?? toggle
         ExtensionAlertView(alert: Extension.AlertSpec(text: Self.heading(ask, program), note: Self.note(ask, program, details: details),
-                                                      actions: buttons), extra: extra) {
+                                                      actions: buttons), extra: toggle, below: sent) {
             answer($0 == 1)
         }
         .frame(width: 480)

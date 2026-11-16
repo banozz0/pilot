@@ -30,7 +30,10 @@ enum CataloguePullRequest {
     static func title(_ pack: CataloguePublish.Pack, update: Bool) -> String {
         let kind = pack.kind == .themes ? "Theme" : "Extension"
         let name = pack.kind == .themes ? pack.title : "\(pack.title) \(pack.label)"
-        return "\(kind)\(update ? " update" : ""): \(oneLine(name, 80))"
+        // A title is plain text on GitHub: one line and capped, nothing escaped.
+        var flat = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        if flat.count > 80 { flat = String(flat.prefix(79)) + "…" }
+        return "\(kind)\(update ? " update" : ""): \(flat)"
     }
 
     /// The body; `commit` is the commit's id once made, so the preview's link reaches the branch's copy of it.
@@ -55,7 +58,7 @@ enum CataloguePullRequest {
         let dark = manifest["dark"] as? Bool ?? true
         let palette = manifest["palette"] as? [String: String] ?? [:]
         let variants = (manifest["variants"] as? [String: Any]).map { Array($0.keys).sorted() } ?? []
-        let wallpapers = manifest["wallpapers"] as? [String] ?? []
+        let wallpapers = pictures(manifest["wallpapers"] as? [String] ?? [], in: pack.folder)
         let apps = ["Pilot"] + ((manifest["adapters"] as? [String: Any]).map { Array($0.keys).sorted() } ?? [])
             .map { appNames[$0] ?? oneLine($0, 30) }
         let modes = ([dark ? "dark" : "light"] + variants.map { oneLine($0, 20) }).joined(separator: " and ")
@@ -67,10 +70,10 @@ enum CataloguePullRequest {
         let others = palette.count - roles.filter { palette[$0.key] != nil }.count
         if others > 0 { lines += ["", "And \(count(others, "more colour")) in `manifest.json` (terminal brights and Pilot's own roles)."] }
         lines += ["", "**Wallpapers:** \(wallpapers.isEmpty ? "none." : "\(wallpapers.count), as PROVENANCE.md records them:")"]
-        let licence = section("Wallpapers", of: provenance)
+        let licence = wallpaperLines(provenance)
         if !wallpapers.isEmpty {
             lines += licence.isEmpty ? ["", "- PROVENANCE.md says nothing about them: ask the author where they come from."]
-                : [""] + licence.prefix(12).map { "- \(oneLine($0, 240))" }
+                : [""] + licence.prefix(12).map { "- \($0)" }
         }
         let palettes = section("Palette", of: provenance)
         if !palettes.isEmpty { lines += ["", "**Palette from:**", ""] + palettes.prefix(4).map { "- \(oneLine($0, 240))" } }
@@ -78,8 +81,14 @@ enum CataloguePullRequest {
         lines += ["", "## Evidence", "", "- **Checks:** `catalogue/scripts/check.py`, run on the catalogue's main with this pack in it: `\(code(facts.check))`"]
         if let preview = manifest["preview"] as? String {
             let path = "\(pack.path)/\(preview)"
-            lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`:")
-            lines += ["", "  ![\(oneLine(pack.title, 40)) preview](https://github.com/\(facts.repo)/blob/\(commit ?? "<commit>")/\(url(path))?raw=true)"]
+            let link = "https://github.com/\(facts.repo)/blob/\(commit ?? "<commit>")/\(url(path))?raw=true"
+            // GitHub draws only the web's picture kinds in a body; a HEIC or the like is a link it downloads.
+            if ["png", "jpg", "jpeg", "gif", "webp"].contains(URL(filePath: preview).pathExtension.lowercased()) {
+                lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`:")
+                lines += ["", "  ![\(oneLine(pack.title, 40)) preview](\(link))"]
+            } else {
+                lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`, which GitHub cannot show in place: [open it](\(link))")
+            }
         } else {
             lines.append("- **Preview:** none; the pack has no `preview`, so the palette above is the whole look.")
         }
@@ -203,16 +212,52 @@ enum CataloguePullRequest {
         (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     }
 
-    /// The list items under `## <name>` in PROVENANCE.md, their marker dropped.
-    static func section(_ name: String, of text: String) -> [String] {
-        var inside = false, out: [String] = []
+    /// The list items under `## <name>` in PROVENANCE.md, their marker dropped, each with the `###` heading it sits under
+    /// (a wallpaper's file name), nil for one straight under the section.
+    static func items(_ name: String, of text: String) -> [(under: String?, item: String)] {
+        var inside = false, under: String?, out: [(String?, String)] = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("#") { inside = trimmed.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces).lowercased() == name.lowercased(); continue }
+            if trimmed.hasPrefix("#") {
+                let level = trimmed.prefix { $0 == "#" }.count, words = trimmed.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)
+                if level <= 2 { inside = words.lowercased() == name.lowercased(); under = nil } else if inside { under = words }
+                continue
+            }
             guard inside, trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { continue }
-            out.append(String(trimmed.dropFirst(2)))
+            out.append((under, String(trimmed.dropFirst(2))))
         }
         return out
+    }
+
+    static func section(_ name: String, of text: String) -> [String] { items(name, of: text).map(\.item) }
+
+    /// What PROVENANCE.md says of each wallpaper: under a `###` per file, its rights, licence, source and author lines
+    /// (each file one line); else the section's own list.
+    static func wallpaperLines(_ text: String) -> [String] {
+        let found = items("Wallpapers", of: text)
+        let keys = ["rights", "licence", "license", "source", "author"]
+        var order: [String] = [], picked: [String: [String]] = [:], plain: [String] = []
+        for (under, item) in found {
+            guard let under else { plain.append(oneLine(item, 240)); continue }
+            if picked[under] == nil { order.append(under); picked[under] = [] }
+            if keys.contains(where: { item.lowercased().hasPrefix($0) }) { picked[under]?.append(item) }
+        }
+        return plain + order.map { file in
+            let said = picked[file] ?? []
+            return "`\(code(file))`: " + (said.isEmpty ? "no rights, licence or source line" : said.map { oneLine($0, 160) }.joined(separator: "; "))
+        }
+    }
+
+    /// The pictures a manifest's wallpapers name: a file, or each file in a folder, inside the pack.
+    private static func pictures(_ entries: [String], in folder: URL) -> [String] {
+        entries.flatMap { entry -> [String] in
+            let url = folder.appending(path: entry)
+            var folderFlag: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &folderFlag) else { return [] }
+            guard folderFlag.boolValue else { return [entry] }
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path(percentEncoded: false))) ?? []
+            return names.filter { !$0.hasPrefix(".") }.sorted().map { "\(entry)/\($0)" }
+        }
     }
 
     /// A stranger's words as one line of plain text: breaks and runs of space one space, at most `limit` characters,

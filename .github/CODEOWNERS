@@ -1,0 +1,5 @@
+# Code owners (Sven, 2026-11-16): a pull request that changes how pull requests are checked needs the owner's review
+# once the repo's ruleset asks for code-owner review, so none can quietly change its own checks.
+/.github/                      @banozz0
+/catalogue/scripts/            @banozz0
+/catalogue/tests/harness.py    @banozz0

@@ -55,6 +55,8 @@ private struct InstrumentAsk<Buttons: View, Foot: View>: View {
 struct InstrumentExtensionAlert: View {
     let alert: Extension.AlertSpec
     var extra: AnyView?
+    /// A row of its own under the buttons (the Allow prompt's message).
+    var below: AnyView?
     var press: (Int?) -> Void
 
     var body: some View {
@@ -64,7 +66,7 @@ struct InstrumentExtensionAlert: View {
                 Button(button.title) { press(button.id) }.buttonStyle(InstrumentButtonStyle(kind: button.primary ? .primary : .raised))
             }
         } foot: {
-            EmptyView()
+            below
         }
         .frame(minWidth: 300, alignment: .leading)
     }

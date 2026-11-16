@@ -61,6 +61,8 @@ struct ToyAsk<Buttons: View, Foot: View>: View {
 struct ToyExtensionAlert: View {
     let alert: Extension.AlertSpec
     var extra: AnyView?
+    /// A row of its own under the buttons (the Allow prompt's message).
+    var below: AnyView?
     var press: (Int?) -> Void
 
     var body: some View {
@@ -71,7 +73,7 @@ struct ToyExtensionAlert: View {
                 else { Button(button.title) { press(button.id) }.buttonStyle(.pilot) }
             }
         } foot: {
-            EmptyView()
+            below
         }
         .frame(minWidth: 320, alignment: .leading)
     }
