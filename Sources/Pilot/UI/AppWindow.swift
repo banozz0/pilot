@@ -62,11 +62,8 @@ final class AppWindowModel {
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
-        let place = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0) }
-        let saved = place?.page ?? .home
+        let saved = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
         page = saved.isDeveloper && !DeveloperPages.on ? saved.area.shown.first ?? .home : saved
-        // A page that became a tab (Tiling, the pages split) opens on that tab.
-        if let section = place?.section, section.isTab, section.page == page { sections[page] = section }
     }
 
     /// The part of `page` showing now: the one picked, else its first (a page's own content is nil).

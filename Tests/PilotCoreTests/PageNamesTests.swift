@@ -10,7 +10,7 @@ struct PageNamesTests {
     func paths() {
         #expect(AppPlace(.conflicts).path == "Binds › Conflicts")
         #expect(AppPlace(.permissions).path == "Pilot › Permissions" && AppPlace(.recordingQuality).path == "Captures › Recording › Recording quality")
-        #expect(AppPlace(.reports).path == "Update & Clean › Reports" && AppPlace(.stats).path == "Stats" && AppPlace(.tiling).path == "Windows › Tiling")
+        #expect(AppPlace(.reports).path == "Update & Clean › Reports" && AppPlace(.stats).path == "Stats" && AppPlace(.tiling).path == "Tiling")
     }
 
     @Test("Onboarding's clash row sends the user to Binds › Conflicts")

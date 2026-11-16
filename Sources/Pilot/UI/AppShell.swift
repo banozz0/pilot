@@ -120,8 +120,8 @@ struct PageView: View {
             } else {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
-        // Windows: Workspaces and Tiling, one page (the pages split, Sven 2026-11-15).
-        case .workspaces: if section == .tiling { TilingSettingsView() } else { WorkspacesSettingsView(more: section == .workspacesMore) }
+        case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
+        case .tiling: TilingSettingsView()
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).
