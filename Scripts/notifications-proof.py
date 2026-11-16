@@ -889,11 +889,12 @@ def pinned(s):
     def alerts(*ns):
         return [banner(n, 'Alert', identifier=f'btm-{n}', description=f'Sekret-App-{n} Sekret-Title-{n}, Sekret-Body-{n}', subtitle=False) for n in ns]
 
-    def cards_now(ids, seconds=6):
+    def cards_now(count, seconds=6):
+        """Status once the card count is `count`, or as it stands after `seconds`."""
         deadline = time.time() + seconds
         while time.time() < deadline:
             st = s.status()
-            if st['cards'] == len(ids):
+            if st['cards'] == count:
                 return st
             time.sleep(0.1)
         return s.status()
@@ -902,21 +903,21 @@ def pinned(s):
     s.tree([listed(alerts(31, 32))], bump=False)
     s.new_events()
     s.set('notifications.enabled', True)
-    st = cards_now(['btm-31', 'btm-32'])
+    st = cards_now(2)
     check(st['cards'] == 2, f'two pinned alerts already up at attach become two cards ({st["cards"]})')
     check(s.wait_event('move')['y'] == -9999, 'and macOS\'s window goes off screen')
     s.tree([listed(alerts(33, 31, 32))])
-    st = cards_now(['btm-33', 'btm-31', 'btm-32'])
+    st = cards_now(3)
     check(st['cards'] == 3 and st['hostParked'] is True, f'a third arriving after attach becomes a card, still hidden ({st["cards"]})')
     s.tree([listed(alerts(34, 33, 31, 32), depth=3)])
-    st = cards_now(['btm-34', 'btm-33', 'btm-31', 'btm-32'])
+    st = cards_now(4)
     check(st['cards'] == 4, f'the same alerts three groups deeper still read ({st["cards"]})')
     s.tree(alerts(31))
-    st = cards_now(['btm-31'])
+    st = cards_now(1)
     check(st['cards'] == 1 and st['hostParked'] is True, 'down to one alert: one card, still hidden')
     # A host the walk reads no banner in (one nested past its reach): three looks a second apart, then it waits.
-    s.tree([listed(alerts(35), depth=12)])
-    cards_now([])
+    s.tree([listed(alerts(35), depth=14)])
+    check(cards_now(0)['cards'] == 0, 'an alert nested past the walk\'s reach reads as none')
     before = s.status()['sweeps']
     s.settled(5)
     looks = s.status()['sweeps'] - before

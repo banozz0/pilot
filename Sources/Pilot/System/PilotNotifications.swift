@@ -120,9 +120,8 @@ final class PilotNotifications {
     private var systemLookTask: Task<Void, Never>?
     /// The last Control Center window shapes logged, so a repeat isn't logged again.
     private var lastSystemShapes: [NotificationReader.SystemShape] = []
-    /// How many looks again a host window up with no banner read has had, and its last shape logged.
-    private var emptyHostLooks = 0
-    private var lastEmptyHost: String?
+    /// A host window up with no banner read: its last shape logged and how many looks again it has had.
+    private var emptyHost: (shape: String, looks: Int)?
     /// Looks again at a host window up with no banner read: a tree still being built at login settles within these.
     static let emptyHostLookLimit = 3
 
@@ -223,8 +222,7 @@ final class PilotNotifications {
         sweepWanted = false
         systemLookTask?.cancel()
         systemLookTask = nil
-        emptyHostLooks = 0
-        lastEmptyHost = nil
+        emptyHost = nil
         restoreSystem(Array(systemParked), wait: false)
         systemParked = [:]
         source?.detach()
@@ -355,14 +353,11 @@ final class PilotNotifications {
     /// The host window up with no banner read in it is a misread (it exists only while one is up): its shape is logged
     /// once, never a word, and a few walks a second apart look again.
     private func noteEmptyHost(_ shape: String?) {
-        guard let shape else { emptyHostLooks = 0; lastEmptyHost = nil; return }
-        if shape != lastEmptyHost {
-            slog.notice("notifications: host up with no banner read \(shape, privacy: .public)")
-            lastEmptyHost = shape
-        }
-        guard emptyHostLooks < Self.emptyHostLookLimit else { return }
-        emptyHostLooks += 1
-        lookAgainSoon()
+        guard let shape else { return emptyHost = nil }
+        if shape != emptyHost?.shape { slog.notice("notifications: host up with no banner read \(shape, privacy: .public)") }
+        let looks = emptyHost?.looks ?? 0
+        emptyHost = (shape, min(looks + 1, Self.emptyHostLookLimit))
+        if looks < Self.emptyHostLookLimit { lookAgainSoon() }
     }
 
     /// While a Control Center banner is up, or the host reads empty: a walk a second from now, which sees it change.

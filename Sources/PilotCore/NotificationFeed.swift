@@ -69,8 +69,7 @@ public struct NotificationReading: Sendable, Equatable {
     public var emptyHost: String?
     public init(answered: Bool = false, panelOpen: Bool = false, hostFound: Bool = false, hostPosition: CGPoint? = nil, banners: [NotificationRead] = [],
                 emptyHost: String? = nil) {
-        (self.answered, self.panelOpen, self.hostFound, self.hostPosition, self.banners) = (answered, panelOpen, hostFound, hostPosition, banners)
-        self.emptyHost = emptyHost
+        (self.answered, self.panelOpen, self.hostFound, self.hostPosition, self.banners, self.emptyHost) = (answered, panelOpen, hostFound, hostPosition, banners, emptyHost)
     }
 }
 
@@ -81,8 +80,8 @@ public enum NotificationReader {
     public static let hostSubrole = "AXSystemDialog"
     static let panelListIdentifier = "AXNotificationListItems"
     /// A lone banner sits 5 deep; two or more pinned alerts (Login Item Added, App Background Activity) were missed at 7
-    /// on 2026-11-16, so there is room for a list and a group or two around them.
-    static let maxDepth = 10
+    /// on 2026-11-16. The keys' walk's depth (`Notifications.maxDepth`); `maxNodes` bounds the walk.
+    static let maxDepth = Notifications.maxDepth
     static let maxNodes = 300
 
     public static func host(in app: any NotificationElement) -> (any NotificationElement)? {
@@ -121,23 +120,26 @@ public enum NotificationReader {
         return found
     }
 
-    /// A host window's make-up for the log: how deep the walk went, its roles and subroles counted, the AX-named
-    /// identifiers, and how deep the first banner subrole sits (deeper than `maxDepth` is a miss). Never a word.
+    /// A host window with no banner read: its make-up for the log, walked only then, within the reader's own limits. How
+    /// deep and how many nodes the walk reached (`maxNodes` reached is a miss), roles and subroles and the AX-named
+    /// identifiers counted. Never a word.
     static func shape(of host: any NotificationElement) -> String {
-        var roles: [String: Int] = [:], ids: [String: Int] = [:], nodes = 0, deepest = 0, bannerDepth: Int?
+        var roles: [String: Int] = [:], ids: [String: Int] = [:], nodes = 0, deepest = 0
         func walk(_ element: any NotificationElement, _ depth: Int) {
-            guard depth <= maxDepth + 4, nodes < maxNodes else { return }
+            guard depth <= maxDepth, nodes < maxNodes else { return }
             nodes += 1
             deepest = max(deepest, depth)
-            let subrole = element.subrole ?? ""
-            roles[[element.role ?? "?", subrole].filter { !$0.isEmpty }.joined(separator: "/"), default: 0] += 1
+            roles[[element.role ?? "?", element.subrole ?? ""].filter { !$0.isEmpty }.joined(separator: "/"), default: 0] += 1
             if let id = element.identifier, id.hasPrefix("AX") { ids[id, default: 0] += 1 }
-            if bannerDepth == nil, subrole.hasPrefix("AXNotificationCenter") { bannerDepth = depth }
             element.children.forEach { walk($0, depth + 1) }
         }
         walk(host, 0)
-        func counted(_ counts: [String: Int]) -> String { counts.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",") }
-        return "depth=\(deepest) nodes=\(nodes) bannerDepth=\(bannerDepth.map(String.init) ?? "-") roles=\(counted(roles)) ids=\(counted(ids))"
+        return "depth=\(deepest) nodes=\(nodes) roles=\(counted(roles)) ids=\(counted(ids))"
+    }
+
+    /// Counts for a log line, as `key:n`, sorted.
+    static func counted(_ counts: [String: Int]) -> String {
+        counts.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
     }
 
     /// AXIdentifier, or the kind and words for one without, hashed so the key shows none of them.
@@ -211,7 +213,7 @@ public extension NotificationReader {
         public var isBanner: Bool { texts >= 2 && !controls }
         /// For the log: shape only.
         public var line: String {
-            "\(role)/\(subrole) texts=\(texts) controls=\(controls) roles=" + roles.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
+            "\(role)/\(subrole) texts=\(texts) controls=\(controls) roles=" + NotificationReader.counted(roles)
         }
     }
 
