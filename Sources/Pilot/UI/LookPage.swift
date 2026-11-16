@@ -8,8 +8,8 @@ import SwiftUI
 /// setting has an ⓘ saying what it does (Sven, 2026-10-09). A column of cards under the page's title; nothing folds
 /// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it. The front holds the preview, Glass
 /// with its Transparency and Blur (pages round 5), the wallpaper's Previous and Next, and Theme, then the cursor and the
-/// wallpaper's folders (pages round 4, Sven's Q99); the rest, how apps show among it (pages round 5), is on More
-/// (simplify-pages T20, T28).
+/// wallpaper's folders (pages round 4, Sven's Q99); the style and this window's layout are on More (simplify-pages T20,
+/// T28). The Hyper+Space menu's layout and how apps show went to Launcher's More (Sven's notes on build 19).
 struct LookPage: View {
     @Environment(\.ink) private var ink
     let look: Look
@@ -88,9 +88,7 @@ struct LookPage: View {
     /// its count here.
     static let entries = [
         MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
-        MoreEntry(id: .menuLayout, symbol: "text.magnifyingglass", controls: 1),
         MoreEntry(id: .windowLayout, symbol: "sidebar.left", controls: 1),
-        MoreEntry(id: .appsShowAs, symbol: "square.grid.2x2", controls: 1),
     ]
 
     // MARK: The page
@@ -165,14 +163,12 @@ struct LookPage: View {
         }
     }
 
-    /// More: the style, the menu's and this window's layouts and how apps show, each a place a link or the search lands on.
+    /// More: the style and this window's layout, each a place a link or the search lands on.
     private var moreTab: some View {
         @Bindable var look = look
         return KitMore(entries: Self.entries) {
             headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
-            headed(.menuLayout, Info.menuLayout) { MenuLayoutPicker(look: look).padding(14).blockSurface() }
             headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
-            headed(.appsShowAs, Info.appsShowAs) { calmLine("Every list: the menu, Binds, Open with, the top bar.") { appsShowAs } }
             errorLine.padding(.top, 12)
         }
     }
@@ -232,12 +228,6 @@ struct LookPage: View {
     private var windowShape: some View {
         Segments(selection: Binding(get: { look.windowShape }, set: { look.windowShape = $0 }),
                  options: WindowShape.allCases.map { ($0, $0.title) }, label: "Window layout")
-    }
-
-    /// Apps show as (story 154): icon only, title only, or both, for every list that shows an app.
-    private var appsShowAs: some View {
-        @Bindable var look = look
-        return Segments(selection: $look.appsShowAs, options: AppsShowAs.allCases.map { ($0, $0.label) }, label: "Apps show as")
     }
 
     /// Transparency from 0 % (solid) to 100 % (round 15; it was Strength, 40 to 100 %, the other way round), shown while
@@ -1174,4 +1164,39 @@ func themePlanText(_ plan: JSONValue) -> String {
         }
     }
     return lines.joined(separator: "\n")
+}
+
+/// Launcher's More: how Hyper+Space draws the menu, Line, Classic or the Rail (Look's More until Sven's notes on build 19;
+/// `look.menuLayout` as before).
+struct MenuLayoutBlock: View {
+    let look: Look
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CalmHeading(title: AppSection.menuLayout.title) { InfoMark(text: LookPage.Info.menuLayout) }
+            MenuLayoutPicker(look: look).padding(14).blockSurface()
+        }
+        .moreBlock(.menuLayout)
+    }
+}
+
+/// Launcher's More: Apps show as (story 154), icon only, title only, or both, for every list that shows an app (Look's More
+/// until Sven's notes on build 19; `look.appsShowAs` as before).
+struct AppsShowAsBlock: View {
+    @Environment(\.ink) private var ink
+    @Bindable var look: Look
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CalmHeading(title: AppSection.appsShowAs.title) { InfoMark(text: LookPage.Info.appsShowAs) }
+            HStack(spacing: 16) {
+                Text("Every list: the menu, Binds, Open with, the top bar.").foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Segments(selection: $look.appsShowAs, options: AppsShowAs.allCases.map { ($0, $0.label) }, label: "Apps show as")
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .blockSurface()
+        }
+        .moreBlock(.appsShowAs)
+    }
 }

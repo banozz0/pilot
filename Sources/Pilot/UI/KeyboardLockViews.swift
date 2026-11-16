@@ -83,6 +83,7 @@ struct KeyboardLockView: View {
 
 /// Binds › Keyboard's Cleaning block (Part 04): Lock keyboard for cleaning with its key or Set key, Lock now, and how a
 /// lock ends. The unlock is fixed (Sven, Q471: Esc held 3 s or Unlock, 2 minutes' safety; Q472: the mouse stays live).
+/// A KitBlock, so it keeps the page's gap under Export and import on Keys' More (Sven's notes on build 19: it sat flush).
 struct KeyboardLockCard: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -90,7 +91,7 @@ struct KeyboardLockCard: View {
 
     var body: some View {
         let id = KeyboardLockController.actionID
-        Tile(title: "Cleaning", symbol: "lock") {
+        KitBlock(title: "Cleaning", symbol: "lock") {
             VStack(spacing: 0) {
                 BlockRow(first: true) {
                     line("Lock keyboard for cleaning", "Every key stops until you unlock. The mouse and trackpad keep working.")

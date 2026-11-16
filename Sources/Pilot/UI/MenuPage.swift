@@ -7,7 +7,8 @@ import SwiftUI
 /// (story 160) under the abilities they configure since the page map. Your menu also holds the extra rows the root can
 /// list (MenuExtrasBlock, Sven 2026-10-20; on More from simplify-pages T15 until pages round 4, Sven's Q96). More holds
 /// Translate's pair (TranslateBlock, from System's Keyboard layout card), and Aliases and Quicklinks, Defaults' blocks
-/// and then their own tabs. File search went on to the Files page (Sven 2026-10-10).
+/// and then their own tabs; and how the menu draws (Line, Classic or the Rail) and how apps show, Look's More's until
+/// Sven's notes on build 19. File search went on to the Files page (Sven 2026-10-10).
 struct MenuPage: View {
     /// None offscreen without one: Translate's block needs the engine's settings.
     @Environment(Engine.self) private var engine: Engine?
@@ -25,7 +26,7 @@ struct MenuPage: View {
     @State private var fit = Fit.stacked
 
     static let intro = "Hyper+Space: the rows it lists before you type, in your order."
-    static let introInfo = "Its other tabs: everything Pilot can do and the rings. More holds Translate, aliases and quicklinks."
+    static let introInfo = "Its other tabs: everything Pilot can do and the rings. More holds Translate, aliases, quicklinks, the menu's layout and how apps show."
     /// The page width from which Your menu's preview stands beside its rows (simplify-pages T26): the rows at their
     /// least (a long title, its ⓘ, the arrows and the switch), the gap, the preview.
     static let rowsWidth: CGFloat = 372, gap: CGFloat = 18
@@ -46,6 +47,8 @@ struct MenuPage: View {
         MoreEntry(id: .translate, symbol: "character.bubble", controls: 2),
         MoreEntry(id: .aliases, symbol: "character.textbox", controls: 1),
         MoreEntry(id: .quicklinks, symbol: "link", controls: 1),
+        MoreEntry(id: .menuLayout, symbol: "text.magnifyingglass", controls: 1),
+        MoreEntry(id: .appsShowAs, symbol: "square.grid.2x2", controls: 1),
     ]
 
     var body: some View {
@@ -61,6 +64,8 @@ struct MenuPage: View {
                     if let settings { TranslateBlock(settings: settings).moreBlock(.translate) }
                     AliasesList(book: aliases, asked: editAlias, page: scroll).moreBlock(.aliases)
                     QuicklinksList(book: links).moreBlock(.quicklinks)
+                    MenuLayoutBlock(look: .shared)
+                    AppsShowAsBlock(look: .shared)
                 }
             }
         default:

@@ -132,8 +132,8 @@ final class AppWindowModel {
         extensionFocus = id
     }
 
-    /// ⌃Tab: the next page in the area, round to the first; on Extensions (Launcher's since the pages split), Installed then
-    /// each extension that opens a page, as the sidebar lists them, then the area's next page.
+    /// ⌃Tab: the next page in the area, round to the first; on Extensions, Installed then each extension that opens a page,
+    /// as the sidebar lists them, round to Installed.
     func nextPage(entries: [ExtensionPages.Link] = ExtensionPages.shared.pageEntries) {
         let after = AppPlace(AppArea.next(after: page, developer: DeveloperPages.on))
         guard page == .extensions, !entries.isEmpty else { return go(after) }

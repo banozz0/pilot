@@ -123,7 +123,7 @@ struct LookPageTests {
         // One render in one main-actor turn, so every page sees the same moment and no other suite runs between; a gap
         // between pages, as a page drew some of its neighbour's edge without one.
         let pages = [try page(), try page(), try page { $0.pick("garnet") }, try page { $0.style = .toybox }, try page { $0.glass = true },
-                     try page(more: true), try page(more: true) { $0.menuLayout = .rail }]
+                     try page(more: true), try page(more: true) { $0.style = .toybox }]
         let gap = 200
         let view = VStack(spacing: CGFloat(gap)) { ForEach(pages.indices, id: \.self) { pages[$0] } }
         let rep = try #require(snapshot(drawing: view, scale: 1))
@@ -139,8 +139,9 @@ struct LookPageTests {
         for (i, change) in ["theme", "style", "Glass switch"].enumerated() {
             #expect(differing(i + 2) > 500, "the \(change) draws nothing new")
         }
-        // The Hyper+Space menu's picker is on More (simplify-pages T20): More against More.
-        #expect(differing(6, from: 5) > 500, "the Hyper+Space menu draws nothing new")
+        // The style's picker is on More (simplify-pages T20): More against More. The Hyper+Space menu's left for Launcher's
+        // More (Sven's notes on build 19).
+        #expect(differing(6, from: 5) > 500, "the style on More draws nothing new")
     }
 
     /// Opt-in: Vision finds the words to click on the main actor and, on a loaded Mac, stalls it for minutes (e5rt

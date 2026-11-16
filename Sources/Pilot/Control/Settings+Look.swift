@@ -38,11 +38,11 @@ extension SettingsSchema {
                  standard: ShakeDetector.defaultSwings, read: { look.defocusShakeSwings }, write: { look.defocusShakeSwings = $0 }),
             .number("look.defocusShakeWithin", "Seconds the swings fall within", page: "tiling", range: ShakeDetector.withinRange,
                     standard: ShakeDetector.defaultWithin, read: { look.defocusShakeWithin }, write: { look.defocusShakeWithin = $0 }),
-            .choice("look.appsShowAs", "Apps show as", page: "look", AppsShowAs.allCases, standard: .standard,
+            .choice("look.appsShowAs", "Apps show as", page: "menu", AppsShowAs.allCases, standard: .standard,
                     read: { look.appsShowAs }, write: { look.appsShowAs = $0 }),
             .choice("look.windowLayout", "Window layout", page: "look", WindowShape.allCases, standard: .rail,
                     read: { look.windowShape }, write: { look.windowShape = $0 }),
-            .choice("look.menuLayout", "Hyper+Space menu", page: "look", MenuLayoutStyle.allCases, standard: .line,
+            .choice("look.menuLayout", "Hyper+Space menu", page: "menu", MenuLayoutStyle.allCases, standard: .line,
                     read: { look.menuLayout }, write: { look.menuLayout = $0 }),
             // Pilot drawing the cursor, its shape, size, colours or custom fill and outline change the system cursor
             // everywhere, so `pilot set` waits on Allow (P84). The page's offer to turn Accessibility's pointer colours off

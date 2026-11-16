@@ -209,21 +209,20 @@ public enum AppArea: String, CaseIterable, Sendable {
     // Pilot stays last: its key is ",", the rest count down the rail.
     // Look left Desktop for an area of its own, and Developer took Configs and Repos from Apps, shown only while the
     // Developer pages switch is on, last above Pilot so switching it never renumbers the keys (the pages split, Sven 2026-11-15).
-    // Windows (Workspaces and Tiling, listed in its sidebar as any area's pages, Q291) sits under Keys, and Extensions, each
-    // command a Hyper+Space row, joined Launcher (Sven on Q289: "Workspaces and Tiling as its own page on the sidebar under
-    // Keys", and a Launcher area for the launcher's pages).
-    case home, keys, windows, launcher, desktop, look, mac, tools, apps, ai, developer, pilot
+    // Windows (Workspaces and Tiling, listed in its sidebar as any area's pages, Q291) sits under Keys (Sven on Q289:
+    // "Workspaces and Tiling as its own page on the sidebar under Keys"). Extensions joined Launcher on build 19 and is an
+    // area of its own again after AI (Sven's notes on build 19); the eleventh keyed area, it has no Cmd key.
+    case home, keys, windows, launcher, desktop, look, mac, tools, apps, ai, extensions, developer, pilot
 
-    /// Its pages in order. Voice is Dictation and Read aloud (in Tools, Sven 2026-10-16); AI (the chat and its setup) is an
-    /// area of its own (Sven 2026-10-16); General alone is Pilot. Launcher (the menu's page) left Keys for an area of its own
-    /// after it (P37, Sven 2026-10-18, Q285), and Extensions, an area of its own until the pages split, listing every installed
-    /// extension under its page, joined it there.
+    /// Its pages in order. Voice is Dictation and Read aloud (in Tools, Sven 2026-10-16); AI (the chat and its setup) and
+    /// Extensions are areas of their own, Extensions listing every installed extension under its page (Sven 2026-10-16);
+    /// General alone is Pilot. Launcher (the menu's page) left Keys for an area of its own after it (P37, Sven 2026-10-18, Q285).
     public var pages: [AppPage] {
         switch self {
         case .home: [.home]
         case .keys: [.binds]
         case .windows: [.workspaces, .tiling]
-        case .launcher: [.menu, .extensions]
+        case .launcher: [.menu]
         // Pilot menu beside Menu bar: what the menu under Pilot's icon shows (Sven, 2026-11-12, Q182: Menu bar was crowded).
         // Dock beside Menu bar, its own page (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop").
         // The split (Sven, 2026-11-15: "the themes and all that go into one place and the rest into another"): Desktop keeps
@@ -238,6 +237,7 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .apps: [.openWith, .install]
         case .developer: [.configs, .repos]
         case .ai: [.ai]
+        case .extensions: [.extensions]
         case .pilot: [.general]
         }
     }
@@ -254,6 +254,7 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .tools: "Tools"
         case .apps: "Apps"
         case .ai: "AI"
+        case .extensions: "Extensions"
         case .developer: "Developer"
         case .pilot: "Pilot"
         }
@@ -271,13 +272,14 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .tools: "doc.on.clipboard"
         case .apps: "shippingbox"
         case .ai: "sparkles"
+        case .extensions: "puzzlepiece.extension"
         case .developer: "hammer"
         case .pilot: "gearshape"
         }
     }
 
     /// The key that opens it with Cmd: "1" to "9" top to bottom, then "0" for the tenth (AI since the pages split),
-    /// "," for Pilot at the foot; Developer, shown only while its switch is on, has none.
+    /// "," for Pilot at the foot; Extensions, the eleventh, and Developer, shown only while its switch is on, have none.
     public var key: Character? {
         switch self {
         case .pilot: ","
@@ -339,9 +341,8 @@ public enum RailLayout {
     }
 
     /// Areas of one page take the whole width, the list's one row saying nothing, its tabs in the page's header (Sven,
-    /// 2026-10-18): Home, Keys, AI and Pilot. Windows and Launcher list their pages,
-    /// each extension's page a row under Launcher's Extensions.
-    public static func fullWidth(_ area: AppArea) -> Bool { area.pages.count == 1 }
+    /// 2026-10-18): Home, Keys, Launcher, AI and Pilot. Extensions keeps its list, each extension's page a row in it.
+    public static func fullWidth(_ area: AppArea) -> Bool { area.pages.count == 1 && area != .extensions }
 
     /// A measured window width kept to the widths these rules tell apart, so only crossing a line redraws a frame.
     public static func bucket(_ width: Double) -> Double {
@@ -417,8 +418,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Catalogue (public-repo-catalogue T22, Sven's variant C): every theme pack in Pilot's catalogue as a gallery
     /// of desks, each acting from its own tile (Get, Update, Apply, Remove).
     case themeCatalogue
-    /// Look's More (simplify-pages T20) and its places: the style, the Hyper+Space menu's and this window's layouts and how
-    /// apps show (back on More in pages round 5); the glass's transparency and blur (under Glass, pages round 5), the cursor,
+    /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
+    /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
     case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
@@ -471,7 +472,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var page: AppPage {
         switch self {
         case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
-        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate: .menu
+        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .menuLayout, .appsShowAs: .menu
         case .fileSearch, .duplicates, .folders: .files
         case .reports: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
@@ -488,7 +489,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .menuLayout, .windowLayout, .appsShowAs, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .windowLayout, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
