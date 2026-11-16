@@ -42,3 +42,20 @@ public enum AppLink: Equatable, Sendable {
         return nil
     }
 }
+
+/// Bundle ids that name one app, the one a release ships first. Ghostex: release builds are `com.madda.ghostex.host`
+/// (its GPUI release pipeline, 2026-07-13), dev and source builds `com.madda.ghostex.gpui`; Pilot named the dev build's
+/// id until Sven's Mac went to a release on 2026-11-16, and a bind or menu row saved under either opens whichever is here.
+public enum SameApp {
+    public static let ghostex = ["com.madda.ghostex.host", "com.madda.ghostex.gpui"]
+    static let groups = [ghostex]
+
+    /// The id a menu row's key (`app:<id>`) names the app by, so an alias, a ranking or a favourite saved under one
+    /// build's id finds the other's row.
+    public static func canonical(_ bundle: String) -> String { groups.first { $0.contains(bundle) }?.first ?? bundle }
+
+    /// The bundle itself first, then the ids it shares an app with.
+    public static func ids(_ bundle: String) -> [String] {
+        [bundle] + (groups.first { $0.contains(bundle) }?.filter { $0 != bundle } ?? [])
+    }
+}

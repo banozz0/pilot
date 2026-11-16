@@ -9,7 +9,7 @@ struct MyBindsTests {
     @Test("Hammerspoon's app and site binds keep their keys, opening in Zen where Hammerspoon did")
     func appBinds() {
         let b = MyBinds.extras
-        #expect(b["apps.open:com.madda.ghostex.gpui"] == Key("g"))
+        #expect(b["apps.open:com.madda.ghostex.host"] == Key("g"))
         #expect(b["apps.open:app.zen-browser.zen"] == Key("b"))
         #expect(b["apps.url:app.zen-browser.zen:https://claude.ai"] == Key("i"))
         #expect(b["apps.private:app.zen-browser.zen"] == Key("b", .shift))

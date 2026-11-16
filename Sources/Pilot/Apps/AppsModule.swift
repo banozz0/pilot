@@ -349,7 +349,8 @@ enum AppsModule {
 
     /// LaunchServices' file for the app, else the last installedApps scan's: an app in a home folder never opened yet.
     static func url(forBundle bundle: String) -> URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) ?? scanned?.files[bundle]
+        // An id another build of the same app uses (SameApp) opens the one this Mac has.
+        SameApp.ids(bundle).lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) ?? scanned?.files[$0] }.first
     }
     static func isInstalled(_ bundle: String) -> Bool { url(forBundle: bundle) != nil }
 

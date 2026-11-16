@@ -16,7 +16,7 @@ public enum PilotDefault {
         "apps.generatePassword": Key("p", .shift),
         "apps.launcher": Key("space"),
         "apps.lazygit": Key("l", .shift),
-        "apps.open:com.madda.ghostex.gpui": Key("g"),
+        "apps.open:com.madda.ghostex.host": Key("g"),
         "apps.open:com.openai.codex": Key("o"),
         "apps.open:dev.vencord.vesktop": Key("d"),
         "apps.open:net.whatsapp.WhatsApp": Key("w", .shift),
