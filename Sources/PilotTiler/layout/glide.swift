@@ -55,7 +55,7 @@ struct GlideSet {
             let progress = min(1, (now - glide.start) / glide.duration)
             let frame = Self.frame(from: glide.from, to: glide.to, progress: progress)
             frames.append(GlideStep(id: id, from: glide.at, frame: frame, span: glide.span, sizeUnknown: !glide.sized,
-                                    then: progress >= 1 ? glide.then : nil))
+                                    then: progress >= 1 ? glide.then : nil, lands: progress >= 1))
             glide.at = frame
             glide.sized = true
             glides[id] = progress >= 1 ? nil : glide
@@ -83,6 +83,8 @@ struct GlideStep {
     let span: ClosedRange<CGFloat>?
     var sizeUnknown = false
     var then: CGPoint? = nil
+    /// The last step, at the target: a tile's lands where its least size shows (WindowMinimums).
+    var lands = false
 }
 
 /// Pilot (scrolling layout, Moody on T1): one frame write as AX takes it, the size and the position apart, the window

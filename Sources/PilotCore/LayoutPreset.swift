@@ -168,6 +168,14 @@ public enum LayoutPreset: String, CaseIterable, Codable, Sendable {
     /// The tiles this preset lays `n` windows into within `area`, in order: the workspace editor's preview draws them.
     public func tiles(_ n: Int, in area: CGRect) -> [CGRect] { slots(n, in: area).map(\.rect) }
 
+    /// The frames the tiler gives `n` windows within `area`, in open order: a tree's tiles less `gap` between them, each
+    /// window at least its `minimums` size where the room allows (TileFit); scrolling's and stage's tiles as they are.
+    public func frames(_ n: Int, in area: CGRect, gap: CGFloat, minimums: [Int: CGSize]) -> [CGRect] {
+        guard self != .scrolling, self != .stage else { return tiles(n, in: area) }
+        let room = room(n, in: area)
+        return tree(n, in: room.size)?.frames(in: room, gap: gap, minimums: minimums) ?? []
+    }
+
     /// How much of the width the editor's Stage picture gives the shelf: its room on a 1440 pt wide screen.
     static let shelfShare = CGFloat(PilotBlock.shelfWidth) / 1440
 

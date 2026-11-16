@@ -333,6 +333,8 @@ class MacApp: AbstractApp { // Pilot: not final, for OwnApp (Pilot's own windows
                 try disableAnimations(app: axApp.threadGuarded, job) {
                     glider.minWidths[windowId] = try setFrame(window, topLeft, size, span: span, minWidth: glider.minWidths[windowId] ?? 0, job)
                 }
+                // Pilot: what a tile's write left the window at, for its least size (WindowMinimums); a column learns its own
+                if span == nil, let size, let took = window.get(Ax.sizeAttr) { WindowMinimums.report(windowId, asked: size, took: took) }
                 return TilerFrames.announce([windowId])
             }
             try glider.run(axApp.threadGuarded, windows, on: screen)
@@ -701,6 +703,7 @@ extension Glider {
                     setPosition: { ax.set(Ax.topLeftCornerAttr, $0) },
                 )
                 if let then = step.then { ax.set(Ax.topLeftCornerAttr, then) } // Pilot: a slid-out window's hide (spaceSlide.swift)
+                else if step.lands, step.span == nil, let took = ax.get(Ax.sizeAttr) { WindowMinimums.report(step.id, asked: step.frame.size, took: took) }
             }
             TilerFrames.announce(takeLanded())
             guard landed else { return }

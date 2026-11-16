@@ -101,6 +101,7 @@ final class MacWindow: Window {
         // Pilot: a quitting app's windows may go before it is reported terminated (card agent-bo-95423036)
         windowSlots.windowsLeaving([self])
         windowTitles[windowId] = nil
+        WindowMinimums.forget(windowId)
         let parent = try unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
         let focus = focus

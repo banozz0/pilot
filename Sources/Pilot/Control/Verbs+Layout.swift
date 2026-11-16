@@ -11,12 +11,15 @@ extension ControlVerbs {
                              + "and in what order; tiles lists each window's tile, x, y, width and height in points from the top left, for 1 to "
                              + "--windows windows (6) on a screen of --screen (the main display's room), and the order the tiler's tree reads them. "
                              + "Scrolling's are the strip's frames at --strip's look, scrolled to show --focus (the newest); a column scrolled off "
-                             + "lies past the screen's edge.",
-                             usage: "pilot layout | pilot layout cycle | pilot layout tiles <layout> [--windows <n>] [--screen <width>x<height>] [--strip thirds|centred|halves] [--focus <n>]",
+                             + "lies past the screen's edge. --gap and --min lay them as the tiler does: the inner gap between tiles, and a "
+                             + "window that cannot shrink below its least size given it, the tiles beside it giving way.",
+                             usage: "pilot layout | pilot layout cycle | pilot layout tiles <layout> [--windows <n>] [--screen <width>x<height>] [--strip thirds|centred|halves] [--focus <n>] [--gap <points>] [--min <window>=<width>x<height>[,…]]",
                              flags: [.init("windows", help: "the most windows to lay out, 1 to 12 (6)"),
                                      .init("screen", help: "the room the tiles share, as <width>x<height> in points (the main display's)"),
                                      .init("strip", help: "scrolling's look, \(Self.cases(PilotBlock.StripLook.self)) (halves, the default)"),
-                                     .init("focus", help: "scrolling's focused column, 1 first (the newest)")]) { call throws(ControlError) in
+                                     .init("focus", help: "scrolling's focused column, 1 first (the newest)"),
+                                     .init("gap", help: "the inner gap between tiles, in points (0)"),
+                                     .init("min", help: "windows' least sizes, as <window>=<width>x<height>, comma-separated, window 1 first in open order")]) { call throws(ControlError) in
             let args = call.arguments()
             func row(_ preset: LayoutPreset) -> JSONValue {
                 .object(["layout": .string(preset.rawValue), "label": .string(preset.label), "inCycle": .bool(LayoutPreset.cycle.contains(preset))])
@@ -46,8 +49,20 @@ extension ControlVerbs {
                     guard let n = Int(word), n >= 1 else { throw ControlError(.badValue, "--focus: \(word) is not a column, 1 first") }
                     return n - 1
                 }
+                let gap: CGFloat = try args.value("gap").map { word throws(ControlError) -> CGFloat in
+                    guard let points = Double(word), (0...100).contains(points) else { throw ControlError(.badValue, "--gap: \(word) is not 0 to 100 points") }
+                    return CGFloat(points)
+                } ?? 0
+                var minimums: [Int: CGSize] = [:]
+                for entry in (try args.value("min") ?? "").split(separator: ",") {
+                    let sides = entry.split(separator: "="), size = sides.count == 2 ? sides[1].split(separator: "x").compactMap { Double($0) } : []
+                    guard let window = sides.first.flatMap({ Int($0) }), window >= 1, size.count == 2, size.allSatisfy({ $0 >= 0 }) else {
+                        throw ControlError(.badValue, "--min: \(entry) is not <window>=<width>x<height>")
+                    }
+                    minimums[window - 1] = CGSize(width: size[0], height: size[1])
+                }
                 let counts = (1...most).map { n in
-                    let tiles = (preset == .scrolling ? StripPreview.frames(n, look: strip, focus: focus, in: size) : preset.tiles(n, in: area)).map { tile in
+                    let tiles = (preset == .scrolling ? StripPreview.frames(n, look: strip, focus: focus, in: size) : preset.frames(n, in: area, gap: gap, minimums: minimums)).map { tile in
                         JSONValue.array([tile.minX, tile.minY, tile.width, tile.height].map { .number(($0 * 10).rounded() / 10) })
                     }
                     let reading = preset.reading(of: Array(0..<n), in: size)
