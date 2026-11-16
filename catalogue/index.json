@@ -2272,6 +2272,65 @@
       ]
     },
     {
+      "id": "nebula",
+      "title": "Nebula",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "accent": "#9B7BFF",
+        "background": "#14111F",
+        "blue": "#8C9CFF",
+        "bright_blue": "#A9B6FF",
+        "bright_cyan": "#8FE3F0",
+        "bright_foreground": "#F4F0FC",
+        "bright_green": "#A0EDCB",
+        "bright_magenta": "#FF9AD6",
+        "bright_red": "#FF8C9D",
+        "bright_yellow": "#F9E19D",
+        "cyan": "#6CCFE0",
+        "dark_background": "#0E0B16",
+        "dark_foreground": "#7A7196",
+        "darker_background": "#19152A",
+        "foreground": "#E6E1F5",
+        "green": "#7EE0B5",
+        "light_foreground": "#BDB5D6",
+        "lighter_background": "#1E1930",
+        "magenta": "#FF7AC6",
+        "muted": "#4A4266",
+        "native_graph1": "#9B7BFF",
+        "native_graph2": "#FF7AC6",
+        "native_graph3": "#7EE0B5",
+        "native_line": "#2A2440",
+        "native_line2": "#3B3456",
+        "native_second": "#FF7AC6",
+        "native_selection": "#9B7BFF",
+        "native_text3": "#8E85AB",
+        "native_third": "#6CCFE0",
+        "red": "#FF6B81",
+        "selection": "#2E2548",
+        "yellow": "#F5D37A"
+      },
+      "preview": null,
+      "digest": "38982a0251c0d5b890a1f813cade5e49eec250704392108033fcc8882988c7e5",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "d8b3af9aa11ab7798e331d25ccb62928c272021d9cee67d351368cbcadad679a",
+          "size": 944,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "377df45a8d81ef2f622d243f01610281d6dac2c6ecccb841ef40c96a927fbd22",
+          "size": 934,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "neon-rain",
       "title": "Neon Rain",
       "dark": true,
