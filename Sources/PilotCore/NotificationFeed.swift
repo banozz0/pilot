@@ -64,8 +64,13 @@ public struct NotificationReading: Sendable, Equatable {
     /// Where the host window is, read once a walk.
     public var hostPosition: CGPoint?
     public var banners: [NotificationRead] = []
-    public init(answered: Bool = false, panelOpen: Bool = false, hostFound: Bool = false, hostPosition: CGPoint? = nil, banners: [NotificationRead] = []) {
+    /// The host window was up with the panel closed, yet no banner read in it: since 27.2 that window exists only while
+    /// one is up, so this is a misread. Its make-up, counted and never a word, for the log.
+    public var emptyHost: String?
+    public init(answered: Bool = false, panelOpen: Bool = false, hostFound: Bool = false, hostPosition: CGPoint? = nil, banners: [NotificationRead] = [],
+                emptyHost: String? = nil) {
         (self.answered, self.panelOpen, self.hostFound, self.hostPosition, self.banners) = (answered, panelOpen, hostFound, hostPosition, banners)
+        self.emptyHost = emptyHost
     }
 }
 
@@ -75,7 +80,9 @@ public struct NotificationReading: Sendable, Equatable {
 public enum NotificationReader {
     public static let hostSubrole = "AXSystemDialog"
     static let panelListIdentifier = "AXNotificationListItems"
-    static let maxDepth = 7
+    /// A lone banner sits 5 deep; two or more pinned alerts (Login Item Added, App Background Activity) were missed at 7
+    /// on 2026-11-16, so there is room for a list and a group or two around them.
+    static let maxDepth = 10
     static let maxNodes = 300
 
     public static func host(in app: any NotificationElement) -> (any NotificationElement)? {
@@ -88,26 +95,49 @@ public enum NotificationReader {
         let host = windows.first { $0.subrole == hostSubrole }
         guard !app.isExpanded else { return NotificationReading(answered: true, panelOpen: true, hostFound: host != nil, hostPosition: host?.position) }
         guard let host else { return NotificationReading(answered: true) }
-        return NotificationReading(answered: true, hostFound: true, hostPosition: host.position,
-                                   banners: elements(in: host).compactMap { read(banner: $0, vocabulary: vocabulary) })
+        let banners = elements(in: host, panelOpen: false).compactMap { read(banner: $0, vocabulary: vocabulary) }
+        return NotificationReading(answered: true, hostFound: true, hostPosition: host.position, banners: banners,
+                                   emptyHost: banners.isEmpty ? shape(of: host) : nil)
     }
 
     /// The banner element with `id`, read afresh for a press; nil once it has gone.
     public static func element(id: String, in app: any NotificationElement) -> (any NotificationElement)? {
         guard let host = host(in: app) else { return nil }
-        return elements(in: host).first { key(of: $0) == id }
+        return elements(in: host, panelOpen: app.isExpanded).first { key(of: $0) == id }
     }
 
-    static func elements(in host: any NotificationElement) -> [any NotificationElement] {
+    /// The list Notification Center keeps its rows in is the open panel's history, never walked then. With the panel
+    /// closed the host holds no history (the 27 capture), so a list there holds what is on screen: two or more pinned
+    /// alerts (modelled 2026-11-16, not yet captured).
+    static func elements(in host: any NotificationElement, panelOpen: Bool) -> [any NotificationElement] {
         var budget = maxNodes, found: [any NotificationElement] = []
         func walk(_ element: any NotificationElement, _ depth: Int) {
-            guard depth <= maxDepth, budget > 0, element.identifier != panelListIdentifier else { return }
+            guard depth <= maxDepth, budget > 0, !(panelOpen && element.identifier == panelListIdentifier) else { return }
             budget -= 1
             if let subrole = element.subrole, NotificationKind(rawValue: subrole) != nil { found.append(element); return }
             element.children.forEach { walk($0, depth + 1) }
         }
         walk(host, 0)
         return found
+    }
+
+    /// A host window's make-up for the log: how deep the walk went, its roles and subroles counted, the AX-named
+    /// identifiers, and how deep the first banner subrole sits (deeper than `maxDepth` is a miss). Never a word.
+    static func shape(of host: any NotificationElement) -> String {
+        var roles: [String: Int] = [:], ids: [String: Int] = [:], nodes = 0, deepest = 0, bannerDepth: Int?
+        func walk(_ element: any NotificationElement, _ depth: Int) {
+            guard depth <= maxDepth + 4, nodes < maxNodes else { return }
+            nodes += 1
+            deepest = max(deepest, depth)
+            let subrole = element.subrole ?? ""
+            roles[[element.role ?? "?", subrole].filter { !$0.isEmpty }.joined(separator: "/"), default: 0] += 1
+            if let id = element.identifier, id.hasPrefix("AX") { ids[id, default: 0] += 1 }
+            if bannerDepth == nil, subrole.hasPrefix("AXNotificationCenter") { bannerDepth = depth }
+            element.children.forEach { walk($0, depth + 1) }
+        }
+        walk(host, 0)
+        func counted(_ counts: [String: Int]) -> String { counts.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",") }
+        return "depth=\(deepest) nodes=\(nodes) bannerDepth=\(bannerDepth.map(String.init) ?? "-") roles=\(counted(roles)) ids=\(counted(ids))"
     }
 
     /// AXIdentifier, or the kind and words for one without, hashed so the key shows none of them.

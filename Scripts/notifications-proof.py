@@ -313,9 +313,10 @@ def probe(s):
     s.tree(s.first_banners(), expanded=True, list_rows=[banner(9)])
     s.settled(0.4)
     check(s.status()['panelOpen'] is True and s.status()['live'] == 0, 'open panel: rows are not banners')
+    # With the panel closed the host holds no history, so a list there is what's up: pinned alerts (2026-11-16).
     s.tree(s.first_banners(), list_rows=[banner(9)])
     s.settled(0.4)
-    check(s.status()['live'] == 0 and s.status()['panelOpen'] is False, 'the panel\'s list is never walked')
+    check(s.status()['live'] == 1 and s.status()['panelOpen'] is False, 'panel closed: a list\'s rows are banners on screen')
     # Notification Center restarts under a new pid.
     s.new_events()
     s.pid(700)
@@ -874,7 +875,59 @@ def system(s):
     s.tree([], bump=False)
 
 
-CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system)
+def listed(alerts, depth=0):
+    """Pinned alerts as a modelled shape (2026-11-16, not captured): two or more up at once, in a list, `depth` groups deeper."""
+    node = {'role': 'AXGroup', 'identifier': 'AXNotificationListItems', 'children': alerts}
+    for _ in range(depth):
+        node = {'role': 'AXGroup', 'children': [node]}
+    return node
+
+
+def pinned(s):
+    """macOS's Login Item Added and App Background Activity alerts (2026-11-16): two or more pinned alerts up at once,
+    already up when Pilot attaches, then one more after; each becomes a card and macOS's window goes off screen."""
+    def alerts(*ns):
+        return [banner(n, 'Alert', identifier=f'btm-{n}', description=f'Sekret-App-{n} Sekret-Title-{n}, Sekret-Body-{n}', subtitle=False) for n in ns]
+
+    def cards_now(ids, seconds=6):
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            st = s.status()
+            if st['cards'] == len(ids):
+                return st
+            time.sleep(0.1)
+        return s.status()
+
+    s.set('notifications.hideMacBanners', True)
+    s.tree([listed(alerts(31, 32))], bump=False)
+    s.new_events()
+    s.set('notifications.enabled', True)
+    st = cards_now(['btm-31', 'btm-32'])
+    check(st['cards'] == 2, f'two pinned alerts already up at attach become two cards ({st["cards"]})')
+    check(s.wait_event('move')['y'] == -9999, 'and macOS\'s window goes off screen')
+    s.tree([listed(alerts(33, 31, 32))])
+    st = cards_now(['btm-33', 'btm-31', 'btm-32'])
+    check(st['cards'] == 3 and st['hostParked'] is True, f'a third arriving after attach becomes a card, still hidden ({st["cards"]})')
+    s.tree([listed(alerts(34, 33, 31, 32), depth=3)])
+    st = cards_now(['btm-34', 'btm-33', 'btm-31', 'btm-32'])
+    check(st['cards'] == 4, f'the same alerts three groups deeper still read ({st["cards"]})')
+    s.tree(alerts(31))
+    st = cards_now(['btm-31'])
+    check(st['cards'] == 1 and st['hostParked'] is True, 'down to one alert: one card, still hidden')
+    # A host the walk reads no banner in (one nested past its reach): three looks a second apart, then it waits.
+    s.tree([listed(alerts(35), depth=12)])
+    cards_now([])
+    before = s.status()['sweeps']
+    s.settled(5)
+    looks = s.status()['sweeps'] - before
+    check(looks == 3, f'a host up with no banner read: looked at again three times, then stops ({looks})')
+    s.set('notifications.enabled', False)
+    s.wait_event('end')
+    s.set('notifications.hideMacBanners', False)
+    s.tree([], bump=False)
+
+
+CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system, pinned=pinned)
 
 
 def main():
