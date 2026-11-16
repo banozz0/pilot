@@ -36,10 +36,37 @@ enum CataloguePullRequest {
         return "\(kind)\(update ? " update" : ""): \(flat)"
     }
 
-    /// The body; `commit` is the commit's id once made, so the preview's link reaches the branch's copy of it.
-    static func body(_ pack: CataloguePublish.Pack, _ facts: Facts, commit: String? = nil) -> String {
-        let parts = pack.kind == .themes ? theme(pack, facts, commit: commit) : extensionBody(pack, facts)
+    /// GitHub's cap on a pull request's body, in characters; a title and body past it are refused before the Allow.
+    static let longest = 65_536
+
+    /// The body, read once in the plan and kept there: the Allow shows it (`shown`) and the publish sends it (`sent`),
+    /// never read again from the pack's folder. The preview's link waits for the commit's id: `linkStart`…`linkEnd`
+    /// wrap the whole link and `commitMark` stands for the id, characters no pack word can hold (`oneLine` and `code`
+    /// drop every control character).
+    static func body(_ pack: CataloguePublish.Pack, _ facts: Facts) -> String {
+        let parts = pack.kind == .themes ? theme(pack, facts) : extensionBody(pack, facts)
         return parts.joined(separator: "\n") + "\n"
+    }
+    private static let commitMark = "\u{0}", linkStart = "\u{1}", linkEnd = "\u{2}"
+
+    /// The body as the Allow shows it: `<commit>` where the id will go.
+    static func shown(_ body: String) -> String {
+        body.replacingOccurrences(of: linkStart, with: "").replacingOccurrences(of: linkEnd, with: "")
+            .replacingOccurrences(of: commitMark, with: "<commit>")
+    }
+
+    /// The body as sent: the commit's id in the preview's link, or, when git gave none, no link at all.
+    static func sent(_ body: String, commit: String?) -> String {
+        if let commit, commit.wholeMatch(of: /[0-9a-f]{40}/) != nil {
+            return body.replacingOccurrences(of: linkStart, with: "").replacingOccurrences(of: linkEnd, with: "")
+                .replacingOccurrences(of: commitMark, with: commit)
+        }
+        return body.replacing(/\x{1}[^\x{2}]*\x{2}/, with: "(not linked: git gave no commit id)")
+    }
+
+    /// Title and body together, the body as sent (a 40-character id in place of the mark).
+    static func length(_ title: String, _ body: String) -> Int {
+        title.count + sent(body, commit: String(repeating: "0", count: 40)).count
     }
 
     // MARK: Theme
@@ -52,7 +79,7 @@ enum CataloguePullRequest {
     ]
     private static let appNames = ["ghostty": "Ghostty", "zed": "Zed", "obsidian": "Obsidian"]
 
-    private static func theme(_ pack: CataloguePublish.Pack, _ facts: Facts, commit: String?) -> [String] {
+    private static func theme(_ pack: CataloguePublish.Pack, _ facts: Facts) -> [String] {
         let manifest = json(pack.folder.appending(path: "manifest.json"))
         let provenance = (try? String(contentsOf: pack.folder.appending(path: "PROVENANCE.md"), encoding: .utf8)) ?? ""
         let dark = manifest["dark"] as? Bool ?? true
@@ -63,7 +90,7 @@ enum CataloguePullRequest {
             .map { appNames[$0] ?? oneLine($0, 30) }
         let modes = ([dark ? "dark" : "light"] + variants.map { oneLine($0, 20) }).joined(separator: " and ")
         var lines = ["## Summary", "",
-                     "\(oneLine(pack.title, 80)): a \(modes) theme \(facts.author.map { "by \(handle($0))" } ?? "from Pilot"), "
+                     "\(leading(oneLine(pack.title, 80))): a \(modes) theme \(facts.author.map { "by \(handle($0))" } ?? "from Pilot"), "
                         + "\(count(wallpapers.count, "wallpaper")), for \(list(apps)). It goes in `\(pack.path)/`.", "",
                      "| Role | Colour |", "| --- | --- |"]
         for role in roles { if let hex = palette[role.key] { lines.append("| \(role.name) | \(hexCell(hex)) |") } }
@@ -81,13 +108,13 @@ enum CataloguePullRequest {
         lines += ["", "## Evidence", "", "- **Checks:** `catalogue/scripts/check.py`, run on the catalogue's main with this pack in it: `\(code(facts.check))`"]
         if let preview = manifest["preview"] as? String {
             let path = "\(pack.path)/\(preview)"
-            let link = "https://github.com/\(facts.repo)/blob/\(commit ?? "<commit>")/\(url(path))?raw=true"
+            let link = "https://github.com/\(facts.repo)/blob/\(commitMark)/\(url(path))?raw=true"
             // GitHub draws only the web's picture kinds in a body; a HEIC or the like is a link it downloads.
             if ["png", "jpg", "jpeg", "gif", "webp"].contains(URL(filePath: preview).pathExtension.lowercased()) {
                 lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`:")
-                lines += ["", "  ![\(oneLine(pack.title, 40)) preview](\(link))"]
+                lines += ["", "  \(linkStart)![\(oneLine(pack.title, 40)) preview](\(link))\(linkEnd)"]
             } else {
-                lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`, which GitHub cannot show in place: [open it](\(link))")
+                lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`, which GitHub cannot show in place: \(linkStart)[open it](\(link))\(linkEnd)")
             }
         } else {
             lines.append("- **Preview:** none; the pack has no `preview`, so the palette above is the whole look.")
@@ -124,7 +151,7 @@ enum CataloguePullRequest {
         let programs = Array(Set(commands.compactMap { $0["run"] as? String })).sorted()
         let surfaces = manifest["surfaces"] as? [String: Any] ?? [:]
         var lines = ["## Summary", "",
-                     "\(oneLine(pack.title, 80)) \(oneLine(pack.label, 20)): \(oneLine(manifest["description"] as? String ?? "no description.", 400))", "",
+                     "\(leading(oneLine(pack.title, 80))) \(oneLine(pack.label, 20)): \(oneLine(manifest["description"] as? String ?? "no description.", 400))", "",
                      "| Command | Shows |", "| --- | --- |"]
         lines += shown.map { "| \(cell($0["title"] as? String ?? $0["name"] as? String ?? "?")) | \(cell($0["mode"] as? String ?? "?")) |" }
         if shown.isEmpty { lines.append("| none listed | |") }
@@ -194,7 +221,7 @@ enum CataloguePullRequest {
     }
 
     /// The folder's files by path inside it, each its sha256, `__pycache__` left out as the publish leaves it.
-    private static func files(_ folder: URL) -> [String: String] {
+    static func files(_ folder: URL) -> [String: String] {
         var out: [String: String] = [:]
         let base = folder.standardizedFileURL.path(percentEncoded: false)
         guard let walk = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else { return out }
@@ -264,7 +291,7 @@ enum CataloguePullRequest {
     /// Markdown's and HTML's marks written out, and `@` kept from mentioning (a zero-width space after it).
     static func oneLine(_ text: String, _ limit: Int) -> String {
         var flat = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
-        flat = String(flat.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !(0x200B...0x200F).contains($0.value) && !(0x202A...0x202E).contains($0.value) && !(0x2066...0x2069).contains($0.value) })
+        flat = String(flat.unicodeScalars.filter { !ExtensionCheck.hides($0) })
         if flat.count > limit { flat = String(flat.prefix(limit - 1)) + "…" }
         var out = ""
         for ch in flat {
@@ -279,13 +306,21 @@ enum CataloguePullRequest {
         return out
     }
 
+    /// A line that starts with a stranger's words: a list or heading marker at its start written out, so the line stays
+    /// a sentence ("- x", "+ x", "1. x", "1) x"; `oneLine` already escapes "#" and ">").
+    private static func leading(_ text: String) -> String {
+        if let first = text.first, first == "-" || first == "+" { return "\\" + text }
+        if let match = text.prefixMatch(of: /(\d{1,9})([.)])/) { return match.output.1 + "\\" + text.dropFirst(match.output.1.count) }
+        return text
+    }
+
     /// A table cell's words.
     private static func cell(_ text: String) -> String { oneLine(text, 80) }
 
-    /// Inside a code span: one line, no backtick, no pipe (a table would split on it).
+    /// Inside a code span: one line, no hidden character, no backtick, no pipe (a table would split on it).
     private static func code(_ text: String) -> String {
-        String(text.components(separatedBy: .newlines).joined(separator: " ").prefix(200))
-            .replacingOccurrences(of: "`", with: "'").replacingOccurrences(of: "|", with: "/")
+        let flat = String(text.components(separatedBy: .newlines).joined(separator: " ").unicodeScalars.filter { !ExtensionCheck.hides($0) })
+        return String(flat.prefix(200)).replacingOccurrences(of: "`", with: "'").replacingOccurrences(of: "|", with: "/")
     }
 
     /// A colour cell: the hex as code when it is one, else its words.
@@ -296,8 +331,12 @@ enum CataloguePullRequest {
     /// A handle as code, so it names and never mentions.
     private static func handle(_ login: String) -> String { "`@\(code(login))`" }
 
+    /// RFC 3986's unreserved characters, the only ones a path segment keeps as they are: anything else, `(`, `)`, `@`,
+    /// `*` and `!` among them, is percent-encoded, so a file name can never end the link or start Markdown after it.
+    private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
     private static func url(_ path: String) -> String {
-        path.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+        path.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "" }.joined(separator: "/")
     }
 
     private static func count(_ n: Int, _ noun: String) -> String {

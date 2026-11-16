@@ -216,6 +216,12 @@ public enum ExtensionCheck {
     /// A tab in a text file; U+200D and U+FE0F joining an icon's emoji.
     private static let lineText: Set<UInt32> = [0x09], emojiJoiners: Set<UInt32> = [0x200D, 0xFE0F], manifestText = lineText.union(emojiJoiners)
 
+    /// Whether `scalar` hides or reorders text by check.py's list, for a surface that drops such characters (a catalogue
+    /// pull request's body).
+    public static func hides(_ scalar: Unicode.Scalar) -> Bool {
+        hiddenCategories.contains(scalar.properties.generalCategory) || hiddenRanges.contains { $0.contains(scalar.value) }
+    }
+
     /// check.py's `hidden_chars`: the hiding or reordering code points in `text` as U+XXXX, each once, `allowed` aside.
     static func hidden(_ text: some Sequence<Unicode.Scalar>, allowed: Set<UInt32> = []) -> [String] {
         var found: [String] = []

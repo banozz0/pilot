@@ -1,5 +1,6 @@
-# Code owners (Sven, 2026-11-16): a pull request that changes how pull requests are checked needs the owner's review
-# once the repo's ruleset asks for code-owner review, so none can quietly change its own checks.
+# Code owners (public-repo spec T27): the owner reviews every pull request once the repo's ruleset requires code-owner
+# review. The later lines name the paths that check pull requests, so a change to them is plainly the owner's call.
+*                              @banozz0
 /.github/                      @banozz0
 /catalogue/scripts/            @banozz0
 /catalogue/tests/harness.py    @banozz0

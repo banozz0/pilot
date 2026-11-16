@@ -81,12 +81,16 @@ enum CataloguePublish {
         let credit: Bool
         /// What the pull request says that the pack does not (its check line, whether it is an update).
         let facts: CataloguePullRequest.Facts
+        /// The body, made once from the pack as it was planned: the Allow shows it and the publish sends it.
+        let body: String
+        /// The pack's files and their sha256 as planned: the copy the commit takes must hold the same, or nothing is sent.
+        let files: [String: String]
         var github: Bool { gh != nil }
         var title: String { CataloguePullRequest.title(pack, update: facts.update) }
         var ask: ControlGate.Ask {
             let what = "\(pack.kind.noun) \(pack.id) \(pack.label) on branch \(branch)"
             guard github else { return ControlGate.Ask("Push a branch to \(repo)", what) }
-            let sent = "\(title)\n\n" + CataloguePullRequest.body(pack, facts)
+            let sent = "\(title)\n\n" + CataloguePullRequest.shown(body)
             guard let fork else { return ControlGate.Ask("Open a pull request on \(repo)", what).sending(sent) }
             // GitHub picks the fork's name (an existing repo of the same name gets another), so the Allow names its owner.
             return ControlGate.Ask("Open a pull request on \(repo) from your fork of it on @\(fork)", what + ", pushed to that fork (made on your GitHub account if it is not there)").sending(sent)
@@ -122,6 +126,8 @@ enum CataloguePublish {
                 fork = login
             }
         }
+        // The pack as planned, read before anything is made from it.
+        let files = CataloguePullRequest.files(pack.folder)
         _ = try await git(folder, "fetch", "-q", "origin", "main")
         let index = try await mainIndex(folder)
         if let login = fork, pack.kind == .themes { credit = try unlisted(pack.id, by: login, in: index) }
@@ -132,8 +138,13 @@ enum CataloguePublish {
             check: try await scratchCheck(pack, folder, credit: credit ? fork : nil),
             build: "Pilot \(GeneralPage.shortVersion) (build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "dev"))",
             author: pack.kind == .themes ? (credit ? fork : packBy(pack.folder)) : fork, repo: repo)
+        let body = CataloguePullRequest.body(pack, facts)
+        let title = CataloguePullRequest.title(pack, update: facts.update)
+        if gh != nil, CataloguePullRequest.length(title, body) > CataloguePullRequest.longest {
+            throw ControlError(.badValue, "the pull request's title and body come to \(CataloguePullRequest.length(title, body)) characters, past the \(CataloguePullRequest.longest) GitHub takes: \(pack.kind == .themes ? "shorten the pack's PROVENANCE.md" : "trim the extension's commands and permissions")")
+        }
         return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork, credit: credit,
-                    facts: facts)
+                    facts: facts, body: body, files: files)
     }
 
     /// The catalogue's index on the clone's origin/main, fetched.
@@ -192,7 +203,7 @@ enum CataloguePublish {
         _ = try await git(clone, "switch", "-q", "-c", plan.branch, "origin/main")
         var fork: String?
         do throws(ControlError) {
-            try place(pack, in: clone, credit: plan.credit ? plan.fork : nil)
+            try place(pack, in: clone, credit: plan.credit ? plan.fork : nil, expect: plan.files)
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/build-index.py"], step: "build-index.py")
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/check.py"], step: "check.py")
             _ = try await git(clone, "add", "-A", "--", pack.path, "\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
@@ -225,9 +236,9 @@ enum CataloguePublish {
         }
         let head = plan.fork.map { "\($0):\(plan.branch)" } ?? plan.branch
         // The body the Allow showed, the preview's link now reaching the commit (a fork's commits are the repo's once the pull
-        // request opens).
+        // request opens); no link when git gives no id.
         let commit = try? await git(clone, "rev-parse", plan.branch)
-        let body = CataloguePullRequest.body(pack, plan.facts, commit: commit)
+        let body = CataloguePullRequest.sent(plan.body, commit: commit)
         let pr = try await run(clone, gh, ["pr", "create", "--repo", plan.repo, "--base", "main", "--head", head,
                                            "--title", plan.title, "--body", body], step: "gh pr create")
         answer["pullRequest"] = .string(pr.split(separator: "\n").last.map(String.init) ?? pr)
@@ -261,15 +272,22 @@ enum CataloguePublish {
 
     /// The pack's folder copied to its place under `root` (a clone, or a scratch catalogue), in place of what was there,
     /// `__pycache__` left out, and credited to `login` when one is given.
-    private static func place(_ pack: Pack, in root: URL, credit login: String?) throws(ControlError) {
+    /// With `expect`, the copy must hold those files as they were planned (the pack saved again while asking would send
+    /// what the Allow did not show), checked before the credit line is added.
+    private static func place(_ pack: Pack, in root: URL, credit login: String?, expect: [String: String]? = nil) throws(ControlError) {
         let target = root.appending(path: pack.path, directoryHint: .isDirectory)
         do {
             try? FileManager.default.removeItem(at: target)
             try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: pack.folder, to: target)
             try? FileManager.default.removeItem(at: target.appending(path: "__pycache__"))
-            if let login { try credit(target, login) }
         } catch { throw ControlError(.badValue, "could not copy \(pack.id) into \(root.lastPathComponent): \(error.localizedDescription)") }
+        if let expect, CataloguePullRequest.files(target) != expect {
+            throw ControlError(.denied, "\(pack.id) changed while asking, so nothing was sent: publish it again")
+        }
+        do { if let login { try credit(target, login) } } catch {
+            throw ControlError(.badValue, "could not credit \(pack.id): \(error.localizedDescription)")
+        }
     }
 
     /// A `Pack by: @login` line in the copy's PROVENANCE.md when it has none: the gallery credits a theme from a fork to
