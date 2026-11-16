@@ -16,6 +16,18 @@ struct LaunchAtLoginTests {
         #expect(LaunchAtLogin.step(wanted: false, status: .notRegistered) == nil)
     }
 
+    @Test("Only a release Pilot.app in the real home owns the login item: never a bare binary, a debug build or a moved home")
+    func owns() {
+        let app = "/Applications/Pilot.app", bare = "/Users/x/code/pilot-worktrees/3/.build/out/Products/Debug/Pilot"
+        #expect(LaunchAtLogin.owns(bundlePath: app, debugBuild: false, environment: [:], testRun: false), "the installed app")
+        #expect(!LaunchAtLogin.owns(bundlePath: bare, debugBuild: true, environment: [:], testRun: false), "the bare debug binary of 2026-11-16")
+        #expect(!LaunchAtLogin.owns(bundlePath: bare, debugBuild: false, environment: [:], testRun: false), "a bare release binary")
+        #expect(!LaunchAtLogin.owns(bundlePath: app, debugBuild: true, environment: [:], testRun: false), "a debug Pilot.app")
+        #expect(!LaunchAtLogin.owns(bundlePath: app, debugBuild: false, environment: ["CFFIXED_USER_HOME": "/tmp/sandbox"], testRun: false),
+                "a sandboxed home, where the setting reads its default, on")
+        #expect(!LaunchAtLogin.owns(bundlePath: app, debugBuild: false, environment: [:]), "a test run, by default")
+    }
+
     @Test("Login items: a launchd plist reads as its label, program and app; the disabled store and System Events' list read back")
     func loginItems() throws {
         let plist = try PropertyListSerialization.data(fromPropertyList: [
