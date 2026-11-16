@@ -38,11 +38,8 @@ extension ControlVerbs {
                     guard let n = Int(word), (1...12).contains(n) else { throw ControlError(.badValue, "--windows: \(word) is not 1 to 12") }
                     return n
                 } ?? 6
-                let size = try args.value("screen").map { word throws(ControlError) in
-                    let parts = word.split(separator: "x").compactMap { Double($0) }
-                    guard parts.count == 2, parts.allSatisfy({ $0 >= 100 }) else { throw ControlError(.badValue, "--screen: \(word) is not <width>x<height>, each 100 or more") }
-                    return CGSize(width: parts[0], height: parts[1])
-                } ?? NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
+                let size = try args.value("screen").map { word throws(ControlError) in try Self.size(word, "--screen", least: 100) }
+                    ?? NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
                 let area = CGRect(origin: .zero, size: size)
                 let strip: PilotBlock.StripLook = try args.value("strip").map { word throws(ControlError) in try Self.choice(word, "--strip") } ?? .halves
                 let focus = try args.value("focus").map { word throws(ControlError) in
@@ -54,12 +51,12 @@ extension ControlVerbs {
                     return CGFloat(points)
                 } ?? 0
                 var minimums: [Int: CGSize] = [:]
-                for entry in (try args.value("min") ?? "").split(separator: ",") {
-                    let sides = entry.split(separator: "="), size = sides.count == 2 ? sides[1].split(separator: "x").compactMap { Double($0) } : []
-                    guard let window = sides.first.flatMap({ Int($0) }), window >= 1, size.count == 2, size.allSatisfy({ $0 >= 0 }) else {
+                for entry in (args.value("min") ?? "").split(separator: ",") {
+                    let sides = entry.split(separator: "=")
+                    guard sides.count == 2, let window = Int(sides[0]), window >= 1 else {
                         throw ControlError(.badValue, "--min: \(entry) is not <window>=<width>x<height>")
                     }
-                    minimums[window - 1] = CGSize(width: size[0], height: size[1])
+                    minimums[window - 1] = try Self.size(String(sides[1]), "--min", least: 0)
                 }
                 let counts = (1...most).map { n in
                     let tiles = (preset == .scrolling ? StripPreview.frames(n, look: strip, focus: focus, in: size) : preset.frames(n, in: area, gap: gap, minimums: minimums)).map { tile in
@@ -75,5 +72,14 @@ extension ControlVerbs {
             case let other?: throw ControlError(.badValue, "no layout \(other) part; pilot layout, pilot layout cycle or pilot layout tiles <layout>")
             }
         })
+    }
+
+    /// A `<width>x<height>` value of `flag`, each side `least` or more.
+    private static func size(_ word: String, _ flag: String, least: Double) throws(ControlError) -> CGSize {
+        let parts = word.split(separator: "x").compactMap { Double($0) }
+        guard parts.count == 2, parts.allSatisfy({ $0 >= least }) else {
+            throw ControlError(.badValue, "\(flag): \(word) is not <width>x<height>, each \(Int(least)) or more")
+        }
+        return CGSize(width: parts[0], height: parts[1])
     }
 }

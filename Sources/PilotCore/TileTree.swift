@@ -56,10 +56,7 @@ public indirect enum TileTree: Equatable, Sendable {
         func least(_ node: TileTree, sideways: Bool) -> CGFloat {
             switch node {
             case .window(let index): minimums[index].map { sideways ? $0.width : $0.height } ?? 0
-            case .split(let along, let parts):
-                along == sideways
-                    ? parts.map { least($0.node, sideways: sideways) }.reduce(0, +) + gap * CGFloat(parts.count - 1)
-                    : parts.map { least($0.node, sideways: sideways) }.max() ?? 0
+            case .split(let along, let parts): TileFit.least(parts.map { least($0.node, sideways: sideways) }, along: along == sideways, gap: gap)
             }
         }
         func walk(_ node: TileTree, _ rect: CGRect) {
@@ -107,6 +104,12 @@ public enum TileFit {
     /// The part of the inner gap part `i` of `count` gives up: half on each side that has a neighbour.
     public static func gapShare(_ i: Int, of count: Int, gap: CGFloat) -> CGFloat {
         gap - (i == 0 ? gap / 2 : 0) - (i == count - 1 ? gap / 2 : 0)
+    }
+
+    /// The least room a split's parts take, `leasts` each: one after another with `gap` between when they run `along`
+    /// the way asked, else the largest.
+    public static func least(_ leasts: [CGFloat], along: Bool, gap: CGFloat) -> CGFloat {
+        along ? leasts.reduce(0, +) + gap * CGFloat(max(0, leasts.count - 1)) : leasts.max() ?? 0
     }
 
     /// `sizes` (each part's room with its gap share, adding up to the split's) with every part at least its window's

@@ -4,6 +4,11 @@
 // window its least size and the tiles beside it give way (TileFit), without touching the tree's weights, so the preset's
 // shares come back once it goes.
 import AppKit
+import Synchronization
+
+/// The windows `WindowMinimums` holds a size or a pending one for, readable from the AX threads: their every write is
+/// news, a write of any other one only when the app took more than it was asked.
+private let watched = Mutex<Set<UInt32>>([])
 
 /// The least size each window's app lets it be, as the tiler's frame writes found it, on the main actor where layout
 /// reads it. An app's AX thread reports each tiled write's outcome (`report`); a larger size counts only once a second
@@ -16,13 +21,19 @@ enum WindowMinimums {
 
     static func least(_ windowId: UInt32) -> CGSize? { known[windowId] }
 
+    /// No window is known to refuse a size: layout keeps its weights as they are.
+    static var isEmpty: Bool { known.isEmpty }
+
     static func forget(_ windowId: UInt32) {
         known[windowId] = nil
         seen[windowId] = nil
+        watched.withLock { _ = $0.remove(windowId) }
     }
 
-    /// From an app's AX thread: window `windowId` was asked for `asked` and took `took`.
+    /// From an app's AX thread: window `windowId` was asked for `asked` and took `took`. Most writes take what they ask
+    /// and are no news, so only a refusal or a watched window's write goes to the main actor.
     nonisolated static func report(_ windowId: UInt32, asked: CGSize, took: CGSize) {
+        guard took.width > asked.width + 1 || took.height > asked.height + 1 || watched.withLock({ $0.contains(windowId) }) else { return }
         Task.startUnstructured { @MainActor in
             if learn(windowId, asked: asked, took: took) { scheduleCancellableCompleteRefreshSession(.pilotCall("window minimum")) }
         }
@@ -53,6 +64,8 @@ enum WindowMinimums {
         side(asked.height, took.height, &least.height, &pending.height)
         known[windowId] = least == .zero ? nil : least
         seen[windowId] = pending == .zero ? nil : pending
+        let watching = known[windowId] != nil || seen[windowId] != nil
+        watched.withLock { if watching { $0.insert(windowId) } else { $0.remove(windowId) } }
         return again
     }
 }

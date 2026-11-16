@@ -691,6 +691,7 @@ extension Glider {
         enhancedUIWasOn = app.get(Ax.enhancedUserInterfaceAttr) == true
         if enhancedUIWasOn { app.set(Ax.enhancedUserInterfaceAttr, false) }
         startTicking(on: screen?.screen) { [unowned self] in
+            var landing: [(UInt32, CGSize, AXUIElement)] = []
             let landed = tick(.now) { step in
                 guard let ax = try? windows.threadGuarded[step.id]?.ax else { return }
                 let steps = FrameSteps(current: step.sizeUnknown ? nil : step.from, target: step.frame, span: step.span,
@@ -703,8 +704,10 @@ extension Glider {
                     setPosition: { ax.set(Ax.topLeftCornerAttr, $0) },
                 )
                 if let then = step.then { ax.set(Ax.topLeftCornerAttr, then) } // Pilot: a slid-out window's hide (spaceSlide.swift)
-                else if step.lands, step.span == nil, let took = ax.get(Ax.sizeAttr) { WindowMinimums.report(step.id, asked: step.frame.size, took: took) }
+                else if step.lands, step.span == nil { landing.append((step.id, step.frame.size, ax)) }
             }
+            // Pilot: what a tile's glide left the window at, read once every write of the tick is done (WindowMinimums)
+            for (id, asked, ax) in landing { if let took = ax.get(Ax.sizeAttr) { WindowMinimums.report(id, asked: asked, took: took) } }
             TilerFrames.announce(takeLanded())
             guard landed else { return }
             stopTicking()
