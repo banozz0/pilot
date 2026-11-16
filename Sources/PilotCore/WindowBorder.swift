@@ -20,6 +20,21 @@ public enum WindowBorder {
         }
     }
 
+    /// `window` as the window server draws it (live bug 2026-11-16: Photo Booth sat off its tile, smaller, while
+    /// Accessibility's focused window had the tile's frame and the border ringed empty space). `drawn`, the server's
+    /// frame for the window's number, wins over AX's; when the server draws no window of that number, `front`, the app's
+    /// frontmost drawn window, is the one marked. A minimised or fullscreen window, or one with no number, stays as read.
+    public static func asDrawn(_ window: Window, drawn: CGRect?, front: (id: CGWindowID, frame: CGRect)?) -> Window {
+        guard window.windowID != nil, !window.minimised, !window.fullScreen else { return window }
+        var shown = window
+        if let drawn {
+            shown.frame = drawn
+        } else if let front {
+            (shown.frame, shown.windowID) = (front.frame, front.id)
+        }
+        return shown
+    }
+
     /// The border panel's AppKit frame, the window's grown by `width` (Look keeps it clamped) on every side; nil when no border shows: off, no
     /// window, minimised, fullscreen (or a frame that is a whole screen), not a standard window (dialogs, sheets, panels), a
     /// sliver, or less than half of it on a screen (the tiler parks a hidden workspace's windows in a corner).

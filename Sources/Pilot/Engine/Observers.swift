@@ -47,7 +47,7 @@ final class EngineObservers {
     /// Each read of the focused window: focus, move, resize, the tiler's writes (the window border follows it, card agent-bo-95422950).
     var onFocusedWindow: (WindowBorder.Window?) -> Void = { _ in }
     /// The focused window's title, frame and AX element as one app reports them; tests pass a fake.
-    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = EngineObservers.axFocusedWindow
+    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = EngineObservers.drawnFocusedWindow
     /// The last read's window server number: the tiler's writes to other windows are not re-read.
     @ObservationIgnored private var focusedWindowID: CGWindowID?
     /// The last read's window and its AX element: a move or resize of that element reads its frame alone.
@@ -257,7 +257,14 @@ final class EngineObservers {
     func tilerLanded(_ ids: Set<UInt32>) {
         guard focusedApp != nil, focusedWindowID.map(ids.contains) ?? true else { return }
         refreshFocusedWindow()
+        // Pilot (live bug 2026-11-16): again a beat later, for an app that settles its own frame after the write (one
+        // that cannot take its tile, or draws it late) while the gliding mark still dropped its AX moves.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            self?.refreshFocusedWindow()
+        }
     }
+
 
     /// Pilot's key window when the border marks it (BorderedWindow): a non-activating panel such as the capture editor
     /// takes the keys while another app stays in front, so AX would name that app's window (P32). `marked: false` takes
@@ -270,6 +277,19 @@ final class EngineObservers {
         return (w.title, WindowBorder.Window(frame: WindowGeometry.flip(w.frame, primaryHeight: Screens.primaryHeight),
                                              subrole: marked ? "AXStandardWindow" : w.accessibilitySubrole()?.rawValue,
                                              fullScreen: !marked && w.styleMask.contains(.fullScreen), minimised: w.isMiniaturized, windowID: id), nil)
+    }
+
+    /// The focused window of app `pid` through Accessibility, at the frame the window server draws it (live bug
+    /// 2026-11-16: AX had Photo Booth at its tile while it was drawn off it, and the border ringed empty space): its own
+    /// number's frame, or the app's frontmost drawn window when that number draws nothing (WindowBorder.asDrawn).
+    static func drawnFocusedWindow(_ pid: pid_t) -> FocusedWindowRead? {
+        guard var read = axFocusedWindow(pid) else { return nil }
+        guard let id = read.window.windowID, !read.window.minimised, !read.window.fullScreen else { return read }
+        let drawn = DragFollower.drawnBounds(of: id)
+        let front = drawn != nil || pid == getpid() ? nil
+            : normal(onScreen(), skipping: []).first { $0.pid == pid }.map { (id: $0.id, frame: $0.frame) }
+        read.window = WindowBorder.asDrawn(read.window, drawn: drawn, front: front)
+        return read
     }
 
     /// The focused window of app `pid` through Accessibility; nil when it has none. Pilot's own is read from AppKit with

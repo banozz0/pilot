@@ -80,6 +80,14 @@ final class DragFollower {
         return CGRect(dictionaryRepresentation: bounds)
     }
 
+    /// The window server's bounds for window `id` while it draws it: nil when it is off screen or see-through.
+    nonisolated static func drawnBounds(of id: CGWindowID) -> CGRect? {
+        guard let info = description(of: id), info[kCGWindowIsOnscreen as String] as? Bool == true,
+              (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+              let bounds = info[kCGWindowBounds as String] as! CFDictionary? else { return nil }
+        return CGRect(dictionaryRepresentation: bounds)
+    }
+
     /// The window server's layer for window `id`, the same number as its NSWindow.Level (the border stacks at it).
     nonisolated static func layer(of id: CGWindowID) -> Int? { description(of: id)?[kCGWindowLayer as String] as? Int }
 
