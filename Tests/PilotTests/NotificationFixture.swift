@@ -112,8 +112,8 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
         guard let visible = Self.displays[display] else { return record(["event": "bad-command"]) }
         let bell = bellPlaces.frame(on: display, visible: visible)
         let drawer = bellPlaces.drawer(nextTo: bell, in: visible)
-        // A one-card stack on the main display, placed as the app places it against this bell.
-        let cards = NotificationPlacement.cards(in: Self.displays["main"]!, size: CGSize(width: NotificationPlacement.cardWidth, height: 92), bell: bell)
+        // A one-card stack, placed as the app places it: beside this bell on its display.
+        let cards = NotificationPlacement.cards(nextTo: bell, in: visible, size: CGSize(width: NotificationPlacement.cardWidth, height: 92))
         record(["event": "bell-place", "display": display, "last": bellPlaces.lastDisplay ?? "",
                 "bell": [bell.minX, bell.minY, bell.width, bell.height], "drawer": [drawer.minX, drawer.minY, drawer.width, drawer.height],
                 "cards": [cards.minX, cards.minY, cards.width, cards.height]])
@@ -227,7 +227,7 @@ final class NotificationRecordingPresenter: NotificationPresenting {
         let size = CGSize(width: NotificationPlacement.cardWidth, height: 92 * Double(min(cards.count, NotificationFeed.cardLimit)))
         // As the app's panels place them: against the bell where it is now (review round 2, B2 wiring).
         let bell = source.bellPlaces.frame(on: "main", visible: Self.visible)
-        let frame = NotificationPlacement.cards(in: Self.visible, size: size, bell: bell)
+        let frame = NotificationPlacement.cards(nextTo: bell, in: Self.visible, size: size)
         source.record(["event": "cards", "cards": cards.map(Self.describe), "drawer": drawer.map(Self.describe), "unread": unread,
                        "frame": [frame.minX, frame.minY, frame.width, frame.height], "bell": [bell.minX, bell.minY]])
         if !cards.isEmpty, source.has("render"), let png = NotificationFixtureRender.cards(cards) { try? png.write(to: source.file("cards.png")) }

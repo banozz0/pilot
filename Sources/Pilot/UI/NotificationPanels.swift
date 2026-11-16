@@ -118,7 +118,7 @@ final class NotificationPanels: NotificationPresenting {
         } else if cardsPanel == nil {
             // Above apps whatever the layer: a card pops up over the window in front while it shows.
             cardsPanel = BarPanelWindow.keyPanel(NotificationCardStack(model: model), surface: .barPopovers, level: HUD.level, takesKey: false) { [weak self] in
-                self?.cardsFrame($0) ?? NotificationPlacement.cards(in: notificationScreen(), size: $0)
+                self?.cardsFrame($0) ?? NotificationPlacement.cards(nextTo: NotificationPlacement.bell(in: notificationScreen()), in: notificationScreen(), size: $0)
             }
         }
     }
@@ -160,11 +160,11 @@ final class NotificationPanels: NotificationPresenting {
         placeCards()
     }
 
-    /// Floating: above the bell when it sits low in their column. Top bar: under the bell item, else under the main
+    /// Floating: beside the bell on its display, as the drawer opens. Top bar: under the bell item, else under the main
     /// display's bar at its right.
     private func cardsFrame(_ size: CGSize) -> CGRect {
         guard inBar, let spot = barItem() ?? barRight() else {
-            return NotificationPlacement.cards(in: notificationScreen(), size: size, bell: bellPanel?.frame)
+            return NotificationPlacement.cards(nextTo: bellPanel?.frame ?? bellFrame(), in: bellScreen()?.visibleFrame ?? notificationScreen(), size: size)
         }
         return NotificationPlacement.cards(under: spot.item.midX, foot: spot.foot, in: spot.screen, size: size)
     }

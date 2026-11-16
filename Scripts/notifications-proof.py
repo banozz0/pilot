@@ -711,7 +711,7 @@ def bell(s):
     e = place('bell-drop main 100 1300 64')
     check(e['bell'] == [100, 1300, 64, 64] and e['last'] == 'main', f'dropped top left at 64: kept there ({e["bell"]})')
     check(e['drawer'] == [100, 852, 380, 440], f'top left: the drawer opens below it, flush left ({e["drawer"]})')
-    check(e['cards'] == [3084, 134, 340, 92], f'bell away from the corner: cards keep their place ({e["cards"]})')
+    check(e['cards'] == [100, 1200, 340, 92], f'bell top left: cards hang below it, flush left (2026-11-16) ({e["cards"]})')
     deadline = time.time() + 15
     while time.time() < deadline and not (s.folder / 'bell.png').exists():
         time.sleep(0.2)
@@ -722,6 +722,7 @@ def bell(s):
     e = place('bell-drop side 5000 -50 200')
     check(e['bell'] == [5000, 0, 96, 96] and e['last'] == 'side', f'on the second display: pulled past the largest, kept at 96 and on screen ({e["bell"]})')
     check(e['drawer'] == [4716, 104, 380, 440], f'bottom right of that display: the drawer above it ({e["drawer"]})')
+    check(e['cards'] == [4756, 104, 340, 92], f'the cards go to the bell\'s display, above it ({e["cards"]})')
     e = place('bell main')
     check(e['bell'] == [100, 1300, 64, 64] and e['last'] == 'side', f'each display keeps its own place ({e["bell"]})')
     e = place('bell-drop main 3328 86 96')
@@ -735,13 +736,14 @@ def bell(s):
     e = place('drawer-closed 100 100\nbell-drop main 200 200 64')
     check(e['bell'] == [200, 200, 64, 64] and e['drawer'] == [200, 272, 300, 200],
           f'the bell moved bottom left: the drawer follows it, at its smallest 300x200 ({e["bell"]}, {e["drawer"]})')
+    check(e['cards'] == [200, 272, 340, 92], f'bell bottom left (Sven, 2026-11-16): cards sit above it, flush left ({e["cards"]})')
     panels = (REPO / 'Sources/Pilot/UI/NotificationPanels.swift').read_text()
     check('setFrameAutosaveName' not in panels and 'setFrameUsingName' not in panels, 'the drawer panel keeps no saved frame of its own')
-    # The app's wiring of B2: the cards' panel is placed against the bell panel's frame, and again when the bell drops or the
+    # The app's wiring of B2: the cards' panel is placed beside the bell panel on its display, and again when the bell drops or the
     # screens change.
     dropped = panels[panels.index('private func bellDropped'):panels.index('private func placeCards')]
     replace = panels[panels.index('private func replace()'):]
-    check(panels.count('self?.cardsFrame($0)') == 1 and panels.count('bell: bellPanel?.frame') == 1
+    check(panels.count('self?.cardsFrame($0)') == 1 and panels.count('nextTo: bellPanel?.frame ?? bellFrame(), in: bellScreen()') == 1
           and 'placeCards()' in dropped and 'placeCards()' in replace.split('\n    }')[0],
           'the app places cards against its bell panel, and again on a drop and a screen change')
     check(not SECRET.search(json.dumps([x for x in s.events() if x['event'] == 'bell-place'])), 'bell events carry no notification text')
