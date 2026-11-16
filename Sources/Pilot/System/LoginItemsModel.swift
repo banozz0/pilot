@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import PilotCore
 
-/// Login and background items (Q386) as Mac › Update & Clean lists them: read off the main thread each time the page
+/// Login and background items (Q386) as Mac › Login & Background lists them: read off the main thread each time the page
 /// shows, never polled, and held only while the page does. A switch runs only after the page's confirm, in a child: a
 /// login item through System Events (the ones Pilot took out remembered with their app, so they list as Off), an agent
 /// through launchctl, a daemon through launchctl as root behind macOS's own password prompt (Sven, Q412).
@@ -16,6 +16,9 @@ final class LoginItemsModel {
     private(set) var problem: String?
     /// Login items System Events would not take out: their app registered them itself, so only System Settings switches them.
     private(set) var appHeld: Set<String> = []
+
+    /// `items` given (a render's) is the list as read, and no read is made.
+    init(items: [LoginItems.Item]? = nil) { self.items = items }
 
     /// The login items Pilot took out, name to app, in Pilot's settings.
     @ObservationIgnored private let defaults = UserDefaults.pilot()

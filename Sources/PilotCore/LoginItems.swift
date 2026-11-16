@@ -1,6 +1,6 @@
 import Foundation
 
-/// Mac › Update & Clean's Login and background items (Sven, Q386, from Toolbox for Mac): what starts at login or runs in
+/// Mac › Login & Background's Login and background items (Sven, Q386, from Toolbox for Mac): what starts at login or runs in
 /// the background. macOS keeps its full list (the BTM store) from every app but root, so Pilot lists what it can read:
 /// the login items, and the launchd jobs in ~/Library/LaunchAgents, /Library/LaunchAgents and /Library/LaunchDaemons.
 /// Each turns off and back on here (Sven, Q412): a login item through System Events, a job through launchctl (a daemon's

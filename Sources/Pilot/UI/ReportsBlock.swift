@@ -2,57 +2,48 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Update & Clean › Reports (story 153; Activity's until simplify-pages T16): every Update and Clean run, newest first, each opening to when it ran, how it ended,
-/// the exact command, what it was to change (Update's versions from → to, Clean's items and the space Mole freed) and
-/// what it printed. A run still in its terminal is read again every 2 s until it ends. Update and Clean themselves are
-/// Mac › Update & Clean (UpkeepPage).
-struct ReportsPage: View {
+/// Update & Clean's Reports (story 153; Activity's until simplify-pages T16, Update & Clean's tab until Sven, 2026-11-16),
+/// under the Update and Clean block: every Update and Clean run, newest first, the one picked opening to when it ran, how it
+/// ended, the exact command, what it was to change (Update's versions from → to, Clean's items and the space Mole freed)
+/// and what it printed. UpkeepPage reads the runs and follows one still in its terminal; this draws them.
+struct ReportsBlock: View {
     @Environment(\.ink) private var ink
     var store = ReportStore.standard
-    /// The run to open first, from Update & Clean's Open report; else the newest.
-    var open: String?
-    /// Nil until the first read, so the page never says "No runs yet" while it reads.
-    @State private var records: [RunRecord]?
-    @State private var picked: String?
+    /// Nil until the first read, so the block never says "No runs yet" while it reads.
+    let records: [RunRecord]?
+    /// The run opened, from a row or Update and Clean's Open report; nil opens the newest.
+    @Binding var picked: String?
+    /// Counts the page's reads of the runs, so a run still writing its output is read again with them.
+    var reads = 0
     @State private var output = ""
-    /// Bumped when a run begins, so an open page lists it and follows it to its end.
-    @State private var wake = 0
 
     /// The run opened: the one picked, else the newest.
     private var shown: RunRecord? { records?.first { $0.id == picked } ?? records?.first }
 
-    static let intro = "Every Update and Clean run, newest first, with what it printed."
-    static let introInfo = "What each was asked to do, how it ended and what it printed. The last \(ReportStore.keep) are kept."
-
+    /// Two of the page's children in Toybox, so the page spaces them as any blocks; the first, tagged for a link or Open
+    /// report to land on, reads the output.
     var body: some View {
-        KitPage(intro: Self.intro, info: Self.introInfo) {
-            if records?.isEmpty == true {
-                EmptyState(title: "No runs yet", line: "Each Update and Clean run is kept here.").padding(.vertical, 24)
-            } else if let shown {
-                if ink.isInstrument {
-                    InstrumentPair(level: false) { runs(shown) } right: { detail(shown) }
-                } else {
-                    runs(shown); detail(shown)
-                }
+        if let shown {
+            if ink.isInstrument {
+                landing(InstrumentPair(level: false) { runs(shown) } right: { detail(shown) })
+            } else {
+                // Held at the page's width, so the runs sit under Update and Clean, never beside it (PageFlow).
+                landing(runs(shown).pageWide())
+                detail(shown).pageWide()
             }
-        }
-        .task(id: wake) {
-            reload()
-            while records?.contains(where: { $0.end == .running }) == true {
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled else { return }
-                reload()
+        } else if records != nil {
+            landing(KitBlock(title: AppSection.reports.title, symbol: "list.bullet") {
+                EmptyState(title: "No runs yet", line: "Each Update and Clean run is kept here.").padding(.vertical, 12)
             }
+            .pageWide())
         }
-        .onReceive(NotificationCenter.default.publisher(for: ReportStore.began)) { _ in wake += 1 }
-        .onAppear { if let open { picked = open } }
-        .onChange(of: picked) { readOutput() }
     }
 
-    private func reload() {
-        let read = store.list()
-        if read != records { records = read }
-        readOutput()
+    /// Where a link or Open report lands, and where the opened run's output is read again as the pick or a read changes it.
+    private func landing(_ block: some View) -> some View {
+        block.id(AppSection.reports)
+            .onChange(of: shown?.id, initial: true) { readOutput() }
+            .onChange(of: reads) { readOutput() }
     }
 
     /// Assigned only when it changed, so a 2 s read of a quiet run lays out nothing again.
@@ -62,7 +53,7 @@ struct ReportsPage: View {
     }
 
     private func runs(_ shown: RunRecord) -> some View {
-        KitBlock(title: "Runs", symbol: "list.bullet") {
+        KitBlock(title: AppSection.reports.title, symbol: "list.bullet") {
             Text("\(records?.count ?? 0)").font(ink.mono(11.5))
         } content: {
             VStack(spacing: 2) {
