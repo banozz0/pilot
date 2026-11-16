@@ -38,7 +38,10 @@ Pilot's extensions and themes come from `catalogue/` in this repo, and anyone ca
 
   and open a pull request that changes only `catalogue/`. Pilot does these steps with `pilot ext publish <id>` or
   `pilot theme publish <id>` (or /publish in Ask Pilot) when your GitHub account can push here; sending from your own
-  fork that way is in debug builds (`swift build`) only for now.
+  fork that way is in debug builds (`swift build`) only for now. Its pull request is titled `Theme: <Name>` or
+  `Extension: <Name> <version>` (`update` after the kind when the catalogue has it) and its body, shown on Allow before
+  anything is pushed, fills `.github/PULL_REQUEST_TEMPLATE.md`'s sections from the pack; opening one by hand, fill them
+  yourself.
 - **Checks:** every pull request that touches `catalogue/` runs `check.py`, rebuilds the index and compares it, and
   runs the catalogue's tests on macOS's own `/usr/bin/python3`. A pull request from a fork that changes `catalogue/`
   may change nothing else: send a fix to `Sources/` on its own.

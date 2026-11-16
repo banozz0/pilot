@@ -13,6 +13,8 @@ import PilotCore
 /// yet gets a `Pack by:` line naming the login when it has none, so the gallery credits its author; one it lists (one
 /// installed from the catalogue, say) is sent only by its own author, never re-credited. Nothing reaches the catalogue's
 /// main until its owner merges.
+/// The pull request's title and body (CataloguePullRequest) are read from the pack before the Allow, check.py's line from a
+/// run on a scratch copy of origin/main's catalogue with the pack in it, and the Allow shows both whole.
 /// A clone whose origin is not on GitHub is pushed to and no pull request opens. A failed step puts the clone back on
 /// the branch it was on, the new branch gone.
 @MainActor
@@ -77,13 +79,17 @@ enum CataloguePublish {
         let fork: String?
         /// A theme from a fork that the catalogue does not list yet: its copy gets a `Pack by:` line when it has none.
         let credit: Bool
+        /// What the pull request says that the pack does not (its check line, whether it is an update).
+        let facts: CataloguePullRequest.Facts
         var github: Bool { gh != nil }
+        var title: String { CataloguePullRequest.title(pack, update: facts.update) }
         var ask: ControlGate.Ask {
             let what = "\(pack.kind.noun) \(pack.id) \(pack.label) on branch \(branch)"
             guard github else { return ControlGate.Ask("Push a branch to \(repo)", what) }
-            guard let fork else { return ControlGate.Ask("Open a pull request on \(repo)", what) }
+            let sent = "\(title)\n\n" + CataloguePullRequest.body(pack, facts)
+            guard let fork else { return ControlGate.Ask("Open a pull request on \(repo)", what).sending(sent) }
             // GitHub picks the fork's name (an existing repo of the same name gets another), so the Allow names its owner.
-            return ControlGate.Ask("Open a pull request on \(repo) from your fork of it on @\(fork)", what + ", pushed to that fork (made on your GitHub account if it is not there)")
+            return ControlGate.Ask("Open a pull request on \(repo) from your fork of it on @\(fork)", what + ", pushed to that fork (made on your GitHub account if it is not there)").sending(sent)
         }
     }
 
@@ -114,21 +120,59 @@ enum CataloguePublish {
                 }
                 let login = try await run(folder, found, ["api", "user", "--jq", ".login"], step: "gh api user (sign in with gh auth login)")
                 fork = login
-                if pack.kind == .themes { credit = try await unlisted(pack.id, by: login, in: folder) }
             }
         }
-        return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork, credit: credit)
+        _ = try await git(folder, "fetch", "-q", "origin", "main")
+        let index = try await mainIndex(folder)
+        if let login = fork, pack.kind == .themes { credit = try unlisted(pack.id, by: login, in: index) }
+        let listed = pack.kind == .themes ? index.theme(pack.id)?.files : index.entry(pack.id)?.files
+        let facts = CataloguePullRequest.Facts(
+            update: listed != nil, listedVersion: pack.kind == .extensions ? index.entry(pack.id)?.version : nil,
+            changes: listed.map { CataloguePullRequest.changes(pack.folder, listed: $0) } ?? [],
+            check: try await scratchCheck(pack, folder, credit: credit ? fork : nil),
+            build: "Pilot \(GeneralPage.shortVersion) (build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "dev"))",
+            author: pack.kind == .themes ? (credit ? fork : packBy(pack.folder)) : fork, repo: repo)
+        return Plan(pack: pack, clone: folder, origin: origin, repo: repo, branch: branch, back: back, gh: gh, fork: fork, credit: credit,
+                    facts: facts)
+    }
+
+    /// The catalogue's index on the clone's origin/main, fetched.
+    private static func mainIndex(_ clone: URL) async throws(ControlError) -> ExtensionCatalogue.Index {
+        let text = try await git(clone, "show", "origin/main:\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
+        do { return try ExtensionCatalogue.index(Data(text.utf8)) } catch {
+            throw ControlError(.badValue, "the catalogue's index on origin/main does not read: \(ExtensionCatalogue.Problem.reason(error))")
+        }
+    }
+
+    /// check.py's last line on a scratch copy of origin/main's catalogue (and Packaging/ThemePacks, which it compares
+    /// themes with) holding the pack as the publish would put it, the index rebuilt first: what the pull request
+    /// reports, read before the Allow without touching the clone. A failing check stops here, before any question.
+    private static func scratchCheck(_ pack: Pack, _ clone: URL, credit login: String?) async throws(ControlError) -> String {
+        let scratch = FileManager.default.temporaryDirectory.appending(path: "pilot-publish-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        do { try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true) } catch {
+            throw ControlError(.badValue, "could not make a scratch folder for check.py: \(error.localizedDescription)")
+        }
+        let tar = scratch.appending(path: "main.tar").path(percentEncoded: false)
+        let paths = (try? await git(clone, "cat-file", "-e", "origin/main:Packaging/ThemePacks")) != nil
+            ? [ExtensionCatalogue.root, "Packaging/ThemePacks"] : [ExtensionCatalogue.root]
+        _ = try await run(clone, "/usr/bin/git", ["archive", "-o", tar, "origin/main"] + paths, step: "git archive")
+        _ = try await run(scratch, "/usr/bin/tar", ["-xf", tar], step: "tar")
+        try place(pack, in: scratch, credit: login)
+        _ = try await run(scratch, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/build-index.py"], step: "build-index.py")
+        let said = try await run(scratch, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/check.py"], step: "check.py")
+        return ScriptCommand.lastLine(said) ?? said
+    }
+
+    /// The handle on the pack's own `Pack by:` line, as build-index.py reads it; nil for none.
+    private static func packBy(_ folder: URL) -> String? {
+        let text = (try? String(contentsOf: folder.appending(path: "PROVENANCE.md"), encoding: .utf8)) ?? ""
+        return text.firstMatch(of: /(?m)^[ \t]*(?:[-*][ \t]+)?Pack by:[ \t]*@(\S+)[ \t]*$/).map { String($0.output.1) }
     }
 
     /// Whether the catalogue's index on origin/main leaves out theme `id`. One it lists may come from a fork only from the
     /// author its index names: a pack installed from the catalogue is someone else's, and is never re-credited.
-    private static func unlisted(_ id: String, by login: String, in clone: URL) async throws(ControlError) -> Bool {
-        _ = try await git(clone, "fetch", "-q", "origin", "main")
-        let text = try await git(clone, "show", "origin/main:\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
-        let index: ExtensionCatalogue.Index
-        do { index = try ExtensionCatalogue.index(Data(text.utf8)) } catch {
-            throw ControlError(.badValue, "the catalogue's index on origin/main does not read: \(ExtensionCatalogue.Problem.reason(error))")
-        }
+    private static func unlisted(_ id: String, by login: String, in index: ExtensionCatalogue.Index) throws(ControlError) -> Bool {
         guard let listed = index.theme(id) else { return true }
         guard let author = listed.author, author.lowercased() == login.lowercased() else {
             throw ControlError(.badValue, "\(id) is in the catalogue already, \(listed.author.map { "sent by @\($0)" } ?? "one of Pilot's own"): duplicate it under a new id to send one of yours")
@@ -148,20 +192,14 @@ enum CataloguePublish {
         _ = try await git(clone, "switch", "-q", "-c", plan.branch, "origin/main")
         var fork: String?
         do throws(ControlError) {
-            let target = clone.appending(path: pack.path, directoryHint: .isDirectory)
-            do {
-                try? FileManager.default.removeItem(at: target)
-                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: pack.folder, to: target)
-                try? FileManager.default.removeItem(at: target.appending(path: "__pycache__"))
-                if plan.credit, let login = plan.fork { try credit(target, login) }
-            } catch { throw ControlError(.badValue, "could not copy \(pack.id) into the clone: \(error.localizedDescription)") }
+            try place(pack, in: clone, credit: plan.credit ? plan.fork : nil)
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/build-index.py"], step: "build-index.py")
             _ = try await run(clone, "/usr/bin/python3", ["\(ExtensionCatalogue.root)/scripts/check.py"], step: "check.py")
             _ = try await git(clone, "add", "-A", "--", pack.path, "\(ExtensionCatalogue.root)/\(ExtensionCatalogue.indexPath)")
             guard try await !git(clone, "diff", "--cached", "--name-only").isEmpty else {
                 throw ControlError(.badValue, "\(pack.id) \(pack.label) is already in the catalogue as it is")
             }
+            // "<id>: <label>": a commit subject, which git hooks read as "<area>: <what>"; the pull request's title names the kind.
             _ = try await git(clone, "commit", "-q", "-m", "\(pack.id): \(pack.label) from Pilot")
             if let gh = plan.gh, plan.fork != nil {
                 fork = try await forked(plan, gh)
@@ -186,9 +224,12 @@ enum CataloguePublish {
             return .object(answer)
         }
         let head = plan.fork.map { "\($0):\(plan.branch)" } ?? plan.branch
-        let body = "\(pack.title) \(pack.label), sent from Pilot with pilot \(pack.kind.verb) publish. catalogue/scripts/check.py passed and catalogue/index.json is rebuilt."
+        // The body the Allow showed, the preview's link now reaching the commit (a fork's commits are the repo's once the pull
+        // request opens).
+        let commit = try? await git(clone, "rev-parse", plan.branch)
+        let body = CataloguePullRequest.body(pack, plan.facts, commit: commit)
         let pr = try await run(clone, gh, ["pr", "create", "--repo", plan.repo, "--base", "main", "--head", head,
-                                           "--title", "\(pack.id): \(pack.label)", "--body", body], step: "gh pr create")
+                                           "--title", plan.title, "--body", body], step: "gh pr create")
         answer["pullRequest"] = .string(pr.split(separator: "\n").last.map(String.init) ?? pr)
         return .object(answer)
     }
@@ -216,6 +257,19 @@ enum CataloguePublish {
             catch { if attempt == 5 { throw error } }
             try? await Task.sleep(for: .seconds(3))
         }
+    }
+
+    /// The pack's folder copied to its place under `root` (a clone, or a scratch catalogue), in place of what was there,
+    /// `__pycache__` left out, and credited to `login` when one is given.
+    private static func place(_ pack: Pack, in root: URL, credit login: String?) throws(ControlError) {
+        let target = root.appending(path: pack.path, directoryHint: .isDirectory)
+        do {
+            try? FileManager.default.removeItem(at: target)
+            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: pack.folder, to: target)
+            try? FileManager.default.removeItem(at: target.appending(path: "__pycache__"))
+            if let login { try credit(target, login) }
+        } catch { throw ControlError(.badValue, "could not copy \(pack.id) into \(root.lastPathComponent): \(error.localizedDescription)") }
     }
 
     /// A `Pack by: @login` line in the copy's PROVENANCE.md when it has none: the gallery credits a theme from a fork to

@@ -114,8 +114,18 @@ struct AllowPromptView: View {
             AnyView(Button(details ? "Hide details" : "Show details") { details.toggle() }
                 .buttonStyle(.plain).styleText(\.caption).foregroundStyle(style.color(\.text2)).padding(.trailing, 6))
         }
+        // The words the request sends on (a pull request's title and body), whole, in a scroll above the buttons.
+        let sent = ask.message.map { message in
+            AnyView(ScrollView {
+                Text(verbatim: Self.message(message)).font(.system(size: 11, design: .monospaced)).foregroundStyle(style.color(\.text))
+                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+            }
+            .frame(height: 260)
+            .background(RoundedRectangle(cornerRadius: 6).fill(style.color(\.text).opacity(0.05))))
+        }
+        let extra: AnyView? = sent.map { sent in AnyView(VStack(alignment: .trailing, spacing: 8) { sent; toggle }) } ?? toggle
         ExtensionAlertView(alert: Extension.AlertSpec(text: Self.heading(ask, program), note: Self.note(ask, program, details: details),
-                                                      actions: buttons), extra: toggle) {
+                                                      actions: buttons), extra: extra) {
             answer($0 == 1)
         }
         .frame(width: 480)
@@ -154,6 +164,13 @@ struct AllowPromptView: View {
         let detail = !ask.rows.isEmpty ? ask.rows.map { ControlGate.Ask.visible($0.line) }.joined(separator: "\n")
             : ask.lines.map { $0.map(line).joined(separator: "\n") } ?? ControlGate.Ask.visible(ask.detail)
         return ControlGate.Ask.visible(ask.title) + joiner + detail
+    }
+
+    /// A message as it is sent, a line each: every hidden character written out, as `visible` does, its backslashes
+    /// left single (the message is Markdown, and runs nothing).
+    static func message(_ text: String) -> String {
+        text.components(separatedBy: "\n").map { ControlGate.Ask.visible($0).replacingOccurrences(of: "\\\\", with: "\\") }
+            .joined(separator: "\n")
     }
 
     static let warning = "Program names are what each process calls itself. Nothing runs unless you press Allow; no answer in "

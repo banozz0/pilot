@@ -1,0 +1,269 @@
+import CryptoKit
+import Foundation
+import PilotCore
+
+/// The pull request `pilot theme publish` and `pilot ext publish` open (Sven, 2026-11-16): a title that names the pack
+/// and a body for the catalogue's owner, made from the pack's own files before the Allow, which shows both. Its sections
+/// follow the pr skill's template (Summary, Evidence, Merge Danger; after Dex Horthy's show-me skill, HumanLayer), as
+/// .github/PULL_REQUEST_TEMPLATE.md does for a pull request opened by hand.
+/// Every word from the pack is a stranger's: it is one line, its Markdown and HTML written out as text and an `@` kept
+/// from mentioning anyone, so a pack can neither hide words from the reviewer nor tick the checklist, which is Pilot's.
+enum CataloguePullRequest {
+    /// What the body says that the pack's folder does not: read in the plan, before the Allow.
+    struct Facts: Equatable, Sendable {
+        /// The catalogue's index on origin/main lists this id: the title says update, and the body what changed.
+        let update: Bool
+        /// The listed extension's version.
+        let listedVersion: String?
+        /// Each file that differs from the listed copy: "added", "changed" or "removed", then its path in the pack.
+        let changes: [String]
+        /// check.py's last line, run on origin/main's catalogue with this pack in it.
+        let check: String
+        /// "Pilot 1.3.0 (build 19)".
+        let build: String
+        /// The handle the pack credits (`Pack by:`), or the sender's from a fork.
+        let author: String?
+        /// The catalogue's repo, "owner/name", whose copy of the commit the preview's link reaches.
+        let repo: String
+    }
+
+    static func title(_ pack: CataloguePublish.Pack, update: Bool) -> String {
+        let kind = pack.kind == .themes ? "Theme" : "Extension"
+        let name = pack.kind == .themes ? pack.title : "\(pack.title) \(pack.label)"
+        return "\(kind)\(update ? " update" : ""): \(oneLine(name, 80))"
+    }
+
+    /// The body; `commit` is the commit's id once made, so the preview's link reaches the branch's copy of it.
+    static func body(_ pack: CataloguePublish.Pack, _ facts: Facts, commit: String? = nil) -> String {
+        let parts = pack.kind == .themes ? theme(pack, facts, commit: commit) : extensionBody(pack, facts)
+        return parts.joined(separator: "\n") + "\n"
+    }
+
+    // MARK: Theme
+
+    /// The roles a reviewer looks at, in order, as the palette names them.
+    private static let roles: [(key: String, name: String)] = [
+        ("accent", "Accent"), ("background", "Background"), ("foreground", "Text"), ("light_foreground", "Second text"),
+        ("muted", "Muted"), ("selection", "Selection"), ("red", "Red"), ("yellow", "Yellow"), ("green", "Green"),
+        ("cyan", "Cyan"), ("blue", "Blue"), ("magenta", "Magenta"),
+    ]
+    private static let appNames = ["ghostty": "Ghostty", "zed": "Zed", "obsidian": "Obsidian"]
+
+    private static func theme(_ pack: CataloguePublish.Pack, _ facts: Facts, commit: String?) -> [String] {
+        let manifest = json(pack.folder.appending(path: "manifest.json"))
+        let provenance = (try? String(contentsOf: pack.folder.appending(path: "PROVENANCE.md"), encoding: .utf8)) ?? ""
+        let dark = manifest["dark"] as? Bool ?? true
+        let palette = manifest["palette"] as? [String: String] ?? [:]
+        let variants = (manifest["variants"] as? [String: Any]).map { Array($0.keys).sorted() } ?? []
+        let wallpapers = manifest["wallpapers"] as? [String] ?? []
+        let apps = ["Pilot"] + ((manifest["adapters"] as? [String: Any]).map { Array($0.keys).sorted() } ?? [])
+            .map { appNames[$0] ?? oneLine($0, 30) }
+        let modes = ([dark ? "dark" : "light"] + variants.map { oneLine($0, 20) }).joined(separator: " and ")
+        var lines = ["## Summary", "",
+                     "\(oneLine(pack.title, 80)): a \(modes) theme \(facts.author.map { "by \(handle($0))" } ?? "from Pilot"), "
+                        + "\(count(wallpapers.count, "wallpaper")), for \(list(apps)). It goes in `\(pack.path)/`.", "",
+                     "| Role | Colour |", "| --- | --- |"]
+        for role in roles { if let hex = palette[role.key] { lines.append("| \(role.name) | \(hexCell(hex)) |") } }
+        let others = palette.count - roles.filter { palette[$0.key] != nil }.count
+        if others > 0 { lines += ["", "And \(count(others, "more colour")) in `manifest.json` (terminal brights and Pilot's own roles)."] }
+        lines += ["", "**Wallpapers:** \(wallpapers.isEmpty ? "none." : "\(wallpapers.count), as PROVENANCE.md records them:")"]
+        let licence = section("Wallpapers", of: provenance)
+        if !wallpapers.isEmpty {
+            lines += licence.isEmpty ? ["", "- PROVENANCE.md says nothing about them: ask the author where they come from."]
+                : [""] + licence.prefix(12).map { "- \(oneLine($0, 240))" }
+        }
+        let palettes = section("Palette", of: provenance)
+        if !palettes.isEmpty { lines += ["", "**Palette from:**", ""] + palettes.prefix(4).map { "- \(oneLine($0, 240))" } }
+        lines += updateLines(facts)
+        lines += ["", "## Evidence", "", "- **Checks:** `catalogue/scripts/check.py`, run on the catalogue's main with this pack in it: `\(code(facts.check))`"]
+        if let preview = manifest["preview"] as? String {
+            let path = "\(pack.path)/\(preview)"
+            lines.append("- **Preview:** the pack's own picture, committed in it as `\(code(preview))`:")
+            lines += ["", "  ![\(oneLine(pack.title, 40)) preview](https://github.com/\(facts.repo)/blob/\(commit ?? "<commit>")/\(url(path))?raw=true)"]
+        } else {
+            lines.append("- **Preview:** none; the pack has no `preview`, so the palette above is the whole look.")
+        }
+        lines.append("- **Sent by:** \(facts.build), `pilot theme publish \(code(pack.id))`")
+        lines += ["", "## Merge Danger", "",
+                  "**Door:** two-way",
+                  "",
+                  "A theme is colours, wallpapers and the config Pilot writes for \(list(apps.filter { $0 != "Pilot" }, or: "no other app")) on Apply. "
+                    + "A revert takes it out of the gallery; anyone who applied it keeps it until they pick another.",
+                  "",
+                  "**Blast Radius:** cosmetic",
+                  "",
+                  "Only Macs that apply it change, and only in look."]
+        lines += review(pack, [
+            "Licence: the palette's source and every wallpaper allow this use, as PROVENANCE.md says",
+            "The preview and wallpapers are what the pack says they are, nothing unrelated or unkind",
+        ])
+        return lines
+    }
+
+    // MARK: Extension
+
+    private static func extensionBody(_ pack: CataloguePublish.Pack, _ facts: Facts) -> [String] {
+        let manifest = json(pack.folder.appending(path: "extension.json"))
+        let commands = manifest["commands"] as? [[String: Any]] ?? []
+        let shown = commands.filter { ($0["hidden"] as? Bool) != true }
+        let permissions = manifest["permissions"] as? [String: Any] ?? [:]
+        let network = permissions["network"] as? [String] ?? []
+        let files = permissions["files"] as? [String] ?? []
+        let actions = permissions["actions"] as? [String] ?? []
+        let clipboard = permissions["clipboard"] as? Bool ?? false
+        let requires = manifest["requires"] as? [String] ?? []
+        let programs = Array(Set(commands.compactMap { $0["run"] as? String })).sorted()
+        let surfaces = manifest["surfaces"] as? [String: Any] ?? [:]
+        var lines = ["## Summary", "",
+                     "\(oneLine(pack.title, 80)) \(oneLine(pack.label, 20)): \(oneLine(manifest["description"] as? String ?? "no description.", 400))", "",
+                     "| Command | Shows |", "| --- | --- |"]
+        lines += shown.map { "| \(cell($0["title"] as? String ?? $0["name"] as? String ?? "?")) | \(cell($0["mode"] as? String ?? "?")) |" }
+        if shown.isEmpty { lines.append("| none listed | |") }
+        if commands.count > shown.count { lines += ["", "And \(count(commands.count - shown.count, "hidden command")) only the extension itself runs."] }
+        let places = surfaces.keys.sorted().map { key -> String in
+            let every = (surfaces[key] as? [String: Any])?["every"] as? Int
+            return "\(key == "bar" ? "top bar item" : key == "page" ? "page" : oneLine(key, 20))\(every.map { ", every \($0) s" } ?? "")"
+        }
+        if !places.isEmpty { lines += ["", "**Surfaces:** \(places.joined(separator: "; "))."] }
+        lines += ["", "**What it touches:**", "",
+                  "- **Runs:** \(programs.isEmpty ? "nothing" : programs.map { "`\(code($0))`" }.joined(separator: ", ")) as the user, with their rights\(requires.isEmpty ? "" : "; needs \(requires.map { "`\(code($0))`" }.joined(separator: ", "))")",
+                  "- **Network:** \(network.isEmpty ? "none declared" : network.map { "`\(code($0))`" }.joined(separator: ", "))",
+                  "- **Files:** \(files.isEmpty ? "none declared" : files.map { "`\(code($0))`" }.joined(separator: ", "))",
+                  "- **Clipboard:** \(clipboard ? "reads or writes it" : "no")",
+                  "- **Pilot actions:** \(actions.isEmpty ? "none" : actions.map { "`\(code($0))`" }.joined(separator: ", "))",
+                  "", "Pilot shows these permissions; it does not enforce them (ADR 0010), so the programs are what to read."]
+        lines += updateLines(facts)
+        lines += ["", "## Evidence", "",
+                  "- **Checks:** `catalogue/scripts/check.py`, run on the catalogue's main with this extension in it: `\(code(facts.check))`",
+                  "- **Version:** \(facts.listedVersion.map { "`\(code($0))` in the catalogue, `\(code(pack.label))` here" } ?? "`\(code(pack.label))`, new to the catalogue")",
+                  "- **Sent by:** \(facts.build), `pilot ext publish \(code(pack.id))`"]
+        let reach = network.isEmpty ? "" : " and reach \(list(network.map { "`\(code($0))`" }))"
+        lines += ["", "## Merge Danger", "",
+                  "**Door:** one-way for anyone who installs it",
+                  "",
+                  "Its programs run on their Mac as them\(reach). A revert takes it out of the catalogue, not off the Macs that installed it, "
+                    + "and what it already ran, sent or wrote stays done.",
+                  "",
+                  "**Blast Radius:** every Mac that installs it",
+                  "",
+                  "A bad version reaches each install that takes the update."]
+        lines += review(pack, [
+            "Licence: the code is the author's own or under a licence that allows it; no code from Raycast, Vicinae, ClipBook or Alfred extensions",
+            "The programs do only what the Summary says: every host they reach and file they write is declared",
+            "Python 3 standard library only, protocol lines alone on stdout, no item titles, clipboard text or secrets logged",
+        ])
+        return lines
+    }
+
+    // MARK: Shared
+
+    private static func updateLines(_ facts: Facts) -> [String] {
+        guard facts.update else { return [] }
+        guard !facts.changes.isEmpty else { return ["", "**Changed since the catalogue's copy:** no file."] }
+        return ["", "**Changed since the catalogue's copy:**", ""] + facts.changes.prefix(30).map { "- \($0)" }
+            + (facts.changes.count > 30 ? ["- and \(facts.changes.count - 30) more"] : [])
+    }
+
+    /// The reviewer's checklist, Pilot's words only and none ticked.
+    private static func review(_ pack: CataloguePublish.Pack, _ own: [String]) -> [String] {
+        ["", "## Review", ""] + (own + [
+            "No secrets: no tokens, keys, personal paths or account names in any file",
+            "Scope: only `\(pack.path)/` and `catalogue/index.json` change",
+        ]).map { "- [ ] \($0)" }
+    }
+
+    /// Each file that differs from `listed`, the index's copy, by sha256: added, changed, then removed.
+    static func changes(_ folder: URL, listed: [ExtensionCatalogue.File]) -> [String] {
+        let mine = files(folder)
+        let theirs = Dictionary(listed.map { ($0.path, $0.sha256) }, uniquingKeysWith: { a, _ in a })
+        var out: [String] = []
+        for (path, sha) in mine.sorted(by: { $0.key < $1.key }) {
+            if let old = theirs[path] { if old != sha { out.append("changed `\(code(path))`") } } else { out.append("added `\(code(path))`") }
+        }
+        out += theirs.keys.filter { mine[$0] == nil }.sorted().map { "removed `\(code($0))`" }
+        return out
+    }
+
+    /// The folder's files by path inside it, each its sha256, `__pycache__` left out as the publish leaves it.
+    private static func files(_ folder: URL) -> [String: String] {
+        var out: [String: String] = [:]
+        let base = folder.standardizedFileURL.path(percentEncoded: false)
+        guard let walk = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else { return out }
+        for case let file as URL in walk {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let full = file.standardizedFileURL.path(percentEncoded: false)
+            let path = String(full.dropFirst(base.hasSuffix("/") ? base.count : base.count + 1))
+            guard !path.split(separator: "/").contains("__pycache__"), let data = try? Data(contentsOf: file) else { continue }
+            out[path] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
+        return out
+    }
+
+    private static func json(_ file: URL) -> [String: Any] {
+        (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+    }
+
+    /// The list items under `## <name>` in PROVENANCE.md, their marker dropped.
+    static func section(_ name: String, of text: String) -> [String] {
+        var inside = false, out: [String] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") { inside = trimmed.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces).lowercased() == name.lowercased(); continue }
+            guard inside, trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { continue }
+            out.append(String(trimmed.dropFirst(2)))
+        }
+        return out
+    }
+
+    /// A stranger's words as one line of plain text: breaks and runs of space one space, at most `limit` characters,
+    /// Markdown's and HTML's marks written out, and `@` kept from mentioning (a zero-width space after it).
+    static func oneLine(_ text: String, _ limit: Int) -> String {
+        var flat = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        flat = String(flat.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !(0x200B...0x200F).contains($0.value) && !(0x202A...0x202E).contains($0.value) && !(0x2066...0x2069).contains($0.value) })
+        if flat.count > limit { flat = String(flat.prefix(limit - 1)) + "…" }
+        var out = ""
+        for ch in flat {
+            switch ch {
+            case "\\", "`", "*", "_", "[", "]", "#", "!", "|", "~", ">": out += "\\\(ch)"
+            case "<": out += "&lt;"
+            case "&": out += "&amp;"
+            case "@": out += "@\u{200B}"
+            default: out.append(ch)
+            }
+        }
+        return out
+    }
+
+    /// A table cell's words.
+    private static func cell(_ text: String) -> String { oneLine(text, 80) }
+
+    /// Inside a code span: one line, no backtick, no pipe (a table would split on it).
+    private static func code(_ text: String) -> String {
+        String(text.components(separatedBy: .newlines).joined(separator: " ").prefix(200))
+            .replacingOccurrences(of: "`", with: "'").replacingOccurrences(of: "|", with: "/")
+    }
+
+    /// A colour cell: the hex as code when it is one, else its words.
+    private static func hexCell(_ hex: String) -> String {
+        hex.wholeMatch(of: /#[0-9A-Fa-f]{3,8}/) != nil ? "`\(hex.uppercased())`" : cell(hex)
+    }
+
+    /// A handle as code, so it names and never mentions.
+    private static func handle(_ login: String) -> String { "`@\(code(login))`" }
+
+    private static func url(_ path: String) -> String {
+        path.split(separator: "/").map { $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+    }
+
+    private static func count(_ n: Int, _ noun: String) -> String {
+        n == 0 ? "no \(noun)s" : n == 1 ? "1 \(noun)" : "\(n) \(noun)s"
+    }
+
+    private static func list(_ items: [String], or none: String = "nothing") -> String {
+        switch items.count {
+        case 0: none
+        case 1: items[0]
+        default: items.dropLast().joined(separator: ", ") + " and " + items.last!
+        }
+    }
+}
