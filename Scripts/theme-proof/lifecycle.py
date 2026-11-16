@@ -1591,8 +1591,12 @@ def linked_config(passed):
         f, dots, real = setup('y'); f.start(); assert f.apply()['status'] == 'applied'
         other = dots / 'other'; other.write_bytes(real.read_bytes()); kept = real.read_bytes()
         f.config.unlink(); f.config.symlink_to(other)
-        answer = f.call('theme', 'plan', 'restore', ok=False)
-        assert 'conflict' in json.dumps(answer) and real.read_bytes() == kept and other.read_bytes() == kept, answer
+        # Another target holds the config: Pilot leaves both files alone, names the link, and the rest still plans.
+        answer = f.call('theme', 'plan', 'restore')
+        paths = [change['path'] for change in answer['changes']]
+        assert any('theme take' in line and str(f.config.name) in line for line in answer['review']['kept']), answer
+        assert all(not path.endswith('/config') for path in paths) and any(path.endswith('pilot-theme.conf') for path in paths), answer
+        assert real.read_bytes() == kept and other.read_bytes() == kept, answer
         f.stop()
         # A claim from build 2136, whose anchor still holds the link's own identity: Sven may have applied with it.
         f, dots, real = setup('z'); f.start(); assert f.apply()['status'] == 'applied'; f.stop()
