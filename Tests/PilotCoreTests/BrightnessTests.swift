@@ -15,7 +15,7 @@ struct BrightnessTests {
 
         init(apple: [UInt32: Double] = [:], ddc: [UInt32: Double] = [:]) { self.apple = apple; self.ddc = ddc }
         func readApple(_ display: UInt32) -> Double? { apple[display] }
-        func readDDC(_ display: UInt32) -> Double? { ddc[display] }
+        func readDDC(_ display: UInt32) -> DDCRead { ddc[display].map(DDCRead.level) ?? .silent }
         func write(_ level: Double, to display: UInt32, over route: BrightnessRoute) -> Bool {
             lock.withLock { _writes.append((display, level, route)) }
             return true

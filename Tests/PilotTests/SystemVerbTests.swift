@@ -16,7 +16,7 @@ struct ControlSystemVerbTests {
         private var _writes: [(UInt32, Double)] = []
         var writes: [(UInt32, Double)] { lock.withLock { _writes } }
         func readApple(_ display: UInt32) -> Double? { display == 1 ? 0.5 : nil }
-        func readDDC(_ display: UInt32) -> Double? { nil }
+        func readDDC(_ display: UInt32) -> DDCRead { .silent }
         func write(_ level: Double, to display: UInt32, over route: BrightnessRoute) -> Bool {
             lock.withLock { _writes.append((display, level)) }
             return true

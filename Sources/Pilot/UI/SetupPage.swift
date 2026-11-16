@@ -422,9 +422,12 @@ struct SetupPage: View {
                 Text("\(Int((level * 100).rounded())) %").font(ink.mono(12)).foregroundStyle(ink.text2).monospacedDigit()
                     .frame(width: 44, alignment: .trailing)
             } else {
-                Text(screen == nil ? "Reading brightness…" : "No brightness control").foregroundStyle(ink.muted)
-                if screen != nil {
-                    InfoMark(text: "This screen answers neither Apple's brightness call nor DDC/CI. Check that DDC/CI is on in the monitor's own menu and that its cable doesn't run through a hub or converter.")
+                Text(screen == nil ? "Reading brightness…" : screen?.ddcRefused == true ? "This adapter doesn't pass DDC" : "No brightness control")
+                    .foregroundStyle(ink.muted)
+                if let screen {
+                    InfoMark(text: screen.ddcRefused
+                        ? "The adapter or converter between the Mac and this monitor turns down DDC/CI, so no app can set its brightness. Use the monitor's own menu, or connect it with a cable or adapter that passes DDC/CI."
+                        : "This screen answers neither Apple's brightness call nor DDC/CI. Check that DDC/CI is on in the monitor's own menu and that its cable doesn't run through a hub or converter.")
                 }
             }
             Spacer()

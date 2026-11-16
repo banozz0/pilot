@@ -201,6 +201,7 @@ extension ControlVerbs {
                 let read = brightness.screens[info.id]
                 var entry: [String: JSONValue] = ["route": .string(read?.route.rawValue ?? "reading")]
                 entry["level"] = read?.level.map(percent)
+                if read?.ddcRefused == true { entry["ddc"] = .string("refused by adapter") }
                 screen["brightness"] = .object(entry)
             }
             return .object(screen)
@@ -315,7 +316,9 @@ extension ControlVerbs {
                 throw ControlError(.notReady, "\(info.name)'s brightness is not read yet; ask again in a moment")
             }
             guard read.route != .none, brightness.set(info.id, level) != nil else {
-                throw ControlError(.badValue, "\(info.name) answers neither Apple's brightness call nor DDC/CI, so Pilot cannot set its brightness")
+                throw ControlError(.badValue, read.ddcRefused
+                    ? "\(info.name)'s adapter doesn't pass DDC/CI, so Pilot cannot set its brightness"
+                    : "\(info.name) answers neither Apple's brightness call nor DDC/CI, so Pilot cannot set its brightness")
             }
         }
         if let mode, mode != info.mode {
