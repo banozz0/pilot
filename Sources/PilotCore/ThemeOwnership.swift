@@ -80,6 +80,18 @@ public enum ThemeFiles {
         anchor.replacing(#/\|link:([^|]*?):\d+:\d+:\d+:/#) { "|link:\($0.1):" }
     }
 
+    /// An anchor without its device numbers, for a check that spans a restart. macOS numbers a volume as it mounts it,
+    /// so the same folder reads another device after a restart while its inode and mode stay (16777234 became 16777230,
+    /// and every claim read as moved). Each place an anchor holds one: its leading folder and
+    /// each folder on the way, an inside link's own identity, and its parent's.
+    public static func withoutDevices(_ anchor: String) -> String {
+        anchor.split(separator: "|", omittingEmptySubsequences: false).map { part -> String in
+            if part.hasPrefix("parent:") { return String(part.replacing(#/:\d+(:\d+:\d+)$/#) { "\($0.1)" }) }
+            if part.hasPrefix("link:") { return String(part.replacing(#/^(link:.*?):\d+(:\d+:\d+:\/)/#) { "\($0.1)\($0.2)" }) }
+            return String(part.replacing(#/^\d+(:\d+:\d+)$/#) { "\($0.1)" })
+        }.joined(separator: "|")
+    }
+
     public static let folderMissing = "folder missing"
     /// A destination whose own folder does not exist yet, up to three levels under a real folder: nothing to read, and
     /// Apply makes the folders (an app installed but never opened, or WezTerm's ~/.config/wezterm/colors).

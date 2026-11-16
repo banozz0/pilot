@@ -32,7 +32,7 @@ final class ThemeCoordinator {
         let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
-                                                appearance: { Look.shared.packChanged($0) }, ghostty: { await GhosttyBridge.reloadNow() },
+                                                appearance: { Look.shared.packChanged($0) }, ghostty: { isTestRun ? nil : await GhosttyBridge.reloadNow() },
                                                 btop: { isTestRun ? 0 : ThemeCoordinator.reloadBtop() },
                                                 vesktopOpen: { !isTestRun && !ThemeCoordinator.processes(named: "vesktop").isEmpty }), reload: { intent in
                 try await Task.detached {
@@ -294,6 +294,42 @@ final class ThemeCoordinator {
         } catch let error as ControlError { throw error }
         catch { throw ControlError(.badValue, String(describing: error)) }
     }
+    /// Gives Pilot back a file a plan holds (it moved, or its link points elsewhere, since the theme): its claims follow the
+    /// file as it is now. Nothing else is written; the next Apply or Restore then reads Pilot's part as any other, so a part
+    /// the person changed there is kept as theirs.
+    func take(_ path: String, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
+        busy = true; defer { busy = false }
+        do {
+            guard try state("pending").bytes == nil else { throw ThemeFailure("pending recovery; restart/recover first") }
+            let (file, record) = try ledger()
+            let wanted = (path as NSString).expandingTildeInPath
+            var next = record, taken: [String] = []
+            for (index, claim) in record.claims.enumerated() where claim.root + "/" + claim.path == wanted || claim.resolved == wanted {
+                let current = try destination(claim.root, claim.path)
+                guard !(anchored(claim.anchor, current) && current.resolved == claim.resolved) else { continue }
+                var moved = ThemeClaim(root: claim.root, path: claim.path, resolved: current.resolved, anchor: current.anchor, selector: claim.selector,
+                                       original: claim.original, last: claim.last, codec: claim.codec, originalFileAbsent: claim.originalFileAbsent)
+                moved.bindingID = claim.bindingID
+                next.claims[index] = moved
+                taken.append(current.resolved)
+            }
+            guard !taken.isEmpty else { throw ThemeFailure("Pilot holds no file at \(path): only one a plan leaves alone because it moved can be taken back") }
+            next.epoch += 1
+            try validate(next)
+            let chosen = next, words = AppConfigs.tilde(wanted, home: NSHomeDirectory())
+            return try await gate.allow(.init("Give \(words) back to the theme", "Pilot's next Apply or Restore writes it again"), peer: peer) { () throws(ControlError) in
+                do {
+                    guard try self.state("ownership") == file, try self.state("pending").bytes == nil else { throw ThemeFailure("stale take; plan again") }
+                    _ = try ThemeFiles.write(ThemeDigest.encoded(chosen), over: file)
+                    self.plans.removeAll()
+                    return .object(["status": .string("taken"), "files": .array(Set(taken).sorted().map(JSONValue.string)),
+                                    "next": .string("pilot theme plan apply <id> --summary shows what applying writes there")])
+                } catch { throw ControlError(.badValue, String(describing: error)) }
+            }
+        } catch let error as ControlError { throw error }
+        catch { throw ControlError(.badValue, String(describing: error)) }
+    }
     /// Explicitly chosen vault + configured folder, with no registry/discovery or portable authority.
     func bindObsidian(_ root: String?, configDir: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
@@ -392,9 +428,12 @@ final class ThemeCoordinator {
     private func destination(_ root: String, _ path: String) throws -> ThemeSnapshot {
         try ThemeFiles.read(root: root, path: path, linkedLeaf: linked(root, path))
     }
-    /// A recorded anchor against what is there now. Only Ghostty's linked config has an older form to accept.
+    /// A recorded anchor against what is there now, device numbers aside: a restart renumbers the volume
+    /// (ThemeFiles.withoutDevices). Only Ghostty's linked config has an older form to accept.
     private func anchored(_ recorded: String, _ current: ThemeSnapshot) -> Bool {
-        current.anchor == recorded || linked(current.root, current.path) && current.linkedOut && ThemeFiles.withoutLinkIdentity(recorded) == current.anchor
+        let now = ThemeFiles.withoutDevices(current.anchor)
+        return ThemeFiles.withoutDevices(recorded) == now
+            || linked(current.root, current.path) && current.linkedOut && ThemeFiles.withoutDevices(ThemeFiles.withoutLinkIdentity(recorded)) == now
     }
     private func replace(_ bytes: Data?, over target: ThemeSnapshot) throws -> ThemeSnapshot {
         try ThemeFiles.write(bytes, over: target, linkedLeaf: linked(target.root, target.path))
@@ -1385,6 +1424,11 @@ final class ThemeCoordinator {
             }
             if !lines.contains(line) { lines.append(line) }
         }
+        for file in Set(plan.heldFiles.map { AppConfigs.tilde($0.root + "/" + $0.path, home: NSHomeDirectory()) }).sorted() {
+            lines.append((done ? "Left \(file) alone: it moved, or its link points elsewhere, since the theme. "
+                               : "Pilot leaves \(file) alone: it moved, or its link points elsewhere, since the theme. ")
+                         + "To give it back to Pilot, run pilot theme take \(file), then apply or Restore again.")
+        }
         let connected = Set(plan.wallpaperState?.displays.map(\.id) ?? [])
         let gone = plan.keptWallpapers.filter { if case .display(let id) = $0 { !connected.contains(id) } else { false } }
         if !gone.isEmpty {
@@ -1449,8 +1493,8 @@ final class ThemeCoordinator {
         return .init(entries: entries, skipped: skipped, details: plan.warnings.filter { !skipped.contains($0) }, short: short, next: next,
                      kept: keptWords(plan, done: false, appearance: appearance))
     }
-    /// What a person reads when a file Pilot set is no longer the one it set: moved, or a link pointed elsewhere. A change
-    /// inside it is kept instead (keptWords).
+    /// What a person reads when a file Pilot owns is not among the plan's destinations. One that moved, or whose link
+    /// points elsewhere, is held instead, and a change inside it kept (keptWords).
     private func changedSince(_ claim: ThemeClaim) -> String {
         "conflict: \(claim.root)/\(claim.path) changed since the theme was applied, so Pilot left it alone"
     }
@@ -1647,14 +1691,17 @@ final class ThemeCoordinator {
         // person changed keeps their change: only that claim goes, and nothing writes there this time.
         var keptFiles: [ThemeClaim] = []
         var adapterClaims: [ThemeClaim] = []
+        // A file that moved, or whose link points elsewhere, is held: its claim stays as it is, nothing writes there, and the
+        // rest goes ahead. The adapters still see the claim, so none takes the file for someone else's.
+        var heldFiles: [ThemeClaim] = []
         for claim in record.claims {
-            guard let current = targets.first(where: { $0.root == claim.root && $0.path == claim.path }),
-                  anchored(claim.anchor, current), current.resolved == claim.resolved else { throw ThemeFailure(changedSince(claim)) }
+            guard let current = targets.first(where: { $0.root == claim.root && $0.path == claim.path }) else { throw ThemeFailure(changedSince(claim)) }
+            guard anchored(claim.anchor, current), current.resolved == claim.resolved else { heldFiles.append(claim); adapterClaims.append(claim); continue }
             let now = try ThemeRegions.owned(claim.selector, in: current.bytes)
             adapterClaims.append(claim.reading(now))
             if !ThemeRegions.sameMeaning(claim.selector, now, claim.last) { keptFiles.append(claim) }
         }
-        record.claims = adapterClaims.filter { claim in !keptFiles.contains { $0.identity == claim.identity } }
+        record.claims = adapterClaims.filter { claim in !(keptFiles + heldFiles).contains { $0.identity == claim.identity } }
         var changes: [ThemeMutation] = []
         var warnings = (ghostty ? ["Ghostty: other config files or launch flags can still change its colours", "Ghostty: your fonts and Pilot's older settings stay"] : []) + notes
             + gone.sorted().map { "\($0) no longer exists, so Pilot leaves it out and writes nothing" }
@@ -1719,7 +1766,7 @@ final class ThemeCoordinator {
                 changes += prepared.changes; warnings += prepared.notes
             }
         }
-        changes.removeAll { change in keptFiles.contains { same($0, change.target, change.selector) } }
+        changes.removeAll { change in keptFiles.contains { same($0, change.target, change.selector) } || heldFiles.contains { $0.root == change.target.root && $0.path == change.target.path } }
         // Retire selectors no longer supplied (including dark->light) before composing the resource's single write.
         let releases = try record.claims.filter { claim in !changes.contains(where: { same(claim, $0.target, $0.selector) }) }.map { claim in
             try restoration(claim, targets.first { $0.root == claim.root && $0.path == claim.path }!)
@@ -1762,7 +1809,7 @@ final class ThemeCoordinator {
         let appObservations = try custom.map { try ThemeFiles.read(root: $0.app, path: "Contents/Info.plist") }
         let plan = ThemePlan(id: UUID().uuidString, packID: id, revision: loaded?.revision, binding: binding, style: style(),
                              ledger: recordFile, protectedLegacy: legacy, zed: local.zed, zedOptOut: local.zedOptOut, observations: targets + appObservations + [try state("bindings"), try state("components")],
-                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, wallpaperImages: folder?.images.count, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
+                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, wallpaperImages: folder?.images.count, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, keptFiles: keptFiles, heldFiles: heldFiles, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
         if plans.count >= 32 { plans.removeAll() }
         plans[plan.id] = (plan, try context(), nativePlan.0, nativePlan.1)
         return plan
@@ -1889,8 +1936,8 @@ final class ThemeCoordinator {
         let (oldFile, old) = try ledger()
         if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
         try validateComposition(plan.mutations, claims: old.claims)
-        var next = old; next.epoch += 1; next.selected = plan.selection; next.appearance = ownership
-        next.claims = plan.packID == nil ? [] : plan.mutations.filter { $0.release != true }.map { change in
+        var next = old; next.epoch += 1; next.selected = plan.selection ?? (plan.heldFiles.isEmpty ? nil : old.selected); next.appearance = ownership
+        next.claims = plan.heldFiles + (plan.packID == nil ? [] : plan.mutations.filter { $0.release != true }.map { change in
             let prior = old.claims.first { same($0, change.target, change.selector) }
             var claim = ThemeClaim(root: change.target.root, path: change.target.path, resolved: change.target.resolved,
                               anchor: change.target.anchor, selector: change.selector,
@@ -1898,6 +1945,12 @@ final class ThemeCoordinator {
                               originalFileAbsent: prior?.originalFileAbsent ?? (change.target.bytes == nil))
             claim.bindingID = change.bindingID
             return claim
+        })
+        // A Restore that holds files keeps the selection, and gives back Look's parts with an ownership of none of them: a
+        // selection with no ownership at all reads as a schema-1 ledger, which owns the palette (appearanceOwnership).
+        if plan.packID == nil, !plan.heldFiles.isEmpty, next.appearance == nil, let after = appearance?.after {
+            var none = ThemeFollowing(); none.palette = false
+            next.appearance = .init(original: after, last: after, following: none, paletteOwned: false, materialOwned: false)
         }
         let wallpaperClaims = plan.wallpapers.filter { !$0.release }.map { change in
             ThemeWallpaperClaim(target: change.target, original: old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
@@ -1906,8 +1959,9 @@ final class ThemeCoordinator {
         next.wallpapers = claimed.isEmpty ? nil : claimed
         next.ghostexSettings = plan.ghostexClaims.isEmpty ? nil : plan.ghostexClaims
         if next.claims.isEmpty && next.wallpapers == nil && next.appearance == nil { next.selected = nil }  // Everything it owned has gone.
+        try validate(next)  // A held claim must still be one the next read accepts.
         let nextBytes = try ThemeDigest.encoded(next)
-        let journal = ThemeJournal(schema: 1, beforeLedger: oldFile.bytes, afterLedger: nextBytes, mutations: plan.mutations, wallpapers: plan.wallpapers.isEmpty ? nil : plan.wallpapers, appearance: appearance, ghostexSettings: plan.ghostex.isEmpty ? nil : plan.ghostex, keptWallpapers: plan.keptWallpapers.isEmpty ? nil : plan.keptWallpapers, keptFiles: plan.keptFiles.isEmpty ? nil : plan.keptFiles,
+        let journal = ThemeJournal(schema: 1, beforeLedger: oldFile.bytes, afterLedger: nextBytes, mutations: plan.mutations, wallpapers: plan.wallpapers.isEmpty ? nil : plan.wallpapers, appearance: appearance, ghostexSettings: plan.ghostex.isEmpty ? nil : plan.ghostex, keptWallpapers: plan.keptWallpapers.isEmpty ? nil : plan.keptWallpapers, keptFiles: plan.keptFiles.isEmpty ? nil : plan.keptFiles,  // Held files are in both ledgers, unchanged.
                                    keptLook: plan.keptLook.isEmpty ? nil : plan.keptLook)
         let pending = try state("pending")
         try fault("journal")
