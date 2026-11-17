@@ -1750,8 +1750,12 @@ def ghostex_interface(passed):
         f.stop()
         f = setup('n'); f.start(); assert f.apply()['status'] == 'applied'
         edit(f, 'customSidebarTitlebarBackgroundTintColor', '#123456')
-        assert f.apply('b')['status'] == 'applied'
-        assert values(f) == {**wanted(f.packs[1]), 'customSidebarTitlebarBackgroundTintColor': '#123456'}, values(f)
+        # Sven, 2026-11-17: a theme applies to everything. The next Apply sets it too, and keeps the person's value as
+        # what Restore puts back.
+        plan = f.call('theme', 'plan', 'apply', 'b')
+        assert [w for w in plan['warnings'] if 'takes this theme; Restore puts yours back' in w], plan['warnings']
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied'
+        assert values(f) == wanted(f.packs[1]), values(f)
         assert f.restore()['status'] == 'restored' and values(f) == {**original, 'customSidebarTitlebarBackgroundTintColor': '#123456'}, values(f)
         f.stop()
 
@@ -1815,7 +1819,7 @@ def ghostex_interface(passed):
 
     before = real_values()
     for label, check in [('applies in one Allow, Restore returns the exact values', apply_restore),
-                         ('a value changed since stays, on Restore and on the next Apply', changed_since),
+                         ('a value changed since stays on Restore; the next Apply sets it, and Restore then puts the person\'s value back', changed_since),
                          ('closed or absent skips with a line; closed at Restore waits; uninstalled drops', closed_absent),
                          ('a failed set or crash rolls back and fails the Apply', partial_failure),
                          ('switch releases and persists; a change after Preview refuses', switch_and_stale)]:

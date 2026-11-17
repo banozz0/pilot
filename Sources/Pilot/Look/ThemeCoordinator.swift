@@ -1303,8 +1303,9 @@ final class ThemeCoordinator {
         guard let state else {
             guard claims.isEmpty else { throw ThemeFailure("missing wallpaper state/effect binding") }; return ([], [], [])
         }
-        // What the person changed since (another image, their own collection, a pin) stays theirs and only its claim
-        // goes, so one changed screen never stops the rest of an Apply or Restore.
+        // What the person changed since (another image, their own collection, a pin) lets its claim go, so one changed
+        // screen never stops the rest. An Apply still sets the theme there, all but a pinned screen (Sven, 2026-11-17:
+        // a theme applies to everything), with the person's choice as what Restore puts back; a Restore leaves it.
         var owned: [ThemeWallpaperClaim] = [], kept: [ThemeWallpaperTarget] = []
         for claim in claims {
             // A pinned screen is the person's; one no longer connected can't be set or put back, so its claim goes too.
@@ -1314,14 +1315,13 @@ final class ThemeCoordinator {
             else { kept.append(claim.target) }
         }
         var changes: [ThemeWallpaperMutation] = []
-        // With their own collection in place, the theme's images would have nothing to cycle from: none are set.
-        if let loaded, !loaded.images.isEmpty, !kept.contains(.sources) {
+        if let loaded, !loaded.images.isEmpty {
             changes.append(.init(target: .sources, before: .sources(state.sources), after: .sources(collection ?? loaded.images)))
             let order = state.preferences["order"]?.string.flatMap(WallpaperCycle.Order.init) ?? .name
             let seed = state.preferences["seed"]?.string.flatMap(UInt64.init) ?? 0
             let fit = state.preferences["fitShape"] == .bool(true)
             let images = WallpaperCycle.ordered(loaded.images.map { URL(fileURLWithPath: $0) }, order: order, seed: seed)
-            for display in state.displays where !display.pinned && display.image != nil && !kept.contains(.display(display.id)) {
+            for display in state.displays where !display.pinned && display.image != nil {
                 let shape: WallpaperCycle.Shape = display.portrait ? .portrait : .landscape
                 let pick = WallpaperCycle.step(images, shape: { loaded.portraits.contains($0.path) ? .portrait : .landscape }, screen: shape, fit: fit, current: nil, forward: true)
                 if let pick { changes.append(.init(target: .display(display.id), before: .image(display.image), after: .image(pick.url.path))) }
@@ -1390,8 +1390,14 @@ final class ThemeCoordinator {
             lines.append(done ? "Let go of the wallpaper on \(place) no longer connected." : "Pilot lets go of the wallpaper on \(place) no longer connected: it can't set or put it back there.")
         }
         let kept = plan.keptWallpapers.filter { !gone.contains($0) }
-        if kept.contains(.sources) { lines.append(done ? "Kept your own wallpaper collection." : "Your own wallpaper collection stays: you changed it after the theme.") }
-        let screens = kept.filter { $0 != .sources }.count
+        let again = kept.filter { target in plan.wallpapers.contains { $0.target == target && !$0.release } }
+        if again.contains(.sources) { lines.append(done ? "Your own wallpaper collection took this theme; Restore puts yours back." : "Your own wallpaper collection, changed after the theme, takes this theme; Restore puts yours back.") }
+        else if kept.contains(.sources) { lines.append(done ? "Kept your own wallpaper collection." : "Your own wallpaper collection stays: you changed it after the theme.") }
+        let retaken = again.filter { $0 != .sources }.count, screens = kept.filter { $0 != .sources }.count - retaken
+        if retaken > 0 {
+            let place = retaken == 1 ? "one screen" : "\(retaken) screens"
+            lines.append(done ? "Your wallpaper on \(place) took this theme; Restore puts yours back." : "Your wallpaper on \(place), changed after the theme, takes this theme; Restore puts yours back.")
+        }
         if screens > 0 {
             let place = screens == 1 ? "one screen" : "\(screens) screens"
             lines.append(done ? "Kept your wallpaper on \(place)." : "Your wallpaper on \(place) stays: you changed it after the theme.")
@@ -1482,11 +1488,16 @@ final class ThemeCoordinator {
             else if wanted != nil { warnings.append("Ghostex skipped: it is not running") }
             return (nil, [], claims)
         }
-        var changes: [ThemeSettingMutation] = [], next: [ThemeSettingClaim] = [], kept: [String] = []
+        var changes: [ThemeSettingMutation] = [], next: [ThemeSettingClaim] = [], kept: [String] = [], retaken: [String] = []
         for key in GhostexInterface.keys {
             guard let current = state[key] else { continue }
-            let claim = claims.first { $0.key == key }
-            if let claim, current != claim.last { kept.append(key); continue }
+            var claim = claims.first { $0.key == key }
+            // Changed since Pilot set it: an Apply sets it anyway, with the person's value as what Restore puts back (Sven,
+            // 2026-11-17: a theme applies to everything); a Restore leaves it theirs.
+            if let changed = claim, current != changed.last {
+                guard wanted?[key] != nil else { kept.append(key); continue }
+                retaken.append(key); claim = nil
+            }
             if let after = wanted?[key] {
                 next.append(.init(key: key, original: claim?.original ?? current, last: after))
                 if after != current { changes.append(.init(key: key, before: current, after: after)) }
@@ -1495,6 +1506,7 @@ final class ThemeCoordinator {
             }
         }
         if !kept.isEmpty { warnings.append("Ghostex: \(kept.compactMap { GhostexInterface.names[$0] }.joined(separator: ", ")) changed since Pilot set it, so it stays yours") }
+        if !retaken.isEmpty { warnings.append("Ghostex: \(retaken.compactMap { GhostexInterface.names[$0] }.joined(separator: ", ")) changed since Pilot set it, and takes this theme; Restore puts yours back") }
         if wanted != nil, !changes.isEmpty {
             warnings += ["Ghostex: a terminal background set to Theme follows this colour"]
         }
@@ -1540,7 +1552,8 @@ final class ThemeCoordinator {
         for (index, change) in mutations.enumerated() {
             guard !mutations.dropFirst(index + 1).contains(where: { $0.target == change.target }) else { throw ThemeFailure("duplicate wallpaper journal target") }
             try validateWallpaper(change.target, [change.before, change.after])
-            let old = claims.first { $0.target == change.target }, new = after.wallpapers?.first { $0.target == change.target }
+            // A kept target an Apply sets again starts a new claim: its original is the person's choice it replaces.
+            let old = kept.contains(change.target) ? nil : claims.first { $0.target == change.target }, new = after.wallpapers?.first { $0.target == change.target }
             if change.release {
                 guard let old, new == nil, Self.stillTheme(old, now: change.before, among: claims), change.after == old.original else { throw ThemeFailure("inconsistent wallpaper release journal") }
             } else {
@@ -1548,10 +1561,12 @@ final class ThemeCoordinator {
                       old == nil || Self.stillTheme(old!, now: change.before, among: claims) else { throw ThemeFailure("inconsistent wallpaper ownership journal") }
             }
         }
-        // A kept claim only goes: it was owned before, nothing is written for it and nothing owns it after.
+        // A kept claim goes: it was owned before, and nothing is written for it and nothing owns it after, unless an Apply
+        // sets it again (checked above as a new claim).
         for (index, target) in kept.enumerated() {
+            let again = mutations.contains { $0.target == target && !$0.release }
             guard !kept.dropFirst(index + 1).contains(target), claims.contains(where: { $0.target == target }),
-                  !mutations.contains(where: { $0.target == target }), after.wallpapers?.contains(where: { $0.target == target }) != true else { throw ThemeFailure("inconsistent kept wallpaper journal") }
+                  again || (!mutations.contains(where: { $0.target == target }) && after.wallpapers?.contains(where: { $0.target == target }) != true) else { throw ThemeFailure("inconsistent kept wallpaper journal") }
         }
         for claim in claims + (after.wallpapers ?? []) {
             if !mutations.contains(where: { $0.target == claim.target }) && !kept.contains(claim.target) {
@@ -1914,7 +1929,7 @@ final class ThemeCoordinator {
             return claim
         }
         let wallpaperClaims = plan.wallpapers.filter { !$0.release }.map { change in
-            ThemeWallpaperClaim(target: change.target, original: old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
+            ThemeWallpaperClaim(target: change.target, original: plan.keptWallpapers.contains(change.target) ? change.before : old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
         }
         let claimed = wallpaperClaims + plan.heldWallpapers
         next.wallpapers = claimed.isEmpty ? nil : claimed

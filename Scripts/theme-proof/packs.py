@@ -322,19 +322,23 @@ def run(seam_only=False, fixes_only=False):
                 for step in ['apply','restore']:
                     f=fixture('moved'); f.start(); f.apply('tokyo-night'); state=moved(f,kind); mine=state['displays'][0]['image']
                     words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
-                    assert words['review']['kept']==([] if kind=='inside' else ['Your wallpaper on one screen stays: you changed it after the theme.']),words['review']
+                    # Sven, 2026-11-17: a theme applies to everything. Apply sets the theme on a screen the person changed too, with
+                    # their choice as what Restore puts back; Restore leaves it theirs.
+                    planned={'apply':'Your wallpaper on one screen, changed after the theme, takes this theme; Restore puts yours back.','restore':'Your wallpaper on one screen stays: you changed it after the theme.'}
+                    said={'apply':'Your wallpaper on one screen took this theme; Restore puts yours back.','restore':'Kept your wallpaper on one screen.'}
+                    assert words['review']['kept']==([] if kind=='inside' else [planned[step]]),words['review']
                     if crash:
                         before=f.read_wall(); ledger=(f.root/'state/ownership.json').read_bytes(); f.controls(crash=crash)
                         f.call('theme','apply' if step=='apply' else 'restore',words['id'],ok=False); f.stop(crashed=True); f.controls(); f.start()
                         assert not (f.root/'state/pending.json').exists() and f.read_wall()==before and (f.root/'state/ownership.json').read_bytes()==ledger
                         words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
                     answer=f.call('theme','apply' if step=='apply' else 'restore',words['id'])
-                    assert answer['status']==('applied' if step=='apply' else 'restored') and answer['kept']==([] if kind=='inside' else ['Kept your wallpaper on one screen.']),answer
+                    assert answer['status']==('applied' if step=='apply' else 'restored') and answer['kept']==([] if kind=='inside' else [said[step]]),answer
                     wide=next((x for x in own(f).get('wallpapers',[]) if x['target']=={'display':{'_0':'wide'}}),None)
                     if step=='apply':
                         assert f.read_wall()['displays'][1]['image'].endswith('dracula-tall.png')
                         if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png')
-                        else: assert wide is None and f.read_wall()['displays'][0]['image']==mine
+                        else: assert wide['original']=={'image':{'_0':mine}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png'),wide
                         f.restore()
                     if kind=='inside': restored(f)
                     else:
@@ -347,7 +351,7 @@ def run(seam_only=False, fixes_only=False):
         f.call('theme','fixture-cycle','wide',back)
         assert f.read_wall()['displays'][0]['image']==back and next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}})['last']=={'image':{'_0':back}}
         f.restore(); restored(f); f.stop()
-        passed('moved wallpaper: one of the theme\'s images is still the theme\'s (Apply plans from it, Restore puts the original back); one outside them stays the person\'s with only its claim released and "Kept your wallpaper on one screen."; both for Apply and Restore, with and without a crash at the first wallpaper effect; the cycle steps on from a moved screen')
+        passed('moved wallpaper: one of the theme\'s images is still the theme\'s (Apply plans from it, Restore puts the original back); one outside them takes the next Apply with the person\'s image as what Restore puts back, and Restore alone keeps it theirs; both for Apply and Restore, with and without a crash at the first wallpaper effect; the cycle steps on from a moved screen')
 
         stages=['journal','write:0','after-write:0','wallpaper:0','after-wallpaper:0','wallpaper:1','after-wallpaper:1','wallpaper:2','after-wallpaper:2','ledger','after-ledger','cleanup','after-cleanup','effect']
         for switching in [False,True]:
