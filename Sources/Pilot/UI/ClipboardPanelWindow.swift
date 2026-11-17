@@ -239,6 +239,12 @@ final class ClipboardHistory: ScreenPausing {
         case .editSnippets:
             close()
             AppWindowController.shared.open(.snippets)
+        case .saveAsSnippet:
+            guard let text = model.targets.first?.text else { return }
+            close()
+            let id = SnippetsEditor(library: .shared).add(text: text)
+            cliplog.notice("clipboard: saved a copy as a snippet")
+            AppWindowController.shared.open(AppPlace(.snippets), editSnippet: id)
         case .cycleSort: sort { $0.sort = $0.sort.next }
         case .reverseSort: sort { $0.reversed.toggle() }
         case .close:
@@ -640,6 +646,7 @@ final class PanelModel {
         case (.tag, .existing(let tag)?, _): try? store.tag(ids, with: tag.name)
         case (.actions, _, .pasteAndDelete?): return true
         case (.actions, _, .pasteInSequence?): run?(.pasteInSequence); return false
+        case (.actions, _, .saveAsSnippet?): run?(.saveAsSnippet); return false
         case (.actions, _, .rename?): open(.rename)
         case (.actions, _, .edit?): open(.edit)
         case (.actions, _, let action?):
@@ -1162,6 +1169,8 @@ struct PilotOpener: ClipOpening {
     func openWith(_ urls: [URL]) { FileActions.openWith(urls) }
     func reveal(_ urls: [URL]) { NSWorkspace.shared.activateFileViewerSelecting(urls) }
     func copy(_ text: String, tip: String) { SystemModule.copy(text, tip: tip) }
+
+    func markUp(_ data: Data) { if !CapturesModule.open(data) { HUD.tip("That image could not be opened.") } }
 
     func saveImage(_ data: Data, named name: String) {
         let panel = NSSavePanel()

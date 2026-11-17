@@ -84,6 +84,16 @@ enum CapturesModule {
         return true
     }
 
+    /// A copied image's bytes in the editor, as a capture not yet saved (the clipboard panel's Mark up); false when they
+    /// do not read. Read on the main thread, unlike a file: the bytes are in memory already, and `pilot clip markup`
+    /// counts the editor as soon as it answers.
+    @discardableResult
+    static func open(_ data: Data) -> Bool {
+        guard let (image, scale) = Pins.load(data) else { return false }
+        CaptureEditor.show(image, scale: scale, file: nil, capture: PilotCapture.shared)
+        return true
+    }
+
     /// The capture just taken in the editor (Sven on build 54: with thumbnails it no longer opens on its own): the newest
     /// thumbnail on screen, else the newest capture in the captures folder.
     static func editLast() {

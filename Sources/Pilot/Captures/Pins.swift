@@ -37,7 +37,16 @@ enum Pins {
 
     /// An image file and its scale, from its DPI (2 when it has none).
     nonisolated static func load(_ url: URL) -> (CGImage, CGFloat)? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        CGImageSourceCreateWithURL(url as CFURL, nil).flatMap(load)
+    }
+
+    /// An image's bytes, as a copied one is kept (Cmd+K's Mark up).
+    nonisolated static func load(_ data: Data) -> (CGImage, CGFloat)? {
+        CGImageSourceCreateWithData(data as CFData, nil).flatMap(load)
+    }
+
+    private nonisolated static func load(_ source: CGImageSource) -> (CGImage, CGFloat)? {
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let dpi = (CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])?[kCGImagePropertyDPIWidth] as? Double
         return (image, CGFloat((dpi ?? 144) / 72))
     }
