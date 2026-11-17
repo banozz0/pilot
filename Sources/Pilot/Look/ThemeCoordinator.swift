@@ -188,8 +188,8 @@ final class ThemeCoordinator {
     /// but the Carousel's recording host, which passes its own.
     var forgetFavourite: @MainActor (String) -> Void = { _ in }
     /// What the ledger and recovery may name: stored bindings plus the detected destinations an Apply took on.
-    private func selection() throws -> LocalSelection {
-        var local = try stored()
+    private func selection(_ bindings: LocalSelection? = nil) throws -> LocalSelection {
+        var local = try bindings ?? stored()
         if local.zed == nil { local.zed = local.adoptedZed }
         local.apps = local.adoptedApps
         if let adopted = local.adoptedObsidian { local.obsidian = Self.merged(local.obsidian ?? [], adding: adopted) }
@@ -237,15 +237,47 @@ final class ThemeCoordinator {
         }
     }
 
-    /// Select local authority separately from editing/importing portable templates. Never executes reload.
+    /// A bind while a theme is applied (Sven, 2026-11-17: themes follow everything): the new destination takes that theme
+    /// at once, through the same plan and apply as any other (its own Allow), so its parts are backed up and owned and
+    /// Restore and No theme undo them. A bind that would drop a destination the theme still owns waits for Restore
+    /// (keepsOwned), since the ledger may only name bound destinations. A failed or refused apply keeps the binding.
+    private func applyingTheme(after bound: JSONValue, peer: ControlPeer?) async -> JSONValue {
+        guard case .object(var result) = bound, let id = try? ledger().1.selected?.id else { return bound }
+        do {
+            let planned = try await plan(id)
+            result["applied"] = planned.mutations.isEmpty ? .string("\(id) has nothing for it") : try await apply(planned.id, peer: peer)
+        } catch { result["applied"] = .string("bound; theme not applied: \(error)") }
+        return .object(result)
+    }
+    /// The applied theme's claims must all stay bound under `next`, else ledger() would refuse every later verb.
+    private func keepsOwned(_ next: LocalSelection) throws {
+        let record = try ledger().1
+        guard record.selected != nil else { return }
+        do { try validate(record, bindings: next) }
+        catch { throw ThemeFailure("Restore the applied theme first: this change stops following a place it changed") }
+    }
+
     func bindCustom(_ item: ThemeMappingBinding, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        await applyingTheme(after: try await chooseCustom(item, peer: peer), peer: peer)
+    }
+    func bindZed(_ root: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let bound = try await chooseZed(root, optOut: optOut, peer: peer)
+        return optOut ? bound : await applyingTheme(after: bound, peer: peer)
+    }
+    func bindObsidian(_ root: String?, configDir: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let bound = try await chooseObsidian(root, configDir: configDir, optOut: optOut, peer: peer)
+        return optOut ? bound : await applyingTheme(after: bound, peer: peer)
+    }
+
+    /// Select local authority separately from editing/importing portable templates. Never executes reload.
+    private func chooseCustom(_ item: ThemeMappingBinding, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
         busy = true; defer { busy = false }
         do {
-            guard try state("pending").bytes == nil, try ledger().1.selected == nil else { throw ThemeFailure("Restore active appearance/recovery before changing bindings") }
+            guard try state("pending").bytes == nil else { throw ThemeFailure("A theme change is still recovering: restart Pilot, then bind") }
             var next = try stored()
             next.custom = (next.custom ?? []).filter { $0.id != item.id } + [item]
-            try validateCustom(next)
+            try validateCustom(next); try keepsOwned(next)
             let before = try state("bindings"), ownership = try state("ownership"), pending = try state("pending")
             let target = try ThemeFiles.read(root: item.root, path: item.path), revision = try context(), chosen = next
             return try await gate.allow(.init("Select custom theme destination", "\(item.id): \(item.root)/\(item.path); app \(item.app). Reload configuration only; executes nothing."), peer: peer) { () throws(ControlError) in
@@ -265,11 +297,11 @@ final class ThemeCoordinator {
     var zedSelection: LocalSelection { get throws { try selection() } }
 
     /// The CLI's explicit route, beside what detection finds; packs cannot invoke it.
-    func bindZed(_ root: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+    private func chooseZed(_ root: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
         busy = true; defer { busy = false }
         do {
-            guard try state("pending").bytes == nil, try ledger().1.selected == nil else { throw ThemeFailure("Restore active appearance/recovery before changing bindings") }
+            guard try state("pending").bytes == nil else { throw ThemeFailure("A theme change is still recovering: restart Pilot, then bind") }
             if let root {
                 guard root.hasPrefix("/"), URL(fileURLWithPath: root).standardizedFileURL.path == root,
                       !root.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
@@ -280,7 +312,7 @@ final class ThemeCoordinator {
             let before = try state("bindings"), ownership = try state("ownership"), pending = try state("pending")
             var next = try stored()
             next.zed = root.map { ThemeBinding(root: $0, config: "settings.json", generated: "themes/pilot-theme.json") }; next.zedOptOut = optOut
-            try validateCustom(next)
+            try validateCustom(next); try keepsOwned(next)
             let chosen = next
             return try await gate.allow(.init("Select Zed theme destination", root ?? (optOut ? "Zed opted out" : "Zed not selected")), peer: peer) { () throws(ControlError) in
                 do {
@@ -295,11 +327,11 @@ final class ThemeCoordinator {
         catch { throw ControlError(.badValue, String(describing: error)) }
     }
     /// Explicitly chosen vault + configured folder, with no registry/discovery or portable authority.
-    func bindObsidian(_ root: String?, configDir: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+    private func chooseObsidian(_ root: String?, configDir: String?, optOut: Bool, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
         busy = true; defer { busy = false }
         do {
-            guard try state("pending").bytes == nil, try ledger().1.selected == nil else { throw ThemeFailure("Restore active appearance/recovery before changing bindings") }
+            guard try state("pending").bytes == nil else { throw ThemeFailure("A theme change is still recovering: restart Pilot, then bind") }
             var next = try stored()
             var observed: [ThemeSnapshot] = []
             if optOut {
@@ -313,9 +345,10 @@ final class ThemeCoordinator {
                 observed = try [vault.generated, vault.config].map { try ThemeFiles.read(root: root, path: $0) }
                 var vaults = next.obsidian ?? []; vaults.removeAll { $0.root == root }; vaults.append(vault)
                 next.obsidian = vaults
+                next.obsidianOff = next.obsidianOff?.filter { $0 != root }  // Else a detecting plan still skips it.
             }
             let before = try state("bindings"), ownership = try state("ownership"), pending = try state("pending")
-            try validateCustom(next)
+            try validateCustom(next); try keepsOwned(next)
             let chosen = next, snapshots = observed, revision = try context()
             return try await gate.allow(.init("Select Obsidian theme vaults", optOut ? "Stop following in \(root ?? "all selected vaults")" : "\(root!) / \(configDir!); pilot-theme.css and individual snippet membership"), peer: peer) { () throws(ControlError) in
                 do {
@@ -579,8 +612,10 @@ final class ThemeCoordinator {
         return (observed, record)
     }
 
-    private func validate(_ record: ThemeLedger) throws {
-        guard record.schema == 1, record.claims.allSatisfy({ $0.codec == 1 && validSelector($0.selector, root: $0.root, path: $0.path) }),
+    /// `bindings`: checks against those in place of the stored ones (keepsOwned).
+    private func validate(_ record: ThemeLedger, bindings: LocalSelection? = nil) throws {
+        let local = try selection(bindings)
+        guard record.schema == 1, record.claims.allSatisfy({ $0.codec == 1 && validSelector($0.selector, root: $0.root, path: $0.path, local: local) }),
               Set(record.claims.map(\.identity)).count == record.claims.count,
               (record.claims.isEmpty && (record.wallpapers ?? []).isEmpty && record.appearance == nil) == (record.selected == nil) else { throw ThemeFailure("corrupt ownership ledger") }
         try validateWallpapers(record.wallpapers ?? [])
@@ -600,7 +635,6 @@ final class ThemeCoordinator {
         let ghostty = record.claims.filter { $0.root == binding.root && [binding.config, binding.generated].contains($0.path) }
         // Ownership may be partial: a part the person changed since was let go and the rest stays Pilot's.
         guard Set(ghostty.map(\.path)).count == ghostty.count else { throw ThemeFailure("duplicate Ghostty ownership") }
-        let local = try selection()
         var remaining = record.claims.filter { !ghostty.contains($0) }
         for destination in [local.zed, local.ghostex].compactMap({ $0 }) + (local.obsidian ?? []) {
             let claims = remaining.filter { $0.root == destination.root && [destination.config, destination.generated].contains($0.path) }
@@ -625,7 +659,7 @@ final class ThemeCoordinator {
         if let selected = record.selected { _ = try ThemePack.decode(ThemeDigest.encoded(selected)) }
     }
 
-    private func validSelector(_ selector: ThemeSelector, root: String, path: String) -> Bool {
+    private func validSelector(_ selector: ThemeSelector, root: String, path: String, local: LocalSelection? = nil) -> Bool {
         func ghosttyOwned(_ destination: ThemeBinding) -> Bool {
             switch selector {
             case .file: return path == destination.generated
@@ -635,7 +669,7 @@ final class ThemeCoordinator {
             }
         }
         if root == binding.root, ghosttyOwned(binding) { return true }
-        guard let local = try? selection() else { return false }
+        guard let local = try? local ?? selection() else { return false }
         if let zed = local.zed, root == zed.root {
             switch selector {
             case .file: if path == zed.generated { return true }
@@ -1680,7 +1714,8 @@ final class ThemeCoordinator {
         if let pack = loaded?.pack, pack.adapters["obsidian"] != nil {
             if detect == nil || !(local.obsidian ?? []).isEmpty { warnings += ObsidianThemeAdapter.warnings }
             let generated = try ObsidianThemeAdapter.asset(pack), value = try ThemeDigest.encoded(ObsidianThemeAdapter.element)  // One snippet for every vault.
-            for vault in local.obsidian ?? [] where detect == nil || (local.obsidianOptOut != true && !(local.obsidianOff ?? []).contains(vault.root)) {
+            // Opting out of all vaults drops every bound one, so a vault bound after it is one the person chose: it follows.
+            for vault in local.obsidian ?? [] where detect == nil || !(local.obsidianOff ?? []).contains(vault.root) {
                 let asset = targets.first { $0.root == vault.root && $0.path == vault.generated }!
                 let settings = targets.first { $0.root == vault.root && $0.path == vault.config }!
                 let document = try ThemeJSONC(settings.bytes ?? Data("{}".utf8))

@@ -258,14 +258,17 @@ enum DriveModule {
 
     /// A running app's menu item by title path, through Accessibility; the app stays where it is.
     /// Presses a running app's menu item; an app that is not running is said so in a tip unless `quietWhenNotRunning`.
-    static func pressMenu(_ bundle: String, _ path: [String], quietWhenNotRunning: Bool = false) {
+    /// `every`: in each running instance of the app (a second one from `open -na` too), not only the first; a bind's
+    /// press stays on one.
+    static func pressMenu(_ bundle: String, _ path: [String], quietWhenNotRunning: Bool = false, every: Bool = false) {
         let title = DriveRoute.title(path)
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else {
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.bundleIdentifier == bundle }
+        guard !apps.isEmpty else {
             dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .private): not running")
             if !quietWhenNotRunning { HUD.tip("\(AppsModule.appName(bundle) ?? bundle) is not running.") }
             return
         }
-        press(path, pid: app.processIdentifier, bundle: bundle, name: app.localizedName ?? bundle)
+        for app in every ? apps : [apps[0]] { press(path, pid: app.processIdentifier, bundle: bundle, name: app.localizedName ?? bundle) }
     }
 
     /// Presses the item at `path` off the main thread, the walk at most a second, so the tap never waits on it; `wait`

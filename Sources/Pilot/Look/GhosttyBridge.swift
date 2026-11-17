@@ -36,17 +36,23 @@ enum GhosttyBridge {
         }
     }
 
-    /// A running Ghostty reloads through its menu; a stopped one reads the config at launch.
-    static func reload() { DriveModule.pressMenu(bundle, reloadItem, quietWhenNotRunning: true) }
+    /// Every running Ghostty reloads through its menu; a stopped one reads the config at launch.
+    static func reload() { DriveModule.pressMenu(bundle, reloadItem, quietWhenNotRunning: true, every: true) }
 
-    /// A theme's Apply and Restore: Ghostty › Reload Configuration pressed now, through its menu (ADR 0001, never its
-    /// key), off the main thread. Nil when Ghostty isn't running, since it reads its config at launch.
+    /// A theme's Apply and Restore: Ghostty › Reload Configuration pressed now in every running Ghostty (a second one
+    /// from `open -na` too), through its menu (ADR 0001, never its key), off the main thread. True when any pressed;
+    /// nil when none is running, since it reads its config at launch.
     static func reloadNow() async -> Bool? {
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else { return nil }
-        let pid = app.processIdentifier, item = reloadItem
-        let pressed = await Task.detached(priority: .userInitiated) { AXMenu.press(pid: pid, path: item) }.value
-        looklog.notice("theme: Ghostty reload \(pressed ? "pressed" : "not found", privacy: .public)")
-        return pressed
+        let pids = running()
+        guard !pids.isEmpty else { return nil }
+        let item = reloadItem
+        let pressed = await Task.detached(priority: .userInitiated) { pids.filter { AXMenu.press(pid: $0, path: item) }.count }.value
+        looklog.notice("theme: Ghostty reload pressed in \(pressed, privacy: .public) of \(pids.count, privacy: .public)")
+        return pressed > 0
+    }
+    /// Every running Ghostty's pid, each instance its own process.
+    static func running() -> [pid_t] {
+        NSWorkspace.shared.runningApplications.filter { $0.bundleIdentifier == bundle }.map(\.processIdentifier)
     }
 
     /// Look's Ghostty write on a theme pick: the standard files, then a reload when they changed; errors go to the caller.
