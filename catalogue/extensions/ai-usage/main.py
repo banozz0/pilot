@@ -49,6 +49,13 @@ Settings (the manifest's preferences): which providers the bar shows and whether
 used window; pace on or off; other Codex folders and Gemini shown or hidden. Every bar shows the share left, CodexBar's
 way, draining as it is used.
 
+Claude's limit reset credits come from Ghostex, which holds the Claude sign-in: `ghostex accounts --json` lists each
+Claude account's `resetCreditDetails` (`id`, `expiresAt`, an optional `note`), the account matched by the email Claude
+Code signed in with. A popover or page asks it once the last answer (paths.cache/claude-resets.json) is over 5 minutes
+old; the bar only reads that answer. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
+Anthropic reads and redeems these only with Claude Code's sign-in token, so Redeem in Ghostex opens Ghostex, whose
+account usage panel redeems them; without Ghostex, Claude shows no credits.
+
 Nothing else is read: no auth.json, credentials, keychain items or cookies of any provider.
 """
 import calendar
@@ -99,6 +106,10 @@ CODEX_HOME_NAME = re.compile(r"\.codex(-[A-Za-z0-9._-]+)?\Z")
 PILOT_AI_CODEX = os.path.join("Library", "Application Support", "Pilot", "codex")  # Pilot › AI's CODEX_HOME (Q203)
 STATUSLINE = os.path.join(".local", "state", "ghostex", "agent-hooks", "claude-statusline")
 STATUSLINE_TRIES = 40  # newest status-line files read for one with rate_limits
+GHOSTEX_CLI = "/Applications/Ghostex.app/Contents/Resources/CLI/ghostex"
+GHOSTEX_ID = "com.madda.ghostex.host"
+GHOSTEX_FILE = "claude-resets.json"
+GHOSTEX_FRESH = 300  # a popover or page asks Ghostex again when its answer is older; Ghostex asks Anthropic every 15 min
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 SESSION, WEEK = 300, 10080  # window lengths in minutes
 WARN, ALERT = 60, 85  # percent used
@@ -109,6 +120,7 @@ VIEW = {"barProviders": "both", "barWindow": "session", "pace": True, "otherCode
 STATUS_PAGES = {"claude": "https://status.claude.com", "codex": "https://status.openai.com"}
 PROVIDERS = (("claude", "Claude"), ("codex", "Codex"))
 DASHBOARDS = {"claude": "https://claude.ai/settings/usage", "codex": "https://chatgpt.com/codex/cloud/settings/analytics#usage"}
+CLAUDE_MODELS = ("Fable", "Opus", "Sonnet", "Haiku")  # a reset grant's id naming one is that model's (with any per-model week's)
 CLAUDE_PLANS = {"claude_max": "Max", "claude_pro": "Pro", "claude_team": "Team", "claude_enterprise": "Enterprise"}
 
 
@@ -259,6 +271,68 @@ def claude_limits(home, now):
     else:
         read_at, windows = cached
     return {"state": "ok", "who": email, "plan": plan, "read_at": read_at, "windows": windows}
+
+
+def ghostex_program():
+    """Ghostex's CLI: on PATH, else inside Ghostex.app; None without Ghostex."""
+    found = shutil.which("ghostex")
+    return found or (GHOSTEX_CLI if os.access(GHOSTEX_CLI, os.X_OK) else None)
+
+
+def ask_ghostex(deadline):
+    """Claude's limit reset credits per account as Ghostex reads them (`ghostex accounts --json`: `resetCreditDetails`,
+    each `id`, `expiresAt` and an optional `note`): {email lower case: [{id, expires, note}]}; None when Ghostex is
+    missing, fails or is quiet at `deadline`. An account Ghostex could not read (`resetCreditsError`) is left out."""
+    program = ghostex_program()
+    if not program:
+        return None
+    try:
+        out = subprocess.run([program, "accounts", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, timeout=max(0.5, deadline - time.monotonic()),
+                             start_new_session=True).stdout
+        data = json.loads(out)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    rows = data.get("accounts") if isinstance(data, dict) else None
+    found = {}
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict) or row.get("provider") != "claude" or row.get("resetCreditsError"):
+            continue
+        email, details = row.get("email"), row.get("resetCreditDetails")
+        if not isinstance(email, str) or not email or not isinstance(details, list):
+            continue
+        found[email.lower()] = [{"id": c["id"], "expires": parse_time(c.get("expiresAt")),
+                                 "note": c["note"] if isinstance(c.get("note"), str) else None}
+                                for c in details if isinstance(c, dict) and isinstance(c.get("id"), str)]
+    return found
+
+
+def claude_resets(cache_dir, claude, now, ask_until=None, fresh=GHOSTEX_FRESH):
+    """The Claude account's limit reset credits, Codex's shape ({count, expires, kinds, notes}), from Ghostex's last answer
+    in paths.cache (asked again inline once over `fresh` s old when `ask_until` is given, never by the bar); None without Ghostex,
+    an account it lists under the email Claude Code signed in with, or a credit."""
+    email = claude.get("who")
+    path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
+    saved = read_json(path) if path else None
+    saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None else None
+    if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
+        accounts = ask_ghostex(ask_until)
+        saved = {"at": now, "accounts": accounts or {}}
+        if path:
+            write_json(path, saved)
+    credits = ((saved or {}).get("accounts") or {}).get(email.lower()) if email else None
+    if not credits:
+        return None
+    models = [w["name"][:-len(" weekly")] for w in claude.get("windows") or [] if w["name"].endswith(" weekly")]
+    models += [m for m in CLAUDE_MODELS if m not in models]
+    kinds = {}
+    for c in credits:  # a grant scoped to one model names it in its id (launch-2610-fable)
+        words = re.split(r"[-_]", c["id"].lower())
+        model = next((m for m in models if m.lower() in words), None)
+        if model:
+            kinds[model] = kinds.get(model, 0) + 1
+    return {"count": len(credits), "expires": sorted(c["expires"] for c in credits if c["expires"]),
+            "kinds": kinds, "notes": sorted({c["note"] for c in credits if c["note"]})}
 
 
 # Codex
@@ -698,8 +772,11 @@ def limits(run, now=None, ask_until=None, fresh=LIVE_FRESH):
     """Every provider's limits as a dict."""
     home = os.path.expanduser("~")
     now = time.time() if now is None else now
-    return {"now": now, "claude": claude_limits(home, now), "codex": codex_accounts(home, now, run, ask_until, fresh),
-            "gemini": gemini_state(), "status": status_read((run.get("paths") or {}).get("cache"), now)}
+    cache_dir = (run.get("paths") or {}).get("cache")
+    claude = claude_limits(home, now)
+    claude["reset_credits"] = claude_resets(cache_dir, claude, now, ask_until, fresh)
+    return {"now": now, "claude": claude, "codex": codex_accounts(home, now, run, ask_until, fresh),
+            "gemini": gemini_state(), "status": status_read(cache_dir, now)}
 
 
 # Claude Code tokens (footnote)
@@ -1095,20 +1172,38 @@ def section(title, subtitle, aside, aside_note, blocks):
 
 
 def claude_card(claude, now):
+    credits = reset_credits_text(claude.get("reset_credits"), now)
+    extra = [{"type": "markdown", "text": credits}, claude_redeem_button()] if credits else []
     if claude["state"] != "ok":
         return section("Claude", "Unknown", claude.get("who"), claude.get("plan"),
-                       [{"type": "markdown", "text": CLAUDE_UNKNOWN}])
+                       [{"type": "markdown", "text": CLAUDE_UNKNOWN}] + extra)
     return section("Claude", "Updated " + stamp(claude["read_at"], now), claude.get("who"), claude.get("plan"),
-                   [meter(w, "Claude Code reply", now) for w in claude["windows"]])
+                   [meter(w, "Claude Code reply", now) for w in claude["windows"]] + extra)
+
+
+def kinds_text(found):
+    """A Claude account's model-scoped credits, e.g. "2 Fable"; None when none is scoped (Codex's never are)."""
+    kinds = found.get("kinds") or {}
+    return ", ".join("%d %s" % (n, model) for model, n in sorted(kinds.items())) or None
 
 
 def reset_credits_text(found, now):
     if not found or found["count"] <= 0:
         return None
     text = "**Limit reset credits:** %d available" % found["count"]
+    if kinds_text(found):
+        text += " (%s)" % kinds_text(found)
     if found["expires"]:
         text += " · expire " + ", ".join(stamp_ahead(t, now) for t in found["expires"])
+    for note in found.get("notes") or []:
+        text += " · " + note
     return text
+
+
+def claude_redeem_button():
+    """Claude's credits are redeemed in Ghostex's account usage panel: Anthropic takes a redeem only with Claude Code's
+    sign-in token, which Pilot never reads, so the button opens Ghostex."""
+    return {"type": "buttons", "actions": [{"type": "run", "command": "open-ghostex", "title": "Redeem in Ghostex…"}]}
 
 
 def stamp_ahead(moment, now):
@@ -1219,27 +1314,32 @@ def calm_meter(w, since, now, headroom=False):
 
 
 def calm_credits(found, now):
-    """Codex's limit reset credits as one note: how many, the next expiry, every expiry on hover."""
+    """Limit reset credits as one note: how many, the next expiry; the kinds, every expiry and any note on hover."""
     if not found or found["count"] <= 0:
         return None
     note = {"type": "note", "icon": "reset",
             "text": "%d reset credit%s" % (found["count"], "" if found["count"] == 1 else "s")}
+    words = [kinds_text(found)] + list(found.get("notes") or [])
     if found["expires"]:
         first = min(found["expires"])
         note["aside"] = "next expires " + time.strftime("%-d %b", time.localtime(first))
-        note["help"] = "Expire " + ", ".join(stamp_ahead(t, now) for t in found["expires"])
+        words.append("Expire " + ", ".join(stamp_ahead(t, now) for t in found["expires"]))
+    if any(words):
+        note["help"] = " · ".join(w for w in words if w)
     return note
 
 
 def calm_claude(claude, now):
+    credits = calm_credits(claude.get("reset_credits"), now)
+    extra = [credits, claude_redeem_button()] if credits else []
     if claude["state"] != "ok":
         return calm_section("claude", "Claude", "unknown", claude.get("who"), None,
-                            [CLAUDE_UNKNOWN, claude.get("who"), claude.get("plan")], [])
+                            [CLAUDE_UNKNOWN, claude.get("who"), claude.get("plan")], extra)
     read = "Updated " + stamp(claude["read_at"], now)
     stale = now - claude["read_at"] > STALE
     return calm_section("claude", "Claude", read if stale else None, claude.get("who"), claude.get("plan"),
                         [claude.get("who"), None if stale else read],
-                        [calm_meter(w, "Claude Code reply", now) for w in claude["windows"]])
+                        [calm_meter(w, "Claude Code reply", now) for w in claude["windows"]] + extra)
 
 
 def calm_codex(codex, now):
@@ -1431,6 +1531,9 @@ def show_usage(run):
     else:
         md.append(CLAUDE_UNKNOWN)
         rows.append({"label": "Claude", "text": "unknown"})
+    credits = reset_credits_text(claude.get("reset_credits"), now)
+    if credits:
+        md += ["", "- " + credits + " · redeem them in Ghostex"]
     for codex in data["codex"]:
         md += ["", "## Codex · %s" % codex["name"]]
         if codex["state"] == "ok":
@@ -1559,6 +1662,17 @@ def remove_account(run):
     finally:
         lock.close()
     send({"type": "hud", "text": "Removed the Codex account from Pilot"})
+
+
+def open_ghostex(run):
+    """Redeem in Ghostex: opens Ghostex, whose account usage panel redeems Claude's limit reset credits (see
+    claude_redeem_button for why Pilot can't)."""
+    try:
+        opened = subprocess.run(["open", "-b", GHOSTEX_ID], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        opened = False
+    send({"type": "hud", "text": "Redeem it in Ghostex's account usage panel" if opened else "Ghostex isn't installed on this Mac"})
 
 
 # What each of Codex's consume outcomes means, as Codex's own Redeem reset says it.
@@ -1723,7 +1837,8 @@ def background_codex(cache_dir, homes):
 
 
 COMMANDS = {"usage": show_usage, "summary": show_summary, "page": show_page, "bar": show_bar,
-            "add-account": add_account, "remove-account": remove_account, "refresh": refresh, "redeem-reset": redeem_reset}
+            "add-account": add_account, "remove-account": remove_account, "refresh": refresh, "redeem-reset": redeem_reset,
+            "open-ghostex": open_ghostex}
 
 
 def main():
