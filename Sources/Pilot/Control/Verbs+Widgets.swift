@@ -97,7 +97,7 @@ extension ControlVerbs {
             }
         })
         register(ControlCollection(
-            "widgets", help: "The widgets on the desktop, each placement with its widget, screen (a display UUID; main when none), place as a fraction of the screen and size; a widget may be placed more than once. They show on an empty workspace or while Show desktop holds the windows out, on every workspace or on the one given; Hyper+drag moves one. While widgets.snapToGrid is on (the default) each lands on whole cells of the screen's grid, clear of the others: pilot status --part widgets gives the grid and each one's cell.",
+            "widgets", help: "The widgets on the desktop, each placement with its widget, screen (a display UUID; main when none) and screenIdentity (the display's vendor:model:serial, which finds it once macOS gives it a new UUID), place as a fraction of the screen and size; a widget may be placed more than once. They show on an empty workspace or while Show desktop holds the windows out, on every workspace or on the one given; Hyper+drag moves one. While widgets.snapToGrid is on (the default) each lands on whole cells of the screen's grid, clear of the others: pilot status --part widgets gives the grid and each one's cell.",
             fields: [.init("widget", help: "an installed widget's id, or a ready one's: \(ReadyWidgets.ids.joined(separator: ", "))"), .init("screen", help: "a display's UUID (pilot status --part widgets lists them); the main display when left out", required: false),
                      .init("x", help: "the left edge, 0 to 1 of the screen's width", required: false), .init("y", help: "the top edge, 0 to 1 of the screen's height", required: false),
                      .init("workspace", help: "the one workspace it shows on, 1 to 9; the widget's own (its widget.json), else every workspace, when left out", required: false),
@@ -159,14 +159,16 @@ extension ControlVerbs {
     /// Saved as the desk places them (on the grid while Snap to grid is on), then shown; what was saved.
     @discardableResult
     private static func save(_ placements: [Widget.Placement], _ tools: WidgetTools) throws(ControlError) -> [Widget.Placement] {
-        let placed = WidgetDesk.placed(placements)
-        do { try tools.store.save(placed) } catch { throw ControlError(.badValue, "not saved: \(error.localizedDescription)") }
-        tools.desk.reload()
-        return placed
+        do {
+            let saved = try tools.store.save(WidgetDesk.placed(placements))
+            tools.desk.reload()
+            return saved
+        } catch { throw ControlError(.badValue, "not saved: \(error.localizedDescription)") }
     }
 
     private static func row(_ p: Widget.Placement) -> JSONValue {
         .object(["id": .string(p.id), "widget": .string(p.widget), "screen": p.screen.map(JSONValue.string) ?? .string("main"),
+                 "screenIdentity": p.screenIdentity.map(JSONValue.string) ?? .null,
                  "x": .number(p.x), "y": .number(p.y), "width": .number(p.width), "height": .number(p.height),
                  "workspace": p.workspace.map(JSONValue.string) ?? .string("all"), "home": .bool(p.onHome),
                  "values": .object(p.values ?? [:])])

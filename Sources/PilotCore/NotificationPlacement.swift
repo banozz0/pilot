@@ -62,8 +62,8 @@ public enum NotificationPlacement {
     private static func clamp(_ v: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat { max(low, min(v, max(low, high))) }
 }
 
-/// Where Sven left the bell, one place a display (by its UUID), and which display it was on last. A place is the bell's
-/// foot-left corner from that display's visible frame's, and its side.
+/// Where Sven left the bell, one place a display (by its identity, LiveDisplay, or before identities its UUID), and which
+/// display it was on last. A place is the bell's foot-left corner from that display's visible frame's, and its side.
 public struct NotificationBellPlaces {
     public struct Place: Codable, Equatable, Sendable {
         public var x: Double, y: Double, side: Double
@@ -81,8 +81,12 @@ public struct NotificationBellPlaces {
     public func place(on display: String) -> Place? { all[display] }
 
     /// The bell's frame on `display`: its place there, or the corner at the first side.
-    public func frame(on display: String?, visible: CGRect) -> CGRect {
-        let place = display.flatMap(place(on:))
+    public func frame(on display: String?, visible: CGRect) -> CGRect { frame(on: display.map { [$0] } ?? [], visible: visible) }
+
+    /// The bell's frame from the first of `displays` that has a place (one display's identity, then its UUID), or the
+    /// corner at the first side.
+    public func frame(on displays: [String], visible: CGRect) -> CGRect {
+        let place = displays.lazy.compactMap(place(on:)).first
         return NotificationPlacement.bell(in: visible, at: place.map { CGPoint(x: $0.x, y: $0.y) },
                                           side: place.map { CGFloat($0.side) } ?? NotificationPlacement.bell.width)
     }

@@ -168,8 +168,10 @@ public struct ConnectedDisplay: Hashable, Sendable {
 }
 
 extension NSScreen {
-    /// The display's UUID, which macOS derives from its vendor, model and serial, so it survives replugging. Kept per
-    /// display number, since the own tiler reads it each time it lists the monitors, many times per layout.
+    /// The display's UUID. It usually survives replugging, but macOS may hand a display a new one at a restart (Sven's
+    /// ultrawide, whose EDID serial is a placeholder, 2026-11-16), so a setting kept for good matches the display's
+    /// identity first (LiveDisplay). Kept per display number, since the own tiler reads it each time it lists the
+    /// monitors, many times per layout.
     public var displayUUID: String? {
         guard let number = (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { return nil }
         if let known = Self.uuids.withLock({ $0[number] }) { return known }

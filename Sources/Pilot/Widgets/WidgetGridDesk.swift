@@ -66,9 +66,9 @@ extension WidgetDesk {
     /// as they were.
     static func snapped(_ all: [Widget.Placement]) -> [Widget.Placement] {
         var out = all
-        let desk = all.indices.filter { !all[$0].onHome && screen(all[$0].screen)?.displayUUID != nil }
-        for indices in Dictionary(grouping: desk, by: { screen(all[$0].screen)?.displayUUID ?? "" }).values {
-            guard let display = screen(all[indices[0]].screen) else { continue }
+        let desk = all.indices.filter { !all[$0].onHome && screen(of: all[$0])?.displayUUID != nil }
+        for indices in Dictionary(grouping: desk, by: { screen(of: all[$0])?.displayUUID ?? "" }).values {
+            guard let display = screen(of: all[indices[0]]) else { continue }
             let full = flip(display.frame), grid = grid(on: display)
             for (i, cell) in zip(indices, grid.pack(indices.map { all[$0].frame(on: full) })) { out[i].land(on: grid.rect(cell), screen: full) }
         }
@@ -90,7 +90,7 @@ extension WidgetDesk {
 
     /// A placement's cells on its screen's grid, and whether its frame is exactly them, for status.
     func gridRow(_ placement: Widget.Placement) -> [String: JSONValue] {
-        guard !placement.onHome, let screen = Self.screen(placement.screen) else { return [:] }
+        guard !placement.onHome, let screen = Self.screen(of: placement) else { return [:] }
         let grid = Self.grid(on: screen), frame = placement.frame(on: Self.flip(screen.frame))
         return ["cell": .string(grid.cell(nearest: frame).line), "onGrid": .bool(grid.holds(frame))]
     }
@@ -115,7 +115,7 @@ final class WidgetGridDrag {
         if held.map({ !WidgetDesk.flip($0.screen.frame).contains(middle) }) ?? true {
             guard let screen = NSScreen.screens.first(where: { WidgetDesk.flip($0.frame).contains(middle) }) ?? held?.screen ?? NSScreen.main else { return }
             let grid = WidgetDesk.grid(on: screen), full = WidgetDesk.flip(screen.frame), uuid = screen.displayUUID
-            let others = placements.filter { $0.id != id && !$0.onHome && WidgetDesk.screen($0.screen)?.displayUUID == uuid }
+            let others = placements.filter { $0.id != id && !$0.onHome && WidgetDesk.screen(of: $0)?.displayUUID == uuid }
                 .map { grid.cell(nearest: $0.frame(on: full)) }
             held = (screen, grid, others)
             (model.grid, model.origin) = (grid, full.origin)

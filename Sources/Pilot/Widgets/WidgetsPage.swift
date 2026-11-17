@@ -115,12 +115,14 @@ final class WidgetsPageModel {
     }
 
     /// Add on the Widgets page's map (Q252 B): a new placement on `display`'s first free cells, nearest its room's top
-    /// left, at the widget's own size in whole cells, Snap to grid on or off; its id, so the page picks it.
-    @discardableResult func add(_ widget: Widget, on display: WidgetsDisplay) -> String {
+    /// left, at the widget's own size in whole cells, Snap to grid on or off; its id, so the page picks it. `displays` are
+    /// the ones the page shows, `display` alone when none are given.
+    @discardableResult func add(_ widget: Widget, on display: WidgetsDisplay, among displays: [WidgetsDisplay]? = nil) -> String {
         var all = store.placements()
         let grid = Widget.Grid(area: display.room)
-        let others = all.filter(display.holds).map { $0.frame(on: display.frame) }
+        let others = all.filter { display.holds($0, among: displays ?? [display]) }.map { $0.frame(on: display.frame) }
         var placement = Widget.Placement.new(widget, after: all.count, screen: display.uuid)
+        placement.screenIdentity = display.identity
         let start = CGRect(x: display.room.minX, y: display.room.minY, width: widget.size.width, height: widget.size.height)
         if let cell = grid.pack(others + [start]).last { placement.land(on: grid.rect(cell), screen: display.frame) }
         all.append(placement)
@@ -264,7 +266,7 @@ struct WidgetsPage: View {
                 if home {
                     WidgetsHomeTiles(placements: model.placements.filter(\.onHome), widget: model.widget, selected: $selected)
                 } else if let display {
-                    WidgetsMap(display: display, placements: model.placements.filter(display.holds), widget: model.widget,
+                    WidgetsMap(display: display, placements: model.placements.filter { display.holds($0, among: shown) }, widget: model.widget,
                                snap: snap.on, selected: $selected)
                 }
             }
@@ -272,11 +274,11 @@ struct WidgetsPage: View {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 20) {
                     inspector.frame(minWidth: 400, maxWidth: .infinity, alignment: .topLeading)
-                    list(display).frame(width: 290)
+                    list(display, shown).frame(width: 290)
                 }
                 VStack(alignment: .leading, spacing: 20) {
                     inspector
-                    list(display)
+                    list(display, shown)
                 }
             }
             .padding(.top, 16).padding(.bottom, 20)
@@ -334,10 +336,10 @@ struct WidgetsPage: View {
         }
     }
 
-    private func list(_ display: WidgetsDisplay?) -> some View {
+    private func list(_ display: WidgetsDisplay?, _ shown: [WidgetsDisplay]) -> some View {
         WidgetsAddList(model: model, home: home) { widget in
             if home { selected = model.addHome(widget) }
-            else if let display { selected = model.add(widget, on: display) }
+            else if let display { selected = model.add(widget, on: display, among: shown) }
             else { model.add(widget) }
         }
     }

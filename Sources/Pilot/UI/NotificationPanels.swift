@@ -139,21 +139,26 @@ final class NotificationPanels: NotificationPresenting {
 
     func say(_ text: String) { HUD.tip(text, seconds: 3) }
 
-    /// The display the bell was left on, while it is connected, else the main one; and the bell's frame there.
+    /// The display the bell was left on (by identity, or a UUID from before identities), while it is connected, else the
+    /// main one; and the bell's frame there.
     private func bellScreen() -> NSScreen? {
         let last = bellPlaces.lastDisplay
-        return NSScreen.screens.first { $0.displayUUID == last } ?? NSScreen.screens.first ?? NSScreen.main
+        return NSScreen.screens.first { last != nil && ($0.displayIdentity == last || $0.displayUUID == last) } ?? NSScreen.screens.first ?? NSScreen.main
     }
 
+    /// A bell left on a UUID no display has now (macOS hands some a new one at a restart) keeps that place on the main
+    /// display it falls back to, as widgets do (Widget.Placement.screenIndex).
     private func bellFrame() -> CGRect {
-        let screen = bellScreen()
-        return bellPlaces.frame(on: screen?.displayUUID, visible: screen?.visibleFrame ?? notificationScreen())
+        let screen = bellScreen(), last = bellPlaces.lastDisplay
+        let lost = last.map { last in !NSScreen.screens.contains { $0.displayIdentity == last || $0.displayUUID == last } } ?? false
+        let keys = [screen?.displayIdentity, screen?.displayUUID, lost ? last : nil].compactMap { $0 }
+        return bellPlaces.frame(on: keys, visible: screen?.visibleFrame ?? notificationScreen())
     }
 
     /// A drag or pull let go: the bell stays on the display holding its middle, inside it, remembered there.
     private func bellDropped(_ frame: CGRect) {
         let middle = CGPoint(x: frame.midX, y: frame.midY)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(middle) }) ?? bellScreen(), let id = screen.displayUUID else { return }
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(middle) }) ?? bellScreen(), let id = screen.displayIdentity ?? screen.displayUUID else { return }
         let kept = bellPlaces.save(frame, on: id, visible: screen.visibleFrame)
         bellPanel?.setFrame(kept, display: true)
         model.bellSide = kept.width

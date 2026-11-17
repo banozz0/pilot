@@ -741,10 +741,13 @@ extension Widget {
 extension Widget {
     /// One widget on the desktop (the `widgets` collection): a widget may be placed more than once. Its top-left corner is
     /// a fraction of its screen's frame, so it keeps its place when the resolution changes; `screen` is the display's
-    /// UUID, nil for the main one. `workspace` is the one workspace it shows on, nil for every one (Q691): a new placement
-    /// starts with its widget.json's, and the Widgets page changes it.
+    /// UUID, nil for the main one, and `screenIdentity` its EDID identity, which outlasts a UUID macOS hands out anew
+    /// (LiveDisplay). `workspace` is the one workspace it shows on, nil for every one (Q691): a new placement starts with
+    /// its widget.json's, and the Widgets page changes it.
     public struct Placement: Codable, Equatable, Sendable {
         public var id: String, widget: String, screen: String?
+        /// The display's identity ("1507:46104:1010101"), kept beside `screen` by WidgetStore.save; nil before it was read.
+        public var screenIdentity: String?
         public var x: Double, y: Double, width: Double, height: Double
         public var workspace: String?
         /// Sven resized it (Hyper+right-drag, Q695): its size is his, never fitted to its content.

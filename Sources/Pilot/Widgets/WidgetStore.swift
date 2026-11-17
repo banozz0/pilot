@@ -314,11 +314,16 @@ struct WidgetStore: Sendable {
         return (try? Data(contentsOf: placementsFile)).flatMap { try? JSONDecoder().decode([Widget.Placement].self, from: $0) }
     }
 
-    func save(_ placements: [Widget.Placement]) throws {
+    /// Saves `placements`, each one's display identity kept beside its UUID from the display that has that UUID now, so
+    /// it still finds its screen once macOS hands that display a new UUID (LiveDisplay); the placements as saved.
+    @discardableResult func save(_ placements: [Widget.Placement]) throws -> [Widget.Placement] {
         try FileManager.default.createDirectory(at: placementsFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let live = LiveDisplay.connected()
+        let filled = placements.map { placement in var placement = placement; placement.fillIdentity(from: live); return placement }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        try encoder.encode(placements).write(to: placementsFile, options: .atomic)
+        try encoder.encode(filled).write(to: placementsFile, options: .atomic)
+        return filled
     }
 
     // MARK: Import
