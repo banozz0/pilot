@@ -13,8 +13,9 @@ public enum Mole {
     public static let analyze = "mo analyze"
 }
 
-/// What `mo clean --dry-run` says it would remove (story 117): each `→` line under its `➤` section, in Mole's words,
-/// and the summary's potential space. Review-only (`⊙`) and skipped (`◎`) lines are not cleaned, so they are left out.
+/// What `mo clean --dry-run` says it would remove (story 117): each item line under its `➤` section, in Mole's words,
+/// and the summary's potential space. Mole marks an item `→` up to 1.54 and `○` (its ICON_DRY_RUN) from 1.72; both
+/// mean it would clean it. Review-only (`⊙`) and skipped (`◎`) lines are not cleaned, so they are left out.
 public struct CleanPreview: Equatable, Sendable {
     public struct Item: Equatable, Sendable { public let section: String, title: String, detail: String }
 
@@ -29,12 +30,19 @@ public struct CleanPreview: Equatable, Sendable {
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("➤ ") { section = String(line.dropFirst(2)) }
-            else if line.hasPrefix("→ ") { items.append(item(String(line.dropFirst(2)), section: section)) }
+            else if let rest = itemLine(line) { items.append(item(rest, section: section)) }
             else if line.hasPrefix("Potential space: ") {
-                total = line.dropFirst("Potential space: ".count).components(separatedBy: " | ").first
+                // "28.75GB | Items: 834 | Categories: 6" up to 1.54, "2.09GB · 212 items" from 1.72: the size alone.
+                total = line.dropFirst("Potential space: ".count).components(separatedBy: " | ").first?
+                    .components(separatedBy: " · ").first
             } else if line.contains("System caches need sudo") { systemSkipped = true }
         }
         return CleanPreview(items: items, total: total, systemSkipped: systemSkipped)
+    }
+
+    /// An item line's text after its marker, `→ ` (Mole 1.54) or `○ ` (Mole 1.72); nil for any other line.
+    static func itemLine(_ line: String) -> String? {
+        line.hasPrefix("→ ") || line.hasPrefix("○ ") ? String(line.dropFirst(2)) : nil
     }
 
     /// "Chrome cache · 1.73GB dry" or "Chrome Service Worker, would clean 270.4MB, 0 protected": the title, then the rest
@@ -48,7 +56,7 @@ public struct CleanPreview: Equatable, Sendable {
     }
 }
 
-/// How far Mole's preview has got (card agent-bo-95423002): the `➤` section it is on and the `→` items found so far.
+/// How far Mole's preview has got (card agent-bo-95423002): the `➤` section it is on and the items (`→` or `○`) found so far.
 public struct CleanProgress: Equatable, Sendable {
     public var section: String?
     public var items = 0
@@ -61,7 +69,7 @@ public struct CleanProgress: Equatable, Sendable {
     /// Reads one line of Mole's output as it prints it.
     public mutating func read(_ line: String) {
         let line = line.trimmingCharacters(in: .whitespaces)
-        if line.hasPrefix("➤ ") { section = String(line.dropFirst(2)) } else if line.hasPrefix("→ ") { items += 1 }
+        if line.hasPrefix("➤ ") { section = String(line.dropFirst(2)) } else if CleanPreview.itemLine(line) != nil { items += 1 }
     }
 }
 
