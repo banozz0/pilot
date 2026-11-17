@@ -51,8 +51,8 @@ way, draining as it is used.
 
 Claude's limit reset credits come from Ghostex, which holds the Claude sign-in: `ghostex accounts --json` lists each
 Claude account's `resetCreditDetails` (`id`, `expiresAt`, an optional `note`), the account matched by the email Claude
-Code signed in with. A popover or page asks it once the last answer (paths.cache/claude-resets.json) is over 5 minutes
-old; the bar only reads that answer. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
+Code signed in with. A popover asks it again once the last answer (paths.cache/claude-resets.json) is over 30 s old, a
+page over 120 s, Refresh now always, waiting at most 1 s; the bar only reads that answer. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
 Anthropic reads and redeems these only with Claude Code's sign-in token, so Redeem in Ghostex opens Ghostex, whose
 account usage panel redeems them; without Ghostex, Claude shows no credits.
 
@@ -109,7 +109,8 @@ STATUSLINE_TRIES = 40  # newest status-line files read for one with rate_limits
 GHOSTEX_CLI = "/Applications/Ghostex.app/Contents/Resources/CLI/ghostex"
 GHOSTEX_ID = "com.madda.ghostex.host"
 GHOSTEX_FILE = "claude-resets.json"
-GHOSTEX_FRESH = 300  # a popover or page asks Ghostex again when its answer is older; Ghostex asks Anthropic every 15 min
+GHOSTEX_FRESH = 300  # at most this old an answer of Ghostex's is reused (a popover's 30 s, a page's 120 s); Ghostex asks Anthropic every 15 min
+GHOSTEX_WAIT = 1.0  # seconds Ghostex may take, so Codex keeps the rest of a popover's or page's wait
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 SESSION, WEEK = 300, 10080  # window lengths in minutes
 WARN, ALERT = 60, 85  # percent used
@@ -288,7 +289,7 @@ def ask_ghostex(deadline):
         return None
     try:
         out = subprocess.run([program, "accounts", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, timeout=max(0.5, deadline - time.monotonic()),
+                             stderr=subprocess.DEVNULL, timeout=max(0.2, min(GHOSTEX_WAIT, deadline - time.monotonic())),
                              start_new_session=True).stdout
         data = json.loads(out)
     except (OSError, subprocess.SubprocessError, ValueError):
