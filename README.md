@@ -9,13 +9,13 @@ the keyboard-driven desktop Linux people love, made for the Mac.
 
 <p align="center">
 <a href="https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg"><b>Download Pilot.dmg</b></a>
-&nbsp;·&nbsp; <a href="https://pilot-mac.vercel.app">Website</a>
+&nbsp;·&nbsp; <a href="https://www.pilotformac.com">Website</a>
 &nbsp;·&nbsp; <a href="https://github.com/banozz0/pilot/releases">Releases</a>
 &nbsp;·&nbsp; macOS 27+, Apple silicon &nbsp;·&nbsp; Free, MIT
 </p>
 
 <p align="center">
-<a href="https://pilot-mac.vercel.app/#film"><img src="site/pilot-film-poster.jpg" width="720" alt="Pilot in five minutes: play the film"></a><br>
+<a href="https://www.pilotformac.com/#film"><img src="site/pilot-film-poster.jpg" width="720" alt="Pilot in five minutes: play the film"></a><br>
 <sub>▶ Pilot in five minutes: every feature, start to finish. Click to play it on the website.</sub>
 </p>
 
@@ -26,21 +26,21 @@ under it runs whatever you set.
 
 | | Area | What you get | Key |
 |---|---|---|---|
-| ⌨️ | [Keys and binds](https://pilot-mac.vercel.app/keys.html) | Every key under Hyper does what you set, from one picture of your keyboard. Hold Hyper to see what each key does. | Hyper |
-| 🪟 | [Windows and workspaces](https://pilot-mac.vercel.app/windows.html) | Pilot's own tiler arranges every window across nine workspaces, without turning off System Integrity Protection. Columns, rows, grid or scrolling. | `Hyper+1…9` |
-| 🖼️ | [Desktop and widgets](https://pilot-mac.vercel.app/desktop.html) | Widgets on the desktop and on Home, one menu on Hyper + right-click, and any folder as a gallery: pick a wallpaper by looking. | |
-| 🔎 | [Launcher](https://pilot-mac.vercel.app/launcher.html) | One search box for apps, windows, files, actions, settings and answers: maths, units, money, time zones, emoji. | `Hyper+Space` |
-| 📋 | [Clipboard and notes](https://pilot-mac.vercel.app/clipboard.html) | Everything you copy, kept on your Mac, plus quick notes and snippets that type themselves. | |
-| 📸 | [Captures](https://pilot-mac.vercel.app/captures.html) | Screenshots, scrolling captures, screen recordings and text from the screen, with an image and video editor. | |
-| 🎙️ | [Dictation and voice](https://pilot-mac.vercel.app/dictation.html) | Talk and Pilot types it, with a speech model running on your Mac. Read aloud speaks selected text back. | Your pick |
-| ✨ | [AI](https://pilot-mac.vercel.app/ai.html) | An AI chat on the plan you already pay for, and AI on any text you select. | `Hyper+Q` |
-| 🌐 | [Web apps](https://pilot-mac.vercel.app/webapps.html) | Turn a site into a small Mac app with its own Dock icon, Cmd+Tab entry and logins. | |
-| 🧩 | [Extensions](https://pilot-mac.vercel.app/extensions.html) | Add commands from the catalogue or build your own, and drive Pilot from a terminal or an agent. | |
-| 📊 | [Menu bar and top bar](https://pilot-mac.vercel.app/menubar.html) | Pilot's icon in the menu bar, or a top bar of its own in place of macOS's, and a terminal that drops from it. | `Hyper+T` |
+| ⌨️ | [Keys and binds](https://www.pilotformac.com/keys.html) | Every key under Hyper does what you set, from one picture of your keyboard. Hold Hyper to see what each key does. | Hyper |
+| 🪟 | [Windows and workspaces](https://www.pilotformac.com/windows.html) | Pilot's own tiler arranges every window across nine workspaces, without turning off System Integrity Protection. Columns, rows, grid or scrolling. | `Hyper+1…9` |
+| 🖼️ | [Desktop and widgets](https://www.pilotformac.com/desktop.html) | Widgets on the desktop and on Home, one menu on Hyper + right-click, and any folder as a gallery: pick a wallpaper by looking. | |
+| 🔎 | [Launcher](https://www.pilotformac.com/launcher.html) | One search box for apps, windows, files, actions, settings and answers: maths, units, money, time zones, emoji. | `Hyper+Space` |
+| 📋 | [Clipboard and notes](https://www.pilotformac.com/clipboard.html) | Everything you copy, kept on your Mac, plus quick notes and snippets that type themselves. | |
+| 📸 | [Captures](https://www.pilotformac.com/captures.html) | Screenshots, scrolling captures, screen recordings and text from the screen, with an image and video editor. | |
+| 🎙️ | [Dictation and voice](https://www.pilotformac.com/dictation.html) | Talk and Pilot types it, with a speech model running on your Mac. Read aloud speaks selected text back. | Your pick |
+| ✨ | [AI](https://www.pilotformac.com/ai.html) | An AI chat on the plan you already pay for, and AI on any text you select. | `Hyper+Q` |
+| 🌐 | [Web apps](https://www.pilotformac.com/webapps.html) | Turn a site into a small Mac app with its own Dock icon, Cmd+Tab entry and logins. | |
+| 🧩 | [Extensions](https://www.pilotformac.com/extensions.html) | Add commands from the catalogue or build your own, and drive Pilot from a terminal or an agent. | |
+| 📊 | [Menu bar and top bar](https://www.pilotformac.com/menubar.html) | Pilot's icon in the menu bar, or a top bar of its own in place of macOS's, and a terminal that drops from it. | `Hyper+T` |
 
 No key listed? Type the feature's name in Hyper+Space, or give it one on the Binds page. Also in the box: file search
 and convert, Mac controls and stats, app install, update and clean, and the `pilot` command.
-[All 198 features](https://pilot-mac.vercel.app/#features).
+[All 198 features](https://www.pilotformac.com/#features).
 
 No analytics and no crash reporting. File search, dictation, read aloud and translate run on your Mac; AI goes only to
 the provider you pick.

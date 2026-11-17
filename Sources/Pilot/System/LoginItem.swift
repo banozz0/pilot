@@ -19,9 +19,25 @@ final class LoginItem {
             default: .notRegistered
             }
         }, register: { try SMAppService.mainApp.register() }, unregister: { try SMAppService.mainApp.unregister() }) }
+
+        /// For a Pilot that does not own the login item (LaunchAtLogin.owns): reads it, never changes it.
+        static var handsOff: Service {
+            let refused = { throw LoginItemRefused() }
+            return Service(status: live.status, register: refused, unregister: refused)
+        }
     }
 
-    static let shared = LoginItem(service: .live)
+    struct LoginItemRefused: LocalizedError {
+        var errorDescription: String? { "Only an installed Pilot.app launches at login; this run leaves the login items alone." }
+    }
+
+    static let shared = LoginItem(service: LaunchAtLogin.owns(bundlePath: Bundle.main.bundlePath, debugBuild: isDebugBuild,
+                                                              environment: ProcessInfo.processInfo.environment) ? .live : .handsOff)
+    #if DEBUG
+    private static let isDebugBuild = true
+    #else
+    private static let isDebugBuild = false
+    #endif
 
     @ObservationIgnored private let service: Service
     /// Read live, so an approval given in System Settings shows at onboarding's next check.
