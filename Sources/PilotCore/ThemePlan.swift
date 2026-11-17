@@ -66,11 +66,12 @@ public struct ThemePlan: Sendable {
     /// Wallpaper claims carried as they are: a shipped pack whose pictures are not here leaves those screens alone, and
     /// Restore still puts each original back. No mutation, so nothing words them as a change.
     public let heldWallpapers: [ThemeWallpaperClaim]
-    /// File regions the person changed since: their change stays, and only Pilot's claim on each goes.
-    public let keptFiles: [ThemeClaim]
-    /// File claims carried as they are: the file moved, or its link points elsewhere, since the theme, so nothing writes
-    /// there and Restore leaves it too, until `theme take` gives it back.
-    public let heldFiles: [ThemeClaim]
+    /// Claims as this plan read them where the ledger says otherwise: the file moved, its link points elsewhere, or its
+    /// region was changed outside Pilot. A theme applies to every file (Sven, 2026-11-17), so the commit records these
+    /// first and then writes over them like any other.
+    public let takenFiles: [ThemeClaim]
+    /// The regions among them changed outside Pilot, as they read now: each is copied to the backups folder before the write.
+    public let backups: [ThemeClaim]
     /// Pilot's own parts the person changed since the theme: Restore leaves them, Apply gives them this theme with the
     /// person's choice as what Restore puts back.
     public let keptLook: [String]
@@ -82,12 +83,12 @@ public struct ThemePlan: Sendable {
     public let ghostexClaims: [ThemeSettingClaim]
     public let apps: [ThemeAppBinding]
     public init(id: String, packID: String?, revision: String?, binding: ThemeBinding, style: String, ledger: ThemeSnapshot,
-                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], wallpaperImages: Int? = nil, keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], keptFiles: [ThemeClaim] = [], heldFiles: [ThemeClaim] = [], keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
+                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], wallpaperImages: Int? = nil, keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], takenFiles: [ThemeClaim] = [], backups: [ThemeClaim] = [], keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
         self.id = id; self.packID = packID; self.revision = revision; self.binding = binding; self.style = style
         self.zed = zed; self.zedOptOut = zedOptOut; self.observations = observations
         self.obsidian = obsidian; self.obsidianOptOut = obsidianOptOut
         self.ledger = ledger; self.protectedLegacy = protectedLegacy; self.mutations = mutations; self.selection = selection; self.warnings = warnings
-        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.wallpaperImages = wallpaperImages; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.keptFiles = keptFiles; self.heldFiles = heldFiles; self.keptLook = keptLook
+        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.wallpaperImages = wallpaperImages; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.takenFiles = takenFiles; self.backups = backups; self.keptLook = keptLook
         self.reloads = reloads
         self.ghostexState = ghostexState; self.ghostex = ghostex; self.ghostexClaims = ghostexClaims; self.apps = apps
     }

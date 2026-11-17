@@ -245,29 +245,28 @@ def run(seam_only=False, fixes_only=False):
         f.preserved()
         passed('existing generated file restored byte-for-byte with mode across switches/restart')
 
-        # The coordinator's brief (Sven Q38): a part the person edited keeps their edit, only that claim goes, and
-        # the rest of Restore finishes with a plain line.
-        pre = f.actual.read_bytes()
+        # Sven, 2026-11-17: a theme applies to everything. A part changed outside Pilot is written like any other, and
+        # a copy of it is saved first, so Restore keeps what was there.
+        pre, found = f.actual.read_bytes(), f.generated.read_bytes()
         f.apply()
         mine = f.generated.read_bytes() + b'# Later owned edit\n'
         f.generated.write_bytes(mine)
-        kept = f.call('theme', 'plan', 'restore')['review']['kept']
-        assert len(kept) == 1 and f.generated.name in kept[0] and 'stays: you edited' in kept[0], kept
+        plan = f.call('theme', 'plan', 'restore')
+        assert plan['review']['kept'] == [] and [w for w in plan['warnings'] if f.generated.name in w and 'changed outside Pilot' in w], plan
         answer = f.restore()
-        assert answer['status'] == 'restored' and len(answer['kept']) == 1 and answer['kept'][0].startswith('Kept your change to'), answer
-        assert f.generated.read_bytes() == mine and f.actual.read_bytes() == pre and not f.call('theme', 'status')['owned']
+        assert answer['status'] == 'restored' and answer['kept'] == [] and len(answer['backups']) == 1, answer
+        assert Path(answer['backups'][0]).read_bytes() == mine and stat.S_IMODE(Path(answer['backups'][0]).stat().st_mode) == 0o600, answer
+        assert f.generated.read_bytes() == found and f.actual.read_bytes() == pre and not f.call('theme', 'status')['owned']
         f.generated.unlink()
         f.apply()
         original = f.actual.read_bytes()
         loader = ('config-file = ?' + str(f.generated)).encode()
         assert loader in original
-        mine = original.replace(loader, loader + b'-changed', 1)
-        f.actual.write_bytes(mine)
+        f.actual.write_bytes(original.replace(loader, loader + b'-changed', 1))
         answer = f.restore()
-        assert answer['status'] == 'restored' and answer['kept'][0].startswith('Kept your change to'), answer
-        assert f.actual.read_bytes() == mine and not f.generated.exists() and not f.call('theme', 'status')['owned']
-        f.actual.write_bytes(pre)
-        passed('a later edit to the generated file or the loader block stays as the person made it; only that claim goes and Restore finishes the rest')
+        assert answer['status'] == 'restored' and answer['kept'] == [] and b'-changed' in Path(answer['backups'][0]).read_bytes(), answer
+        assert f.actual.read_bytes() == pre and not f.generated.exists() and not f.call('theme', 'status')['owned']
+        passed('a later edit to the generated file or the loader block is written over like any other, with a copy of it saved first')
 
         for stale in ['target', 'pack', 'asset', 'style', 'binding', 'ledger', 'link']:
             saved = f.snapshot()
@@ -1396,8 +1395,10 @@ def detected_apps(passed):
         assert [c for c in plan['review']['changes'] if 'Notes (in work)' in c] and [c for c in plan['review']['changes'] if 'Notes (in home)' in c], plan['review']
         assert f.call('theme', 'apply', plan['id'])['status'] == 'applied'
         (twins[0] / '.obsidian/appearance.json').write_bytes(b'{ "enabledCssSnippets":["personal"] }\n')
-        message = json.dumps(f.call('theme', 'plan', 'restore')['review']['kept'])
-        assert 'Notes (in work)' in message and 'Notes (in home)' not in message and 'snippet stays off' in message, message
+        # A snippet turned off is no longer kept apart (Sven, 2026-11-17): Restore plans both vaults, each named apart.
+        plan = f.call('theme', 'plan', 'restore')
+        assert plan['review']['kept'] == [] and [c for c in plan['review']['changes'] if 'Notes (in work)' in c] and [c for c in plan['review']['changes'] if 'Notes (in home)' in c], plan['review']
+        assert f.call('theme', 'restore', plan['id'])['status'] == 'restored' and b'personal' in (twins[0] / '.obsidian/appearance.json').read_bytes()
         f.stop()
 
     def gone():
@@ -1444,7 +1445,7 @@ def detected_apps(passed):
                        ('cursor colours follow, shown in Preview, Restore returns Custom, keep personal, denied Apply leaves it; macOS\'s pointer claims nothing and asks nothing', cursor),
                        ('a light theme switches macOS to Light mode and Restore puts Dark back; a mode or palette the person changed after is let go (Restore keeps it, Apply takes it); switched off, the light theme still shows in Zed and Obsidian in Dark mode; Look\'s parts go before the mode, and an Apply or Restore stopped between or after the switch recovers at launch; a late switch counts; a press in Pilot\'s window applies and restores with no Allow while the CLI still asks; with Auto on the switch is skipped and nothing claimed', mode),
                        ('Ghostex config left alone; a claim from an earlier build still leaves exact', ghostex),
-                       ('two vaults with one folder name are told apart; a snippet turned off names its vault', told_apart),
+                       ('two vaults with one folder name are told apart, in Apply and in a Restore after a snippet was turned off', told_apart),
                        ('owned root that is gone drops with a warning and no write; one that exists but fails still refuses', gone),
                        ('unusable destination skipped with one warning', unusable)]:
         live.clear()
@@ -1591,12 +1592,12 @@ def linked_config(passed):
         f, dots, real = setup('y'); f.start(); assert f.apply()['status'] == 'applied'
         other = dots / 'other'; other.write_bytes(real.read_bytes()); kept = real.read_bytes()
         f.config.unlink(); f.config.symlink_to(other)
-        # Another target holds the config: Pilot leaves both files alone, names the link, and the rest still plans.
+        # Another target holds the config: the claim follows the link (Sven, 2026-11-17), so Restore takes Pilot's block
+        # out of the file it points at now and leaves the old one alone.
         answer = f.call('theme', 'plan', 'restore')
         paths = [change['path'] for change in answer['changes']]
-        assert any('theme take' in line and str(f.config.name) in line for line in answer['review']['kept']), answer
-        assert all(not path.endswith('/config') for path in paths) and any(path.endswith('pilot-theme.conf') for path in paths), answer
-        assert real.read_bytes() == kept and other.read_bytes() == kept, answer
+        assert answer['review']['kept'] == [] and any(path.endswith('/config') for path in paths) and any(path.endswith('pilot-theme.conf') for path in paths), answer
+        assert f.restore()['status'] == 'restored' and other.read_bytes() == f.original and real.read_bytes() == kept
         f.stop()
         # A claim from build 2136, whose anchor still holds the link's own identity: Sven may have applied with it.
         f, dots, real = setup('z'); f.start(); assert f.apply()['status'] == 'applied'; f.stop()
@@ -1611,7 +1612,7 @@ def linked_config(passed):
         intact(f, dots, real); f.stop()
 
     for label, check in [('applies through the link, the link stays, Restore is byte exact', through_link),
-                         ('ln -sf to the same target keeps ownership, another target refuses, a 2136 claim still reads', relinked),
+                         ('ln -sf to the same target keeps ownership, another target takes the claim along, a 2136 claim still reads', relinked),
                          ('a failed Apply rolls back through the link; a committed one verifies', around_failures),
                          ('the link moving after Preview or during Allow refuses', link_moves),
                          ('broken, folder, pipe, hardlinked, other-file and root links refuse', refusals)]:

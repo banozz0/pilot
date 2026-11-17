@@ -341,18 +341,23 @@ private struct ThemePackControls: View {
                 Button("Delete…") { deleting = packs.first { $0.id == selected } }.disabled(!deletable)
             }
             if let apps {
-                if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
-                if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
-                ForEach(apps.apps, id: \.kind) { app in
-                    if let kind = ThemeAppKind(rawValue: app.kind) { appSwitch("\(app.name) follows", on: app.on, app: .app(kind)) }
-                }
-                if !apps.vaults.isEmpty {
-                    appSwitch("Obsidian follows", on: apps.obsidianOn, app: .obsidian)
-                    ForEach(apps.vaults, id: \.root) { vault in
-                        appSwitch(ThemeCoordinator.vaultLabel(vault.root, among: apps.vaults.map(\.root)), on: vault.on, app: .vault(vault.root))
-                            .help(vault.root).padding(.leading, 18).disabled(!apps.obsidianOn)
+                // Off is Pilot only (Sven, 2026-11-17): Pilot's own look takes the theme and no other app's files change.
+                appSwitch("Themes recolour other apps", on: apps.othersOn, app: .others)
+                    .help("Off: Pilot only. A theme changes Pilot's own look, and no other app's files.")
+                Group {
+                    if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
+                    if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
+                    ForEach(apps.apps, id: \.kind) { app in
+                        if let kind = ThemeAppKind(rawValue: app.kind) { appSwitch("\(app.name) follows", on: app.on, app: .app(kind)) }
                     }
-                }
+                    if !apps.vaults.isEmpty {
+                        appSwitch("Obsidian follows", on: apps.obsidianOn, app: .obsidian)
+                        ForEach(apps.vaults, id: \.root) { vault in
+                            appSwitch(ThemeCoordinator.vaultLabel(vault.root, among: apps.vaults.map(\.root)), on: vault.on, app: .vault(vault.root))
+                                .help(vault.root).padding(.leading, 18).disabled(!apps.obsidianOn)
+                        }
+                    }
+                }.padding(.leading, 18).disabled(!apps.othersOn)
             }
         }
     }

@@ -174,9 +174,12 @@ public struct ThemeClaim: Codable, Equatable, Sendable {
         self.root = root; self.path = path; self.resolved = resolved; self.anchor = anchor; self.selector = selector
         self.original = original; self.last = last; self.codec = codec; self.originalFileAbsent = originalFileAbsent
     }
-    /// The same claim with its region as the file holds it now.
-    public func reading(_ now: Data?) -> ThemeClaim {
-        var claim = ThemeClaim(root: root, path: path, resolved: resolved, anchor: anchor, selector: selector, original: original, last: now, codec: codec, originalFileAbsent: originalFileAbsent)
+    /// The same claim with its region as the file holds it now. `at`: the file as it is now, for one that moved or whose
+    /// link points elsewhere (a theme applies to every file, Sven 2026-11-17); the claim follows the path, and Restore
+    /// still puts back what was there before the theme.
+    public func reading(_ now: Data?, at current: ThemeSnapshot? = nil) -> ThemeClaim {
+        var claim = ThemeClaim(root: root, path: path, resolved: current?.resolved ?? resolved, anchor: current?.anchor ?? anchor, selector: selector,
+                               original: original, last: now, codec: codec, originalFileAbsent: originalFileAbsent)
         claim.bindingID = bindingID
         return claim
     }
@@ -279,7 +282,7 @@ public struct ThemeJournal: Codable, Sendable {
     public var ghostexSettings: [ThemeSettingMutation]? = nil
     /// Wallpaper claims this operation drops without touching the screen or collection: the person changed them since.
     public var keptWallpapers: [ThemeWallpaperTarget]? = nil
-    /// File claims this operation drops without writing: the person changed those regions since.
+    /// File claims a journal from before 2026-11-17 dropped without writing; read so its recovery still runs, never written now.
     public var keptFiles: [ThemeClaim]? = nil
     /// Pilot's own parts the person changed since, let go by this operation (ThemeAppearanceOwnership.parts).
     public var keptLook: [String]? = nil

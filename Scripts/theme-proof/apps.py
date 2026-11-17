@@ -146,8 +146,10 @@ def checks(passed):
         assert [w for w in plan['warnings'] if 'colorCustomizations comes back' in w], plan['warnings']
         assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and b'#123456' not in settings.read_bytes()
         mine = settings.read_bytes().replace(b'editor.background', b'editor.background2'); settings.write_bytes(mine)
+        # A theme applies to everything (Sven, 2026-11-17): the later edit is written over, with a copy of it saved first.
         answer = f.restore()
-        assert answer['status'] == 'restored' and [k for k in answer['kept'] if 'settings.json' in k] and settings.read_bytes() == mine, answer
+        assert answer['status'] == 'restored' and answer['kept'] == [] and [p for p in answer['backups'] if b'editor.background2' in Path(p).read_bytes()], answer
+        assert b'editor.background2' not in settings.read_bytes() and b'#123456' in settings.read_bytes(), settings.read_bytes()
         f.stop()
 
     def reformatted():
@@ -164,14 +166,15 @@ def checks(passed):
         answer = f.restore(); assert answer['status'] == 'restored' and answer['kept'] == [], answer
         assert strip_jsonc(settings.read_text()) == {**strip_jsonc(JSONC.decode()), 'editor.tabSize': 2}, settings.read_text()
         assert (roots['kitty'] / 'kitty.conf').read_bytes() == b'font_size 13\n' and not (roots['kitty'] / 'pilot-theme.conf').exists()
-        # The person's own colour: it stays, only that claim goes, and Kitty still follows.
+        # The person's own colour: the theme writes over it like any other file (Sven, 2026-11-17), with a copy saved first.
         f.apply(); value = strip_jsonc(settings.read_text()); value['workbench.colorCustomizations']['editor.background'] = '#010203'
         settings.write_text(json.dumps(value, indent=2))
-        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'settings.json' in k], plan['review']
-        answer = f.call('theme', 'apply', plan['id']); assert answer['status'] == 'applied' and answer['kept'], answer
-        assert strip_jsonc(settings.read_text())['workbench.colorCustomizations']['editor.background'] == '#010203'
+        plan = f.call('theme', 'plan', 'apply', 'b')
+        assert plan['review']['kept'] == [] and [w for w in plan['warnings'] if 'settings.json' in w and 'changed outside Pilot' in w], plan
+        answer = f.call('theme', 'apply', plan['id']); assert answer['status'] == 'applied' and [p for p in answer['backups'] if b'#010203' in Path(p).read_bytes()], answer
+        assert strip_jsonc(settings.read_text())['workbench.colorCustomizations']['editor.background'] == f.packs[1]['palette']['background']
         assert f.packs[1]['palette']['background'] in (roots['kitty'] / 'pilot-theme.conf').read_text()
-        assert f.restore()['status'] == 'restored' and strip_jsonc(settings.read_text())['workbench.colorCustomizations']['editor.background'] == '#010203'
+        assert f.restore()['status'] == 'restored' and strip_jsonc(settings.read_text()).get('workbench.colorCustomizations') == strip_jsonc(JSONC.decode()).get('workbench.colorCustomizations')
         assert not (roots['kitty'] / 'pilot-theme.conf').exists(); f.stop()
 
     def installed_without_folders():
@@ -297,9 +300,9 @@ def checks(passed):
             target.write_bytes(b'#? Config file for btop v.1.4.8\n\ncolor_theme = "pilot"\n\ntheme_background = false\n')
         rewritten = target.read_bytes()
         assert rewritten.startswith(b'#? Config file for btop') and b'Pilot theme pack' not in rewritten, rewritten[:200]
-        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'btop.conf' in k], plan['review']
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert plan['review']['kept'] == [], plan['review']
         kitty = (roots['kitty'] / 'pilot-theme.conf').read_bytes()
-        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and target.read_bytes() == rewritten
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and b'Pilot theme pack' in target.read_bytes()
         assert (roots['kitty'] / 'pilot-theme.conf').read_bytes() != kitty and theme(roots['btop'] / 'themes/pilot.theme')['main_bg'] == f.packs[1]['palette']['background']
         answer = f.restore(); assert answer['status'] == 'restored', answer
         left = target.read_text()
@@ -308,15 +311,15 @@ def checks(passed):
               + repr([l for l in left.splitlines() if l.startswith(('color_theme', 'theme_background'))]), flush=True)
         f.stop()
         # A btop that rewrites btop.conf (an option changed, or the file had no header) keeps Pilot's values and drops its
-        # markers: Pilot then counts the file as the person's, keeps following through pilot.theme, and Restore leaves it.
+        # markers: the next Apply writes Pilot's part again (Sven, 2026-11-17), and Restore takes it out.
         f, home, roots, tree = setup('btr', apps=['btop'])
         target = roots['btop'] / 'btop.conf'; target.write_bytes(made); f.start()
         assert f.apply()['status'] == 'applied'
         rewritten = made.replace(b'"Default"', b'"pilot"').replace(b'= true', b'= false'); target.write_bytes(rewritten)
-        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'btop.conf' in k], plan['review']
-        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and target.read_bytes() == rewritten
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert plan['review']['kept'] == [], plan['review']
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and b'Pilot theme pack' in target.read_bytes()
         assert theme(roots['btop'] / 'themes/pilot.theme')['main_bg'] == f.packs[1]['palette']['background']
-        assert f.restore()['status'] == 'restored' and target.read_bytes() == rewritten and not (roots['btop'] / 'themes/pilot.theme').exists()
+        assert f.restore()['status'] == 'restored' and target.read_bytes() == rewritten and not (roots['btop'] / 'themes/pilot.theme').exists(), target.read_bytes()
         f.stop()
 
     def lazygit_neovim():
@@ -476,11 +479,11 @@ def checks(passed):
         (roots['fish'] / 'conf.d').mkdir(); settings = roots['vesktop'] / 'settings/settings.json'; settings.parent.mkdir(); settings.write_text(json.dumps(mine, indent=4))
         before = tree(); f.start(); assert f.apply()['status'] == 'applied' and f.restore()['status'] == 'restored'
         assert tree() == before, 'Restore was not byte exact'
-        # Turned off in Vesktop's own Themes tab: that stays the person's, and Pilot's file still follows.
+        # Turned off in Vesktop's own Themes tab: the next Apply turns it on again (Sven, 2026-11-17); Vesktop's follow
+        # switch is how to keep it off.
         assert f.apply()['status'] == 'applied'; off = json.loads(settings.read_text()); off['enabledThemes'] = []; settings.write_text(json.dumps(off, indent=4))
-        plan = f.call('theme', 'plan', 'apply', 'b'); assert [k for k in plan['review']['kept'] if 'stays off in Vesktop' in k], plan['review']
-        print('  Vesktop turned off, Preview kept: ' + json.dumps(plan['review']['kept']), flush=True)
-        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and json.loads(settings.read_text())['enabledThemes'] == []
+        plan = f.call('theme', 'plan', 'apply', 'b'); assert plan['review']['kept'] == [], plan['review']
+        assert f.call('theme', 'apply', plan['id'])['status'] == 'applied' and json.loads(settings.read_text())['enabledThemes'] != []
         assert f.restore()['status'] == 'restored' and json.loads(settings.read_text())['enabledThemes'] == []; f.stop()
 
     def lazygit_reads(home, roots, accent):
@@ -517,14 +520,14 @@ def checks(passed):
                          ('Alacritty inside an existing [general], with no file, and skipped with its own import list', alacritty_general),
                          ('a settings file Pilot made survives the editor rewriting it', made_settings_survive_the_editor),
                          ('an absent app gets nothing; each switch persists and releases', absent_and_switches),
-                         ("owned-value rules: someone else's file skips, a later edit stays the person's, own colours come back", owned_values),
-                         ('a reformatted settings.json is still Pilot\'s; a colour the person changed stays theirs while the rest follows', reformatted),
+                         ("owned-value rules: someone else's file skips, a later edit is written over with a copy saved, own colours come back", owned_values),
+                         ('a reformatted settings.json is still Pilot\'s; a colour the person changed takes the theme too, with a copy saved', reformatted),
                          ('installed apps with no config folder yet, and WezTerm by ~/.wezterm.lua, follow; Apply makes the folders and Restore removes them; Alacritty on ~/.alacritty.toml skips with why', installed_without_folders),
                          ('Apply and Restore reload Ghostty through its menu; a missing item or a closed Ghostty says so plainly', ghostty_reloads),
                          ('a broken link and a link for the generated file skip the app and write nothing', refuses),
                          ("lazygit and Neovim: Sven's shapes set and put back byte for byte and read by the real apps; under a gui of the person's; skips with why; init.vim, an own line, a return, no init", lazygit_neovim),
-                         ("fish and Vesktop: Sven's shapes set and put back byte for byte, real fish reads its colours; Vencord's whole-file rewrite keeps the entry Pilot's; turned off in Vesktop stays off", fish_vesktop),
-                         ('btop: every theme key, its config set and put back byte for byte, with a config and without; a btop rewrite keeps it the person\'s', btop),
+                         ("fish and Vesktop: Sven's shapes set and put back byte for byte, real fish reads its colours; Vencord's whole-file rewrite keeps the entry Pilot's; turned off in Vesktop comes back on", fish_vesktop),
+                         ('btop: every theme key, its config set and put back byte for byte, with a config and without; a btop rewrite gets Pilot\'s part again', btop),
                          ('Allow names all twelve', many)]:
         check(); passed('apps ' + label)
 

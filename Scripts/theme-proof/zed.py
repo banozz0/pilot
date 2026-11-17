@@ -278,17 +278,18 @@ def run(seam_only=False, fixes_only=False):
         f.start()
 
         assert f.apply()['status'] == 'applied'; palette(f, f.packs[0]); f.zpreserved()
-        # Pilot holds both slots now (build 2168), so the person's later light theme replaces Pilot's there and stays theirs.
+        # Pilot holds both slots (build 2168), and a theme applies to everything (Sven, 2026-11-17): the person's later light
+        # theme is written over like Pilot's own, and Restore puts the original back. Their mode and font stay.
         changed = f.zactual.read_bytes().replace(b'"mode": "system"', b'"mode": "light"').replace(b'"Pilot a Dark"', b'"Later Light"', 1).replace(b'"Keep Editor"', b'"Later Font"')
         f.zactual.write_bytes(changed)
         f.apply('b'); palette(f, f.packs[1])
         f.stop(); f.start(); assert f.call('theme', 'status')['selected']['id'] == 'b'
         assert f.restore()['status'] == 'restored'
-        expected = f.zoriginal.replace(b'"mode": "system"', b'"mode": "light"').replace(b'"Keep Light"', b'"Later Light"').replace(b'"Keep Editor"', b'"Later Font"')
+        expected = f.zoriginal.replace(b'"mode": "system"', b'"mode": "light"').replace(b'"Keep Editor"', b'"Later Font"')
         assert f.zactual.read_bytes() == expected
         assert not f.zasset.exists()
         f.stop()
-        passed('dynamic A->B->restart->Restore keeps BOM/CRLF/comments/trailing commas, fonts, later mode/opposite/font edits and exact original selection; generated asset originally absent is removed')
+        passed('dynamic A->B->restart->Restore keeps BOM/CRLF/comments/trailing commas, fonts, later mode/font edits, writes over a later slot edit, and puts the exact original selection back; generated asset originally absent is removed')
 
         for dynamic in [False, True]:
             f = fixture('switch', dynamic=dynamic)
@@ -323,16 +324,17 @@ def run(seam_only=False, fixes_only=False):
         f.restore(); f.stop()
         passed('resource/selector identities distinguish equal settings.json filenames across roots; Zed-only packs preserve Ghostty')
 
-        # The coordinator's brief (Sven Q38): the person's theme choice stays, only that claim goes, the rest runs.
+        # Sven, 2026-11-17: a theme applies to everything. The person's theme choice is written over like any other part,
+        # with a copy of it saved first, and Restore puts back what was there before the theme.
         f = fixture('conf'); f.start(); f.apply(); old = f.zactual.read_bytes()
         mine = old.replace(b'Pilot a Dark', b'User changed'); f.zactual.write_bytes(mine)
         f.stop(); f.start()
         plan = f.call('theme', 'plan', 'apply', 'b')
-        assert [x for x in plan['review']['kept'] if 'stays: you edited' in x], plan['review']
-        answer = f.call('theme', 'apply', plan['id']); assert answer['status'] == 'applied' and answer['kept'], answer
-        assert b'User changed' in f.zactual.read_bytes()
+        assert plan['review']['kept'] == [] and [w for w in plan['warnings'] if 'settings.json' in w and 'changed outside Pilot' in w], plan
+        answer = f.call('theme', 'apply', plan['id']); assert answer['status'] == 'applied' and answer['kept'] == [], answer
+        assert b'User changed' not in f.zactual.read_bytes() and [p for p in answer['backups'] if b'User changed' in Path(p).read_bytes()], answer
         answer = f.restore(); assert answer['status'] == 'restored', answer
-        assert f.zactual.read_bytes() == mine and not f.zasset.exists() and f.actual.read_bytes() == f.original
+        assert f.zactual.read_bytes() == f.zoriginal and not f.zasset.exists() and f.actual.read_bytes() == f.original
         f.stop()
         passed('a later edit to Zed\'s theme setting stays across restart, Apply and Restore; only that claim goes')
 
