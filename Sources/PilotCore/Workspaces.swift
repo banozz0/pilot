@@ -1,5 +1,4 @@
 import AppKit
-import Synchronization
 
 /// The workspaces, numbered from 1 (Sven 2026-10-09: 1 to 9 by default, added and removed on the Workspaces page): never
 /// more than nine, one per number key, never fewer than one. Adding one makes the next number; deleting one closes its
@@ -165,23 +164,6 @@ public struct ConnectedDisplay: Hashable, Sendable {
         guard case .display(let name, let id) = pin else { return false }
         return id.map { $0 == self.id } ?? (name.caseInsensitiveCompare(self.name) == .orderedSame)
     }
-}
-
-extension NSScreen {
-    /// The display's UUID. It usually survives replugging, but macOS may hand a display a new one at a restart (Sven's
-    /// ultrawide, whose EDID serial is a placeholder, 2026-11-16), so a setting kept for good matches the display's
-    /// identity first (LiveDisplay). Kept per display number, since the own tiler reads it each time it lists the
-    /// monitors, many times per layout.
-    public var displayUUID: String? {
-        guard let number = (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { return nil }
-        if let known = Self.uuids.withLock({ $0[number] }) { return known }
-        guard let uuid = CGDisplayCreateUUIDFromDisplayID(number)?.takeRetainedValue() else { return nil }
-        let id = CFUUIDCreateString(nil, uuid) as String
-        Self.uuids.withLock { $0[number] = id }
-        return id
-    }
-
-    private static let uuids = Mutex<[CGDirectDisplayID: String]>([:])
 }
 
 /// Each workspace's monitor pin, Pilot's own setting (N7), saved in Pilot's defaults and fed to Pilot's tiler. On first

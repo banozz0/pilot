@@ -179,7 +179,8 @@ final class WidgetDesk: ScreenPausing {
             let desktop = showDesktopWorkspace()
             var states: [String: Widget.ScreenState] = [:]
             for screen in NSScreen.screens {
-                guard let uuid = screen.displayUUID else { continue }
+                // Read fresh, as the tiler reads its workspaces' UUIDs: a kept one may be from before macOS changed it.
+                guard let uuid = screen.freshDisplayUUID else { continue }
                 let workspace = visible.first { $0.displayUUID == uuid }?.workspace
                 states[uuid] = Widget.ScreenState(inUse: inUse, tilerAnswering: answering, workspace: workspace,
                                                   windows: workspace.map { w in windows.count { $0.workspace == w } } ?? 0,
@@ -196,7 +197,7 @@ final class WidgetDesk: ScreenPausing {
         let live = LiveDisplay.screens
         for placement in placements where !placement.onHome {
             let screen = Self.screen(of: placement, in: live)
-            let shows = screen?.displayUUID.flatMap { screens[$0] }.map { placement.why(on: $0).shows } ?? false
+            let shows = screen?.freshDisplayUUID.flatMap { screens[$0] }.map { placement.why(on: $0).shows } ?? false
             if shows, let screen { show(placement, on: screen) } else { hide(placement.id) }
         }
         noteShown()
@@ -774,7 +775,7 @@ final class WidgetDesk: ScreenPausing {
         if clicked { refix(held.id); return openMenu(at: held.start) }
         guard let panel = panels[held.id], let i = placements.firstIndex(where: { $0.id == held.id }) else { return }
         guard let screen = panel.screen ?? NSScreen.main else { return }
-        (placements[i].screen, placements[i].screenIdentity) = (screen.displayUUID, screen.displayIdentity)
+        (placements[i].screen, placements[i].screenIdentity) = (screen.freshDisplayUUID, screen.displayIdentity)
         placements[i].move(to: Self.flip(panel.frame), on: Self.flip(screen.frame))
         // A resize that changed nothing leaves the placement fitted to its content.
         if held.corner != nil, panel.frame.size != held.frame.size {
@@ -803,7 +804,7 @@ final class WidgetDesk: ScreenPausing {
                             "data": .string(widget.data.label), "trust": .string(trust.rawValue), "runs": .bool(trust.runs)])
         }
         let rows: [JSONValue] = placements.map { placement in
-            let shown = Self.screen(of: placement), uuid = shown?.displayUUID
+            let shown = Self.screen(of: placement), uuid = shown?.freshDisplayUUID
             let state = uuid.flatMap { screens[$0] }
             let widget = store.widget(placement.widget)
             var row: [String: JSONValue] = ["id": .string(placement.id), "widget": .string(placement.widget), "home": .bool(placement.onHome),

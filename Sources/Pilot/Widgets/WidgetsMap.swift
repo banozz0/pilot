@@ -28,7 +28,7 @@ struct WidgetsDisplay: Identifiable, Equatable {
     /// The Mac's displays now, the main one first, as the desk reads them.
     @MainActor static func live() -> [WidgetsDisplay] {
         NSScreen.screens.enumerated().map { i, screen in
-            WidgetsDisplay(uuid: screen.displayUUID, name: screen.localizedName, main: i == 0,
+            WidgetsDisplay(uuid: screen.freshDisplayUUID, name: screen.localizedName, main: i == 0,
                            frame: WidgetDesk.flip(screen.frame), room: WidgetDesk.room(on: screen), identity: screen.displayIdentity)
         }
     }

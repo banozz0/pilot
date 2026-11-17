@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import Synchronization
 
 /// A connected display as a saved screen is matched against: macOS's display UUID and Pilot's identity, the EDID's
 /// vendor, model and serial ("1507:46104:1010101", the start of `pilot system`'s identity). The UUID is not lasting:
@@ -23,13 +24,17 @@ public struct LiveDisplay: Equatable, Sendable {
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
         return ids.prefix(Int(count)).map { id in
-            LiveDisplay(uuid: CGDisplayCreateUUIDFromDisplayID(id).map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String },
-                        identity: identity(of: id))
+            LiveDisplay(uuid: uuid(of: id), identity: identity(of: id))
         }
     }
 
-    /// The screens now in NSScreen's order, the main one first, as a placement's index names them.
-    @MainActor public static var screens: [LiveDisplay] { NSScreen.screens.map { LiveDisplay(uuid: $0.displayUUID, identity: $0.displayIdentity) } }
+    /// macOS's UUID of `display` now, read fresh, as the tiler reads it for its workspaces (QueryCalls).
+    public static func uuid(of display: CGDirectDisplayID) -> String? {
+        CGDisplayCreateUUIDFromDisplayID(display).map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String }
+    }
+
+    /// The screens now in NSScreen's order, the main one first, as a placement's index names them; UUIDs read fresh.
+    @MainActor public static var screens: [LiveDisplay] { NSScreen.screens.map { LiveDisplay(uuid: $0.freshDisplayUUID, identity: $0.displayIdentity) } }
 
     /// The index in `live` of the display a saved UUID and identity name: the identity when exactly one display has it
     /// (twins with one serial fall through), else the UUID; nil when neither names a connected display.
@@ -48,10 +53,44 @@ public struct LiveDisplay: Equatable, Sendable {
 }
 
 extension NSScreen {
-    /// Pilot's identity of the display (LiveDisplay.identity), read fresh: CoreGraphics answers it from the EDID.
-    public var displayIdentity: String? {
-        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber).flatMap { LiveDisplay.identity(of: $0.uint32Value) }
+    private var number: CGDirectDisplayID? { (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value }
+
+    /// The display's UUID, kept per display number until the screens change, since the own tiler reads it each time it
+    /// lists the monitors, many times per layout. It is not lasting: macOS handed Sven's ultrawide a new one while Pilot
+    /// ran (2026-11-16, its EDID serial a placeholder), so a setting kept for good matches `displayIdentity` first, and
+    /// what must agree with the tiler's fresh read uses `freshDisplayUUID`.
+    public var displayUUID: String? {
+        guard let number else { return nil }
+        _ = Self.forgetAtScreenChanges
+        if let known = Self.uuids.withLock({ $0[number] }) { return known }
+        guard let id = LiveDisplay.uuid(of: number) else { return nil }
+        Self.uuids.withLock { $0[number] = id }
+        return id
     }
+
+    /// The display's UUID read now (66 µs on an M4), as the tiler reads it.
+    public var freshDisplayUUID: String? { number.flatMap(LiveDisplay.uuid(of:)) }
+
+    /// Pilot's identity of the display (LiveDisplay.identity), kept per display number until the screens change: a read
+    /// is three CoreGraphics calls (185 µs on an M4).
+    public var displayIdentity: String? {
+        guard let number else { return nil }
+        _ = Self.forgetAtScreenChanges
+        if let known = Self.identities.withLock({ $0[number] }) { return known }
+        let identity = LiveDisplay.identity(of: number)
+        Self.identities.withLock { $0[number] = identity }
+        return identity
+    }
+
+    private static let uuids = Mutex<[CGDirectDisplayID: String]>([:])
+    private static let identities = Mutex<[CGDirectDisplayID: String?]>([:])
+    /// A screen change forgets both: a display number may come back as another display, and a display a new UUID.
+    private static let forgetAtScreenChanges: Void = {
+        _ = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: nil) { _ in
+            uuids.withLock { $0 = [:] }
+            identities.withLock { $0 = [:] }
+        }
+    }()
 }
 
 extension Widget.Placement {

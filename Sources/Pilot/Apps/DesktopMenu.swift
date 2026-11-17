@@ -22,7 +22,7 @@ enum DesktopMenu {
     }
 
     private static func rows(at point: CGPoint, on screen: NSScreen?, frame: CGRect?) -> [BarMenu.Row] {
-        let look = Look.shared, widgets = WidgetsPageModel.shared, display = screen?.displayUUID
+        let look = Look.shared, widgets = WidgetsPageModel.shared, display = screen?.freshDisplayUUID
         // Put with its top left at the press, as fractions of the screen's frame (Widget.Placement's x and y).
         let x = frame.map { Double((point.x - $0.minX) / $0.width) }, y = frame.map { Double((point.y - $0.minY) / $0.height) }
         let addable = (ReadyWidgets.all + widgets.store.installed().widgets).map { widget in
