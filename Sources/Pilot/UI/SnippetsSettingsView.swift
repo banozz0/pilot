@@ -11,6 +11,8 @@ struct SnippetsSettingsView: View {
     @State private var selection: TextSelection?
     @State private var confirmingDelete = false
     @FocusState private var focus: Field?
+    /// A snippet to pick and name, set from outside the page (the clipboard panel's Save as snippet); cleared once picked.
+    private let editSnippet: Binding<UUID?>
 
     private enum Field { case name, keyword, text }
 
@@ -19,8 +21,9 @@ struct SnippetsSettingsView: View {
     private static let fieldLine: CGFloat = 17
 
     /// `library` is a temp file's in tests; `selected` the snippet picked as the page opens, else the first.
-    init(library: SnippetLibrary = .shared, selected: UUID? = nil) {
+    init(library: SnippetLibrary = .shared, selected: UUID? = nil, editSnippet: Binding<UUID?> = .constant(nil)) {
         _editor = State(initialValue: SnippetsEditor(library: library, selected: selected))
+        self.editSnippet = editSnippet
     }
 
     var body: some View {
@@ -29,6 +32,13 @@ struct SnippetsSettingsView: View {
             if let current = editor.current { filled(current) } else { empty }
         }
         .onChange(of: editor.selected) { selection = nil }
+        .onChange(of: editSnippet.wrappedValue, initial: true) {
+            guard let id = editSnippet.wrappedValue else { return }
+            editor.selected = id
+            editSnippet.wrappedValue = nil
+            // The name field is drawn on the next pass; it takes the keys then.
+            Task { focus = .name }
+        }
         .confirmationDialog(Text("Delete “\(editor.current.map { SnippetsEditor.title($0) } ?? "")”?"),
                             isPresented: $confirmingDelete, presenting: editor.current) { snippet in
             Button("Delete snippet", role: .destructive) { editor.delete(snippet.id) }
@@ -299,8 +309,10 @@ final class SnippetsEditor {
     var current: Snippet? { library.snippets.first { $0.id == selected } ?? library.snippets.first }
 
     /// A new snippet at the end of the list, so its keyword never takes over one above it; picked.
-    @discardableResult func add() -> UUID {
-        let snippet = Snippet(name: "New snippet", keyword: "", text: "")
+    /// `text`: a copy's, from the clipboard panel's Save as snippet; named New snippet, never after its text, which the
+    /// paste log would show.
+    @discardableResult func add(text: String = "") -> UUID {
+        let snippet = Snippet(name: "New snippet", keyword: "", text: text)
         library.snippets.append(snippet)
         selected = snippet.id
         return snippet.id

@@ -33,6 +33,7 @@ final class ControlClipboardTests {
         func reveal(_ urls: [URL]) { revealed += urls }
         func copy(_ text: String, tip: String) {}
         func saveImage(_ data: Data, named name: String) {}
+        func markUp(_ data: Data) {}
     }
 
     init() throws {

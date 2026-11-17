@@ -28,6 +28,8 @@ public enum PanelCommand: Equatable, Sendable {
     case togglePick
     /// Cmd+E on the Snippets tab: the Pilot window on Snippets (Sven, 2026-10-08).
     case editSnippets
+    /// Cmd+K's Save as snippet on a text: a new snippet of its text, open on the Snippets page (Sven, 2026-11-17).
+    case saveAsSnippet
 
     public enum Key: Equatable, Sendable { case up, down, left, right, `return`, escape, backspace, tab, character(Character) }
 

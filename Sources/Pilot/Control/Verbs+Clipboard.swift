@@ -21,8 +21,10 @@ final class ClipboardTools {
     var terminal: @MainActor () -> URL? = { ClipboardHistory.terminalFolder() }
     /// Paste one by one: the panel's own sequence, which the tap's Cmd+V reports drive.
     lazy var sequence: @MainActor ([StoredClip]) throws -> Void = { [unowned self] in try history.startSequence($0) }
-    /// Open and Show in Finder, as the panel's Cmd+K list runs them.
+    /// Open, Show in Finder and Mark up, as the panel's Cmd+K list runs them.
     var opener: any ClipOpening = PilotOpener()
+    /// Where Save as snippet adds: the Snippets page's library; a test's own.
+    lazy var snippets = SnippetLibrary.shared
     /// Never record from takes installed apps only, as the page's app picker offers.
     var installed: @MainActor (String) -> Bool = { AppsModule.url(forBundle: $0) != nil }
 
@@ -43,7 +45,7 @@ extension ControlVerbs {
     /// `pilot clip …`, then the clipboard's two lists (Collections+Clipboard.swift).
     func registerClipboard(_ tools: ClipboardTools) {
         let words = ["list", "search", "show", "copy", "paste", "pin", "unpin", "delete", "clear", "tag", "untag", "tag-edit",
-                     "rename", "edit", "split", "merge", "format", "open", "reveal"]
+                     "rename", "edit", "split", "merge", "format", "open", "reveal", "markup", "snippet"]
         let known: [String: [String]] = ["list": ["limit"], "search": ["limit"], "show": ["image"], "copy": ["plain"],
                                          "paste": ["app", "plain", "delete", "one-by-one"], "tag": ["tag"], "untag": ["tag"],
                                          "tag-edit": ["name", "colour"], "rename": ["title"], "edit": ["text"], "format": ["as"]]
@@ -65,10 +67,12 @@ extension ControlVerbs {
             "split": "pilot clip split <id>: one new item per non-empty line, on top; merge <id…> joins texts into one new item. Both answer the new rows.",
             "format": "pilot clip format <id…> --as <format>: \(formats.joined(separator: ", ")).",
             "open": "pilot clip open <id…>: opens a link or files as the panel's Open does, after Allow; reveal <id…> shows files in Finder.",
+            "markup": "pilot clip markup <id>: opens an image in Pilot's capture editor, as Cmd+K's Mark up does, after Allow; Done there saves it as a new capture. Answers how many editors are open.",
+            "snippet": "pilot clip snippet <id>: a new snippet of a text item's text, named New snippet with no keyword, as Cmd+K's Save as snippet makes it, after Allow (pilot list snippets reads it back). Answers its id; the panel's action also opens it on the Snippets page.",
         ]
         let aliases = ["unpin": "pin", "untag": "tag", "merge": "split", "reveal": "open"]
-        register(ControlVerb("clip", help: "The clipboard history: list and search (metadata), show one whole (asks Allow), copy, paste, pin, tag, rename, edit, format, delete and clear.",
-                             usage: "pilot clip [list | search <query…> | show <id> | copy <id…> | paste <id…> --app <app> | pin <id…> | unpin <id…> | delete <id…> | clear | tag <id…> --tag <name> | untag <id…> --tag <name> | tag-edit <tag> | rename <id> --title <name> | edit <id> --text <text> | split <id> | merge <id…> | format <id…> --as <format> | open <id…> | reveal <id…>]",
+        register(ControlVerb("clip", help: "The clipboard history: list and search (metadata), show one whole (asks Allow), copy, paste, pin, tag, rename, edit, format, mark up, save as snippet, delete and clear.",
+                             usage: "pilot clip [list | search <query…> | show <id> | copy <id…> | paste <id…> --app <app> | pin <id…> | unpin <id…> | delete <id…> | clear | tag <id…> --tag <name> | untag <id…> --tag <name> | tag-edit <tag> | rename <id> --title <name> | edit <id> --text <text> | split <id> | merge <id…> | format <id…> --as <format> | open <id…> | reveal <id…> | markup <id> | snippet <id>]",
                              flags: [.init("limit", help: "list and search: how many rows, 50 unless given"),
                                      .init("image", help: "show: save an image item as PNG at this new path"),
                                      .init("plain", help: "copy and paste: the text only", takesValue: false),
@@ -88,7 +92,7 @@ extension ControlVerbs {
                                                            "copied": .string("its last copy"), "firstCopied": .string("its first copy"),
                                                            "copies": .string("times copied"), "size": .string("bytes kept"), "pinned": .string("pinned"),
                                                            "tags": .string("its tags' names"), "readingText": .string("true: an image whose text is not read yet")]),
-                                          "asks": .string("show, copy, paste, delete, clear, open, and search with words ask Allow"),
+                                          "asks": .string("show, copy, paste, delete, clear, open, markup, snippet, and search with words ask Allow"),
                                           "formats": .array(formats.map(JSONValue.string))])
                              },
                              index: { .object(["subcommands": index]) },
@@ -120,6 +124,8 @@ extension ControlVerbs {
                 let name = try args.required("as")
                 guard let format = TextFormat(rawValue: name) else { throw ControlError(.badValue, "--as: no format \(name); formats: \(formats.joined(separator: ", "))") }
                 return try Self.format(rest, format, tools)
+            case "markup": return try await Self.markUp(rest, tools, peer: call.peer)
+            case "snippet": return try await Self.snippet(rest, tools, peer: call.peer)
             default: return try await Self.open(rest, reveal: word == "reveal", tools, peer: call.peer)
             }
         })
@@ -411,6 +417,30 @@ extension ControlVerbs {
             try tools.attempt("clipboard \(action.title)") { try ClipActions(store: store, opener: tools.opener).run(action, on: clips) }
             cliplog.notice("clip \(reveal ? "reveal" : "open", privacy: .public) ids=\(ids), from the pilot command")
             return .object([reveal ? "revealed" : "opened": idArray(ids)])
+        }
+    }
+
+    /// Mark up asks, as Open does: the image comes up on screen in Pilot's editor.
+    private static func markUp(_ words: [String], _ tools: ClipboardTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let (store, clips) = try picked(words, tools, one: true), id = clips[0].id
+        try offered(.markUp, clips)
+        return try await tools.gate.allow(ask("Mark up a clipboard image", [id], store), peer: peer) { () throws(ControlError) in
+            try tools.attempt("clipboard mark up") { try ClipActions(store: store, opener: tools.opener).run(.markUp, on: clips) }
+            cliplog.notice("clip markup #\(id), from the pilot command")
+            return .object(["markingUp": .number(Double(id)), "editors": .number(Double(CaptureEditor.openCount))])
+        }
+    }
+
+    /// Save as snippet asks: the text is then readable through pilot list snippets, as clip show reads it after Allow.
+    private static func snippet(_ words: [String], _ tools: ClipboardTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let (store, clips) = try picked(words, tools, one: true), id = clips[0].id
+        try offered(.saveAsSnippet, clips)
+        return try await tools.gate.allow(ask("Save a clipboard item as a snippet", [id], store), peer: peer) { () throws(ControlError) in
+            guard let text = try tools.attempt("clipboard read", { try store.clips([id]) }).first?.text else { throw ControlError(.badValue, "#\(id) is no longer in the history") }
+            let made = SnippetsEditor(library: tools.snippets).add(text: text)
+            if let failed = tools.snippets.failed { throw ControlError(.badValue, failed) }
+            cliplog.notice("clip snippet #\(id), from the pilot command")
+            return .object(["snippet": .string(made.uuidString), "from": .number(Double(id))])
         }
     }
 }

@@ -139,7 +139,7 @@ struct PageView: View {
         case .clipboard: ClipboardSettingsView()
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
-        case .snippets: SnippetsSettingsView()
+        case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
             // File search and Duplicates are places on the front (settings tidy), which the window scrolls to.

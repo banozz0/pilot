@@ -70,7 +70,8 @@ public enum ClipCode: Hashable, Sendable {
 
 /// One row of the panel's Cmd+K list.
 public enum ClipAction: Equatable, Hashable, Sendable {
-    case pasteAndDelete, pasteInSequence, open, openWith, reveal, copyPath, saveImage, copyText, rename, edit, split, merge, format(TextFormat), pin, delete
+    case pasteAndDelete, pasteInSequence, open, openWith, reveal, copyPath, markUp, saveImage, copyText, rename, edit, saveAsSnippet, split, merge,
+         format(TextFormat), pin, delete
     /// The previewed image's QR code: its link opened, or its text copied.
     case code(ClipCode)
 
@@ -82,12 +83,14 @@ public enum ClipAction: Equatable, Hashable, Sendable {
         case .openWith: "Open With…"
         case .reveal: "Show in Finder"
         case .copyPath: "Copy path"
+        case .markUp: "Mark up"
         case .saveImage: "Save image as PNG…"
         case .copyText: "Copy text"
         case .code(.link): "Open QR link"
         case .code(.text): "Copy QR text"
         case .rename: "Rename…"
         case .edit: "Edit text…"
+        case .saveAsSnippet: "Save as snippet"
         case .split: "Split into lines"
         case .merge: "Merge into one item"
         case .format(let format): "Format: \(format.title)"
@@ -108,8 +111,9 @@ public enum ClipAction: Equatable, Hashable, Sendable {
     }
 
     /// What fits the targets, paste and delete first, then paste one by one for several, and pin and delete last: open and open with for a link or files, reveal and copy path for files,
-    /// save for one image, copy text for one image with text read from it, formats for text, split for text of several lines, edit for one text,
-    /// rename for one item, merge for several texts; `code` is one image's QR code, read for its preview.
+    /// mark up in Pilot's capture editor and save for one image, copy text for one image with text read from it, formats for text, split for
+    /// text of several lines, edit and save as snippet for one text, rename for one item, merge for several texts (Sven, 2026-11-17: mark up
+    /// and save as snippet); `code` is one image's QR code, read for its preview.
     public static func available(for targets: [StoredClip], code: ClipCode? = nil) -> [ClipAction] {
         guard !targets.isEmpty else { return [] }
         let kinds = Set(targets.map(\.kind))
@@ -121,10 +125,10 @@ public enum ClipAction: Equatable, Hashable, Sendable {
         if kinds == [.link] || kinds == [.file] { actions += [.open, .openWith] }
         if kinds == [.file] { actions += [.reveal, .copyPath] }
         if targets.count == 1, kinds == [.image], let code { actions.append(.code(code)) }
-        if targets.count == 1, kinds == [.image] { actions.append(.saveImage) }
+        if targets.count == 1, kinds == [.image] { actions += [.markUp, .saveImage] }
         if targets.count == 1, kinds == [.image], targets[0].recognised?.isEmpty == false { actions.append(.copyText) }
         if targets.count == 1 { actions.append(.rename) }
-        if targets.count == 1, texts { actions.append(.edit) }
+        if targets.count == 1, texts { actions += [.edit, .saveAsSnippet] }
         if lines > 1 { actions.append(.split) }
         if targets.count > 1, texts { actions.append(.merge) }
         if texts { actions += TextFormat.allCases.map(ClipAction.format) }
@@ -142,6 +146,8 @@ public protocol ClipOpening {
     /// Copies text and says so in a tip.
     func copy(_ text: String, tip: String)
     func saveImage(_ data: Data, named name: String)
+    /// Opens an image (its PNG or TIFF bytes) in Pilot's capture editor, as a capture not yet saved.
+    func markUp(_ data: Data)
 }
 
 /// Runs the actions that need no typing (rename and edit take the panel's field first).
@@ -154,8 +160,8 @@ public struct ClipActions {
         self.store = store; self.opener = opener
     }
 
-    /// The new rows to select, when the action made some (split, merge). Paste and delete, rename and edit are the
-    /// panel's: it pastes, or opens its field for the new name or text first.
+    /// The new rows to select, when the action made some (split, merge). Paste and delete, rename, edit and save as
+    /// snippet are the panel's: it pastes, opens its field for the new name or text first, or opens the Snippets page.
     @discardableResult
     public func run(_ action: ClipAction, on targets: [StoredClip]) throws -> [Int64] {
         switch action {
@@ -164,6 +170,7 @@ public struct ClipActions {
         case .openWith: opener.openWith(try targets.flatMap(urls))
         case .reveal: opener.reveal(try targets.flatMap(fileURLs))
         case .copyPath: opener.copy(try targets.flatMap(fileURLs).map(\.path).joined(separator: "\n"), tip: "Path copied")
+        case .markUp: if let id = targets.first?.id, let data = try store.image(of: id) { opener.markUp(data) }
         case .saveImage:
             guard let clip = targets.first, let item = try store.contents(of: clip.id).first,
                   let data = TerminalPaste.png(item) else { return [] }
@@ -177,7 +184,8 @@ public struct ClipActions {
             for clip in targets { try store.setText(clip.id, to: format.apply(clip.text)) }
         case .pin: try store.setPinned(targets.map(\.id), !targets.allSatisfy(\.pinned))
         case .delete: try store.delete(targets.map(\.id))
-        case .pasteAndDelete, .pasteInSequence, .rename, .edit: break  // they need the panel: it pastes, or types the new name or text
+        // They need the panel: it pastes, types the new name or text, or opens the new snippet on the Snippets page.
+        case .pasteAndDelete, .pasteInSequence, .rename, .edit, .saveAsSnippet: break
         }
         return []
     }

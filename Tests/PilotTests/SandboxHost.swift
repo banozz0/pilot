@@ -33,8 +33,10 @@ struct SandboxHost {
             AISettings.shared.provider = picks.first.flatMap(AIProvider.init(rawValue:)) ?? .claudeCode
             AISettings.shared.fallback = picks.count > 1 ? AIProvider(rawValue: picks[1]) : nil
         }
-        // `pilot files open` makes its viewer here but never puts it on Sven's screen or activates Pilot.
+        // `pilot files open` makes its viewer here, and `pilot clip markup` its editor, but never puts either on Sven's screen
+        // or activates Pilot.
         ImageViewer.onScreen = false
+        CaptureEditor.onScreen = false
         // PILOT_SANDBOX_TILER=<folder>: a stand-in for Pilot's tiler with a file's windows (TilerFixture), made before the Engine
         // makes its tiler, so `pilot workspace move` carries those windows, never the Mac's.
         TilerFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_TILER"])
