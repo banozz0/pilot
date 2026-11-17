@@ -66,6 +66,16 @@ struct SnippetExpansionTests {
 
     static let commit = Snippet(name: "Commit", keyword: ";cm", text: "feat({cursor}): {clipboard}")
 
+    @Test("A text typed after its keyword is what the keyword pastes (site-video V4 take, build 2640)")
+    func textAfterKeyword() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "snippets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let library = SnippetLibrary(store: SnippetStore(url: url), paster: Rig([]).paster)
+        library.snippets = [Snippet(name: "Commit", keyword: ";cm", text: "")]
+        library.snippets[0].text = "feat: ship it"
+        #expect(library.keywords.snippet(for: ";cm")?.text == "feat: ship it")
+    }
+
     @Test("Hyper+Space: the query cm lists the snippet, and Return pastes it into the field and puts the copy back")
     func fromMenu() throws {
         let rig = Rig([Self.commit])

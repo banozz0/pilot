@@ -61,7 +61,7 @@ extension ControlVerbs {
 
         register(ControlCollection("snippets", help: "Saved text pasted by its keyword in any app or from Hyper+Space. Each row reads back its preview "
                                    + "(clipboard and argument as samples) and where its keyword expands: anywhere, word-start, menu-only, or never when a "
-                                   + "snippet higher in the list has it (clashesWith).",
+                                   + "snippet higher in the list has it (clashesWith); typedText is the text typing its keyword pastes now.",
                                    fields: [.init("name", help: "the snippet's name"),
                                             .init("text", help: "what it pastes; {date}, {time}, {clipboard}, {argument}, {cursor} are filled in"),
                                             .init("keyword", help: "typed in any app to paste it, e.g. ;sig; none: Hyper+Space only", required: false),
@@ -339,6 +339,7 @@ extension ControlVerbs {
             expands = !wins ? "never" : first.isLetter || first.isNumber ? "word-start" : "anywhere"
         }
         row["expands"] = .string(expands)
+        if let typed = editor.library.keywords.snippet(for: s.keyword) { row["typedText"] = .string(typed.text) }
         return row
     }
 

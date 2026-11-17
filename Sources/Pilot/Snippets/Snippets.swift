@@ -66,10 +66,16 @@ final class SnippetKeywords {
         self.isBlocked = isBlocked; self.expand = expand
     }
 
+    /// Every change: the copies the tap pastes follow each name and text edit. What was typed so far is kept unless
+    /// the keywords themselves changed.
     func set(_ snippets: [Snippet]) {
+        let old = Set(byKeyword.keys)
         byKeyword = Dictionary(snippets.filter { !$0.keyword.isEmpty }.map { ($0.keyword, $0) }) { first, _ in first }
-        typing = SnippetTyping(keywords: Array(byKeyword.keys))
+        if Set(byKeyword.keys) != old { typing = SnippetTyping(keywords: Array(byKeyword.keys)) }
     }
+
+    /// The snippet typing `keyword` pastes now: the tap's own copy, which the snippets row reads back as typedText.
+    func snippet(for keyword: String) -> Snippet? { byKeyword[keyword] }
 
     /// A click or another app in front: the caret moved, so what came before no longer counts.
     func reset() { typing.reset() }
@@ -84,7 +90,7 @@ final class SnippetKeywords {
         guard e.flags & (KeyEvent.cmdMask | KeyEvent.ctrlMask) == 0, !characters.isEmpty,
               !characters.unicodeScalars.contains(where: { $0.properties.generalCategory == .control || (0xF700...0xF8FF).contains($0.value) })
         else { typing.reset(); return false }
-        guard let keyword = typing.type(characters), let snippet = byKeyword[keyword], !isBlocked() else { return false }
+        guard let keyword = typing.type(characters), let snippet = snippet(for: keyword), !isBlocked() else { return false }
         expand(snippet, keyword.count - characters.count)
         return true
     }
@@ -95,11 +101,10 @@ final class SnippetKeywords {
 final class SnippetLibrary {
     static let shared = SnippetLibrary()
 
-    /// Every change is saved at once and the tap watches the new keywords.
+    /// Every change is saved at once and the tap pastes it from then on.
     var snippets: [Snippet] {
         didSet {
-            // A name or text typed in the editor leaves the keywords as they were.
-            if snippets.map(\.keyword) != oldValue.map(\.keyword) { keywords.set(snippets) }
+            keywords.set(snippets)
             do { try store.save(snippets); failed = nil } catch {
                 failed = "Snippets not saved: \(error.localizedDescription)"
                 snippetLog.error("snippets not saved: \(String(describing: error), privacy: .public)")
