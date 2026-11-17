@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import PilotTilerPrivateApi
 
 /// The focused window's moves and resizes, at most one read per display frame (Sven's report 2026-10-17: the border
 /// lagged a dragged window and a fast drag lagged the whole screen). A drag sends AX a move per mouse event, and each
@@ -82,7 +83,10 @@ final class FrameFollower {
     static func readOffMain(_ element: AXUIElement, _ done: @escaping @MainActor (CGRect?) -> Void) {
         nonisolated(unsafe) let element = element
         axQueue.async {
-            let frame = frame(of: element)
+            // Where the window server draws it, when it does: an app's AX frame can be the one it was asked for (Photo Booth)
+            var id = CGWindowID()
+            let drawn = _AXUIElementGetWindow(element, &id) == .success && id != kCGNullWindowID ? DragFollower.drawnBounds(of: id) : nil
+            let frame = drawn ?? frame(of: element)
             DispatchQueue.main.async { MainActor.assumeIsolated { done(frame) } }
         }
     }

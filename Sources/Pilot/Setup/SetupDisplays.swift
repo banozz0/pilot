@@ -44,9 +44,11 @@ final class SetupDisplays {
     /// The app's model offers Revert in a tip; the tests' models do not.
     @ObservationIgnored private let offersRevert: Bool
     @ObservationIgnored private var revertTip: TipModel?
-    /// Each screen's rotation by display UUID, as last seen while the same screens stayed connected, and that set of
-    /// screens: what `settleRotations` puts back once the set changes. Saved, so a launch onto another set restores
-    /// too; the tests' models keep them in memory.
+    /// Each screen's rotation by display identity (LiveDisplay.key; by UUID before identities), as last seen while the
+    /// same screens stayed connected, and that set of screens by UUID: what `settleRotations` puts back once the set
+    /// changes. The set stays by UUID, since a new UUID is what makes macOS take the screens for a new set and turn them
+    /// back (Sven's ultrawide, 2026-11-16); the rotation, kept by identity, is then found again. Saved, so a launch onto
+    /// another set restores too; the tests' models keep them in memory.
     @ObservationIgnored private let defaults: UserDefaults?
     @ObservationIgnored private var rotations: [String: Int] = [:]
     @ObservationIgnored private var screenSet: Set<String>?
@@ -258,19 +260,27 @@ final class SetupDisplays {
         if let screenSet, screenSet != set { restoreUntil = Date().addingTimeInterval(5) }
         screenSet = set
         let restoring = Date() < restoreUntil
+        let live = now.map(\.live)
         for screen in now {
-            guard let uuid = screen.displayUUID else { continue }
-            if restoring, let kept = rotations[uuid], kept != screen.rotation {
+            guard screen.live.key(among: live) != nil else { continue }
+            if restoring, let kept = rotations.first(of: screen.live.keys(among: live)), kept != screen.rotation {
                 slog.notice("display \(screen.id, privacy: .public) back to its kept rotation \(kept, privacy: .public)° after the screens changed")
                 _ = turn(screen.id, kept)
             } else {
-                rotations[uuid] = screen.rotation
+                keep(screen.rotation, for: screen, among: live)
             }
         }
         saveRotations()
     }
 
     private static let rotationsKey = "displays.rotations", screenSetKey = "displays.screenSet"
+
+    /// `degrees` kept under the screen's key, its UUID's entry from before identities gone.
+    private func keep(_ degrees: Int, for screen: DisplayInfo, among live: [LiveDisplay]) {
+        guard let key = screen.live.key(among: live) else { return }
+        if let uuid = screen.displayUUID, uuid != key { rotations[uuid] = nil }
+        rotations[key] = degrees
+    }
 
     private func saveRotations() {
         defaults?.set(rotations, forKey: Self.rotationsKey)
@@ -283,8 +293,8 @@ final class SetupDisplays {
             problem = nil
             slog.notice("display \(display, privacy: .public) rotated to \(degrees, privacy: .public)°")
             start()
-            if let uuid = displays.first(where: { $0.id == display })?.displayUUID {
-                rotations[uuid] = degrees
+            if let screen = displays.first(where: { $0.id == display }) {
+                keep(degrees, for: screen, among: displays.map(\.live))
                 saveRotations()
             }
             return true
@@ -305,7 +315,7 @@ final class SetupDisplays {
             // still give the old places and draw each move one press late. The screens' change notice reads them again.
             displays = displays.map { d in
                 origins[d.id].map { DisplayInfo(id: d.id, name: d.name, main: d.main, frame: CGRect(origin: $0, size: d.frame.size), mode: d.mode,
-                                                rotation: d.rotation, displayUUID: d.displayUUID) } ?? d
+                                                rotation: d.rotation, displayUUID: d.displayUUID, displayIdentity: d.displayIdentity) } ?? d
             }
             return true
         } catch {

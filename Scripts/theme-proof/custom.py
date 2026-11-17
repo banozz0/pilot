@@ -223,12 +223,14 @@ def run(seam_only=False, fixes_only=False):
         passed('absent structural key versus explicit null, generated-file absence, and newly inserted block/separator Restore across restart preserve later unrelated bytes')
 
         f=fixture('conflict'); f.start(); f.apply(); before=f.json.read_bytes(); f.json.write_bytes(before.replace(f.packs[0]['palette']['accent'].encode(),b'#123456'))
-        # The coordinator's brief (Sven Q38): the person's later value stays, only that claim goes, the rest restores.
+        # Sven, 2026-11-17: a theme applies to everything. The later value is written over like any other part, with a
+        # copy of it saved first, and Restore finishes everything.
         f.stop(); f.start()
-        assert [k for k in f.call('theme','plan','restore')['review']['kept'] if f.json.name in k]
-        answer=f.restore(); assert answer['status']=='restored' and answer['kept'] and b'#123456' in f.json.read_bytes(),answer
+        assert f.call('theme','plan','restore')['review']['kept']==[]
+        answer=f.restore(); assert answer['status']=='restored' and answer['kept']==[] and b'#123456' not in f.json.read_bytes(),answer
+        assert [p for p in answer['backups'] if b'#123456' in Path(p).read_bytes()],answer
         assert json.loads((f.root/'state/ownership.json').read_text())['claims']==[]; f.stop()
-        passed('a later owned-key edit stays the person\'s across restart while Restore finishes the rest')
+        passed('a later owned-key edit is written over across restart, with a copy saved, and Restore finishes the rest')
 
         # Revalidation after Allow binds destination bytes, local IDs, program bytes and complete inputs.
         for label, edit in [('file',lambda f:f.json.write_bytes(f.json.read_bytes()+b'// concurrent\n')),

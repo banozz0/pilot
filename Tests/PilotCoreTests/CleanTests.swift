@@ -61,6 +61,55 @@ struct CleanTests {
         #expect(preview.systemSkipped)
     }
 
+    /// Cut from `mo clean --dry-run < /dev/null` on Sven's Mac, Mole 1.72.0, 2026-11-17: items are marked `○`, not `→`,
+    /// and the total is "size · N items" (whitelist line left out, the home folder as ~).
+    static let dryRun172 = """
+    ◎ System caches need sudo, run sudo -v && mo clean --dry-run for full preview
+
+    ⚙ Apple Silicon | Free space: 83.87GB
+
+    ➤ User essentials
+      ○ User app cache · 9 items, 1.39GB dry
+      ○ User app logs · 12KB dry
+
+    ➤ Browsers
+      ○ Chrome Service Worker, would clean 230.6MB, 0 protected
+
+    ➤ Cloud & Office
+      ✓ Nothing to clean
+
+    ➤ Developer tools
+      ○ npm cache · would clean
+      ⊙ Rust toolchains · 3 · 1.95.0 and 1.99.1 besides stable · ~/.rustup/toolchains
+      ◎ Project caches · skipped 1 slow/incomplete root scan
+      ○ Zig cache · 6 items, 291.1MB dry
+      ◎ Simulator caches · skipped (process state unknown)
+
+    ➤ Large files
+      ⊙ Gradle caches · 5.29GB · ~/.gradle/caches
+
+
+    ======================================================================
+    Dry run complete - no changes made
+    Potential space: 2.09GB · 212 items
+    Detailed file list: ~/.config/mole/clean-list.txt
+    ======================================================================
+    """
+
+    @Test("Mole 1.72's ○ items read like 1.54's →, review and skipped lines still left out, and the total is the size alone")
+    func parse172() {
+        let preview = CleanPreview.parse(Self.dryRun172)
+        #expect(preview.items.map(\.title) == ["User app cache", "User app logs", "Chrome Service Worker", "npm cache", "Zig cache"])
+        #expect(preview.items.map(\.detail) == ["9 items, 1.39GB", "12KB", "would clean 230.6MB, 0 protected", "would clean",
+                                                "6 items, 291.1MB"])
+        #expect(preview.items.map(\.section) == ["User essentials", "User essentials", "Browsers", "Developer tools", "Developer tools"])
+        #expect(preview.total == "2.09GB")
+        #expect(preview.systemSkipped)
+        var progress = CleanProgress()
+        Self.dryRun172.split(whereSeparator: \.isNewline).forEach { progress.read(String($0)) }
+        #expect(progress == CleanProgress(section: "Large files", items: 5))
+    }
+
     @Test("A run with admin access cached includes system caches; a run that never summed has no total")
     func partial() {
         let preview = CleanPreview.parse("➤ User essentials\n  → User app cache · 2 items, 1.0GB dry\n")

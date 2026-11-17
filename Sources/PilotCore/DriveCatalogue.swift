@@ -56,7 +56,7 @@ public struct DriveCatalogue: Decodable, Sendable {
     private struct File: Decodable { var apps: [App] }
 
     /// The app's actions; nil when the catalogue does not hold it: not supported.
-    public func actions(for bundle: String) -> [Entry]? { apps.first { $0.bundle == bundle }?.actions }
+    public func actions(for bundle: String) -> [Entry]? { apps.first { SameApp.ids(bundle).contains($0.bundle) }?.actions }
 
     /// The app and action holding a bound route.
     public func app(for route: String) -> (app: App, entry: Entry)? {

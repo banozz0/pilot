@@ -12,21 +12,24 @@ struct WidgetsDisplay: Identifiable, Equatable {
     let frame: CGRect
     /// Its frame less the top bar and the dock (WidgetDesk.room), where the grid sits.
     let room: CGRect
+    /// Its EDID identity (LiveDisplay), which a placement matches before its UUID.
+    var identity: String? = nil
 
     var id: String { uuid ?? "main" }
 
-    /// Whether `placement` sits on this display: its own UUID, or none on the main one.
-    func holds(_ placement: Widget.Placement) -> Bool {
+    /// Whether `placement` sits on this display among `displays` (the main one first), as the desk puts it
+    /// (Widget.Placement.screenIndex).
+    func holds(_ placement: Widget.Placement, among displays: [WidgetsDisplay]) -> Bool {
         guard !placement.onHome else { return false }
-        if let screen = placement.screen { return screen == uuid }
-        return main
+        let live = displays.map { LiveDisplay(uuid: $0.uuid, identity: $0.identity) }
+        return placement.screenIndex(in: live).map { displays[$0].id == id } ?? false
     }
 
     /// The Mac's displays now, the main one first, as the desk reads them.
     @MainActor static func live() -> [WidgetsDisplay] {
         NSScreen.screens.enumerated().map { i, screen in
-            WidgetsDisplay(uuid: screen.displayUUID, name: screen.localizedName, main: i == 0,
-                           frame: WidgetDesk.flip(screen.frame), room: WidgetDesk.room(on: screen))
+            WidgetsDisplay(uuid: screen.freshDisplayUUID, name: screen.localizedName, main: i == 0,
+                           frame: WidgetDesk.flip(screen.frame), room: WidgetDesk.room(on: screen), identity: screen.displayIdentity)
         }
     }
 

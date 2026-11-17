@@ -1,6 +1,6 @@
 {
   "entries": [
-    {"id": "ghostex", "name": "Ghostex", "category": "Featured", "cask": "ghostex", "bundle": "com.madda.ghostex.gpui", "vendor": "https://ghostex.dev/", "checked": "2026-10-05"},
+    {"id": "ghostex", "name": "Ghostex", "category": "Featured", "cask": "ghostex", "bundle": "com.madda.ghostex.host", "vendor": "https://ghostex.dev/", "checked": "2026-10-05"},
     {"id": "videorc", "name": "Videorc", "category": "Featured", "download": "https://www.videorc.com/account/download", "bundle": "dev.theorcdev.videorc", "vendor": "https://github.com/TheOrcDev/videorc", "checked": "2026-10-10"},
     {"id": "empryo", "name": "Empryo", "category": "Featured", "download": "https://empryo.com/download", "bundle": "dev.empryo.desktop", "vendor": "https://empryo.com", "checked": "2026-10-10"},
     {"id": "claude-code", "name": "Claude Code", "category": "AI agents", "cask": "claude-code", "command": "claude", "vendor": "https://claude.com/product/claude-code", "checked": "2026-10-05"},

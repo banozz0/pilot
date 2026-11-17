@@ -197,6 +197,10 @@ class AIUsageTests(ExtensionTestCase):
         fake.write_text(FAKE_CODEX)
         # Always shimmed: the real codex on PATH must never be asked from a test.
         self.box.shim("codex", 'exec python3 "%s" "%s" "$@"' % (fake, self.box.log))
+        # And the real ghostex: it answers `accounts --json` from fake-ghostex.json beside the box, none failing at once.
+        self.ghostex_file = self.box.root / "fake-ghostex.json"
+        self.box.shim("ghostex", 'printf "%%s\\n" "ghostex $*" >> "%s"\n[ -f "%s" ] && exec cat "%s"\nexit 1'
+                      % (self.box.log, self.ghostex_file, self.ghostex_file))
         self.status_pages({"claude": {"indicator": "none", "description": "All Systems Operational", "updated": None},
                            "codex": {"indicator": "none", "description": "All Systems Operational", "updated": None}})
 
@@ -271,6 +275,133 @@ class AIUsageTests(ExtensionTestCase):
         self.codex_says(codex_answer(EMAIL, "plus", live_window(11, 300, n + 150 * MIN), live_window(13, 10080, n + 4 * DAY),
                                      credits=((n + 19 * DAY, "available"), (n + 27 * DAY, "available"),
                                               (n + 9 * DAY, "redeemed"))))
+
+    def ghostex_says(self, *accounts):
+        """`ghostex accounts --json` (shape read live 2026-11-17: ok, accounts, helpers), each account (provider, email,
+        details, error) with the fields the extension reads; the Claude answer kept from an earlier run is dropped."""
+        rows = [{"id": "a%d" % i, "number": i + 1, "provider": provider, "email": email, "state": "ready",
+                 "resetCredits": len(details) if details is not None else None, "resetCreditDetails": details,
+                 "resetCreditsError": error, "usage": [], "sessions": []}
+                for i, (provider, email, details, error) in enumerate(accounts)]
+        self.ghostex_file.write_text(json.dumps({"ok": True, "accounts": rows, "helpers": {}}))
+        (self.box.cache / "claude-resets.json").unlink(missing_ok=True)
+
+    def ghostex_calls(self):
+        return [line for line in self.box.shim_calls() if line.startswith("ghostex ")]
+
+    def sven_resets(self):
+        """Sven's Claude account on 2026-11-17: two Fable grants and one reset that works only at a limit; another
+        account's credit beside it that must never show."""
+        n = self.now
+        limit = "Only works once you reach a usage limit."
+        self.ghostex_says(("claude", EMAIL.upper(), [
+            {"id": "launch-2610-fable", "expiresAt": iso_offset(n + 30 * DAY)},
+            {"id": "launch-2610-fable-6mo", "expiresAt": iso_offset(n + 40 * DAY)},
+            {"id": "weekly-reset", "expiresAt": iso_offset(n + 10 * DAY), "note": limit}], None),
+            ("claude", OTHER, [{"id": "launch-2610-fable", "expiresAt": iso_offset(n + 5 * DAY)}], None),
+            ("codex", EMAIL, [{"id": "RateLimitResetCredit_x", "expiresAt": iso_offset(n + DAY)}], None))
+        return limit
+
+    REDEEM_CLAUDE = {"type": "buttons", "actions": [{"type": "run", "command": "open-ghostex", "title": "Redeem in Ghostex…"}]}
+
+    def test_claudes_reset_credits_come_from_ghostex_with_redeem_in_ghostex(self):
+        self.sven_like()
+        limit = self.sven_resets()
+        n = self.now
+        day = lambda t: time.strftime("%-d %b %H:%M", time.localtime(t))
+        expiry = "%s, %s, %s" % (day(n + 10 * DAY), day(n + 30 * DAY), day(n + 40 * DAY))
+        blocks = self.popover(home=self.box.home)
+        self.check_quiet(json.dumps(blocks))
+        self.assertEqual(card(blocks, "Claude")["blocks"][3:], [
+            {"type": "markdown", "text": "**Limit reset credits:** 3 available (2 Fable) · expire %s · %s" % (expiry, limit)},
+            self.REDEEM_CLAUDE], "the account Claude Code signed in with, its Fable grants named, the limit-only one said")
+        self.assertNotIn("open-ghostex", json.dumps(card(blocks, "Codex")), "Codex keeps its own Redeem reset")
+        self.assertEqual(self.ghostex_calls(), ["ghostex accounts --json"])
+        calm = card(self.popover(home=self.box.home, pilot=self.CALM), "Claude")
+        self.assertEqual(calm["blocks"][3:], [
+            {"type": "note", "icon": "reset", "text": "3 reset credits",
+             "aside": "next expires " + time.strftime("%-d %b", time.localtime(n + 10 * DAY)),
+             "help": "2 Fable · %s · Expire %s" % (limit, expiry)}, self.REDEEM_CLAUDE])
+        self.assertEqual(len(self.ghostex_calls()), 1, "an answer under 30 s old is not asked again")
+        bar = self.bar(home=self.box.home)
+        self.assertIn(self.REDEEM_CLAUDE, card(bar["blocks"], "Claude")["blocks"], "the bar carries Ghostex's last answer")
+        self.assertEqual(len(self.ghostex_calls()), 1, "the bar never asks Ghostex")
+        self.assertIn("3 available (2 Fable)", json.dumps(card(self.page(home=self.box.home), "Claude")))
+        self.assertIn("3 available (2 Fable)", self.detail()[0]["markdown"])
+
+    def test_no_claude_credits_without_ghostex_its_answer_or_the_signed_in_account(self):
+        n = self.now
+        self.claude_cache(claude_json(n - MIN, (10, n + HOUR), (20, n + DAY)))
+        credit = [{"id": "launch-2610-fable", "expiresAt": iso_offset(n + DAY)}]
+        for why, setup in (
+                ("Ghostex missing or failing", lambda: self.ghostex_file.unlink(missing_ok=True)),
+                ("only another account", lambda: self.ghostex_says(("claude", OTHER, credit, None))),
+                ("Ghostex couldn't read it", lambda: self.ghostex_says(("claude", EMAIL, credit, "Resets need a current login."))),
+                ("no credit left", lambda: self.ghostex_says(("claude", EMAIL, [], None))),
+                ("a garbled answer", lambda: self.ghostex_file.write_text('{"ok": true, "accounts": [{"provider": "claude"'))):
+            setup()
+            (self.box.cache / "claude-resets.json").unlink(missing_ok=True)
+            blocks = self.popover(home=self.box.home)
+            self.assertEqual([b["type"] for b in card(blocks, "Claude")["blocks"]], ["meter", "meter"], why)
+            self.assertNotIn("open-ghostex", json.dumps(blocks), why)
+
+    def test_redeem_in_ghostex_opens_ghostex(self):
+        self.box.shim("open")
+        r = self.run_account("open-ghostex")
+        self.assertEqual([h["text"] for h in r.of_type("hud")], ["Redeem it in Ghostex's account usage panel"])
+        self.assertIn("open -b com.madda.ghostex.host", self.box.shim_calls())
+        self.box.shim("open", "exit 1")
+        r = self.run_account("open-ghostex")
+        self.assertEqual([h["text"] for h in r.of_type("hud")], ["Ghostex isn't installed on this Mac"])
+
+    REDEEM_IN_CLAUDE = {"type": "buttons", "actions": [{"type": "run", "command": "claude-limit-reset",
+                                                        "title": "Redeem in Claude Code…"}]}
+
+    def test_without_ghostex_claude_shows_no_count_and_redeem_in_claude_code(self):
+        """Claude Code reports no reset grant headless, so without Ghostex the card counts none and offers Claude Code's
+        own /limit-reset. In-process: Ghostex.app on this Mac would be found, and Codex is left out so none is asked."""
+        n = self.now
+        self.claude_cache(claude_json(n - MIN, (10, n + HOUR), (20, n + DAY)))
+        run = {"paths": {"cache": str(self.box.cache)}}
+
+        def claude(ghostex, cli):
+            with mock.patch.dict(os.environ, {"HOME": str(self.box.home)}), \
+                    mock.patch.object(ai_usage, "ghostex_program", lambda: ghostex), \
+                    mock.patch.object(ai_usage, "claude_program", lambda: cli), \
+                    mock.patch.object(ai_usage, "codex_accounts", lambda *a: []):
+                return ai_usage.limits(run, n)["claude"]
+
+        alone = claude(None, "/x/claude")
+        self.assertEqual(ai_usage.claude_card(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
+        self.assertEqual(ai_usage.calm_claude(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
+        for ghostex, cli, why in (("/x/ghostex", "/x/claude", "Ghostex comes first: without its answer, nothing"),
+                                  (None, None, "neither Ghostex nor Claude Code")):
+            self.assertEqual(len(ai_usage.claude_card(claude(ghostex, cli), n)["blocks"]), 2, why)
+
+    def test_redeem_in_claude_code_opens_its_limit_reset_in_a_terminal(self):
+        """Ghostty as a new window running claude /limit-reset, else Terminal running a script; nothing is spent here:
+        Claude Code's picker asks first."""
+        cache = self.box.root / "cache-claude"
+        for ghostty in ((str(self.box.root),), ()):
+            sent, opened = [], []
+            with mock.patch.object(ai_usage, "send", sent.append), \
+                    mock.patch.object(ai_usage, "claude_program", lambda: "/x/my claude"), \
+                    mock.patch.object(ai_usage, "GHOSTTY", ghostty), \
+                    mock.patch.object(ai_usage.subprocess, "run",
+                                      lambda argv, **kw: opened.append(argv) or subprocess.CompletedProcess(argv, 0)):
+                ai_usage.claude_limit_reset({"paths": {"cache": str(cache)}})
+            if ghostty:
+                self.assertEqual(opened[0][:3], ["open", "-na", str(self.box.root)])
+                self.assertEqual(opened[0][-1], "--command='/x/my claude' /limit-reset")
+                self.assertEqual(sent, [{"type": "hud", "text": "Pick a reset in Claude Code's /limit-reset in Ghostty"}])
+            else:
+                script = cache / "claude-limit-reset.command"
+                self.assertEqual(opened, [["open", "-a", "Terminal", str(script)]])
+                self.assertEqual(script.read_text(), "#!/bin/sh\ncd ~ && exec '/x/my claude' /limit-reset\n")
+        sent = []
+        with mock.patch.object(ai_usage, "send", sent.append), mock.patch.object(ai_usage, "claude_program", lambda: None):
+            ai_usage.claude_limit_reset({})
+        self.assertEqual(sent, [{"type": "hud", "text": "Claude Code isn't installed on this Mac"}])
 
     def redeem(self, name, count, home=".codex"):
         """The Redeem reset button a card with `count` reset credits carries."""

@@ -30,8 +30,8 @@ class Fixture(obsidian.Fixture):
         self.desktop = dict(sources=[str(image)], preferences=dict(order='shuffle',seed='816',fitShape=True,interval=30,
             folders='perScreen',workspaces='perWorkspace',screenSources={'personal-screen':[str(image)]},
             workspaceSources={'9':[str(image)]},workspaceImages={'9':str(image)},scope='everyScreen',cycling=False),
-            displays=[dict(id=key,workspace=workspace,portrait=portrait,image=str(image),pinned=pinned) for key,workspace,portrait,pinned in
-                      [('wide','1',False,False),('tall','2',True,False),('personal-screen','3',False,True),('personal-space','9',False,True)]])
+            displays=[dict(id=key,workspace=workspace,portrait=portrait,image=str(image),pinned=pinned,**({'identity':identity} if identity else {})) for key,workspace,portrait,pinned,identity in
+                      [('wide','1',False,False,'1507:46104:1010101'),('tall','2',True,False,'1552:41063:0'),('personal-screen','3',False,True,'4268:41190:7'),('personal-space','9',False,True,None)]])
         self.write_wall(self.desktop)
         self.settings.update(factoryPacks=str(self.root/'factory'),wallpaperState=str(self.wall),
                              wallpaperBindings=[x['id'] for x in self.desktop['displays']],cursorRoot=str(self.root/'cursors'))
@@ -322,19 +322,23 @@ def run(seam_only=False, fixes_only=False):
                 for step in ['apply','restore']:
                     f=fixture('moved'); f.start(); f.apply('tokyo-night'); state=moved(f,kind); mine=state['displays'][0]['image']
                     words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
-                    assert words['review']['kept']==([] if kind=='inside' else ['Your wallpaper on one screen stays: you changed it after the theme.']),words['review']
+                    # Sven, 2026-11-17: a theme applies to everything. Apply sets the theme on a screen the person changed too, with
+                    # their choice as what Restore puts back; Restore leaves it theirs.
+                    planned={'apply':'Your wallpaper on one screen, changed after the theme, takes this theme; Restore puts yours back.','restore':'Your wallpaper on one screen stays: you changed it after the theme.'}
+                    said={'apply':'Your wallpaper on one screen took this theme; Restore puts yours back.','restore':'Kept your wallpaper on one screen.'}
+                    assert words['review']['kept']==([] if kind=='inside' else [planned[step]]),words['review']
                     if crash:
                         before=f.read_wall(); ledger=(f.root/'state/ownership.json').read_bytes(); f.controls(crash=crash)
                         f.call('theme','apply' if step=='apply' else 'restore',words['id'],ok=False); f.stop(crashed=True); f.controls(); f.start()
                         assert not (f.root/'state/pending.json').exists() and f.read_wall()==before and (f.root/'state/ownership.json').read_bytes()==ledger
                         words=f.call('theme','plan','apply','dracula') if step=='apply' else f.call('theme','plan','restore')
                     answer=f.call('theme','apply' if step=='apply' else 'restore',words['id'])
-                    assert answer['status']==('applied' if step=='apply' else 'restored') and answer['kept']==([] if kind=='inside' else ['Kept your wallpaper on one screen.']),answer
+                    assert answer['status']==('applied' if step=='apply' else 'restored') and answer['kept']==([] if kind=='inside' else [said[step]]),answer
                     wide=next((x for x in own(f).get('wallpapers',[]) if x['target']=={'display':{'_0':'wide'}}),None)
                     if step=='apply':
                         assert f.read_wall()['displays'][1]['image'].endswith('dracula-tall.png')
                         if kind=='inside': assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png')
-                        else: assert wide is None and f.read_wall()['displays'][0]['image']==mine
+                        else: assert wide['original']=={'image':{'_0':mine}} and f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png'),wide
                         f.restore()
                     if kind=='inside': restored(f)
                     else:
@@ -347,7 +351,31 @@ def run(seam_only=False, fixes_only=False):
         f.call('theme','fixture-cycle','wide',back)
         assert f.read_wall()['displays'][0]['image']==back and next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}})['last']=={'image':{'_0':back}}
         f.restore(); restored(f); f.stop()
-        passed('moved wallpaper: one of the theme\'s images is still the theme\'s (Apply plans from it, Restore puts the original back); one outside them stays the person\'s with only its claim released and "Kept your wallpaper on one screen."; both for Apply and Restore, with and without a crash at the first wallpaper effect; the cycle steps on from a moved screen')
+        passed('moved wallpaper: one of the theme\'s images is still the theme\'s (Apply plans from it, Restore puts the original back); one outside them takes the next Apply with the person\'s image as what Restore puts back, and Restore alone keeps it theirs; both for Apply and Restore, with and without a crash at the first wallpaper effect; the cycle steps on from a moved screen')
+        # Sven, 2026-11-17: macOS handed the ultrawide a new UUID at a restart (865A6247 -> E4FDD9B3), and its claim read as
+        # an unplugged screen. The claim follows the display's identity; one from before identities matches by UUID, else
+        # falls to the main screen, as a widget does.
+        def renamed(f, old, new):
+            state=f.read_wall(); state['displays']=[dict(d,id=new) if d['id']==old else d for d in state['displays']]
+            f.stop(); f.write_wall(state); f.settings['wallpaperBindings']=[new if x==old else x for x in f.settings['wallpaperBindings']]
+            f.manifest.write_text(json.dumps(f.settings)); f.start()
+        for legacy in [False,True]:
+            f=fixture('uuid'); f.start(); assert f.apply('tokyo-night')['status']=='applied'
+            claim=next(c for c in own(f)['wallpapers'] if c['target']=={'display':{'_0':'wide'}})
+            assert claim['identity']=='1507:46104:1010101',claim
+            if legacy:
+                value=own(f)
+                for c in value['wallpapers']: c.pop('identity',None)
+                f.stop(); (f.root/'state/ownership.json').write_text(json.dumps(value)); f.start()
+            renamed(f,'wide','wide-new')
+            answer=f.apply('dracula'); assert answer['status']=='applied',answer
+            wide=next(x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide-new'}})
+            assert wide['original']=={'image':{'_0':f.desktop['displays'][0]['image']}} and wide['identity']=='1507:46104:1010101',wide
+            assert f.read_wall()['displays'][0]['image'].endswith('dracula-wide.png') and not [x for x in own(f)['wallpapers'] if x['target']=={'display':{'_0':'wide'}}]
+            print(f"  {'pre-identity' if legacy else 'identity'} claim after the new UUID: target wide-new, original {wide['original']['image']['_0'].rsplit('/',1)[-1]}, now {f.read_wall()['displays'][0]['image'].rsplit('/',1)[-1]}",flush=True)
+            answer=f.restore(); assert answer['status']=='restored' and f.read_wall()['displays'][0]['image']==f.desktop['displays'][0]['image'] and own(f).get('wallpapers',[])==[],answer
+            f.stop()
+        passed('a screen macOS gives a new UUID keeps its wallpaper claim by display identity, and one saved before identities by falling to the main screen; Apply and Restore go on')
 
         stages=['journal','write:0','after-write:0','wallpaper:0','after-wallpaper:0','wallpaper:1','after-wallpaper:1','wallpaper:2','after-wallpaper:2','ledger','after-ledger','cleanup','after-cleanup','effect']
         for switching in [False,True]:
@@ -396,7 +424,7 @@ def run(seam_only=False, fixes_only=False):
         for kind in ['duplicate','unbound','wrong-value']:
             f=fixture('ledger'); f.start(); f.apply('tokyo-night'); f.stop(); path=f.root/'state/ownership.json'; value=own(f)
             if kind=='duplicate': value['wallpapers'].append(value['wallpapers'][0])
-            elif kind=='unbound': value['wallpapers'][1]['target']={'display':{'_0':'unbound'}}
+            elif kind=='unbound': value['wallpapers'][1].update(target={'display':{'_0':'unbound'}},identity='9999:1:1')  # no screen has either
             else: value['wallpapers'][0]['last']={'image':{'_0':str(f.root/'baseline.png')}}
             path.write_text(json.dumps(value))
             if kind!='unbound': refusal(f,'duplicate wallpaper' if kind=='duplicate' else 'target/value mismatch'); continue

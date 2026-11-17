@@ -10,6 +10,7 @@ struct MonitorInfoImpl: Sendable {
     let visibleRect: Rect
     let isMain: Bool
     var displayId: String? = nil // Pilot
+    var displayIdentity: String? = nil // Pilot
 }
 
 extension MonitorInfoImpl: MonitorInfo {
@@ -29,6 +30,8 @@ protocol MonitorInfo: AeroAny {
     var isMain: Bool { get }
     /// Pilot: NSScreen.displayUUID, what a workspace pinned to this display matches (N7).
     var displayId: String? { get }
+    /// Pilot: NSScreen.displayIdentity, what a pin matches before `displayId`.
+    var displayIdentity: String? { get }
 }
 
 final class LazyMonitorInfo: MonitorInfo {
@@ -39,6 +42,7 @@ final class LazyMonitorInfo: MonitorInfo {
     let height: CGFloat
     let isMain: Bool
     let displayId: String?
+    let displayIdentity: String?
     private var _rect: Rect?
     private var _visibleRect: Rect?
 
@@ -50,6 +54,7 @@ final class LazyMonitorInfo: MonitorInfo {
         self.screen = screen
         self.isMain = isMain
         self.displayId = screen.displayUUID
+        self.displayIdentity = screen.displayIdentity
     }
 
     var rect: Rect {
@@ -74,6 +79,7 @@ extension NSScreen {
             visibleRect: visibleRect,
             isMain: isMainScreen,
             displayId: displayUUID,
+            displayIdentity: displayIdentity,
         )
     }
 

@@ -17,7 +17,7 @@ enum WallpaperSwitch {
                 guard let id = DisplayIdentity.uuid(of: screen) else { return nil }
                 let workspace = settings.shownWorkspace(id)
                 let pinned = settings.ownWorkspace(on: id) != nil || settings.folders == .perScreen && !settings.ownSources(id).isEmpty
-                return .init(id: id, workspace: workspace, portrait: shape(of: screen) == .portrait, image: current(on: screen)?.path, pinned: pinned)
+                return .init(id: id, workspace: workspace, portrait: shape(of: screen) == .portrait, image: current(on: screen)?.path, pinned: pinned, identity: screen.displayIdentity)
             }
             let state = settings.themeState(displays: displays)
             return .init(sources: state.sources, displays: state.displays, preferences: state.preferences.merging(["cycling": .bool(queued > 0)]) { _, new in new })

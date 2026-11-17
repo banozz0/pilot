@@ -118,7 +118,7 @@ final class NotificationPanels: NotificationPresenting {
         } else if cardsPanel == nil {
             // Above apps whatever the layer: a card pops up over the window in front while it shows.
             cardsPanel = BarPanelWindow.keyPanel(NotificationCardStack(model: model), surface: .barPopovers, level: HUD.level, takesKey: false) { [weak self] in
-                self?.cardsFrame($0) ?? NotificationPlacement.cards(in: notificationScreen(), size: $0)
+                self?.cardsFrame($0) ?? NotificationPlacement.cards(nextTo: NotificationPlacement.bell(in: notificationScreen()), in: notificationScreen(), size: $0)
             }
         }
     }
@@ -139,32 +139,37 @@ final class NotificationPanels: NotificationPresenting {
 
     func say(_ text: String) { HUD.tip(text, seconds: 3) }
 
-    /// The display the bell was left on, while it is connected, else the main one; and the bell's frame there.
+    /// The display the bell was left on (by identity, or a UUID from before identities), while it is connected, else the
+    /// main one; and the bell's frame there.
     private func bellScreen() -> NSScreen? {
         let last = bellPlaces.lastDisplay
-        return NSScreen.screens.first { $0.displayUUID == last } ?? NSScreen.screens.first ?? NSScreen.main
+        return NSScreen.screens.first { last != nil && ($0.displayIdentity == last || $0.displayUUID == last) } ?? NSScreen.screens.first ?? NSScreen.main
     }
 
+    /// A bell left on a UUID no display has now (macOS hands some a new one at a restart) keeps that place on the main
+    /// display it falls back to, as widgets do (Widget.Placement.screenIndex).
     private func bellFrame() -> CGRect {
-        let screen = bellScreen()
-        return bellPlaces.frame(on: screen?.displayUUID, visible: screen?.visibleFrame ?? notificationScreen())
+        let screen = bellScreen(), last = bellPlaces.lastDisplay
+        let lost = last.map { last in !NSScreen.screens.contains { $0.displayIdentity == last || $0.displayUUID == last } } ?? false
+        let keys = [screen?.displayIdentity, screen?.displayUUID, lost ? last : nil].compactMap { $0 }
+        return bellPlaces.frame(on: keys, visible: screen?.visibleFrame ?? notificationScreen())
     }
 
     /// A drag or pull let go: the bell stays on the display holding its middle, inside it, remembered there.
     private func bellDropped(_ frame: CGRect) {
         let middle = CGPoint(x: frame.midX, y: frame.midY)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(middle) }) ?? bellScreen(), let id = screen.displayUUID else { return }
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(middle) }) ?? bellScreen(), let id = screen.displayIdentity ?? screen.displayUUID else { return }
         let kept = bellPlaces.save(frame, on: id, visible: screen.visibleFrame)
         bellPanel?.setFrame(kept, display: true)
         model.bellSide = kept.width
         placeCards()
     }
 
-    /// Floating: above the bell when it sits low in their column. Top bar: under the bell item, else under the main
+    /// Floating: beside the bell on its display, as the drawer opens. Top bar: under the bell item, else under the main
     /// display's bar at its right.
     private func cardsFrame(_ size: CGSize) -> CGRect {
         guard inBar, let spot = barItem() ?? barRight() else {
-            return NotificationPlacement.cards(in: notificationScreen(), size: size, bell: bellPanel?.frame)
+            return NotificationPlacement.cards(nextTo: bellPanel?.frame ?? bellFrame(), in: bellScreen()?.visibleFrame ?? notificationScreen(), size: size)
         }
         return NotificationPlacement.cards(under: spot.item.midX, foot: spot.foot, in: spot.screen, size: size)
     }

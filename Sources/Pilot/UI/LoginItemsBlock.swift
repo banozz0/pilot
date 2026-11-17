@@ -1,19 +1,35 @@
 import PilotCore
 import SwiftUI
 
-/// Update & Clean's Login and background items (Q386): each item's icon, name, app and kind, read as the page shows.
+/// Mac › Login & Background (Sven, 2026-11-16: "login and background should have its own page"; Update & Clean's until
+/// then): what starts at login or runs in the background, in one block.
+struct LoginItemsPage: View {
+    /// The items a render draws in place of this Mac's; nil reads them.
+    var seeded: [LoginItems.Item]?
+
+    static let intro = "What starts at login or runs in the background, each turned off or on here after a confirm."
+    static let introInfo = "Pilot lists Open at Login's apps and the launchd jobs it can read. What an app registered itself switches in System Settings › Login Items."
+
+    var body: some View {
+        KitPage(intro: Self.intro, info: Self.introInfo) { LoginItemsBlock(seeded: seeded) }
+    }
+}
+
+/// Login & Background's Login and background items (Q386): each item's icon, name, app and kind, read as the page shows.
 /// Each item but Pilot's own and macOS's gets Turn off (or Turn on), asked first in a confirm naming exactly what Pilot
 /// does (Sven, Q412). What an app registered itself is macOS's to switch, so the block keeps Open Login Items….
 struct LoginItemsBlock: View {
     @Environment(\.ink) private var ink
     /// Held only while the block shows, so the list is let go with the page.
-    @State private var model = LoginItemsModel()
+    @State private var model: LoginItemsModel
+
+    /// `seeded` items (a render's) are drawn as read; nothing is read.
+    init(seeded items: [LoginItems.Item]? = nil) { _model = State(initialValue: LoginItemsModel(items: items)) }
     /// The switch waiting on its confirm.
     @State private var asking: (item: LoginItems.Item, on: Bool)?
 
     var body: some View {
         KitBlock(title: "Login and background items", symbol: "power.circle",
-                 note: "What starts at login or runs in the background. Turn each off or on here; what an app registered itself switches in Login Items.",
                  trailing: { Button("Open Login Items…") { LoginItemsModel.openSettings() }.buttonStyle(.pilot) }) {
             VStack(spacing: 0) {
                 if let items = model.items {

@@ -313,9 +313,10 @@ def probe(s):
     s.tree(s.first_banners(), expanded=True, list_rows=[banner(9)])
     s.settled(0.4)
     check(s.status()['panelOpen'] is True and s.status()['live'] == 0, 'open panel: rows are not banners')
+    # With the panel closed the host holds no history, so a list there is what's up: pinned alerts (2026-11-16).
     s.tree(s.first_banners(), list_rows=[banner(9)])
     s.settled(0.4)
-    check(s.status()['live'] == 0 and s.status()['panelOpen'] is False, 'the panel\'s list is never walked')
+    check(s.status()['live'] == 1 and s.status()['panelOpen'] is False, 'panel closed: a list\'s rows are banners on screen')
     # Notification Center restarts under a new pid.
     s.new_events()
     s.pid(700)
@@ -710,7 +711,7 @@ def bell(s):
     e = place('bell-drop main 100 1300 64')
     check(e['bell'] == [100, 1300, 64, 64] and e['last'] == 'main', f'dropped top left at 64: kept there ({e["bell"]})')
     check(e['drawer'] == [100, 852, 380, 440], f'top left: the drawer opens below it, flush left ({e["drawer"]})')
-    check(e['cards'] == [3084, 134, 340, 92], f'bell away from the corner: cards keep their place ({e["cards"]})')
+    check(e['cards'] == [100, 1200, 340, 92], f'bell top left: cards hang below it, flush left (2026-11-16) ({e["cards"]})')
     deadline = time.time() + 15
     while time.time() < deadline and not (s.folder / 'bell.png').exists():
         time.sleep(0.2)
@@ -721,6 +722,7 @@ def bell(s):
     e = place('bell-drop side 5000 -50 200')
     check(e['bell'] == [5000, 0, 96, 96] and e['last'] == 'side', f'on the second display: pulled past the largest, kept at 96 and on screen ({e["bell"]})')
     check(e['drawer'] == [4716, 104, 380, 440], f'bottom right of that display: the drawer above it ({e["drawer"]})')
+    check(e['cards'] == [4756, 104, 340, 92], f'the cards go to the bell\'s display, above it ({e["cards"]})')
     e = place('bell main')
     check(e['bell'] == [100, 1300, 64, 64] and e['last'] == 'side', f'each display keeps its own place ({e["bell"]})')
     e = place('bell-drop main 3328 86 96')
@@ -734,13 +736,14 @@ def bell(s):
     e = place('drawer-closed 100 100\nbell-drop main 200 200 64')
     check(e['bell'] == [200, 200, 64, 64] and e['drawer'] == [200, 272, 300, 200],
           f'the bell moved bottom left: the drawer follows it, at its smallest 300x200 ({e["bell"]}, {e["drawer"]})')
+    check(e['cards'] == [200, 272, 340, 92], f'bell bottom left (Sven, 2026-11-16): cards sit above it, flush left ({e["cards"]})')
     panels = (REPO / 'Sources/Pilot/UI/NotificationPanels.swift').read_text()
     check('setFrameAutosaveName' not in panels and 'setFrameUsingName' not in panels, 'the drawer panel keeps no saved frame of its own')
-    # The app's wiring of B2: the cards' panel is placed against the bell panel's frame, and again when the bell drops or the
+    # The app's wiring of B2: the cards' panel is placed beside the bell panel on its display, and again when the bell drops or the
     # screens change.
     dropped = panels[panels.index('private func bellDropped'):panels.index('private func placeCards')]
     replace = panels[panels.index('private func replace()'):]
-    check(panels.count('self?.cardsFrame($0)') == 1 and panels.count('bell: bellPanel?.frame') == 1
+    check(panels.count('self?.cardsFrame($0)') == 1 and panels.count('nextTo: bellPanel?.frame ?? bellFrame(), in: bellScreen()') == 1
           and 'placeCards()' in dropped and 'placeCards()' in replace.split('\n    }')[0],
           'the app places cards against its bell panel, and again on a drop and a screen change')
     check(not SECRET.search(json.dumps([x for x in s.events() if x['event'] == 'bell-place'])), 'bell events carry no notification text')
@@ -874,7 +877,60 @@ def system(s):
     s.tree([], bump=False)
 
 
-CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system)
+def listed(alerts, depth=0):
+    """Pinned alerts as a modelled shape (2026-11-16, not captured): two or more up at once, in a list, `depth` groups deeper."""
+    node = {'role': 'AXGroup', 'identifier': 'AXNotificationListItems', 'children': alerts}
+    for _ in range(depth):
+        node = {'role': 'AXGroup', 'children': [node]}
+    return node
+
+
+def pinned(s):
+    """macOS's Login Item Added and App Background Activity alerts (2026-11-16): two or more pinned alerts up at once,
+    already up when Pilot attaches, then one more after; each becomes a card and macOS's window goes off screen."""
+    def alerts(*ns):
+        return [banner(n, 'Alert', identifier=f'btm-{n}', description=f'Sekret-App-{n} Sekret-Title-{n}, Sekret-Body-{n}', subtitle=False) for n in ns]
+
+    def cards_now(count, seconds=6):
+        """Status once the card count is `count`, or as it stands after `seconds`."""
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            st = s.status()
+            if st['cards'] == count:
+                return st
+            time.sleep(0.1)
+        return s.status()
+
+    s.set('notifications.hideMacBanners', True)
+    s.tree([listed(alerts(31, 32))], bump=False)
+    s.new_events()
+    s.set('notifications.enabled', True)
+    st = cards_now(2)
+    check(st['cards'] == 2, f'two pinned alerts already up at attach become two cards ({st["cards"]})')
+    check(s.wait_event('move')['y'] == -9999, 'and macOS\'s window goes off screen')
+    s.tree([listed(alerts(33, 31, 32))])
+    st = cards_now(3)
+    check(st['cards'] == 3 and st['hostParked'] is True, f'a third arriving after attach becomes a card, still hidden ({st["cards"]})')
+    s.tree([listed(alerts(34, 33, 31, 32), depth=3)])
+    st = cards_now(4)
+    check(st['cards'] == 4, f'the same alerts three groups deeper still read ({st["cards"]})')
+    s.tree(alerts(31))
+    st = cards_now(1)
+    check(st['cards'] == 1 and st['hostParked'] is True, 'down to one alert: one card, still hidden')
+    # A host the walk reads no banner in (one nested past its reach): three looks a second apart, then it waits.
+    s.tree([listed(alerts(35), depth=14)])
+    check(cards_now(0)['cards'] == 0, 'an alert nested past the walk\'s reach reads as none')
+    before = s.status()['sweeps']
+    s.settled(5)
+    looks = s.status()['sweeps'] - before
+    check(looks == 3, f'a host up with no banner read: looked at again three times, then stops ({looks})')
+    s.set('notifications.enabled', False)
+    s.wait_event('end')
+    s.set('notifications.hideMacBanners', False)
+    s.tree([], bump=False)
+
+
+CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system, pinned=pinned)
 
 
 def main():

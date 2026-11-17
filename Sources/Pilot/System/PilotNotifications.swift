@@ -120,6 +120,10 @@ final class PilotNotifications {
     private var systemLookTask: Task<Void, Never>?
     /// The last Control Center window shapes logged, so a repeat isn't logged again.
     private var lastSystemShapes: [NotificationReader.SystemShape] = []
+    /// A host window up with no banner read: its last shape logged and how many looks again it has had.
+    private var emptyHost: (shape: String, looks: Int)?
+    /// Looks again at a host window up with no banner read: a tree still being built at login settles within these.
+    static let emptyHostLookLimit = 3
 
     private(set) var feed = NotificationFeed()
     private(set) var active = false
@@ -218,6 +222,7 @@ final class PilotNotifications {
         sweepWanted = false
         systemLookTask?.cancel()
         systemLookTask = nil
+        emptyHost = nil
         restoreSystem(Array(systemParked), wait: false)
         systemParked = [:]
         source?.detach()
@@ -323,6 +328,7 @@ final class PilotNotifications {
         syncParking()
         syncSystemParking()
         if feed.live.contains(where: \.isSystem) { lookAgainSoon() }
+        noteEmptyHost(reading.emptyHost)
         let system = reading.banners.filter(\.isSystem).count
         if first {
             slog.notice("notifications: first walk banners=\(reading.banners.count, privacy: .public) system=\(system, privacy: .public) hostFound=\(reading.hostFound, privacy: .public) cards=\(self.feed.cards.count, privacy: .public) drawer=\(self.feed.drawer.count, privacy: .public)")
@@ -344,7 +350,17 @@ final class PilotNotifications {
         }
     }
 
-    /// While a Control Center banner is up: a walk a second from now, which sees it go.
+    /// The host window up with no banner read in it is a misread (it exists only while one is up): its shape is logged
+    /// once, never a word, and a few walks a second apart look again.
+    private func noteEmptyHost(_ shape: String?) {
+        guard let shape else { return emptyHost = nil }
+        if shape != emptyHost?.shape { slog.notice("notifications: host up with no banner read \(shape, privacy: .public)") }
+        let looks = emptyHost?.looks ?? 0
+        emptyHost = (shape, min(looks + 1, Self.emptyHostLookLimit))
+        if looks < Self.emptyHostLookLimit { lookAgainSoon() }
+    }
+
+    /// While a Control Center banner is up, or the host reads empty: a walk a second from now, which sees it change.
     private func lookAgainSoon() {
         guard systemLookTask == nil else { return }
         systemLookTask = Task { [weak self] in

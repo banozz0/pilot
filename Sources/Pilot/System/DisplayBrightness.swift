@@ -45,23 +45,31 @@ final class DisplayBrightness: BrightnessHardware, @unchecked Sendable {
     }
 
     /// Get VCP 0x10, up to three tries: the request twice 10 ms apart, 50 ms for the monitor, then its 11-byte reply.
-    func readDDC(_ display: UInt32) -> Double? {
-        guard let writeI2C, let readI2C, let service = lock.withLock({ ddc[display]?.service }) ?? service(for: display) else { return nil }
+    /// Refused when no request write went through: the link itself turned DDC/CI down, as a MegaChips DP-to-HDMI
+    /// converter does with 0xe0114000 while it still passes the EDID (probe, 2026-11-16); longer waits don't help.
+    func readDDC(_ display: UInt32) -> DDCRead {
+        guard let writeI2C, let readI2C, let service = lock.withLock({ ddc[display]?.service }) ?? service(for: display) else { return .silent }
+        var wentThrough = false, refusal = kIOReturnError
         for _ in 1...3 {
             var request = DDC.get(DDC.brightness)
             for _ in 1...2 {
                 usleep(10_000)
-                _ = writeI2C(service, DDC.chip, DDC.dataAddress, &request, UInt32(request.count))
+                let sent = writeI2C(service, DDC.chip, DDC.dataAddress, &request, UInt32(request.count))
+                if sent == kIOReturnSuccess { wentThrough = true } else { refusal = sent }
             }
             usleep(50_000)
             var reply = [UInt8](repeating: 0, count: DDC.replyLength)
             guard readI2C(service, DDC.chip, 0, &reply, UInt32(reply.count)) == kIOReturnSuccess,
                   let value = DDC.reply(reply, for: DDC.brightness) else { continue }
             lock.withLock { ddc[display] = (service, value.max) }
-            return Double(value.current) / Double(value.max)
+            return .level(Double(value.current) / Double(value.max))
+        }
+        if !wentThrough {
+            slog.notice("brightness: display \(display, privacy: .public)'s link refuses DDC (0x\(String(UInt32(bitPattern: refusal), radix: 16), privacy: .public)): an adapter on the way passes no DDC/CI")
+            return .refused
         }
         slog.notice("brightness: display \(display, privacy: .public) does not answer DDC")
-        return nil
+        return .silent
     }
 
     func write(_ level: Double, to display: UInt32, over route: BrightnessRoute) -> Bool {

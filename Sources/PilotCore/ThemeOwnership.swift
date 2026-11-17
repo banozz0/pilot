@@ -80,6 +80,18 @@ public enum ThemeFiles {
         anchor.replacing(#/\|link:([^|]*?):\d+:\d+:\d+:/#) { "|link:\($0.1):" }
     }
 
+    /// An anchor without its device numbers, for a check that spans a restart. macOS numbers a volume as it mounts it,
+    /// so the same folder reads another device after a restart while its inode and mode stay (16777234 became 16777230,
+    /// and every claim read as moved). Each place an anchor holds one: its leading folder and
+    /// each folder on the way, an inside link's own identity, and its parent's.
+    public static func withoutDevices(_ anchor: String) -> String {
+        anchor.split(separator: "|", omittingEmptySubsequences: false).map { part -> String in
+            if part.hasPrefix("parent:") { return String(part.replacing(#/:\d+(:\d+:\d+)$/#) { "\($0.1)" }) }
+            if part.hasPrefix("link:") { return String(part.replacing(#/^(link:.*?):\d+(:\d+:\d+:\/)/#) { "\($0.1)\($0.2)" }) }
+            return String(part.replacing(#/^\d+(:\d+:\d+)$/#) { "\($0.1)" })
+        }.joined(separator: "|")
+    }
+
     public static let folderMissing = "folder missing"
     /// A destination whose own folder does not exist yet, up to three levels under a real folder: nothing to read, and
     /// Apply makes the folders (an app installed but never opened, or WezTerm's ~/.config/wezterm/colors).
@@ -162,9 +174,12 @@ public struct ThemeClaim: Codable, Equatable, Sendable {
         self.root = root; self.path = path; self.resolved = resolved; self.anchor = anchor; self.selector = selector
         self.original = original; self.last = last; self.codec = codec; self.originalFileAbsent = originalFileAbsent
     }
-    /// The same claim with its region as the file holds it now.
-    public func reading(_ now: Data?) -> ThemeClaim {
-        var claim = ThemeClaim(root: root, path: path, resolved: resolved, anchor: anchor, selector: selector, original: original, last: now, codec: codec, originalFileAbsent: originalFileAbsent)
+    /// The same claim with its region as the file holds it now. `at`: the file as it is now, for one that moved or whose
+    /// link points elsewhere (a theme applies to every file, Sven 2026-11-17); the claim follows the path, and Restore
+    /// still puts back what was there before the theme.
+    public func reading(_ now: Data?, at current: ThemeSnapshot? = nil) -> ThemeClaim {
+        var claim = ThemeClaim(root: root, path: path, resolved: current?.resolved ?? resolved, anchor: current?.anchor ?? anchor, selector: selector,
+                               original: original, last: now, codec: codec, originalFileAbsent: originalFileAbsent)
         claim.bindingID = bindingID
         return claim
     }
@@ -267,7 +282,7 @@ public struct ThemeJournal: Codable, Sendable {
     public var ghostexSettings: [ThemeSettingMutation]? = nil
     /// Wallpaper claims this operation drops without touching the screen or collection: the person changed them since.
     public var keptWallpapers: [ThemeWallpaperTarget]? = nil
-    /// File claims this operation drops without writing: the person changed those regions since.
+    /// File claims a journal from before 2026-11-17 dropped without writing; read so its recovery still runs, never written now.
     public var keptFiles: [ThemeClaim]? = nil
     /// Pilot's own parts the person changed since, let go by this operation (ThemeAppearanceOwnership.parts).
     public var keptLook: [String]? = nil
@@ -394,8 +409,11 @@ public struct ThemeFollowing: Codable, Equatable, Sendable {
 public struct ThemeWallpaperClaim: Codable, Equatable, Sendable {
     public let target: ThemeWallpaperTarget
     public let original, last: ThemeWallpaperValue
-    public init(target: ThemeWallpaperTarget, original: ThemeWallpaperValue, last: ThemeWallpaperValue) {
-        self.target = target; self.original = original; self.last = last
+    /// A display target's identity (ThemeWallpaperState.Display.identity), matched before its UUID; nil in a claim kept
+    /// before identities, which then matches by UUID and else falls to the main screen.
+    public var identity: String?
+    public init(target: ThemeWallpaperTarget, original: ThemeWallpaperValue, last: ThemeWallpaperValue, identity: String? = nil) {
+        self.target = target; self.original = original; self.last = last; self.identity = identity
     }
 }
 

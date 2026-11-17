@@ -31,8 +31,6 @@ final class AppWindowModel {
     var extensionFocus: String?
     /// The extension whose page shows in place of the Extensions page (story 161); any other place clears it.
     var extensionPage: String?
-    /// The run Reports opens on, from Update & Clean's Open report; leaving Reports or going anywhere else clears it.
-    var reportPick: String?
     /// The category Install's catalogue opens on, from Fonts' Get more fonts; going anywhere else clears it.
     var catalogueCategory: String?
     /// The repo Developer › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
@@ -74,7 +72,6 @@ final class AppWindowModel {
     /// Shows `place`: its page, and its part (conflicts open as a sheet over Binds).
     func go(_ place: AppPlace) {
         extensionPage = nil
-        reportPick = nil
         catalogueCategory = nil
         repoPick = nil
         wallpaperFocus = nil

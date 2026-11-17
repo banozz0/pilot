@@ -333,6 +333,8 @@ class MacApp: AbstractApp { // Pilot: not final, for OwnApp (Pilot's own windows
                 try disableAnimations(app: axApp.threadGuarded, job) {
                     glider.minWidths[windowId] = try setFrame(window, topLeft, size, span: span, minWidth: glider.minWidths[windowId] ?? 0, job)
                 }
+                // Pilot: what a tile's write left the window at, for its least size (WindowMinimums); a column learns its own
+                if span == nil, let size, let took = window.get(Ax.sizeAttr) { WindowMinimums.report(windowId, asked: size, took: took) }
                 return TilerFrames.announce([windowId])
             }
             try glider.run(axApp.threadGuarded, windows, on: screen)
@@ -689,6 +691,7 @@ extension Glider {
         enhancedUIWasOn = app.get(Ax.enhancedUserInterfaceAttr) == true
         if enhancedUIWasOn { app.set(Ax.enhancedUserInterfaceAttr, false) }
         startTicking(on: screen?.screen) { [unowned self] in
+            var landing: [(UInt32, CGSize, AXUIElement)] = []
             let landed = tick(.now) { step in
                 guard let ax = try? windows.threadGuarded[step.id]?.ax else { return }
                 let steps = FrameSteps(current: step.sizeUnknown ? nil : step.from, target: step.frame, span: step.span,
@@ -701,7 +704,10 @@ extension Glider {
                     setPosition: { ax.set(Ax.topLeftCornerAttr, $0) },
                 )
                 if let then = step.then { ax.set(Ax.topLeftCornerAttr, then) } // Pilot: a slid-out window's hide (spaceSlide.swift)
+                else if step.lands, step.span == nil { landing.append((step.id, step.frame.size, ax)) }
             }
+            // Pilot: what a tile's glide left the window at, read once every write of the tick is done (WindowMinimums)
+            for (id, asked, ax) in landing { if let took = ax.get(Ax.sizeAttr) { WindowMinimums.report(id, asked: asked, took: took) } }
             TilerFrames.announce(takeLanded())
             guard landed else { return }
             stopTicking()

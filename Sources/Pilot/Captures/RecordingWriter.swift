@@ -26,9 +26,11 @@ final class RecordingWriter: @unchecked Sendable {
     private let inputs: [Track: AVAssetWriterInput]
     private var clock = RecordingClock()
     private var started = false
-    /// Where the last frame landed, and where the last sound ends: the file ends at the later of one frame after the
-    /// first and the second, so a narrated still screen keeps its last words.
+    /// Where the last frame landed, and where the last sound ends: the file ends at Stop, and never before one frame
+    /// after the first or the end of the second, so a narrated still screen keeps its last words.
     private(set) var lastFrame: Double = 0
+    /// The last frame as it came: shown again at the end, so a screen still since then holds it up to Stop.
+    private var lastSample: CMSampleBuffer?
     private(set) var soundEnd: Double = 0
     /// The pointer's places and clicks on the file's timeline (P71), for the video editor's zoom; and, on a recording
     /// that keeps the pointer out (T29), its shapes, for the export to draw it.
@@ -63,6 +65,8 @@ final class RecordingWriter: @unchecked Sendable {
 
     /// H.264 at a quality the encoder holds frame by frame, CABAC, tagged BT.709 as ScreenCaptureKit's frames are. An
     /// average bitrate (build 52) let the encoder spend a fifth of it on screen content: soft text, banded gradients.
+    /// No frame reordering (B-frames): a still screen sends a frame a second or less, so a reordered frame decodes seconds
+    /// after a later one, across a 2 s fragment, and the fragment writer fails the file (-16341, build 2640).
     static func videoSettings(size: CGSize, fps: Int, quality: Double) -> [String: Any] {
         [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -75,6 +79,7 @@ final class RecordingWriter: @unchecked Sendable {
                 AVVideoExpectedSourceFrameRateKey: fps, AVVideoMaxKeyFrameIntervalKey: fps * 2,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
+                AVVideoAllowFrameReorderingKey: false,
             ] as [String: Any],
         ]
     }
@@ -94,7 +99,7 @@ final class RecordingWriter: @unchecked Sendable {
         }
         guard input.isReadyForMoreMediaData, let moved = Self.retimed(sample, by: stamp.seconds - at) else { return }
         guard input.append(moved) else { return }
-        if track == .video { lastFrame = at } else { soundEnd = max(soundEnd, at + max(0, sample.duration.seconds.isFinite ? sample.duration.seconds : 0)) }
+        if track == .video { lastFrame = at; lastSample = sample } else { soundEnd = max(soundEnd, at + max(0, sample.duration.seconds.isFinite ? sample.duration.seconds : 0)) }
     }
 
     /// The pointer at `place` (a fraction of the recorded frame) at host time `time`, or a click there: kept at its place
@@ -129,15 +134,25 @@ final class RecordingWriter: @unchecked Sendable {
     /// The clock's own tracks for the pointer, after the media's.
     private static let moveTrack = 3, clickTrack = 4
 
-    /// Ends the file one frame after its last and closes it; the file's length in seconds. A recording that never got a
-    /// frame leaves no file.
-    func finish() async throws -> Double {
+    /// Ends the file at host time `stop`, Stop's press, pauses left out (no `stop`: one frame after its last), and closes
+    /// it; the file's length in seconds. ScreenCaptureKit sends no frame while the screen is still, so the last frame is
+    /// shown again just before the end and holds to Stop. A recording that never got a frame leaves no file.
+    func finish(at stop: Double? = nil) async throws -> Double {
         guard started else {
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: url)
             throw Problem.nothingRecorded
         }
-        let end = max(lastFrame + 1 / Double(fps), soundEnd)
+        let frame = 1 / Double(fps)
+        let end = max(lastFrame + frame, soundEnd, stop.map { clock.elapsed(at: $0) } ?? 0)
+        if end - frame > lastFrame + frame / 2, let lastSample, let video = inputs[.video] {
+            // The stream has stopped: the encoder catches up in a moment.
+            for _ in 0..<50 where !video.isReadyForMoreMediaData { try? await Task.sleep(for: .milliseconds(10)) }
+            if let held = Self.retimed(lastSample, by: lastSample.presentationTimeStamp.seconds - (end - frame)), video.append(held) {
+                lastFrame = end - frame
+            }
+        }
+        self.lastSample = nil
         inputs.values.forEach { $0.markAsFinished() }
         writer.endSession(atSourceTime: CMTime(seconds: end, preferredTimescale: 600))
         let writer = self.writer

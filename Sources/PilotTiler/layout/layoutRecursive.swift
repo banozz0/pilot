@@ -1,5 +1,6 @@
 // Vendored from AeroSpace (MIT, nikitabobko/AeroSpace) at 74a1bf17: Sources/AppBundle/layout/layoutRecursive.swift
 import AppKit
+import PilotCore
 
 extension Workspace {
     /// Pilot: `unhidingColumns`, the tiler is stopping: a scrolling strip lays every column on screen, a stage every
@@ -156,30 +157,30 @@ extension TilingContainer {
         guard let delta = ((orientation == .h ? width : height) - CGFloat(try children.sumOfDouble { try $0.getWeight(orientation) }))
             .div(children.count) else { return }
 
-        let lastIndex = children.indices.last
-        for (i, child) in children.enumerated() {
-            try child.setWeight(orientation, try child.getWeight(orientation) + delta)
-            let rawGap = context.resolvedGaps.inner.get(orientation).toDouble()
-            // Gaps. Consider 4 cases:
-            // 1. Multiple children. Layout first child
-            // 2. Multiple children. Layout last child
-            // 3. Multiple children. Layout child in the middle
-            // 4. Single child   let rawGap = gaps.inner.get(orientation).toDouble()
-            let gap = rawGap - (i == 0 ? rawGap / 2 : 0) - (i == lastIndex ? rawGap / 2 : 0)
+        for child in children { try child.setWeight(orientation, try child.getWeight(orientation) + delta) }
+        // Pilot (live bug 2026-11-16): a window that cannot shrink to its tile gets its least size, the tiles beside it
+        // giving way (TileFit, WindowMinimums); the weights stay the preset's, so its shares come back once it goes.
+        let rawGap = CGFloat(context.resolvedGaps.inner.get(orientation))
+        let weights = try children.map { try $0.getWeight(orientation) }
+        let sizes = WindowMinimums.isEmpty ? weights
+            : TileFit.sizes(weights, gap: rawGap, minimums: children.map { $0.leastExtent(orientation, gap: rawGap) })
+        for (i, (child, size)) in zip(children, sizes).enumerated() {
+            // Gaps: half the inner gap is each side's that has a neighbour (TileFit.gapShare)
+            let gap = TileFit.gapShare(i, of: children.count, gap: rawGap)
             try await child.layoutRecursive(
                 i == 0 ? point : point.addingOffset(orientation, rawGap / 2),
-                width: orientation == .h ? child.hWeight - gap : width,
-                height: orientation == .v ? child.vWeight - gap : height,
+                width: orientation == .h ? size - gap : width,
+                height: orientation == .v ? size - gap : height,
                 virtual: Rect(
                     topLeftX: virtualPoint.x,
                     topLeftY: virtualPoint.y,
-                    width: orientation == .h ? child.hWeight : width,
-                    height: orientation == .v ? child.vWeight : height,
+                    width: orientation == .h ? size : width,
+                    height: orientation == .v ? size : height,
                 ),
                 context,
             )
-            virtualPoint = orientation == .h ? virtualPoint.addingXOffset(try child.hWeight) : virtualPoint.addingYOffset(try child.vWeight)
-            point = orientation == .h ? point.addingXOffset(try child.hWeight) : point.addingYOffset(try child.vWeight)
+            virtualPoint = orientation == .h ? virtualPoint.addingXOffset(size) : virtualPoint.addingYOffset(size)
+            point = orientation == .h ? point.addingXOffset(size) : point.addingYOffset(size)
         }
     }
 
@@ -237,6 +238,15 @@ extension TilingContainer {
 }
 
 extension TreeNode {
+    /// Pilot (live bug 2026-11-16): the least room this node's windows take along `orientation` (WindowMinimums), with
+    /// `gap` between those side by side that way; zero where none is known.
+    @MainActor
+    fileprivate func leastExtent(_ orientation: Orientation, gap: CGFloat) -> CGFloat {
+        if let window = self as? Window { return WindowMinimums.least(window.windowId).map { orientation == .h ? $0.width : $0.height } ?? 0 }
+        guard let container = self as? TilingContainer, container.layout == .tiles else { return 0 }
+        return TileFit.least(container.children.map { $0.leastExtent(orientation, gap: gap) }, along: container.orientation == orientation, gap: gap)
+    }
+
     /// Pilot: one column of a strip or group of a stage laid out at `frame`, half the inner gap on each side its own.
     @MainActor
     fileprivate func layoutColumn(_ frame: Rect, _ context: LayoutContext) async throws {

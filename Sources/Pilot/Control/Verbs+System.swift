@@ -36,7 +36,7 @@ extension ControlVerbs {
          "the output and input devices, each with its volume (0-100) and mute; picks a device, sets a level or the mute as Setup › Sound does. A device is its id or its name. A volume macOS keeps fixed answers volumeSettable false and refuses a level."),
         ("displays", "system displays", "every screen's mode and brightness route, plus independently observed display connections and recovery readiness"),
         ("display", "system display <screen> [--name <text>] [--size <W>x<H>] [--hidpi] [--rate <Hz>] [--brightness <0-100>] [--rotate 0|90|180|270] [--connected on|off] [--test-connection] | display keep|revert|restore-all",
-         "--name sets a personal Pilot label on an active screen; empty text clears it. Names persist by display UUID. Other flags change size, rate, brightness, rotation or native connection; a size or rate goes back after 15 s unless kept; a rotation stays unless reverted within 15 s. OFF needs attended `--test-connection` and refuses the last awake display. `restore-all` retries remembered OFF displays. Hardware names and connection identity stay unchanged."),
+         "--name sets a personal Pilot label on an active screen; empty text clears it. Names persist by the display's identity (vendor:model:serial), so they outlast a new display UUID. Other flags change size, rate, brightness, rotation or native connection; a size or rate goes back after 15 s unless kept; a rotation stays unless reverted within 15 s. OFF needs attended `--test-connection` and refuses the last awake display. `restore-all` retries remembered OFF displays. Hardware names and connection identity stay unchanged."),
         ("awake", "system awake [on|off] [--for 1h|4h|until-off]",
          "keep awake: on or off, until when, and its length; --for sets the length the switch turns it on for, and while on counts from now, as the page's For picker does"),
         ("layout", "system layout [<layout>]", "the keyboard layouts macOS has enabled, the one in use marked; a layout (its id or name) selects it, as Setup › Keyboard layout does"),
@@ -201,6 +201,7 @@ extension ControlVerbs {
                 let read = brightness.screens[info.id]
                 var entry: [String: JSONValue] = ["route": .string(read?.route.rawValue ?? "reading")]
                 entry["level"] = read?.level.map(percent)
+                if read?.ddcRefused == true { entry["ddc"] = .string("refused by adapter") }
                 screen["brightness"] = .object(entry)
             }
             return .object(screen)
@@ -315,7 +316,9 @@ extension ControlVerbs {
                 throw ControlError(.notReady, "\(info.name)'s brightness is not read yet; ask again in a moment")
             }
             guard read.route != .none, brightness.set(info.id, level) != nil else {
-                throw ControlError(.badValue, "\(info.name) answers neither Apple's brightness call nor DDC/CI, so Pilot cannot set its brightness")
+                throw ControlError(.badValue, read.ddcRefused
+                    ? "\(info.name)'s adapter doesn't pass DDC/CI, so Pilot cannot set its brightness"
+                    : "\(info.name) answers neither Apple's brightness call nor DDC/CI, so Pilot cannot set its brightness")
             }
         }
         if let mode, mode != info.mode {

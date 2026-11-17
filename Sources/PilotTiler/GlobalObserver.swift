@@ -53,6 +53,9 @@ enum GlobalObserver {
         nc.addObserver(forName: NSWorkspace.didUnhideApplicationNotification, object: nil, queue: .main, using: onNotif)
         nc.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: onNotif)
         nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main, using: onNotif)
+        // Pilot (live bug 2026-11-16): a display turned, resized or rearranged lays its windows out again at once, its
+        // auto workspaces rebuilt for the new room, not on whatever event comes next
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: onNotif)
 
         // Pilot: AeroSpace's NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp), through a session tap (below)
         installLeftMouseUpTap { _ in

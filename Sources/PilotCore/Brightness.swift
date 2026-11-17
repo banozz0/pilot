@@ -45,13 +45,23 @@ public enum DDC {
     }
 }
 
+/// What a DDC/CI read of a screen's brightness got.
+public enum DDCRead: Equatable, Sendable {
+    case level(Double)
+    /// No valid reply, or no service to ask.
+    case silent
+    /// The link refused the I2C write itself: an adapter or converter on the way passes no DDC/CI (a MegaChips
+    /// DisplayPort-to-HDMI converter does this, though it passes the EDID).
+    case refused
+}
+
 /// The calls behind the routes, all blocking: DisplayServices and IOAVService on the Mac, a fake in the tests. Reads and
 /// writes run on the screen's own queue, never on the main thread, except Apple's quick read.
 public protocol BrightnessHardware: Sendable {
     /// The level, 0 to 1, when DisplayServices can change this screen; nil otherwise.
     func readApple(_ display: UInt32) -> Double?
-    /// The level over DDC/CI; nil when the monitor does not answer.
-    func readDDC(_ display: UInt32) -> Double?
+    /// The level over DDC/CI, or why there is none.
+    func readDDC(_ display: UInt32) -> DDCRead
     /// False when the screen refused.
     func write(_ level: Double, to display: UInt32, over route: BrightnessRoute) -> Bool
 }
@@ -108,6 +118,8 @@ public final class Brightness {
         public var route: BrightnessRoute
         /// 0 to 1; nil only with no route.
         public var level: Double?
+        /// No route because the link refused DDC/CI, so Setup can blame the adapter rather than the monitor.
+        public var ddcRefused = false
     }
 
     /// A screen to read. A non-Apple screen with HDR on is no Apple display, though DisplayServices may claim it
@@ -151,8 +163,11 @@ public final class Brightness {
     /// Apple's route, then DDC, then none: the first that works.
     nonisolated static func probe(_ display: Display, _ hardware: any BrightnessHardware) -> Screen {
         if display.appleAllowed, let level = hardware.readApple(display.id) { return Screen(route: .apple, level: level) }
-        if let level = hardware.readDDC(display.id) { return Screen(route: .ddc, level: level) }
-        return Screen(route: .none, level: nil)
+        switch hardware.readDDC(display.id) {
+        case .level(let level): return Screen(route: .ddc, level: level)
+        case .refused: return Screen(route: .none, level: nil, ddcRefused: true)
+        case .silent: return Screen(route: .none, level: nil)
+        }
     }
 
     /// One step up or down; the new level, or nil when the screen has no control or is not read yet. An Apple screen's

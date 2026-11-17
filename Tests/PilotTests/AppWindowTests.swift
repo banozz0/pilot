@@ -62,16 +62,14 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .stats)
         defaults.set("pilot", forKey: "appWindow.page")
         #expect(AppWindowModel(defaults: defaults).page == .general)
-        // Going back to a page with its own content first shows that content again.
+        // Reports is a place on Update & Clean's front (Sven, 2026-11-16): a link or Open report opens the front, scrolled
+        // to it; the old `page=install&tab=reports` too.
         let model = AppWindowModel(defaults: defaults)
+        #expect(AppPlace.linked(URL(string: "pilot://open?page=install&tab=reports")!) == AppPlace(.reports))
         model.go(AppPlace(.reports))
-        #expect(model.section(of: .upkeep) == .reports)
-        model.go(AppPlace(.upkeep))
-        #expect(model.section(of: .upkeep) == nil)
-        // Update & Clean's Open report picks the run Reports opens on; going anywhere else forgets it.
-        model.reportPick = "run-1"
-        model.go(AppPlace(.upkeep))
-        #expect(model.reportPick == nil)
+        #expect(model.page == .upkeep && model.section(of: .upkeep) == nil && model.blockFocus == .reports)
+        model.go(AppPlace(.loginItems))
+        #expect(model.page == .loginItems && model.blockFocus == nil)
     }
 
     @Test("The window's own keys answer before the main menu's: Cmd+, opens Pilot (not the menu's Open Pilot…), Ctrl+Tab the area's next page, Cmd+2 Keys")
@@ -338,11 +336,11 @@ struct AppWindowRenders {
                 cards = Self.count(want, in: try #require(snapshot(frame, scale: 2)), fromX: fromX)
                 document.scroll(NSPoint(x: 0, y: top))
             }
-            // Instrument draws these as plain lists, empty on the fakes (Activity's processes, Update & Clean's reports, the
+            // Instrument draws these as plain lists, empty on the fakes (Activity's processes, Login & Background's items, the
             // catalogue, instructions, extensions, Look's theme catalogue before its index reads): no card to find. Configs and
             // its Agents part, and Repos, read this Mac's files off the main thread, which never hands back while this test
             // holds it: ConfigsListTests and ReposPageRenders draw their cards from a home of their own.
-            let lists: Set = ["activity", "upkeep-reports", "install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
+            let lists: Set = ["activity", "loginItems", "install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
             if cards < enough && !lists.contains(name) { withoutCards.append(name) }
         }
         // The Binds page searched (card agent-bo-95422785): each hit under its own layer's heading.

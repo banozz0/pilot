@@ -38,7 +38,7 @@ public struct FontPlace: Equatable, Sendable, Identifiable {
     /// rewrites on quit), Terminal (an archived NSFont), WezTerm (its config is Lua code), Warp (no readable font store).
     public static let known: [FontPlace] = [
         .init(id: "ghostty", app: "Ghostty", place: "Terminal", bundles: ["com.mitchellh.ghostty"], path: ".config/ghostty/pilot.conf", format: .ghostty),
-        .init(id: "ghostex", app: "Ghostex", place: "Terminal", bundles: ["com.madda.ghostex.gpui"],
+        .init(id: "ghostex", app: "Ghostex", place: "Terminal", bundles: SameApp.ghostex,
               path: ".config/ghostex/native-sidebar-settings.json", format: .json(key: "terminalFontFamily", css: false), live: false),
         .init(id: "vscode.editor", app: "VS Code", place: "Editor", bundles: ["com.microsoft.VSCode"],
               path: "Library/Application Support/Code/User/settings.json", format: .json(key: "editor.fontFamily", css: true)),

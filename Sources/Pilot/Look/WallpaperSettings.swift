@@ -23,8 +23,9 @@ final class WallpaperSettings: ScreenPausing {
         get { ownFolders == .eachScreen ? .perScreen : .shared }
         set { if newValue == .perScreen { ownFolders = .eachScreen } else if ownFolders == .eachScreen { ownFolders = .nothing } }
     }
-    /// Each screen's own folders and images by its display UUID (DisplayIdentity, as Monitors keys its pins), read
-    /// only while `folders` is perScreen; a screen not here takes `sources`.
+    /// Each screen's own folders and images by its display identity (LiveDisplay.key; by UUID before identities), so
+    /// they outlast a UUID macOS hands out anew; read only while `folders` is perScreen; a screen not here takes
+    /// `sources`. Callers name a screen by its UUID.
     private(set) var screenSources: [String: [String]] { didSet { defaults.set(screenSources, forKey: Self.screenSourcesKey) } }
     /// Workspaces share the screen's folders, or each can have its own (Sven 2026-10-19, Q333): `ownFolders` read for
     /// workspaces.
@@ -132,7 +133,7 @@ final class WallpaperSettings: ScreenPausing {
     }
 
     /// The screen's own folders and images; empty when it takes the shared ones.
-    func ownSources(_ display: String) -> [String] { screenSources[display] ?? [] }
+    func ownSources(_ display: String) -> [String] { screenSources.first(of: LiveDisplay.keys(forUUID: display)) ?? [] }
 
     /// The workspace's own folders and images; empty when it takes its screen's.
     func workspaceOwn(_ workspace: String) -> [String] { workspaceSources[workspace] ?? [] }
@@ -147,7 +148,13 @@ final class WallpaperSettings: ScreenPausing {
         if let workspace {
             workspaceSources[workspace] = list.isEmpty ? nil : list
             workspaceImages[workspace] = nil
-        } else if let display { screenSources[display] = list.isEmpty ? nil : list } else { sources = list }
+        } else if let display {
+            // Under the screen's identity, its UUID's entry from before identities gone.
+            var own = screenSources
+            own[display] = nil
+            own[LiveDisplay.key(forUUID: display)] = list.isEmpty ? nil : list
+            screenSources = own
+        } else { sources = list }
     }
 
     /// Keeps the image a workspace with its own sources now shows, for the next time it is switched to.

@@ -545,7 +545,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
 
         public var key: String? {
             switch self {
-            case .app(let b): "app:\(b)"
+            case .app(let b): "app:\(SameApp.canonical(b))"
             case .window, .remove, .update, .clean, .copy, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: nil
             case .file(let path): "file:\(path)"
             case .package(let key): "package:\(key)"

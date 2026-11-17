@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 
 /// Where the notification surfaces sit, in screen coordinates (origin bottom left), inside a screen's visible frame so the
-/// Dock and the top bar stay clear: cards in the bottom right above the bell's corner; the bell there until Sven moves it,
-/// and the drawer beside the bell wherever it is; with the top bar's bell item, the cards under it.
+/// Dock and the top bar stay clear: the bell in the bottom right until Sven moves it, and the cards and the drawer beside
+/// the bell wherever it is; with the top bar's bell item, the cards under it.
 public enum NotificationPlacement {
     public static let margin: CGFloat = 16
     public static let gap: CGFloat = 8
@@ -15,16 +15,10 @@ public enum NotificationPlacement {
         CGRect(x: visible.maxX - margin - bell.width, y: visible.minY + margin, width: bell.width, height: bell.height)
     }
 
-    /// The top of the room above the bell, for a stack whose foot sits there.
-    private static func foot(in visible: CGRect) -> CGFloat { visible.minY + margin + bell.height + gap }
-
-    /// The stack's foot sits above the corner's bell, and above `bell` itself when it is low in the cards' column at any
-    /// size, so a 96 pt bell in the corner is never covered (review B2).
-    public static func cards(in visible: CGRect, size: CGSize, bell: CGRect? = nil) -> CGRect {
-        let x = visible.maxX - margin - size.width
-        var y = foot(in: visible)
-        if let bell, bell.maxX > x, bell.minX < visible.maxX - margin, bell.minY < visible.midY { y = max(y, bell.maxY + gap) }
-        return CGRect(x: x, y: y, width: size.width, height: size.height)
+    /// The floating cards beside the bell, on its display, as the drawer opens (Sven, 2026-11-16: they stayed bottom right
+    /// with the bell moved bottom left): above a low bell, below a high one, flush with its outer edge, never over it.
+    public static func cards(nextTo bell: CGRect, in visible: CGRect, size: CGSize) -> CGRect {
+        drawer(nextTo: bell, in: visible, size: size)
     }
 
     /// The top bar's cards: centred under its bell item at `centre`, `gap` under the bar's `foot`, kept inside `screen`'s sides.
@@ -68,8 +62,8 @@ public enum NotificationPlacement {
     private static func clamp(_ v: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat { max(low, min(v, max(low, high))) }
 }
 
-/// Where Sven left the bell, one place a display (by its UUID), and which display it was on last. A place is the bell's
-/// foot-left corner from that display's visible frame's, and its side.
+/// Where Sven left the bell, one place a display (by its identity, LiveDisplay, or before identities its UUID), and which
+/// display it was on last. A place is the bell's foot-left corner from that display's visible frame's, and its side.
 public struct NotificationBellPlaces {
     public struct Place: Codable, Equatable, Sendable {
         public var x: Double, y: Double, side: Double
@@ -87,8 +81,12 @@ public struct NotificationBellPlaces {
     public func place(on display: String) -> Place? { all[display] }
 
     /// The bell's frame on `display`: its place there, or the corner at the first side.
-    public func frame(on display: String?, visible: CGRect) -> CGRect {
-        let place = display.flatMap(place(on:))
+    public func frame(on display: String?, visible: CGRect) -> CGRect { frame(on: display.map { [$0] } ?? [], visible: visible) }
+
+    /// The bell's frame from the first of `displays` that has a place (one display's identity, then its UUID), or the
+    /// corner at the first side.
+    public func frame(on displays: [String], visible: CGRect) -> CGRect {
+        let place = displays.lazy.compactMap(place(on:)).first
         return NotificationPlacement.bell(in: visible, at: place.map { CGPoint(x: $0.x, y: $0.y) },
                                           side: place.map { CGFloat($0.side) } ?? NotificationPlacement.bell.width)
     }

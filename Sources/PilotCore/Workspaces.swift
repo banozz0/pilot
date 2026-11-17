@@ -1,5 +1,4 @@
 import AppKit
-import Synchronization
 
 /// The workspaces, numbered from 1 (Sven 2026-10-09: 1 to 9 by default, added and removed on the Workspaces page): never
 /// more than nine, one per number key, never fewer than one. Adding one makes the next number; deleting one closes its
@@ -142,44 +141,42 @@ public struct WorkspaceRenumber: Equatable, Sendable {
 public enum MonitorPin: Codable, Hashable, Sendable {
     /// Whichever display is main (the one with the menu bar at the origin).
     case main
-    /// A display by the name macOS gives it and its display UUID, which survives replugging. A pin carried over from
-    /// AeroSpace's table has no id yet: its name is AeroSpace's monitor description, matched as AeroSpace did.
-    case display(name: String, id: String?)
+    /// A display by the name macOS gives it, its display UUID and its EDID identity (LiveDisplay), matched identity
+    /// first, since macOS may hand a display a new UUID (Sven's ultrawide, 2026-11-16); a pin saved before identities has
+    /// none. A pin carried over from AeroSpace's table has no id yet: its name is AeroSpace's monitor description,
+    /// matched as AeroSpace did.
+    case display(name: String, id: String?, identity: String? = nil)
 }
 
 /// A connected display as the Monitor pick offers it.
 public struct ConnectedDisplay: Hashable, Sendable {
     public let name: String
     public let id: String
-    public init(name: String, id: String) { self.name = name; self.id = id }
+    /// Its EDID identity (LiveDisplay), nil when it has none.
+    public let identity: String?
+    public init(name: String, id: String, identity: String? = nil) { self.name = name; self.id = id; self.identity = identity }
 
-    public var pin: MonitorPin { .display(name: name, id: id) }
+    public var pin: MonitorPin { .display(name: name, id: id, identity: identity) }
 
     /// The displays connected now, in NSScreen's order.
     @MainActor public static var current: [ConnectedDisplay] {
-        NSScreen.screens.compactMap { screen in screen.displayUUID.map { ConnectedDisplay(name: screen.localizedName, id: $0) } }
+        NSScreen.screens.compactMap { screen in
+            screen.displayUUID.map { ConnectedDisplay(name: screen.localizedName, id: $0, identity: screen.displayIdentity) }
+        }
     }
 
-    /// This display is the one `pin` names: by id, or by name for a carried-over pin that has none.
-    public func matches(_ pin: MonitorPin) -> Bool {
-        guard case .display(let name, let id) = pin else { return false }
-        return id.map { $0 == self.id } ?? (name.caseInsensitiveCompare(self.name) == .orderedSame)
-    }
-}
-
-extension NSScreen {
-    /// The display's UUID, which macOS derives from its vendor, model and serial, so it survives replugging. Kept per
-    /// display number, since the own tiler reads it each time it lists the monitors, many times per layout.
-    public var displayUUID: String? {
-        guard let number = (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { return nil }
-        if let known = Self.uuids.withLock({ $0[number] }) { return known }
-        guard let uuid = CGDisplayCreateUUIDFromDisplayID(number)?.takeRetainedValue() else { return nil }
-        let id = CFUUIDCreateString(nil, uuid) as String
-        Self.uuids.withLock { $0[number] = id }
-        return id
+    /// The one of `displays` that `pin` names: by identity while only one has it, else by id (LiveDisplay.index), or by
+    /// name for a carried-over pin that has neither.
+    public static func named(by pin: MonitorPin, in displays: [ConnectedDisplay]) -> ConnectedDisplay? {
+        guard case .display(let name, let id, let identity) = pin else { return nil }
+        let live = displays.map { LiveDisplay(uuid: $0.id, identity: $0.identity) }
+        if let i = LiveDisplay.index(uuid: id, identity: identity, in: live) { return displays[i] }
+        guard id == nil, identity == nil else { return nil }
+        return displays.first { name.caseInsensitiveCompare($0.name) == .orderedSame }
     }
 
-    private static let uuids = Mutex<[CGDirectDisplayID: String]>([:])
+    /// This display is the one `pin` names, as `named(by:in:)` reads it with this display alone.
+    public func matches(_ pin: MonitorPin) -> Bool { Self.named(by: pin, in: [self]) != nil }
 }
 
 /// Each workspace's monitor pin, Pilot's own setting (N7), saved in Pilot's defaults and fed to Pilot's tiler. On first
@@ -202,11 +199,19 @@ public enum WorkspaceMonitors {
     /// wait with their name.
     public static func pins(in defaults: UserDefaults, carryingFrom file: @autoclosure () -> String,
                             displays: [ConnectedDisplay]) -> [String: MonitorPin] {
-        if let data = defaults.data(forKey: key), let saved = try? JSONDecoder().decode([String: MonitorPin].self, from: data) { return saved }
+        if let data = defaults.data(forKey: key), let saved = try? JSONDecoder().decode([String: MonitorPin].self, from: data) {
+            // A pin saved before identities takes its display's while its UUID still names that display.
+            let filled = saved.mapValues { pin -> MonitorPin in
+                guard case .display(let name, let id?, nil) = pin, let identity = displays.first(where: { $0.id == id })?.identity else { return pin }
+                return .display(name: name, id: id, identity: identity)
+            }
+            if filled != saved { save(filled, in: defaults) }
+            return filled
+        }
         let carried = carryOver(from: file()).mapValues { name in
             if name == "main" { return MonitorPin.main }
             let pin = MonitorPin.display(name: name, id: nil)
-            return displays.first { $0.matches(pin) }?.pin ?? pin
+            return ConnectedDisplay.named(by: pin, in: displays)?.pin ?? pin
         }
         if !carried.isEmpty { save(carried, in: defaults) }
         return carried
@@ -223,8 +228,8 @@ public enum WorkspaceMonitors {
         -> (choices: [(value: MonitorPin?, title: String)], picked: MonitorPin?) {
         var choices: [(value: MonitorPin?, title: String)] = [(nil, "Any"), (.main, "Main")]
         choices += displays.map { ($0.pin, $0.name) }
-        guard let pin, case .display(let name, _) = pin else { return (choices, pin) }
-        if let display = displays.first(where: { $0.matches(pin) }) { return (choices, display.pin) }
+        guard let pin, case .display(let name, _, _) = pin else { return (choices, pin) }
+        if let display = ConnectedDisplay.named(by: pin, in: displays) { return (choices, display.pin) }
         return (choices + [(pin, "\(name) (unplugged)")], pin)
     }
 }

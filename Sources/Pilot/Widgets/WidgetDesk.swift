@@ -99,6 +99,11 @@ final class WidgetDesk: ScreenPausing {
         guard !started else { return }
         started = true
         self.tiler = tiler
+        // Placements saved before display identities keep their display's now, while its UUID still names it.
+        if let read = store.readPlacements() {
+            let live = LiveDisplay.connected()
+            if read.contains(where: { var p = $0; return p.fillIdentity(from: live) }) { try? store.save(read) }
+        }
         // Placements from before Snap to grid, or a file edited by hand, go on the grid once at the start.
         if WidgetSnap.shared.on { snapAll() } else { reload() }
     }
@@ -174,7 +179,8 @@ final class WidgetDesk: ScreenPausing {
             let desktop = showDesktopWorkspace()
             var states: [String: Widget.ScreenState] = [:]
             for screen in NSScreen.screens {
-                guard let uuid = screen.displayUUID else { continue }
+                // Read fresh, as the tiler reads its workspaces' UUIDs: a kept one may be from before macOS changed it.
+                guard let uuid = screen.freshDisplayUUID else { continue }
                 let workspace = visible.first { $0.displayUUID == uuid }?.workspace
                 states[uuid] = Widget.ScreenState(inUse: inUse, tilerAnswering: answering, workspace: workspace,
                                                   windows: workspace.map { w in windows.count { $0.workspace == w } } ?? 0,
@@ -188,9 +194,10 @@ final class WidgetDesk: ScreenPausing {
     /// Shows the placements whose screen shows, on their one workspace when they have one; hides the rest. Home's are
     /// Home's.
     private func apply() {
+        let live = LiveDisplay.screens
         for placement in placements where !placement.onHome {
-            let screen = Self.screen(placement.screen)
-            let shows = screen?.displayUUID.flatMap { screens[$0] }.map { placement.why(on: $0).shows } ?? false
+            let screen = Self.screen(of: placement, in: live)
+            let shows = screen?.freshDisplayUUID.flatMap { screens[$0] }.map { placement.why(on: $0).shows } ?? false
             if shows, let screen { show(placement, on: screen) } else { hide(placement.id) }
         }
         noteShown()
@@ -768,7 +775,7 @@ final class WidgetDesk: ScreenPausing {
         if clicked { refix(held.id); return openMenu(at: held.start) }
         guard let panel = panels[held.id], let i = placements.firstIndex(where: { $0.id == held.id }) else { return }
         guard let screen = panel.screen ?? NSScreen.main else { return }
-        placements[i].screen = screen.displayUUID
+        (placements[i].screen, placements[i].screenIdentity) = (screen.freshDisplayUUID, screen.displayIdentity)
         placements[i].move(to: Self.flip(panel.frame), on: Self.flip(screen.frame))
         // A resize that changed nothing leaves the placement fitted to its content.
         if held.corner != nil, panel.frame.size != held.frame.size {
@@ -797,11 +804,13 @@ final class WidgetDesk: ScreenPausing {
                             "data": .string(widget.data.label), "trust": .string(trust.rawValue), "runs": .bool(trust.runs)])
         }
         let rows: [JSONValue] = placements.map { placement in
-            let uuid = Self.screen(placement.screen)?.displayUUID
+            let shown = Self.screen(of: placement), uuid = shown?.freshDisplayUUID
             let state = uuid.flatMap { screens[$0] }
             let widget = store.widget(placement.widget)
             var row: [String: JSONValue] = ["id": .string(placement.id), "widget": .string(placement.widget), "home": .bool(placement.onHome),
                                             "screen": placement.screen.map(JSONValue.string) ?? .string("main"),
+                                            "screenIdentity": placement.screenIdentity.map(JSONValue.string) ?? .null,
+                                            "display": placement.onHome ? .null : shown.map { .string($0.localizedName) } ?? .null,
                                             "workspace": placement.workspace.map(JSONValue.string) ?? .string("all"),
                                             "shown": .bool(panels[placement.id]?.isVisible ?? false),
                                             "feeding": .bool(feeds[placement.id] != nil && !idle.contains(placement.id)),
@@ -837,10 +846,11 @@ final class WidgetDesk: ScreenPausing {
 
     // MARK: Geometry
 
-    /// The screen a placement names, the main one for nil; nil when that display is not connected.
-    static func screen(_ uuid: String?) -> NSScreen? {
-        guard let uuid else { return NSScreen.screens.first }
-        return NSScreen.screens.first { $0.displayUUID == uuid }
+    /// The screen a placement shows on (Widget.Placement.screenIndex): its display by identity or UUID, the main one for
+    /// none; nil when that display is not connected.
+    static func screen(of placement: Widget.Placement, in live: [LiveDisplay] = LiveDisplay.screens) -> NSScreen? {
+        let screens = NSScreen.screens
+        return placement.screenIndex(in: live).flatMap { $0 < screens.count ? screens[$0] : nil }
     }
 
     /// An AppKit frame (bottom-left origin) in top-left coordinates, and back.

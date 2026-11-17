@@ -79,8 +79,10 @@ public enum RetiredActions {
 
     public static func current(_ id: String) -> String { renamed[id] ?? id }
 
-    /// A menu row's key (MenuEntry.Target.key, `action:<id>`) with its action's current id.
+    /// A menu row's key (MenuEntry.Target.key, `action:<id>`) with its action's current id; an app's (`app:<id>`) by
+    /// the id its row is keyed by (SameApp).
     public static func current(key: String) -> String {
+        if key.hasPrefix("app:") { return "app:" + SameApp.canonical(String(key.dropFirst("app:".count))) }
         guard key.hasPrefix("action:") else { return key }
         return "action:" + current(String(key.dropFirst("action:".count)))
     }

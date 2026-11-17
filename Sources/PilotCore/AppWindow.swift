@@ -14,9 +14,10 @@ import Foundation
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
-/// Windows area's sidebar.
+/// Windows area's sidebar. Login and background items left Update & Clean for a Mac page of its own, and Reports came onto
+/// Update & Clean's front under the Update and Clean block (Sven, 2026-11-16: "login and background should have its own page").
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, loginItems, stats, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -36,6 +37,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .system: "System"
         case .activity: "Activity"
         case .upkeep: "Update & Clean"
+        case .loginItems: "Login & Background"
         case .stats: "Stats"
         case .clipboard: "Clipboard"
         case .captures: "Captures"
@@ -70,6 +72,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .system: "slider.horizontal.3"
         case .activity: "gauge.with.dots.needle.67percent"
         case .upkeep: "arrow.triangle.2.circlepath"
+        case .loginItems: "power.circle"
         case .stats: "chart.xyaxis.line"
         case .clipboard: "doc.on.clipboard"
         case .captures: "camera.viewfinder"
@@ -97,7 +100,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .workspaces, .tiling, .system, .voice: 2
         case .menu, .menuBar, .dock, .pilotMenu, .general, .activity: 3
         case .install, .extensions, .files, .stats, .fonts, .repos: 4
-        case .openWith, .configs, .notes: 5
+        case .openWith, .configs, .notes, .loginItems: 5
         }
     }
 
@@ -170,8 +173,9 @@ public enum AppPage: String, CaseIterable, Sendable {
                        "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
                        "volume up", "volume down"]
         case .activity: ["activity monitor", "process", "running", "quit", "force quit", "kill", "task manager", "hog", "helper"]
-        case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run", "login items",
-                       "open at login", "startup", "launch agent", "launchd", "daemon", "background items"]
+        case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run"]
+        case .loginItems: ["login items", "open at login", "startup", "startup items", "launch agent", "launchd", "daemon", "background items",
+                           "runs in the background", "turn off at login"]
         case .stats: ["stats", "history", "readings", "cpu", "memory", "ram", "storage", "disk", "network", "temperature", "heat", "fan", "graphics",
                       "gpu", "battery", "bluetooth", "busiest", "this mac"]
         // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10).
@@ -231,8 +235,9 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .desktop: [.menuBar, .dock, .pilotMenu, .widgets]
         case .look: [.look, .fonts]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
-        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
-        case .mac: [.upkeep, .system, .activity, .stats]
+        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split). Login & Background beside Update & Clean
+        // (Sven, 2026-11-16).
+        case .mac: [.upkeep, .loginItems, .system, .activity, .stats]
         case .tools: [.clipboard, .notes, .files, .voice, .captures, .snippets]
         case .apps: [.openWith, .install]
         case .developer: [.configs, .repos]
@@ -376,8 +381,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     case duplicates
     /// Files' tab: folders dressed in Pilot's designs or a picture, and Reset (P43).
     case folders
-    /// Update & Clean's tab: Reports, every Update and Clean run (story 153, was Install's, then Activity's until
-    /// simplify-pages T16, beside the runs it records). Stats was Activity's other part until it became a page (Sven 2026-10-10).
+    /// Update & Clean's place on its front: Reports, every Update and Clean run, under the Update and Clean block (story 153;
+    /// Install's, then Activity's until simplify-pages T16, then Update & Clean's tab until Sven, 2026-11-16: "reports for
+    /// update and clean should be under clean and upgrade"). Stats was Activity's other part until it became a page (Sven 2026-10-10).
     case reports
     case catalogue, webApps
     /// A place on Install's More: the command-line tools other features run (General's until the page map, Sven
@@ -533,7 +539,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
-                                                     .voiceWords, .installLists, .fileSearch, .duplicates]
+                                                     .voiceWords, .installLists, .fileSearch, .duplicates, .reports]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
@@ -776,7 +782,7 @@ public struct AppPlace: Hashable, Sendable {
     /// The place `pilot://open?page=<page>[&tab=<section>]` names, the old page names included; nil when it names none or
     /// an unknown one (the window opens as usual). A tab that moved off its old page in C3 follows it there:
     /// `page=workspaces&tab=tiling` opens Tiling, `page=binds&tab=abilities` Launcher › Abilities, `page=install&tab=reports`
-    /// Update & Clean › Reports, `page=defaults&tab=configs` Configs. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
+    /// Update & Clean at its Reports, `page=defaults&tab=configs` Configs. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
     /// Snippets, `page=menu&tab=fileSearch` Files › File search, `page=activity&tab=stats` (or `tab=history`) Stats.
     public static func linked(_ url: URL) -> AppPlace? {
         guard let place = url.queryValue("page").flatMap(named) else { return nil }

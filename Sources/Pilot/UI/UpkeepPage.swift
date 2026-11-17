@@ -1,9 +1,10 @@
 import PilotCore
 import SwiftUI
 
-/// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports; Reports its tab since simplify-pages T16): Update and Clean themselves, each with its
-/// last run and an Open report link to that run on Reports. A run still in its terminal is read again every 2 s until it
-/// ends, so its last run follows it. Under them, what starts at login (LoginItemsBlock, Q386).
+/// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports): Update and Clean themselves, each with its
+/// last run and an Open report link to that run, and under them their Reports (ReportsBlock; a tab from simplify-pages T16
+/// until Sven, 2026-11-16, when Login and background items left for Login & Background). A run still in its terminal is
+/// read again every 2 s until it ends, so its last run and its report follow it.
 struct UpkeepPage: View {
     @Environment(\.ink) private var ink
     var store = ReportStore.standard
@@ -11,21 +12,26 @@ struct UpkeepPage: View {
     var mole = CleanModule.mole != nil
     /// Homebrew is there for Update to read and Mole to install through; a render says which.
     var homebrew = Helper.homebrew.path() != nil
-    /// Opens the Reports tab on a run.
-    var openReport: (String) -> Void = { _ in }
+    /// Opens a place in the window: Open report goes to `AppSection.reports`, which scrolls the page there.
+    var go: (AppPlace) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
     @State private var records: [RunRecord]?
+    /// The run Reports opens, from its row or Open report; nil opens the newest.
+    @State private var picked: String?
+    /// What the opened run printed.
+    @State private var output = ""
     /// Bumped when a run begins, so the page follows it to its end.
     @State private var wake = 0
 
     static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
-    static let introInfo = "Clean runs Mole. Each run is kept on the Reports tab."
+    static let introInfo = "Clean runs Mole. Each run is kept under Reports with what it printed; the last \(ReportStore.keep) are kept."
 
     var body: some View {
-        KitPage(intro: Self.intro, info: Self.introInfo) {
+        KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {
             start
-            LoginItemsBlock()
-        }
+            ReportsBlock(store: store, records: records, picked: $picked, output: output)
+        } }
+            .onChange(of: picked) { readOutput() }
             .task(id: wake) {
                 reload()
                 while records?.contains(where: { $0.end == .running }) == true {
@@ -37,9 +43,22 @@ struct UpkeepPage: View {
             .onReceive(NotificationCenter.default.publisher(for: ReportStore.began)) { _ in wake += 1 }
     }
 
+    /// The opened run's output is read again only when the runs changed or it is still running, so a quiet 2 s read lays
+    /// out nothing.
     private func reload() {
         let read = store.list()
-        if read != records { records = read }
+        if read != records {
+            records = read
+            readOutput()
+        } else if ReportsBlock.shown(records, picked: picked)?.end == .running {
+            readOutput()
+        }
+    }
+
+    /// Assigned only when it changed.
+    private func readOutput() {
+        let text = ReportsBlock.shown(records, picked: picked).map { store.output($0.id) } ?? ""
+        if text != output { output = text }
     }
 
     /// Update and Clean open their Hyper+Space branch, so the preview, the confirm and the run are the menu's own; Clean
@@ -72,15 +91,15 @@ struct UpkeepPage: View {
     private func starter<Action: View>(_ kind: RunReport.Kind, line: String, @ViewBuilder action: () -> Action) -> some View {
         let last = records?.first { $0.report.kind == kind }
         return HStack(spacing: 12) {
-            IconTile(icon: ReportsPage.icon(kind), size: 30)
+            IconTile(icon: ReportsBlock.icon(kind), size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind == .update ? "Update" : "Clean").font(ink.ui(13, .semibold)).foregroundStyle(ink.text)
                 Text(line).font(ink.ui(11.5)).foregroundStyle(ink.muted).lineLimit(2)
                 if let last {
                     HStack(spacing: 6) {
-                        Text("Last run \(ReportsPage.when(last.report.started)) · \(last.summary)").font(ink.ui(11.5)).foregroundStyle(ink.text2)
-                        ReportsPage.chip(last.end, ink: ink)
-                        Button("Open report") { openReport(last.id) }.buttonStyle(.link).font(ink.ui(11.5))
+                        Text("Last run \(ReportsBlock.when(last.report.started)) · \(last.summary)").font(ink.ui(11.5)).foregroundStyle(ink.text2)
+                        ReportsBlock.chip(last.end, ink: ink)
+                        Button("Open report") { picked = last.id; go(AppPlace(.reports)) }.buttonStyle(.link).font(ink.ui(11.5))
                     }
                 } else if records != nil {
                     Text("No run yet").font(ink.ui(11.5)).foregroundStyle(ink.text2)

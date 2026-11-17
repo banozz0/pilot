@@ -4,10 +4,10 @@ import Testing
 
 @Suite("App window")
 struct AppWindowTests {
-    @Test("Twenty-eight pages in Home, eleven areas, Developer while its switch is on, and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the first ten, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), Windows under Keys (Q289), AI and Extensions areas of their own (build 19 notes), Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
+    @Test("Twenty-nine pages in Home, eleven areas, Developer while its switch is on, and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the first ten, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), Windows under Keys (Q289), AI and Extensions areas of their own (build 19 notes), Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
     func pages() {
         #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Pilot menu", "Look", "System", "Activity",
-                                                   "Update & Clean", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
+                                                   "Update & Clean", "Login & Background", "Stats", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
                                                    "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Extensions", "Developer", "Pilot"])
         // Every page in exactly one area.
@@ -20,8 +20,8 @@ struct AppWindowTests {
         // The split (Sven, 2026-11-15): Look and Fonts are an area of their own.
         #expect(AppArea.desktop.pages == [.menuBar, .dock, .pilotMenu, .widgets])
         #expect(AppArea.look.pages == [.look, .fonts])
-        // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with.
-        #expect(AppArea.mac.pages == [.upkeep, .system, .activity, .stats])
+        // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with; Login & Background beside it (2026-11-16).
+        #expect(AppArea.mac.pages == [.upkeep, .loginItems, .system, .activity, .stats] && AppArea.mac.key == "7")
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
         #expect(AppArea.apps.pages == [.openWith, .install])
         // Configs and Repos are Developer's, an area shown only while the switch is on (Q715; the split): off, the rail,
@@ -63,8 +63,9 @@ struct AppWindowTests {
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
         #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
-        // Reports beside the runs it records, Install's tools and hidden apps on its More (simplify-pages T16).
-        #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "Reports"] && AppPage.activity.tabs.isEmpty)
+        // Reports on Update & Clean's front under the runs' block (Sven, 2026-11-16), Install's tools and hidden apps on its More (simplify-pages T16).
+        #expect(AppPage.upkeep.tabs.isEmpty && AppPage.loginItems.tabs.isEmpty && AppPage.activity.tabs.isEmpty)
+        #expect(AppSection.reports.onFront && AppSection.reports.page == .upkeep)
         #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "More"])
         // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])

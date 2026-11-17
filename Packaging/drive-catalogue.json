@@ -160,12 +160,12 @@
     },
     {
       "name": "Ghostex",
-      "bundle": "com.madda.ghostex.gpui",
+      "bundle": "com.madda.ghostex.host",
       "doc": "https://github.com/maddada/Ghostex/blob/main/apps/desktop/src/app/helpers/os_cli/main_menus.rs",
       "checked": "2026-11-04",
       "actions": [
-        { "label": "New Window", "route": "drive.menu:com.madda.ghostex.gpui:File > New Window", "symbol": "macwindow.badge.plus", "opens": true },
-        { "label": "Settings", "route": "drive.menu:com.madda.ghostex.gpui:Ghostex > Settings…", "symbol": "gearshape", "opens": true }
+        { "label": "New Window", "route": "drive.menu:com.madda.ghostex.host:File > New Window", "symbol": "macwindow.badge.plus", "opens": true },
+        { "label": "Settings", "route": "drive.menu:com.madda.ghostex.host:Ghostex > Settings…", "symbol": "gearshape", "opens": true }
       ]
     },
     {

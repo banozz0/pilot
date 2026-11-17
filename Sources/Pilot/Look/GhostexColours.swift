@@ -33,6 +33,7 @@ import PilotCore
         return GhostexInterface.required.allSatisfy { found[$0] != nil } ? found : nil  // A Ghostex without these counts as not there.
     }
 
-    private static var running: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: "com.madda.ghostex.gpui").isEmpty }
+    /// A release or a dev build (SameApp.ghostex).
+    private static var running: Bool { SameApp.ghostex.contains { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty } }
 
 }

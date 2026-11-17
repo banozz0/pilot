@@ -98,6 +98,27 @@ struct RecordingWriterTests {
         writer.cancel()
     }
 
+    @Test("A mostly still screen, a changed frame a second, runs across its fragments to Stop, 5 s after its last frame (build 2640)")
+    func stillScreen() async throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "recording-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try RecordingWriter(url: url, size: CGSize(width: 64, height: 48), fps: 60)
+        // ScreenCaptureKit sends only frames with new pixels: on a still screen, one a second or less.
+        for s in 0...6 {
+            writer.append(Self.frame(at: 5000 + Double(s)), .video)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let length = try await writer.finish(at: 5011)
+        #expect(abs(length - 11) < 0.05)
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        #expect(abs(duration - 11) < 0.1, "the file is \(duration) s")
+        // The picture holds the last frame up to Stop: the video track runs the whole file.
+        let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let shown = try await video.load(.timeRange).end.seconds
+        #expect(abs(shown - 11) < 0.1, "the picture ends at \(shown) s")
+    }
+
     /// A screen-like frame, 960 × 600: light text lines over a dark gradient (Sven's build 53 recording), scrolled `n` × 6 px.
     static func screen(_ n: Int) -> CMSampleBuffer {
         let w = 960, h = 600

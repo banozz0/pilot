@@ -339,7 +339,9 @@ struct WorkspaceMonitorsBlock: View {
     /// Same OS UUIDs as monitor pins, read fresh so a reused session handle cannot borrow an old label.
     private static func connectedDisplays() -> [ConnectedDisplay] {
         NSScreen.screens.compactMap { screen in
-            WallpaperScreen.number(screen).flatMap(DisplayIdentity.uuid(for:)).map { ConnectedDisplay(name: screen.localizedName, id: $0) }
+            WallpaperScreen.number(screen).flatMap(DisplayIdentity.uuid(for:)).map {
+                ConnectedDisplay(name: screen.localizedName, id: $0, identity: screen.displayIdentity)
+            }
         }
     }
 
@@ -348,10 +350,10 @@ struct WorkspaceMonitorsBlock: View {
         -> (choices: [(value: MonitorPin?, title: String)], picked: MonitorPin?) {
         let pick = WorkspaceMonitors.choices(pinned: pinned, displays: displays)
         return (pick.choices.map { choice in
-            guard let value = choice.value, case .display(let name, let id) = value else { return choice }
+            guard let value = choice.value, case .display(let name, let id, _) = value else { return choice }
             let unique = id.map { uuid in displays.filter { $0.id == uuid }.count <= 1 } ?? false
             let label = nicknames.label(systemName: name, displayUUID: unique ? id : nil)
-            let unplugged = !displays.contains { $0.matches(value) }
+            let unplugged = ConnectedDisplay.named(by: value, in: displays) == nil
             return (choice.value, label + (unplugged ? " (unplugged)" : ""))
         }, pick.picked)
     }

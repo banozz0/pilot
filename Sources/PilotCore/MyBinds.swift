@@ -7,7 +7,7 @@ public enum MyBinds {
     public static let zen = "app.zen-browser.zen"
 
     public static let extras: [String: Key] = [
-        AppLink.open(bundle: "com.madda.ghostex.gpui").id: Key("g"),
+        AppLink.open(bundle: SameApp.ghostex[0]).id: Key("g"),
         AppLink.open(bundle: zen).id: Key("b"),
         // Hyper+T drops the terminal (spec Bar drops, Q105).
         AppLink.open(bundle: "com.tdesktop.Telegram").id: Key("t", .alt),

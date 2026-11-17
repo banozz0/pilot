@@ -81,7 +81,7 @@ struct WallpaperControl {
         return screen
     }
 
-    /// The display UUID of the screen `--screen` names, which its own folders are kept by; nil with no --screen.
+    /// The display UUID of the screen `--screen` names, which its own folders are found by (kept by its identity); nil with no --screen.
     func display(_ args: ControlArguments) throws(ControlError) -> String? {
         guard let name = args.value("screen") else { return nil }
         guard args.value("workspace") == nil else { throw ControlError(.badValue, "--screen or --workspace, not both") }

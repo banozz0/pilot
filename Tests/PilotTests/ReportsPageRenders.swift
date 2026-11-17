@@ -4,11 +4,12 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Update & Clean › Reports (story 153), drawn offscreen from a store seeded in a temporary folder, never Pilot's own: an Update
-/// all that went through, an Update that failed, a Clean that freed space and one whose window was closed. Instrument
-/// and Toybox; Instrument's text is read back. Mac › Update & Clean beside it, Mole missing. PILOT_RENDER_DIR keeps the PNGs.
+/// Mac › Update & Clean with its Reports under the Update and Clean block (story 153; Sven, 2026-11-16), drawn offscreen
+/// from a store seeded in a temporary folder, never Pilot's own: an Update all that went through, an Update that failed, a
+/// Clean that freed space and one whose window was closed; Mole missing. Beside it Mac › Login & Background on seeded
+/// items, never this Mac's. Instrument and Toybox; Instrument's text is read back. PILOT_RENDER_DIR keeps the PNGs.
 @MainActor
-@Suite("Reports page renders")
+@Suite("Update & Clean and Login & Background renders")
 struct ReportsPageRenders {
     static func seed(_ folder: URL) throws -> ReportStore {
         let store = ReportStore(folder: folder)
@@ -37,9 +38,9 @@ struct ReportsPageRenders {
         return store
     }
 
-    @Test("Reports lists each run newest first with how it ended, and opens the newest to its command, versions and output")
-    func render() throws {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-reports-\(UUID().uuidString)")
+    @Test("Update & Clean has Update and Clean, each with its last run and Open report, Clean offering Install Mole when it is missing, and under them every run newest first, the newest open to its command, versions and output")
+    func upkeep() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-upkeep-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let store = try Self.seed(folder)
         #expect(store.list().map(\.end) == [.done, .failed(1), .done, .cancelled(nil)])
@@ -47,46 +48,53 @@ struct ReportsPageRenders {
         let look = LookPageTests().look().0
         var text = ""
         for style in PilotStyle.allCases {
-            let name = style.rawValue
             look.style = style
-            let page = ReportsGround { ReportsPage(store: store) }.styled(.page(.install), look: look).frame(width: 1000, height: 1300).pilotTheme(look: look)
-            try LookPageTests().hosted(page, height: 1300) { host in
-                let rep = try #require(snapshot(host, scale: 2))
-                if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "reports-\(name).png")) }
-                if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
-            }
-        }
-        for line in ["Update all", "Update node", "failed", "exit 1", "5.91GB freed", "cancelled", "brew upgrade", "0.205.4", "0.206.1",
-                     "Upgrading 1 outdated package", "Copy output", "Show in Finder"] {
-            #expect(text.contains(line), "\(line) missing, read: \(text)")
-        }
-        #expect(!text.contains("[34m"), "colours stripped, read: \(text)")
-        // Update and Clean themselves left Reports for their own page (Sven 2026-10-20).
-        #expect(!text.contains("Install Mole") && !text.contains("Open report"), "read: \(text)")
-    }
-
-    @Test("Update & Clean has Update and Clean, each with its last run and Open report, Clean offering Install Mole when it is missing; the window's search lands there")
-    func upkeep() throws {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-upkeep-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let store = try Self.seed(folder)
-        let dir = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"].map { URL(filePath: $0) }
-        let look = LookPageTests().look().0
-        var text = ""
-        for style in PilotStyle.allCases {
-            look.style = style
-            let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 500).pilotTheme(look: look)
-            try LookPageTests().hosted(page, height: 500) { host in
+            let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
+            try LookPageTests().hosted(page, height: 1500) { host in
                 let rep = try #require(snapshot(host, scale: 2))
                 if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue).png")) }
                 if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
             }
         }
-        for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run"] {
+        for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run", "Reports",
+                     "Update all", "Update node", "failed", "exit 1", "5.91GB freed", "cancelled", "brew upgrade", "0.205.4", "0.206.1",
+                     "Upgrading 1 outdated package", "Copy output", "Show in Finder"] {
             #expect(text.contains(line), "\(line) missing, read: \(text)")
         }
+        #expect(!text.contains("[34m"), "colours stripped, read: \(text)")
+        // Login and background items left for a page of their own (Sven, 2026-11-16).
+        #expect(!text.contains("Login and background"), "read: \(text)")
         for query in ["update", "clean", "upgrade", "free space"] { #expect(AppPlace.search(query).first == AppPlace(.upkeep), "\(query)") }
         #expect(AppPlace.search("report").first == AppPlace(.reports))
+    }
+
+    @Test("Login & Background lists each item with its app and kind, Turn off or on where Pilot switches it, Pilot's own pointing at Launch at login; the search lands there")
+    func loginItems() throws {
+        var pilot = LoginItems.Item(label: "Pilot", kind: .loginItem, path: "/Applications/Pilot.app", appPath: "/Applications/Pilot.app")
+        pilot.isPilot = true
+        let items = [
+            LoginItems.Item(label: "Rectangle", kind: .loginItem, path: "/Applications/Rectangle.app", appPath: "/Applications/Rectangle.app"),
+            LoginItems.Item(label: "com.ada.backup", kind: .agent, path: "/Users/ada/agents/com.ada.backup.plist"),
+            LoginItems.Item(label: "org.example.helper", kind: .daemon, path: "/opt/example/org.example.helper.plist", disabled: true),
+            pilot,
+        ]
+        let dir = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"].map { URL(filePath: $0) }
+        let look = LookPageTests().look().0
+        var text = ""
+        for style in PilotStyle.allCases {
+            look.style = style
+            let page = ReportsGround { LoginItemsPage(seeded: items) }.styled(.page(.loginItems), look: look).frame(width: 1000, height: 600).pilotTheme(look: look)
+            try LookPageTests().hosted(page, height: 600) { host in
+                let rep = try #require(snapshot(host, scale: 2))
+                if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "login-items-\(style.rawValue).png")) }
+                if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
+            }
+        }
+        for line in ["Login and background items", "Open Login Items", "Rectangle", "com.ada.backup", "Your agent", "Background daemon",
+                     "Turn off", "Turn on", "Launch at login"] {
+            #expect(text.contains(line), "\(line) missing, read: \(text)")
+        }
+        for query in ["login items", "background items", "launchd", "daemon"] { #expect(AppPlace.search(query).first == AppPlace(.loginItems), "\(query)") }
     }
 }
 

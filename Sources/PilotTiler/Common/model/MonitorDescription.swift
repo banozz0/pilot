@@ -6,6 +6,8 @@ public enum MonitorDescription: Equatable, Sendable {
     case pattern(CaseInsensitiveRegex)
     /// Pilot: a display by its UUID (NSScreen.displayUUID), so a workspace pin survives replugging (N7).
     case displayId(String)
+    /// Pilot: a display by its EDID identity (LiveDisplay), while only one monitor has it.
+    case displayIdentity(String)
 
     public static func pattern(_ raw: String) -> MonitorDescription? {
         switch CaseInsensitiveRegex.new(raw) {

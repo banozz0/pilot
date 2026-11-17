@@ -260,7 +260,8 @@ enum DriveModule {
     /// Presses a running app's menu item; an app that is not running is said so in a tip unless `quietWhenNotRunning`.
     static func pressMenu(_ bundle: String, _ path: [String], quietWhenNotRunning: Bool = false) {
         let title = DriveRoute.title(path)
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundle }) else {
+        let ids = SameApp.ids(bundle)
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { ids.contains($0.bundleIdentifier ?? "") }) else {
             dlog.notice("menu \(bundle, privacy: .public) \(title, privacy: .private): not running")
             if !quietWhenNotRunning { HUD.tip("\(AppsModule.appName(bundle) ?? bundle) is not running.") }
             return
