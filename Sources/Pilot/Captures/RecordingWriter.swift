@@ -63,6 +63,8 @@ final class RecordingWriter: @unchecked Sendable {
 
     /// H.264 at a quality the encoder holds frame by frame, CABAC, tagged BT.709 as ScreenCaptureKit's frames are. An
     /// average bitrate (build 52) let the encoder spend a fifth of it on screen content: soft text, banded gradients.
+    /// No frame reordering (B-frames): a still screen sends a frame a second or less, so a reordered frame decodes seconds
+    /// after a later one, across a 2 s fragment, and the fragment writer fails the file (-16341, build 2640).
     static func videoSettings(size: CGSize, fps: Int, quality: Double) -> [String: Any] {
         [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -75,6 +77,7 @@ final class RecordingWriter: @unchecked Sendable {
                 AVVideoExpectedSourceFrameRateKey: fps, AVVideoMaxKeyFrameIntervalKey: fps * 2,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
+                AVVideoAllowFrameReorderingKey: false,
             ] as [String: Any],
         ]
     }
