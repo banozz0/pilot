@@ -292,14 +292,15 @@ final class Recorder {
     private func finish(reason: String?, error: Error? = nil, then done: (@MainActor () -> Void)? = nil) {
         guard let output, phase == .recording || phase == .paused else { done?(); return }
         let stream = self.stream
-        let length = clock.elapsed(at: Self.now())
+        let stopped = Self.now()
+        let length = clock.elapsed(at: stopped)
         end()
         if let error { Self.log.error("recording stopped by the stream: \(String(describing: error), privacy: .public)") }
         if let reason { Self.log.notice("recording stopped: \(reason, privacy: .public)") }
         closing = Task { @MainActor in
             try? await stream?.stopCapture()
             do {
-                let seconds = try await output.close()
+                let seconds = try await output.close(at: stopped)
                 let url = output.writer.url
                 Self.log.notice("recording saved: \(url.lastPathComponent, privacy: .public), \(RecordingClock.label(seconds), privacy: .public)")
                 let pointer = output.writer.pointer
@@ -460,11 +461,11 @@ final class RecordingOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchec
 
     func stream(_ stream: SCStream, didStopWithError error: Error) { stopped(error) }
 
-    /// Finishes the file on the writer's queue, after every sample already queued.
-    func close() async throws -> Double {
+    /// Finishes the file at host time `stop`, after every sample already queued.
+    func close(at stop: Double) async throws -> Double {
         let writer = self.writer
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in queue.async { done.resume() } }
-        return try await writer.finish()
+        return try await writer.finish(at: stop)
     }
 
     /// Drops the file: a recording stopped before it began.
