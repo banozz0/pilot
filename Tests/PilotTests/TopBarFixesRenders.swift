@@ -129,6 +129,44 @@ struct TopBarFixesRenders {
         try writeRender(floating, to: dir.appendingPathComponent("floating.png"), wait: 0.8)
     }
 
+    /// The bell's two-digit count in each place it shows (Sven on build 2687: the floating bell's "11" cut at its top
+    /// right). The floating bell is drawn clipped to its own square, as its panel is exactly the bell; then the top bar's
+    /// item and the dock's bell (Sven, 2026-11-17). Layout and words only: glass is off, the dock Solid.
+    @Test("The bell's count in floating, top bar and dock", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func bellBadge() async throws {
+        let dir = try ClockRenders.dir("notifications-badge")
+        testApp()
+        let look = Look.shared, settings = NotificationSettings.shared, model = NotificationCardsModel.shared
+        let (glass, saved) = (look.glass, (settings.enabled, settings.showIn, settings.topBarOn))
+        look.glass = false
+        defer {
+            look.glass = glass
+            (settings.enabled, settings.showIn, settings.topBarOn) = saved
+            (model.unread, model.bellSide) = (0, NotificationPlacement.bell.width)
+        }
+        settings.topBarOn = { true }
+        (settings.enabled, settings.showIn) = (true, .topBar)
+        model.unread = 11
+        let width: CGFloat = 1100, ground = Color(white: 0.2)
+        let bar = try await Self.bar(MenuApps(reader: MenuAppsTests.FakeExtras(), ownPid: 13), notifications: true).frame(width: width, height: 30)
+        // The default side, the smallest with "99+", and the largest.
+        let bells = [(40.0, 11), (28.0, 120), (96.0, 11)].map { side, unread in
+            let one = NotificationCardsModel()
+            (one.unread, one.bellSide) = (unread, side)
+            return one
+        }
+        let floating = HStack(alignment: .bottom, spacing: 24) {
+            ForEach(bells.indices, id: \.self) { NotificationBell(model: bells[$0]) { _ in }.clipped() }
+        }
+        .styled(.barPopovers).pilotTheme()
+        let dock = DockStrip(size: .medium, apps: DockRenders.apps(6), hasWidgets: true, maxWidth: width - 2 * DockPill.sideMargin, style: .solid) {
+            DockNotificationBell(model: model, icon: CGFloat(DockSize.medium.icon), tells: false)
+        }
+        .environment(\.inTopBar, true).styled(.topBar).pilotTheme()
+        let scene = VStack(spacing: 32) { bar; floating; dock }.padding(.bottom, 24).frame(width: width).background(ground)
+        try writeRender(scene, to: dir.appendingPathComponent("bell-badge.png"), wait: 0.8)
+    }
+
     static func bar(_ menuApps: MenuApps, notifications: Bool = false) async throws -> TopBarView {
         let menus = AppMenus(reader: AppMenusTests.fake(), front: { AppMenusTests.textEdit }, center: NotificationCenter())
         let readings = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: Look(inputSources: SetupKeepAwakeTests.FakeSources()),

@@ -707,8 +707,9 @@ struct MenuBarPage: View {
 
     /// Other apps' notifications as Pilot's cards (spec notifications.html), beside the bell's item and the clock (on the
     /// Pilot page until the settings tidy, Sven 2026-11-14): off by default, nothing runs until it's on.
-    static let showInInfo = "Floating: a bell you can drag, with each card in the bottom right. Top bar: a bell item in Pilot's top bar "
-        + "with the count of new ones; each card drops under it and a click lists what arrived."
+    static let showInInfo = "Floating: a bell you can drag, with each card beside it. Top bar: a bell item in Pilot's top bar "
+        + "with the count of new ones; each card drops under it and a click lists what arrived. Dock: the same bell at the end of Pilot's "
+        + "dock; each card rises over it."
     static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
         + "window, as widgets do. A new card still pops up above apps while it shows."
 
@@ -725,9 +726,10 @@ struct MenuBarPage: View {
                     HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
                     Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
                 }
-                if settings.showIn == .topBar && placement == .floating {
+                if settings.showIn != .floating && placement == .floating {
                     BlockRow {
-                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on above.")
+                        FinePrint(text: settings.showIn == .topBar ? "Pilot's top bar is off, so notifications show floating. Turn the top bar on above."
+                                  : "Pilot's dock is off, so notifications show floating. Turn the dock on in Dock.")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }

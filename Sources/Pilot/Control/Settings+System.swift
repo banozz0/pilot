@@ -19,7 +19,7 @@ extension SettingsSchema {
                   read: { notifications.enabled }, write: { notifications.enabled = $0 }),
             .bool("notifications.hideMacBanners", "Hide macOS's own banner while Pilot's card shows", page: "general", standard: false,
                   read: { notifications.hideMacBanners }, write: { notifications.hideMacBanners = $0 }),
-            .choice(NotificationSettings.showInKey, "Notifications show floating (a bell and cards bottom right) or in the top bar (a bell item, cards under it); the top bar while off falls back to floating",
+            .choice(NotificationSettings.showInKey, "Notifications show floating (a bell you can drag, cards beside it), in the top bar (a bell item, cards under it) or in the dock (a bell at its end, cards over it); the top bar or dock while off falls back to floating",
                     page: "general", NotificationSettings.ShowIn.allCases, standard: .floating,
                     read: { notifications.showIn }, write: { notifications.showIn = $0 }),
             .choice(NotificationSettings.layerKey, "Floating notifications' bell and list rest above apps or below them on the desktop; a new card shows above apps either way",
