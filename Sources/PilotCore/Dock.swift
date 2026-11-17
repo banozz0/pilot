@@ -400,6 +400,10 @@ public struct DockSettings: Codable, Equatable, Sendable {
         return dock.filter { !removed.contains($0.key) } + kept.filter { !keys.contains($0.key) }
     }
 
+    /// The Dock's pins taken out of Pilot's dock, in the Dock's order: the Dock page lists them to bring back, as one not
+    /// running shows nowhere else (Sven on build 2687).
+    public func taken(_ dock: [DockPin]) -> [DockPin] { dock.filter { removed.contains($0.key) } }
+
     /// Keep in Dock: an app the Dock's list holds comes back; any other joins the end.
     public mutating func keep(_ pin: DockPin, dock: [DockPin]) {
         removed.removeAll { $0 == pin.key }

@@ -181,7 +181,12 @@ final class DockController {
     }
 
     static func runningApps() -> [DockRunning] {
-        NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && !$0.isTerminated }.map {
+        // Pilot's own policy from NSApp: it turns regular only while a window of its is open (DockIcon), and its entry in
+        // NSWorkspace's list can still read the old one then.
+        let me = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications.filter {
+            ($0.processIdentifier == me ? NSApp.activationPolicy() : $0.activationPolicy) == .regular && !$0.isTerminated
+        }.map {
             DockRunning(bundleID: $0.bundleIdentifier, url: $0.bundleURL, name: $0.localizedName ?? $0.bundleURL?.deletingPathExtension().lastPathComponent ?? "App",
                         pid: $0.processIdentifier)
         }
@@ -225,6 +230,10 @@ final class DockController {
     func unpin(_ app: DockApp, dock: [DockPin]? = nil) {
         settings.unpin(app.key, dock: dock ?? current)
     }
+
+    /// The Dock's pins taken out of Pilot's dock (DockSettings.taken), and one brought back.
+    var taken: [DockPin] { settings.taken(current) }
+    func restore(_ pin: DockPin) { settings.keep(pin, dock: current) }
 
     /// The Dock's pins as last read, or read now while the dock is off.
     private var current: [DockPin] { dockPins.isEmpty ? readPins() : dockPins }
