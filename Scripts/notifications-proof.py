@@ -737,7 +737,19 @@ def bell(s):
     check(e['bell'] == [200, 200, 64, 64] and e['drawer'] == [200, 272, 300, 200],
           f'the bell moved bottom left: the drawer follows it, at its smallest 300x200 ({e["bell"]}, {e["drawer"]})')
     check(e['cards'] == [200, 272, 340, 92], f'bell bottom left (Sven, 2026-11-16): cards sit above it, flush left ({e["cards"]})')
+    # The dock's bell (Sven, 2026-11-17): a card rises over it, centred, gap over the pill's top, inside the screen's sides.
+    s.new_events()
+    command(s, 'dock-bell 3000 13 52')
+    e = s.wait_event('dock-cards')
+    check(e['cards'] == [2856, 81, 340, 92], f'dock bell: the card rises over it, centred ({e["cards"]})')
+    s.new_events()
+    command(s, 'dock-bell 3400 13 36')
+    e = s.wait_event('dock-cards')
+    check(e['cards'] == [3084, 65, 340, 92], f'dock bell at the right end: the card stays inside the screen ({e["cards"]})')
     panels = (REPO / 'Sources/Pilot/UI/NotificationPanels.swift').read_text()
+    check(panels.count('cards(over: bell.midX, top: bell.maxY + CGFloat(DockSize.top), in: screen.frame') == 1
+          and panels.count('under: bell, AnyView(NotificationBarDrawer(model: model))') == 1,
+          'the app rises cards and the list over the dock bell it registered')
     check('setFrameAutosaveName' not in panels and 'setFrameUsingName' not in panels, 'the drawer panel keeps no saved frame of its own')
     # The app's wiring of B2: the cards' panel is placed beside the bell panel on its display, and again when the bell drops or the
     # screens change.
@@ -771,6 +783,11 @@ def setting(s):
     check(st['showIn'] == 'topBar' and st['layer'] == 'below' and st['placement'] == 'floating', 'top bar falls back to floating while the top bar is off')
     items = json.loads(s.pilot('list', 'bar-items').stdout)
     check(any(i.get('item') == 'notifications' and i.get('on') for i in items), 'top bar puts the bell item on the bar')
+    # Dock (Sven, 2026-11-17): falls back to floating while the dock is off, as the sandbox's is, and never turns it on.
+    s.pilot('set', 'notifications.showIn', 'dock')
+    st = s.status()
+    check(st['showIn'] == 'dock' and st['placement'] == 'floating', f'dock falls back to floating while the dock is off ({st["showIn"]}, {st["placement"]})')
+    check(s.get('dock.on') is False, 'dock leaves the dock switch off')
     s.pilot('set', 'notifications.showIn', 'floating')
     s.pilot('set', 'notifications.layer', 'above')
     run = s.pilot('actions').stdout

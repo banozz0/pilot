@@ -3,7 +3,7 @@ import Foundation
 
 /// Where the notification surfaces sit, in screen coordinates (origin bottom left), inside a screen's visible frame so the
 /// Dock and the top bar stay clear: the bell in the bottom right until Sven moves it, and the cards and the drawer beside
-/// the bell wherever it is; with the top bar's bell item, the cards under it.
+/// the bell wherever it is; with the top bar's bell item, the cards under it; with the dock's bell, the cards over it.
 public enum NotificationPlacement {
     public static let margin: CGFloat = 16
     public static let gap: CGFloat = 8
@@ -25,6 +25,13 @@ public enum NotificationPlacement {
     public static func cards(under centre: CGFloat, foot: CGFloat, in screen: CGRect, size: CGSize) -> CGRect {
         let x = clamp(centre - size.width / 2, screen.minX + margin, screen.maxX - margin - size.width)
         return CGRect(x: x, y: foot - gap - size.height, width: size.width, height: size.height)
+    }
+
+    /// The dock's cards (Sven, 2026-11-17): centred over its bell at `centre`, `gap` over the pill's `top`, kept inside
+    /// `screen`'s sides.
+    public static func cards(over centre: CGFloat, top: CGFloat, in screen: CGRect, size: CGSize) -> CGRect {
+        let x = clamp(centre - size.width / 2, screen.minX + margin, screen.maxX - margin - size.width)
+        return CGRect(x: x, y: top + gap, width: size.width, height: size.height)
     }
 
     /// How small and large the bell may be pulled (Q42).

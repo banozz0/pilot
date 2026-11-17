@@ -119,9 +119,18 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
                 "cards": [cards.minX, cards.minY, cards.width, cards.height]])
     }
 
+    /// A one-card stack over the dock's bell at `x`,`y` at `side` on the main display, as the app places it
+    /// (NotificationPanels.cardsFrame): `gap` over the pill's top at rest, its bell's top plus DockSize.top.
+    @MainActor private func dockCards(x: Double, y: Double, side: Double) {
+        let bell = CGRect(x: x, y: y, width: side, height: side), screen = Self.displays["main"] ?? .zero
+        let cards = NotificationPlacement.cards(over: bell.midX, top: bell.maxY + CGFloat(DockSize.top), in: screen,
+                                                size: CGSize(width: NotificationPlacement.cardWidth, height: 92))
+        record(["event": "dock-cards", "cards": [cards.minX, cards.minY, cards.width, cards.height]])
+    }
+
     /// `commands`, a line each: `open <id>`, `close <id>` or `button <name> <id>`, the taps a card would make;
     /// `bell-drop <display> <x> <y> <side>` and `bell <display>`, the bell's drag and where it is; `drawer-closed <w> <h>`,
-    /// the drawer closing at a pulled size.
+    /// the drawer closing at a pulled size; `dock-bell <x> <y> <side>`, where a card rises over the dock's bell.
     @MainActor private func runCommands() {
         guard has("commands"), let text = text("commands"), !text.isEmpty else { return }
         for line in text.split(separator: "\n") {
@@ -135,6 +144,7 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
             case ("button"?, 3): PilotNotifications.shared.press(.button(words[1]), id: words[2])
             case ("bell-drop"?, 5): bellDrop(display: words[1], x: Double(words[2]) ?? 0, y: Double(words[3]) ?? 0, side: Double(words[4]) ?? 0)
             case ("bell"?, 2): bellPlace(display: words[1])
+            case ("dock-bell"?, 4): dockCards(x: Double(words[1]) ?? 0, y: Double(words[2]) ?? 0, side: Double(words[3]) ?? 0)
             case ("relaunch"?, 1):
                 record(["event": "relaunch"])
                 PilotNotifications.shared.relaunchForSandbox()

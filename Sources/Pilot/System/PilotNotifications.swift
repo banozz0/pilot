@@ -15,10 +15,17 @@ final class NotificationSettings {
     static let showInKey = "notifications.showIn", layerKey = "notifications.layer"
 
     /// Where they show (Sven, 2026-11-12): floating, the bell and cards on the desktop as they first shipped, or Pilot's top
-    /// bar, a bell item there and each card dropping under it. The top bar while it is off falls back to floating.
+    /// bar, a bell item there and each card dropping under it; or Pilot's dock (Sven, 2026-11-17), a bell at its right
+    /// end and each card rising over it. The top bar or the dock while it is off falls back to floating.
     enum ShowIn: String, CaseIterable, Sendable {
-        case floating, topBar
-        var label: String { self == .floating ? "Floating" : "Top bar" }
+        case floating, topBar, dock
+        var label: String {
+            switch self {
+            case .floating: "Floating"
+            case .topBar: "Top bar"
+            case .dock: "Dock"
+            }
+        }
     }
 
     /// Floating's layer: above every window, or below them on the desktop as a widget is. A new card shows above apps either
@@ -51,13 +58,24 @@ final class NotificationSettings {
         layer = defaults.string(forKey: Self.layerKey).flatMap(Layer.init) ?? .above
     }
 
-    /// Where they show now: the top bar only while Pilot's is on, else floating. The one rule the panels, the bar's bell
-    /// item, the page and `pilot status` read.
-    var placement: ShowIn { showIn == .topBar && topBarOn() ? .topBar : .floating }
+    /// Where they show now: the top bar only while Pilot's is on, the dock only while Pilot's is on, else floating. The one
+    /// rule the panels, the bar's and the dock's bells, the page and `pilot status` read. Dock never turns the dock on: that
+    /// switch hides the macOS Dock.
+    var placement: ShowIn {
+        switch showIn {
+        case .topBar where topBarOn(): .topBar
+        case .dock where dockOn(): .dock
+        default: .floating
+        }
+    }
     /// Whether Pilot's top bar is on: the engine's; a render stands one in.
     @ObservationIgnored var topBarOn: @MainActor () -> Bool = { Engine.shared?.topBar.isOn ?? false }
+    /// Whether Pilot's dock is on: the engine's; a render stands one in.
+    @ObservationIgnored var dockOn: @MainActor () -> Bool = { Engine.shared?.dock.isOn ?? false }
     /// The top bar's bell item draws: they are on and show there.
     var inBar: Bool { enabled && placement == .topBar }
+    /// The dock's bell draws: they are on and show there.
+    var inDock: Bool { enabled && placement == .dock }
 }
 
 /// Draws what the feed says: the panels in the app, a recording in the sandbox.

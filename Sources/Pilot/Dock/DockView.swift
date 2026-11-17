@@ -57,12 +57,16 @@ struct DockView: View {
         let apps = DockController.apps(dock.settings, pins: dock.pins, running: dock.running, byApp: byApp, front: observers.focusedApp?.bundleIdentifier)
         // Each widget is a view of its own, so a reading's tick redraws its widget, not the pill.
         let left = dock.settings.widgets(on: .left), right = dock.settings.widgets(on: .right)
-        DockStrip(size: size, apps: apps, hasWidgets: !right.isEmpty, maxWidth: DockWindow.widest(),
+        // The notifications' bell at the right end while they show in the dock: it reads its own count, so a new one
+        // redraws the bell, not the pill.
+        let bell = NotificationSettings.shared.inDock
+        DockStrip(size: size, apps: apps, hasWidgets: !right.isEmpty || bell, maxWidth: DockWindow.widest(),
                   windows: { app in app.bundleID.flatMap { byApp[$0] } ?? [] }, tiler: tiler, dock: dock, style: dock.settings.style, magnify: magnify,
                   origin: hovering ? CGFloat(reach.width) / 2 : 0, onHover: { hovering = $0 },
                   placement: dock.settings.placement, tint: dock.settings.tint, drag: dock.drag,
                   leftWidgets: left.isEmpty ? nil : AnyView(ForEach(left, id: \.self) { slot in widget(slot, reader) })) {
             ForEach(right, id: \.self) { slot in widget(slot, reader) }
+            if bell { DockNotificationBell(model: .shared, icon: CGFloat(size.icon)) }
         }
             .environment(\.inTopBar, true)
             // The bar's Item colours, so a widget's warning and alert read as they do in the bar (amber, red), not
@@ -557,6 +561,33 @@ struct DockAppIcon: View {
 
 /// An app's windows over its icon (round 1, look A): its name and count, then one row per window with its workspace;
 /// a pick focuses that window through the tiler.
+/// The notifications' bell at the dock's right end while they show in the dock (Sven, 2026-11-17): the count of new ones
+/// inside its square, as the floating bell's (NotificationBadge); a click opens the list over it, and each card rises over
+/// it (NotificationPanels.cardsFrame).
+struct DockNotificationBell: View {
+    @Environment(\.ink) private var ink
+    let model: NotificationCardsModel
+    let icon: CGFloat
+    /// Tells the panels where it is; a render tells nothing.
+    var tells = true
+    @State private var anchor = ScreenAnchor.Box()
+
+    var body: some View {
+        Button { PilotNotifications.shared.toggleDrawer() } label: {
+            Image(systemName: "bell.fill").font(.system(size: icon * 0.42)).foregroundStyle(ink.text)
+                .frame(width: icon, height: icon)
+                .overlay(alignment: .topTrailing) { NotificationBadge(unread: model.unread, side: icon) }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(ScreenAnchor(box: anchor))
+        .onAppear { if tells { NotificationPanels.register(dock: anchor) } }
+        .onDisappear { NotificationPanels.unregister(dock: anchor) }
+        .help("Notifications")
+        .accessibilityLabel(model.unread > 0 ? "Notifications, \(model.unread) new" : "Notifications")
+    }
+}
+
 struct DockWindowList: View {
     @Environment(\.ink) private var ink
     let app: String

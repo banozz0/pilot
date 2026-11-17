@@ -23,8 +23,9 @@ final class NotificationCardsModel {
 
 /// Pilot's own notification surfaces. The panels are made as things arrive and dropped as they go, never activate Pilot,
 /// and never take key status: the app in front keeps its typing, and Notification Center's own panel stays open. Where
-/// they sit follows NotificationSettings' placement: floating, the bell above or below apps; or the top bar, its bell item
-/// with the cards dropping under it and the list as its popover.
+/// they sit follows NotificationSettings' placement: floating, the bell above or below apps; the top bar, its bell item
+/// with the cards dropping under it and the list as its popover; or the dock, its bell with the cards rising over it and
+/// the list as its popover.
 @MainActor
 final class NotificationPanels: NotificationPresenting {
     let model = NotificationCardsModel.shared
@@ -45,6 +46,10 @@ final class NotificationPanels: NotificationPresenting {
     private static var barItems: [ScreenAnchor.Box] = []
     static func register(_ box: ScreenAnchor.Box) { barItems.append(box) }
     static func unregister(_ box: ScreenAnchor.Box) { barItems.removeAll { $0 === box } }
+    /// The dock's bell as it draws (DockNotificationBell), so a card rises over it.
+    private static var dockBells: [ScreenAnchor.Box] = []
+    static func register(dock box: ScreenAnchor.Box) { dockBells.append(box) }
+    static func unregister(dock box: ScreenAnchor.Box) { dockBells.removeAll { $0 === box } }
 
     /// Under every window, over the desktop's icons: a widget's level (WidgetDesk).
     static let belowApps = NSWindow.Level(rawValue: DesktopIcons.level + 1)
@@ -78,7 +83,7 @@ final class NotificationPanels: NotificationPresenting {
         laid = (place, layer)
         closeDrawer()
         closeBarList()
-        if place == .topBar {
+        if place != .floating {
             close(&bellPanel)
         } else if let bellPanel {
             rest(bellPanel)
@@ -106,8 +111,10 @@ final class NotificationPanels: NotificationPresenting {
         panel.collectionBehavior = below ? [.canJoinAllSpaces, .stationary, .ignoresCycle] : [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
     }
 
-    /// Laid out for the top bar: `laid` is what the panels were last laid out for, so a change that moves nothing skips it.
+    /// Laid out for the top bar or the dock: `laid` is what the panels were last laid out for, so a change that moves
+    /// nothing skips it.
     private var inBar: Bool { laid?.place == .topBar }
+    private var inDock: Bool { laid?.place == .dock }
 
     func update(cards: [NotificationEntry], drawer: [NotificationEntry], unread: Int) {
         model.cards = Array(cards.prefix(NotificationFeed.cardLimit))
@@ -166,8 +173,12 @@ final class NotificationPanels: NotificationPresenting {
     }
 
     /// Floating: beside the bell on its display, as the drawer opens. Top bar: under the bell item, else under the main
-    /// display's bar at its right.
+    /// display's bar at its right. Dock: over its bell, clear of the pill's top at rest (a magnified icon grows past it
+    /// only while the pointer is on the dock).
     private func cardsFrame(_ size: CGSize) -> CGRect {
+        if inDock, let bell = dockBell(), let screen = NSScreen.screens.first(where: { $0.frame.intersects(bell) }) {
+            return NotificationPlacement.cards(over: bell.midX, top: bell.maxY + CGFloat(DockSize.top), in: screen.frame, size: size)
+        }
         guard inBar, let spot = barItem() ?? barRight() else {
             return NotificationPlacement.cards(nextTo: bellPanel?.frame ?? bellFrame(), in: bellScreen()?.visibleFrame ?? notificationScreen(), size: size)
         }
@@ -194,6 +205,14 @@ final class NotificationPanels: NotificationPresenting {
         return (shown.first { $0.screen == NSScreen.screens.first } ?? shown.first)?.spot
     }
 
+    /// The dock's bell on screen; nil while the dock is out of sight.
+    private func dockBell() -> CGRect? {
+        Self.dockBells.lazy.compactMap { box -> CGRect? in
+            guard let view = box.view, view.window?.isVisible == true else { return nil }
+            return view.screenFrame
+        }.first
+    }
+
     /// The main display's bar, its right end: where the cards drop while no bell item is drawn.
     private func barRight() -> BarSpot? {
         guard let screen = NSScreen.screens.first, let bar = Self.bar(on: screen) else { return nil }
@@ -210,6 +229,11 @@ final class NotificationPanels: NotificationPresenting {
             // The list hangs under the bell item as its popover, as a click on it does.
             guard let item = barItem()?.item else { return say("Put Notifications in the top bar to open its list: Pilot › Menu bar") }
             return BarPanel.shared.toggle([.notifications], under: item, AnyView(NotificationBarDrawer(model: model)))
+        }
+        if inDock {
+            // It rises over the dock's bell as a dock app's window list does (BarPanelPlacement.rises).
+            guard let bell = dockBell() else { return say("Pilot's dock is out of sight, so its bell can't open the list") }
+            return BarPanel.shared.toggle([.notifications], under: bell, AnyView(NotificationBarDrawer(model: model)))
         }
         if drawerPanel != nil { return closeDrawer() }
         let panel = makeDrawer()
@@ -291,19 +315,30 @@ struct NotificationBell: View {
         KitPopover(width: side, inset: side / 4, arrow: false) {
             Image(systemName: "bell.fill").font(.system(size: side * 0.35)).foregroundStyle(style.color(\.text2)).frame(width: side / 2, height: side / 2)
         }
-        .overlay(alignment: .topTrailing) {
-            if model.unread > 0 {
-                Text(model.unread > 99 ? "99+" : "\(model.unread)").font(.system(size: max(9, side * 0.22), weight: .bold)).foregroundStyle(style.color(\.onAccent))
-                    .padding(.horizontal, 4).padding(.vertical, 1).background(style.color(\.accent), in: Capsule()).offset(x: 3, y: -3)
-            }
-        }
         .extensionGlass()
+        .overlay(alignment: .topTrailing) { NotificationBadge(unread: model.unread, side: side) }
         .overlay { BellHandle(model: model, dropped: dropped) }
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(model.unread > 0 ? "Notifications, \(model.unread) new" : "Notifications")
         .accessibilityAction { PilotNotifications.shared.toggleDrawer() }
         .allowsWindowActivationEvents(true)
+    }
+}
+
+/// The count of what arrived since the list last opened, inside its bell's square: the panel is exactly the bell, so the
+/// badge drawn 3 pt past its top right corner was cut by the window's edge (Sven on build 2687, "11" clipped).
+struct NotificationBadge: View {
+    @Environment(\.style) private var style
+    let unread: Int
+    let side: CGFloat
+
+    var body: some View {
+        if unread > 0 {
+            Text(unread > 99 ? "99+" : "\(unread)").font(.system(size: max(9, side * 0.22), weight: .bold)).foregroundStyle(style.color(\.onAccent))
+                .padding(.horizontal, 4).padding(.vertical, 1).background(style.color(\.accent), in: Capsule())
+                .fixedSize().padding(max(2, side * 0.06))
+        }
     }
 }
 
