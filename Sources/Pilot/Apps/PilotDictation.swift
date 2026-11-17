@@ -11,6 +11,8 @@ enum DictateLine: Equatable {
     case listening, preparing, loaded, prepared
     /// The microphone went away mid-take; the take so far follows as text.
     case inputLost
+    /// A feed's file played to its end (PilotDictation.feed): the take ends as a second press ends it.
+    case fed
     case progress(Double)
     /// How loud the microphone was, a few readings 0 to 1 per buffer: the pill's waveform.
     case levels([Double])
@@ -26,6 +28,7 @@ enum DictateLine: Equatable {
         case "preparing": self = .preparing
         case "loaded": self = .loaded
         case "prepared": self = .prepared
+        case "fed": self = .fed
         case "input": guard rest == "lost" else { return nil }; self = .inputLost
         case "progress": guard let fraction = Double(rest) else { return nil }; self = .progress(fraction)
         case "level":
@@ -65,15 +68,17 @@ extension DictateHelper {
 /// Contents/Helpers/pilot-dictate, built from Helpers/pilot-dictate by Scripts/build-app.sh.
 struct BundledDictateHelper: DictateHelper {
     static let path = Bundle.main.bundleURL.appending(path: "Contents/Helpers/pilot-dictate").path
+    /// The bundle's; the sandbox host's DictationFixture runs a helper built in the checkout.
+    var path = Self.path
 
     func run(_ arguments: [String], heard: @escaping @MainActor (DictateLine) -> Void, ended: @escaping @MainActor (Int32) -> Void) -> DictateRun? {
-        guard FileManager.default.isExecutableFile(atPath: Self.path) else {
+        guard FileManager.default.isExecutableFile(atPath: path) else {
             whisperLog.error("pilot-dictate is not in the bundle")
             return nil
         }
         let command = arguments.first ?? ""
         do {
-            let session = try ChildProcess.Session(Self.path, arguments, lines: { line in
+            let session = try ChildProcess.Session(path, arguments, lines: { line in
                 guard let parsed = DictateLine(line) else { return }
                 DispatchQueue.main.async { MainActor.assumeIsolated { heard(parsed) } }
             }, ended: { status, stderr in
@@ -94,7 +99,7 @@ struct BundledDictateHelper: DictateHelper {
     /// stamp names this helper's code signature and this macOS build, and every part of that compile is still in Core
     /// ML's cache. In doubt, false, and the helper decides as before.
     func prepared(_ folder: URL) async -> Bool {
-        let helper = URL(filePath: Self.path)
+        let helper = URL(filePath: path)
         return await Task.detached(priority: .utility) { Self.stamped(folder, helper: helper) }.value
     }
 
@@ -572,7 +577,18 @@ protocol DictationShowing: AnyObject {
 /// ended: that text goes to the clipboard instead.
 @Observable @MainActor
 final class PilotDictation {
-    static let shared = PilotDictation()
+    static let shared: PilotDictation = {
+        #if DEBUG
+        if let standIn { return standIn() }
+        #endif
+        return PilotDictation()
+    }()
+
+    #if DEBUG
+    /// The sandbox host's dictation (PILOT_SANDBOX_DICTATION, DictationFixture), set before its Engine first reads
+    /// `shared`, so a take types into its own field and draws nothing.
+    static var standIn: (@MainActor () -> PilotDictation)?
+    #endif
 
     enum State: Equatable { case idle, starting, listening, writing }
 
@@ -639,7 +655,8 @@ final class PilotDictation {
     @ObservationIgnored private let secureInput: @MainActor () -> Bool
     @ObservationIgnored private let tell: @MainActor (String, TimeInterval, HUD.TipAction?) -> Void
     @ObservationIgnored private let after: Watch.After
-    @ObservationIgnored private let show: DictationShowing
+    /// The pill; `pilot dictation` reads it (ControlVerbs.registerDictationFeed).
+    @ObservationIgnored let show: DictationShowing
     @ObservationIgnored private let media: MediaPause
     @ObservationIgnored private let microphoneName: @MainActor () -> String?
     /// The Mac has a default input that records: false and a press says so rather than start the helper.
@@ -652,6 +669,18 @@ final class PilotDictation {
     @ObservationIgnored private var waitingTip = false
     /// The kept takes' audio being written down now, by file name, so none is written down twice.
     @ObservationIgnored private var recovering: [String: DictateRun] = [:]
+    /// A dev build's stand-in for the microphone (`pilot dictation feed`, for the site's video): a sound file the next
+    /// take plays in the microphone's place, so the pill, its waveform, the model and the typing all run as if spoken.
+    /// One take, armed for ten minutes at most, so a forgotten one never stands in for Sven's voice later.
+    @ObservationIgnored private var feed: (file: URL, until: Date)?
+    static let feedMinutes = 10.0
+    /// The file the next take plays, while it is armed.
+    var armedFeed: URL? { feed.flatMap { $0.until > .now ? $0.file : nil } }
+
+    /// Arms `file` for the next take, which starts as usual: the key, a bind or `pilot run dictation.toggle`.
+    func arm(_ file: URL?) {
+        feed = file.map { ($0, .now.addingTimeInterval(Self.feedMinutes * 60)) }
+    }
 
     /// One take, in its own pilot-dictate. Each keeps what it was spoken to, so a take left to finish in the background
     /// (✕ while it is written down, or a press that starts the next one) types or offers its own words when they come and
@@ -779,26 +808,14 @@ final class PilotDictation {
             tell("Download a speech model first, in Voice › Dictation", 4, Self.openVoice)
             return false
         }
-        guard hasMicrophone() else {
-            tell(MicrophoneGrant.noInputTip, 4, nil)
-            return false
-        }
-        microphone.refresh()
-        switch microphone.status {
-        case .authorized: break
-        case .notDetermined:
-            let microphone = microphone
-            Task { @MainActor in await microphone.ask() }
-            tell("Allow the microphone for Pilot, then press again", 4, nil)
-            return false
-        default:
-            tell(MicrophoneGrant.offTip, 4, MicrophoneGrant.open)
-            return false
-        }
+        // A feed stands in for the microphone, so neither it nor its grant is asked for.
+        let fed = armedFeed
+        feed = nil
+        guard fed != nil || microphoneReady() else { return false }
         // A background prepare goes on: the take's helper waits for its compile (Dictate.load's lock) and loads from it,
         // where stopping it threw minutes of compiling away and the take started its own from nothing.
         let words = whileSpeaking == .words, take = Take()
-        take.run = helper.run(["listen", model.folder.path] + (words ? ["--words"] : []),
+        take.run = helper.run(["listen", model.folder.path] + (words ? ["--words"] : []) + (fed.map { ["--feed", $0.path] } ?? []),
                               heard: { [weak self] in self?.heard($0, take) }, ended: { [weak self] in self?.ended($0, take) })
         guard take.run != nil else {
             tell("The speech helper is missing from this build of Pilot", 4, nil)
@@ -808,8 +825,28 @@ final class PilotDictation {
         state = .starting
         show.started(microphone: microphoneName(), words: words)
         if pausesMedia { media.takeStarted() }
-        whisperLog.notice("pilot dictation: start")
+        whisperLog.notice("pilot dictation: start\(fed == nil ? "" : ", fed from a file", privacy: .public)")
         return true
+    }
+
+    /// The Mac has a microphone and Pilot may record it; otherwise a tip says why not, and asks for the grant once.
+    private func microphoneReady() -> Bool {
+        guard hasMicrophone() else {
+            tell(MicrophoneGrant.noInputTip, 4, nil)
+            return false
+        }
+        microphone.refresh()
+        switch microphone.status {
+        case .authorized: return true
+        case .notDetermined:
+            let microphone = microphone
+            Task { @MainActor in await microphone.ask() }
+            tell("Allow the microphone for Pilot, then press again", 4, nil)
+            return false
+        default:
+            tell(MicrophoneGrant.offTip, 4, MicrophoneGrant.open)
+            return false
+        }
     }
 
     /// Ends the take. A stop before the microphone came up ends an empty one.
@@ -853,6 +890,7 @@ final class PilotDictation {
         case .inputLost:
             tell("The microphone went away: writing down what you said", 3, nil)
             stop()
+        case .fed: stop()
         case .levels(let levels): show.levels(levels)
         // Replacements once, on the helper's own words: Undo's words come back through deliver already replaced.
         case .partial(let words): show.words(vocabulary.taught.replaced(words))

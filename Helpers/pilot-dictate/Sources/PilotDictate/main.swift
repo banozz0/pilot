@@ -1,10 +1,13 @@
 // pilot-dictate: Pilot's own dictation (story 194) in a process that lives only while it works, so Whisper's model and
 // the audio engine leave with it. Pilot reads one line per event on stdout:
 //   pilot-dictate download <folder> <model>     progress <0…1> while files arrive, then preparing; exit 0 once ready
-//   pilot-dictate listen <folder> [--words]   listening once the microphone records, loaded once the model is up, and
-//                                         level <four 0…1 numbers> ten times a second while it records; with --words,
-//                                         partial <JSON string> as the words so far change; Pilot closes stdin to stop
-//                                         (cancel on stdin drops the take), then text <JSON string>
+//   pilot-dictate listen <folder> [--words] [--feed <file>]   listening once the microphone records, loaded once the
+//                                         model is up, and level <four 0…1 numbers> ten times a second while it records;
+//                                         with --words, partial <JSON string> as the words so far change; Pilot closes
+//                                         stdin to stop (cancel on stdin drops the take), then text <JSON string>. With
+//                                         --feed, a dev build's (PilotDictation.feed), the file plays in the microphone's
+//                                         place at its own pace, then quiet, and fed comes as it ends; no microphone or
+//                                         grant is asked for.
 //   pilot-dictate prepare <folder>        compiles the model for this helper unless it already did: prepared, or nothing
 //   pilot-dictate transcribe <folder> <file>   text <JSON string> for a recorded file (the tests, a check by hand)
 //   pilot-dictate speak <folder> <voice> <speed> [--out <file>]   Read aloud's Kokoro voice (Speak): reads the text from
@@ -59,7 +62,7 @@ func outliveParent() { signal(SIGPIPE, SIG_IGN) }
 umask(0o077)
 
 func usage() -> Never {
-    FileHandle.standardError.write(Data("usage: pilot-dictate download <folder> <model> | listen <folder> [--words] | prepare <folder> | transcribe <folder> <file> | speak <folder> <voice> <speed> [--out <file>] | samples <folder> (<voice> <line>)...\n".utf8))
+    FileHandle.standardError.write(Data("usage: pilot-dictate download <folder> <model> | listen <folder> [--words] [--feed <file>] | prepare <folder> | transcribe <folder> <file> | speak <folder> <voice> <speed> [--out <file>] | samples <folder> (<voice> <line>)...\n".utf8))
     exit(2)
 }
 
@@ -108,12 +111,19 @@ do {
             else { try await Dictate.download(to: base, model: arguments[2], progress: progress, preparing: { say("preparing") }) }
         }
     case "listen":
-        // No microphone at all: said before the grant is read, which could ask for it.
-        guard Dictate.hasInputDevice else { say(Dictate.noInput); exit(4) }
-        guard Dictate.microphoneAllowed else { say("error microphone"); exit(3) }
+        let options = Array(arguments.dropFirst(2))
+        let feed = try options.firstIndex(of: "--feed").map { at in
+            guard at + 1 < options.count else { usage() }
+            return try Dictate.samples(of: URL(filePath: options[at + 1]))
+        }
+        if feed == nil {
+            // No microphone at all: said before the grant is read, which could ask for it.
+            guard Dictate.hasInputDevice else { say(Dictate.noInput); exit(4) }
+            guard Dictate.microphoneAllowed else { say("error microphone"); exit(3) }
+        }
         outliveParent()
         // Pilot gone or the take dropped: nothing to type.
-        let take = try await Dictate.listen(base, words: arguments.dropFirst(2).contains("--words"), said: say) {
+        let take = try await Dictate.listen(base, words: options.contains("--words"), feed: feed, said: say) {
             await stopOrCancel() || getppid() == 1
         }
         if let take { answer(take, base: base, kept: Dictate.kept("wav", beside: base)) }

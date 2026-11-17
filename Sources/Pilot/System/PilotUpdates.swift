@@ -31,6 +31,9 @@ final class PilotUpdates {
     /// The appcast Sparkle reads: Info.plist's SUFeedURL, the one place it is written.
     let feed: String?
     let route: Route
+    /// A build of Sven's own: Info.plist's PilotDevBuild, which Scripts/build-app.sh writes for debug and PILOT_DEV builds
+    /// without Sparkle's key, never for a release. Only such a build registers the dev-only verbs (`pilot dictation`).
+    let devBuild: Bool
     /// Sparkle's updater, made by `start()` on the Sparkle route alone.
     private var sparkle: SPUStandardUpdaterController?
     private let reminders = GentleReminders()
@@ -39,6 +42,8 @@ final class PilotUpdates {
         commit = info?["PilotCommit"] as? String
         feed = info?["SUFeedURL"] as? String
         let keyed = Self.isKey(info?["SUPublicEDKey"] as? String) && feed != nil
+        // build-app.sh never writes the marker beside Sparkle's key; a bundle that has both anyway is a release.
+        devBuild = info?["PilotDevBuild"] as? Bool == true && !keyed
         #if DEBUG
         source = info?["PilotSource"] as? String
         route = keyed ? .sparkle : commit != nil && source != nil ? .checkout : .none

@@ -125,6 +125,9 @@ xcrun actool --compile "$APP/Contents/Resources" --platform macosx --minimum-dep
 PLIST=(-c "Add :PilotCommit string $(git -C "$ROOT" rev-parse HEAD)")
 [[ -n ${SPARKLE_FEED:-} ]] && PLIST+=(-c "Set :SUFeedURL $SPARKLE_FEED")
 [[ -n ${SPARKLE_ED_KEY:-} ]] && PLIST+=(-c "Set :SUPublicEDKey $SPARKLE_ED_KEY")
+# A build of Sven's own, debug or PILOT_DEV and never one with Sparkle's key, has the dev-only verbs (PilotUpdates.devBuild):
+# `pilot dictation feed`, the site video's stand-in for the microphone. A release (release.sh unsets PILOT_DEV) has none.
+[[ ( $CONFIG == debug || ${PILOT_DEV:-} == 1 ) && -z ${SPARKLE_ED_KEY:-} ]] && PLIST+=(-c "Add :PilotDevBuild bool true")
 [[ $CONFIG == debug ]] && PLIST+=(-c "Add :PilotSource string $(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)")")
 # The terminal pack goes in build/ beside the bundle, the release asset release.sh hands on. A build of Sven's own (debug or
 # PILOT_DEV) fetches it from build-terminal-pack.sh's cache in the repo's git common dir, which outlives this checkout and

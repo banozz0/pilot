@@ -63,6 +63,7 @@ final class ControlSocket {
         verbs.registerLight()
         verbs.registerLayout()
         verbs.registerUninstall()
+        if status.updates.devBuild { verbs.registerDictationFeed() }
         return verbs
     }
 

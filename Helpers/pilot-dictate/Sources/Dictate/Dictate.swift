@@ -273,14 +273,15 @@ public enum Dictate {
     /// the transcription alone; nil when `stop` cancels the take. `said` hears listening once the input records, preparing
     /// when the model must be compiled first, loaded once it is up, and a level line per buffer while it records. With
     /// `words`, a partial line too each time the words so far change (`partials`); the text is still the whole take's.
-    /// The input going away mid-take ends it as `stop` would, the take so far written down, and says `inputLost`.
-    public static func listen(_ base: URL, words: Bool = false, said: @escaping @Sendable (String) -> Void,
+    /// The input going away mid-take ends it as `stop` would, the take so far written down, and says `inputLost`. With
+    /// `feed`, those samples take the microphone's place, and `fedLine` comes as they end.
+    public static func listen(_ base: URL, words: Bool = false, feed: [Float]? = nil, said: @escaping @Sendable (String) -> Void,
                               stop: @escaping @Sendable () async -> Bool) async throws -> String? {
-        let recording = Recording(keepsRecent: words)
+        let recording = Recording(keepsRecent: words, feed: feed)
         enum End { case stopped, cancelled, lost }
         // Whichever comes first: `stop`'s answer, or the input gone.
         let (ends, end) = AsyncStream.makeStream(of: End.self)
-        try recording.start(buffer: { said(Self.levelLine($0)) }, lost: { said(inputLost); end.yield(.lost) })
+        try recording.start(buffer: { said(Self.levelLine($0)) }, lost: { said(inputLost); end.yield(.lost) }, played: { said(fedLine) })
         said("listening")
         if !isPrepared(base) { said("preparing") }
         let up = OSAllocatedUnfairLock(initialState: false)
@@ -432,6 +433,8 @@ public enum Dictate {
     public static let noInput = "error no input device"
     /// The line for the input going away mid-take, after which the take so far is written down.
     public static let inputLost = "input lost"
+    /// The line for a feed's file played to its end (`listen --feed`): Pilot ends the take as a second press does.
+    public static let fedLine = "fed"
 
     /// No input device to record: thrown before the input tap is installed.
     public struct NoInputDevice: Error {}
@@ -571,29 +574,58 @@ struct ParakeetTranscriber: Transcriber {
     }
 }
 
-/// The default input, recorded at 16 kHz mono from start to stop.
+/// The default input, recorded at 16 kHz mono from start to stop; or with `feed`, a file's samples in its place.
 final class Recording: Sendable {
     nonisolated(unsafe) private let processor = AudioProcessor()
     private let keepsRecent: Bool
+    /// `listen --feed`: a dev build's stand-in for the microphone (PilotDictation.feed), played a buffer every 100 ms as
+    /// it was recorded, then quiet until the stop. Nil records the microphone.
+    private let feed: [Float]?
+    /// How many samples of the feed have played, quiet past its end counted too, and the timer that plays them.
+    private let played = OSAllocatedUnfairLock(initialState: 0)
+    nonisolated(unsafe) private var feeding: DispatchSourceTimer?
     /// The take from sample `start` on, a copy of its own: the processor's samples grow on the audio thread unguarded.
     private let recentSamples = OSAllocatedUnfairLock(initialState: (start: 0, samples: [Float]()))
     /// The engine's configuration-change observer while recording; set in `start`, read in `stop`, one after the other.
     nonisolated(unsafe) private var changes: (any NSObjectProtocol)?
 
-    init(keepsRecent: Bool = false) { self.keepsRecent = keepsRecent }
+    init(keepsRecent: Bool = false, feed: [Float]? = nil) {
+        self.keepsRecent = keepsRecent
+        self.feed = feed
+    }
 
     /// `buffer` hears each new buffer of samples, about 100 ms, on the audio thread; `lost` once, when the engine's
     /// input changes under it (unplugged, or the default switched), which stops the engine. Throws NoInputDevice
-    /// rather than let WhisperKit tap an input with no format.
-    func start(buffer: @escaping ([Float]) -> Void, lost: @escaping @Sendable () -> Void) throws {
+    /// rather than let WhisperKit tap an input with no format. A feed calls `played` once, as its file's last buffer goes.
+    func start(buffer: @escaping @Sendable ([Float]) -> Void, lost: @escaping @Sendable () -> Void,
+               played ended: @escaping @Sendable () -> Void) throws {
+        // Each buffer, the microphone's or the feed's: the partials' copy, then the level line.
+        let heard: @Sendable ([Float]) -> Void = { [keepsRecent, recentSamples] samples in
+            if keepsRecent { recentSamples.withLock { $0.samples.append(contentsOf: samples) } }
+            buffer(samples)
+        }
+        if let feed {
+            let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "pilot-dictate.feed", qos: .userInteractive))
+            timer.schedule(deadline: .now(), repeating: .milliseconds(100))
+            let quiet = [Float](repeating: 0, count: Dictate.frame)
+            timer.setEventHandler { [played] in
+                let (at, chunk) = played.withLock { count in
+                    let at = count, chunk = at < feed.count ? Array(feed[at..<min(feed.count, at + Dictate.frame)]) : quiet
+                    count += chunk.count
+                    return (at, chunk)
+                }
+                heard(chunk)
+                if at < feed.count, at + chunk.count >= feed.count { ended() }
+            }
+            feeding = timer
+            timer.resume()
+            return
+        }
         // The probe engine must outlive the read: inputNode does not retain it, and a freed one crashed every take.
         let probe = AVAudioEngine()
         let format = withExtendedLifetime(probe) { probe.inputNode.inputFormat(forBus: 0) }
         guard format.sampleRate > 0, format.channelCount > 0 else { throw Dictate.NoInputDevice() }
-        try processor.startRecordingLive(inputDeviceID: nil) { [keepsRecent, recentSamples] samples in
-            if keepsRecent { recentSamples.withLock { $0.samples.append(contentsOf: samples) } }
-            buffer(samples)
-        }
+        try processor.startRecordingLive(inputDeviceID: nil, callback: heard)
         changes = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: processor.audioEngine,
                                                          queue: nil) { _ in lost() }
     }
@@ -613,6 +645,11 @@ final class Recording: Sendable {
 
     /// Stops the input and hands back the whole take.
     func stop() -> [Float] {
+        if let feed, let feeding {
+            feeding.cancel()
+            let count = played.withLock { $0 }
+            return Array(feed.prefix(count)) + [Float](repeating: 0, count: max(0, count - feed.count))
+        }
         if let changes { NotificationCenter.default.removeObserver(changes) }
         processor.stopRecording()
         defer { processor.audioSamples = [] }

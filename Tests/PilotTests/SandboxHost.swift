@@ -40,6 +40,9 @@ struct SandboxHost {
         // PILOT_SANDBOX_TILER=<folder>: a stand-in for Pilot's tiler with a file's windows (TilerFixture), made before the Engine
         // makes its tiler, so `pilot workspace move` carries those windows, never the Mac's.
         TilerFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_TILER"])
+        // PILOT_SANDBOX_DICTATION=<folder>: Pilot's own dictation on a cloned model and a checkout's helper, typing into an
+        // offscreen field (DictationFixture), made before the Engine registers dictation's actions on it.
+        DictationFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DICTATION"])
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
         // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows
