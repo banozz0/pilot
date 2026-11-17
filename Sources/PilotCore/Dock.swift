@@ -152,8 +152,10 @@ public enum DockApps {
             DockApp(bundleID: bundleID, url: url, name: name, pinned: pinned, pid: pid,
                     windows: pid == nil ? 0 : bundleID.flatMap { windows[$0] } ?? 0, front: pid != nil && bundleID != nil && bundleID == front)
         }
+        // One app by its ids (SameApp), else its path: the Dock's pin can keep an id the app no longer runs under
+        // (Ghostex's dev build's on its release), which showed the pin dotless and the app again after it (Sven on build 2687).
         func matches(_ pin: DockPin, _ run: DockRunning) -> Bool {
-            if let id = pin.bundleID, let other = run.bundleID { return id == other }
+            if let id = pin.bundleID, let other = run.bundleID, SameApp.ids(id).contains(other) { return true }
             return run.url?.standardizedFileURL == pin.url.standardizedFileURL
         }
         var left = running
@@ -399,6 +401,10 @@ public struct DockSettings: Codable, Equatable, Sendable {
         let keys = Set(dock.map(\.key))
         return dock.filter { !removed.contains($0.key) } + kept.filter { !keys.contains($0.key) }
     }
+
+    /// The Dock's pins taken out of Pilot's dock, in the Dock's order: the Dock page lists them to bring back, as one not
+    /// running shows nowhere else (Sven on build 2687).
+    public func taken(_ dock: [DockPin]) -> [DockPin] { dock.filter { removed.contains($0.key) } }
 
     /// Keep in Dock: an app the Dock's list holds comes back; any other joins the end.
     public mutating func keep(_ pin: DockPin, dock: [DockPin]) {
