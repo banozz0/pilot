@@ -72,6 +72,9 @@ public struct ThemePlan: Sendable {
     public let takenFiles: [ThemeClaim]
     /// The regions among them changed outside Pilot, as they read now: each is copied to the backups folder before the write.
     public let backups: [ThemeClaim]
+    /// The ledger's wallpaper claims moved onto the screens they name now (ThemeCoordinator.rekeyed), when that changed
+    /// any: the commit records them first, as takenFiles.
+    public let rekeyedWallpapers: [ThemeWallpaperClaim]?
     /// Pilot's own parts the person changed since the theme: Restore leaves them, Apply gives them this theme with the
     /// person's choice as what Restore puts back.
     public let keptLook: [String]
@@ -83,12 +86,12 @@ public struct ThemePlan: Sendable {
     public let ghostexClaims: [ThemeSettingClaim]
     public let apps: [ThemeAppBinding]
     public init(id: String, packID: String?, revision: String?, binding: ThemeBinding, style: String, ledger: ThemeSnapshot,
-                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], wallpaperImages: Int? = nil, keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], takenFiles: [ThemeClaim] = [], backups: [ThemeClaim] = [], keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
+                protectedLegacy: ThemeSnapshot?, zed: ThemeBinding? = nil, zedOptOut: Bool = false, observations: [ThemeSnapshot] = [], obsidian: [ThemeBinding] = [], obsidianOptOut: Bool = false, mutations: [ThemeMutation], selection: ThemePack?, warnings: [String], wallpaperState: ThemeWallpaperState? = nil, wallpapers: [ThemeWallpaperMutation] = [], wallpaperImages: Int? = nil, keptWallpapers: [ThemeWallpaperTarget] = [], heldWallpapers: [ThemeWallpaperClaim] = [], takenFiles: [ThemeClaim] = [], backups: [ThemeClaim] = [], rekeyedWallpapers: [ThemeWallpaperClaim]? = nil, keptLook: [String] = [], reloads: [ThemeReloadIntent] = [], ghostexState: [String: String]? = nil, ghostex: [ThemeSettingMutation] = [], ghostexClaims: [ThemeSettingClaim] = [], apps: [ThemeAppBinding] = []) {
         self.id = id; self.packID = packID; self.revision = revision; self.binding = binding; self.style = style
         self.zed = zed; self.zedOptOut = zedOptOut; self.observations = observations
         self.obsidian = obsidian; self.obsidianOptOut = obsidianOptOut
         self.ledger = ledger; self.protectedLegacy = protectedLegacy; self.mutations = mutations; self.selection = selection; self.warnings = warnings
-        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.wallpaperImages = wallpaperImages; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.takenFiles = takenFiles; self.backups = backups; self.keptLook = keptLook
+        self.wallpaperState = wallpaperState; self.wallpapers = wallpapers; self.wallpaperImages = wallpaperImages; self.keptWallpapers = keptWallpapers; self.heldWallpapers = heldWallpapers; self.takenFiles = takenFiles; self.backups = backups; self.rekeyedWallpapers = rekeyedWallpapers; self.keptLook = keptLook
         self.reloads = reloads
         self.ghostexState = ghostexState; self.ghostex = ghostex; self.ghostexClaims = ghostexClaims; self.apps = apps
     }
@@ -102,8 +105,11 @@ public struct ThemeWallpaperState: Codable, Equatable, Sendable {
         public let portrait: Bool
         public let image: String?
         public let pinned: Bool
-        public init(id: String, workspace: String?, portrait: Bool, image: String?, pinned: Bool) {
-            self.id = id; self.workspace = workspace; self.portrait = portrait; self.image = image; self.pinned = pinned
+        /// The display's vendor:model:serial (LiveDisplay.identity), which outlasts `id`, macOS's UUID: a restart may
+        /// hand a display a new UUID (Sven's ultrawide, 2026-11-16). Nil when it has no EDID.
+        public let identity: String?
+        public init(id: String, workspace: String?, portrait: Bool, image: String?, pinned: Bool, identity: String? = nil) {
+            self.id = id; self.workspace = workspace; self.portrait = portrait; self.image = image; self.pinned = pinned; self.identity = identity
         }
     }
     public let sources: [String]

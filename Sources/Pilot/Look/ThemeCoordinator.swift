@@ -1033,7 +1033,7 @@ final class ThemeCoordinator {
         }
         var next = old
         next.epoch += 1
-        next.wallpapers![index] = .init(target: .display(display), original: claims[index].original, last: .image(after))
+        next.wallpapers![index] = .init(target: .display(display), original: claims[index].original, last: .image(after), identity: claims[index].identity)
         let bytes = try ThemeDigest.encoded(next)
         let change = ThemeWallpaperMutation(target: .display(display), before: .image(before), after: .image(after))
         let journal = ThemeJournal(schema: 1, beforeLedger: file.bytes, afterLedger: bytes, mutations: [], wallpapers: [change])
@@ -1280,6 +1280,24 @@ final class ThemeCoordinator {
     /// Whether a claimed wallpaper is still the theme's: as Pilot last set it, a screen moved on to another of the
     /// theme's own images (the cycle, a gallery pick or a workspace switch), or a collection of only the theme's images
     /// in another order. The images are the ledger's, not the live collection, which may be the person's own by now.
+    /// Wallpaper claims on the screens now (SavedDisplay): a claim follows its display's identity when macOS hands it a
+    /// new UUID, as at Sven's restarts of 2026-11-16. One kept before identities whose UUID names no screen now goes to
+    /// the main one (the first), as a widget does, unless another claim is there. Each keeps its screen's identity.
+    nonisolated static func rekeyed(_ claims: [ThemeWallpaperClaim], on displays: [ThemeWallpaperState.Display]) -> [ThemeWallpaperClaim] {
+        let live = displays.map { LiveDisplay(uuid: $0.id, identity: $0.identity) }
+        var taken = Set(claims.compactMap { claim -> String? in
+            if case .display(let id) = claim.target, live.contains(where: { $0.uuid == id }) { id } else { nil }
+        })
+        return claims.map { claim in
+            guard case .display(let id) = claim.target else { return claim }
+            var index = LiveDisplay.index(uuid: id, identity: claim.identity, in: live)
+            if index == nil, claim.identity == nil, let main = live.first?.uuid, !taken.contains(main) { index = 0 }
+            guard let index, let uuid = live[index].uuid else { return claim }
+            if uuid != id { guard !taken.contains(uuid) else { return claim }; taken.insert(uuid) }
+            return .init(target: .display(uuid), original: claim.original, last: claim.last, identity: live[index].identity ?? claim.identity)
+        }
+    }
+
     private static func stillTheme(_ claim: ThemeWallpaperClaim, now: ThemeWallpaperValue, among claims: [ThemeWallpaperClaim]) -> Bool {
         if now == claim.last { return true }
         guard case .sources(let images)? = claims.first(where: { $0.target == .sources })?.last else { return false }
@@ -1760,6 +1778,11 @@ final class ThemeCoordinator {
         let wallpaperState = try wallpaper?.read()
         try wallpaperState?.validate()
         guard wallpaperState?.preferences["cycling"] != .bool(true) else { throw ThemeFailure("wallpaper cycle in progress; plan again") }
+        var rekeyedWallpapers: [ThemeWallpaperClaim]?
+        if let state = wallpaperState, let claims = record.wallpapers {
+            let moved = Self.rekeyed(claims, on: state.displays)
+            if moved != claims { record.wallpapers = moved; rekeyedWallpapers = moved }
+        }
         let components = try following()
         let nativePlan = try appearancePlan(loaded?.pack, old: appearanceOwnership(record, current: native?.read()), following: components)
         let unpictured = folder == nil && (loaded.map { ShippedWallpapers.wants($0) && $0.images.isEmpty } ?? false)
@@ -1781,7 +1804,7 @@ final class ThemeCoordinator {
         let appObservations = try custom.map { try ThemeFiles.read(root: $0.app, path: "Contents/Info.plist") }
         let plan = ThemePlan(id: UUID().uuidString, packID: id, revision: loaded?.revision, binding: binding, style: style(),
                              ledger: recordFile, protectedLegacy: legacy, zed: local.zed, zedOptOut: local.zedOptOut, observations: targets + appObservations + [try state("bindings"), try state("components")],
-                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, wallpaperImages: folder?.images.count, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, takenFiles: takenFiles, backups: backups, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
+                             obsidian: local.obsidian ?? [], obsidianOptOut: local.obsidianOptOut ?? false, mutations: changes, selection: loaded?.pack, warnings: warnings, wallpaperState: wallpaperState, wallpapers: wallpapers, wallpaperImages: folder?.images.count, keptWallpapers: keptWallpapers, heldWallpapers: heldWallpapers, takenFiles: takenFiles, backups: backups, rekeyedWallpapers: rekeyedWallpapers, keptLook: nativePlan.2, reloads: reloads, ghostexState: ghostexPlan.state, ghostex: ghostexPlan.changes, ghostexClaims: ghostexPlan.claims, apps: local.apps ?? [])
         if plans.count >= 32 { plans.removeAll() }
         plans[plan.id] = (plan, try context(), nativePlan.0, nativePlan.1)
         return plan
@@ -1907,11 +1930,13 @@ final class ThemeCoordinator {
     private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?) async throws -> JSONValue {
         var (oldFile, old) = try ledger()
         if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
-        // Files that moved or were changed outside Pilot: their claims as the plan read them are recorded first, and each part
-        // changed outside Pilot is copied, so the journal's before-ledger says what the files hold and nothing of theirs is lost.
+        // Files that moved or were changed outside Pilot, and wallpaper claims on a screen with a new UUID: their claims as the
+        // plan read them are recorded first, and each part changed outside Pilot is copied, so the journal's before-ledger
+        // says what the files and screens hold and nothing of theirs is lost.
         var saved: [String] = []
-        if !plan.takenFiles.isEmpty {
+        if !plan.takenFiles.isEmpty || plan.rekeyedWallpapers != nil {
             old.claims = old.claims.map { claim in plan.takenFiles.first { $0.identity == claim.identity } ?? claim }
+            if let moved = plan.rekeyedWallpapers { old.wallpapers = moved }
             try validate(old)
             saved = try backUp(plan.backups)
             try fault("taken")
@@ -1929,7 +1954,8 @@ final class ThemeCoordinator {
             return claim
         }
         let wallpaperClaims = plan.wallpapers.filter { !$0.release }.map { change in
-            ThemeWallpaperClaim(target: change.target, original: plan.keptWallpapers.contains(change.target) ? change.before : old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after)
+            ThemeWallpaperClaim(target: change.target, original: plan.keptWallpapers.contains(change.target) ? change.before : old.wallpapers?.first { $0.target == change.target }?.original ?? change.before, last: change.after,
+                                identity: plan.wallpaperState?.displays.first { .display($0.id) == change.target }?.identity)
         }
         let claimed = wallpaperClaims + plan.heldWallpapers
         next.wallpapers = claimed.isEmpty ? nil : claimed
@@ -2384,7 +2410,7 @@ struct ThemeFixture: Decodable {
                 switch (change.target, change.after) {
                 case (.sources, .sources(let paths)): sources = paths
                 case (.display(let id), .image(let image)):
-                    displays = displays.map { $0.id == id ? .init(id: $0.id, workspace: $0.workspace, portrait: $0.portrait, image: image, pinned: $0.pinned) : $0 }
+                    displays = displays.map { $0.id == id ? .init(id: $0.id, workspace: $0.workspace, portrait: $0.portrait, image: image, pinned: $0.pinned, identity: $0.identity) : $0 }
                 default: throw ThemeFailure("invalid recording wallpaper effect")
                 }
                 let next = ThemeWallpaperState(sources: sources, displays: displays, preferences: before.preferences)

@@ -409,8 +409,11 @@ public struct ThemeFollowing: Codable, Equatable, Sendable {
 public struct ThemeWallpaperClaim: Codable, Equatable, Sendable {
     public let target: ThemeWallpaperTarget
     public let original, last: ThemeWallpaperValue
-    public init(target: ThemeWallpaperTarget, original: ThemeWallpaperValue, last: ThemeWallpaperValue) {
-        self.target = target; self.original = original; self.last = last
+    /// A display target's identity (ThemeWallpaperState.Display.identity), matched before its UUID; nil in a claim kept
+    /// before identities, which then matches by UUID and else falls to the main screen.
+    public var identity: String?
+    public init(target: ThemeWallpaperTarget, original: ThemeWallpaperValue, last: ThemeWallpaperValue, identity: String? = nil) {
+        self.target = target; self.original = original; self.last = last; self.identity = identity
     }
 }
 
