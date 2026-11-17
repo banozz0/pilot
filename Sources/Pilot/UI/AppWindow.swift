@@ -176,7 +176,12 @@ final class AppWindowController: NSObject {
     let model = AppWindowModel()
     private(set) var window: NSWindow?
     /// Seams for the tests: the real ones switch the app's activation policy and quit.
-    var applyDockIcon: (DockIcon) -> Void = { NSApp.setActivationPolicy($0 == .dock ? .regular : .accessory) }
+    /// Pilot's dock reads its running apps again after: nothing NSWorkspace posts follows Pilot's own policy, so an open
+    /// Pilot taken out of it showed nowhere (Sven on build 2687).
+    var applyDockIcon: (DockIcon) -> Void = {
+        NSApp.setActivationPolicy($0 == .dock ? .regular : .accessory)
+        Engine.shared?.dock.refreshRunning()
+    }
     var quit: () -> Void = { NSApp.terminate(nil) }
     /// The windows the Dock rule counts (counts). A seam so a test counts only its own: the runner's other suites open and
     /// close theirs meanwhile, which closed and kept the icon under a test's window (full runs, 2026-10-11).

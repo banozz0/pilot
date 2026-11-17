@@ -67,6 +67,22 @@ struct DockPage: View {
             }
             if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
             TitledPanel(title: "Look") { look(dock) }
+            // The Dock's apps taken out with Remove from Dock: one not running shows nowhere else (Sven on build 2687).
+            let taken = dock.taken
+            if !taken.isEmpty {
+                TitledPanel(title: "Taken out") {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(taken.enumerated()), id: \.element.key) { i, pin in
+                            BlockRow(first: i == 0) {
+                                Text(pin.name).foregroundStyle(ink.text)
+                                Spacer()
+                                Button("Keep in Dock") { dock.restore(pin) }.buttonStyle(.pilot)
+                            }
+                        }
+                    }
+                    .font(ink.ui(13))
+                }
+            }
             TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
         }
         .task { if !prefs.loaded { await prefs.load() } }
