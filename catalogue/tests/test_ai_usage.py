@@ -354,6 +354,55 @@ class AIUsageTests(ExtensionTestCase):
         r = self.run_account("open-ghostex")
         self.assertEqual([h["text"] for h in r.of_type("hud")], ["Ghostex isn't installed on this Mac"])
 
+    REDEEM_IN_CLAUDE = {"type": "buttons", "actions": [{"type": "run", "command": "claude-limit-reset",
+                                                        "title": "Redeem in Claude Code…"}]}
+
+    def test_without_ghostex_claude_shows_no_count_and_redeem_in_claude_code(self):
+        """Claude Code reports no reset grant headless, so without Ghostex the card counts none and offers Claude Code's
+        own /limit-reset. In-process: Ghostex.app on this Mac would be found, and Codex is left out so none is asked."""
+        n = self.now
+        self.claude_cache(claude_json(n - MIN, (10, n + HOUR), (20, n + DAY)))
+        run = {"paths": {"cache": str(self.box.cache)}}
+
+        def claude(ghostex, cli):
+            with mock.patch.dict(os.environ, {"HOME": str(self.box.home)}), \
+                    mock.patch.object(ai_usage, "ghostex_program", lambda: ghostex), \
+                    mock.patch.object(ai_usage, "claude_program", lambda: cli), \
+                    mock.patch.object(ai_usage, "codex_accounts", lambda *a: []):
+                return ai_usage.limits(run, n)["claude"]
+
+        alone = claude(None, "/x/claude")
+        self.assertEqual(ai_usage.claude_card(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
+        self.assertEqual(ai_usage.calm_claude(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
+        for ghostex, cli, why in (("/x/ghostex", "/x/claude", "Ghostex comes first: without its answer, nothing"),
+                                  (None, None, "neither Ghostex nor Claude Code")):
+            self.assertEqual(len(ai_usage.claude_card(claude(ghostex, cli), n)["blocks"]), 2, why)
+
+    def test_redeem_in_claude_code_opens_its_limit_reset_in_a_terminal(self):
+        """Ghostty as a new window running claude /limit-reset, else Terminal running a script; nothing is spent here:
+        Claude Code's picker asks first."""
+        cache = self.box.root / "cache-claude"
+        for ghostty in ((str(self.box.root),), ()):
+            sent, opened = [], []
+            with mock.patch.object(ai_usage, "send", sent.append), \
+                    mock.patch.object(ai_usage, "claude_program", lambda: "/x/my claude"), \
+                    mock.patch.object(ai_usage, "GHOSTTY", ghostty), \
+                    mock.patch.object(ai_usage.subprocess, "run",
+                                      lambda argv, **kw: opened.append(argv) or subprocess.CompletedProcess(argv, 0)):
+                ai_usage.claude_limit_reset({"paths": {"cache": str(cache)}})
+            if ghostty:
+                self.assertEqual(opened[0][:3], ["open", "-na", str(self.box.root)])
+                self.assertEqual(opened[0][-1], "--command='/x/my claude' /limit-reset")
+                self.assertEqual(sent, [{"type": "hud", "text": "Pick a reset in Claude Code's /limit-reset in Ghostty"}])
+            else:
+                script = cache / "claude-limit-reset.command"
+                self.assertEqual(opened, [["open", "-a", "Terminal", str(script)]])
+                self.assertEqual(script.read_text(), "#!/bin/sh\ncd ~ && exec '/x/my claude' /limit-reset\n")
+        sent = []
+        with mock.patch.object(ai_usage, "send", sent.append), mock.patch.object(ai_usage, "claude_program", lambda: None):
+            ai_usage.claude_limit_reset({})
+        self.assertEqual(sent, [{"type": "hud", "text": "Claude Code isn't installed on this Mac"}])
+
     def redeem(self, name, count, home=".codex"):
         """The Redeem reset button a card with `count` reset credits carries."""
         ask = "Reset Codex's limits for %s now? It spends 1 of your %d reset credit%s." % (name, count, "" if count == 1 else "s")

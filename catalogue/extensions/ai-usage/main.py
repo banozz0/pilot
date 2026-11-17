@@ -54,7 +54,10 @@ Claude account's `resetCreditDetails` (`id`, `expiresAt`, an optional `note`), t
 Code signed in with. A popover asks it again once the last answer (paths.cache/claude-resets.json) is over 30 s old, a
 page over 120 s, Refresh now always, waiting at most 1 s; the bar only reads that answer. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
 Anthropic reads and redeems these only with Claude Code's sign-in token, so Redeem in Ghostex opens Ghostex, whose
-account usage panel redeems them; without Ghostex, Claude shows no credits.
+account usage panel redeems them. Without Ghostex nothing on this Mac counts them: Claude Code reports no reset grant
+headless (`claude -p /usage` shows the limits alone, and `/limit-reset` "isn't available in this environment"), so the
+card shows no count and Redeem in Claude Code opens a terminal (Ghostty, else Terminal) running `claude /limit-reset`,
+Claude Code's own picker, which asks before it spends one.
 
 Nothing else is read: no auth.json, credentials, keychain items or cookies of any provider.
 """
@@ -66,6 +69,7 @@ import math
 import os
 import re
 import select
+import shlex
 import shutil
 import signal
 import subprocess
@@ -111,6 +115,9 @@ GHOSTEX_ID = "com.madda.ghostex.host"
 GHOSTEX_FILE = "claude-resets.json"
 GHOSTEX_FRESH = 300  # at most this old an answer of Ghostex's is reused (a popover's 30 s, a page's 120 s); Ghostex asks Anthropic every 15 min
 GHOSTEX_WAIT = 1.0  # seconds Ghostex may take, so Codex keeps the rest of a popover's or page's wait
+CLAUDE_CLIS = (os.path.join(".local", "bin", "claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
+GHOSTTY = ("/Applications/Ghostty.app", os.path.expanduser("~/Applications/Ghostty.app"))
+LIMIT_RESET = "/limit-reset"  # Claude Code's reset picker (an interactive command: no -p, no count)
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 SESSION, WEEK = 300, 10080  # window lengths in minutes
 WARN, ALERT = 60, 85  # percent used
@@ -278,6 +285,13 @@ def ghostex_program():
     """Ghostex's CLI: on PATH, else inside Ghostex.app; None without Ghostex."""
     found = shutil.which("ghostex")
     return found or (GHOSTEX_CLI if os.access(GHOSTEX_CLI, os.X_OK) else None)
+
+
+def claude_program():
+    """Claude Code's CLI: on PATH, else where its installer or Homebrew puts it; None without Claude Code."""
+    home = os.path.expanduser("~")
+    found = shutil.which("claude")
+    return found or next((p for p in (os.path.join(home, c) for c in CLAUDE_CLIS) if os.access(p, os.X_OK)), None)
 
 
 def ask_ghostex(deadline):
@@ -776,6 +790,7 @@ def limits(run, now=None, ask_until=None, fresh=LIVE_FRESH):
     cache_dir = (run.get("paths") or {}).get("cache")
     claude = claude_limits(home, now)
     claude["reset_credits"] = claude_resets(cache_dir, claude, now, ask_until, fresh)
+    claude["redeem_in_claude"] = ghostex_program() is None and claude_program() is not None
     return {"now": now, "claude": claude, "codex": codex_accounts(home, now, run, ask_until, fresh),
             "gemini": gemini_state(), "status": status_read(cache_dir, now)}
 
@@ -1174,7 +1189,7 @@ def section(title, subtitle, aside, aside_note, blocks):
 
 def claude_card(claude, now):
     credits = reset_credits_text(claude.get("reset_credits"), now)
-    extra = [{"type": "markdown", "text": credits}, claude_redeem_button()] if credits else []
+    extra = claude_redeem(claude, credits and {"type": "markdown", "text": credits})
     if claude["state"] != "ok":
         return section("Claude", "Unknown", claude.get("who"), claude.get("plan"),
                        [{"type": "markdown", "text": CLAUDE_UNKNOWN}] + extra)
@@ -1201,10 +1216,16 @@ def reset_credits_text(found, now):
     return text
 
 
-def claude_redeem_button():
-    """Claude's credits are redeemed in Ghostex's account usage panel: Anthropic takes a redeem only with Claude Code's
-    sign-in token, which Pilot never reads, so the button opens Ghostex."""
-    return {"type": "buttons", "actions": [{"type": "run", "command": "open-ghostex", "title": "Redeem in Ghostex…"}]}
+def claude_redeem(claude, credits):
+    """The Claude card's reset blocks: Ghostex's count (`credits`, a block) and Redeem in Ghostex, whose account usage
+    panel redeems (Anthropic takes a redeem only with Claude Code's sign-in token, which Pilot never reads); without
+    Ghostex, no count and Redeem in Claude Code, its own picker in a terminal; else none."""
+    if credits:
+        return [credits, {"type": "buttons", "actions": [{"type": "run", "command": "open-ghostex", "title": "Redeem in Ghostex…"}]}]
+    if claude.get("redeem_in_claude"):
+        return [{"type": "buttons", "actions": [{"type": "run", "command": "claude-limit-reset",
+                                                 "title": "Redeem in Claude Code…"}]}]
+    return []
 
 
 def stamp_ahead(moment, now):
@@ -1331,8 +1352,7 @@ def calm_credits(found, now):
 
 
 def calm_claude(claude, now):
-    credits = calm_credits(claude.get("reset_credits"), now)
-    extra = [credits, claude_redeem_button()] if credits else []
+    extra = claude_redeem(claude, calm_credits(claude.get("reset_credits"), now))
     if claude["state"] != "ok":
         return calm_section("claude", "Claude", "unknown", claude.get("who"), None,
                             [CLAUDE_UNKNOWN, claude.get("who"), claude.get("plan")], extra)
@@ -1535,6 +1555,8 @@ def show_usage(run):
     credits = reset_credits_text(claude.get("reset_credits"), now)
     if credits:
         md += ["", "- " + credits + " · redeem them in Ghostex"]
+    elif claude.get("redeem_in_claude"):
+        md += ["", "- **Limit reset credits:** counted only with Ghostex · redeem one with %s in Claude Code" % LIMIT_RESET]
     for codex in data["codex"]:
         md += ["", "## Codex · %s" % codex["name"]]
         if codex["state"] == "ok":
@@ -1674,6 +1696,40 @@ def open_ghostex(run):
     except (OSError, subprocess.TimeoutExpired):
         opened = False
     send({"type": "hud", "text": "Redeem it in Ghostex's account usage panel" if opened else "Ghostex isn't installed on this Mac"})
+
+
+def claude_limit_reset(run):
+    """Redeem in Claude Code: a terminal running `claude /limit-reset`, Claude Code's own reset picker, which asks
+    before it spends one; Ghostty as a new window, else Terminal running a script in paths.cache. The window belongs to
+    the terminal, never to this program."""
+    program = claude_program()
+    if not program:
+        send({"type": "hud", "text": "Claude Code isn't installed on this Mac"})
+        return
+    home = os.path.expanduser("~")
+    ghostty = next((g for g in GHOSTTY if os.path.isdir(g)), None)
+    if ghostty:
+        arguments, app = ["-na", ghostty, "--args", "--working-directory=" + home, "--window-save-state=never",
+                          "--command=%s %s" % (shlex.quote(program), LIMIT_RESET)], "Ghostty"
+    else:
+        cache = (run.get("paths") or {}).get("cache") or os.environ.get("TMPDIR", "/tmp")
+        script = os.path.join(cache, "claude-limit-reset.command")
+        try:
+            os.makedirs(cache, exist_ok=True)
+            with open(script, "w", encoding="utf-8") as f:
+                f.write("#!/bin/sh\ncd ~ && exec %s %s\n" % (shlex.quote(program), LIMIT_RESET))
+            os.chmod(script, 0o755)
+        except OSError:
+            send({"type": "hud", "text": "Couldn't write the script that opens Claude Code"})
+            return
+        arguments, app = ["-a", "Terminal", script], "Terminal"
+    try:
+        opened = subprocess.run(["open"] + arguments, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        opened = False
+    send({"type": "hud", "text": "Pick a reset in Claude Code's %s in %s" % (LIMIT_RESET, app) if opened
+          else "%s didn't open" % app})
 
 
 # What each of Codex's consume outcomes means, as Codex's own Redeem reset says it.
@@ -1839,7 +1895,7 @@ def background_codex(cache_dir, homes):
 
 COMMANDS = {"usage": show_usage, "summary": show_summary, "page": show_page, "bar": show_bar,
             "add-account": add_account, "remove-account": remove_account, "refresh": refresh, "redeem-reset": redeem_reset,
-            "open-ghostex": open_ghostex}
+            "open-ghostex": open_ghostex, "claude-limit-reset": claude_limit_reset}
 
 
 def main():
