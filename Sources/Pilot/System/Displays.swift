@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import PilotCore
 
 /// One way a screen can run: its size in points, the pixels behind them, and its refresh rate.
 struct DisplayMode: Codable, Equatable, Hashable, Sendable {
@@ -33,6 +34,11 @@ struct DisplayInfo: Equatable, Sendable {
     let rotation: Int
     /// Durable label key, independent of the current-session CoreGraphics handle.
     var displayUUID: String? = nil
+    /// Its EDID identity (LiveDisplay), which outlasts a UUID macOS hands out anew.
+    var displayIdentity: String? = nil
+
+    /// The display as a setting kept per display matches it.
+    var live: LiveDisplay { LiveDisplay(uuid: displayUUID, identity: displayIdentity) }
 }
 
 enum DisplayIdentity {
@@ -135,7 +141,8 @@ final class CoreGraphicsDisplays: DisplaySystem {
         return ids.compactMap { id in
             guard let mode = CGDisplayCopyDisplayMode(id).map(Self.mode) else { return nil }
             return DisplayInfo(id: id, name: names[id] ?? "Display \(id)", main: CGDisplayIsMain(id) != 0, frame: CGDisplayBounds(id),
-                               mode: mode, rotation: Int(CGDisplayRotation(id)), displayUUID: DisplayIdentity.uuid(for: id))
+                               mode: mode, rotation: Int(CGDisplayRotation(id)), displayUUID: DisplayIdentity.uuid(for: id),
+                               displayIdentity: LiveDisplay.identity(of: id))
         }
     }
 

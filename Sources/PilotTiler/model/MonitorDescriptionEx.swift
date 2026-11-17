@@ -7,6 +7,7 @@ extension MonitorDescription {
             case .main: mainMonitorInfo
             case .pattern(let regex): sortedMonitors.first { $0.name.contains(caseInsensitiveRegex: regex) }
             case .displayId(let id): sortedMonitors.first { $0.displayId == id } // Pilot
+            case .displayIdentity(let identity): sortedMonitors.filter { $0.displayIdentity == identity }.singleOrNil() // Pilot
             case .secondary:
                 sortedMonitors.takeIf { $0.count == 2 }?
                     .first { $0.rect.topLeftCorner != mainMonitorInfo.rect.topLeftCorner }

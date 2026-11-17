@@ -1,7 +1,9 @@
 import Foundation
 import Observation
+import PilotCore
 
-/// Personal labels only. Display UUIDs survive session-ID churn; hardware names and connection bindings stay original.
+/// Personal labels only, by display identity (LiveDisplay.key), so a name outlasts a UUID macOS hands out anew; one saved
+/// before identities is read by its UUID. Hardware names and connection bindings stay original.
 @Observable @MainActor
 final class DisplayNicknames {
     static let shared = DisplayNicknames()
@@ -18,7 +20,7 @@ final class DisplayNicknames {
     }
 
     func nickname(for displayUUID: String?) -> String? {
-        displayUUID.flatMap(UUID.init(uuidString:)).flatMap { names[$0.uuidString] }
+        displayUUID.flatMap(UUID.init(uuidString:)).flatMap { names.first(of: LiveDisplay.keys(forUUID: $0.uuidString)) }
     }
 
     func label(systemName: String, displayUUID: String?) -> String {
@@ -31,7 +33,10 @@ final class DisplayNicknames {
             throw ConnectionFailure.refused("That display has no stable identity for a personal name")
         }
         guard !unreadable else { throw ConnectionFailure.refused("Pilot's display names could not be read; saved names were left unchanged") }
-        names[uuid.uuidString] = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
+        // Under the display's identity, the UUID's own entry from before identities gone.
+        let key = LiveDisplay.key(forUUID: uuid.uuidString)
+        names[uuid.uuidString] = nil
+        names[key] = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
         defaults.set(names, forKey: Self.key)
     }
 }

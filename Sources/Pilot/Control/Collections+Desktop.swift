@@ -333,7 +333,7 @@ extension ControlVerbs {
                 // The Monitor pick's own choices: Any, Main, each display, and the workspace's unplugged one.
                 let choices = WorkspaceMonitors.choices(pinned: lists.monitors.pins[workspace], displays: lists.displays()).choices
                 guard let choice = choices.first(where: { $0.title.caseInsensitiveCompare(word) == .orderedSame })
-                        ?? choices.first(where: { if case .display(_, word?) = $0.value { true } else { false } }) else {
+                        ?? choices.first(where: { if case .display(_, word?, _) = $0.value { true } else { false } }) else {
                     throw ControlError(.badValue, "--monitor is one of \(choices.map(\.title).joined(separator: ", ")), not \(word)")
                 }
                 lists.monitors.set(choice.value, for: workspace)
@@ -511,12 +511,13 @@ extension ControlVerbs {
     }
 
     private static func row(_ pin: MonitorPin?, workspace: String) -> JSONValue {
-        let (monitor, id): (String, String?) = switch pin {
-        case nil: ("Any", nil)
-        case .main: ("Main", nil)
-        case .display(let name, let id): (name, id)
+        let (monitor, id, identity): (String, String?, String?) = switch pin {
+        case nil: ("Any", nil, nil)
+        case .main: ("Main", nil, nil)
+        case .display(let name, let id, let identity): (name, id, identity)
         }
-        return .object(["workspace": .string(workspace), "monitor": .string(monitor), "id": id.map(JSONValue.string) ?? .null])
+        return .object(["workspace": .string(workspace), "monitor": .string(monitor), "id": id.map(JSONValue.string) ?? .null,
+                        "identity": identity.map(JSONValue.string) ?? .null])
     }
 
     private static func row(_ layout: WorkspaceLayout, workspace: String) -> JSONValue {

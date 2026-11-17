@@ -55,8 +55,10 @@ extension TilerSettings {
     static func monitors(_ pin: MonitorPin) -> [MonitorDescription] {
         switch pin {
             case .main: [.main]
-            case .display(_, let id?): [.displayId(id), .main]
-            case .display(let name, nil): ((try? parseMonitorDescription(name).get()).map { [$0] } ?? []) + [.main]
+            // Its identity first, which outlasts a UUID macOS hands out anew (LiveDisplay).
+            case .display(_, let id?, let identity): (identity.map { [.displayIdentity($0)] } ?? []) + [.displayId(id), .main]
+            case .display(let name, nil, let identity):
+                (identity.map { [.displayIdentity($0)] } ?? []) + ((try? parseMonitorDescription(name).get()).map { [$0] } ?? []) + [.main]
         }
     }
 }

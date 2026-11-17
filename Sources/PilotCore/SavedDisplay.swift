@@ -50,6 +50,50 @@ public struct LiveDisplay: Equatable, Sendable {
     public static func identity(for uuid: String?, kept: String?, in live: [LiveDisplay]) -> String? {
         uuid.flatMap { uuid in live.first { $0.uuid == uuid } }?.identity ?? kept
     }
+
+    // MARK: Settings kept per display
+
+    /// The key a setting kept per display (a nickname, a rotation, a screen's own wallpaper folders) saves this display
+    /// under among `live`: its identity while no other display there shares it, else its UUID.
+    public func key(among live: [LiveDisplay]) -> String? {
+        if let identity, live.count(where: { $0.identity == identity }) <= 1 { return identity }
+        return uuid
+    }
+
+    /// The keys such a setting may hold this display under, the first that holds a value winning: its key, then its UUID
+    /// (a value saved before identities).
+    public func keys(among live: [LiveDisplay]) -> [String] {
+        let key = key(among: live)
+        return [key, uuid != key ? uuid : nil].compactMap { $0 }
+    }
+
+    /// The screens now with their kept UUIDs and identities (cheap, unlike `screens`), in NSScreen's order.
+    @MainActor public static var kept: [LiveDisplay] { NSScreen.screens.map { LiveDisplay(uuid: $0.displayUUID, identity: $0.displayIdentity) } }
+
+    /// The connected display a setting names by `uuid` (kept UUIDs first, then fresh reads), and the screens it was found
+    /// among; nil when no display has that UUID now.
+    @MainActor public static func connected(uuid: String) -> (display: LiveDisplay, among: [LiveDisplay])? {
+        let live = kept
+        if let found = live.first(where: { $0.uuid == uuid }) { return (found, live) }
+        let fresh = screens
+        return fresh.first { $0.uuid == uuid }.map { ($0, fresh) }
+    }
+
+    /// The key to save a setting under for the display with `uuid` (its identity when unique), the UUID itself while
+    /// that display is not connected.
+    @MainActor public static func key(forUUID uuid: String) -> String {
+        connected(uuid: uuid).flatMap { $0.display.key(among: $0.among) } ?? uuid
+    }
+
+    /// The keys a setting may hold the display with `uuid` under, the first that holds a value winning.
+    @MainActor public static func keys(forUUID uuid: String) -> [String] {
+        connected(uuid: uuid).map { $0.display.keys(among: $0.among) } ?? [uuid]
+    }
+}
+
+extension Dictionary where Key == String {
+    /// The value kept under the first of `keys` that holds one (LiveDisplay.keys).
+    public func first(of keys: [String]) -> Value? { keys.lazy.compactMap { self[$0] }.first }
 }
 
 extension NSScreen {
