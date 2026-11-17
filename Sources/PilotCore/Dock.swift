@@ -152,8 +152,10 @@ public enum DockApps {
             DockApp(bundleID: bundleID, url: url, name: name, pinned: pinned, pid: pid,
                     windows: pid == nil ? 0 : bundleID.flatMap { windows[$0] } ?? 0, front: pid != nil && bundleID != nil && bundleID == front)
         }
+        // One app by its ids (SameApp), else its path: the Dock's pin can keep an id the app no longer runs under
+        // (Ghostex's dev build's on its release), which showed the pin dotless and the app again after it (Sven on build 2687).
         func matches(_ pin: DockPin, _ run: DockRunning) -> Bool {
-            if let id = pin.bundleID, let other = run.bundleID { return id == other }
+            if let id = pin.bundleID, let other = run.bundleID, SameApp.ids(id).contains(other) { return true }
             return run.url?.standardizedFileURL == pin.url.standardizedFileURL
         }
         var left = running
