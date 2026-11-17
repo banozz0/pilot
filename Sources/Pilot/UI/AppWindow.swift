@@ -46,6 +46,8 @@ final class AppWindowModel {
     var editBind: String?
     /// The row whose alias editor Launcher › Aliases opens (the menu's Set alias…, card agent-bo-95423037); Aliases clears it.
     var editAlias: Alias?
+    /// The snippet Snippets picks and names first (the clipboard panel's Save as snippet); Snippets clears it.
+    var editSnippet: UUID?
     /// The workspace whose editor popup shows over the window (mockup E, card agent-bo-95422980).
     var editingWorkspace: EditedWorkspace?
     /// Whether the window shows on screen now: open and not hidden, minimised or covered.
@@ -193,8 +195,9 @@ final class AppWindowController: NSObject {
     /// Opens the window, or brings it forward, at `place`; with none, on the page shown last (Home the first time). On a
     /// locked screen it waits for the unlock, since the tiler never tiles a window made while locked (LockedOpen).
     /// `editBind` opens Binds' editor on that action (the menu's Set Hyper bind, card agent-bo-95422968), `editAlias`
-    /// Launcher › Aliases' editor on that row (Set alias…, card agent-bo-95423037).
-    func open(_ place: AppPlace? = nil, setup: SetupSection? = nil, extension focus: String? = nil, editBind: String? = nil, editAlias: Alias? = nil) {
+    /// Launcher › Aliases' editor on that row (Set alias…, card agent-bo-95423037), `editSnippet` Snippets on that snippet's name.
+    func open(_ place: AppPlace? = nil, setup: SetupSection? = nil, extension focus: String? = nil, editBind: String? = nil, editAlias: Alias? = nil,
+              editSnippet: UUID? = nil) {
         // A developer page while the Developer switch is off (a link, a bind) opens General, where the switch is.
         var place = place.map { $0.page.isDeveloper && !DeveloperPages.on ? AppPlace(.general) : $0 }
         // System's section (Hyper+Ctrl+A, B and W, card agent-bo-95422805) and the bind to edit, kept through a locked
@@ -205,6 +208,7 @@ final class AppWindowController: NSObject {
         if place?.page == .extensions, let focus { model.extensionFocus = focus }
         if place?.page == .binds, let editBind { model.editBind = editBind }
         if place?.section == .aliases, let editAlias { model.editAlias = editAlias }
+        if place?.page == .snippets, let editSnippet { model.editSnippet = editSnippet }
         guard case .show(let page) = lockedOpen.request(place, screenLocked: screenLocked()) else {
             log.notice("app window waits for the screen to unlock")
             if unlockObserver == nil {
