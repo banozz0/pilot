@@ -25,11 +25,21 @@ public struct LinkToken {
     /// Whether a link carrying `token` may run or bind `action`: always for Pilot's own actions, apps, web pages and
     /// menu items; for the rest only with the token. A keystroke goes into whichever app the link brings to the front,
     /// so links could type a command into a terminal key by key; Wi-Fi, Bluetooth, shut down, restart, sleep, log out
-    /// and the locks (ControlGate.Ask.cutting) would let any web page cut the network or end the session (T52).
+    /// and the locks (ControlGate.Ask.cutting) would let any web page cut the network or end the session (T52); a
+    /// terminal opens only on the user's own action (Self.opensTerminal).
     public func allows(_ action: String, token: String?) -> Bool {
-        if BindStore.arrivesOff(action) || ControlGate.Ask.cutting[action] != nil { return matches(token) }
+        if BindStore.arrivesOff(action) || ControlGate.Ask.cutting[action] != nil || Self.opensTerminal(action) { return matches(token) }
         if case .keystroke? = DriveRoute(id: action) { return matches(token) }
         return true
+    }
+
+    /// The actions that open a terminal window: the Terminal and Agent keys, the drop under the top bar, Bitwarden's
+    /// unlock (a Terminal window while the vault is locked) and opening a known terminal app (Sven, 2026-11-18, Q247:
+    /// a tester saw Ghostty windows open by themselves).
+    public static func opensTerminal(_ action: String) -> Bool {
+        if ["apps.terminal", "apps.agent", "apps.bitwardenFill", "terminal.drop"].contains(action) { return true }
+        guard action.hasPrefix("apps.open:") else { return false }
+        return AppRole.terminalApps.contains(String(action.dropFirst("apps.open:".count)))
     }
 
     /// `text` with every token value in it, plain or percent-encoded (once or more) inside another link, shown as <redacted>: a log

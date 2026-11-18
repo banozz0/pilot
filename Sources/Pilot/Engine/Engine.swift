@@ -818,8 +818,8 @@ final class Engine {
 
     /// pilot://run?action=windows.close[&app=Finder] runs one action by id, bypassing the tap. Picker actions work
     /// unbound: action=apps.open:com.apple.Notes, action=apps.web:https://chatgpt.com or a drive route,
-    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke, a non-web URL, or
-    /// Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock (ControlGate.Ask.cutting) also needs the link token
+    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke, a non-web URL, a
+    /// terminal (LinkToken.opensTerminal), or Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock (ControlGate.Ask.cutting) also needs the link token
     /// (LinkToken), so a link on a web page cannot run one.
     func runAction(_ url: URL) {
         let value = url.queryValue

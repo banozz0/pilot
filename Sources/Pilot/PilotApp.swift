@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// pilot://press?layer=capslock|lctl|rctl|lopt|ropt|lcmd|rcmd|chord|plain&key=k[&tap=1][&shift=1][&ctrl=1][&alt=1|left|right][&cmd=…][&app=Finder]&token=… posts the keys itself (the manual test
     /// protocol; with app, only once that app is frontmost; the token always, LinkToken); pilot://run?action=windows.close[&app=Finder] runs an action by id
-    /// (a command, keystroke, non-web URL, Wi-Fi, Bluetooth, power, session or lock action with the link token, LinkToken);
+    /// (a command, keystroke, non-web URL, terminal, Wi-Fi, Bluetooth, power, session or lock action with the link token, LinkToken);
     /// pilot://observers prints the observers to the log; pilot://reload-binds reads the bind store's file again;
     /// pilot://bind?action=…&key=…[&shift=1][&ctrl=1][&alt=1] or &unbind=1 or &reset=1 changes one bind (Engine.bind);
     /// pilot://alert?text=… shows a tip, the alert Hammerspoon's hammerspoon://fence showed for scripts;
