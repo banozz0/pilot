@@ -30,6 +30,8 @@ struct OnboardingRenders {
         // A fresh Mac's Hyper key, Caps Lock alone, so the screens read as a new user sees them (the moved home may hold
         // other renders' picks). The tap never runs here, so no key mapping is written.
         engine.settings.setLayerKeys([.capsLock], from: .onboarding)
+        // Pilot default's binds, as a new user has them, so each Hyper choice's warning names the bind it would run.
+        engine.binds.use(.pilot)
         let look = Look.shared
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
@@ -43,7 +45,8 @@ struct OnboardingRenders {
         mac.log.removeAll()
         let setup = OnboardingSetup(system: mac, defaults: defaults)
         setup.load()
-        #expect(setup.everything.count == 15 && setup.noAppBefore == [.md])
+        // Set up offers the main things only (Sven's critique, 2026-11-18): the two keys and launch at login.
+        #expect(setup.everything == [.filesKey, .notesKey, .launchAtLogin] && setup.noAppBefore.isEmpty && !setup.asksForMacLogin)
         let grants = RecordingGrants()
         let model = OnboardingModel(setup: setup, walk: GrantWalk(system: grants))
 
@@ -52,20 +55,35 @@ struct OnboardingRenders {
             model.step = step
             try instrument(model, engine, name, dir)
         }
+        model.step = .welcome
+        try toybox(model, engine, "1-hyper", dir)
+        model.step = .extras
         try toybox(model, engine, "3a-fork", dir)
 
-        // Pick by hand: mole ticked ticks Homebrew; the .md row.
+        // Pick by hand: the Files key and launch at login.
         setup.phase = .pick
-        setup.set(.mole, true)
-        setup.set(.md, true)
-        #expect(setup.picked == [.homebrew, .mole, .md])
+        setup.set(.filesKey, true)
+        setup.set(.launchAtLogin, true)
+        #expect(setup.picked == [.filesKey, .launchAtLogin])
         try instrument(model, engine, "3b-pick", dir)
-        setup.set(.homebrew, false)
-        #expect(setup.picked == [.md])
+        setup.set(.filesKey, false)
+        setup.set(.launchAtLogin, false)
         setup.phase = .fork
 
-        // Set up everything.
-        setup.start(setup.everything)
+        // Set up everything on a fresh Mac of its own: three changes, done at once, no Terminal run.
+        let freshMac = RecordingMac(defaults: defaults)
+        let fresh = OnboardingSetup(system: freshMac, defaults: defaults)
+        fresh.load()
+        fresh.start(fresh.everything)
+        #expect(freshMac.scripts.isEmpty && fresh.title == "Set up · 3 of 3 done" && freshMac.log == ["launch at login on"])
+        let ran3 = OnboardingModel(setup: fresh)
+        ran3.step = .extras
+        try instrument(ran3, engine, "3c-run", dir)
+        try toybox(ran3, engine, "3c-run", dir)
+        defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
+
+        // An earlier release's run, which offered every item: its record keeps each row and Undo here.
+        setup.start(SetupItem.allCases)
         for _ in 0..<100 where setup.ledger[.md]?.state != .done { try await Task.sleep(for: .milliseconds(20)) }
         #expect(mac.picks.picks[.files] == AppRolePicks.pilot && mac.picks.picks[.notes] == AppRolePicks.pilot)
         let ran = mac.log + ["keys: files → \(mac.picks.picks[.files] ?? "Automatic"), notes → \(mac.picks.picks[.notes] ?? "Automatic")"]
@@ -81,9 +99,6 @@ struct OnboardingRenders {
         mac.downloads = [.dictation: .downloading(0.42), .voices: .ready]
         setup.refresh()
         #expect(setup.title == "Setting up · 11 of 15")
-        model.step = .extras
-        try instrument(model, engine, "3c-run", dir)
-        try toybox(model, engine, "3c-run", dir)
 
         // The end: npm failed, the window closed before cargo.
         mac.status! += "webp done\nnpm installing\nnpm failed exit 1\ncargo installing\nclosed\n"
@@ -94,7 +109,6 @@ struct OnboardingRenders {
         #expect(setup.ledger[.npm]?.state == .failed("stopped with exit 1; the Terminal window says why" + retry))
         #expect(setup.ledger[.cargo]?.state == .failed("the Terminal window closed before it finished" + retry))
         #expect(setup.title == "Set up · 13 done, 2 failed" && !setup.isLive)
-        try instrument(model, engine, "3d-run-done", dir)
 
         // Try it (T58): no What changed card; Allow the rest reads nothing until it starts, then walks each grant: one
         // already allowed passes without an ask, one allowed in Settings moves on by itself, Skip and Stop leave the rest
@@ -180,10 +194,7 @@ struct OnboardingRenders {
         defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
         let kept = OnboardingSetup(system: second, defaults: defaults)
         kept.load()
-        #expect(kept.everything.count == 12 && !kept.asksForMacLogin)
-        let other = OnboardingModel(setup: kept)
-        other.step = .extras
-        try instrument(other, engine, "3e-fork-homebrew-on-mac", dir)
+        #expect(kept.everything == [.filesKey, .notesKey, .launchAtLogin] && !kept.asksForMacLogin)
         kept.start([.homebrew, .mole, .mas, .voices])
         #expect(kept.ledger.keys.sorted { $0.rawValue < $1.rawValue } == [.mas])
         #expect(second.scripts.count == 1 && !second.scripts[0].contains("'homebrew'"))
