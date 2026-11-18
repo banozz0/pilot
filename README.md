@@ -1,49 +1,107 @@
+<p align="center">
+  <a href="https://pilotformac.com"><img src="site/press/pilot-logo-dark.svg" alt="Pilot" width="72" /></a>
+</p>
+
 <h1 align="center">Pilot</h1>
 
-<p align="center"><b>Hold Caps Lock. The whole Mac answers.</b></p>
+<h3 align="center">Your Mac, your look.<br />A launcher that does the rest.</h3>
 
 <p align="center">
-Tiling, a launcher, clipboard, captures, dictation and AI in one native app, all on one key:<br>
-the keyboard-driven desktop Linux people love, made for the Mac.
+  <s>Tiling&nbsp;manager</s>&nbsp;·
+  <s>Launcher</s>&nbsp;·
+  <s>Clipboard&nbsp;manager</s>&nbsp;·
+  <s>Key&nbsp;remapper</s>&nbsp;·
+  <s>Screenshot&nbsp;tool</s>&nbsp;·
+  <s>Dictation&nbsp;app</s>&nbsp;·
+  <s>File&nbsp;manager</s>&nbsp;·
+  <s>File&nbsp;converter</s>&nbsp;·
+  <s>System&nbsp;monitor</s>&nbsp;·
+  <s>Mac&nbsp;cleaner</s>
 </p>
 
-<p align="center">
-<a href="https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg"><b>Download Pilot.dmg</b></a>
-&nbsp;·&nbsp; <a href="https://www.pilotformac.com">Website</a>
-&nbsp;·&nbsp; <a href="https://github.com/banozz0/pilot/releases">Releases</a>
-&nbsp;·&nbsp; macOS 27+, Apple silicon &nbsp;·&nbsp; Free, MIT
-</p>
+<p align="center"><b>All in one app: Pilot.</b></p>
 
 <p align="center">
-<a href="https://www.pilotformac.com/#film"><img src="site/pilot-film-poster.jpg" width="720" alt="Pilot in five minutes: play the film"></a><br>
-<sub>▶ Pilot in five minutes: every feature, start to finish. Click to play it on the website.</sub>
+  <a href="https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg"><b>Download</b></a> ·
+  <a href="https://pilotformac.com">Website</a> ·
+  <a href="https://pilotformac.com/changelog.html">Changelog</a> ·
+  <a href="https://github.com/sponsors/banozz0">Sponsor</a>
 </p>
+
+<p align="center">macOS 27 or later · Apple silicon<br />Free and open source · MIT</p>
+
+<!-- video 1: swap the next two blocks for the uploaded clip's address on a line of its own -->
+[![Pilot in a minute: windows tiled on a themed desktop, with a play button](.github/readme/pilot-in-a-minute.jpg)](https://pilotformac.com)
+
+<p align="center"><sub>▶ Pilot in a minute. Plays on pilotformac.com.</sub></p>
 
 ## What it does
 
-Pick a key you rarely use (Caps Lock, or one side of Control, Option or Command). It becomes Hyper, and every key
-under it runs whatever you set.
+The keyboard-driven desktop Linux people love, made for the Mac. Pick a key you rarely use: Caps Lock, or one side of Control, Option or Command. It becomes Hyper, and every key under it runs what you set.
 
-| | Area | What you get | Key |
-|---|---|---|---|
-| ⌨️ | [Keys and binds](https://www.pilotformac.com/keys.html) | Every key under Hyper does what you set, from one picture of your keyboard. Hold Hyper to see what each key does. | Hyper |
-| 🪟 | [Windows and workspaces](https://www.pilotformac.com/windows.html) | Pilot's own tiler arranges every window across nine workspaces, without turning off System Integrity Protection. Columns, rows, grid or scrolling. | `Hyper+1…9` |
-| 🖼️ | [Desktop and widgets](https://www.pilotformac.com/desktop.html) | Widgets on the desktop and on Home, one menu on Hyper + right-click, and any folder as a gallery: pick a wallpaper by looking. | |
-| 🔎 | [Launcher](https://www.pilotformac.com/launcher.html) | One search box for apps, windows, files, actions, settings and answers: maths, units, money, time zones, emoji. | `Hyper+Space` |
-| 📋 | [Clipboard and notes](https://www.pilotformac.com/clipboard.html) | Everything you copy, kept on your Mac, plus quick notes and snippets that type themselves. | |
-| 📸 | [Captures](https://www.pilotformac.com/captures.html) | Screenshots, scrolling captures, screen recordings and text from the screen, with an image and video editor. | |
-| 🎙️ | [Dictation and voice](https://www.pilotformac.com/dictation.html) | Talk and Pilot types it, with a speech model running on your Mac. Read aloud speaks selected text back. | Your pick |
-| ✨ | [AI](https://www.pilotformac.com/ai.html) | An AI chat on the plan you already pay for, and AI on any text you select. | `Hyper+Q` |
-| 🌐 | [Web apps](https://www.pilotformac.com/webapps.html) | Turn a site into a small Mac app with its own Dock icon, Cmd+Tab entry and logins. | |
-| 🧩 | [Extensions](https://www.pilotformac.com/extensions.html) | Add commands from the catalogue or build your own, and drive Pilot from a terminal or an agent. | |
-| 📊 | [Menu bar and top bar](https://www.pilotformac.com/menubar.html) | Pilot's icon in the menu bar, or a top bar of its own in place of macOS's, and a terminal that drops from it. | `Hyper+T` |
+### 🎨 Your Mac, your look
 
-No key listed? Type the feature's name in Hyper+Space, or give it one on the Binds page. Also in the box: file search
-and convert, Mac controls and stats, app install, update and clean, and the `pilot` command.
-[All 198 features](https://www.pilotformac.com/#features).
+19 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and the apps it finds recolour together: Ghostty, Zed, Obsidian and more. Add a dock and a top bar of your own, with widgets. [Look](https://pilotformac.com/look.html) · [Desktop](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
 
-No analytics and no crash reporting. File search, dictation, read aloud and translate run on your Mac; AI goes only to
-the provider you pick.
+<details>
+<summary>See a theme change</summary>
+
+![Six tiled apps, the bar and the dock, all in the Meadow theme](.github/readme/themes.jpg)
+
+</details>
+
+### 🪟 Windows tile as they open
+
+Pilot's own tiler arranges every window across nine workspaces, without turning off System Integrity Protection. Six layouts, focus, swap and resize from the keys, and `Hyper+1…9` jumps to a workspace. [Windows](https://pilotformac.com/windows.html)
+
+<details>
+<summary>See tiling</summary>
+
+![Three windows tiled in columns after the layout key](.github/readme/tiling.jpg)
+
+</details>
+
+### 🔎 A launcher that does the rest
+
+`Hyper+Space` opens one search box for apps, windows, files, actions, settings and answers: maths, units, money, time zones, emoji. Type an app and its own commands come with it. [Launcher](https://pilotformac.com/launcher.html)
+
+<details>
+<summary>See the launcher</summary>
+
+![The launcher listing Google Chrome's own commands under the app](.github/readme/launcher.jpg)
+
+</details>
+
+### ⌨️ Your keyboard runs the Mac
+
+Give any key a job by clicking it on a picture of your keyboard, never in a config file. Hold Hyper and a panel shows what every key does. [Keys and binds](https://pilotformac.com/keys.html)
+
+<!-- video 2: swap the next two blocks for the uploaded clip's address on a line of its own -->
+[![Your keyboard runs the Mac: Pilot's Keys page, with a play button](.github/readme/keyboard-runs-the-mac.jpg)](https://pilotformac.com/#keyboard)
+
+<p align="center"><sub>▶ Keys and windows. Plays on pilotformac.com.</sub></p>
+
+### 📋 Clipboard, notes and snippets
+
+`Hyper+V` shows everything you copy, kept on your Mac and searched in plain words. `Hyper+N` opens a quick note, and snippets type themselves from a keyword. [Clipboard](https://pilotformac.com/clipboard.html) · [Notes](https://pilotformac.com/notes.html)
+
+### 📸 Captures
+
+`Hyper+S` captures an area and opens an editor: arrows, text, blur, numbered steps, a backdrop. `Hyper+R` records the screen, then you cut and speed up the recording. Scrolling captures and text from the screen too. [Captures](https://pilotformac.com/captures.html)
+
+### ✨ AI and dictation
+
+`Hyper+Q` opens an AI chat on the Claude or ChatGPT plan you already pay for, your own API key, or Ollama on the Mac. Hold a key and talk: Pilot types it, with a speech model running on your Mac. [AI](https://pilotformac.com/ai.html) · [Dictation](https://pilotformac.com/dictation.html)
+
+### 📁 Files
+
+`Hyper+F` opens Pilot Files, a file window of its own: folder sizes, `⌘K` on every file and undo for every action. Find a file through a typo, and convert one with a right-click. [Pilot Files](https://pilotformac.com/pilotfiles.html) · [File search](https://pilotformac.com/files.html) · [Convert](https://pilotformac.com/convert.html)
+
+**Also in the box:** [Update and Clean](https://pilotformac.com/update.html), every upgrade previewed first · [web apps](https://pilotformac.com/webapps.html) with their own Dock icon · [extensions](https://pilotformac.com/extensions.html) from the catalogue, or built by Pilot's AI · a drop-down terminal on `Hyper+T` · [Mac stats](https://pilotformac.com/stats.html) · the `pilot` command for scripts and agents.
+
+No key listed? Type the feature's name in Hyper+Space, or give it one on the Binds page. [Everything Pilot does, a key at a time](https://pilotformac.com/#features).
+
+No account, no analytics and no crash reporting. File search, dictation, read aloud and translate run on your Mac; AI goes only to the provider you pick. [Privacy](https://pilotformac.com/privacy.html)
 
 ## Install
 
@@ -103,9 +161,16 @@ the grants survive every rebuild; with an ad-hoc one, remove Pilot from Privacy 
 Disk Access) and allow it again after each rebuild.
 </details>
 
+## Help and contributing
+
+[Issues](https://github.com/banozz0/pilot/issues/new/choose) for bugs and ideas · [Contributing](CONTRIBUTING.md) for code, themes and extensions · [Sponsor](https://github.com/sponsors/banozz0) to support Pilot.
+
 ## Licence and credits
 
-Pilot is MIT-licensed ([LICENSE](LICENSE)). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). It builds on:
+Pilot is MIT-licensed ([LICENSE](LICENSE)). Its tiler is ported from [AeroSpace](https://github.com/nikitabobko/AeroSpace) (MIT), [Ghostty](https://ghostty.org)'s libghostty runs the drop-down terminal, and file search is [Cardinal](Helpers/pilot-files/vendor/cardinal/)'s engine.
+
+<details>
+<summary>Credits: the open source Pilot builds on</summary>
 
 - [AeroSpace](https://github.com/nikitabobko/AeroSpace) (MIT): Pilot's tiler is ported from it.
 - [Ghostty](https://ghostty.org) (MIT): libghostty runs the drop-down terminal.
@@ -118,5 +183,7 @@ Pilot is MIT-licensed ([LICENSE](LICENSE)). Contributions: [CONTRIBUTING.md](CON
 - [CodexBar](Packaging/CodexBar-LICENSE.txt), [gemoji](Packaging/gemoji-LICENSE.txt),
   [Omarchy](Packaging/Omarchy-LICENSE.txt), [Snapzy](Packaging/Snapzy-LICENSE.txt), and the fonts in
   [Packaging/Fonts](Packaging/Fonts).
+
+</details>
 
 Third-party code, assets and trademarks in full: [NOTICE](NOTICE), and General › About › Acknowledgements in the app.
