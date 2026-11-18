@@ -118,8 +118,7 @@ https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
 2. Open Pilot. macOS asks once whether to open an app downloaded from the Internet: click **Open**.
 3. Pick your Hyper key in Pilot's setup and allow Accessibility. Hyper+Space opens the menu.
 
-Pilot is signed with Apple's Developer ID and notarized by Apple. Updates install from inside Pilot and keep your
-permissions.
+Signed with a Developer ID and notarized by Apple. Updates install from inside Pilot.
 
 <details>
 <summary>Permissions and checking the download</summary>
@@ -134,10 +133,14 @@ permissions.
 Caps Lock as Hyper: tapped alone it is Escape, and Shift+Caps Lock still types capitals. Password fields are blind to
 every key tap on macOS, Pilot's included: your binds do not work while one has focus.
 
-Check the download against the `.sha256` beside it on the Releases page: `shasum -a 256 -c Pilot.dmg.sha256`.
+Updates keep the permissions you gave. Check the download against the `.sha256` beside it on the Releases page:
+`shasum -a 256 -c Pilot.dmg.sha256`.
 </details>
 
 ## Build from source
+
+<details>
+<summary>Xcode 27, Zig, Rust and Python 3: three commands</summary>
 
 Needs Xcode 27 with its Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`),
 [Zig](https://ziglang.org/download/) at the version Ghostty's tag pins (0.15.2 for v1.3.1), stable
@@ -150,9 +153,6 @@ ZIG=/path/to/zig Scripts/build-ghosttykit.sh
 PILOT_DEV=1 SIGN_ID="<your signing identity>" Scripts/build-app.sh
 open build/Pilot.app
 ```
-
-<details>
-<summary>What the scripts do, and signing</summary>
 
 `build-ghosttykit.sh` finds Zig through `ZIG`, then `zig@0.15` from Homebrew. `build-app.sh` also builds the Rust file
 index helper (`Helpers/pilot-files`), the Swift targets and the dictation helper, and fails a release bundle over the
@@ -169,13 +169,9 @@ the grants survive every rebuild; with an ad-hoc one, remove Pilot from Privacy 
 Disk Access) and allow it again after each rebuild.
 </details>
 
-## Help and contributing
-
-[Issues](https://github.com/banozz0/pilot/issues/new/choose) for bugs and ideas · [Contributing](CONTRIBUTING.md) for code, themes and extensions · [Sponsor](https://github.com/sponsors/banozz0) to support Pilot.
-
 ## Licence and credits
 
-Pilot is MIT-licensed ([LICENSE](LICENSE)). Its tiler is ported from [AeroSpace](https://github.com/nikitabobko/AeroSpace) (MIT), [Ghostty](https://ghostty.org)'s libghostty runs the drop-down terminal, and file search is [Cardinal](Helpers/pilot-files/vendor/cardinal/)'s engine.
+MIT ([LICENSE](LICENSE)), built on [AeroSpace](https://github.com/nikitabobko/AeroSpace), [Ghostty](https://ghostty.org) and [Cardinal](Helpers/pilot-files/vendor/cardinal/). Every notice: [NOTICE](NOTICE).
 
 <details>
 <summary>Credits: the open source Pilot builds on</summary>
@@ -192,6 +188,12 @@ Pilot is MIT-licensed ([LICENSE](LICENSE)). Its tiler is ported from [AeroSpace]
   [Omarchy](Packaging/Omarchy-LICENSE.txt), [Snapzy](Packaging/Snapzy-LICENSE.txt), and the fonts in
   [Packaging/Fonts](Packaging/Fonts).
 
+Also in the app: General › About › Acknowledgements.
+
 </details>
 
-Third-party code, assets and trademarks in full: [NOTICE](NOTICE), and General › About › Acknowledgements in the app.
+<p align="center">
+  <a href="https://github.com/banozz0/pilot/issues/new/choose">Issues</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="https://github.com/sponsors/banozz0">Sponsor</a>
+</p>
