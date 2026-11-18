@@ -134,7 +134,7 @@ final class ClipboardPicksTests {
         func reveal(_ urls: [URL]) { calls += 1 }
         func copy(_ text: String, tip: String) { calls += 1 }
         func saveImage(_ data: Data, named name: String) { calls += 1 }
-        func markUp(_ data: Data) { calls += 1 }
+        func markUp(_ data: Data, clip: Int64) { calls += 1 }
     }
 
     @Test("Cmd+K: typing narrows the list; Split picks the new lines; Rename names the row; Paste and delete goes back to the panel's owner")

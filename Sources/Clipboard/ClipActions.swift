@@ -146,8 +146,9 @@ public protocol ClipOpening {
     /// Copies text and says so in a tip.
     func copy(_ text: String, tip: String)
     func saveImage(_ data: Data, named name: String)
-    /// Opens an image (its PNG or TIFF bytes) in Pilot's capture editor, as a capture not yet saved.
-    func markUp(_ data: Data)
+    /// Opens an image (its PNG or TIFF bytes) in Pilot's capture editor, as a capture not yet saved; `clip` is the copy's id,
+    /// so marking up the same copy again brings its open editor to the front.
+    func markUp(_ data: Data, clip: Int64)
 }
 
 /// Runs the actions that need no typing (rename and edit take the panel's field first).
@@ -170,7 +171,7 @@ public struct ClipActions {
         case .openWith: opener.openWith(try targets.flatMap(urls))
         case .reveal: opener.reveal(try targets.flatMap(fileURLs))
         case .copyPath: opener.copy(try targets.flatMap(fileURLs).map(\.path).joined(separator: "\n"), tip: "Path copied")
-        case .markUp: if let id = targets.first?.id, let data = try store.image(of: id) { opener.markUp(data) }
+        case .markUp: if let id = targets.first?.id, let data = try store.image(of: id) { opener.markUp(data, clip: id) }
         case .saveImage:
             guard let clip = targets.first, let item = try store.contents(of: clip.id).first,
                   let data = TerminalPaste.png(item) else { return [] }

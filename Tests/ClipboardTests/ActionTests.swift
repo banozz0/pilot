@@ -101,7 +101,7 @@ struct ActionTests {
         func reveal(_ urls: [URL]) { calls.append("reveal \(urls.map(\.path).joined(separator: ","))") }
         func copy(_ text: String, tip: String) { calls.append("copy \(text) · \(tip)") }
         func saveImage(_ data: Data, named name: String) { calls.append("save \(name) \(data.count)") }
-        func markUp(_ data: Data) { calls.append("mark up \(data.count)") }
+        func markUp(_ data: Data, clip: Int64) { calls.append("mark up \(data.count)") }
         func openWith(_ urls: [URL]) { calls.append("open with \(urls.map(\.absoluteString).joined(separator: ","))") }
     }
 

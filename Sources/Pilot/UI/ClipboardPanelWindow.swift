@@ -1170,7 +1170,7 @@ struct PilotOpener: ClipOpening {
     func reveal(_ urls: [URL]) { NSWorkspace.shared.activateFileViewerSelecting(urls) }
     func copy(_ text: String, tip: String) { SystemModule.copy(text, tip: tip) }
 
-    func markUp(_ data: Data) { if !CapturesModule.open(data) { HUD.tip("That image could not be opened.") } }
+    func markUp(_ data: Data, clip: Int64) { if !CapturesModule.open(data, clip: clip) { HUD.tip("That image could not be opened.") } }
 
     func saveImage(_ data: Data, named name: String) {
         let panel = NSSavePanel()
