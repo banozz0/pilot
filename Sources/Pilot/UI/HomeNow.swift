@@ -339,7 +339,9 @@ struct HomeFoldList<Row: View>: View {
         let cap = min(total, available ?? total)
         let lines = min(cap, rows ?? cap)
         // Fitted to a block too short for a row, it draws none and goes on measuring.
-        let fold = rows == nil && fits == 0 ? (shown: 0, more: 0) : HomeFold.rows(total: total, fits: min(rows ?? fits, max(1, cap)))
+        let fitted = rows == nil && fits == 0 ? (shown: 0, more: 0) : HomeFold.rows(total: total, fits: min(rows ?? fits, max(1, cap)))
+        // Never a row past those read: one kept and none read yet is "1 more", not row 0 (issue #2).
+        let fold = fitted.shown > cap ? (shown: cap, more: total - cap) : fitted
         if total == 0 {
             Text(empty).font(ink.ui(12)).foregroundStyle(ink.muted).frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
         } else {
@@ -479,6 +481,8 @@ struct HomeClipRows: View {
     @State private var clips: [StoredClip] = []
 
     var body: some View {
+        // The rows index the copies this pass read, never the state a later read put there.
+        let clips = clips
         let kept = max(parts.copy?.count ?? 0, clips.count)
         Tile(title: "Clipboard", symbol: HomeLayout.Block.clipboard.symbol, fill: fill) {
             Text("\(kept) kept").font(ink.ui(11.5)).foregroundStyle(ink.muted)
@@ -507,7 +511,7 @@ struct HomeClipRows: View {
             }
         }
         // Read only while it is on Home, as the window shows.
-        .task(id: parts.onScreen) { clips = Array(parts.sources.recentCopies().prefix(InstrumentClips.most)) }
+        .task(id: parts.onScreen) { self.clips = Array(parts.sources.recentCopies().prefix(InstrumentClips.most)) }
     }
 }
 
