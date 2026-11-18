@@ -51,23 +51,18 @@ The keyboard-driven desktop Linux people love, made for the Mac. It runs from Hy
 
 19 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
 
-<!-- slot 1 and 2: 01-workspace-dark.png and 02-workspace-light.png, joined down the middle -->
-![One workspace of tiled apps, half in a dark theme and half in a light one](.github/readme/shot-workspace.jpg)
+![One workspace of tiled windows (Discord, Codex, Zed, Obsidian's graph and Ghostty), the left half in a dark theme and the right half in a light one](.github/readme/shot-workspace.jpg)
 
-<p align="center"><sub>One desktop, two themes.</sub></p>
+<p align="center"><sub>One workspace, tiled, in two themes.</sub></p>
 
 ### 🪟 Windows tile as they open
 
 Six layouts across nine workspaces, all from the keys. No need to turn off System Integrity Protection. [Windows](https://pilotformac.com/windows.html)
 
-<!-- slot 4: 04-tiling.png -->
-![Windows tiled in Main + stack](.github/readme/shot-tiling.jpg)
-
 <details>
-<summary>See the Tiling settings</summary>
+<summary>See the Workspaces page</summary>
 
-<!-- slot 5: 05-tiling-settings.png -->
-![Pilot's Tiling settings page](.github/readme/shot-tiling-settings.jpg)
+![Pilot's Workspaces page: four workspaces, each with its layout, the apps that open in it and where they land](.github/readme/shot-tiling-settings.jpg)
 
 </details>
 
@@ -75,8 +70,7 @@ Six layouts across nine workspaces, all from the keys. No need to turn off Syste
 
 <kbd>Hyper</kbd>+<kbd>Space</kbd> opens one box for apps, windows, files, settings and answers. Type an app and its own commands come with it. [Launcher](https://pilotformac.com/launcher.html)
 
-<!-- slot 3: 03-launcher.png -->
-![The launcher listing an app's own commands](.github/readme/shot-launcher.jpg)
+![The launcher with Ghostex typed: the app as the best match, then its own commands with their shortcuts](.github/readme/shot-launcher.jpg)
 
 ### ⌨️ Your keyboard runs the Mac
 
@@ -94,8 +88,7 @@ https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
 
 <kbd>Hyper</kbd>+<kbd>S</kbd> captures an area and opens an editor: arrows, text, blur, numbered steps, a backdrop. <kbd>Hyper</kbd>+<kbd>R</kbd> records the screen. [Captures](https://pilotformac.com/captures.html)
 
-<!-- slot 6: 06-capture-editor.png -->
-![The screenshot editor with an arrow, a numbered step and a backdrop](.github/readme/shot-capture-editor.jpg)
+![The screenshot editor: numbered steps, an arrow, a box, a circle and a pen line on a capture with a gradient backdrop](.github/readme/shot-capture-editor.jpg)
 
 ### ✨ AI and dictation
 
