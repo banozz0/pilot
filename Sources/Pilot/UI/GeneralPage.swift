@@ -271,7 +271,8 @@ struct GeneralPage: View {
                 Text(engine.observers.tiler.tilerName)
                 InfoMark(text: "The tiler that places your windows and runs the workspaces.")
                 Spacer()
-                engine.observers.tiler.isAnswering ? Chip(text: "running", color: ink.green) : Chip(text: "not running", color: ink.red)
+                if !engine.settings.tiling { Chip(text: "off", color: ink.muted) }
+                else if engine.observers.tiler.isAnswering { Chip(text: "running", color: ink.green) } else { Chip(text: "not running", color: ink.red) }
             }
         }
     }

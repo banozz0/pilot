@@ -323,7 +323,9 @@ enum HomeGreeting {
             }
         }
         guard hyperOn else { return HyperToggle.offWords(layerKey: layerKey) }
-        return "\(layerKey) is your Hyper key; \(tiler) is tiling workspace \(workspace ?? "–")."
+        // No workspace and nothing that needs you: tiling is switched off (a new install's default).
+        guard let workspace else { return "\(layerKey) is your Hyper key; tiling is off." }
+        return "\(layerKey) is your Hyper key; \(tiler) is tiling workspace \(workspace)."
     }
 }
 

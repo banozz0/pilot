@@ -401,7 +401,10 @@ final class Engine {
         settings.onTilingChange = { [unowned self] in
             tilingSwitch.follow(settings.tiling)
             wslog.notice("tiling \(self.settings.tiling ? "on" : "off", privacy: .public)")
-            if settings.tiling { startTiler() } else { observers.tiler.stopEngine() }
+            guard !settings.tiling else { return startTiler() }
+            observers.tiler.stopEngine()
+            // A shown Window shelf goes: it refreshes on the tiler's events, and a stopped tiler sends none.
+            if started { shelf.stop(); shelf.start() }
         }
         observers.tiler.isWanted = { [settings] in settings.tiling }
         let stepWorkspace = { [unowned self] (fire: WorkspaceSwipe.Fire) in _ = action(fire == .next ? "workspaces.next" : "workspaces.previous")?.run() }
