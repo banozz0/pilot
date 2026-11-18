@@ -641,8 +641,7 @@
 
 /* Binds › Hyper key: Pilot's setup list (InstrumentOnboarding), with the line the hero used to carry */
 .hpick .hline { font: 600 22px/1.25 var(--sans); letter-spacing: -.02em; margin-bottom: 14px; }
-.hpick .hline > span:last-child { color: var(--m-fg3); }
-.kc2 { display: inline-block; position: relative; vertical-align: -9px; width: 64px; height: 34px; margin: 0 2px; border-radius: 8px; background: linear-gradient(var(--lime-hi), var(--lime)); border: 1px solid var(--lime-edge); box-shadow: 0 2px 0 color-mix(in srgb, var(--lime-edge) 75%, #000); color: var(--on-lime); }
+.hpick .kc2 { display: inline-block; position: relative; vertical-align: -9px; width: 64px; height: 34px; margin: 0 2px; border-radius: 8px; background: linear-gradient(var(--lime-hi), var(--lime)); border: 1px solid var(--lime-edge); box-shadow: 0 2px 0 color-mix(in srgb, var(--lime-edge) 75%, #000); color: var(--on-lime); }
 .kc2 i { position: absolute; left: 8px; top: 5px; font: 400 13px/1 -apple-system, system-ui, sans-serif; font-style: normal; }
 .kc2 b { position: absolute; left: 8px; bottom: 5px; font: 600 8.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .hlist .hrow { width: 100%; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--m-line); text-align: left; }
@@ -1321,7 +1320,7 @@
   .home2 .hb { grid-column: span 6 !important; }
 }
 .site .film.clip { max-width: 880px; margin: 28px 0 32px; }
-.site .film.clip .box { aspect-ratio: 16 / 10; }   /* the feature clips are 1280 x 800: their header and footer bands stay whole */
+.site .film.clip .box { aspect-ratio: 16 / 10; }   /* the clips are 16:10 (the takes 1920 x 1200, film v4's 1280 x 800): nothing is cropped */
 /* A selected row's quiet text keeps 4.5:1 on the selection fill (axe, 2026-11-03) */
 .cb .it.sel .tg, .cb .it.sel .tm, .sel > .lhint:not(.k), .sel > .lname > em { color: var(--m-fg2); }
 
@@ -1334,6 +1333,7 @@
 .stx { display: grid; justify-items: start; gap: 12px; max-width: 440px; }
 .stx h3 { font: 480 clamp(25px, 2.5vw, 34px)/1.08 var(--sans); letter-spacing: -.032em; }
 .stx p { font: 400 16.5px/1.55 var(--sans); color: var(--t2); }
+.stxs { display: grid; gap: 44px; }   /* the keyboard section: two heads beside one clip (2026-11-18) */
 .sft { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 8px; }
 .skey { display: inline-flex; gap: 4px; }
 .skey kbd { display: inline-grid; place-items: center; height: 26px; min-width: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line2); background: linear-gradient(var(--kbd1), var(--kbd2)); box-shadow: 0 1px 0 var(--line2); font: 500 12.5px/1 var(--mono); color: var(--t2); }
