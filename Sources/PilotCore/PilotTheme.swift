@@ -309,14 +309,14 @@ public enum Contrast {
     }
     public static func ratio(_ a: UInt32, _ b: UInt32) -> Double { ratio(rgb(a), rgb(b)) }
 
-    /// `colour` as text on every one of `grounds`: unchanged at 4.5:1 or more, else moved toward `ink` in 5 % steps
-    /// until it reads, so a light theme's pale accent darkens only as far as it must.
-    public static func readable(_ colour: String, on grounds: [String], toward ink: String) -> String {
+    /// `colour` as text on every one of `grounds`: unchanged at `minimum` (4.5:1) or more, else moved toward `ink` in 5 %
+    /// steps until it reads, so a light theme's pale accent darkens only as far as it must.
+    public static func readable(_ colour: String, on grounds: [String], toward ink: String, minimum: Double = 4.5) -> String {
         let start = rgb(hex(colour)), target = rgb(hex(ink)), backs = grounds.map { luminance(rgb(hex($0))) }
         for step in 0...20 {
             let c = rgb(hex(mix(target, start, Double(step) / 20)))  // As written: rounded to whole channels.
             let l = luminance(c)
-            if backs.allSatisfy({ (max(l, $0) + 0.05) / (min(l, $0) + 0.05) >= 4.5 }) { return step == 0 ? colour : String(format: "#%06X", hex(c)) }
+            if backs.allSatisfy({ (max(l, $0) + 0.05) / (min(l, $0) + 0.05) >= minimum }) { return step == 0 ? colour : String(format: "#%06X", hex(c)) }
         }
         return ink
     }

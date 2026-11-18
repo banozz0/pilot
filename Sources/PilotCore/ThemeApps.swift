@@ -227,8 +227,22 @@ public enum ThemeApps {
 
     /// Every colour btop v1.4.8 reads from a theme (its `Default_theme`), from the pack's roles as Omarchy's btop template
     /// maps them, with the four box outlines in the accent as Sven's reference shows. A key left out falls back to btop's own.
+    /// Its text is lifted toward the foreground where it would not read on the terminal's ground (the pack's background,
+    /// theme_background being off), as Obsidian's is: 4.5:1 for text, inactive_fg too, as btop fades the process list from
+    /// main_fg to it, so a pale muted greyed rows out (Meadow 2.2:1, Sven, 2026-11-18, Q240); 3:1 for the divider and box
+    /// outlines, which are lines. The three highlights read on their own grounds.
     static func btop(_ pack: ThemePack) -> Data {
-        let p = pack.palette
+        let p = pack.palette, ground = p["background"]!, ink = p["foreground"]!
+        func lift(_ role: String, minimum: Double = 4.5) -> String { Contrast.readable(p[role]!, on: [ground], toward: ink, minimum: minimum) }
+        // On a highlight's own ground, moved toward whichever of foreground and background reads better there.
+        func on(_ role: String, _ back: String) -> String {
+            let b = Contrast.hex(p[back]!), best = [ink, ground].max { Contrast.ratio(Contrast.hex($0), b) < Contrast.ratio(Contrast.hex($1), b) }!
+            return Contrast.readable(p[role]!, on: [p[back]!], toward: best)
+        }
+        let line = lift("muted", minimum: 3), outline = lift("accent", minimum: 3)
+        let lifted = ["title": lift("bright_foreground"), "hi_fg": lift("accent"), "graph_text": lift("light_foreground"), "proc_misc": lift("light_foreground"),
+                      "inactive_fg": lift("muted"), "div_line": line, "cpu_box": outline, "mem_box": outline, "net_box": outline, "proc_box": outline,
+                      "selected_fg": on("bright_foreground", "selection"), "proc_banner_fg": on("bright_foreground", "selection"), "followed_fg": on("background", "blue")]
         let keys: [(String, String)] = [
             ("main_bg", "background"), ("main_fg", "foreground"), ("title", "bright_foreground"), ("hi_fg", "accent"),
             ("selected_bg", "selection"), ("selected_fg", "bright_foreground"), ("inactive_fg", "muted"), ("graph_text", "light_foreground"),
@@ -245,8 +259,7 @@ public enum ThemeApps {
             ("process_start", "cyan"), ("process_mid", "blue"), ("process_end", "magenta"),
             ("proc_pause_bg", "red"), ("proc_follow_bg", "blue"), ("proc_banner_bg", "selection"), ("proc_banner_fg", "bright_foreground"),
             ("followed_bg", "blue"), ("followed_fg", "background")]
-        let lines = [header(pack, "#")] + keys.map { "theme[\($0.0)]=\"\(p[$0.1]!)\"" }
-        return text(lines)
+        return text([header(pack, "#")] + keys.map { "theme[\($0.0)]=\"\(lifted[$0.0] ?? p[$0.1]!)\"" })
     }
 
     static let neovimScheme = "pilot"
