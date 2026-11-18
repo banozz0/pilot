@@ -95,17 +95,26 @@ final class TilingSwitch: QuickSwitchable {
 
 /// A quick switch on at every launch, never saved, so it is never forgotten off for good: the clipboard's recording
 /// (card agent-bo-95422912; paused, nothing copied is kept) and the Hyper key (card agent-bo-95422986; off, the layer
-/// key and chord Hyper do what macOS says, plain combos still run).
+/// key and chord Hyper do what macOS says, plain combos still run). With `onceOn`, a new install's starts off (Sven's
+/// pick, 2026-11-19) until the switch is first turned on, which is saved; a pause after that still lasts one launch.
 @Observable @MainActor
 final class SessionSwitch: QuickSwitchable {
-    static let clipboard = SessionSwitch { ClipboardHistory.shared.setRecording($0) }
-    private(set) var isOn = true
+    static let clipboard = SessionSwitch(onceOn: "clipboard.recording") { ClipboardHistory.shared.setRecording($0) }
+    private(set) var isOn: Bool
     @ObservationIgnored private let apply: @MainActor (Bool) -> Void
+    @ObservationIgnored private let onceOn: String?
+    @ObservationIgnored private let defaults: UserDefaults
 
-    init(apply: @escaping @MainActor (Bool) -> Void) { self.apply = apply }
+    init(onceOn: String? = nil, defaults: UserDefaults = .pilot(), apply: @escaping @MainActor (Bool) -> Void) {
+        self.apply = apply
+        self.onceOn = onceOn
+        self.defaults = defaults
+        isOn = onceOn.map { defaults.object(forKey: $0) as? Bool ?? Install.startsOn } ?? true
+    }
 
     func toggle() {
         isOn.toggle()
+        if isOn, let onceOn { defaults.set(true, forKey: onceOn) }
         apply(isOn)
     }
 

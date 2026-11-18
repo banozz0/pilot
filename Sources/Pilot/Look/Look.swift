@@ -244,7 +244,7 @@ final class Look {
         glass = defaults.bool(forKey: Key.glass)
         self.transparency = transparency
         glassBlur = defaults.string(forKey: Key.glassBlur).flatMap(GlassBlur.init(rawValue:)) ?? .full
-        windowBorder = defaults.object(forKey: Key.windowBorder) as? Bool ?? true
+        windowBorder = defaults.object(forKey: Key.windowBorder) as? Bool ?? Install.startsOn
         windowBorderWidth = defaults.object(forKey: Key.windowBorderWidth) == nil
             ? WindowBorder.defaultWidth : WindowBorder.clamped(defaults.integer(forKey: Key.windowBorderWidth))
         windowBorderColour = defaults.string(forKey: Key.windowBorderColour).flatMap(ColourChoice.init(rawValue:)) ?? .theme
@@ -254,7 +254,7 @@ final class Look {
         // The dim the saved strength gave is saved once as the dim, so moving the blur later leaves it where it was.
         if defaults.object(forKey: Key.defocusDim) == nil { defaults.set(Defocus.dim(strength: defocusStrength), forKey: Key.defocusDim) }
         defocusDim = Defocus.clamped(dim: defaults.integer(forKey: Key.defocusDim))
-        defocusShake = defaults.object(forKey: Key.defocusShake) as? Bool ?? true
+        defocusShake = defaults.object(forKey: Key.defocusShake) as? Bool ?? Install.startsOn
         defocusShakeSwings = (defaults.object(forKey: Key.defocusShakeSwings) as? Int).map(ShakeDetector.clamped(swings:))
             ?? ShakeDetector.defaultSwings
         defocusShakeWithin = (defaults.object(forKey: Key.defocusShakeWithin) as? Double).map(ShakeDetector.clamped(within:))

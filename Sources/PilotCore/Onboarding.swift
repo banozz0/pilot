@@ -8,7 +8,7 @@ public enum Onboarding {
 
     /// A choice's line under its name: what Caps Lock keeps, or what a modifier no longer does (LayerKey.note).
     public static func hyperDetail(_ key: LayerKey) -> String {
-        key == .capsLock ? "suggested · tap alone for Escape · Shift+Caps Lock still types capitals" : key.note
+        key == .capsLock ? "suggested · Shift+Caps Lock still types capitals" : key.note
     }
 
     public struct Status: Equatable, Sendable {

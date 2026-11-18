@@ -33,7 +33,8 @@ extension SettingsSchema {
                   read: { history.settings.expireSecrets }, write: { on in change { $0.expireSecrets = on } }),
             .int("clipboard.secretMinutes", "Expire them after (minutes)", page: "clipboard", range: ClipboardSettings.secretMinuteRange,
                  standard: standard.secretMinutes, read: { history.settings.secretMinutes }, write: { n in change { $0.secretMinutes = n } }),
-            .bool("clipboard.recording", "Clipboard keeps what is copied (on again at every launch)", page: "clipboard", standard: true,
+            .bool("clipboard.recording", "Clipboard keeps what is copied (off for a new install until turned on; a pause lasts one launch)", page: "clipboard",
+                  standard: Install.startsOn,
                   read: { recording.isOn }, write: { recording.set($0) }),
         ])
     }

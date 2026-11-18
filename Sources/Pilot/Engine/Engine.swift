@@ -19,7 +19,8 @@ final class PilotSettings {
         // "layerKeys" since more than one key can be Hyper (Sven 2026-10-12); before it, one key under "layerKey".
         layerKeys = LayerKey.parse(defaults.stringArray(forKey: "layerKeys") ?? defaults.string(forKey: "layerKey").map { [$0] } ?? [])
             ?? [.capsLock]
-        quickTapEscape = defaults.object(forKey: "quickTapEscape") as? Bool ?? true
+        // The switches marked Install.startsOn are off for a new install (Sven's pick, 2026-11-19), as before for an older one.
+        quickTapEscape = defaults.object(forKey: "quickTapEscape") as? Bool ?? Install.startsOn
         keySwaps = KeySwap.parse(defaults.stringArray(forKey: Self.keySwapsKey) ?? [])
         dictationKey = defaults.string(forKey: Self.dictationKeyKey).flatMap(DictationKey.init(rawValue:)) ?? .off
         dictationKeyMode = defaults.string(forKey: Self.dictationKeyModeKey).flatMap(DictationKeyMode.init(rawValue:)) ?? .toggle
@@ -28,23 +29,17 @@ final class PilotSettings {
         overlayDelay = HoldOverlay.clamped(delay: defaults.object(forKey: "overlay.delay") as? Double ?? HoldOverlay.delay)
         overlayEnabled = defaults.object(forKey: "overlay.enabled") as? Bool ?? true
         showPublicIP = defaults.bool(forKey: "system.publicIP")
-        dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
-        bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? true
-        // Off for a new install (Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open).
-        // Once, an install that ran before the switch existed starts on, so tiling stays as it was: binds.json is written
-        // by every launch's first load, and onboarding leaves its key, both later in the launch than this. Saved at once,
-        // so a relaunch mid-onboarding reads the saved off.
-        let tiling = defaults.object(forKey: Self.tilingKey) as? Bool
-            ?? (Binds.ranBefore || defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
-        defaults.set(tiling, forKey: Self.tilingKey)
-        self.tiling = tiling
+        dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? Self.dragModifierStart
+        bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? Install.startsOn
+        // Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open.
+        tiling = defaults.object(forKey: Self.tilingKey) as? Bool ?? Install.startsOn
         // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
         // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
         let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
         defaults.set(developer, forKey: Self.developerKey)
         self.developer = developer
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
-        brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? true
+        brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? Install.startsOn
         translatePair = TranslatePair(defaults: defaults)
         // Notes written in Application Support before Pilot's own folder moved to Documents (task N1) stay where they are.
         notesReopenMinutes = (defaults.object(forKey: Self.notesReopenKey) as? Int).map(NotesReopen.clamped) ?? NotesReopen.standard
@@ -201,6 +196,8 @@ final class PilotSettings {
         }
     }
     static let tilingKey = "tiling.on"
+    /// Hold to move or resize with the mouse: Alt, as Sven's yabairc had it, for an install from before; off for a new one.
+    static var dragModifierStart: DragModifier { Install.isNew ? .off : .default }
     /// The engine starts or stops the tiler here.
     @ObservationIgnored var onTilingChange: () -> Void = {}
 
@@ -373,13 +370,16 @@ final class Engine {
         // A mouse button whose action is not on this Mac (Sven's own Now Playing extension) stays free: a bind there would
         // take the button and run nothing. An extension's id always builds an action, so its command is looked up too.
         binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys)) { [unowned self] in
+            // A new install starts with no mouse button bound (Sven's pick, 2026-11-19); Sven's own were Q531's.
+            guard !Install.isNew else { return [:] }
             let installed = Extension.find(in: Extension.folder).extensions
             return PilotDefault.mouse.filter { _, id in
                 action(id) != nil && (Extension.command(inAction: id) == nil || Extension.command(inAction: id, in: installed) != nil)
             }
         }
-        // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194).
-        if rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
+        // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194); a new install binds no
+        // mouse button.
+        if !Install.isNew, rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
         for id in Set(PilotDefault.binds.keys).union(MyBinds.extras.keys) where action(id) == nil {
             log.error("binds: a preset names \(LinkToken.redact(id), privacy: .public), which no action has")
         }
@@ -581,7 +581,7 @@ final class Engine {
         }
         WallpaperSettings.shared.shownWorkspace = { [tiler = observers.tiler] display in tiler.perMonitor.first { $0.displayUUID == display }?.workspace }
         pilotBlock.carryYabaiFloats()
-        ClipboardHistory.shared.start()
+        ClipboardHistory.shared.start(recording: SessionSwitch.clipboard.isOn)
         log.notice("engine started, layer keys \(self.settings.layerKeys.rawValues, privacy: .public)")
         if keysArmed { armPointerTaps() }
     }
