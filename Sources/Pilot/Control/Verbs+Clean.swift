@@ -48,7 +48,7 @@ extension ControlVerbs {
     /// The kept preview; else Mole's run, waited on with `wait`, or started (or joined) and its progress answered.
     private static func cleanPreview(_ jobs: ControlJobs, wait: Bool) async -> JSONValue {
         if let ready = jobs.previewer.ready { return preview(ready) }
-        let run = Task { await jobs.previewer.preview() }
+        let run = Task { await jobs.previewer.preview(caller: "pilot clean preview") }
         guard wait else {
             // The run is under way once the main actor lets it start; its progress shows from then.
             await Task.yield()

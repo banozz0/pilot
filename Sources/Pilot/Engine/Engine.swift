@@ -349,7 +349,7 @@ final class Engine {
         binds.onChange = { [unowned self] in armMouseButtons() }
         let myBinds = MyBinds.preset(registry: registry.defaults)
         AbilitySettings.shared.seed(existingUser: FileManager.default.fileExists(atPath: Binds.url.path))
-        // A mouse button whose action is not on this Mac (Sven's own Now Playing extension) stays free: a bind there would
+        // A mouse button whose action is not on this Mac (an extension's, say) stays free: a bind there would
         // take the button and run nothing. An extension's id always builds an action, so its command is looked up too.
         binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys)) { [unowned self] in
             let installed = Extension.find(in: Extension.folder).extensions
@@ -411,11 +411,14 @@ final class Engine {
             if autorepeat && !action.repeats { return }
             record(key, action: action.label)
             if !autorepeat { countPress(id) }
-            if let hold = action.hold {
-                held[key] = { hold(false) }
-                hold(true)
-            } else {
-                action.run()
+            // The press names itself to what it opens (RunCaller): "terminal → … opened via Mouse 3".
+            RunCaller.with(key.label) {
+                if let hold = action.hold {
+                    held[key] = { hold(false) }
+                    hold(true)
+                } else {
+                    action.run()
+                }
             }
         }
         tap.onRelease = { [unowned self] key in held.removeValue(forKey: key)?() }
@@ -827,7 +830,7 @@ final class Engine {
         guard LinkToken.standard.allows(id, token: value("token")) else { return Self.refuseLink("run", id) }
         guard ensureFrontmost(value("app")) else { return }
         log.notice("run: \(LinkToken.redact(id), privacy: .public)")
-        action.run()
+        RunCaller.with("link") { action.run() }
     }
 
     private static func refuseLink(_ verb: String, _ id: String) {

@@ -198,6 +198,6 @@ final class WorkspacePresets {
 
     /// Pilot's launch-or-focus (AppsModule.open).
     private struct Opener: AppOpening {
-        func open(bundle: String) -> Bool { AppsModule.open(bundle: bundle) }
+        func open(bundle: String) -> Bool { RunCaller.with("workspace preset") { AppsModule.open(bundle: bundle) } }
     }
 }

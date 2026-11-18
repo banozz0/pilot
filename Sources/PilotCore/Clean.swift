@@ -130,6 +130,8 @@ public final class CleanPreviewer {
     public private(set) var progress: CleanProgress?
     /// Each run's end, once, whether or not a menu waits on it: its preview, or nil when it failed.
     @ObservationIgnored public var onFinish: ((CleanPreview?) -> Void)?
+    /// Each new run's start, with who asked for it (the menu, the command), so a log says what started Mole.
+    @ObservationIgnored public var onStart: ((String) -> Void)?
 
     public init(now: @escaping () -> Date = { .now }, run: @escaping (@escaping @Sendable (String) -> Void) async -> String?) {
         self.now = now
@@ -144,10 +146,11 @@ public final class CleanPreviewer {
 
     /// The fresh preview, or Mole's next one; nil when the run failed, which is not kept. Cancelling the caller only stops
     /// its wait: the run carries on and ends in `finish`.
-    public func preview() async -> CleanPreview? {
+    public func preview(caller: String = "unknown") async -> CleanPreview? {
         if let ready { return ready }
         if let running { return await running.value }
         let mine = generation
+        onStart?(caller)
         progress = CleanProgress()
         let task = Task { [run] in
             let preview = await run { line in Task { @MainActor [weak self] in self?.heard(line, in: mine) } }.map(CleanPreview.parse)

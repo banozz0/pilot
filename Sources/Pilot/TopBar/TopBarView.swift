@@ -136,7 +136,7 @@ final class BarDropLights {
             let chat = AIChatPanel.shared
             chat.isShown ? chat.hide() : chat.show()
         case .terminal:
-            terminal.toggle()
+            RunCaller.with("top bar") { terminal.toggle() }
         case .pill:
             PillDrop.shared.toggle()   // no item clicked: the focused display, as its key does (the pill's item names its own)
         }

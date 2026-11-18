@@ -318,7 +318,7 @@ final class WidgetDesk: ScreenPausing {
            Widget.isActionID(actionID) {
             guard let run = WidgetDesk.buttonAction(actionID) else { return HUD.tip("\(widget.title): Pilot has no action \(actionID)") }
             widgetLog.notice("widget \(widget.id, privacy: .public): button runs \(actionID, privacy: .public)")
-            return run.run()
+            return RunCaller.with("widget \(widget.id)") { run.run() }
         }
         guard case .extensionPage = widget.data, let page = extensionPages[id] else {
             return widgetLog.notice("widget \(widget.id, privacy: .public): a button its feed printed, not one it declares, runs nothing")

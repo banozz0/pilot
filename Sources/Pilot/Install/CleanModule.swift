@@ -20,6 +20,7 @@ enum CleanModule {
         }
         // The run ends whether or not a menu waits (card agent-bo-95423002): logged only. With Clean closed it says nothing,
         // so it never reads as a scan Pilot started by itself; the kept preview shows when Clean opens next (Sven, Q246).
+        previewer.onStart = { caller in ilog.notice("clean: preview started by \(caller, privacy: .public)") }
         previewer.onFinish = { preview in
             if let preview { ilog.notice("clean: preview ready, \(preview.items.count) items, \(preview.total ?? "no total", privacy: .public)") }
         }

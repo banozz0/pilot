@@ -120,7 +120,7 @@ struct InstrumentDropdown: View {
             // Closed first, so the keyboard goes back to the password field for ⌘V.
             if let id = problems[i].action {
                 BarPanel.shared.close()
-                engine.action(id)?.run()
+                RunCaller.with("dropdown") { engine.action(id)?.run() }
                 return
             }
             switch (problems[i].kind, problems[i].place) {

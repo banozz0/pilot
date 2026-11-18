@@ -270,7 +270,7 @@ final class NotificationPanels: NotificationPresenting {
 
     func openApp(named name: String) {
         guard let bundle = AppsModule.bundles(named: [name])[name] else { return }
-        AppsModule.open(bundle: bundle)
+        RunCaller.with("notification") { _ = AppsModule.open(bundle: bundle) }
     }
 
     private func replace() {

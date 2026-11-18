@@ -35,7 +35,7 @@ enum AppsModule {
                 case .command(let command): ok = openAgent(command)
                 case .app(let bundle): ok = role == .terminal ? newTerminalWindow(bundle) : open(bundle: bundle)
                 }
-                alog.notice("\(role.rawValue, privacy: .public) → \(value, privacy: .public) \(ok ? "opened" : "not installed", privacy: .public)")
+                alog.notice("\(role.rawValue, privacy: .public) → \(value, privacy: .public) \(ok ? "opened" : "not installed", privacy: .public) via \(RunCaller.name, privacy: .public)")
             }
         }
         add(&registry, "launcher", "Pilot menu", Key("space")) { PilotMenu.shared.toggle(pressedAt: HyperTap.pressedAt) }
@@ -175,7 +175,7 @@ enum AppsModule {
     /// state and lands on a Space of its own (Hammerspoon's note, 2026-09-10).
     static func ghostty(_ arguments: [String], what: String) {
         guard let app = url(forBundle: "com.mitchellh.ghostty") else { return alog.notice("\(what, privacy: .public): Ghostty not installed") }
-        run(app.appendingPathComponent("Contents/MacOS/ghostty").path, ["--window-save-state=never"] + arguments, what: what)
+        run(app.appendingPathComponent("Contents/MacOS/ghostty").path, ["--window-save-state=never"] + arguments, what: "\(what) via \(RunCaller.name)")
     }
 
     /// Hyper+Shift+G: lazygit on a repo under ~/code (or the folder picked on Defaults › Folders), newest first, picked
@@ -466,6 +466,7 @@ enum AppsModule {
     @discardableResult
     static func open(bundle: String, newInstance: Bool = false) -> Bool {
         guard let url = url(forBundle: bundle) else { return false }
+        if AppRole.terminalApps.contains(bundle) { alog.notice("terminal app: \(bundle, privacy: .public) opens via \(RunCaller.name, privacy: .public)") }
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = newInstance
         NSWorkspace.shared.openApplication(at: url, configuration: config) { _, error in

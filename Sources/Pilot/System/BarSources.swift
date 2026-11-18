@@ -21,7 +21,7 @@ struct BarSources {
     /// Pilot's dropdown (card agent-bo-95422912), hung from Pilot's item in either bar.
     var dropdown: @MainActor () -> AnyView = { AnyView(EmptyView()) }
     /// Opens an app by bundle id: the clock's date opens Calendar (card agent-bo-95423011); a fake in tests.
-    var openApp: @MainActor (String) -> Void = { _ = AppsModule.open(bundle: $0) }
+    var openApp: @MainActor (String) -> Void = { bundle in RunCaller.with("bar item") { _ = AppsModule.open(bundle: bundle) } }
     /// Runs the Power item's lock, sleep, restart, shut down and log out; a fake in tests.
     var power: any PowerRunning = SystemPower()
     /// The Displays item's screens and brightness, the app's own as System's Displays card's: a mode picked waits for Keep
@@ -40,7 +40,7 @@ struct BarSources {
     var bluetoothOn: @MainActor () -> Bool? = { BluetoothPower.state(SystemModule.bluetooth) }
     var setBluetooth: @MainActor (Bool) -> Void = { SystemModule.setBluetooth($0) }
     /// Runs a registered action by its id, as the menu's rows do; a fake in tests.
-    var runAction: @MainActor (String) -> Void = { Engine.shared?.action($0)?.run() }
+    var runAction: @MainActor (String) -> Void = { id in RunCaller.with("bar item") { Engine.shared?.action(id)?.run() } }
     /// A workspace's ready layout, which the workspace its screen shows draws as a glyph, and the click there that cycles
     /// it (layouts round 1); fakes in tests.
     var layout: @MainActor (String) -> LayoutPreset? = { Engine.shared?.layouts.layout($0).preset }

@@ -196,7 +196,8 @@ extension ControlVerbs {
                 log.notice("run: \(LinkToken.redact(id), privacy: .public), from the pilot command")
                 let withheld = RunReadback.withheld(id)
                 var tips: [String] = []
-                if withheld == nil { tips = await app.readback.watch { action.run() } } else { action.run() }
+                if withheld == nil { tips = await app.readback.watch { RunCaller.with("pilot run") { action.run() } } }
+                else { RunCaller.with("pilot run") { action.run() } }
                 let off = engine.binds.store.isDisabled(id) ? "\(id) is switched off, so nothing ran; turn it on in Binds › More › Export and import (pilot open exportImport)" : nil
                 var answer: [String: JSONValue] = ["dispatched": .string(id), "hud": tips.isEmpty ? .null : .string(tips.joined(separator: "\n")),
                                                    "error": off.map(JSONValue.string) ?? .null]

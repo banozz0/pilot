@@ -30,7 +30,8 @@ final class TerminalDrop {
     static func register(into registry: inout ActionRegistry, drop: @escaping @Sendable @MainActor () -> TerminalDrop = { .shared }) {
         do {
             try registry.register(Action(id: actionID, label: "Drop the terminal", module: .apps, defaultKey: Key("t"), tier: .v1, keywords: "terminal shell") {
-                RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { drop().toggle() } }
+                let via = RunCaller.name   // the hop below would lose it
+                RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { RunCaller.with(via) { drop().toggle() } } }
             })
         } catch { tblog.error("terminal drop action: \(String(describing: error), privacy: .public)") }
     }
@@ -61,6 +62,7 @@ final class TerminalDrop {
             return
         }
         drops.open(.terminal, face: face(surface))
+        tblog.notice("terminal drop: opened via \(RunCaller.name, privacy: .public)")
     }
 
     func hide() { drops.close(.terminal) }
@@ -77,6 +79,7 @@ final class TerminalDrop {
         let pin = TerminalPack.pin, dylib = TerminalPack.dylib(pin)
         guard GhosttyRuntime.loaded == nil, TerminalPack.isInstalled(pin) else { return offerPack() }
         loading = true
+        let via = RunCaller.name
         Task {
             defer { loading = false }
             do {
@@ -84,7 +87,7 @@ final class TerminalDrop {
                     try TerminalPack.load(dylib, sha256: pin.dylibSHA256, requirement: TerminalPack.pilotRequirement())
                 }.value
                 GhosttyRuntime.use(api, from: dylib)
-                show()
+                RunCaller.with(via) { show() }
             } catch let failure as TerminalPack.Failure where failure == .unsigned {
                 tip(failure.message)  // the pack is fine; this Pilot cannot check it
             } catch {
@@ -125,7 +128,8 @@ final class TerminalDrop {
             }
         case .ready?:
             dismiss()
-            show()
+            // Long after the press, maybe: the log says it was the download that dropped it.
+            RunCaller.with("terminal download finished") { show() }
         case .failed(let why)?:
             HUD.tip(why, seconds: 10, action: HUD.TipAction(title: "Retry") { self.downloadPack() })
         case .preparing?, .absent?, nil:

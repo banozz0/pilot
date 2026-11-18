@@ -551,7 +551,7 @@ struct DockAppIcon: View {
     /// Opens the app, or brings it forward when it runs: macOS activates an app it is asked to open.
     private func activate() {
         BarPanel.shared.close()
-        if let bundle = app.bundleID, AppsModule.open(bundle: bundle) { return }
+        if let bundle = app.bundleID, RunCaller.with("dock", { AppsModule.open(bundle: bundle) }) { return }
         guard let url = app.url else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             if let error { docklog.error("dock open \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)") }

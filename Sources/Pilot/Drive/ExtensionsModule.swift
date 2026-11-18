@@ -201,7 +201,7 @@ enum ExtensionActions {
                 hud("\(ext.title) can't run \(id).")
                 return nil
             }
-            Engine.shared?.action(id)?.run()
+            RunCaller.with("extension \(ext.id)") { Engine.shared?.action(id)?.run() }
         case .run(let name, let context):
             guard let command = ext.noView(name) else {
                 hud("\(ext.title) has no command \(name) to run.")
