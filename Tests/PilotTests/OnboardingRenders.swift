@@ -27,6 +27,9 @@ struct OnboardingRenders {
         DisplayFaces.directory = LookThemeTests.fonts
         DisplayFaces.register()
         let engine = try SharedLook.HomeRenders.engine()
+        // A fresh Mac's Hyper key, Caps Lock alone, so the screens read as a new user sees them (the moved home may hold
+        // other renders' picks). The tap never runs here, so no key mapping is written.
+        engine.settings.setLayerKeys([.capsLock], from: .onboarding)
         let look = Look.shared
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
