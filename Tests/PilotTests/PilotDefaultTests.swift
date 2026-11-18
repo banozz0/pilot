@@ -8,17 +8,12 @@ import Testing
 @MainActor
 @Suite("Pilot default")
 struct PilotDefaultTests {
-    @Test("Every Pilot default bind and a new file's every mouse button runs an action; the tab pair are Drive's next and previous tab")
+    @Test("Every Pilot default bind runs an action and a new file has no mouse binds; the tab pair are Drive's next and previous tab")
     func registered() {
         let engine = Engine(), registry = engine.registry
         for id in PilotDefault.binds.keys { #expect(engine.action(id) != nil, "\(id)") }
-        // A new file's mouse buttons each run an action here, all under Hyper: a plain click stays the app's own
-        // (2026-11-18: a middle click opened Ghostty).
-        let mouse = engine.binds.store.mouseBinds
-        for b in mouse { #expect(engine.action(b.bind.action) != nil, "\(b.trigger.label)") }
-        #expect(mouse.count == PilotDefault.mouse.count)
-        #expect(engine.binds.store.action(for: Key("Mouse 3", hyper: false)) == nil)
-        #expect(engine.binds.store.action(for: Key("Mouse 4", hyper: false)) == nil)
+        // A new install's mouse buttons stay the apps' own until bound (Sven, Q251; a middle click once opened Ghostty).
+        #expect(engine.binds.store.mouseBinds.isEmpty)
         #expect(registry.actions["drive.nextTab"]?.label == "Next tab" && registry.defaults["drive.nextTab"] == nil)
         #expect(PilotDefault.binds["terminal.drop"] == registry.defaults["terminal.drop"])
         #expect(PilotDefault.binds["ai.chat"] == registry.defaults["ai.chat"])

@@ -113,17 +113,6 @@ public enum PilotDefault {
         return b
     }()
 
-    /// Sven's Hyper + mouse buttons, trigger → action, which a new install's bind file starts with (Binds' first load):
-    /// each one whose action is on that Mac. A plain click stays the app's own (tester feedback 2026-11-18: a middle click
-    /// opened Ghostty, as Sven's plain Mouse 3 → Terminal did on every new install); Sven's plain buttons live in his file.
-    public static let mouse: [Key: String] = [
-        Key("Mouse 3"): "drive.actualSize",
-        Key("Mouse 4"): "drive.zoomOut",
-        Key("Mouse 5"): "drive.zoomIn",
-        Key("Mouse Scroll Up"): "media.volumeUp",
-        Key("Mouse Scroll Down"): "media.volumeDown",
-    ]
-
     /// Start from scratch: empty but the Pilot menu, so a new preset never locks its maker out.
     public static let scratch: [String: Key] = ["apps.launcher": Key("space")]
 }

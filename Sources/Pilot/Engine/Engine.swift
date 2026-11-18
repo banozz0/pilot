@@ -349,14 +349,8 @@ final class Engine {
         binds.onChange = { [unowned self] in armMouseButtons() }
         let myBinds = MyBinds.preset(registry: registry.defaults)
         AbilitySettings.shared.seed(existingUser: FileManager.default.fileExists(atPath: Binds.url.path))
-        // A mouse button whose action is not on this Mac (an extension's, say) stays free: a bind there would
-        // take the button and run nothing. An extension's id always builds an action, so its command is looked up too.
-        binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys)) { [unowned self] in
-            let installed = Extension.find(in: Extension.folder).extensions
-            return PilotDefault.mouse.filter { _, id in
-                action(id) != nil && (Extension.command(inAction: id) == nil || Extension.command(inAction: id, in: installed) != nil)
-            }
-        }
+        // A new install starts with no mouse binds at all (Sven, Q251): every button stays the app's own until bound.
+        binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys))
         // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194).
         if rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
         for id in Set(PilotDefault.binds.keys).union(MyBinds.extras.keys) where action(id) == nil {
