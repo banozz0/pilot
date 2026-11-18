@@ -19,14 +19,21 @@
   if (clips.length && !reduced && !(navigator.connection && navigator.connection.saveData) && 'IntersectionObserver' in window) {
     const src = (v) => { if (v.getAttribute('src')) return; v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto'; v.src = v.dataset.src; };
     const near = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { src(e.target); near.unobserve(e.target); } }), { rootMargin: '0px 0px 120px 0px' });
-    const run = (v) => { if (v.dataset.paused || document.hidden) return; src(v); v.play().then(() => { v.classList.add('on'); const b = v.nextElementSibling; if (b) b.hidden = false; }).catch(() => {}); };
+    /* A clip starts muted (browsers autoplay only that); a take's sound button, after its pause button, unmutes it and
+       mutes any other (Sven, 2026-11-18). A browser that refuses the unmuted play (Safari, scrolling back) gets it muted. */
+    const snd = (v) => { const b = v.nextElementSibling?.nextElementSibling; return b && b.classList.contains('ssnd') ? b : null; };
+    const sound = (v, on) => { v.muted = !on; const b = snd(v); if (!b) return; b.dataset.on = on ? '1' : ''; b.setAttribute('aria-label', b.getAttribute('aria-label').replace(/^(Unmute|Mute)/, on ? 'Mute' : 'Unmute')); };
+    const shown = (v) => { v.classList.add('on'); const b = v.nextElementSibling; if (b) b.hidden = false; const s = snd(v); if (s) s.hidden = false; };
+    const run = (v) => { if (v.dataset.paused || document.hidden) return; src(v); v.play().then(() => shown(v)).catch(() => { if (!v.muted) { sound(v, false); v.play().then(() => shown(v)).catch(() => {}); } }); };
     const inView = new IntersectionObserver((es) => es.forEach(e => { const v = e.target; v._in = e.intersectionRatio >= .5; if (v._in) run(v); else v.pause(); }), { threshold: [0, .5] });
     /* No clip is asked for before the page has loaded: the hero's is on screen from the start, and fetching it while the
        poster, fonts and styles are still coming would hold back the first paint (Sven, 2026-11-18). */
     const arm = () => clips.forEach(v => { near.observe(v); inView.observe(v); });
     if (document.readyState === 'complete') arm(); else addEventListener('load', arm, { once: true });
-    clips.forEach(v => { const b = v.nextElementSibling;
-      b?.addEventListener('click', () => { const off = !v.dataset.paused; if (off) { v.dataset.paused = '1'; v.pause(); } else { delete v.dataset.paused; run(v); } b.setAttribute('aria-label', b.getAttribute('aria-label').replace(off ? 'Pause' : 'Play', off ? 'Play' : 'Pause')); $('path', b).setAttribute('d', off ? 'M5 3v10l8-5z' : 'M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z'); }); });
+    const paused = (v, off) => { const b = v.nextElementSibling; if (off) { v.dataset.paused = '1'; v.pause(); } else { delete v.dataset.paused; run(v); } if (!b) return; b.setAttribute('aria-label', b.getAttribute('aria-label').replace(/^(Pause|Play)/, off ? 'Play' : 'Pause')); $('path', b).setAttribute('d', off ? 'M5 3v10l8-5z' : 'M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z'); };
+    clips.forEach(v => { const b = v.nextElementSibling, s = snd(v);
+      b?.addEventListener('click', () => paused(v, !v.dataset.paused));
+      s?.addEventListener('click', () => { const on = v.muted; clips.forEach(o => { if (o !== v && !o.muted) sound(o, false); }); sound(v, on); if (on) { if (v.dataset.paused) paused(v, false); else run(v); } }); });
     document.addEventListener('visibilitychange', () => clips.forEach(v => { if (document.hidden) v.pause(); else if (v._in) run(v); }));
   }
 
