@@ -35,8 +35,7 @@
 
 <p align="center">
   <a href="https://github.com/banozz0/pilot/releases/latest"><img src="https://img.shields.io/github/v/release/banozz0/pilot?style=flat-square&labelColor=15181C&color=7B5CFF&label=release" alt="Latest release" /></a>
-  <img src="https://img.shields.io/badge/macOS-27%2B-7B5CFF?style=flat-square&labelColor=15181C" alt="macOS 27 or later" />
-  <img src="https://img.shields.io/badge/Apple-silicon-7B5CFF?style=flat-square&labelColor=15181C" alt="Apple silicon" />
+  <img src="https://img.shields.io/badge/macOS_27+-Apple_silicon-7B5CFF?style=flat-square&labelColor=15181C" alt="macOS 27 or later, Apple silicon" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/free-MIT-7B5CFF?style=flat-square&labelColor=15181C" alt="Free and open source, MIT" /></a>
 </p>
 
@@ -50,16 +49,16 @@ The keyboard-driven desktop Linux people love, made for the Mac. It runs from Hy
 
 ### 🎨 Your Mac, your look
 
-19 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together.
+19 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
 
 <!-- slot 1 and 2: 01-workspace-dark.png and 02-workspace-light.png, joined down the middle -->
 ![One workspace of tiled apps, half in a dark theme and half in a light one](.github/readme/shot-workspace.jpg)
 
-<p align="center"><sub>One desktop, two themes. <a href="https://pilotformac.com/look.html">Themes</a> · <a href="https://pilotformac.com/desktop.html">Dock</a> · <a href="https://pilotformac.com/menubar.html">Top bar</a></sub></p>
+<p align="center"><sub>One desktop, two themes.</sub></p>
 
 ### 🪟 Windows tile as they open
 
-Six layouts across nine workspaces, all from the keys. No need to turn off System Integrity Protection.
+Six layouts across nine workspaces, all from the keys. No need to turn off System Integrity Protection. [Windows](https://pilotformac.com/windows.html)
 
 <!-- slot 4: 04-tiling.png -->
 ![Windows tiled in Main + stack](.github/readme/shot-tiling.jpg)
@@ -72,26 +71,20 @@ Six layouts across nine workspaces, all from the keys. No need to turn off Syste
 
 </details>
 
-<p align="center"><sub><a href="https://pilotformac.com/windows.html">More on windows</a></sub></p>
-
 ### 🔎 A launcher that does the rest
 
-<kbd>Hyper</kbd>+<kbd>Space</kbd> opens one box for apps, windows, files, settings and answers. Type an app and its own commands come with it.
+<kbd>Hyper</kbd>+<kbd>Space</kbd> opens one box for apps, windows, files, settings and answers. Type an app and its own commands come with it. [Launcher](https://pilotformac.com/launcher.html)
 
 <!-- slot 3: 03-launcher.png -->
 ![The launcher listing an app's own commands](.github/readme/shot-launcher.jpg)
 
-<p align="center"><sub><a href="https://pilotformac.com/launcher.html">More on the launcher</a></sub></p>
-
 ### ⌨️ Your keyboard runs the Mac
 
-Click any key on a picture of your keyboard to give it a job, never in a config file. Hold Hyper to see what every key does.
+Click any key on a picture of your keyboard to give it a job, never in a config file. Hold Hyper to see what every key does. [Keys and binds](https://pilotformac.com/keys.html)
 
 <!-- video 2: Your keyboard runs the Mac -->
 
 https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
-
-<p align="center"><sub><a href="https://pilotformac.com/keys.html">More on keys and binds</a></sub></p>
 
 ### 📋 Clipboard and notes
 
