@@ -120,7 +120,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 55)
+        #expect(rig.schema.keys.count == 56)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")

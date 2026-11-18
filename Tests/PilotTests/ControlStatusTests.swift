@@ -64,7 +64,8 @@ struct ControlStatusTests {
         #expect(rig.pathReads == 1, "the PATH is read once while not known")
 
         guard case .string(let line)? = status["line"] else { Issue.record("no line"); return }
-        #expect(line.hasPrefix("Hyper is on. 2 things need you."), "\(line)")
+        // A new install's tiling is off (Sven, 2026-11-18), so the tiler not answering is not Needs you.
+        #expect(line.hasPrefix("Hyper is on. Accessibility is not granted"), "\(line)")
         #expect(Self.fields(status["hyper"]) == ["on": .bool(true), "layerKeys": .array(rig.engine.settings.layerKeys.map { .string($0.rawValue) }),
                                                   "layerKeyLabel": .string(rig.engine.settings.layerKeys.label)])
         #expect(Self.fields(status["permissions"]) == ["accessibility": .bool(false), "fullDiskAccess": .bool(true), "screenRecording": .null])
@@ -72,6 +73,7 @@ struct ControlStatusTests {
         #expect(engine["keyEngine"] == .bool(false))
         #expect(engine["secureInput"] == .bool(false))
         #expect(Self.fields(engine["tiler"])["running"] == .bool(false))
+        #expect(Self.fields(engine["tiler"])["tiling"] == .bool(false))
         #expect(Self.fields(status["loginItem"])["status"] == .string("requiresApproval"))
         #expect(Self.fields(status["commandLink"])["state"] == .string("notLinked"))
         #expect(Self.fields(status["update"])["state"] == .string("unknown"))
@@ -80,9 +82,9 @@ struct ControlStatusTests {
         // Home's Needs you, each with the command its button runs.
         guard case .array(let problems)? = status["problems"] else { Issue.record("no problems"); return }
         let fixes = problems.map { Self.fields($0)["fix"] }
-        #expect(problems.map { Self.fields($0)["kind"] } == [.string("accessibility"), .string("tiler")])
+        #expect(problems.map { Self.fields($0)["kind"] } == [.string("accessibility")])
         // Accessibility's Grant is Needs you on Pilot's front (simplify-pages T8).
-        #expect(fixes == [.string("pilot open general"), .string("pilot run engine.restartTiler")])
+        #expect(fixes == [.string("pilot open general")])
     }
 
     @Test("--part reads only the parts named, the Mac's slow ones included")
