@@ -296,17 +296,6 @@ struct CleanTests {
         #expect(dropped.progress == nil && dropped.ready == nil)
     }
 
-    @Test("When the preview ends with Clean not on screen, a tip says so; with Clean showing, the rows do")
-    func tip() {
-        let preview = CleanPreview.parse(CleanTests.dryRun)
-        #expect(CleanMenu.tip(preview, showing: false) == "Mole's preview is ready: Clean 28.75GB in Pilot's menu")
-        #expect(CleanMenu.tip(CleanPreview(items: [], total: nil, systemSkipped: false), showing: false)
-                == "Mole's preview is ready: nothing to clean")
-        #expect(CleanMenu.tip(nil, showing: false) == "Mole's preview did not finish; open Clean to try again")
-        #expect(CleanMenu.tip(preview, showing: true) == nil)
-        #expect(CleanMenu.tip(nil, showing: true) == nil, "the menu says it failed itself")
-    }
-
     /// Holds a run until opened.
     @MainActor final class Gate {
         private var isOpen = false

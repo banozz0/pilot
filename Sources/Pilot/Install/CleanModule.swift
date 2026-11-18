@@ -18,10 +18,10 @@ enum CleanModule {
                 return nil
             }
         }
-        // The run ends whether or not a menu waits (card agent-bo-95423002): logged, and a tip when Clean is not on screen.
+        // The run ends whether or not a menu waits (card agent-bo-95423002): logged only. With Clean closed it says nothing,
+        // so it never reads as a scan Pilot started by itself; the kept preview shows when Clean opens next (Sven, Q246).
         previewer.onFinish = { preview in
             if let preview { ilog.notice("clean: preview ready, \(preview.items.count) items, \(preview.total ?? "no total", privacy: .public)") }
-            if let tip = CleanMenu.tip(preview, showing: PilotMenu.shared.branch == .clean) { HUD.tip(tip, seconds: 6) }
         }
         return previewer
     }()
