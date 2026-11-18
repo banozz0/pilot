@@ -4,10 +4,16 @@ import Observation
 import PilotCore
 
 /// One change Set up makes (Onboarding 1.1, T54, variant C): the seven helpers, two keys, two file kinds, two downloads and
-/// two Pilot settings, 15 in all.
+/// two Pilot settings, 15 in all. Set up offers only `offered`; the rest stay so an earlier run's record keeps its rows
+/// and Undo.
 enum SetupItem: String, CaseIterable, Codable, Hashable {
     case homebrew, mole, mas, ffmpeg, webp, npm, cargo
     case filesKey, notesKey, txt, md, dictation, voices, launchAtLogin, command
+
+    /// What Set up offers (Sven's critique, 2026-11-18: the main things only): the Files and Notes keys and launch at
+    /// login. The helpers live on Install's Command-line tools, .txt and .md on Open with, the dictation model and voices
+    /// on Dictation and Read aloud, the pilot command on General, each with its own button.
+    static let offered: [SetupItem] = [.filesKey, .notesKey, .launchAtLogin]
 
     var group: SetupGroup {
         switch self {
@@ -121,6 +127,8 @@ enum SetupGroup: CaseIterable, Hashable {
     /// In SetupItem's order, which is the run's: npm and cargo last, as they bring Node and Rust and take the longest
     /// (T54's call).
     var items: [SetupItem] { SetupItem.allCases.filter { $0.group == self } }
+    /// Its items Set up offers (SetupItem.offered); a group with none is not shown before a run.
+    var offered: [SetupItem] { items.filter(SetupItem.offered.contains) }
 
     var title: String {
         switch self {
@@ -149,7 +157,7 @@ enum SetupGroup: CaseIterable, Hashable {
         case .keys: "keys: Files → Pilot Files, Notes → Pilot Notes"
         case .fileKinds: "file kinds: .txt and .md open in Pilot"
         case .downloads: "downloads: dictation model and voices, \(OnboardingSetup.speech.megabytes + KokoroModel.megabytes) MB"
-        case .pilot: "launch at login, the pilot command"
+        case .pilot: offered.map(\.short).joined(separator: ", ")
         }
     }
 }
@@ -367,7 +375,7 @@ final class OnboardingSetup {
     func load() {
         onMac = Set(SetupItem.allCases.filter(isOnMac))
         picked.subtract(onMac)
-        noAppBefore = [SetupItem.txt, .md].filter { item in !onMac.contains(item) && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
+        noAppBefore = everything.filter { item in item.kind != nil && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
     }
 
     /// The file kinds with no app on this Mac: their Undo cannot put "none" back, which the fork says first.
@@ -410,7 +418,7 @@ final class OnboardingSetup {
 
     /// Set up everything's changes: all but what is on this Mac or still held by the record (a quiet mark Run setup
     /// again kept, which a later look settles; `start` never runs one twice).
-    var everything: [SetupItem] { SetupItem.allCases.filter { !onMac.contains($0) && ledger[$0] == nil } }
+    var everything: [SetupItem] { SetupItem.offered.filter { !onMac.contains($0) && ledger[$0] == nil } }
 
     /// A formula needs Homebrew: ticking one ticks Homebrew, and unticking Homebrew unticks them while it is missing.
     func set(_ item: SetupItem, _ on: Bool) {
@@ -677,11 +685,12 @@ final class OnboardingSetup {
     var forkCount: String {
         let n = everything.count
         let base = "\(n) change\(n == 1 ? "" : "s")"
-        return onMac.isEmpty ? base : "\(base) · \(onMac.count) already on this Mac"
+        let there = onMac.count(where: SetupItem.offered.contains)
+        return there == 0 ? base : "\(base) · \(there) already on this Mac"
     }
 
     /// Whether the helpers' run needs the Mac's login, because Homebrew is in it.
-    var asksForMacLogin: Bool { !onMac.contains(.homebrew) }
+    var asksForMacLogin: Bool { everything.contains(.homebrew) }
 
     #if DEBUG
     /// A render's state in place of a run: what is on its Mac, what is ticked, the ledger.

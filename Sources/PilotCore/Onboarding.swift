@@ -11,6 +11,30 @@ public enum Onboarding {
         key == .capsLock ? "suggested · tap alone for Escape · Shift+Caps Lock still types capitals" : key.note
     }
 
+    /// The everyday shortcuts each modifier side takes over, a fixed pick of what Mac users press most: Command's Return,
+    /// T, Q and C; Control's terminal keys (interrupt, history search, suspend); Option's word jumps.
+    static func everyday(_ key: LayerKey) -> (modifier: String, keys: [String]) {
+        switch key {
+        case .capsLock: ("", [])
+        case .leftCommand, .rightCommand: ("Cmd", ["Return", "T", "Q", "C"])
+        case .leftControl, .rightControl: ("Ctrl", ["C", "R", "Z"])
+        case .leftOption, .rightOption: ("Option", ["←", "→"])
+        }
+    }
+
+    /// What picking `key` as Hyper breaks, said beside its alert icon (Sven's critique, 2026-11-18); nil for Caps Lock.
+    /// The picked side is Hyper alone and the tap swallows every key while Hyper is held (HyperTap), so each everyday
+    /// shortcut on that side runs the Hyper bind on its key, named by `bound` (its label; nil when none: it does
+    /// nothing). A tester's terminals opening by themselves may be Cmd+Return and Cmd+T on a Command side.
+    public static func hyperBreaks(_ key: LayerKey, bound: (Key) -> String?) -> String? {
+        let (modifier, keys) = everyday(key)
+        guard !keys.isEmpty else { return nil }
+        let runs = keys.map { name in "\(modifier)+\(name) \(bound(Key(name)).map { "→ \($0)" } ?? "does nothing")" }
+        // Left Control's shortcuts move to right Control, and right Control as Hyper has no key: a MacBook has neither.
+        let tail = key == .leftControl || key == .rightControl ? "; a MacBook has no right Control" : ""
+        return runs.joined(separator: " · ") + tail
+    }
+
     public struct Status: Equatable, Sendable {
         public var accessibility = false, systemEvents = false
         /// The file index's grant (card agent-bo-95422768).

@@ -87,8 +87,8 @@ private struct OnboardingSteps: View {
     private var welcome: some View {
         @Bindable var settings = engine.settings
         return VStack(alignment: .leading, spacing: 12) {
-            title("Welcome to Pilot")
-            Text("Pilot makes this Mac work like Omarchy.").font(ink.ui(15, .medium)).foregroundStyle(ink.text2)
+            title(OnboardingModel.welcomeTitle)
+            Text(OnboardingModel.welcomeLine).font(ink.ui(15, .medium)).foregroundStyle(ink.text2)
             Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
                 .foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             Card {
@@ -98,7 +98,11 @@ private struct OnboardingSteps: View {
                         CardRow {
                             Image(systemName: on ? "largecircle.fill.circle" : "circle")
                                 .foregroundStyle(on ? ink.accent : ink.muted).accessibilityHidden(true)
-                            TitledText(title: key.label, detail: Onboarding.hyperDetail(key))
+                            VStack(alignment: .leading, spacing: 6) {
+                                let breaks = model.hyperBreaks(key, engine)
+                                TitledText(title: key.label, detail: breaks == nil ? Onboarding.hyperDetail(key) : nil)
+                                if let breaks { HyperBreaks(text: breaks) }
+                            }
                             Spacer()
                         }
                         .contentShape(.rect)
@@ -364,6 +368,15 @@ final class OnboardingModel {
     var tryIt = Onboarding.TryIt(menuOpens: 0)
     /// Try it's "More, if you want", open.
     var showsMore = false
+    /// Each Hyper choice's warning, worked out once: binds do not change during onboarding, and a label lookup walks every
+    /// action source.
+    @ObservationIgnored private var breaks: [LayerKey: String?] = [:]
+    func hyperBreaks(_ key: LayerKey, _ engine: Engine) -> String? {
+        if let known = breaks[key] { return known }
+        let line = Onboarding.hyperBreaks(key, bound: engine.boundLabel)
+        breaks[key] = line
+        return line
+    }
     /// More's place in Try it's scroll (TryItScroll), which opening it scrolls to.
     static let moreID = "onboarding.more"
     /// Pilot Files came forward since Try it showed.
@@ -375,6 +388,8 @@ final class OnboardingModel {
     @ObservationIgnored private var opened = Date()
     @ObservationIgnored private weak var engine: Engine?
 
+    /// Hyper's screen's head and line (Sven's critique, 2026-11-18, option B): ricing first, then the launcher.
+    static let welcomeTitle = "Rice your Mac.", welcomeLine = "A launcher that does the rest."
     static let accessAbout = "The one grant Pilot waits for: it reads the Hyper key and moves windows. System Settings opens beside this window; switch Pilot on there."
     static let passwordNote = "Homebrew asks your Mac's password once, in Terminal."
     /// Says what Undo cannot do (reviewer, T54): it puts back what was there before Set up, over any change since, and

@@ -110,7 +110,7 @@ struct SetupFork: View {
                     .disabled(setup.everything.isEmpty)
             }
             card(eyebrow: "Your way", title: "Pick by hand",
-                 about: "Choose each helper, key and file kind. Nothing changes until you confirm.") {
+                 about: "Choose each key and setting. Nothing changes until you confirm.") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("· starts with nothing ticked").styleText(\.caption).foregroundStyle(style.color(\.text2))
                     Text("· each row says what it gives").styleText(\.caption).foregroundStyle(style.color(\.text2))
@@ -148,10 +148,10 @@ struct SetupPickList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(SetupGroup.allCases, id: \.self) { group in
+            ForEach(SetupGroup.allCases.filter { !$0.offered.isEmpty }, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 0) {
                     groupHeading(group)
-                    ForEach(group.items, id: \.self) { item in
+                    ForEach(group.offered, id: \.self) { item in
                         InstrumentRule()
                         HStack(spacing: 14) {
                             SetupTitled(title: item.title, detail: item.detail)
@@ -314,6 +314,25 @@ struct GrantWalkPanel: View {
     }
 }
 
+extension Engine {
+    /// The label of the Hyper bind on `key`, nil when none: the action a Hyper choice's everyday shortcut would run.
+    func boundLabel(_ key: Key) -> String? { binds.store.action(for: key).flatMap { action($0)?.label } }
+}
+
+/// What a Hyper key choice breaks, under its name in both styles: an alert icon and Onboarding.hyperBreaks' line (Sven's
+/// critique, 2026-11-18).
+struct HyperBreaks: View {
+    @Environment(\.style) private var style
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(style.color(\.warn)).accessibilityLabel("Breaks")
+            Text(text).styleText(\.caption).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Try it's panels in both styles, scrolling inside Set up's height, so More opening never grows the window past the
 /// screen (a tester's grew too tall to reach Finish, 2026-11-18); opening More scrolls to it, tagged `OnboardingModel.moreID`.
 struct TryItScroll<Content: View>: View {
@@ -330,12 +349,11 @@ struct TryItScroll<Content: View>: View {
     }
 }
 
-/// Try it's "More, if you want", folded: the AI provider, Extensions, Recommend apps, the upscaler's Max quality, the
-/// terminal's download (T76), and the other permissions, which live in Settings › Permissions. Never needed for Finish.
+/// Try it's "More, if you want", folded: only the extras that matter on day one, the AI provider and Extensions (Sven's
+/// critique, 2026-11-18). The rest live where they are used: Recommend apps on Install's search, the upscaler's Max
+/// quality in Upscale's Model, Pilot's terminal downloading on Hyper+T's first press, the other permissions in Allow the
+/// rest just above and Settings › Permissions. Never needed for Finish.
 struct OnboardingMore: View {
-    @Environment(\.style) private var style
-    @State private var recommend = Recommendations.shared.show
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             line {
@@ -349,39 +367,6 @@ struct OnboardingMore: View {
                 SetupTitled(title: "Extensions", detail: OnboardingExtras.extensionsDetail)
                 Spacer(minLength: 8)
                 SetupButton(title: "Browse…") { OnboardingExtras.browseExtensions() }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: "Recommend apps", detail: OnboardingExtras.recommendDetail)
-                Spacer(minLength: 8)
-                Toggle("Recommend apps", isOn: Binding(get: { recommend }, set: { recommend = $0; OnboardingExtras.recommend($0) }))
-                    .labelsHidden().toggleStyle(.pilotSwitch)
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: OnboardingExtras.upscalerTitle, detail: OnboardingExtras.upscalerDetail)
-                Spacer(minLength: 8)
-                if let state = OnboardingExtras.upscalerState {
-                    Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                } else {
-                    SetupButton(title: "Download") { OnboardingExtras.fetchUpscaler() }
-                }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: OnboardingExtras.terminalTitle, detail: OnboardingExtras.terminalDetail)
-                Spacer(minLength: 8)
-                if let state = OnboardingExtras.terminalState {
-                    Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                } else {
-                    SetupButton(title: "Download") { ExtrasDownloads.shared.fetchTerminal() }
-                }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: "Other permissions", detail: "System Events, Full Disk Access, Microphone and the rest, each with its Allow")
-                Spacer(minLength: 8)
-                SetupButton(title: "Open Settings") { AppWindowController.shared.open(.permissions) }
             }
         }
     }

@@ -55,9 +55,9 @@ struct InstrumentOnboarding: View {
     private var welcome: some View {
         @Bindable var settings = engine.settings
         return VStack(alignment: .leading, spacing: 0) {
-            heading("Welcome to Pilot") {
+            heading(OnboardingModel.welcomeTitle) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Pilot makes this Mac work like Omarchy.").styleText(\.strong).foregroundStyle(style.color(\.text))
+                    Text(OnboardingModel.welcomeLine).styleText(\.strong).foregroundStyle(style.color(\.text))
                     Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
                         .styleText(\.body).lineSpacing(3).foregroundStyle(style.color(\.text2))
                 }
@@ -69,7 +69,11 @@ struct InstrumentOnboarding: View {
                     Button { LayerKeyConfirm.pick([key], settings, from: .onboarding, asking: $confirming) } label: {
                         HStack(spacing: 12) {
                             InstrumentRadio(on: on)
-                            titled(key.label, Onboarding.hyperDetail(key))
+                            VStack(alignment: .leading, spacing: 6) {
+                                let breaks = model.hyperBreaks(key, engine)
+                                titled(key.label, breaks == nil ? Onboarding.hyperDetail(key) : nil)
+                                if let breaks { HyperBreaks(text: breaks) }
+                            }
                             Spacer(minLength: 8)
                             InstrumentKey(text: key.symbol, hyper: on)
                         }
