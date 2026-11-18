@@ -89,7 +89,7 @@ struct HomePage: View {
 
     var body: some View {
         let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
-                                         tilerRunning: engine.observers.tiler.isAnswering,
+                                         tilerRunning: engine.tilerFine,
                                          lastError: engine.lastError)
         // In edit mode Done holds Return.
         let held = editing != nil ? .none : HomeReturn.target(picked: picked != nil, problems: problems, searching: searching)

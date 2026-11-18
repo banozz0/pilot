@@ -9,6 +9,9 @@ extension SettingsSchema {
     /// hidden (Q43; page map, Sven 2026-10-17); the block still keeps the other four.
     func registerTiling(block: PilotBlockStore, settings: PilotSettings, pictures: ShelfPictures) {
         register([
+            // Off for a new install (Sven, 2026-11-18): the tiler starts only once this is on, and stops when it goes off.
+            .bool("tiling.on", "Tiling: Pilot's tiler lays windows out (layouts, workspaces, every tiler move)", page: "tiling",
+                  standard: false, read: { settings.tiling }, write: { settings.tiling = $0 }),
             .bool("tiling.gaps.on", "Gaps on", page: "tiling", standard: true,
                   read: { block.block.gapsOn }, write: { on throws(ControlError) in try await block.written { $0.gapsOn = on } }),
             .int("tiling.gaps.inner", "Inner gap, in points", page: "tiling", range: 0...100, standard: 0,

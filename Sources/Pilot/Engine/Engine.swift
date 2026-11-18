@@ -30,6 +30,14 @@ final class PilotSettings {
         showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
         bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? true
+        // Off for a new install (Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open).
+        // Once, an install that ran before the switch existed starts on, so tiling stays as it was: binds.json is written
+        // by every launch's first load, and onboarding leaves its key, both later in the launch than this. Saved at once,
+        // so a relaunch mid-onboarding reads the saved off.
+        let tiling = defaults.object(forKey: Self.tilingKey) as? Bool
+            ?? (Binds.ranBefore || defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
+        defaults.set(tiling, forKey: Self.tilingKey)
+        self.tiling = tiling
         // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
         // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
         let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
@@ -183,6 +191,19 @@ final class PilotSettings {
     /// The engine starts or stops the gesture tap here.
     @ObservationIgnored var onSwipeWorkspacesChange: () -> Void = {}
 
+    /// Windows › Tiling's Tiling switch: on, Pilot's tiler lays windows out (layouts, workspaces, every tiler move); off, it
+    /// never starts and no window is tiled, moved or resized by it. Off for a new install, on for one from before it.
+    var tiling: Bool {
+        didSet {
+            guard tiling != oldValue else { return }
+            defaults.set(tiling, forKey: Self.tilingKey)
+            onTilingChange()
+        }
+    }
+    static let tilingKey = "tiling.on"
+    /// The engine starts or stops the tiler here.
+    @ObservationIgnored var onTilingChange: () -> Void = {}
+
     /// The keyboard's own brightness keys change the focused window's screen through Pilot (Setup › Displays, card
     /// agent-bo-95423314); on at first. Off, macOS gets them as before.
     var brightnessKeys: Bool {
@@ -329,7 +350,7 @@ final class Engine {
         // Deleting a workspace closes its number (Sven's Q233): what is tied to a number follows it.
         workspaceList.follow(presets: presets, layouts: layouts, snapshots: snapshots, wallpaper: .shared)
         workspaceList.closeGaps()
-        tilingSwitch = TilingSwitch(observers.tiler)
+        tilingSwitch = TilingSwitch(observers.tiler, settings: settings)
         hyperSwitch = SessionSwitch { [tap] on in tap.setHyper(on); log.notice("Hyper key \(on ? "on" : "off", privacy: .public)") }
         barSources = BarSources(readings: BarReadings(sound: SetupSound(audio: CoreAudioSystem())), observers: observers, sampler: .shared,
                                 keepAwake: .shared, timer: .shared, pilotTitle: { Engine.shared?.menuBarTitle ?? "–" },
@@ -348,7 +369,7 @@ final class Engine {
         _ = DriveModule.catalogue   // read now, never on the first press of a catalogue bind inside the tap
         binds.onChange = { [unowned self] in armMouseButtons() }
         let myBinds = MyBinds.preset(registry: registry.defaults)
-        AbilitySettings.shared.seed(existingUser: FileManager.default.fileExists(atPath: Binds.url.path))
+        AbilitySettings.shared.seed(existingUser: Binds.ranBefore)
         // A mouse button whose action is not on this Mac (Sven's own Now Playing extension) stays free: a bind there would
         // take the button and run nothing. An extension's id always builds an action, so its command is looked up too.
         binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys)) { [unowned self] in
@@ -375,6 +396,14 @@ final class Engine {
         settings.onOverlayDelayChange = { [unowned self] in tap.update(quickTapWindow: HoldOverlay.quickTapWindow(delay: settings.overlayDelay)) }
         settings.onOverlayDelayChange()
         settings.onSwipeWorkspacesChange = { [unowned self] in armPointerTaps() }
+        // Tiling's switch, from its page, the dropdown or `pilot set tiling.on`: on starts the tiler, off stops it and puts
+        // every parked window back on screen.
+        settings.onTilingChange = { [unowned self] in
+            tilingSwitch.follow(settings.tiling)
+            wslog.notice("tiling \(self.settings.tiling ? "on" : "off", privacy: .public)")
+            if settings.tiling { startTiler() } else { observers.tiler.stopEngine() }
+        }
+        observers.tiler.isWanted = { [settings] in settings.tiling }
         let stepWorkspace = { [unowned self] (fire: WorkspaceSwipe.Fire) in _ = action(fire == .next ? "workspaces.next" : "workspaces.previous")?.run() }
         swipe.onSwipe = stepWorkspace
         hyperScroll.onStep = stepWorkspace
@@ -596,12 +625,17 @@ final class Engine {
     }
 
     /// Pilot's tiler with Pilot's settings: at launch, and Home's and the dropdown's Restart. Windows a crash left off
-    /// screen come back first, once no other tiler runs (card agent-bo-95422999, AC5).
+    /// screen come back first, once no other tiler runs (card agent-bo-95422999, AC5). Only while Tiling's switch is on
+    /// (TilerService.isWanted), and once Accessibility started the engine; a sandbox's stand-in starts without it.
     func startTiler() {
+        guard started || !observers.tiler.engine.movesRealWindows else { return }
         Task { [tiler = observers.tiler, pilotBlock, rescue] in
             await tiler.startEngine({ tiler.tilerSettings(pilotBlock.block) }, beforeStart: { rescue.bringBackQuietly() })
         }
     }
+
+    /// Home's and the dropdown's Needs you: the tiler counts as missing only while tiling is meant to be on.
+    var tilerFine: Bool { !settings.tiling || observers.tiler.isAnswering }
 
     func quit() {
         // Every window the engine parked goes back on screen.
@@ -628,7 +662,7 @@ final class Engine {
     /// As above with `secureInput` as its holder: the dropdown keeps the one it opened with, as taking the keyboard from
     /// the password field may turn secure input off while its Make a password is reached for.
     func homeProblems(secureInput holder: SecureInputHolder?) -> [HomeProblems.Problem] {
-        HomeProblems.list(accessibilityGranted: gate.isTrusted, secureInput: holder, tilerRunning: observers.tiler.isAnswering,
+        HomeProblems.list(accessibilityGranted: gate.isTrusted, secureInput: holder, tilerRunning: tilerFine,
                           lastError: lastError, password: isListed(HomeProblems.passwordAction))
     }
 
@@ -726,7 +760,7 @@ final class Engine {
         for on in [true, false] {
             try? registry.register(Action(id: on ? "engine.tilingOn" : "engine.tilingOff", label: on ? "Turn tiling on" : "Turn tiling off",
                                           module: .engine) { [unowned self] in
-                if tilingSwitch.tiling != on { tilingSwitch.toggle() }
+                settings.tiling = on
             })
         }
         try? registry.register(Action(id: "engine.support", label: "Support Pilot", module: .engine) {

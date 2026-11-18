@@ -7,11 +7,13 @@ import PilotTiler
 /// Workspaces page move a file's windows, never the Mac's. `<folder>/windows.json` is its window list in the tiler's
 /// listing shape (`[{"window-id", "app-name", "app-bundle-id", "app-pid", "workspace", "monitor-id", "window-layout",
 /// "window-title"}]`, tree order), read at each ask; a move or a swap writes it back as the tiler would place the
-/// windows, and every call is a line in `<folder>/commands.log`.
+/// windows, and every call is a line in `<folder>/commands.log`, its start and stop too. PILOT_SANDBOX_TILER_STOPPED=1 makes
+/// it stopped until a start, as Pilot's tiler is before Tiling's switch turns it on.
 @MainActor
 final class TilerFixture: TilerEngineRunning {
     let folder: URL
-    var isRunning = true
+    var isRunning = ProcessInfo.processInfo.environment["PILOT_SANDBOX_TILER_STOPPED"] != "1"
+    let movesRealWindows = false
 
     init(folder: URL) { self.folder = folder }
 
@@ -26,11 +28,15 @@ final class TilerFixture: TilerEngineRunning {
         try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [[String: Any]] ?? []
     }
 
-    func run(_ command: AeroCommand) async throws -> String {
+    private func log(_ text: String) {
         let log = folder.appending(path: "commands.log")
-        let line = Data((command.arguments.joined(separator: " ") + "\n").utf8)
-        if let handle = try? FileHandle(forWritingTo: log) { handle.seekToEndOfFile(); handle.write(line); try handle.close() }
-        else { try line.write(to: log) }
+        let line = Data((text + "\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: log) { handle.seekToEndOfFile(); handle.write(line); try? handle.close() }
+        else { try? line.write(to: log) }
+    }
+
+    func run(_ command: AeroCommand) async throws -> String {
+        log(command.arguments.joined(separator: " "))
         var rows = try rows()
         let index = { (id: Int) throws in
             guard let i = rows.firstIndex(where: { $0["window-id"] as? Int == id }) else { throw Refused(command: command.arguments) }
@@ -70,6 +76,6 @@ final class TilerFixture: TilerEngineRunning {
     func apply(_ settings: TilerSettings) async throws {}
     func setLayouts(_ layouts: [String: WorkspaceLayout]) {}
     func arrange(_ workspace: String, as preset: LayoutPreset) async throws {}
-    func start() async throws {}
-    func stop() {}
+    func start() async throws { log("start"); isRunning = true }
+    func stop() { log("stop"); isRunning = false }
 }

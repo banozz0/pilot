@@ -198,7 +198,7 @@ public enum Abilities {
         "engine.restartTiler": "Starts Pilot's tiler again when it stopped answering, as Home's Restart does.",
         "engine.grantAccessibility": "Asks for Accessibility and opens its pane in System Settings, with Pilot's icon beside it to drag into the list.",
         "system.openFullDiskAccess": "Opens Full Disk Access in System Settings, where Pilot's switch lives.",
-        "engine.tilingOn": "Turns tiling back on after the dropdown's Tiling switch turned it off.",
+        "engine.tilingOn": "Turns tiling on, as Windows › Tiling's switch does: off for a new install.",
         "engine.tilingOff": "Stops tiling and brings every workspace's windows onto the screen, as the dropdown's Tiling switch does.",
         "engine.support": "Opens Pilot's GitHub Sponsors page.",
         // Apps
