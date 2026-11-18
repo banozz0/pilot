@@ -61,7 +61,9 @@ struct BindPresetTests {
         #expect(b.count == 117)
         #expect(Set(b.values).count == b.count)
         #expect(BindStore(presets: [.pilot: b]).refused.isEmpty)
-        #expect(PilotDefault.mouse.count == 8 && PilotDefault.mouse[Key("Mouse Scroll Up")] == "media.volumeUp")
+        #expect(PilotDefault.mouse.count == 5 && PilotDefault.mouse[Key("Mouse Scroll Up")] == "media.volumeUp")
+        // A new install's plain clicks stay the apps' own: a middle click once opened Ghostty (2026-11-18).
+        #expect(!PilotDefault.mouse.keys.contains { !$0.hyper })
         #expect(PilotDefault.scratch == ["apps.launcher": Key("space")])
     }
 

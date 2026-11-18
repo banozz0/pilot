@@ -12,11 +12,12 @@ struct PilotDefaultTests {
     func registered() {
         let engine = Engine(), registry = engine.registry
         for id in PilotDefault.binds.keys { #expect(engine.action(id) != nil, "\(id)") }
-        // A new file's mouse buttons each run an action here; Mouse 4 runs Sven's own Now Playing extension, which a
-        // Mac without it lacks, so it is left free rather than taken to run nothing.
+        // A new file's mouse buttons each run an action here, all under Hyper: a plain click stays the app's own
+        // (2026-11-18: a middle click opened Ghostty).
         let mouse = engine.binds.store.mouseBinds
         for b in mouse { #expect(engine.action(b.bind.action) != nil, "\(b.trigger.label)") }
-        #expect(mouse.count == PilotDefault.mouse.count - 1)
+        #expect(mouse.count == PilotDefault.mouse.count)
+        #expect(engine.binds.store.action(for: Key("Mouse 3", hyper: false)) == nil)
         #expect(engine.binds.store.action(for: Key("Mouse 4", hyper: false)) == nil)
         #expect(registry.actions["drive.nextTab"]?.label == "Next tab" && registry.defaults["drive.nextTab"] == nil)
         #expect(PilotDefault.binds["terminal.drop"] == registry.defaults["terminal.drop"])

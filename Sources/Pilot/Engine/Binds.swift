@@ -46,7 +46,8 @@ final class Binds {
             lastError = "\(fileURL.path) not read: \(error)"
             return log.error("binds: \(self.lastError ?? "", privacy: .public); the defaults run")
         }
-        // A new install starts with Sven's mouse buttons too (Q531); a file keeps its own, none included.
+        // A new install starts with Sven's Hyper + mouse buttons too (Q531; no plain click since 2026-11-18, PilotDefault.mouse);
+        // a file keeps its own, none included.
         if file == nil { for (key, action) in mouse() { store.setMouse(key, to: action) } }
         logRefused()
         log.notice("binds: \(self.store.binds.count) loaded from \(self.fileURL.path, privacy: .public), preset \(self.store.preset.id, privacy: .public)")
