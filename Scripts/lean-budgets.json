@@ -7,7 +7,7 @@
   "helperIdleCPUPercent": 2,
   "launchBindsSeconds": 2,
   "launchFilesSeconds": 5,
-  "widgetsWebIdleMB": 60,
+  "widgetsWebIdleMB": 6.3,
   "widgetsWebIdleCPUPercent": 1.5,
   "ratchetMarginPercent": 17
 }
