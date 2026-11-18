@@ -30,10 +30,9 @@
 
 <p align="center">macOS 27 or later · Apple silicon<br />Free and open source · MIT</p>
 
-<!-- video 1: swap the next two blocks for the uploaded clip's address on a line of its own -->
-[![Pilot in a minute: windows tiled on a themed desktop, with a play button](.github/readme/pilot-in-a-minute.jpg)](https://pilotformac.com)
+<!-- video 1: Pilot in a minute -->
 
-<p align="center"><sub>▶ Pilot in a minute. Plays on pilotformac.com.</sub></p>
+https://github.com/user-attachments/assets/ed72725e-d60d-4e99-8864-794a24263009
 
 ## What it does
 
@@ -76,10 +75,9 @@ Pilot's own tiler arranges every window across nine workspaces, without turning 
 
 Give any key a job by clicking it on a picture of your keyboard, never in a config file. Hold Hyper and a panel shows what every key does. [Keys and binds](https://pilotformac.com/keys.html)
 
-<!-- video 2: swap the next two blocks for the uploaded clip's address on a line of its own -->
-[![Your keyboard runs the Mac: Pilot's Keys page, with a play button](.github/readme/keyboard-runs-the-mac.jpg)](https://pilotformac.com/#keyboard)
+<!-- video 2: Your keyboard runs the Mac -->
 
-<p align="center"><sub>▶ Keys and windows. Plays on pilotformac.com.</sub></p>
+https://github.com/user-attachments/assets/39581434-7de8-477b-b96d-850946f28812
 
 ### 📋 Clipboard, notes and snippets
 
