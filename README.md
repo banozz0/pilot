@@ -59,18 +59,13 @@ The keyboard-driven desktop Linux people love, made for the Mac. It runs from Hy
 
 Six layouts across nine workspaces, all from the keys. No need to turn off System Integrity Protection. [Windows](https://pilotformac.com/windows.html)
 
-<details>
-<summary>See the Workspaces page</summary>
-
 ![Pilot's Workspaces page: four workspaces, each with its layout, the apps that open in it and where they land](.github/readme/shot-tiling-settings.jpg)
-
-</details>
 
 ### 🔎 A launcher that does the rest
 
 <kbd>Hyper</kbd>+<kbd>Space</kbd> opens one box for apps, windows, files, settings and answers. Type an app and its own commands come with it. [Launcher](https://pilotformac.com/launcher.html)
 
-![The launcher with Ghostex typed: the app as the best match, then its own commands with their shortcuts](.github/readme/shot-launcher.jpg)
+<p align="center"><img src=".github/readme/shot-launcher.jpg" width="640" alt="The launcher with Ghostex typed: the app as the best match, then its own commands with their shortcuts" /></p>
 
 ### ⌨️ Your keyboard runs the Mac
 
