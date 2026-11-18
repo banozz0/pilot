@@ -59,7 +59,6 @@ private struct OnboardingSteps: View {
     @Environment(\.dismissWindow) private var dismiss
     @Bindable var model: OnboardingModel
     @State private var confirming: LayerKeyChange?
-    @State private var more = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -185,6 +184,17 @@ private struct OnboardingSteps: View {
         let key = engine.settings.layerKeys.label
         return VStack(alignment: .leading, spacing: 12) {
             title("Try it")
+            TryItScroll(showsMore: model.showsMore) { tryItPanels(key) }
+            HStack {
+                FinePrint(text: "Pilot is in the menu bar")
+                Spacer()
+                Button("Finish") { model.finish(); dismiss(id: "onboarding"); OnboardingWindow.close() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
+            }
+        }
+    }
+
+    private func tryItPanels(_ key: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             Card {
                 prompt("Hold \(key)", "your binds appear while you hold it", done: model.tryIt.held)
                 if let files = model.filesKey(engine) {
@@ -194,16 +204,12 @@ private struct OnboardingSteps: View {
             }
             PanelHeading(text: "The other permissions")
             Card { CardRow { GrantWalkPanel(walk: model.walk) } }
-            Button { more.toggle() } label: {
-                Label("More, if you want", systemImage: more ? "chevron.down" : "chevron.right").font(ink.ui(12.5, .medium)).foregroundStyle(ink.muted)
+            Button { model.showsMore.toggle() } label: {
+                Label("More, if you want", systemImage: model.showsMore ? "chevron.down" : "chevron.right").font(ink.ui(12.5, .medium)).foregroundStyle(ink.muted)
             }
             .buttonStyle(.plain)
-            if more { Card { OnboardingMore() } }
-            HStack {
-                FinePrint(text: "Pilot is in the menu bar")
-                Spacer()
-                Button("Finish") { model.finish(); dismiss(id: "onboarding"); OnboardingWindow.close() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
-            }
+            .id(OnboardingModel.moreID)
+            if model.showsMore { Card { OnboardingMore() } }
         }
     }
 
@@ -356,6 +362,10 @@ final class OnboardingModel {
     var step = Step.welcome
     private(set) var status = Onboarding.Status()
     var tryIt = Onboarding.TryIt(menuOpens: 0)
+    /// Try it's "More, if you want", open.
+    var showsMore = false
+    /// More's place in Try it's scroll (TryItScroll), which opening it scrolls to.
+    static let moreID = "onboarding.more"
     /// Pilot Files came forward since Try it showed.
     private(set) var filesOpened = false
     let setup: OnboardingSetup
@@ -403,7 +413,7 @@ final class OnboardingModel {
     /// A step's button: the step, kept so a relaunch opens there.
     func go(_ next: Step) {
         // Moving on closes the helper beside Settings that Accessibility's Allow shows.
-        PermissionDragPanel.close()
+        PermissionDragPanel.close(reason: "onboarding moved to \(next.rawValue)")
         step = next
         OnboardingWindow.reached(next)
     }
@@ -438,7 +448,7 @@ final class OnboardingModel {
         timer = nil
         // Welcome closing ends Allow the rest and takes the helper beside Settings with it.
         walk.stop()
-        PermissionDragPanel.close()
+        PermissionDragPanel.close(reason: "Welcome closed")
     }
 
     func finish() {

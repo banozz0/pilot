@@ -11,8 +11,6 @@ struct InstrumentOnboarding: View {
     @Bindable var model: OnboardingModel
     @Binding var confirming: LayerKeyChange?
     let finish: () -> Void
-    /// Try it's optional panel, open.
-    @State private var more = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -163,6 +161,13 @@ struct InstrumentOnboarding: View {
         let key = engine.settings.layerKeys
         return VStack(alignment: .leading, spacing: 14) {
             heading("Try it").padding(.bottom, -14)
+            TryItScroll(showsMore: model.showsMore) { tryItPanels(key) }
+            foot("Pilot is in the menu bar", "Finish", action: finish)
+        }
+    }
+
+    private func tryItPanels(_ key: [LayerKey]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
             InstrumentPanel(title: "The Hyper key", note: key.label) {
                 prompt("Hold \(key.label)", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
                 if let files = model.filesKey(engine) {
@@ -176,11 +181,11 @@ struct InstrumentOnboarding: View {
                 GrantWalkPanel(walk: model.walk).padding(.horizontal, 18).padding(.vertical, 12)
             }
             InstrumentPanel(title: "More, if you want") {
-                Button(more ? "Hide" : "Show") { more.toggle() }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
+                Button(model.showsMore ? "Hide" : "Show") { model.showsMore.toggle() }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
             } content: {
-                if more { OnboardingMore() }
+                if model.showsMore { OnboardingMore() }
             }
-            foot("Pilot is in the menu bar", "Finish", action: finish)
+            .id(OnboardingModel.moreID)
         }
     }
 

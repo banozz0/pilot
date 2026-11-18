@@ -99,6 +99,11 @@ struct OnboardingRenders {
         model.startTryIt()
         try instrument(model, engine, "4a-try-it", dir)
         try toybox(model, engine, "4a-try-it", dir)
+        // More open (tester, 2026-11-18): the panels scroll inside Set up's height, so the window stays on the screen.
+        model.showsMore = true
+        try instrument(model, engine, "4d-try-it-more", dir)
+        try toybox(model, engine, "4d-try-it-more", dir)
+        model.showsMore = false
         #expect(grants.log.isEmpty && model.walk.phase == .ready)
         // The walk on a model of its own, drawn without a window's appear and disappear: a closed render window's late
         // onDisappear stops its model's walk, as closing Welcome does.

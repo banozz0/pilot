@@ -314,6 +314,22 @@ struct GrantWalkPanel: View {
     }
 }
 
+/// Try it's panels in both styles, scrolling inside Set up's height, so More opening never grows the window past the
+/// screen (a tester's grew too tall to reach Finish, 2026-11-18); opening More scrolls to it, tagged `OnboardingModel.moreID`.
+struct TryItScroll<Content: View>: View {
+    let showsMore: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollViewReader { scroll in
+            ScrollView { content }
+                .onChange(of: showsMore) { if showsMore { withAnimation { scroll.scrollTo(OnboardingModel.moreID, anchor: .top) } } }
+        }
+        .frame(maxHeight: OnboardingView.scrollHeight)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// Try it's "More, if you want", folded: the AI provider, Extensions, Recommend apps, the upscaler's Max quality, the
 /// terminal's download (T76), and the other permissions, which live in Settings › Permissions. Never needed for Finish.
 struct OnboardingMore: View {
