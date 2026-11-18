@@ -29,6 +29,7 @@ Ratchet (story 142; Sven Q883, Q893): a budgeted reading at least ratchetMarginP
 into lean-budgets.json and printed with its commit line. It never raises one: a rise is Sven's yes. A build is the bundle's
 CFBundleVersion (the running Pilot's for idle), so rerunning one build counts once; the last reading per budget per build
 is kept in --readings (default build/lean-readings.json). Launch timings count only with --runs 5 or more, as their worst run.
+The keys in NO_RATCHET are still read and checked, but never lowered.
 Menu (spec pilot-1.1 T74, Sven Q884): Pilot logs each Hyper+Space press as "menu open: <ms> ms from key down to first
 frame, build <n>", from the key-down's own timestamp to the panel's first visible frame, in Sven's own use (agents never
 press it). menu reads the last --days of those lines, across relaunches, and prints the p75 (nearest rank) and the count
@@ -210,6 +211,11 @@ def write_budgets(path, budgets):
         f.write("\n")
 
 
+# Sven Q236 (2026-11-18): the web widgets' idle RAM stays at 60 MB. Its readings came from one WebKit process, and a
+# second web widget would break a budget lowered from them.
+NO_RATCHET = {"widgetsWebIdleMB"}
+
+
 def ratchet(budgets, report, path, readings_path):
     """Lowers each budget beaten by the margin on two builds in a row (module doc); never raises one."""
     margin = budgets.get("ratchetMarginPercent", 10) / 100
@@ -225,7 +231,7 @@ def ratchet(budgets, report, path, readings_path):
         last = [r for r in kept.get(key, []) if r["build"] != build][-1:]
         kept[key] = last + [{"build": build, "value": value}]
         old = budgets[key]
-        if len(kept[key]) < 2 or any(r["value"] > old * (1 - margin) for r in kept[key]):
+        if key in NO_RATCHET or len(kept[key]) < 2 or any(r["value"] > old * (1 - margin) for r in kept[key]):
             continue
         worst = max(r["value"] for r in kept[key])
         new = math.ceil(worst * (1 + margin) * 10) / 10
