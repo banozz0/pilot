@@ -97,7 +97,7 @@ public struct Helper: Equatable, Sendable, Identifiable {
     /// The path of its command in the folders Install looks in; Pilot runs with launchd's short PATH, so the folders
     /// are read, never PATH.
     public func path(isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> String? {
-        CatalogueEntry.Check.commandFolders.lazy.map { NSString(string: "\($0)/\(self.command)").expandingTildeInPath }.first(where: isExecutable)
+        CatalogueEntry.Check.commandFolders.lazy.map { "\($0)/\(self.command)" }.first(where: isExecutable)
     }
 
     /// The ids of the helpers installed now.

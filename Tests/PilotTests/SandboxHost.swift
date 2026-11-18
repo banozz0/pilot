@@ -40,6 +40,9 @@ struct SandboxHost {
         // PILOT_SANDBOX_TILER=<folder>: a stand-in for Pilot's tiler with a file's windows (TilerFixture), made before the Engine
         // makes its tiler, so `pilot workspace move` carries those windows, never the Mac's.
         TilerFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_TILER"])
+        // PILOT_SANDBOX_TOOLS=<folder>: a stand-in Mac for where commands land: `<folder>/home` as home and Homebrew's
+        // prefixes under `<folder>`, so `pilot list helpers` finds a fixture's npm (an nvm or Volta one), never the Mac's.
+        if let tools = ProcessInfo.processInfo.environment["PILOT_SANDBOX_TOOLS"] { CatalogueEntry.Check.standIn = ("\(tools)/home", tools) }
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
         // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows

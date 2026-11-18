@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// One thing Install, Remove and Update act on: a Homebrew cask or formula, a `uv` tool, a global npm package by name,
 /// an App Store app by its id (card agent-bo-95422998), or a pipx tool, a cargo crate or a Go module path (N9). The name is a token Homebrew, PyPI, npm or mas would accept,
@@ -124,13 +125,47 @@ public struct CatalogueEntry: Equatable, Sendable {
     public enum Check: Hashable, Sendable {
         case bundle(String), paths([String]), command(String)
 
-        /// Where commands land: Homebrew's two prefixes, then the vendors' own installers. Not /usr/bin, which holds
-        /// macOS's own copies (ruby, vim). Pilot runs with launchd's short PATH, so PATH cannot say.
-        public static let commandFolders = ["/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.cargo/bin", "~/.bun/bin", "~/.deno/bin"]
+        /// Where commands land: Homebrew's two prefixes, the vendors' own installers, then Node's version managers', where
+        /// npm and what it installs live (a tester's npm under one read missing, 2026-11-18). Not /usr/bin, which holds
+        /// macOS's own copies (ruby, vim). Pilot runs with launchd's short PATH, and a version manager adds its folder only
+        /// in an interactive shell, so PATH cannot say. Read again after 5 s, so a Node installed since launch is found, while
+        /// a menu open, which checks every catalogue row, lists nvm's folder once.
+        public static var commandFolders: [String] {
+            cache.withLock { cached in
+                if let cached, cached.at.timeIntervalSinceNow > -5 { return cached.folders }
+                let fresh = folders(home: standIn?.home ?? NSHomeDirectory(), root: standIn?.root ?? "")
+                cached = (Date(), fresh)
+                return fresh
+            }
+        }
+
+        private static let cache = Mutex<(at: Date, folders: [String])?>(nil)
+
+        /// A sandbox run's stand-in Mac (PILOT_SANDBOX_TOOLS): its home and the folder Homebrew's prefixes sit under, so
+        /// `pilot list helpers` reads a fixture's folders, never the Mac's. Set once, before the verbs serve.
+        nonisolated(unsafe) public static var standIn: (home: String, root: String)?
+
+        /// The folders for `home`, Homebrew's under `root` (a stand-in Mac's folder; the Mac's own when empty). nvm's is
+        /// its default Node's bin: the newest installed version that `alias/default` names (`22`, `v22.11.0`), else the
+        /// newest installed. fnm's is its default alias, in each of the homes fnm has used.
+        public static func folders(home: String, root: String = "",
+                                   list: (String) -> [String] = { (try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? [] },
+                                   read: (String) -> String? = { try? String(contentsOfFile: $0, encoding: .utf8) }) -> [String] {
+            let nvm = "\(home)/.nvm/versions/node"
+            let versions = list(nvm).filter { $0.hasPrefix("v") }.sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+            let named = read("\(home)/.nvm/alias/default")?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let wanted = named.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+            let pick = wanted.flatMap { w in versions.first { $0.dropFirst() == w || $0.dropFirst().hasPrefix(w + ".") } } ?? versions.first
+            return ["/opt/homebrew/bin", "/usr/local/bin"].map { root + $0 }
+                + [".local/bin", ".cargo/bin", ".bun/bin", ".deno/bin"].map { "\(home)/\($0)" }
+                + (pick.map { ["\(nvm)/\($0)/bin"] } ?? [])
+                + [".volta/bin", ".local/share/fnm/aliases/default/bin", "Library/Application Support/fnm/aliases/default/bin",
+                   ".fnm/aliases/default/bin", ".asdf/shims", ".local/share/mise/shims", ".nodenv/shims", "n/bin"].map { "\(home)/\($0)" }
+        }
 
         /// Every copy of a command in those folders, in their order (Update reads each npm's own tree).
         public static func copies(of name: String, isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> [String] {
-            commandFolders.map { NSString(string: "\($0)/\(name)").expandingTildeInPath }.filter(isExecutable)
+            commandFolders.map { "\($0)/\(name)" }.filter(isExecutable)
         }
 
         public func isMet(bundleInstalled: (String) -> Bool, fileExists: (String) -> Bool) -> Bool {
