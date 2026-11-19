@@ -1,20 +1,24 @@
 // The React side of pilot-ext-host (ADR 0017): a react-reconciler host that commits into a plain tree, and the
 // serializer that turns each commit into the list or detail answer of Pilot's private wire (ADR 0010's lines). Every
 // commit that changes the answer is written, so data that arrives after the first render fills the view in.
+// Callbacks (T2): each Action's `onAction` goes out as an `invoke` action whose handler id is its host element's serial
+// and the prop's name, so the id stays the same while the element lives and a press always reaches its newest props.
+// The table is rebuilt on every answer; an id it lacks is stale. Each query or invoke Pilot numbers (`seq`) is
+// answered by the next line, which carries `ack`: the commit it caused, else the current view again.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
-import { ConcurrentRoot, DefaultEventPriority, NoEventPriority } from "react-reconciler/constants";
+import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 
 const native = globalThis.__native;
 
-let priority = NoEventPriority;
+let priority = NoEventPriority, serials = 0;
 const noop = () => {};
 const hostConfig = {
   supportsMutation: true, supportsPersistence: false, supportsHydration: false, supportsMicrotasks: true,
   isPrimaryRenderer: true, noTimeout: -1, warnsIfNotActing: false,
   rendererPackageName: "pilot-ext-host", rendererVersion: "1",
   NotPendingTransition: null, HostTransitionContext: createContext(null),
-  createInstance: (type, props) => ({ type, props, children: [] }),
+  createInstance: (type, props) => ({ type, props, children: [], serial: ++serials }),
   createTextInstance: (text) => ({ text }),
   appendInitialChild: (parent, child) => { parent.children.push(child); },
   appendChild: (parent, child) => { move(parent.children, child); },
@@ -82,9 +86,23 @@ function accessory(accessories) {
   return undefined;
 }
 
-function item(node, section) {
+/** The Actions under `nodes` (an ActionPanel, its sections), in order: each pressable one as an invoke action, its
+ *  handler entered in `handlers`. */
+function actions(nodes, handlers, out = []) {
+  for (const node of nodes) {
+    if (node.type === "Action") {
+      if (typeof node.props.onAction !== "function") continue;
+      const handler = `${node.serial}.onAction`;
+      handlers.set(handler, node);
+      out.push({ type: "invoke", handler, title: words(node.props.title) || undefined });
+    } else if (node.type === "ActionPanel" || node.type === "ActionPanel.Section") actions(node.children, handlers, out);
+  }
+  return out;
+}
+
+function item(node, section, handlers) {
   const p = node.props;
-  const row = { title: words(p.title) ?? "", actions: [] };
+  const row = { title: words(p.title) ?? "", actions: actions(node.children, handlers) };
   if (p.id != null) row.id = String(p.id);
   const subtitle = words(p.subtitle);
   if (subtitle) row.subtitle = subtitle;
@@ -96,11 +114,11 @@ function item(node, section) {
   return row;
 }
 
-function rows(nodes, section, out) {
+function rows(nodes, section, handlers, out) {
   for (const node of nodes) {
-    if (node.type === "List.Item") out.push(item(node, section));
-    else if (node.type === "List.Section") rows(node.children, words(node.props.title) ?? section, out);
-    else if (node.children) rows(node.children, section, out);
+    if (node.type === "List.Item") out.push(item(node, section, handlers));
+    else if (node.type === "List.Section") rows(node.children, words(node.props.title) ?? section, handlers, out);
+    else if (node.children) rows(node.children, section, handlers, out);
   }
   return out;
 }
@@ -115,11 +133,17 @@ function view(nodes) {
   return null;
 }
 
-function answer(container) {
+/** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
+ *  loading row. */
+function answer(container, handlers) {
   const root = view(container.children);
   if (!root) return null;
-  if (root.type === "Detail") return { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: [] };
-  return { type: "list", items: rows(root.children, undefined, []) };
+  if (root.type === "Detail") {
+    return { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
+  }
+  const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
+  if (root.props.isLoading === true) list.isLoading = true;
+  return list;
 }
 
 // MARK: The run
@@ -129,27 +153,35 @@ function send(message) {
   native.write(JSON.stringify(message));
 }
 
-export function fail(error) {
+/** The error line, answering request `ack` when one waits. */
+export function fail(error, ack) {
   const text = error instanceof Error ? error.message : String(error);
   console.error(error instanceof Error && error.stack ? `${text}\n${error.stack}` : text);
-  send({ type: "error", text: text.slice(0, 300) });
+  send({ type: "error", text: text.slice(0, 300), ack: typeof ack === "number" ? ack : undefined });
 }
 
 /** Renders the command `component` for the run `message`, writing each changed answer. */
 export function render(component, message) {
-  let last = null, queued = false;
+  let last = null, queued = false, handlers = new Map(), ack = null;
+  /** Writes the answer when it changed, or, when a request waits, with its `ack` even unchanged. */
+  function flush() {
+    const table = new Map();
+    const now = answer(container, table) ?? (ack != null ? { type: "list", items: [] } : null);
+    handlers = table;
+    if (!now) return;
+    const line = JSON.stringify(now);
+    if (ack == null && line === last) return;
+    last = line;
+    // `now` is an object, so the ack goes in before its closing brace, the line stringified once.
+    native.write(ack == null ? line : `${line.slice(0, -1)},"ack":${ack}}`);
+    ack = null;
+  }
   const container = {
     children: [],
     committed() {
       if (queued) return;
       queued = true;
-      queueMicrotask(() => {
-        queued = false;
-        const now = answer(container);
-        if (!now) return;
-        const line = JSON.stringify(now);
-        if (line !== last) { last = line; native.write(line); }
-      });
+      queueMicrotask(() => { queued = false; flush(); });
     },
   };
   // Only an error no boundary caught is the run's error line; one a boundary caught, or React recovered from, leaves the
@@ -158,12 +190,49 @@ export function render(component, message) {
   const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, logged, logged, noop);
   const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
   reconciler.updateContainer(createElement(component, props), root, null, null);
+
+  /** Request `seq`: `work` runs, its commit (flushed in this call's microtasks) carries the ack; when nothing committed,
+   *  the current view goes again on the next turn. A throw is the error line, which answers it. */
+  function request(seq, work) {
+    ack = typeof seq === "number" ? seq : null;
+    try {
+      work();
+    } catch (error) {
+      const waiting = ack;
+      ack = null;
+      fail(error, waiting);
+      return;
+    }
+    // Still waiting once this turn's commits flushed: nothing committed, so the current view answers.
+    const mine = ack;
+    if (mine != null) setTimeout(() => { if (ack === mine) flush(); }, 0);
+  }
+
   return {
     /** A later search: the List's own onSearchTextChange, when it takes one. */
-    search(text) {
-      const list = view(container.children);
-      const handler = list?.props?.onSearchTextChange;
-      if (typeof handler === "function") handler(text);
+    search(text, seq) {
+      request(seq, () => {
+        const list = view(container.children);
+        const handler = list?.props?.onSearchTextChange;
+        if (typeof handler === "function") handler(text);
+      });
+    },
+    /** A press: the callback `id` names in the newest answer, called with the element's props as they are now, at a
+     *  discrete event's priority so its update renders at once, as a click's does. A stale id answers the current view. */
+    invoke(id, seq) {
+      request(seq, () => {
+        const node = handlers.get(id);
+        const callback = node?.props?.[String(id).split(".").pop()];
+        if (typeof callback !== "function") return console.error(`no handler ${id} in the current view: answering it unchanged`);
+        const before = priority;
+        priority = DiscreteEventPriority;
+        try {
+          const result = callback();
+          if (result && typeof result.then === "function") result.then(undefined, (error) => fail(error));
+        } finally {
+          priority = before;
+        }
+      });
     },
     close() { reconciler.updateContainer(null, root, null, null); },
   };

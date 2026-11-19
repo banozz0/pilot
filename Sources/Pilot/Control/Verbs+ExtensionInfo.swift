@@ -112,6 +112,7 @@ extension ControlVerbs {
         case .timer(let timer): o["text"] = .string(timer.title)
         case .alert(let alert): o["text"] = .string(alert.text)
         case .ai(let task, _, _): o["text"] = .string(task)
+        case .invoke(let handler): o["handler"] = .string(handler)
         }
         return .object(o)
     }

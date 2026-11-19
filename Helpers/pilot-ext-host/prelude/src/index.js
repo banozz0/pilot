@@ -1,6 +1,7 @@
 // pilot-ext-prelude.js's entry (ADR 0017): loaded into each fresh JSContext before an extension's bundle. globals.js
 // comes first, so React's scheduler finds its timers. The host then calls __pilotStart with the bundle's CommonJS
-// factory and the run message, __pilotQuery with each later search and __pilotClose when the view closes.
+// factory and the run message, __pilotQuery with each later search, __pilotInvoke with each press (T2), both numbered
+// by Pilot so their answer carries the number back, and __pilotClose when the view closes.
 import "./globals.js";
 import * as React from "react";
 import * as JSX from "react/jsx-runtime";
@@ -31,9 +32,9 @@ globalThis.__pilotStart = (factory, message) => {
   }
 };
 
-globalThis.__pilotQuery = (text) => {
-  try { view?.search(text); } catch (error) { fail(error); }
-};
+// Each catches its own work's throw (render's request), answering its seq.
+globalThis.__pilotQuery = (text, seq) => { view ? view.search(text, seq) : fail(new Error("no view is open"), seq); };
+globalThis.__pilotInvoke = (handler, seq) => { view ? view.invoke(handler, seq) : fail(new Error("no view is open"), seq); };
 
 globalThis.__pilotClose = () => {
   try { view?.close(); } catch (error) { console.error(error); }

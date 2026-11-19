@@ -226,6 +226,9 @@ enum ExtensionActions {
                 let next = await ExtensionAI.ask(task, text, then: then, runner: runner, heard: heard)
                 await run(next, in: ext, inputs: inputs, quiet: quiet)?.value
             }
+        case .invoke:
+            // Pressed only in the open view that holds its host (ExtensionListSession.pick); out here it reaches nothing.
+            dlog.error("extension: \(ext.id, privacy: .public) pressed a callback outside its view, ignored")
         }
         return nil
     }

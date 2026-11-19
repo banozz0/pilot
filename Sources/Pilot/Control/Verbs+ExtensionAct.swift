@@ -6,7 +6,8 @@ import PilotCore
 /// Option+Return), with the answer to what it asks (--answer). It asks the page once, as `ext page` does, then performs
 /// the action and asks the page again; the answer is what it did and the blocks after. Its command runs as the page's
 /// do, the HUD left out (its line comes back instead); an open, copy, paste, Pilot action, timer or alert is answered,
-/// never performed, as `ext run` answers them.
+/// never performed, as `ext run` answers them. A Raycast-format extension (ADR 0017) has no page: `ext act` presses a
+/// callback of one of its view's rows instead (actView, T2).
 extension ControlVerbs {
     /// One action a page offers: its name as `ext act` takes it ("Refresh", "Milk/Remove"), the action, and the input box
     /// it belongs to (nil for any other block), with whether it is that box's Option+Return, and whether it is a row's or a
@@ -106,6 +107,7 @@ extension ControlVerbs {
     /// `ext act <id> <action> [--input <text>] [--answer <text>] [--alt]`.
     static func actExtension(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let ext = try await tools.require(try args.word(1, "id"))
+        if ext.page == nil, ext.commands.contains(where: { $0.runtime == .raycast }) { return try await actView(ext, args, tools, peer: peer) }
         guard let page = ext.page else { throw ControlError(.badValue, "\(ext.id) declares no page; pilot ext show \(ext.id) says what it has") }
         let word = try args.word(2, "action, by its name as pilot ext page \(ext.id) shows it (a button, a row, row/action)")
         // The first Allow reads the page; the press asks its own, built from what the page answered, naming what runs.
@@ -122,6 +124,63 @@ extension ControlVerbs {
                 answer["blocks"] = .array(try await Self.blocks(of: page, ext, tools, inputs).map(Self.block))
                 return .object(answer)
             }
+        }
+    }
+
+    /// `ext act <id> <row> [--command <name>]` or `ext act <id> --handler <id>` (T2): a Raycast-format view's row callback,
+    /// pressed in a host started for it and kept open until the answer after the press, then closed. The first Allow
+    /// reads the view; the press asks its own. Its answer: the rows before the press and after it.
+    static func actView(_ ext: Extension, _ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        let named = args.value("command")
+        guard let command = (named.map(ext.view) ?? ext.commands.first { $0.mode != .noView }), command.runtime == .raycast else {
+            throw ControlError(.badValue, "\(ext.title) has no view \(named ?? "") to press in; pilot ext show \(ext.id) lists its commands")
+        }
+        let handler = args.value("handler")
+        let word: String
+        if let handler { word = handler } else { word = try args.word(2, "row, by its title as pilot ext run \(command.actionID) shows it (or row/action), or --handler <id>") }
+        let reading = ["to find \(ControlGate.Ask.visible(word)) in it; the press asks again"]
+        return try await tools.readBack(ext, command, reading, peer: peer) { () throws(ControlError) in
+            let inputs = try await tools.inputs(ext)
+            let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
+            let answer: Result<JSONValue, ControlError>
+            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, in: session, command, ext, tools, peer: peer)) }
+            catch { answer = .failure(error) }
+            session.close()
+            await session.ended()
+            return try answer.get()
+        }
+    }
+
+    /// Opens the view in `session`, finds the callback (a row's first, row/action, or the handler named), asks Allow for
+    /// the press and presses it.
+    private static func press(_ word: String, handler: String?, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
+                              _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        func shown(_ outcome: ListOutcome) throws(ControlError) -> (items: [Extension.Item], json: [String: JSONValue]) {
+            switch outcome {
+            case .items(let items): return (items, ["items": .array(items.map(Self.item))])
+            case .detail(let detail): return (ExtensionList.items(detail, of: command), ["detail": Self.detail(detail)])
+            case .error(let why): throw tools.failed(command, why, in: ext)
+            }
+        }
+        _ = try shown(await session.ask(""))
+        let before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
+        let target = if let handler {
+            PageTarget(path: "handler \(handler)", action: Extension.Item.Action(kind: .invoke(handler: handler)), box: nil, alt: false)
+        } else {
+            try Self.target(word, in: Self.targets([.list(title: nil, items: before.items)]).filter { $0.action.handler != nil }, page: command.actionID)
+        }
+        let id = target.action.handler ?? word
+        let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""
+        let ask = ControlGate.Ask("Press on \(ControlGate.Ask.visible(ext.title))",
+                                  "presses \(ControlGate.Ask.visible(target.path))\(label), runs its callback in pilot-ext-host")
+        return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+            let after = try shown(await session.invoke(id))
+            log.notice("ext act: \(ext.id, privacy: .public) pressed a callback, from the pilot command")
+            var answer: [String: JSONValue] = ["command": .string(command.actionID), "pressed": .string(target.path), "action": Self.action(target.action),
+                                               "before": .object(before.json)]
+            answer.merge(after.json) { $1 }
+            if session.newest?.loading == true { answer["loading"] = .bool(true) }
+            return .object(answer)
         }
     }
 
@@ -144,7 +203,7 @@ extension ControlVerbs {
         case .ai(_, let text, let then):
             parts.append("sends \(min(text.count, ExtensionAI.longest)) characters of its page to \(ControlVerbs.destinations(AISettings.shared))")
             if case .run(let name, _) = then.kind { parts.append("then \(runs(name, view: false)) with the answer") }
-        case .open, .copy, .paste, .hud, .pilot, .timer, .alert: return nil
+        case .open, .copy, .paste, .hud, .pilot, .timer, .alert, .invoke: return nil
         }
         if let input = action.input { parts.append("with the text \(ControlGate.Ask.visible(input))") }
         switch target.action.ask {
@@ -202,6 +261,8 @@ extension ControlVerbs {
             case .error(let why): throw tools.failed(command, why, in: ext)
             }
             return out
+        case .invoke:
+            return ["note": .string("not performed: a callback is pressed in its open view (pilot ext act \(ext.id) <row>)")]
         case .open, .copy, .paste, .hud, .pilot, .timer, .alert:
             return ["note": .string("not performed: it opens, copies, pastes or shows something, or runs a Pilot action, outside the extension; its page performs it")]
         }

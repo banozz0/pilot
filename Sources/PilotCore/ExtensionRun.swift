@@ -75,12 +75,13 @@ public enum ExtensionRun {
 
     /// What starts `command` and where: its own program in its own folder, or for a Raycast-format command (ADR 0017) the
     /// extension host with the prelude and the command's bundle as its arguments, in the extension's folder, where its
-    /// `package.json` and `assets/` are, even when the bundle is in `dist/`.
-    static func launch(_ command: Extension.Command, environment pilot: [String: String]) throws
+    /// `package.json` and `assets/` are, even when the bundle is in `dist/`: `folder` when the caller knows it (an open
+    /// view's session, T2), else the one the bundle's place gives.
+    static func launch(_ command: Extension.Command, folder: URL? = nil, environment pilot: [String: String]) throws
         -> (path: String, arguments: [String], directory: URL) {
         guard command.runtime == .raycast else { return (command.program.path, [], command.program.deletingLastPathComponent()) }
         guard let (host, prelude) = host(environment: pilot) else { throw NoHost() }
-        return (host.path, ["--prelude", prelude.path, command.program.path], RaycastManifest.folder(of: command.program))
+        return (host.path, ["--prelude", prelude.path, command.program.path], folder ?? RaycastManifest.folder(of: command.program))
     }
 
     /// pilot-ext-host and pilot-ext-prelude.js: the app's Contents/Helpers and Contents/Resources; outside a bundle (the

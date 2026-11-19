@@ -4,9 +4,10 @@ import JavaScriptCore
 // pilot-ext-host (ADR 0017): one run of one Raycast-format extension command, in one fresh JSContext that dies with the
 // process, never reused (Tinycast reused one and broke React's scheduler). Pilot starts it as
 //   pilot-ext-host --prelude <pilot-ext-prelude.js> <command.js>
-// and speaks its private wire, ADR 0010's lines: a run message on stdin, then query and close messages; each commit that
-// changes the view is a list, detail or error line on stdout, so data that arrives after the first render fills the view
-// in. Stdout carries nothing else: the extension's console goes to stderr. Once stdin ends or a close comes, the host
+// and speaks its private wire, ADR 0010's lines: a run message on stdin, then query, invoke (a press of a callback by its
+// handler id, T2) and close messages; each commit that changes the view is a list, detail or error line on stdout, so
+// data that arrives after the first render fills the view in. A query or invoke with a `seq` is answered by the next
+// line, which carries it back as `ack`. Stdout carries nothing else: the extension's console goes to stderr. Once stdin ends or a close comes, the host
 // exits as soon as nothing is left to do (no timer pending, then a 150 ms drain for effects), and by a deadline at the
 // latest, inside Pilot's own: 1.7 s from the start of a run that ended its input at once (Pilot's 2 s list limit), 0.4 s
 // from a close (Pilot stops it at 0.5 s). A child an extension spawns is Pilot's to stop with the process tree.
@@ -66,7 +67,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
             started = true
             let parsed = context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line])!
             call("__pilotStart", [factory, parsed])
-        case "query": call("__pilotQuery", [message["text"] as? String ?? ""])
+        case "query": call("__pilotQuery", [message["text"] as? String ?? "", Host.seq(message)])
+        case "invoke": call("__pilotInvoke", [message["handler"] as? String ?? "", Host.seq(message)])
         case "close":
             closing = true
             call("__pilotClose", [])
@@ -82,6 +84,9 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         deadline(max(0.05, Host.runDeadline - Date().timeIntervalSince(born)))
         settle()
     }
+
+    /// A request's number, or null when it has none.
+    static func seq(_ message: [String: Any]) -> Any { (message["seq"] as? Int).map { $0 as Any } ?? NSNull() }
 
     private func call(_ name: String, _ arguments: [Any]) {
         context.objectForKeyedSubscript(name)?.call(withArguments: arguments)
