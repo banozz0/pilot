@@ -61,15 +61,18 @@ struct FrameFollowerTests {
         let draw: (CGRect?) -> Void
     }
 
+    /// The windows other than the dragged one (7) the window server draws: 8, the one staleAndOtherWindows focuses.
+    static let otherWindows: [CGWindowID: CGRect] = [8: CGRect(x: 1000, y: 50, width: 800, height: 600)]
+
     static func rig(frame fps: Double = 120, settle: [TimeInterval] = FrameFollower.settleDelays) -> Rig {
         let clock = Clock(), costs = Costs()
         var current = CGRect(x: 100, y: 50, width: 800, height: 600)
-        var drawn: CGRect?
+        var drawn: CGRect?? // nil: where AX says; .some(nil): drawn nowhere
         let follower = FrameFollower(reader: { element, done in
             costs.offMainAX += 1; costs.frameReads += 1
             done(CFEqual(element, dragged) ? current : nil)
         }, now: { clock.now }, after: { delay, work in clock.due.append((clock.now + delay, work)) }, frame: 1 / fps,
-           bounds: { id, done in costs.settleReads += 1; done(id == 7 ? drawn ?? current : nil) }, settleDelays: settle)
+           bounds: { id, done in costs.settleReads += 1; done(id == 7 ? drawn ?? current : otherWindows[id]) }, settleDelays: settle)
         let mouse = Mouse()
         let drag = DragFollower(reader: { id, done in costs.boundsReads += 1; done(id == 7 ? current : nil) },
                                 ticker: { tick in mouse.tick = tick; mouse.links += 1; return { mouse.tick = nil } },
@@ -86,7 +89,7 @@ struct FrameFollowerTests {
         observers.onFocusedWindow = { border.update($0) }
         observers.refreshFocusedWindow() // focus lands on it, as kAXFocusedWindowChanged does
         return Rig(observers: observers, clock: clock, costs: costs, surface: surface, mouse: mouse, frame: { current }, move: { current = $0 },
-                   draw: { drawn = $0 })
+                   draw: { drawn = .some($0) })
     }
 
     /// A 200 ms drag sending AX a move per millisecond (a 1000 Hz mouse), the window 4 points further each time.
@@ -211,6 +214,27 @@ struct FrameFollowerTests {
         #expect(after.surface.shown == drawn)
         #expect(after.costs.settleReads == FrameFollower.settleDelays.count && after.costs.shows == 2, "two reads, one move")
         #expect(after.clock.due.isEmpty, "idle")
+    }
+
+    /// Tester bug 9: a window read the moment it opens is not on screen yet, and one left on another Space is not either.
+    @Test("A window not drawn yet has no border until the window server draws it; one drawn nowhere (another Space) loses it")
+    func ringsOnceDrawn() {
+        let rig = Self.rig()
+        rig.clock.advance(to: 1)
+        var read = WindowBorder.Window(frame: rig.frame(), subrole: "AXStandardWindow", fullScreen: false, minimised: false, windowID: 7)
+        read.drawn = false
+        rig.observers.readFocusedWindow = { _ in ("Editor", read, Self.dragged) }
+        rig.draw(nil)
+        rig.observers.refreshFocusedWindow() // it just opened
+        #expect(rig.surface.shown == nil, "not drawn yet: no border")
+        rig.draw(rig.frame()) // the app commits it
+        rig.clock.advance(to: 2)
+        #expect(rig.surface.shown == Self.border(rig.frame()), "drawn: the settle reads ring it")
+        rig.draw(nil) // a Space switch leaves it on the other Space
+        rig.observers.refreshFocusedWindow()
+        #expect(rig.surface.shown == nil)
+        rig.clock.advance(to: 3)
+        #expect(rig.surface.shown == nil, "drawn nowhere: no border")
     }
 
     @Test("FrameFollower: one read in flight, a pending move waits for it, and the last move is always read")

@@ -153,6 +153,18 @@ struct WindowBorderControllerTests {
             #expect(observers.focusedWindowFrame == WindowGeometry.flip(target, primaryHeight: Screens.primaryHeight), "move \(i)")
             PanelTestSupport.pump(0.05)
         }
+        // A window just ordered front, read at once as another app's (pid 1, past the own-window rule): not drawn yet,
+        // so no border; drawn a moment later, when the settle reads ring it
+        let fresh = NSPanel(contentRect: NSRect(x: 300, y: 40, width: 160, height: 120), styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        fresh.alphaValue = 0.05
+        fresh.ignoresMouseEvents = true
+        defer { fresh.orderOut(nil) }
+        fresh.orderFrontRegardless()
+        let opened = EngineObservers.drawnFocusedWindow(1) { _ in EngineObservers.ownWindow(fresh, marked: false) }
+        #expect(opened?.window.drawn == false)
+        PanelTestSupport.pump(0.2)
+        #expect(DragFollower.drawnBounds(of: CGWindowID(fresh.windowNumber)) != nil, "drawn by the first settle read's time")
     }
 
     @Test("Once started it redraws by itself when Look's width, switch or theme changes")

@@ -22,7 +22,7 @@ final class FrameFollower {
     private var pending: Read?
     private var busy = false
     private var lastStart = -TimeInterval.infinity
-    /// The window server's frame for window `id`, off the main thread, handed back on it; tests run it in place.
+    /// The window server's frame for window `id` while it draws it, off the main thread, handed back on it; tests run it in place.
     private let bounds: DragFollower.Reader
     /// After the focused window was read (a move, a whole read), its frame is read again from the window server this
     /// long after the last such read, then this much later again (tester bug 9, 2026-11-19): AX has an app's frame at
@@ -41,7 +41,7 @@ final class FrameFollower {
 
     init(reader: @escaping Reader = FrameFollower.readOffMain, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          after: @escaping @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = FrameFollower.mainAfter,
-         frame: TimeInterval = FrameFollower.displayFrame(), bounds: @escaping DragFollower.Reader = DragFollower.readOffMain,
+         frame: TimeInterval = FrameFollower.displayFrame(), bounds: @escaping DragFollower.Reader = FrameFollower.drawnOffMain,
          settleDelays: [TimeInterval] = FrameFollower.settleDelays) {
         self.reader = reader; self.now = now; self.after = after; self.frame = frame; self.bounds = bounds
         settleGaps = zip(settleDelays, [0] + settleDelays).map { $0 - $1 }
@@ -124,6 +124,14 @@ final class FrameFollower {
         axQueue.async {
             // The app's own frame, which it has the moment it posts the move; the window server's comes in the settle reads
             let frame = frame(of: element)
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(frame) } }
+        }
+    }
+
+    /// Window `id`'s frame while the window server draws it (nil: not on screen), off the main thread.
+    static func drawnOffMain(_ id: CGWindowID, _ done: @escaping @MainActor (CGRect?) -> Void) {
+        axQueue.async {
+            let frame = DragFollower.drawnBounds(of: id)
             DispatchQueue.main.async { MainActor.assumeIsolated { done(frame) } }
         }
     }

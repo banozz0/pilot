@@ -79,10 +79,7 @@ final class EngineObservers {
         self.drag = drag
         follower.landed = { [weak self] in self?.frameLanded($0, $1) }
         follower.full = { [weak self] in self?.refreshFocusedWindow() }
-        follower.settled = { [weak self] id, frame in
-            guard let self, focusedWindowID == id else { return }
-            followed(frame)
-        }
+        follower.settled = { [weak self] id, frame in self?.settled(id, frame) }
         drag.landed = { [weak self] id, frame in
             guard let self, focusedWindowID == id else { return }
             followed(frame)
@@ -253,6 +250,18 @@ final class EngineObservers {
         followed(frame)
     }
 
+    /// Where the window server draws the focused window once its reads stopped (FrameFollower.settle): the border
+    /// goes there, comes back for a window drawn at last (just opened), and goes for one drawn nowhere (another Space).
+    private func settled(_ id: CGWindowID, _ frame: CGRect?) {
+        guard focusedWindowID == id, var window = focusedWindow else { return }
+        let drawn = (frame: frame ?? window.frame, on: frame != nil)
+        guard drawn.frame != window.frame || drawn.on != window.drawn else { return }
+        (window.frame, window.drawn) = drawn
+        focusedWindow = window
+        focusedWindowFrame = window.frame
+        onFocusedWindow(window)
+    }
+
     /// The focused window's new frame from a move: the border follows it.
     private func followed(_ frame: CGRect?) {
         guard var window = focusedWindow, let frame, frame != window.frame else { return }
@@ -291,8 +300,8 @@ final class EngineObservers {
 
     /// The focused window of app `pid` through Accessibility, at the frame the window server draws it (live bug
     /// 2026-11-16: AX had Photo Booth at its tile while it was drawn off it, and the border ringed empty space): its own
-    /// number's frame, or the app's frontmost drawn window when that number draws nothing (WindowBorder.asDrawn); none
-    /// when the app draws no window here (its window is on another Space). Pilot's own window keeps AppKit's frame:
+    /// number's frame, or the app's frontmost drawn window when that number draws nothing (WindowBorder.asDrawn); not
+    /// drawn when the app draws none (just opened, or on another Space). Pilot's own window keeps AppKit's frame:
     /// the window server takes a moved window's frame a run loop turn later, when AppKit commits it, and the read a
     /// move sets off came first, so the border stayed where the window had been (tester bug 9, 2026-11-19).
     static func drawnFocusedWindow(_ pid: pid_t, read focused: @MainActor (pid_t) -> FocusedWindowRead? = axFocusedWindow) -> FocusedWindowRead? {
@@ -300,8 +309,7 @@ final class EngineObservers {
         guard pid != getpid(), let id = read.window.windowID, !read.window.minimised, !read.window.fullScreen else { return read }
         let drawn = DragFollower.drawnBounds(of: id)
         let front = drawn != nil ? nil : normal(onScreen(), skipping: []).first { $0.pid == pid }.map { (id: $0.id, frame: $0.frame) }
-        guard let shown = WindowBorder.asDrawn(read.window, drawn: drawn, front: front) else { return nil }
-        read.window = shown
+        read.window = WindowBorder.asDrawn(read.window, drawn: drawn, front: front)
         return read
     }
 
