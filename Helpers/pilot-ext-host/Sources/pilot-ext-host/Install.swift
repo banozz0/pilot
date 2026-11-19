@@ -33,6 +33,11 @@ enum Installer {
     /// What the host supplies itself, so a package's own copy is never fetched or bundled: two Reacts break hooks.
     static let externals: Set<String> = ["@raycast/api", "react"]
     static let registry = "https://registry.npmjs.org/"
+    /// npm's package names, the legacy ones with capitals included: letters, digits, . _ ~ and -, never first . or _,
+    /// and an optional @scope/ of the same.
+    nonisolated(unsafe) static let npmName = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
+    /// A preference's name as the question shows it: a letter, then letters, digits, _ and -.
+    nonisolated(unsafe) static let preferenceName = #/[A-Za-z][A-Za-z0-9_-]*/#
 
     // Limits: the source folder, read from the listing before any file is fetched, and the packages.
     static let mostFiles = 400, fileLimit = 5 << 20, folderLimit = 30 << 20
@@ -82,7 +87,9 @@ enum Installer {
         let listing = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/git/trees/HEAD:\(path)?recursive=1")!
         let data = try await get(listing, limit: 8 << 20, accept: "application/vnd.github+json")
         guard let tree = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let entries = tree["tree"] as? [[String: Any]],
-              let treeSHA = tree["sha"] as? String else { throw Refused("GitHub's listing of \(path) did not read") }
+              let treeSHA = tree["sha"] as? String, treeSHA.wholeMatch(of: #/[0-9a-f]{40}/#) != nil else {
+            throw Refused("GitHub's listing of \(path) did not read")
+        }
         guard tree["truncated"] as? Bool != true else { throw Refused("GitHub cut its listing of \(path) short") }
         fetched(listing, "tree \(owner)/\(repo)/\(path)", data.count, "\(entries.count) entries, not truncated")
         // Only what a build reads: the manifest, the lockfile, src/ and assets/. Links and submodules never. Its tsconfig is
@@ -137,8 +144,11 @@ enum Installer {
               let id = manifest["name"] as? String, let commands = manifest["commands"] as? [[String: Any]] else {
             throw Refused("its package.json is not a Raycast manifest")
         }
-        // Held to Pilot's id rule (Extension.isName) and Raycast's three modes before Pilot asks, so the question names only
-        // words that rule allows; the title is the one remote text it shows, capped and last on its line.
+        // Every remote word the question shows is held to a rule here, and again in GitHubInstall.fetch: the id and command
+        // names to Pilot's id rule (Extension.isName), the modes to Raycast's three, preference names to an identifier, each
+        // package's key, real name and version to npm's (below), the version through ExtensionCatalogue.Version when shown.
+        // The title is the one free text, cut to 80 Unicode scalars and last on its line, where the prompt writes out any
+        // break or hidden scalar (ControlGate.Ask.visible). The tree is the listing's own 40 hex digits (fetch).
         let name = #/[a-z0-9][a-z0-9-]*/#
         guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(id.prefix(64))\", not an id of a-z, 0-9 and hyphens") }
         for command in commands {
@@ -149,10 +159,16 @@ enum Installer {
         // The extension's, then each command's, a name given twice kept once (RaycastManifest.preferences).
         var preferences: [String] = []
         for list in [manifest["preferences"]] + commands.map({ $0["preferences"] }) {
-            for name in (list as? [[String: Any]] ?? []).compactMap({ $0["name"] as? String }) where !preferences.contains(name) { preferences.append(name) }
+            for name in (list as? [[String: Any]] ?? []).map({ $0["name"] as? String ?? "" }) where !preferences.contains(name) {
+                guard name.wholeMatch(of: preferenceName) != nil, name.count <= 64 else {
+                    throw Refused("a preference in its package.json is named \"\(name.prefix(64))\", not a letter then letters, digits, _ and -")
+                }
+                preferences.append(name)
+            }
         }
+        let title = manifest["title"] as? String ?? id
         var plan: [String: Any] = [
-            "id": id, "title": String((manifest["title"] as? String ?? id).prefix(longestTitle)), "manifest": hex(Array(SHA256.hash(data: manifestData))),
+            "id": id, "title": String(String.UnicodeScalarView(title.unicodeScalars.prefix(longestTitle))), "manifest": hex(Array(SHA256.hash(data: manifestData))),
             "commands": commands.map { ["name": $0["name"] as? String ?? "", "title": $0["title"] as? String ?? "", "mode": $0["mode"] as? String ?? "view"] },
             "preferences": preferences,
         ]
@@ -202,19 +218,23 @@ enum Installer {
         plan["packages"] = try needed.map { key -> [String: Any] in
             let entry = packages[key] ?? [:]
             guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(key) leaves its folder") }
-            // The registry's own place for this name and version: <name>/-/<name less its scope>-<version>.tgz.
-            let package = key.components(separatedBy: "node_modules/").last ?? ""
+            // Each name on the key's path is the folder Node requires it by, an alias when the lockfile says so (npm:
+            // string-width-cjs is string-width); the real name, the entry's own `name` else the key's last name, is the one
+            // the registry serves it under: <name>/-/<name less its scope>-<version>.tgz. Both are held to npm's names,
+            // legacy ones included (JSONStream), and the version to semver's characters.
+            let names = key.dropFirst("node_modules/".count).components(separatedBy: "/node_modules/")
             let version = entry["version"] as? String ?? ""
-            guard package.wholeMatch(of: #/(@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*/#) != nil,
-                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil else { throw Refused("\(key) is not an npm package name and version") }
-            let expected = registry + package + "/-/" + (package.split(separator: "/").last.map(String.init) ?? package) + "-" + version + ".tgz"
+            let real = entry["name"] as? String ?? names.last ?? ""
+            guard (names + [real]).allSatisfy({ $0.wholeMatch(of: npmName) != nil && $0.count <= 214 }),
+                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(key) is not an npm package name and version") }
+            let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
             guard let resolved = entry["resolved"] as? String, resolved == expected else {
                 throw Refused("\(key) does not come from its own place on \(registry) (\(entry["resolved"] as? String ?? "no resolved URL"))")
             }
             guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
                 throw Refused("\(key) has no sha512 integrity in its lockfile")
             }
-            return ["key": key, "version": version, "resolved": resolved, "integrity": integrity]
+            return ["key": key, "name": real, "version": version, "resolved": resolved, "integrity": integrity]
         }
         return plan
     }
@@ -260,7 +280,8 @@ enum Installer {
             guard let metaData = try? Data(contentsOf: meta), let read = try? JSONSerialization.jsonObject(with: metaData) as? [String: Any],
                   let inputs = (read["inputs"] as? [String: Any])?.keys else { throw Refused("esbuild wrote no list of what it bundled") }
             let root = source.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-            if let outside = inputs.first(where: { !source.appending(path: $0).standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) }) {
+            // An absolute input is refused as it stands: appending it to the folder would read it as inside.
+            if let outside = inputs.first(where: { $0.hasPrefix("/") || !source.appending(path: $0).standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) }) {
                 throw Refused("command \(name) would bundle \(outside), which is outside the extension's folder; nothing was installed")
             }
             say(["type": "bundle", "command": name, "entry": entry,
@@ -354,23 +375,68 @@ enum Installer {
         var request = URLRequest(url: url, timeoutInterval: 60)
         request.setValue("pilot-ext-host", forHTTPHeaderField: "User-Agent")
         if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
-        // Streamed, and stopped at `limit`: a body past it is never held whole.
-        let (bytes, response) = try await Host.session.bytes(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw Refused("\(url.host() ?? "") answered \(status) for \(url.path())") }
-        guard response.expectedContentLength <= Int64(limit) else { throw Refused("\(url.path()) is \(response.expectedContentLength) bytes, past \(limit)") }
-        var data = Data()
-        data.reserveCapacity(max(0, Int(response.expectedContentLength)))
-        var chunk = [UInt8](), count = 0
-        chunk.reserveCapacity(65_536)
-        for try await byte in bytes {
-            chunk.append(byte)
-            count += 1
-            guard count <= limit else { throw Refused("\(url.path()) runs past \(limit) bytes") }
-            if chunk.count == 65_536 { data.append(contentsOf: chunk); chunk.removeAll(keepingCapacity: true) }
+        // Taken in the chunks URLSession hands over and stopped at `limit`: a body past it is never held whole.
+        let capped = Capped(limit: limit)
+        return try await withCheckedThrowingContinuation { continuation in
+            capped.start(Host.session.dataTask(with: request), continuation)
+        }.get(url, limit: limit)
+    }
+
+    /// One download's task delegate: refuses a status other than 200 or a stated length past `limit` before any body,
+    /// adds each chunk as it comes, and cancels the task once the body runs past `limit`.
+    final class Capped: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        struct Result: Sendable {
+            let data: Data, status: Int, length: Int64, past: Bool
+            func get(_ url: URL, limit: Int) throws -> Data {
+                guard status == 200 else { throw Refused("\(url.host() ?? "") answered \(status) for \(url.path())") }
+                guard length <= Int64(limit) else { throw Refused("\(url.path()) is \(length) bytes, past \(limit)") }
+                guard !past else { throw Refused("\(url.path()) runs past \(limit) bytes") }
+                return data
+            }
         }
-        data.append(contentsOf: chunk)
-        return data
+
+        let limit: Int
+        private let lock = NSLock()
+        private var data = Data(), status = 0, length: Int64 = -1, past = false
+        private var continuation: CheckedContinuation<Result, any Error>?
+
+        init(limit: Int) { self.limit = limit }
+
+        func start(_ task: URLSessionDataTask, _ continuation: CheckedContinuation<Result, any Error>) {
+            lock.withLock { self.continuation = continuation }
+            task.delegate = self
+            task.resume()
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+            let ok = lock.withLock {
+                status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                length = response.expectedContentLength
+                return status == 200 && length <= Int64(limit)
+            }
+            completionHandler(ok ? .allow : .cancel)
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+            let over = lock.withLock {
+                guard !past else { return false }
+                if data.count + chunk.count > limit { past = true; data = Data(); return true }
+                data.append(chunk)
+                return false
+            }
+            if over { dataTask.cancel() }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+            let (continuation, result) = lock.withLock {
+                defer { self.continuation = nil }
+                return (self.continuation, Result(data: data, status: status, length: length, past: past))
+            }
+            // A cancel of this delegate's own (a status, a length or a body past the limit) answers why; any other error is the error.
+            let refused = result.past || (result.status != 0 && (result.status != 200 || result.length > Int64(limit)))
+            if let error, !refused { continuation?.resume(throwing: error) } else { continuation?.resume(returning: result) }
+        }
     }
 
     /// The sha512 digests an npm integrity string names: Subresource Integrity, hashes split by spaces, others ignored.

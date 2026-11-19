@@ -145,8 +145,11 @@ final class ExtensionTools {
     /// built: where it comes from, its commands and preferences, what is downloaded after Allow and how each is checked,
     /// and what it replaces. Past what the prompt shows whole (ControlGate.Ask.longest), the commands, preferences and
     /// packages are counted instead of named, so a big extension is still asked; one still too long (long folder paths)
-    /// is denied unasked, as any question is. The remote words are the id and command names, which the host and
-    /// GitHubInstall hold to the id rule before this is asked, and the title (80 characters at most), last on its line.
+    /// is denied unasked, as any question is. Every remote word it shows is held to a rule by the host and again by
+    /// GitHubInstall.fetch before this is asked: the id and command names (the id rule), the modes (Raycast's three), the
+    /// preference names (a letter, then letters, digits, _ and -), the tree (40 hex digits), each package's key, real name
+    /// and version (npm's); the version only when it reads as one (`checked`). The title is the one free text: at most 80
+    /// Unicode scalars, last on its line, its breaks and hidden scalars written out by the prompt (ControlGate.Ask.visible).
     func githubAsk(_ plan: GitHubInstall.Plan, tools: URL, whole: Bool = true) -> (ask: ControlGate.Ask, whole: Bool) {
         let modes = Dictionary(grouping: plan.commands, by: \.mode).sorted { $0.key < $1.key }.map { "\($0.value.count) \($0.key)" }
         let commands = whole ? plan.commands.map { "ext.\(plan.id).\($0.name) (\($0.mode))" }.joined(separator: ", ")
@@ -155,7 +158,10 @@ final class ExtensionTools {
         let esbuild = plan.esbuild == "reuse" ? "esbuild \(plan.esbuildVersion) is already in \(tools.path), reused"
             : "esbuild \(plan.esbuildVersion) (\(ByteCountFormatter.string(fromByteCount: Int64(plan.esbuildBytes), countStyle: .file)), checked by its pinned sha512) into \(tools.path)"
         let packages = "\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s"), each checked by its lockfile's sha512, no install script run"
-            + (whole && !plan.packages.isEmpty ? ": " + plan.packages.map { "\($0.key.dropFirst("node_modules/".count))@\($0.version)" }.joined(separator: ", ") : "")
+            + (whole && !plan.packages.isEmpty ? ": " + plan.packages.map { package in
+                let place = package.key.dropFirst("node_modules/".count), alias = place.components(separatedBy: "/node_modules/").last ?? ""
+                return "\(place)@\(package.version)" + (alias == package.name ? "" : " (\(package.name))")
+            }.joined(separator: ", ") : "")
         let (replaces, headline, fromLine) = replacing(plan.id, plan.version, from: "From GitHub: \(plan.source)")
         let ask = ControlGate.Ask.install(.extension, lines: [
             "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(plan.title)",
@@ -403,6 +409,10 @@ extension ControlVerbs {
         // changes the question, and the gate then denies.
         return try await tools.gate.allow(tools.githubAsk(plan, tools: github.tools).ask, peer: peer) { () throws(ControlError) in
             let whole = tools.githubAsk(plan, tools: github.tools).whole
+            // What the question named as replaced, the gate having just read it again; the build takes a while, so it is
+            // read once more after it, and a difference installs nothing.
+            let named: [URL]
+            do { named = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch { throw refused(error, "built, nothing installed") }
             let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
             do { (built, more) = try await github.build(plan) } catch { throw refused(error, "built, nothing installed") }
             let staged: ExtensionCheck.Staged
@@ -412,7 +422,13 @@ extension ControlVerbs {
                 throw ControlError(.badValue, "github:\(github.spec) built, but fails the check, so nothing was installed:\n"
                                    + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \($0)" }.joined(separator: "\n"))
             }
-            let old = (try? ExtensionCheck.replaced(ext.id, in: tools.extensions)) ?? []
+            let old: [URL]
+            do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }
+            guard old.map(\.standardizedFileURL.path) == named.map(\.standardizedFileURL.path) else {
+                throw ControlError(.badValue, "github:\(github.spec) built, but what it replaces changed while building "
+                                   + "(asked: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
+                                   + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
+            }
             let done: Extension
             do { done = try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
             log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from the pilot command")

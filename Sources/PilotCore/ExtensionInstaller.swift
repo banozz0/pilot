@@ -105,7 +105,8 @@ public struct ExtensionInstaller: Sendable {
 public struct GitHubInstall: Sendable {
     public struct Plan: Codable, Sendable {
         public struct Command: Codable, Sendable { public let name, title, mode: String }
-        public struct Package: Codable, Sendable { public let key, version, resolved, integrity: String }
+        /// `key` is the lockfile's place, the folder Node requires it by; `name` the registry's, different for an alias.
+        public struct Package: Codable, Sendable { public let key, name, version, resolved, integrity: String }
         public let id, title, source, tree, manifest, esbuild, esbuildVersion: String
         public let version: String?
         public let commands: [Command], preferences: [String], packages: [Package]
@@ -128,9 +129,12 @@ public struct GitHubInstall: Sendable {
 
     static let prefix = ".ext-github-"
 
-    /// The plan, once Pilot holds it to its own rules too: the id and every command name as Extension.isName, Raycast's
-    /// three modes, a title of 80 characters at most. A workspace over an hour old, left by a run that stopped midway,
-    /// is swept first.
+    /// The plan, once Pilot holds every remote word the question shows to its own rules too, as the host's plan() does:
+    /// the id and every command name as Extension.isName, Raycast's three modes, each preference name a letter then
+    /// letters, digits, _ and -, the tree 40 lowercase hex digits, each package's key names, real name and version npm's,
+    /// and the title, the one free text, at most 80 Unicode scalars (the prompt writes out its breaks and hidden scalars,
+    /// ControlGate.Ask.visible; the version shows only when ExtensionCatalogue.Version reads it). A workspace over an
+    /// hour old, left by a run that stopped midway, is swept first.
     public func fetch() async throws -> (Plan, [Fetched]) {
         let fm = FileManager.default, support = workspace.deletingLastPathComponent()
         for name in (try? fm.contentsOfDirectory(atPath: support.path)) ?? [] where name.hasPrefix(Self.prefix) {
@@ -141,11 +145,26 @@ public struct GitHubInstall: Sendable {
         }
         let (lines, last) = try await host(["--fetch", spec, workspace.path, tools.path], input: Data())
         let plan = try JSONDecoder().decode(Plan.self, from: last)
-        guard Extension.isName(plan.id), plan.title.count <= 80,
+        guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
               plan.commands.allSatisfy({ Extension.isName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
             throw Refused(errorDescription: "its package.json names it or a command outside Pilot's id rule (a-z, 0-9 and hyphens)")
         }
+        guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
+            throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")
+        }
+        guard plan.tree.wholeMatch(of: #/[0-9a-f]{40}/#) != nil else { throw Refused(errorDescription: "GitHub's listing named no tree") }
+        guard plan.packages.allSatisfy(Self.npm) else { throw Refused(errorDescription: "its lockfile names a package outside npm's names") }
         return (plan, lines)
+    }
+
+    /// A package npm could have put there: every name on its key's path and its real name npm's, legacy capitals
+    /// included, and a version of semver's characters.
+    static func npm(_ package: Plan.Package) -> Bool {
+        let name = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
+        guard package.key.hasPrefix("node_modules/") else { return false }
+        let names = package.key.dropFirst("node_modules/".count).components(separatedBy: "/node_modules/") + [package.name]
+        return names.allSatisfy { $0.count <= 214 && $0.wholeMatch(of: name) != nil }
+            && package.version.count <= 64 && package.version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil
     }
 
     /// What a build answers: its folder, and the esbuild it used, downloaded or reused.
