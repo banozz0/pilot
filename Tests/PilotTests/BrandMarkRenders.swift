@@ -44,7 +44,7 @@ struct BrandMarkRenders {
         let look = Look.shared
         let was = (look.style, look.themeID, look.glass, look.transparency)
         (look.style, look.glass, look.transparency) = (.instrument, true, 100)
-        defer { look.endTrial(keep: false); (look.style, look.themeID, look.glass, look.transparency) = was }
+        defer { look.endTrial(); (look.style, look.themeID, look.glass, look.transparency) = was }
 
         let screen = BarAttachedRenders.screen
         let walls = try Self.env["PILOT_BAR_WALLS"]!.split(separator: ",").map { pair in

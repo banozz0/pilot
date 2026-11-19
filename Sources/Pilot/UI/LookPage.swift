@@ -69,7 +69,7 @@ struct LookPage: View {
         static let style = "How Pilot is drawn: Instrument or Toybox. The theme still picks every colour."
         static let menuLayout = "How Hyper+Space draws the menu: Line, which opens as Omarchy's list and grows into a wide search on the first key; Classic, Omarchy's list in JetBrains Mono; or the Rail, with the kinds and their counts beside the hits. The keys and rows are the same in all three."
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
-        static let theme = "Click a theme to try it on Pilot; nothing else changes. Apply theme sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
+        static let theme = "Click a theme to try it on Pilot; nothing else changes, and it goes when you leave Look. Apply theme keeps it and sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Glass puts this window, the panels and widgets on regular glass (Blur Full), Clear on clear glass (Blur Light), still readable; the bar's dropdowns stay glass. Custom shows once you change one of them on its own."
         static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and the desktop widgets. Off, they are solid. The top bar's dropdowns and drops follow its own Background."
         static let transparency = "How much of the desktop shows through the glass here, and on a Glass top bar in a colour you picked. In the theme's colour a Glass top bar and dock wear macOS's own clear glass. Both go solid at 0 %. Text stays readable however far you go."
@@ -311,7 +311,7 @@ private struct ThemePackControls: View {
         } message: {
             Text(deletingOwn ? ThemeCatalogueGallery.removeNote(.builtIn) : "Its folder and pictures are removed. This can't be undone.")
         }
-        .onDisappear { editor.invalidate(); look.endTrial(keep: !applied) }
+        .onDisappear { editor.invalidate(); look.endTrial() }
         .task {
             do {
                 let owner = try ThemeCoordinator.production(), store = owner.store
@@ -464,7 +464,7 @@ private struct ThemePackControls: View {
                 outcome = themeOutcomeText(result); outcomeDetails = themeOutcomeDetails(result)
                 applied = (try? ThemeCoordinator.production().appliedTheme().any) ?? applied
                 apps = try? ThemeCoordinator.production().appFollowing()
-                look.endTrial(keep: false)
+                look.endTrial()
             }
             catch { outcome = String(describing: error) }
         }

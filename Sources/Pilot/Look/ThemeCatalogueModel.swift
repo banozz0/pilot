@@ -165,7 +165,7 @@ final class ThemeCatalogueModel {
         defer { look.themePressing = false; busy[id] = nil }
         do {
             let result = try await ThemeCoordinator.production().press(id)
-            look.endTrial(keep: false)
+            look.endTrial()
             await readInstalled()
             return themeOutcomeText(result)
         } catch { return failed(id, String(describing: error)) }

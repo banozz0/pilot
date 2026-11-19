@@ -43,7 +43,7 @@ struct BarInkRenders {
         let look = Look.shared
         let was = (look.style, look.themeID, look.glass, look.transparency, look.glassBlur)
         (look.style, look.glass, look.transparency, look.glassBlur) = (.instrument, true, 100, .full)
-        defer { look.endTrial(keep: false); (look.style, look.themeID, look.glass, look.transparency, look.glassBlur) = was }
+        defer { look.endTrial(); (look.style, look.themeID, look.glass, look.transparency, look.glassBlur) = was }
         let root = LookThemeTests.fonts.deletingLastPathComponent().deletingLastPathComponent()
 
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: home).appendingPathComponent("Library/Preferences"), withIntermediateDirectories: true)
