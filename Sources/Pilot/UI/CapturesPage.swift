@@ -8,7 +8,8 @@ import SwiftUI
 /// down, its two keys and the Recordings folder. More: the capture options, the other capture keys and a recording's
 /// quality. The newest captures are on History. Every row has an ⓘ; a key's is the line Binds shows for it. Each setting's
 /// row is tagged with its `pilot` key, so a search result lands on it and rings it (T6); the search opens the page's first
-/// tab, so a ringed row on another tab turns the page to that tab first (`tab(of:)`).
+/// tab, so a ringed row on More turns the window to More (AppShell's `ringsOnMore`, from `moreKeys`) and one on Recording
+/// turns the page to Recording (`recordingKeys`).
 struct CapturesPage: View {
     @Bindable var store: CaptureSettingsStore
     var bar: BarItemsStore = .shared
@@ -54,17 +55,11 @@ struct CapturesPage: View {
         MoreEntry(id: .recordingQuality, symbol: "dial.medium", controls: 4),
     ]
 
-    /// The tab each tagged setting's row is on: the page's first tab (Capture) when not listed. A row moved to another tab
-    /// moves here too, so the landing ring still finds it.
-    static let tabs: [String: AppSection] = [
-        "capture.audio": .recording, "capture.countdown": .recording, "capture.recordingsFolder": .recording,
-        "capture.hideDesktopIcons": .capturesMore, "capture.thumbnailPlace": .capturesMore, "capture.autoScroll": .capturesMore,
-        "capture.delay": .capturesMore, "capture.recordQuality": .capturesMore, "capture.recordResolution": .capturesMore,
-        "capture.recordFPS": .capturesMore, "capture.showClicks": .capturesMore,
-    ]
-
-    /// The tab that holds setting `key`'s row: nil for Capture.
-    static func tab(of key: String) -> AppSection? { tabs[key] }
+    /// The settings whose rows are on More and on Recording; every other tagged row is on Capture. A row moved to another
+    /// tab moves here too, so the landing ring still finds it.
+    static let moreKeys: Set<String> = ["capture.hideDesktopIcons", "capture.thumbnailPlace", "capture.autoScroll", "capture.delay",
+                                        "capture.recordQuality", "capture.recordResolution", "capture.recordFPS", "capture.showClicks"]
+    static let recordingKeys: Set<String> = ["capture.audio", "capture.countdown", "capture.recordingsFolder"]
 
     var body: some View {
         Group {
@@ -77,12 +72,10 @@ struct CapturesPage: View {
         .onChange(of: ring, initial: true) { follow(ring) }
     }
 
-    /// A ringed setting on another tab: the window turns to it, where the tab's landing scrolls to the row.
+    /// A ringed setting on Recording while Capture shows: the window turns to Recording, whose landing scrolls to the row.
     private func follow(_ key: String?) {
-        guard let key, key.hasPrefix("capture."), let window else { return }
-        let shown: AppSection? = more ? .capturesMore : recording ? .recording : nil
-        let wanted = Self.tab(of: key)
-        if wanted != shown { window.sections[.captures] = wanted }
+        guard let key, Self.recordingKeys.contains(key), !recording, !more, let window else { return }
+        window.sections[.captures] = .recording
     }
 
     /// Capture's front: After capture and the three daily keys, then the folder.

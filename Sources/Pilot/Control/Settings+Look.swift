@@ -32,6 +32,20 @@ extension SettingsSchema {
                  read: { look.defocusStrength }, write: { look.defocusStrength = $0 }),
             .int("look.defocusDim", "Defocus dim, in percent, 0 is off", page: "tiling", range: Defocus.dims, standard: Defocus.defaultDim,
                  read: { look.defocusDim }, write: { look.defocusDim = $0 }),
+            // The Focused window block's two presets (T15, Open question 10): read from the rows above each time, never
+            // stored; a pick writes those rows, and custom is only read.
+            .choice("look.windowBorderPreset", "Border preset: off, soft (2 pt, theme colour) or strong (4 pt, theme colour) sets the border's rows; custom when they match none",
+                    page: "tiling", FocusPreset.allCases, standard: Install.startsOn ? .soft : .off,
+                    read: { Self.border(of: look).preset }, write: { preset throws(ControlError) in
+                        guard let picked = BorderLook.picked(preset, from: Self.border(of: look)) else { throw ControlError(.badValue, FocusPreset.customRefusal) }
+                        look.windowBorder = picked.on; look.windowBorderWidth = picked.width; look.windowBorderColour = picked.colour
+                    }),
+            .choice("look.defocusPreset", "Dim other windows preset: off (no blur, no dim), soft (blur 3, dim 18 %) or strong (blur 5, dim 40 %) sets Defocus's blur and dim; custom when they match none",
+                    page: "tiling", FocusPreset.allCases, standard: .soft,
+                    read: { DimLook(blur: look.defocusStrength, dim: look.defocusDim).preset }, write: { preset throws(ControlError) in
+                        guard let picked = DimLook.picked(preset) else { throw ControlError(.badValue, FocusPreset.customRefusal) }
+                        look.defocusStrength = picked.blur; look.defocusDim = picked.dim
+                    }),
             .bool("look.defocusShake", "A mouse shake toggles Defocus", page: "tiling", standard: Install.startsOn,
                   read: { look.defocusShake }, write: { look.defocusShake = $0 }),
             .int("look.defocusShakeSwings", "Swings a shake needs", page: "tiling", range: ShakeDetector.swingsRange,
@@ -67,6 +81,11 @@ extension SettingsSchema {
             .bool("look.cursorSpotlight", "Cursor halo: Spotlight, shown while cursor.spotlight's key is held", page: "look", standard: false,
                   read: { effects.spotlight }, write: { effects.spotlight = $0 }),
         ])
+    }
+
+    /// The focused window's border as its three rows hold it now, for its preset.
+    @MainActor private static func border(of look: Look) -> BorderLook {
+        BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour)
     }
 
     /// Look's Material (W77): glass, solid or clear sets the top bar's Background, the dock's style and Look's Glass and Blur at once;

@@ -61,7 +61,9 @@ struct AppWindowTests {
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
-        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
+        // Clipboard and the Dock: the simple settings in front, the rest on More (pilot-ui-redesign T17).
+        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
+        #expect(AppPage.snippets.tabs.isEmpty)
         // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
         #expect(AppSection.reports.onMore == .upkeepMore && AppSection.reports.page == .upkeep)

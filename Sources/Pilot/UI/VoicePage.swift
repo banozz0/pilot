@@ -7,14 +7,12 @@ import SwiftUI
 /// pilot-ui-redesign T18, S1 B): Dictation's keys, model in use and two switches, the words it spells your way (pages
 /// round 4, Sven's Q101), then Read aloud's key, speed and its voices behind a toggle. Its More: every speech model, what
 /// shows while you speak, the recent takes, the replacements, and Read aloud's media and better voices. A search that
-/// rings a row on the tab not shown turns the page to it (`moreKeys`).
+/// rings a row on More turns the window to More (AppShell's `ringsOnMore`, from `moreKeys`).
 struct VoicePage: View {
     var speech: ReadAloudSettings = .shared
     var dictation: PilotDictation = .shared
     /// The More tab shows, not the front.
     var more = false
-    @Environment(AppWindowModel.self) private var window: AppWindowModel?
-    @Environment(\.landingRing) private var ring
     /// The voices it lists (SpeechVoice.shown) by language, read when the page first shows, never at launch, and again
     /// when a download lands.
     @State private var sections: (mine: [SpeechVoice.Section], rest: [SpeechVoice.Section]) = ([], [])
@@ -52,7 +50,6 @@ struct VoicePage: View {
                 }
             }
         }
-        .onChange(of: ring, initial: true) { follow(ring) }
         .task(id: "\(speech.personal) \(speech.revision)") {
             let preferred = Locale.preferredLanguages
             sections = SpeechVoice.sections(SpeechVoice.listed(SpeechVoice.shown(speech.voices), preferred: preferred), preferred: preferred)
@@ -62,13 +59,6 @@ struct VoicePage: View {
     /// The settings whose rows are on More; every other dictation and Read aloud row is on the front.
     static let moreKeys: Set<String> = [PilotDictation.whileSpeakingKey, PilotDictation.showInKey, PilotDictation.barSideKey,
                                         PilotDictation.waveColourKey, ReadAloudSettings.mediaKey]
-
-    /// A ringed setting on the tab not shown: the window turns to it, where the tab's landing scrolls to the row.
-    private func follow(_ key: String?) {
-        guard let key, key.hasPrefix("dictation.") || key.hasPrefix("speech."), let window else { return }
-        let onMore = Self.moreKeys.contains(key)
-        if onMore != more { window.sections[.voice] = onMore ? .voiceMore : nil }
-    }
 }
 
 /// Read aloud's key, speed and media (Q282), Kokoro's download (Q264), then its voice as a list (Sven Q219, Q238): Automatic first,
