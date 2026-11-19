@@ -160,6 +160,84 @@ public enum SettingsSearch {
     ]
 }
 
+/// One page's part of the grouped search (spec pilot-ui-redesign T5, S2 B): the page, then its parts and settings the
+/// words found, as Home's results and `pilot open --find` list them, a setting with its value.
+public struct SettingsGroup: Sendable {
+    public let page: AppPage
+    /// Its parts the words found by title or search word, in the page's order.
+    public let parts: [AppSection]
+    /// Its settings the words found by title or choice, a title match first.
+    public let settings: [SettingKey]
+
+    /// The tab path it is listed under: "Windows › Tiling".
+    public func path(developer: Bool) -> String { AppPlace(page).tabPath(developer: developer) }
+}
+
+extension SettingsSearch {
+    /// The most settings a grouped search lists; the values are read for these alone.
+    public static let groupedSettings = 30
+
+    /// Pilot's pages for a query, grouped (spec pilot-ui-redesign T5): word by word, as Ghostex's settings search, each
+    /// typed word starting a word of one field (a title, a choice, a search word), case and accents aside, so "hyper space"
+    /// finds Launcher by its "hyper+space". A page whose own title or a part's matched comes first, then one found by its
+    /// search words, then one found by its settings alone, each tier in the pages' order. `settings` is the schema's,
+    /// matched on their words, so no value is read here. When nothing matches word by word, the places the window's
+    /// search finds (AppPlace.search, typos forgiven) as groups with no rows; empty for a blank query. Developer pages
+    /// only while `developer` is on.
+    public static func grouped(_ query: String, settings: [SettingKey], developer: Bool = true) -> [SettingsGroup] {
+        let words = Words(query)
+        let typos = { AppPlace.search(query, developer: developer).map { SettingsGroup(page: $0.page, parts: [], settings: []) } }
+        guard !words.typed.isEmpty else { return typos() }
+        let pages = AppPage.allCases.filter { developer || !$0.isDeveloper }
+        let found = settings.compactMap { setting -> (page: AppPage, setting: SettingKey, byTitle: Bool)? in
+            guard let page = AppPlace.named(setting.page)?.page, pages.contains(page) else { return nil }
+            if words.holds(setting.label) { return (page, setting, true) }
+            return words.holds(any: setting.choiceWords) ? (page, setting, false) : nil
+        }.prefix(groupedSettings)
+        let ranked = pages.compactMap { page -> (tier: Int, group: SettingsGroup)? in
+            let parts = page.sections.filter { !$0.isMore && words.holds(any: [$0.title] + $0.keywords) }
+            let own = found.filter { $0.page == page }
+            let rows = own.filter(\.byTitle).map(\.setting) + own.filter { !$0.byTitle }.map(\.setting)
+            let tier = words.holds(page.title) || parts.contains { words.holds($0.title) } ? 0 : words.holds(any: page.keywords) || !parts.isEmpty ? 1 : 2
+            guard tier < 2 || !rows.isEmpty else { return nil }
+            return (tier, SettingsGroup(page: page, parts: parts, settings: rows))
+        }
+        guard !ranked.isEmpty else { return typos() }
+        return (0...2).flatMap { tier in ranked.filter { $0.tier == tier }.map(\.group) }
+    }
+
+    /// A query's words, folded, split on anything but letters and digits.
+    struct Words {
+        let typed: [String]
+
+        init(_ query: String) { typed = Self.words(query) }
+
+        static func words(_ text: String) -> [String] {
+            text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                .split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
+
+        /// Every typed word starts a word of the field.
+        func holds(_ field: String) -> Bool {
+            let own = Self.words(field)
+            return !typed.isEmpty && typed.allSatisfy { word in own.contains { $0.hasPrefix(word) } }
+        }
+
+        /// One of the fields holds every typed word.
+        func holds(any fields: [String]) -> Bool { fields.contains(where: holds) }
+    }
+}
+
+extension SettingKey {
+    /// The choices a grouped search matches a setting by (`dim`, `full`); none for a setting without choices.
+    var choiceWords: [String] {
+        switch kind {
+        case .choice(let choices), .choices(let choices): choices
+        default: []
+        }
+    }
+}
+
 extension MenuNavigator {
     /// The settings a root search finds (SettingsSearch.entries(for:)); none inside a branch. Developer pages only while
     /// `developer` is on.
