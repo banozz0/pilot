@@ -389,6 +389,7 @@ final class AppWindowController: NSObject {
     static func makePanel(content: NSView) -> PilotWindow {
         let w = makeWindow(content: content, styleMask: [.titled, .closable, .fullSizeContentView])
         w.closesOnEscape = true
+        w.fixedSize = w.frame.size
         return w
     }
 
@@ -454,6 +455,24 @@ final class PilotWindow: NSWindow {
     var onQuit: () -> Void = {}
     /// The app panel's Esc (T2): set by makePanel only, so Files and Gallery keep theirs.
     var closesOnEscape = false
+    /// The app panel's one size (T2): every frame write keeps it and moves only the origin, so a Hyper right-drag, the
+    /// tiler's frame or a size bind can move the panel but never resize it (T2 review 1). Nil leaves a window free.
+    var fixedSize: NSSize?
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(keepingSize(frameRect), display: flag)
+    }
+
+    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool, animate animateFlag: Bool) {
+        super.setFrame(keepingSize(frameRect), display: displayFlag, animate: animateFlag)
+    }
+
+    /// `frame` at the fixed size, its top-left corner kept: a drag on the bottom or right edge leaves the panel where it
+    /// is, one on the top or left moves it with the edge.
+    private func keepingSize(_ frame: NSRect) -> NSRect {
+        guard let fixedSize, frame.size != fixedSize else { return frame }
+        return NSRect(x: frame.minX, y: frame.maxY - fixedSize.height, width: fixedSize.width, height: fixedSize.height)
+    }
 
     /// Esc that no view took: a focused field's own Esc (the search's clear, an editor's Cancel) runs first and never
     /// reaches here. A text field still focused only ends its editing; the panel closes when nothing is being typed

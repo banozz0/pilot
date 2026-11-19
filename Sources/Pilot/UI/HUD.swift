@@ -62,9 +62,15 @@ enum HUD {
                 Task { @MainActor in fadeTip() }
             }
         }
-        let esc: (NSEvent) -> Void = { e in if Int64(e.keyCode) == KeyCode.escape { MainActor.assumeIsolated { closeTip() } } }
-        escMonitors = [NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: esc),
-                       NSEvent.addLocalMonitorForEvents(matching: .keyDown) { esc($0); return $0 }].compactMap { $0 }
+        let esc: (NSEvent) -> Bool = { e in
+            guard Int64(e.keyCode) == KeyCode.escape else { return false }
+            MainActor.assumeIsolated { closeTip() }
+            return true
+        }
+        // In Pilot's own windows the Esc that closed the tip goes no further, so it never also closes the app panel
+        // under it (ui-redesign T2 review 1).
+        escMonitors = [NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { _ = esc($0) },
+                       NSEvent.addLocalMonitorForEvents(matching: .keyDown) { esc($0) ? nil : $0 }].compactMap { $0 }
         return panel
     }
 

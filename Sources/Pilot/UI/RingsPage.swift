@@ -224,7 +224,9 @@ struct RingsPage: View {
             Text("Opens with").foregroundStyle(ink.muted)
             if recording == ring.id {
                 Text("Press a Hyper key…").foregroundStyle(ink.accentText)
-                Button("Cancel") { stopRecording() }.buttonStyle(.pilot)
+                // Esc stops recording here, as in Binds' editor: Record key listens for Hyper keys only, so a plain Esc
+                // would reach the app panel and close it (ui-redesign T2 review 1).
+                Button("Cancel") { stopRecording() }.buttonStyle(.pilot).keyboardShortcut(.cancelAction)
             } else if let moving, moving.ring == ring.id {
                 Text("\(MouseKeys.buttonName(moving.hold.n)) held opens \(moving.from)").foregroundStyle(ink.text).lineLimit(1)
                 Button("Use it here") { setHold(ring, moving.hold); self.moving = nil }.buttonStyle(.pilotPrimary)
