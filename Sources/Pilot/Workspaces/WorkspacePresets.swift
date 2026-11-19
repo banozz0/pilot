@@ -14,6 +14,8 @@ final class WorkspacePresets {
     /// After a save, once per workspace that takes the preset: the engine sets that workspace's layout row to match
     /// (WorkspaceLayout.saving), with the editor's Keep this layout for the workspace it was saved from, nil for the others.
     @ObservationIgnored var onSave: (String, WorkspacePreset, Bool?) -> Void = { _, _, _ in }
+    /// A workspace's layout row (WorkspaceLayouts): a switch lays the preset out as it says (WorkspacePreset.laidOut).
+    @ObservationIgnored var layoutRow: (String) -> WorkspaceLayout = { _ in .unset }
     @ObservationIgnored private let observers: EngineObservers
     @ObservationIgnored private let store: WorkspacePresetStore
     @ObservationIgnored private let defaults: UserDefaults
@@ -146,7 +148,7 @@ final class WorkspacePresets {
         guard let preset = contents.preset(for: name), !preset.apps.isEmpty else {
             return HUD.tip("Workspace \(name) has no layout saved: add apps under Opens here")
         }
-        guard name != tiler.focused else { return apply(preset, on: name, openMissing: true) }
+        guard name != tiler.focused else { return apply(preset.laidOut(as: layoutRow(name)), on: name, openMissing: true) }
         openOnArrival = name
         Task {
             await tiler.perform("workspaces.openLayout:\(name)") { client in
@@ -167,7 +169,7 @@ final class WorkspacePresets {
         openOnArrival = nil
         // A named workspace with no app yet has nothing to open or lay out.
         guard let preset = contents.preset(for: workspace), !preset.apps.isEmpty else { return }
-        apply(preset, on: workspace, openMissing: forced || preset.openMissing)
+        apply(preset.laidOut(as: layoutRow(workspace)), on: workspace, openMissing: forced || preset.openMissing)
     }
 
     /// One apply at a time: a newer one cancels the one running and starts once it has stopped.
