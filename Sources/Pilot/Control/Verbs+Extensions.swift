@@ -144,7 +144,9 @@ final class ExtensionTools {
     /// A GitHub install's question (ADR 0017, T6), asked once its folder is fetched and before anything is downloaded or
     /// built: where it comes from, its commands and preferences, what is downloaded after Allow and how each is checked,
     /// and what it replaces. Past what the prompt shows whole (ControlGate.Ask.longest), the commands, preferences and
-    /// packages are counted instead of named, so a big extension is asked, never denied unasked.
+    /// packages are counted instead of named, so a big extension is still asked; one still too long (long folder paths)
+    /// is denied unasked, as any question is. The remote words are the id and command names, which the host and
+    /// GitHubInstall hold to the id rule before this is asked, and the title (80 characters at most), last on its line.
     func githubAsk(_ plan: GitHubInstall.Plan, tools: URL, whole: Bool = true) -> (ask: ControlGate.Ask, whole: Bool) {
         let modes = Dictionary(grouping: plan.commands, by: \.mode).sorted { $0.key < $1.key }.map { "\($0.value.count) \($0.key)" }
         let commands = whole ? plan.commands.map { "ext.\(plan.id).\($0.name) (\($0.mode))" }.joined(separator: ", ")
@@ -156,7 +158,7 @@ final class ExtensionTools {
             + (whole && !plan.packages.isEmpty ? ": " + plan.packages.map { "\($0.key.dropFirst("node_modules/".count))@\($0.version)" }.joined(separator: ", ") : "")
         let (replaces, headline, fromLine) = replacing(plan.id, plan.version, from: "From GitHub: \(plan.source)")
         let ask = ControlGate.Ask.install(.extension, lines: [
-            "\(plan.id) (\(plan.title)\(plan.version.map { " \($0)" } ?? "")) from \(plan.source), tree \(plan.tree.prefix(12))",
+            "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(plan.title)",
             "into \(extensions.appending(path: plan.id).path)",
             "commands, run as you in Pilot's extension host: \(commands)",
             "preferences: \(preferences)",
@@ -397,12 +399,14 @@ extension ControlVerbs {
         do { _ = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch {
             throw ControlError(.badValue, ExtensionCatalogue.Problem.reason(error) + " Nothing asked.")
         }
-        let (ask, whole) = tools.githubAsk(plan, tools: github.tools)
-        return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
-            let built: URL, more: [GitHubInstall.Fetched]
+        // Built again after Allow, as the local route's is: an extension installed or removed under this id while asking
+        // changes the question, and the gate then denies.
+        return try await tools.gate.allow(tools.githubAsk(plan, tools: github.tools).ask, peer: peer) { () throws(ControlError) in
+            let whole = tools.githubAsk(plan, tools: github.tools).whole
+            let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
             do { (built, more) = try await github.build(plan) } catch { throw refused(error, "built, nothing installed") }
             let staged: ExtensionCheck.Staged
-            do { staged = try await ExtensionCheck.stage(built) } catch { throw refused(error, "installed") }
+            do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
             defer { staged.remove() }
             guard let ext = staged.ext, staged.entry != nil, ext.id == plan.id else {
                 throw ControlError(.badValue, "github:\(github.spec) built, but fails the check, so nothing was installed:\n"
@@ -415,6 +419,7 @@ extension ControlVerbs {
             return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
                             "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
                             "question": .string(whole ? "whole" : "counted"),
+                            "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
                             "fetched": .array((fetched + more).map { f in
                                 .object(["host": .string(f.host), "what": .string(f.what), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
                             })])

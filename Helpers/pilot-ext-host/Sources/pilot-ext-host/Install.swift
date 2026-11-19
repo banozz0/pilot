@@ -24,6 +24,11 @@ enum Installer {
     static let esbuildURL = "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.28.2.tgz"
     static let esbuildIntegrity = "sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw=="
     static let esbuildDownload = 4_434_422
+    /// The sha256 of that tarball's `package/bin/esbuild`, as unpacked on 2026-11-19 (raycast-extensions T6 log, section 5): a
+    /// copy in Tools is reused only while it still hashes to this, and a fresh one is kept only when it does.
+    static let esbuildSHA256 = "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384"
+    /// The longest `github:` argument and the longest title the question carries.
+    static let longestSpec = 200, longestTitle = 80
 
     /// What the host supplies itself, so a package's own copy is never fetched or bundled: two Reacts break hooks.
     static let externals: Set<String> = ["@raycast/api", "react"]
@@ -69,7 +74,7 @@ enum Installer {
     static func fetch(_ spec: String, workspace: URL, tools: URL) async throws {
         let parts = spec.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         let named = #/^[A-Za-z0-9._-]+$/#
-        guard parts.count >= 3, parts.allSatisfy({ $0.wholeMatch(of: named) != nil && $0 != "." && $0 != ".." }) else {
+        guard spec.count <= longestSpec, parts.count >= 3, parts.allSatisfy({ $0.wholeMatch(of: named) != nil && $0 != "." && $0 != ".." }) else {
             throw Refused("github:\(spec) is not github:<owner>/<repo>/<folder>")
         }
         let (owner, repo, path) = (parts[0], parts[1], parts.dropFirst(2).joined(separator: "/"))
@@ -80,11 +85,12 @@ enum Installer {
               let treeSHA = tree["sha"] as? String else { throw Refused("GitHub's listing of \(path) did not read") }
         guard tree["truncated"] as? Bool != true else { throw Refused("GitHub cut its listing of \(path) short") }
         fetched(listing, "tree \(owner)/\(repo)/\(path)", data.count, "\(entries.count) entries, not truncated")
-        // Only what a build reads: the manifest, the lockfile, tsconfig, src/ and assets/. Links and submodules never.
+        // Only what a build reads: the manifest, the lockfile, src/ and assets/. Links and submodules never. Its tsconfig is
+        // not read: the build gives esbuild its own settings, so no `extends` or `paths` reaches outside the folder.
         let wanted = entries.compactMap { e -> (path: String, sha: String, size: Int)? in
             guard e["type"] as? String == "blob", let p = e["path"] as? String, let sha = e["sha"] as? String,
                   ["100644", "100755"].contains(e["mode"] as? String ?? "") else { return nil }
-            let top = ["package.json", "package-lock.json", "tsconfig.json"].contains(p)
+            let top = ["package.json", "package-lock.json"].contains(p)
             guard top || p.hasPrefix("src/") || p.hasPrefix("assets/") else { return nil }
             return (p, sha, e["size"] as? Int ?? 0)
         }
@@ -131,13 +137,22 @@ enum Installer {
               let id = manifest["name"] as? String, let commands = manifest["commands"] as? [[String: Any]] else {
             throw Refused("its package.json is not a Raycast manifest")
         }
+        // Held to Pilot's id rule (Extension.isName) and Raycast's three modes before Pilot asks, so the question names only
+        // words that rule allows; the title is the one remote text it shows, capped and last on its line.
+        let name = #/[a-z0-9][a-z0-9-]*/#
+        guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(id.prefix(64))\", not an id of a-z, 0-9 and hyphens") }
+        for command in commands {
+            let c = command["name"] as? String ?? ""
+            guard c.wholeMatch(of: name) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(c.prefix(64))\", not a-z, 0-9 and hyphens") }
+            guard ["view", "no-view", "menu-bar"].contains(command["mode"] as? String ?? "view") else { throw Refused("command \(c) has a mode Raycast does not have") }
+        }
         // The extension's, then each command's, a name given twice kept once (RaycastManifest.preferences).
         var preferences: [String] = []
         for list in [manifest["preferences"]] + commands.map({ $0["preferences"] }) {
             for name in (list as? [[String: Any]] ?? []).compactMap({ $0["name"] as? String }) where !preferences.contains(name) { preferences.append(name) }
         }
         var plan: [String: Any] = [
-            "id": id, "title": manifest["title"] as? String ?? id, "manifest": hex(Array(SHA256.hash(data: manifestData))),
+            "id": id, "title": String((manifest["title"] as? String ?? id).prefix(longestTitle)), "manifest": hex(Array(SHA256.hash(data: manifestData))),
             "commands": commands.map { ["name": $0["name"] as? String ?? "", "title": $0["title"] as? String ?? "", "mode": $0["mode"] as? String ?? "view"] },
             "preferences": preferences,
         ]
@@ -187,13 +202,19 @@ enum Installer {
         plan["packages"] = try needed.map { key -> [String: Any] in
             let entry = packages[key] ?? [:]
             guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(key) leaves its folder") }
-            guard let resolved = entry["resolved"] as? String, resolved.hasPrefix(registry), URL(string: resolved) != nil else {
-                throw Refused("\(key) does not come from \(registry) (\(entry["resolved"] as? String ?? "no resolved URL"))")
+            // The registry's own place for this name and version: <name>/-/<name less its scope>-<version>.tgz.
+            let package = key.components(separatedBy: "node_modules/").last ?? ""
+            let version = entry["version"] as? String ?? ""
+            guard package.wholeMatch(of: #/(@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*/#) != nil,
+                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil else { throw Refused("\(key) is not an npm package name and version") }
+            let expected = registry + package + "/-/" + (package.split(separator: "/").last.map(String.init) ?? package) + "-" + version + ".tgz"
+            guard let resolved = entry["resolved"] as? String, resolved == expected else {
+                throw Refused("\(key) does not come from its own place on \(registry) (\(entry["resolved"] as? String ?? "no resolved URL"))")
             }
-            guard let integrity = entry["integrity"] as? String, integrity.hasPrefix("sha512-") else {
+            guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
                 throw Refused("\(key) has no sha512 integrity in its lockfile")
             }
-            return ["key": key, "version": entry["version"] as? String ?? "", "resolved": resolved, "integrity": integrity]
+            return ["key": key, "version": version, "resolved": resolved, "integrity": integrity]
         }
         return plan
     }
@@ -228,11 +249,20 @@ enum Installer {
             guard let entry = ["tsx", "ts", "jsx", "js"].map({ "src/\(name).\($0)" }).first(where: { fm.fileExists(atPath: source.appending(path: $0).path) }) else {
                 throw Refused("command \(name) has no src/\(name).tsx, .ts, .jsx or .js")
             }
+            let meta = workspace.appending(path: "meta-\(name).json")
             try esbuildRun(esbuild.url, in: source, [
                 entry, "--bundle", "--platform=node", "--format=cjs", "--target=es2022", "--jsx=automatic", "--log-level=error",
-                "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react", "--external:react/*",
-                "--outfile=\(built.appending(path: "dist/\(name).js").path)",
+                "--tsconfig-raw={}", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
+                "--external:react/*", "--metafile=\(meta.path)", "--outfile=\(built.appending(path: "dist/\(name).js").path)",
             ])
+            // Every file bundled must be the folder's own or a package unpacked into it: Node's lookup also climbs to
+            // folders above the workspace (~/node_modules), and nothing from there may enter a bundle.
+            guard let metaData = try? Data(contentsOf: meta), let read = try? JSONSerialization.jsonObject(with: metaData) as? [String: Any],
+                  let inputs = (read["inputs"] as? [String: Any])?.keys else { throw Refused("esbuild wrote no list of what it bundled") }
+            let root = source.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+            if let outside = inputs.first(where: { !source.appending(path: $0).standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) }) {
+                throw Refused("command \(name) would bundle \(outside), which is outside the extension's folder; nothing was installed")
+            }
             say(["type": "bundle", "command": name, "entry": entry,
                  "bytes": (try? fm.attributesOfItem(atPath: built.appending(path: "dist/\(name).js").path)[.size] as? Int) ?? 0])
         }
@@ -240,23 +270,24 @@ enum Installer {
         if fm.fileExists(atPath: source.appending(path: "assets").path) {
             try fm.copyItem(at: source.appending(path: "assets"), to: built.appending(path: "assets"))
         }
-        say(["type": "built", "folder": built.path, "esbuild": esbuild.reused ? "reused" : "downloaded", "esbuildPath": esbuild.url.path])
+        say(["type": "built", "folder": built.path, "esbuild": esbuild.reused ? "reused" : "downloaded", "esbuildPath": esbuild.url.path,
+             "esbuildVersion": esbuildVersion])
     }
 
     // MARK: esbuild
 
     struct Tool { let url: URL, reused: Bool }
 
-    /// The esbuild already in `tools` when its bytes still hash as they did when it was unpacked, else nil.
+    /// The esbuild already in `tools` while its bytes hash to the pinned sha256, else nil.
     static func esbuildReady(_ tools: URL) throws -> URL? {
-        let folder = tools.appending(path: "esbuild-\(esbuildVersion)"), binary = folder.appending(path: "esbuild")
-        guard let data = try? Data(contentsOf: binary), let saved = try? String(contentsOf: folder.appending(path: "esbuild.sha256"), encoding: .utf8)
-        else { return nil }
-        return hex(Array(SHA256.hash(data: data))) == saved.trimmingCharacters(in: .whitespacesAndNewlines) ? binary : nil
+        let binary = tools.appending(path: "esbuild-\(esbuildVersion)/esbuild")
+        guard let data = try? Data(contentsOf: binary) else { return nil }
+        return hex(Array(SHA256.hash(data: data))) == esbuildSHA256 ? binary : nil
     }
 
     /// esbuild from `tools`, or downloaded once into it: the registry's tarball checked by the pinned sha512, its
-    /// `bin/esbuild` kept with the sha256 it had, and `--version` read back before it builds anything.
+    /// `bin/esbuild` kept only when it hashes to the pinned sha256 and its `--version` reads back. A temporary folder left
+    /// by a run that stopped midway is swept first.
     static func esbuildTool(_ tools: URL) async throws -> Tool {
         if let ready = try esbuildReady(tools) {
             say(["type": "tool", "esbuild": "reused", "path": ready.path])
@@ -272,16 +303,17 @@ enum Installer {
         fetched(url, "@esbuild/darwin-arm64@\(esbuildVersion)", tarball.count, "sha512 integrity, pinned")
         let fm = FileManager.default
         try fm.createDirectory(at: tools, withIntermediateDirectories: true)
+        sweep(tools, prefix: ".esbuild-")
         let temp = tools.appending(path: ".esbuild-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: temp) }
         _ = try untar(try gunzip(tarball, limit: 64 << 20), into: temp.appending(path: "package"))
         let binary = temp.appending(path: "package/bin/esbuild")
         let data = try Data(contentsOf: binary)
+        guard hex(Array(SHA256.hash(data: data))) == esbuildSHA256 else { throw Refused("the esbuild unpacked does not hash to its pinned sha256") }
         let folder = temp.appending(path: "esbuild-\(esbuildVersion)")
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         try fm.moveItem(at: binary, to: folder.appending(path: "esbuild"))
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.appending(path: "esbuild").path)
-        try hex(Array(SHA256.hash(data: data))).write(to: folder.appending(path: "esbuild.sha256"), atomically: true, encoding: .utf8)
         // Read back before it is kept, so a binary that is not this version never lands in Tools to be reused.
         let version = try esbuildRun(folder.appending(path: "esbuild"), in: temp, ["--version"]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard version == esbuildVersion else { throw Refused("the esbuild downloaded says it is \(version), not \(esbuildVersion)") }
@@ -322,17 +354,48 @@ enum Installer {
         var request = URLRequest(url: url, timeoutInterval: 60)
         request.setValue("pilot-ext-host", forHTTPHeaderField: "User-Agent")
         if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
-        let (data, response) = try await Host.session.data(for: request)
+        // Streamed, and stopped at `limit`: a body past it is never held whole.
+        let (bytes, response) = try await Host.session.bytes(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw Refused("\(url.host() ?? "") answered \(status) for \(url.path())") }
-        guard data.count <= limit else { throw Refused("\(url.path()) is \(data.count) bytes, past \(limit)") }
+        guard response.expectedContentLength <= Int64(limit) else { throw Refused("\(url.path()) is \(response.expectedContentLength) bytes, past \(limit)") }
+        var data = Data()
+        data.reserveCapacity(max(0, Int(response.expectedContentLength)))
+        var chunk = [UInt8](), count = 0
+        chunk.reserveCapacity(65_536)
+        for try await byte in bytes {
+            chunk.append(byte)
+            count += 1
+            guard count <= limit else { throw Refused("\(url.path()) runs past \(limit) bytes") }
+            if chunk.count == 65_536 { data.append(contentsOf: chunk); chunk.removeAll(keepingCapacity: true) }
+        }
+        data.append(contentsOf: chunk)
         return data
     }
 
-    /// Whether `data` hashes to an npm integrity string's sha512.
+    /// The sha512 digests an npm integrity string names: Subresource Integrity, hashes split by spaces, others ignored.
+    static func sha512(_ integrity: String) -> [Data]? {
+        let found = integrity.split(whereSeparator: \.isWhitespace).compactMap { token -> Data? in
+            token.hasPrefix("sha512-") ? Data(base64Encoded: String(token.dropFirst(7))) : nil
+        }
+        return found.isEmpty ? nil : found
+    }
+
+    /// Whether `data` hashes to a sha512 its integrity string names.
     static func matches(_ data: Data, _ integrity: String) -> Bool {
-        guard integrity.hasPrefix("sha512-"), let want = Data(base64Encoded: String(integrity.dropFirst(7))) else { return false }
-        return Data(SHA512.hash(data: data)) == want
+        guard let wanted = sha512(integrity) else { return false }
+        return wanted.contains(Data(SHA512.hash(data: data)))
+    }
+
+    /// Removes the folders in `folder` named `prefix…` that are over an hour old: what a run stopped midway left.
+    static func sweep(_ folder: URL, prefix: String) {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasPrefix(prefix) {
+            let url = folder.appending(path: name)
+            if let made = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date, made < Date(timeIntervalSinceNow: -3600) {
+                try? fm.removeItem(at: url)
+            }
+        }
     }
 
     /// A relative path with no empty, `.` or `..` part.
@@ -395,7 +458,7 @@ enum Installer {
             let name = text(offset, 100), size = number(offset + 124, 12), type = b[offset + 156]
             let prefix = text(offset + 257, 6).hasPrefix("ustar") ? text(offset + 345, 155) : ""
             let start = offset + 512
-            guard size >= 0, start + size <= b.count else { throw Refused("a package's archive is cut short") }
+            guard size >= 0, size <= b.count - start else { throw Refused("a package's archive is cut short") }
             offset = start + (size + 511) / 512 * 512
             let body = Data(b[start..<(start + size)])
             switch type {

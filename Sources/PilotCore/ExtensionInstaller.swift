@@ -122,20 +122,39 @@ public struct GitHubInstall: Sendable {
         guard argument.hasPrefix("github:") else { return nil }
         spec = String(argument.dropFirst("github:".count))
         let support = extensions.deletingLastPathComponent()
-        workspace = support.appending(path: ".ext-github-\(UUID().uuidString)")
+        workspace = support.appending(path: "\(Self.prefix)\(UUID().uuidString)")
         tools = support.appending(path: "Tools")
     }
 
+    static let prefix = ".ext-github-"
+
+    /// The plan, once Pilot holds it to its own rules too: the id and every command name as Extension.isName, Raycast's
+    /// three modes, a title of 80 characters at most. A workspace over an hour old, left by a run that stopped midway,
+    /// is swept first.
     public func fetch() async throws -> (Plan, [Fetched]) {
+        let fm = FileManager.default, support = workspace.deletingLastPathComponent()
+        for name in (try? fm.contentsOfDirectory(atPath: support.path)) ?? [] where name.hasPrefix(Self.prefix) {
+            let old = support.appending(path: name)
+            if let made = (try? fm.attributesOfItem(atPath: old.path))?[.modificationDate] as? Date, made < Date(timeIntervalSinceNow: -3600) {
+                try? fm.removeItem(at: old)
+            }
+        }
         let (lines, last) = try await host(["--fetch", spec, workspace.path, tools.path], input: Data())
-        return (try JSONDecoder().decode(Plan.self, from: last), lines)
+        let plan = try JSONDecoder().decode(Plan.self, from: last)
+        guard Extension.isName(plan.id), plan.title.count <= 80,
+              plan.commands.allSatisfy({ Extension.isName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
+            throw Refused(errorDescription: "its package.json names it or a command outside Pilot's id rule (a-z, 0-9 and hyphens)")
+        }
+        return (plan, lines)
     }
 
-    /// The built folder, and each request the build made; `plan` is the one asked about.
-    public func build(_ plan: Plan) async throws -> (URL, [Fetched]) {
+    /// What a build answers: its folder, and the esbuild it used, downloaded or reused.
+    public struct Built: Decodable, Sendable { public let folder, esbuild, esbuildPath, esbuildVersion: String }
+
+    /// The build, and each request it made; `plan` is the one asked about.
+    public func build(_ plan: Plan) async throws -> (Built, [Fetched]) {
         let (lines, last) = try await host(["--build", workspace.path, tools.path], input: try JSONEncoder().encode(plan))
-        struct Built: Decodable { let folder: String }
-        return (URL(filePath: try JSONDecoder().decode(Built.self, from: last).folder), lines)
+        return (try JSONDecoder().decode(Built.self, from: last), lines)
     }
 
     public func remove() { try? FileManager.default.removeItem(at: workspace) }
