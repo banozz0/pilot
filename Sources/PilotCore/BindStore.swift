@@ -294,15 +294,32 @@ public struct BindStore: Equatable, Sendable {
 
     /// A bind file's active preset added as a new one (Import's Add as preset): its name, or `name` for a file before
     /// version 3, its base and the keys set in it, which become the active preset. App binds are not part of a preset.
+    /// One on a base whose built-in is not listed here (a 1.3 preset on Classic, on a new install) lands on the empty
+    /// base with that table's keys as set by hand, so it keeps every key and Classic never comes to be listed (T14).
     @discardableResult
     public mutating func importPreset(_ json: Data, name: String) throws(LoadError) -> Preset {
         let file = try Self.file(from: json)
         if let rows = file.presets {
             guard let row = rows.first(where: { $0.id == file.preset }) ?? rows.first else { throw .unreadable("no preset") }
-            return add(Preset(id: "", name: row.name, base: try row.resolvedBase), try Self.edits(row.binds).0)
+            let (base, edits) = (try row.resolvedBase, try Self.edits(row.binds).0)
+            if let builtIn = base.builtIn, !presets.contains(builtIn) {
+                return add(Preset(id: "", name: row.name, base: .empty), flattened(edits, onto: base))
+            }
+            return add(Preset(id: "", name: row.name, base: base), edits)
         }
         let base: Base = tables[.myBinds] != nil ? .myBinds : .empty
         return add(Preset(id: "", name: name, base: base), try Self.edits(file.binds).0)
+    }
+
+    /// `edits` on `base`'s table as keys set by hand, as `rebuild` resolves them: the edits first, then each default on
+    /// a trigger still free, a default that finds its trigger taken unbound.
+    private func flattened(_ edits: Edits, onto base: Base) -> Edits {
+        var out = edits, taken = Dictionary(edits.custom.compactMap { action, key in key.map { ($0, action) } }) { first, _ in first }
+        for (action, key) in (tables[base] ?? [:]).sorted(by: { $0.key < $1.key }) where edits.custom[action] == nil {
+            out.custom.updateValue(taken[key] == nil ? key : nil, forKey: action)
+            if taken[key] == nil { taken[key] = action }
+        }
+        return out
     }
 
     /// The action a key or a mouse trigger runs.
