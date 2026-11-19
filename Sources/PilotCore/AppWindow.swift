@@ -172,9 +172,10 @@ public enum AppPage: String, CaseIterable, Sendable {
                        "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
                        "volume up", "volume down"]
         case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run"]
-        // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10).
+        // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10, again in
+        // pilot-ui-redesign T17).
         case .clipboard: ["clipboard", "history", "paste", "keep", "keep the last", "images", "save images", "passwords", "skip passwords",
-                          "clear history", "open clipboard"]
+                          "open clipboard"]
         // The front's words; the rest moved with their controls to Captures' More places (simplify-pages T13).
         case .captures: ["capture", "screenshot", "screen shot", "pictures", "after capture", "area", "full screen", "captures folder"]
         case .notes: ["notes", "quick notes", "scratch", "markdown", "notes folder", "vault", "inbox"]
@@ -190,7 +191,8 @@ public enum AppPage: String, CaseIterable, Sendable {
                         "check for updates", "support", "sponsor"]
         case .ai: ["ai", "ask", "chat", "quick ai", "claude", "ask claude", "ai chat"]
         case .extensions: ["extension", "preference", "password", "permission", "extensions folder"]
-        case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "magnification", "magnify", "dock size", "auto-hide", "pins", "keep in dock"]
+        // The front's words; magnification, placement, icon colours, the visualizer and Taken out moved to More (T17).
+        case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "dock size", "auto-hide", "pins", "widgets"]
         case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note", "snap to grid", "grid", "align"]
         // The front's words; the rest moved with their controls to Voice's More places (simplify-pages T12).
         case .voice: ["dictation", "dictate", "read aloud", "speech", "speak", "voice", "text to speech", "tts", "speed", "speech to text",
@@ -440,9 +442,13 @@ public enum AppSection: String, CaseIterable, Sendable {
     case floatApps, floatTitles, motion, focusedWindow
     /// Workspaces' More's window shelf (on Tiling's More until Sven, 2026-11-11, after 2276).
     case windowShelf
-    /// Clipboard's places on its front, back from More with its More (pages round 4, Sven's Q100): the apps never
-    /// recorded, card numbers and keys that expire, the panel's Return and sort, and the tags.
-    case clipNever, clipExpire, clipPanel, clipTags
+    /// Clipboard's More (pilot-ui-redesign T17, S1 B; it reverses pages round 4's Q100, which had brought them to the
+    /// front) and its places: the apps never recorded, card numbers and keys that expire, the panel's Return and sort, and
+    /// the tags.
+    case clipMore, clipNever, clipExpire, clipPanel, clipTags
+    /// The Dock's More (pilot-ui-redesign T17, S1 B) and its place: magnification, placement, icon colours and the
+    /// visualizer, with the Dock's apps taken out under it.
+    case dockMore, dockLook
     /// Open with's place on its front, back from More with its More (pages round 4, Sven's Q103): the app or site each
     /// role key opens.
     case appsForKeys
@@ -489,7 +495,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .permissions, .about, .hyperKey, .status, .data: .general
         case .notifications: .menuBar
         case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
-        case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
+        case .clipMore, .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
+        case .dockMore, .dockLook: .dock
         case .appsForKeys: .openWith
         case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud: .voice
         case .captureOptions, .captureKeys, .recordingQuality: .captures
@@ -521,6 +528,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
         case .look: .lookMore
+        case .dock: .dockMore
+        case .clipboard: .clipMore
         default: nil
         }
     }
@@ -532,12 +541,12 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .appsShowAs]
+                                                     .lookStyle, .appsShowAs,
+                                                     .dockLook, .clipNever, .clipExpire, .clipPanel, .clipTags]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
-                                                     .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
@@ -597,7 +606,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore: "More"
+        case .dockLook: "Placement and effects"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -674,7 +684,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore: []
+        // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
+        case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
+                         "theme icons", "visualizer", "visualiser", "bars", "taken out", "keep in dock", "removed from dock"]
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
@@ -707,7 +720,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .clipNever: ["never record", "never record from", "ignore app", "exclude app", "password manager"]
         case .clipExpire: ["expire", "card number", "card numbers", "copied key", "secret", "minutes"]
         case .clipPanel: ["return", "paste or copy", "copy only", "sort", "sort by", "reversed", "order"]
-        case .clipTags: ["tags", "tag", "tag colour"]
+        // Clear history sits under the tags on More (T17).
+        case .clipTags: ["tags", "tag", "tag colour", "clear history"]
         case .floatApps: ["always float", "float apps", "float", "floating"]
         case .floatTitles: ["window title", "float titles", "title"]
         case .motion: ["drag", "drag windows", "move windows", "resize", "glide", "animate", "animate windows"]

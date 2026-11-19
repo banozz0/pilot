@@ -33,16 +33,20 @@ final class DockPageFocus {
     }
 }
 
-/// Settings › Desktop › Dock (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop"): the dock's
-/// switch, its style (the top bar's Solid, Glass and Clear), size and magnification, then its widgets: the ones on in the
-/// dock's order with Move up and Move down, the rest, and From extensions (each installed extension with a top bar item
-/// no widget reads). A widget with settings opens them under its row: System stats' readings, an extension's own
-/// preferences (Markets' symbols and how they show, shared with its top bar item).
+/// Settings › Desktop › Dock (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop"). The front
+/// (pilot-ui-redesign T17, S1 B: one switch per simple feature, the rest on More): the dock's switch, its style (the top
+/// bar's Solid, Glass and Clear) and size, then its widgets: the ones on in the dock's order with Move up and Move down,
+/// the rest, and From extensions (each installed extension with a top bar item no widget reads). A widget with settings
+/// opens them under its row: System stats' readings, an extension's own preferences (Markets' symbols and how they show,
+/// shared with its top bar item). More: magnification, placement, icon colours and the visualizer, then the Dock's apps
+/// taken out.
 struct DockPage: View {
     @Environment(\.ink) private var ink
     @Environment(Engine.self) private var engine
     var focus: DockPageFocus = .shared
     var extensionBar: ExtensionBar = .shared
+    /// The page's More tab, not its front.
+    var more = false
     /// The extensions folder it reads: the app's, or a render's.
     let folder: URL
     /// The extensions and their preferences, read as the page opens and saved as they change (the Extensions page's own
@@ -50,42 +54,68 @@ struct DockPage: View {
     @State private var prefs: ExtensionsSettings
 
     /// A render passes `prefs` loaded, as nothing loads before it draws.
-    init(folder: URL = Extension.folder, focus: DockPageFocus = .shared, extensionBar: ExtensionBar = .shared, prefs: ExtensionsSettings? = nil) {
-        self.folder = folder; self.focus = focus; self.extensionBar = extensionBar
+    init(folder: URL = Extension.folder, focus: DockPageFocus = .shared, extensionBar: ExtensionBar = .shared, prefs: ExtensionsSettings? = nil,
+         more: Bool = false) {
+        self.folder = folder; self.focus = focus; self.extensionBar = extensionBar; self.more = more
         _prefs = State(initialValue: prefs ?? ExtensionsSettings(folder: folder))
     }
 
     /// The installed extensions with a top bar item no widget reads (DockWidgetSources.barExtensions), from what was read.
     private var offered: [Extension] { prefs.rows.map(\.ext).filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) } }
 
+    /// The settings on More, by their `pilot` keys: a search result for one opens More (AppShell's `ringsOnMore`).
+    static let moreKeys: Set<String> = ["dock.magnify", "dock.placement", "dock.tint", "dock.visualizer"]
+
+    /// More's index: its one block, so no index shows; Taken out follows it while the Dock has apps taken out.
+    static let entries = [MoreEntry(id: .dockLook, symbol: "sparkles", controls: 4)]
+
     var body: some View {
         let dock = engine.dock
+        Group {
+            if more { moreTab(dock) } else { front(dock) }
+        }
+        .task { if !prefs.loaded { await prefs.load() } }
+    }
+
+    private func front(_ dock: DockController) -> some View {
         PageBody {
             SwitchCard(symbol: "dock.rectangle", name: "Dock", isOn: dock.isOn, busy: dock.busy,
                        detail: "Pilot's own dock at the foot of the main screen: your Dock's apps, the running ones and your widgets. On turns on the macOS Dock's auto-hide; off, or quitting Pilot, puts your setting back.") {
                 dock.set(!dock.isOn)
             }
+            .landingRing("dock.on")
             if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
             TitledPanel(title: "Look") { look(dock) }
-            // The Dock's apps taken out with Remove from Dock: one not running shows nowhere else (Sven on build 2687).
-            let taken = dock.taken
-            if !taken.isEmpty {
-                TitledPanel(title: "Taken out") {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(taken.enumerated()), id: \.element.key) { i, pin in
-                            BlockRow(first: i == 0) {
-                                Text(pin.name).foregroundStyle(ink.text)
-                                Spacer()
-                                Button("Keep in Dock") { dock.restore(pin) }.buttonStyle(.pilot)
-                            }
-                        }
-                    }
-                    .font(ink.ui(13))
-                }
-            }
             TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
         }
-        .task { if !prefs.loaded { await prefs.load() } }
+    }
+
+    private func moreTab(_ dock: DockController) -> some View {
+        KitMore(entries: Self.entries) {
+            VStack(alignment: .leading, spacing: 20) {
+                TitledPanel(title: AppSection.dockLook.title) { effects(dock) }.moreBlock(.dockLook)
+                taken(dock)
+            }
+        }
+    }
+
+    /// The Dock's apps taken out with Remove from Dock: one not running shows nowhere else (Sven on build 2687).
+    @ViewBuilder private func taken(_ dock: DockController) -> some View {
+        let taken = dock.taken
+        if !taken.isEmpty {
+            TitledPanel(title: "Taken out") {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(taken.enumerated()), id: \.element.key) { i, pin in
+                        BlockRow(first: i == 0) {
+                            Text(pin.name).foregroundStyle(ink.text)
+                            Spacer()
+                            Button("Keep in Dock") { dock.restore(pin) }.buttonStyle(.pilot)
+                        }
+                    }
+                }
+                .font(ink.ui(13))
+            }
+        }
     }
 
     @ViewBuilder private func look(_ dock: DockController) -> some View {
@@ -97,19 +127,29 @@ struct DockPage: View {
                 Segments(selection: Binding(get: { dock.settings.style }, set: { dock.settings.style = $0 }),
                          options: TopBarBackground.allCases.map { ($0, $0.title) }, label: "Dock style")
             }
+            .landingRing("dock.style")
             BlockRow {
                 Text("Size").foregroundStyle(ink.text)
                 Spacer()
                 Segments(selection: Binding(get: { dock.settings.size }, set: { dock.settings.size = $0 }),
                          options: DockSize.allCases.map { ($0, $0.rawValue.capitalized) }, label: "Dock size")
             }
-            BlockRow {
+            .landingRing("dock.size")
+        }
+        .font(ink.ui(13))
+    }
+
+    /// More's block: how the icons grow, where the dock sits, the icons' colours and the visualizer.
+    @ViewBuilder private func effects(_ dock: DockController) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BlockRow(first: true) {
                 Text("Magnification").foregroundStyle(ink.text)
                 InfoMark(text: "How much the icon under the pointer grows, as the macOS Dock's.")
                 Spacer()
                 Segments(selection: Binding(get: { dock.settings.magnify }, set: { dock.settings.magnify = $0 }),
                          options: DockMagnification.allCases.map { ($0, $0.title) }, label: "Dock magnification")
             }
+            .landingRing("dock.magnify")
             // Rice round (Sven 2026-11-13, Q220 A, Q221, Q222).
             BlockRow {
                 Text("Placement").foregroundStyle(ink.text)
@@ -118,6 +158,7 @@ struct DockPage: View {
                 Segments(selection: Binding(get: { dock.settings.placement }, set: { dock.settings.placement = $0 }),
                          options: DockPlacement.allCases.map { ($0, $0.title) }, label: "Dock placement")
             }
+            .landingRing("dock.placement")
             BlockRow {
                 Text("Icon colours").foregroundStyle(ink.text)
                 InfoMark(text: "Theme draws every icon in your theme's colours, its tile from the accent and its mark toward the text colour, and draws them again when you change theme. Off keeps each app's own colours.")
@@ -125,6 +166,7 @@ struct DockPage: View {
                 Segments(selection: Binding(get: { dock.settings.tint }, set: { dock.settings.tint = $0 }),
                          options: DockIconTint.allCases.map { ($0, $0.title) }, label: "Dock icon colours")
             }
+            .landingRing("dock.tint")
             BlockRow {
                 Text("Visualizer").foregroundStyle(ink.text)
                 InfoMark(text: "Bars in the theme's colour along the screen's foot, out from the dock to both edges, moving with what your Mac plays; a flat line when nothing plays. Turning it on asks macOS for System Audio Recording: Pilot turns the sound into bars on this Mac and keeps none of it. It listens only while music plays.")
@@ -132,6 +174,7 @@ struct DockPage: View {
                 Toggle("Visualizer", isOn: Binding(get: { dock.settings.visualizer }, set: { on in Task { await dock.setVisualizer(on) } }))
                     .toggleStyle(.pilotSwitch).labelsHidden()
             }
+            .landingRing("dock.visualizer")
             if dock.settings.visualizer, let problem = dock.visualizer.problem { FinePrint(text: problem, color: ink.red) }
         }
         .font(ink.ui(13))

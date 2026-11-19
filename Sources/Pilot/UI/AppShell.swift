@@ -84,7 +84,16 @@ struct PageView: View {
             .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
             // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
             .environment(\.landingRing, model.ringed)
+            // A ringed setting whose row is on its page's More (pilot-ui-redesign T17): More, so the ring shows.
+            .onChange(of: model.ringed) {
+                guard let key = model.ringed, Self.ringsOnMore[model.page]?.contains(key) == true,
+                      let more = AppSection.more(of: model.page) else { return }
+                model.sections[model.page] = more
+            }
     }
+
+    /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T17, S1 B).
+    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .clipboard: ClipboardSettingsView.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
     @ViewBuilder private var page: some View {
@@ -112,7 +121,7 @@ struct PageView: View {
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).
-        case .dock: DockPage()
+        case .dock: DockPage(more: section == .dockMore)
         case .pilotMenu: PilotMenuPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
@@ -120,7 +129,7 @@ struct PageView: View {
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
-        case .clipboard: ClipboardSettingsView()
+        case .clipboard: ClipboardSettingsView(more: section == .clipMore)
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
