@@ -6,14 +6,13 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Home as direction B of the approved mockup vg74ARspzoo (card agent-bo-95422992), opt-in like the other renders: the
-/// whole window at 1440, 1000 and 760 in Tokyo Night, then the page alone in its four states (Working, Key
-/// clicked on Hyper+B, Hyper off, Needs you with the tiler stopped) at 1440, Key clicked and Hyper off at 1000 and 760
-/// too. Seeded in a moved home: the mockup's workspaces with their names and windows, binds with the mockup's apps on T,
-/// B, G, I, Z and M, today's presses, Stats' readings and a last copy (fakes; nothing reaches the tiler or the
-/// clipboard). Hyper off is the engine's own session switch turned off around those
-/// renders; the test never starts the tap it would reach.
-/// `CFFIXED_USER_HOME=/tmp/pilot-render-home-992b PILOT_RENDER_DIR=/tmp/pilot-renders-992b swift test --filter HomeRenders`
+/// Home in the panel (pilot-ui-redesign T6, round 2's shots 7c-home and 7c-search), opt-in like the other renders: the
+/// window at the panel's 780 by 560 in Tokyo Night and Porcelain, on Home at rest (the four switches and Jump back in),
+/// on Home searching "border" (the grouped results with their values), and Tools › Captures with the same words in its
+/// field's drop (⌘F on any tab). Seeded in a moved home: the mockup's
+/// workspaces and binds (fakes; nothing reaches the tiler or the clipboard), a schema on the render's own engine, and
+/// two settings changed last. Its `engine()` and `seedPresets()` seed the other renders too.
+/// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter HomeRenders`
 extension SharedLook {
 @MainActor
 @Suite("Home renders")
@@ -82,7 +81,24 @@ struct HomeRenders {
         try WorkspacePresetStore.standard.save(contents)
     }
 
-    @Test("Home renders as mockup B at 1440, 1000 and 760, in its four states", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    static let looks: [(name: String, theme: String)] = [("dark", "tokyo-night"), ("light", "porcelain")]
+
+    /// The settings the render's Jump back in lists, newest first.
+    static let recent = ["capture.afterCapture", "look.windowBorder"]
+
+    /// The settings on the render's own engine, the stores in the moved home: Look, Captures and part 2 (Tiling's border
+    /// among them), as the app's live schema registers them.
+    static func schema(_ engine: Engine) -> SettingsSchema {
+        let schema = SettingsSchema()
+        schema.registerLook(.shared)
+        schema.registerCaptures(.shared)
+        schema.registerPart2(settings: engine.settings, list: engine.workspaceList, block: engine.pilotBlock, bar: .shared,
+                             topBar: engine.topBar, wallpaper: .shared, pilotSwitch: engine.pilotSwitch,
+                             notesIn: { _ in 0 }, changeNotes: { _ in })
+        return schema
+    }
+
+    @Test("Home renders as shots 7c-home and 7c-search at 780 by 560, in Tokyo Night and Porcelain", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -97,74 +113,40 @@ struct HomeRenders {
         try #require(WorkspacePresetStore.standard.url.path.hasPrefix(home), "the presets would land outside the moved home")
 
         let engine = try Self.engine()
-        SharedLook.StatsRenders.seed(SystemSampler.shared)
-        SharedLook.StatsRenders.pickMockup(BarItemsStore.shared)
-        let suite = testSuite()
+        let schema = Self.schema(engine)
         var sources = HomeSources()
-        sources.lastCopied = { HomeCopy(text: "bd show agent-bo-95422987", at: Date().addingTimeInterval(-125), count: 48) }
-        sources.pages = { [] }
+        // The shots' evening.
+        let evening = Calendar.current.date(bySettingHour: 19, minute: 42, second: 0, of: .now) ?? .now
+        sources.now = { _ in evening }
+        sources.schema = { schema }
+        sources.recent = { Self.recent }
 
-        // PILOT_RENDER_ONLY narrows the renders to the file names holding it.
-        let only = Self.env["PILOT_RENDER_ONLY"]
-        func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }
-
+        let look = Look.shared
+        defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
+        look.style = .instrument
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.home")!)
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model)
             .environment(engine).environment(\.homeSources, sources)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "tokyo-night"
-        defer { Look.shared.themeID = PilotTheme.defaultID }
-        for width in [1440, 1000, 760] where wanted("window-\(width)") {
-            window.setContentSize(NSSize(width: CGFloat(width), height: width == 760 ? 3200 : 2200))
-            model.go(AppPlace(.home))
+        window.setContentSize(AppWindowController.size)
+        func shot(_ file: String, _ place: AppPlace = AppPlace(.home), query: String = "") throws {
+            model.go(place)
+            model.query = query
             RunLoop.main.run(until: Date().addingTimeInterval(0.9))
             frame.layoutSubtreeIfNeeded()
-            try RestyledRenders.writeTrimmed(try #require(snapshot(frame, scale: 2)), from: 207,
-                                             to: dir.appendingPathComponent("window-\(width).png"))
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
-
-        // The page alone at the window's page width (right of the window's 207 pt sidebar), in each state.
-        let b = try #require(KeyNames.code(for: "B"))
-        func page(_ state: String, _ engine: Engine, width: Int, picked: Int64? = nil) throws {
-            guard wanted("page-\(width)-\(state)") else { return }
-            let view = HomePage(onScreen: false, start: .init(picked: picked)) { _ in }
-                .environment(engine).environment(\.homeSources, sources)
-                .frame(width: CGFloat(width - 207), height: width == 760 ? 3200 : 2200).pilotTheme(look: .shared).background(Theme.background)
-            try RestyledRenders.writeTrimmed(rendered(view, wait: 0.9), from: 0,
-                                             to: dir.appendingPathComponent("page-\(width)-\(state).png"))
+        for (name, theme) in Self.looks {
+            look.themeID = theme
+            AppWindowController.applyLook(look, to: window)
+            try shot("\(name)-home")
+            try shot("\(name)-home-searching-border", query: "border")
+            // ⌘F on another tab: the same results in the drop under its field.
+            try shot("\(name)-captures-searching-border", AppPlace(.captures), query: "border")
         }
-        try page("1-working", engine, width: 1440)
-        try page("2-key-clicked", engine, width: 1440, picked: b)
-        try page("2-key-clicked", engine, width: 1000, picked: b)
-        try page("2-key-clicked", engine, width: 760, picked: b)
-        // Two widgets on Home, the Launcher and Notes, beside This Mac on the board: the desk's tiles as Home draws them.
-        if wanted("page-1440-5-widgets") {
-            let launcher = try #require(ReadyWidgets.widget(ReadyWidgets.launcher)), notes = try #require(ReadyWidgets.widget(ReadyWidgets.notes))
-            let tiles = [(launcher, "aa11"), (notes, "bb22")].map { widget, id in
-                let model = WidgetTileModel()
-                model.title = widget.title; model.icon = widget.icon
-                if widget.menuField != nil { model.tiles = WidgetRenders.tiles } else { model.blocks = WidgetRenders.blocks(widget) }
-                return HomeWidget(placement: Widget.Placement(id: id, widget: widget.id, screen: nil, x: 0, y: 0, width: widget.size.width,
-                                                             height: widget.size.height, home: true), model: model)
-            }
-            // Nothing saved: a widget on Home shows on the default layout, after its blocks.
-            let layouts = HomeLayoutStore(defaults: UserDefaults(suiteName: "pilot.renders.home.widgets.\(UUID().uuidString)")!)
-            var withWidgets = sources
-            withWidgets.widgets = { tiles }
-            withWidgets.drawWidget = { _, _ in }
-            withWidgets.layout = { layouts }
-            let saved = sources
-            sources = withWidgets
-            defer { sources = saved }
-            try page("5-widgets", engine, width: 1440)
-        }
-        engine.hyperSwitch.toggle()
-        try #require(!engine.hyperSwitch.isOn)
-        for width in [1440, 1000, 760] { try page("3-hyper-off", engine, width: width) }
-        engine.hyperSwitch.toggle()
-        engine.observers.tiler.seed(focused: nil, occupied: [], windows: [])
-        try page("4-needs-you", engine, width: 1440)
+        model.query = ""
     }
 }
 }

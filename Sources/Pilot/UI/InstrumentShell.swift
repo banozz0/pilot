@@ -8,13 +8,19 @@ import SwiftUI
 /// (Home, Keys, Launcher, AI, Pilot). More's card and what the search finds drop over the page. Binds draws its own bar
 /// (InstrumentBindsPage).
 struct InstrumentFrame: View {
+    @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
+    @Environment(\.homeSources) private var sources
     @Bindable var model: AppWindowModel
     var more = PanelMore()
+    /// What the search finds for the window's words, read once a keystroke for Home's results and the drop alike (T6).
+    @State private var hits = SearchHitsModel()
 
     var body: some View {
         let list = !RailLayout.fullWidth(model.page.area)
         let owns = Self.pageOwnsBar(model.page, section: model.section(of: model.page))
+        // Home draws its own head and search (pilot-ui-redesign T6, shot 7c-home): no bar over it.
+        let bar = !owns && model.page != .home
         VStack(spacing: 0) {
             PanelTabBar(model: model, more: more)
             HStack(spacing: 0) {
@@ -23,7 +29,7 @@ struct InstrumentFrame: View {
                     InstrumentRule(vertical: true)
                 }
                 VStack(spacing: 0) {
-                    if !owns {
+                    if bar {
                         InstrumentToolbar(model: model, listed: list)
                         InstrumentRule()
                     }
@@ -35,7 +41,7 @@ struct InstrumentFrame: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if !owns && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            if bar && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
                 WindowSearchDrop(model: model).padding(.top, PanelTabBar.height + style.points(52) - 6).padding(.trailing, 16)
             }
         }
@@ -48,6 +54,9 @@ struct InstrumentFrame: View {
         .overlay(alignment: .topTrailing) {
             if more.open { PanelMoreMenu(model: model, more: more).padding(.top, PanelTabBar.height - 6).padding(.trailing, 40) }
         }
+        .environment(model)
+        .environment(\.searchHits, hits)
+        .onChange(of: model.query, initial: true) { hits.refresh(model.query, engine: engine, schema: sources.schema) }
         .onChange(of: model.page) { more.open = false }
     }
 
@@ -166,10 +175,11 @@ private struct InstrumentPageRow: View {
 
 // MARK: - Search
 
-/// The window's search field: the pages, settings and System Settings panes by name; Cmd+F focuses it, Escape empties it.
-/// The page list's, and the tabs' strip's.
+/// The window's search field over a page: Pilot's settings, pages and binds and System Settings' panes; Cmd+F focuses it,
+/// the arrows pick a result, Return opens the picked one, Escape empties it. Home draws its own, larger (InstrumentHome).
 struct InstrumentSearchField: View {
     @Environment(\.style) private var style
+    @Environment(\.searchHits) private var hits
     @Bindable var model: AppWindowModel
     @FocusState private var searching: Bool
 
@@ -179,7 +189,8 @@ struct InstrumentSearchField: View {
             Image(systemName: "magnifyingglass").font(style.font(\.icon)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
             TextField("Search settings", text: $model.query, prompt: Text("Search settings").foregroundStyle(style.color(\.text3)))
                 .textFieldStyle(.plain).styleText(\.body).foregroundStyle(style.color(\.text)).focused($searching)
-                .onSubmit { model.goToFirstResult() }
+                .onSubmit { open() }
+                .searchKeys(hits)
                 .onExitCommand { model.query = ""; model.searchOpen = false; searching = false }
             if model.query.isEmpty {
                 Text("⌘F").styleText(\.key).foregroundStyle(style.color(\.text3))
@@ -195,60 +206,269 @@ struct InstrumentSearchField: View {
         .onAppear { if model.searchOpen { searching = true } }
         .onChange(of: searching) { if !searching && model.query.isEmpty { model.searchOpen = false } }
     }
+
+    /// Return: the picked result, else the window's first place as before.
+    private func open() {
+        if let hit = hits?.picked { model.open(hit) } else { model.goToFirstResult() }
+    }
 }
 
-/// What the search finds: places whose title or settings match, then Binds when a bind matches the same words, then the
-/// System Settings panes (Q131), which open in System Settings.
+/// What the search finds, in the drop under a page's field: the same groups as Home's results, narrower.
 struct InstrumentSearchResults: View {
-    @Environment(Engine.self) private var engine
-    @Environment(\.style) private var style
+    @Environment(\.searchHits) private var hits
     let model: AppWindowModel
 
     var body: some View {
-        let places = AppPlace.search(model.query, developer: DeveloperPages.on), panes = SettingsSearch.panes(model.query)
-        let bindHits = !BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: model.query).isEmpty
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(places, id: \.self) { place in
-                InstrumentListRow(title: place.path) { model.go(place); model.query = "" }
-            }
-            if bindHits {
-                InstrumentListRow(title: "Binds matching “\(model.query.trimmingCharacters(in: .whitespaces))”") {
-                    model.go(AppPlace(.binds)); model.query = ""
+        SearchResultsList(hits: hits ?? SearchHitsModel(), compact: true) { model.open($0) }
+    }
+}
+
+/// The search's results (pilot-ui-redesign T6, S2 B; shot 7c-search): grouped by tab path and page, each setting with its
+/// value, a part or a page by name, then the binds the words find and System Settings' panes. The picked row is raised
+/// with a hairline, no accent, and carries Return's cap; a click opens a row as Return does.
+struct SearchResultsList: View {
+    @Environment(\.style) private var style
+    let hits: SearchHitsModel
+    /// The page's drop (340 pt): tighter rows and no foot.
+    var compact = false
+    let open: (SearchHits.Hit) -> Void
+
+    var body: some View {
+        let groups = hits.hits.groups, words = hits.hits.words
+        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
+            ForEach(groups) { group in
+                HStack(spacing: 0) {
+                    Text(group.title)
+                    Text(" · \(group.rows.count)")
+                }
+                .styleText(\.eyebrow).foregroundStyle(style.color(\.text3)).lineLimit(1)
+                .padding(.horizontal, compact ? 10 : 12).padding(.top, group.id == groups.first?.id ? 2 : (compact ? 8 : 12)).padding(.bottom, 2)
+                .accessibilityAddTraits(.isHeader)
+                ForEach(group.rows) { hit in
+                    SearchResultRow(hit: hit, words: words, picked: hits.picked?.id == hit.id, compact: compact) { open(hit) }
                 }
             }
-            ForEach(panes, id: \.self) { pane in
-                InstrumentListRow(title: pane.path) { model.openPane(pane); model.query = "" }
+            if groups.isEmpty {
+                Text("Nothing matches").styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(compact ? 10 : 12)
+            } else if !compact {
+                HStack(spacing: 18) {
+                    hint("↑↓", "move")
+                    hint("↵", "open and ring the row")
+                    hint("esc", "clear")
+                }
+                .padding(.horizontal, 12).padding(.top, 10)
             }
-            if places.isEmpty, !bindHits, panes.isEmpty {
-                Text("Nothing matches").styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(10)
+        }
+        .accessibilityElement(children: .contain).accessibilityLabel("Search results")
+    }
+
+    private func hint(_ key: String, _ words: String) -> some View {
+        HStack(spacing: 6) {
+            InstrumentKey(text: key)
+            Text(words).styleText(\.caption).foregroundStyle(style.color(\.text3))
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// One result: its title, the typed words marked in it, its value in mono or its keys as caps; picked, raised with a
+/// hairline and Return's cap.
+private struct SearchResultRow: View {
+    @Environment(\.style) private var style
+    let hit: SearchHits.Hit
+    let words: [String]
+    let picked: Bool
+    let compact: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text(SearchHits.marked(hit.title, words: words, mark: style.color(\.line)))
+                    .styleText(\.body).foregroundStyle(style.color(\.text)).lineLimit(1).truncationMode(.tail)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                switch hit.value {
+                case .none: EmptyView()
+                case .text(let text):
+                    Text(text).styleText(\.mono).foregroundStyle(style.color(\.text2)).lineLimit(1).truncationMode(.middle)
+                case .keys(let keys): Kbd(text: keys)
+                }
+                if picked && !compact { InstrumentKey(text: "↵") }
             }
+            .padding(.horizontal, compact ? 10 : 12)
+            .frame(maxWidth: .infinity, minHeight: style.points(compact ? 28 : 32), alignment: .leading)
+            .background { if picked { shape.fill(style.color(\.raised)) } }
+            .overlay { if picked { shape.strokeBorder(style.color(\.line)) } }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(picked ? .isSelected : [])
+    }
+}
+
+/// What the search finds for a query (pilot-ui-redesign T6, S2 B): SettingsSearch.grouped's pages under their tab
+/// paths, each setting with its value read now (the 30 at most it lists), the parts and pages it found, then the binds
+/// the words find (Keys › Binds) and System Settings' panes. One list for Home and the drop, so ↑↓ and Return agree.
+@MainActor
+struct SearchHits {
+    enum Value: Equatable { case none, text(String), keys(String) }
+    enum Target: Equatable { case place(AppPlace), bind(String), pane(SystemPane) }
+
+    struct Hit: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let value: Value
+        let target: Target
+    }
+
+    struct Group: Identifiable {
+        let id: String
+        let title: String
+        let rows: [Hit]
+    }
+
+    var groups: [Group] = []
+    /// The typed words, folded, that the rows mark.
+    var words: [String] = []
+
+    static let empty = SearchHits()
+    /// The most binds the Binds group lists.
+    static let binds = 5
+
+    var rows: [Hit] { groups.flatMap(\.rows) }
+    /// "5 settings match": the rows, System Settings' panes aside.
+    var matches: Int { groups.filter { $0.id != Self.panesID }.reduce(0) { $0 + $1.rows.count } }
+
+    static let panesID = "panes"
+
+    init() {}
+
+    init(_ query: String, engine: Engine, schema: SettingsSchema, developer: Bool = DeveloperPages.on) {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        words = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        for found in SettingsSearch.grouped(trimmed, settings: schema.sorted, developer: developer) {
+            let page = found.page
+            var rows = found.settings.map { setting in
+                let place = AppPlace.named(setting.page) ?? AppPlace(page)
+                return Hit(id: "setting:" + setting.key, title: setting.label,
+                           value: (try? schema.get(setting.key)).map { .text(Self.words($0, kind: setting.kind)) } ?? .none, target: .place(place))
+            }
+            rows += found.parts.map { Hit(id: "part:" + $0.rawValue, title: $0.title, value: .none, target: .place(AppPlace(page, $0))) }
+            if rows.isEmpty { rows = [Hit(id: "page:" + page.rawValue, title: page.title, value: .none, target: .place(AppPlace(page)))] }
+            groups.append(Group(id: page.rawValue, title: found.path(developer: developer), rows: rows))
+        }
+        let sections = BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: trimmed)
+        let bound = sections.flatMap(\.rows).filter { $0.key != nil }
+        if !bound.isEmpty {
+            groups.append(Group(id: "binds", title: AppPlace(.binds).tabPath(developer: developer),
+                                rows: bound.prefix(Self.binds).map { Hit(id: "bind:" + $0.id, title: $0.label, value: $0.key.map(Value.keys) ?? .none, target: .bind($0.id)) }))
+        }
+        let panes = SettingsSearch.panes(trimmed)
+        if !panes.isEmpty {
+            groups.append(Group(id: Self.panesID, title: "System Settings",
+                                rows: panes.map { Hit(id: "pane:" + $0.id, title: $0.path.replacingOccurrences(of: "System Settings › ", with: ""),
+                                                      value: .none, target: .pane($0)) }))
+        }
+    }
+
+    /// A setting's value as its row shows it: on or off, a number without a needless ".0", a list joined, a word as is.
+    static func words(_ value: JSONValue, kind: SettingKey.Kind) -> String {
+        switch value {
+        case .null: "none"
+        case .bool(let on): on ? "on" : "off"
+        case .number(let n): n.rounded() == n ? String(Int(n)) : String(format: "%.2f", n).replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
+        case .string(let s): s.isEmpty ? "none" : s
+        case .array(let items): items.map { words($0, kind: kind) }.joined(separator: ", ")
+        case .object: "set"
+        }
+    }
+
+    /// `text` with each of its words that a typed word starts marked by `mark`, as Ghostex's settings search marks them.
+    static func marked(_ text: String, words: [String], mark: Color) -> AttributedString {
+        var out = AttributedString(text)
+        guard !words.isEmpty else { return out }
+        var start = text.startIndex
+        while start < text.endIndex {
+            guard let from = text[start...].firstIndex(where: { $0.isLetter || $0.isNumber }) else { break }
+            let to = text[from...].firstIndex(where: { !($0.isLetter || $0.isNumber) }) ?? text.endIndex
+            let word = text[from..<to].folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            if words.contains(where: word.hasPrefix), let lower = AttributedString.Index(from, within: out),
+               let upper = AttributedString.Index(to, within: out) {
+                out[lower..<upper].backgroundColor = mark
+            }
+            start = to
+        }
+        return out
+    }
+}
+
+/// The search's results for the window's words, read again once a keystroke, and the one ↑↓ picked.
+@Observable @MainActor
+final class SearchHitsModel {
+    private(set) var hits = SearchHits.empty
+    private(set) var index = 0
+    @ObservationIgnored private var query: String?
+
+    var picked: SearchHits.Hit? {
+        let rows = hits.rows
+        return rows.indices.contains(index) ? rows[index] : nil
+    }
+
+    func refresh(_ query: String, engine: Engine, schema: () -> SettingsSchema) {
+        guard query != self.query else { return }
+        self.query = query
+        hits = query.trimmingCharacters(in: .whitespaces).isEmpty ? .empty : SearchHits(query, engine: engine, schema: schema())
+        index = 0
+    }
+
+    /// ↑ or ↓: the row before or after, held at the ends.
+    func step(_ by: Int) {
+        index = max(0, min(hits.rows.count - 1, index + by))
+    }
+}
+
+extension EnvironmentValues {
+    /// The window's search results (InstrumentFrame's); nil outside a window, where Home keeps its own.
+    @Entry var searchHits: SearchHitsModel? = nil
+}
+
+extension View {
+    /// ↑ and ↓ in a search field pick the result before or after.
+    func searchKeys(_ hits: SearchHitsModel?) -> some View {
+        onKeyPress(.downArrow) {
+            guard let hits, !hits.hits.groups.isEmpty else { return .ignored }
+            hits.step(1)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            guard let hits, !hits.hits.groups.isEmpty else { return .ignored }
+            hits.step(-1)
+            return .handled
         }
     }
 }
 
-/// A line of the list: a search result.
-private struct InstrumentListRow: View {
-    @Environment(\.style) private var style
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title).styleText(\.body).foregroundStyle(style.color(\.text2)).lineLimit(1).truncationMode(.tail)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: style.points(28), alignment: .leading)
-                .contentShape(.rect)
+extension AppWindowModel {
+    /// A result's Return or click: its page and part (the window lands on its block), the bind's editor on Binds, or the
+    /// System Settings pane; the words go.
+    func open(_ hit: SearchHits.Hit) {
+        switch hit.target {
+        case .place(let place): go(place)
+        case .bind(let action): editBind = action; go(AppPlace(.binds))
+        case .pane(let pane): openPane(pane)
         }
-        .buttonStyle(.plain)
+        query = ""
     }
 }
 
 // MARK: - Toolbar
 
 struct InstrumentToolbar: View {
-    @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
-    @Environment(\.homeSources) private var sources
     @Bindable var model: AppWindowModel
     /// The page list shows beside: the area's pages are there, not here. The page's parts are here at every width.
     let listed: Bool
@@ -256,27 +476,9 @@ struct InstrumentToolbar: View {
     var body: some View {
         let page = model.page
         InstrumentPageBar(title: model.title) {
-            if page == .home {
-                TimelineView(.everyMinute) { context in
-                    Text(Self.stamp(sources.now(context.date))).styleText(\.mono).foregroundStyle(style.color(\.text3))
-                }
-            }
             if !listed, page.area.shown.count > 1 { areaPages(page.area).padding(.leading, 8) }
             if !model.tabs.isEmpty { tabs(page).padding(.leading, 8) }
             Spacer(minLength: 8)
-            if page == .home {
-                HStack(spacing: 9) {
-                    Text("Hyper").styleText(\.body).foregroundStyle(style.color(\.text2))
-                    Toggle("Hyper key", isOn: Binding(get: { engine.hyperSwitch.isOn }, set: { engine.hyperSwitch.set($0) }))
-                        .toggleStyle(InstrumentSwitchStyle())
-                        .help(engine.hyperSwitch.isOn ? "Turn the Hyper key off" : "Turn the Hyper key on")
-                }
-                .padding(.trailing, 6)
-                Button { engine.action(AppsModule.menuID)?.run() } label: {
-                    InstrumentKeyedLabel(title: "Open menu", trigger: engine.binds.store.trigger(for: AppsModule.menuID))
-                }
-                .buttonStyle(InstrumentButtonStyle())
-            }
             InstrumentSearchField(model: model).frame(width: 180)
         }
     }
@@ -310,10 +512,5 @@ struct InstrumentToolbar: View {
             InstrumentSegments(options: options, selection: selection, tight: true)
         }
         .accessibilityLabel("\(area.title) pages")
-    }
-
-    /// "Thu 8 Oct · 09:41".
-    static func stamp(_ date: Date) -> String {
-        TopBarClockFormat.date.text(date) + " · " + TopBarClockFormat.time24.text(date)
     }
 }

@@ -88,6 +88,12 @@ struct HomePage: View {
     }
 
     var body: some View {
+        // Instrument's Home is the panel's page (pilot-ui-redesign T6, shot 7c-home): greeting, search, the four switches,
+        // Jump back in.
+        if style.kind == .toybox { board } else { InstrumentHome(go: go) }
+    }
+
+    @ViewBuilder private var board: some View {
         let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
                                          tilerRunning: engine.tilerFine,
                                          lastError: engine.lastError)
@@ -107,7 +113,7 @@ struct HomePage: View {
                               cells: Self.cells(home, blocks: blocks, shown: shown), pin: home.layout(of:),
                               style: style.kind, clashes: clashes, widgets: widgets)
         Group {
-            if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentHome(parts: parts) }
+            if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentBoardHome(parts: parts) }
         }
         .environment(\.homeEdit, editing != nil ? HomeNowEdit(frames: frames) : outerEdit)
         .onChange(of: BindsRead(binds: engine.binds.store.binds, presets: engine.presets.contents), initial: true) {
@@ -179,6 +185,13 @@ struct HomeSources: Sendable {
     var widgets: @MainActor @Sendable () -> [HomeWidget] = { WidgetDesk.shared.homeWidgets() }
     /// A Home widget's tile is drawn in the window on screen, or no longer: its feed starts or stops, its page ended.
     var drawWidget: @MainActor @Sendable (String, Bool) -> Void = { WidgetDesk.shared.drawnOnHome($0, $1) }
+    /// The settings the search reads and Jump back in shows the values of: the app's live ones; a render's own.
+    var schema: @MainActor @Sendable () -> SettingsSchema = { .live }
+    /// Jump back in (pilot-ui-redesign T6): the settings changed last, newest first, by key.
+    var recent: @MainActor @Sendable () -> [String] = { UserDefaults.standard.stringArray(forKey: HomeSources.recentKey) ?? [] }
+
+    /// Where the settings changed last are kept.
+    static let recentKey = "home.recentSettings"
 }
 
 extension EnvironmentValues {
@@ -305,6 +318,15 @@ enum HomeFix {
 /// The line beside the Hyper switch, as Toybox's greeting says it.
 @MainActor
 enum HomeGreeting {
+    /// "Good evening.": Home's greeting by the hour of `date` (shot 7c-home).
+    static func good(at date: Date) -> String {
+        switch Calendar.current.component(.hour, from: date) {
+        case 5..<12: "Good morning."
+        case 12..<18: "Good afternoon."
+        default: "Good evening."
+        }
+    }
+
     /// The line beside the Hyper switch: first what the switch is, so it never reads as another's, then what needs you
     /// (its button follows), else what the layer key and tiling do.
     /// `tiler` names the tiler (TilerService.tilerName).
