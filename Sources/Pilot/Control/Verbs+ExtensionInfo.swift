@@ -122,6 +122,9 @@ extension ControlVerbs {
         o["id"] = item.id.map(JSONValue.string)
         o["subtitle"] = item.subtitle.map(JSONValue.string)
         o["icon"] = item.icon.map(JSONValue.string)
+        // T5 (coordinator's yes, 2026-11-19): the row's SF Symbol, and its picture as its size and hash, never its bytes.
+        o["symbol"] = item.symbol.map(JSONValue.string)
+        o["image"] = item.image.map { .string("\($0.count) B, sha256 \(ExtensionCatalogue.sha256($0).prefix(12))") }
         if !item.badges.isEmpty { o["badges"] = .array(item.badges.map { .string($0.text) }) }
         o["section"] = item.section.map(JSONValue.string)
         o["accessory"] = item.accessory.map { .string($0.text) }

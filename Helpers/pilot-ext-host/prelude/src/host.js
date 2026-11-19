@@ -6,10 +6,13 @@
 // Typed actions (T3) go out as the open, copy or paste action Pilot already performs, and a Detail's Metadata as its facts.
 // The table is rebuilt on every answer; an id it lacks is stale. Each query or invoke Pilot numbers (`seq`) is
 // answered by the next line, which carries `ack`: the commit it caused, else the current view again.
+// Icons (T5): a Raycast `Icon` name goes out as the SF Symbol Pilot draws (icons.js), an emoji as itself, and an asset
+// file or an http(s) URL as the row's `image`, read once by the host (Images.swift) and sent in a later line once it lands.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 import { effects } from "./raycast.js";
+import { symbols } from "./icons.js";
 
 const native = globalThis.__native;
 
@@ -134,6 +137,55 @@ function facts(nodes) {
   return out;
 }
 
+// MARK: Icons and images
+
+/** Each picture source the run has asked for: loading, its base64 once it landed, or failed. */
+const images = new Map(), imaging = new Map(), changed = new Set();
+let imageIDs = 0;
+
+globalThis.__pilotImaged = (id, answer) => {
+  const source = imaging.get(id);
+  if (source === undefined) return;
+  imaging.delete(id);
+  if (answer?.image) images.set(source, { image: answer.image });
+  else {
+    images.set(source, { failed: true });
+    console.error(`no picture from ${source}: ${answer?.error ?? "unknown"}`);
+  }
+  for (const flush of changed) flush();
+};
+
+/** A source read as a picture: a URL, or a file under the extension's assets (Raycast names them from there). */
+const isPicture = (source) => /^https?:\/\//i.test(source) || /\.(png|jpe?g|gif|heic|tiff?|webp|bmp)$/i.test(source);
+
+/** The picture at `source` once it landed; asked for the first time it is seen, so it comes in a later line. */
+function image(source) {
+  const known = images.get(source);
+  if (known) return known.image;
+  images.set(source, { loading: true });
+  const id = ++imageIDs;
+  imaging.set(id, source);
+  native.image(id, source, `${native.cwd()}/assets`);
+  return undefined;
+}
+
+/** A Raycast icon prop as a row's fields: `symbol` for an Icon name, `image` for an asset or URL, else `icon` (Pilot
+ *  keeps only an emoji). An object's `source` may be `{ light, dark }` (dark is taken, as the environment says dark) and
+ *  its `fallback` stands in while a picture loads or when it fails; tint and mask are not drawn yet. */
+function picture(prop) {
+  const given = prop && typeof prop === "object" ? prop : { source: prop };
+  let source = given.source;
+  if (source && typeof source === "object") source = source.dark ?? source.light;
+  if (typeof source !== "string" || !source) return {};
+  if (symbols[source]) return { symbol: symbols[source] };
+  if (isPicture(source)) {
+    const landed = image(source);
+    if (landed) return { image: landed };
+    return given.fallback !== undefined ? picture(given.fallback) : {};
+  }
+  return { icon: source };
+}
+
 function item(node, section, handlers) {
   const p = node.props;
   const row = { title: words(p.title) ?? "", actions: actions(node.children, handlers) };
@@ -141,7 +193,7 @@ function item(node, section, handlers) {
   const subtitle = words(p.subtitle);
   if (subtitle) row.subtitle = subtitle;
   if (Array.isArray(p.keywords) && p.keywords.length) row.keywords = p.keywords.filter((k) => typeof k === "string").join(" ");
-  if (typeof p.icon === "string") row.icon = p.icon;
+  Object.assign(row, picture(p.icon));
   const word = accessory(p.accessories);
   if (word) row.accessory = word;
   if (section) row.section = section;
@@ -213,6 +265,7 @@ export function render(component, message) {
     native.write(ack == null ? line : `${line.slice(0, -1)},"ack":${ack}}`);
     ack = null;
   }
+  changed.add(flush);
   const container = {
     children: [],
     committed() {
@@ -271,6 +324,6 @@ export function render(component, message) {
         }
       });
     },
-    close() { reconciler.updateContainer(null, root, null, null); },
+    close() { changed.delete(flush); reconciler.updateContainer(null, root, null, null); },
   };
 }

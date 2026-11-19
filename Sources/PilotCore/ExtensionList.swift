@@ -200,6 +200,11 @@ extension Extension {
             }
         }
 
+        /// `name` when it is shaped as an SF Symbol's (lowercase words and digits joined by dots, at most 64 characters).
+        static func symbolName(_ name: String) -> String? {
+            name.count <= 64 && name.wholeMatch(of: /[a-z0-9]+(\.[a-z0-9]+)*/) != nil ? name : nil
+        }
+
         /// The most inline buttons a row shows.
         public static let mostInline = 3
 
@@ -208,6 +213,9 @@ extension Extension {
         /// up to `largestImage` bytes; a popover row draws it, Hyper+Space shows the emoji.
         public let image: Data?
         public static let largestImage = 64 * 1024
+        /// An SF Symbol its row wears in place of the command's emoji: a Raycast-format row's `Icon` name, which the host
+        /// maps (ADR 0017, T5); only a name shaped as a symbol's is kept.
+        public let symbol: String?
         public let actions: [Action]
         /// Surfaces v2: its badges and its inline buttons (actions drawn as small icon buttons on the row), three each at most.
         public let badges: [Badge], inline: [Action]
@@ -219,14 +227,14 @@ extension Extension {
 
         public init(id: String? = nil, title: String, subtitle: String? = nil, icon: String? = nil, keywords: String? = nil,
                     actions: [Action], badges: [Badge] = [], inline: [Action] = [], image: Data? = nil, section: String? = nil,
-                    accessory: Badge? = nil) {
+                    accessory: Badge? = nil, symbol: String? = nil) {
             self.id = id; self.title = title; self.subtitle = subtitle; self.icon = icon; self.keywords = keywords; self.actions = actions
-            self.image = image; self.section = section; self.accessory = accessory
+            self.image = image; self.section = section; self.accessory = accessory; self.symbol = symbol.flatMap(Self.symbolName)
             self.badges = Array(badges.prefix(Badge.most)); self.inline = Array(inline.prefix(Self.mostInline))
             dropped = 0
         }
 
-        private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory }
+        private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory, symbol }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -237,6 +245,7 @@ extension Extension {
             keywords = try c.decodeIfPresent(String.self, forKey: .keywords)
             // Read leniently: a picture that is not base64, or too large, is no picture.
             image = (try? c.decode(String.self, forKey: .image)).flatMap { Data(base64Encoded: $0) }.flatMap { $0.count <= Self.largestImage ? $0 : nil }
+            symbol = (try? c.decode(String.self, forKey: .symbol)).flatMap(Self.symbolName)
             (actions, dropped) = try Action.decode(c, .actions)
             // Read leniently: a broken badge or button is skipped, never the row.
             badges = Array(((try? c.decode([Lenient<Badge>].self, forKey: .badges)) ?? []).compactMap(\.value).prefix(Badge.most))
@@ -418,12 +427,18 @@ public enum ExtensionList {
         let ownOrder = command.filter == .program
         return items.enumerated().map { index, item in
             var row = MenuEntry(title: item.title, target: .action("\(command.actionID)#\(index)"), detail: item.accessory?.text,
-                                keywords: item.keywords, isAnswer: ownOrder, subtitle: item.subtitle, icon: .command(emoji: item.icon ?? command.icon))
+                                keywords: item.keywords, isAnswer: ownOrder, subtitle: item.subtitle, icon: icon(of: item, in: command))
             row.ownActions = item.actions.map(\.label)
             if item.actions.contains(where: { $0.key != nil }) { row.ownKeys = item.actions.map(\.key) }
             row.section = item.section
             return row
         }
+    }
+
+    /// A row's icon: its own emoji, else its own symbol (T5), else the command's emoji over a terminal.
+    static func icon(of item: Extension.Item, in command: Extension.Command) -> MenuIcon {
+        if item.icon == nil, let symbol = item.symbol { return .glyph(symbol, .neutral) }
+        return .command(emoji: item.icon ?? command.icon)
     }
 
     /// A detail as the view's one row, never ranked: the panel draws its detail in place of the list, and Return and

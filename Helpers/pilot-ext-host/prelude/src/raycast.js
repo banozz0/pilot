@@ -64,7 +64,7 @@ for (const name of ["Push", "SubmitForm", "CreateQuicklink", "CreateSnippet", "T
 }
 Action.Style = Object.freeze({ Regular: "regular", Destructive: "destructive" });
 
-/** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (T5 maps them). */
+/** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (host.js maps an Icon name to its SF Symbol, T5). */
 const names = () => new Proxy({}, { get: (_, key) => (typeof key === "string" ? key : undefined) });
 const shortcut = () => new Proxy({}, { get: (_, key) => (typeof key === "string" ? Object.freeze({ modifiers: [], key: "" }) : undefined) });
 

@@ -99,6 +99,8 @@ extension Host {
 
         // MARK: HTTP
         add("fetch", { [unowned self] (id: Int, request: [String: Any]) in fetch(id, request) } as @convention(block) (Int, [String: Any]) -> Void)
+        // A row's picture (T5, Images.swift): an asset or a remote image, as base64 within Pilot's cap.
+        add("image", { [unowned self] (id: Int, source: String, assets: String) in image(id, source, assets) } as @convention(block) (Int, String, String) -> Void)
 
         // MARK: Children
         add("spawn", { [unowned self] (id: Int, file: String, args: [String], options: [String: Any]) -> Any in
@@ -223,7 +225,7 @@ extension Host {
         }.resume()
     }
 
-    static let session = URLSession(configuration: .ephemeral)
+    nonisolated static let session = URLSession(configuration: .ephemeral)
 
     // MARK: Children
 
