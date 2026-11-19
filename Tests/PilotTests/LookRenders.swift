@@ -137,7 +137,7 @@ struct LookRenders {
     }
 
     /// Defocus's Blur and Dim rows (Sven, 2026-10-16), on Tiling's Focused window block since the page map (Sven
-    /// 2026-10-17): as they come, dim only, and both off, where the hint says there is nothing to do; then Reduce
+    /// 2026-10-17) and on Tiling's More since pilot-ui-redesign T16: as they come, dim only, and both off, where the hint says there is nothing to do; then Reduce
     /// transparency on, where the badge and Defocus each say so on a line of their own; at the window's least width, in
     /// each style.
     @Test("Tiling's Focused window block renders its Defocus rows and badge", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -145,7 +145,7 @@ struct LookRenders {
         let (look, dir) = try Self.setUp()
         func shot(_ name: String) throws {
             Self.mirror(look, spot: nil)
-            try writeRender(FocusedWindowBlock(look: look).styled(.page(.tiling), look: look).padding(.horizontal, 24)
+            try writeRender(FocusedWindowMore(look: look).styled(.page(.tiling), look: look).padding(.horizontal, 24)
                                 .frame(width: Self.page(AppWindowController.minSize.width), height: 820, alignment: .top)
                                 .pilotTheme(look: look).background(Theme.background),
                             to: dir.appendingPathComponent("focused-window-\(name).png"), wait: 0.8)

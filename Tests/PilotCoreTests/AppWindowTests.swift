@@ -76,8 +76,9 @@ struct AppWindowTests {
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
-        // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103).
-        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty)
+        // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More back for the
+        // Focused window's exact rows (pilot-ui-redesign T16).
+        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.map(\.title) == ["Tiling", "More"])
         // Pilot's blocks back on its front, its More gone (pages round 4, Sven's Q106).
         #expect(AppPage.general.tabs.isEmpty)
     }
