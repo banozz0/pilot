@@ -97,6 +97,10 @@ struct SettingsSchemaTests {
     /// Keys whose store has no value of its own but reads UserDefaults on each get.
     static let computedOverDefaults: Set = ["launchAtLogin"]
 
+    /// Keys with no store of their own, read from other keys each time (T15's focused window presets): a pick writes
+    /// the rows behind them, so a per-key round trip does not apply; the sandbox proof covers them.
+    static let derived: Set = ["look.windowBorderPreset", "look.defocusPreset"]
+
     /// A valid value that is not the key's default, as the command types it, and as `get` answers it.
     static func sample(_ setting: SettingKey) -> (word: String, value: JSONValue)? {
         switch setting.kind {
@@ -129,7 +133,7 @@ struct SettingsSchemaTests {
         for folder in [Self.folderA, Self.folderB] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
         defer { for folder in [Self.folderA, Self.folderB] { try? FileManager.default.removeItem(at: folder) } }
         let rig = Rig()
-        let keys = rig.schema.sorted.filter { $0.kind != .secret }
+        let keys = rig.schema.sorted.filter { $0.kind != .secret && !Self.derived.contains($0.key) }
         #expect(keys.count >= 45)
         for setting in keys {
             let sample = try #require(Self.sample(setting), "no non-default sample for \(setting.key)")
