@@ -5,7 +5,7 @@ Every command is this one program; Pilot names the command in the run message on
 paths.data/state.json: the day, the focus blocks ended that day, and the block running or paused. Pilot counts the
 timer down and at zero runs the hidden `ended` command, which counts the block, then shows the end alert, or with
 "Start the next block by itself" starts the next block and says so in a HUD with the end sound. The hidden `page`
-command is its page (and Home block): the countdown as a meter, today's blocks and Focus, Break, Pause, Stop.
+command is its page: the countdown as a meter, today's blocks and Focus, Break, Pause, Stop.
 """
 import json
 import math

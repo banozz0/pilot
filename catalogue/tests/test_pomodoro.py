@@ -183,7 +183,7 @@ class PomodoroTests(ExtensionTestCase):
         for a in d["actions"]:
             self.assertActionShape(a)
 
-    # ---- page (Home block) ----
+    # ---- page ----
 
     def test_page_with_nothing_running_offers_focus_and_break(self):
         self.write_state(count=2)
