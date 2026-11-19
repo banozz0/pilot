@@ -622,17 +622,25 @@ final class NotesTextView: NSTextView {
             kern(4, at: NSMaxRange(filled) - 1)
             if m.range.location > 0, s.character(at: m.range.location - 1) != 10 { kern(4, at: m.range.location - 1) }
         }
-        // A line that only shows a picture: the link muted, never a link to click, and room under it for the picture.
+        // A line that only shows a picture, never a link to click: the picture in place of the link, which is a mark like
+        // the others (bug 11, 2026-11-18: a pasted picture showed as its `![](attachments/…)`). On the caret's line the
+        // link shows muted with the picture under it; a file that does not read leaves the link muted.
         picturesWidth = textContainer?.size.width ?? 0
         hasPictures = false
         each(MarkdownMarks.image) { m in
             let link = s.substring(with: m.range(at: 2))
             storage.removeAttribute(.link, range: m.range)
-            storage.addAttribute(.foregroundColor, value: style.muted, range: m.range)
-            guard let size = pictureSize(link) else { return }
+            guard let size = pictureSize(link) else { mute(m.range); return }
             storage.addAttribute(.notesImage, value: link, range: m.range)
             hasPictures = true
-            lineStyle(m.range, style.paragraph(after: size.height + 2 * Self.pictureGap))
+            let room = size.height + 2 * Self.pictureGap
+            if shows(m.range) {
+                mute(m.range)
+                lineStyle(m.range, style.paragraph(after: room))
+            } else {
+                hide(m.range)
+                lineStyle(m.range, style.paragraph(line: room))
+            }
         }
         // A list: `-`, `*` or `+` drawn as a dot (raw while the caret sits inside the mark), numbers in the quote's
         // colour; a wrapped line lines up under its own text.
@@ -812,15 +820,19 @@ final class NotesTextView: NSTextView {
         return NSSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
     }
 
-    /// Each picture and where it draws, in view coordinates: under its line, at the line's start.
+    /// Each picture and where it draws, in view coordinates, at the line's start: on its line while the link is hidden,
+    /// under it while the caret's line shows the link.
     func pictureRects() -> [(rect: NSRect, image: NSImage)] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
         var shown: [(NSRect, NSImage)] = []
         storage.enumerateAttribute(.notesImage, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
             guard let link = value as? String, let image = picture(link), let size = pictureSize(link) else { return }
-            let glyph = layout.glyphIndexForCharacter(at: NSMaxRange(range) - 1)
+            // The line's own fragment: a hidden link's glyphs are null ones, so its newline's, when it has one.
+            let glyph = layout.glyphIndexForCharacter(at: NSMaxRange(range) < storage.length ? NSMaxRange(range) : NSMaxRange(range) - 1)
             guard let line = fragment(at: glyph) else { return }
-            let height = (storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
+            // The link hidden, the picture is the line; shown (the caret's line), the picture is under it.
+            let hidden = storage.attribute(.notesHidden, at: range.location, effectiveRange: nil) != nil
+            let height = hidden ? 0 : (storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
             shown.append((NSRect(x: line.rect.minX, y: line.rect.minY + height + Self.pictureGap, width: size.width, height: size.height), image))
         }
         return shown
