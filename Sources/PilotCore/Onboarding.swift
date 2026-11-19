@@ -18,7 +18,7 @@ public enum Onboarding {
         /// Pilot's own dictation's grant (story 194).
         public var microphone = false
         /// The grants features ask at their first use, shown on Permissions too (Sven, 2026-10-28, Q4).
-        public var screenRecording = false, inputMonitoring = false, notifications = false
+        public var screenRecording = false, inputMonitoring = false
         public var bluetooth = false, location = false, calendars = false, reminders = false
         public var clashes = 0
 
@@ -45,14 +45,14 @@ public enum Onboarding {
     /// Permissions' rows: every grant Pilot can use (Sven, 2026-10-28: "make sure that we have all permissions shown in
     /// the onboarding"), and the clashing shortcuts.
     public enum Row: CaseIterable, Sendable {
-        case accessibility, systemEvents, fullDiskAccess, conflicts, microphone, screenRecording, inputMonitoring, notifications
+        case accessibility, systemEvents, fullDiskAccess, conflicts, microphone, screenRecording, inputMonitoring
         case bluetooth, location, calendars, reminders
 
         public var need: Need {
             switch self {
             case .accessibility: .required
             case .systemEvents, .fullDiskAccess, .conflicts: .recommended
-            case .microphone, .screenRecording, .inputMonitoring, .notifications: .optional
+            case .microphone, .screenRecording, .inputMonitoring: .optional
             case .bluetooth, .location, .calendars, .reminders: .whenUsed
             }
         }
@@ -68,7 +68,6 @@ public enum Onboarding {
             case .microphone: "Allow Pilot to use the microphone"
             case .screenRecording: "Allow Pilot to record the screen"
             case .inputMonitoring: "Allow Pilot Input Monitoring"
-            case .notifications: "Allow Pilot to send notifications"
             case .bluetooth: "Allow Pilot to use Bluetooth"
             case .location: "Allow Pilot to use your location"
             case .calendars: "Allow Pilot to read your calendars"
@@ -87,7 +86,6 @@ public enum Onboarding {
             case .microphone: "for Pilot's own dictation; skip it if you never dictate"
             case .screenRecording: "for screenshots, scrolling captures, recordings and exact menu bar items; skipped, your first capture asks"
             case .inputMonitoring: "tells a mouse's media keys from your keyboard's, in \(AppPlace(.mouse).path)"
-            case .notifications: "for the reminders a dated line in a note sets"
             case .bluetooth: "lists and connects your paired devices in Setup › Bluetooth"
             case .location: "macOS hides Wi-Fi names without it, in Setup › Wi-Fi"
             case .calendars: "your events in the clock's popover, and quick events"
@@ -105,7 +103,6 @@ public enum Onboarding {
         case .microphone: s.microphone
         case .screenRecording: s.screenRecording
         case .inputMonitoring: s.inputMonitoring
-        case .notifications: s.notifications
         case .bluetooth: s.bluetooth
         case .location: s.location
         case .calendars: s.calendars
@@ -145,7 +142,6 @@ extension Onboarding.Row {
         case .microphone: "Microphone"
         case .screenRecording: "Screen Recording at first capture"
         case .inputMonitoring: "Input Monitoring"
-        case .notifications: "Notifications"
         case .bluetooth: "Bluetooth"
         case .location: "Location"
         case .calendars: "Calendars"

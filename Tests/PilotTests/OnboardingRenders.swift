@@ -31,7 +31,7 @@ struct OnboardingRenders {
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
 
-        // A fresh Mac: nothing on it; Notes already opens Obsidian, .txt TextEdit, .md nothing.
+        // A fresh Mac: nothing on it; Notes already opens Obsidian.
         let suite = "pilot-onboarding-renders-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -40,7 +40,7 @@ struct OnboardingRenders {
         mac.log.removeAll()
         let setup = OnboardingSetup(system: mac, defaults: defaults)
         setup.load()
-        #expect(setup.everything.count == 15 && setup.noAppBefore == [.md])
+        #expect(setup.everything.count == 13)
         let grants = RecordingGrants()
         let model = OnboardingModel(setup: setup, walk: GrantWalk(system: grants))
 
@@ -51,33 +51,32 @@ struct OnboardingRenders {
         }
         try toybox(model, engine, "3a-fork", dir)
 
-        // Pick by hand: mole ticked ticks Homebrew; the .md row.
+        // Pick by hand: mole ticked ticks Homebrew; the Notes key's row.
         setup.phase = .pick
         setup.set(.mole, true)
-        setup.set(.md, true)
-        #expect(setup.picked == [.homebrew, .mole, .md])
+        setup.set(.notesKey, true)
+        #expect(setup.picked == [.homebrew, .mole, .notesKey])
         try instrument(model, engine, "3b-pick", dir)
         setup.set(.homebrew, false)
-        #expect(setup.picked == [.md])
+        #expect(setup.picked == [.notesKey])
         setup.phase = .fork
 
         // Set up everything.
         setup.start(setup.everything)
-        for _ in 0..<100 where setup.ledger[.md]?.state != .done { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<100 where setup.ledger[.notesKey]?.state != .done { try await Task.sleep(for: .milliseconds(20)) }
         #expect(mac.picks.picks[.files] == AppRolePicks.pilot && mac.picks.picks[.notes] == AppRolePicks.pilot)
         let ran = mac.log + ["keys: files → \(mac.picks.picks[.files] ?? "Automatic"), notes → \(mac.picks.picks[.notes] ?? "Automatic")"]
-        #expect(ran.contains("default public.plain-text → dev.banozz.pilot") && ran.contains("default net.daringfireball.markdown → dev.banozz.pilot"))
         #expect(ran.contains("downloads dictation true, voices true") && ran.contains("launch at login on") && ran.contains("pilot command link"))
         let script = try #require(mac.scripts.first)
         let order = script.split(separator: "\n").filter { $0.hasPrefix("step ") }.map { $0.split(separator: " ")[1] }
         #expect(order == ["'homebrew'", "'mole'", "'mas'", "'ffmpeg'", "'webp'", "'npm'", "'cargo'"])
-        #expect(setup.ledger[.notesKey]?.before == "md.obsidian" && setup.ledger[.txt]?.before == "com.apple.TextEdit")
+        #expect(setup.ledger[.notesKey]?.before == "md.obsidian")
 
         // Mid-run: the Terminal's status file and the downloads part way.
         mac.status = "homebrew installing\nhomebrew done\nmole installing\nmole done\nmas done\nffmpeg done\nwebp installing\n"
         mac.downloads = [.dictation: .downloading(0.42), .voices: .ready]
         setup.refresh()
-        #expect(setup.title == "Setting up · 11 of 15")
+        #expect(setup.title == "Setting up · 9 of 13")
         model.step = .extras
         try instrument(model, engine, "3c-run", dir)
         try toybox(model, engine, "3c-run", dir)
@@ -90,7 +89,7 @@ struct OnboardingRenders {
         let retry = "; install it from \(AppPlace(.helpers).path)"
         #expect(setup.ledger[.npm]?.state == .failed("stopped with exit 1; the Terminal window says why" + retry))
         #expect(setup.ledger[.cargo]?.state == .failed("the Terminal window closed before it finished" + retry))
-        #expect(setup.title == "Set up · 13 done, 2 failed" && !setup.isLive)
+        #expect(setup.title == "Set up · 11 done, 2 failed" && !setup.isLive)
         try instrument(model, engine, "3d-run-done", dir)
 
         // Try it (T58): no What changed card; Allow the rest reads nothing until it starts, then walks each grant: one
@@ -120,8 +119,8 @@ struct OnboardingRenders {
         walking.walk.stop()
         let asked = grants.log.firstIndex(of: "ask screenRecording"), read = grants.log.firstIndex(of: "read screenRecording")
         #expect(asked != nil && read != nil && asked! < read!)
-        #expect(walking.walk.phase == .finished && walking.walk.done == "Done: 3 of 6")
-        #expect(walking.walk.skipped == [.microphone, .inputMonitoring, .notifications] && grants.log.last == "close helper inputMonitoring")
+        #expect(walking.walk.phase == .finished && walking.walk.done == "Done: 3 of 5")
+        #expect(walking.walk.skipped == [.microphone, .inputMonitoring] && grants.log.last == "close helper inputMonitoring")
         // Allowed, Screen Recording's helper stays for its Quit & Reopen; the next steps close only their own.
         #expect(!grants.log.contains("close helper screenRecording") && grants.log.contains("close helper fullDiskAccess"))
         try instrument(walking, engine, "4c-allow-the-rest-done", dir)
@@ -151,18 +150,14 @@ struct OnboardingRenders {
         #expect(skipping.phase == .asking(.fullDiskAccess) && skipping.skipped == [.systemEvents] && skipping.allowedRows.isEmpty)
         #expect(racing.stills.first?() == false && racing.stills.last?() == true)
 
-        // Undo everything, group by group: Homebrew's own uninstaller (the view asks first), each key and kind back.
+        // Undo everything, group by group: Homebrew's own uninstaller (the view asks first), each key back.
         mac.log.removeAll()
         for group in SetupGroup.allCases { setup.undo(setup.undoable(group)) }
-        // The kinds go back in turn, .md after .txt.
-        for _ in 0..<100 where setup.ledger[.md]?.state == .done { try await Task.sleep(for: .milliseconds(20)) }
         mac.installed = []
         setup.refresh()
         #expect(mac.picks.picks[.notes] == "md.obsidian" && mac.picks.picks[.files] == nil)
-        #expect(mac.log.contains("default public.plain-text → com.apple.TextEdit"))
         #expect(mac.log.contains { $0.hasPrefix("terminal Remove Homebrew: /bin/bash -c ") })
-        #expect(setup.ledger[.md]?.state == .undoFailed("this Mac had no app for Markdown files before; pick one in Open with"))
-        #expect(SetupItem.allCases.filter { setup.ledger[$0]?.state == .undone }.count == 12)
+        #expect(SetupItem.allCases.filter { setup.ledger[$0]?.state == .undone }.count == 11)
         let undone = mac.log + ["keys: files → \(mac.picks.picks[.files] ?? "Automatic"), notes → \(mac.picks.picks[.notes] ?? "Automatic")"]
 
         // A Mac with Homebrew, Mole and the voices: they are never part of the run, so no undo removes them.
@@ -172,7 +167,7 @@ struct OnboardingRenders {
         defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
         let kept = OnboardingSetup(system: second, defaults: defaults)
         kept.load()
-        #expect(kept.everything.count == 12 && !kept.asksForMacLogin)
+        #expect(kept.everything.count == 10 && !kept.asksForMacLogin)
         let other = OnboardingModel(setup: kept)
         other.step = .extras
         try instrument(other, engine, "3e-fork-homebrew-on-mac", dir)
@@ -276,12 +271,9 @@ final class RecordingMac: SetupSystem {
     var status: String?
     var loginOn = false, linked = false, speech: String?
     let picks: AppRolePicks
-    private let mac = SandboxDefaults()
-    var defaultApps: DefaultAppsSystem { mac }
 
     init(defaults: UserDefaults) {
         picks = AppRolePicks(defaults: defaults, installed: { _ in true }, found: { _ in true })
-        mac.record = { [weak self] in self?.log.append($0) }
     }
 
     func installed(_ item: SetupItem) -> Bool { installed.contains(item) }
@@ -312,22 +304,6 @@ final class RecordingMac: SetupSystem {
     func runInTerminal(_ command: String, title: String, onSuccess: String) { log.append("terminal \(title): \(command)") }
 }
 
-/// Default apps in memory: Pilot listed for both kinds, .txt on TextEdit, .md on nothing.
-@MainActor
-final class SandboxDefaults: DefaultAppsSystem {
-    var defaults: [DefaultHandler: String] = [.contentType("public.plain-text"): "com.apple.TextEdit"]
-    var record: (String) -> Void = { _ in }
-
-    func current(_ handler: DefaultHandler) -> String? { defaults[handler] }
-    func choices(_ handlers: [DefaultHandler]) -> [(name: String, bundle: String)] {
-        [("TextEdit", "com.apple.TextEdit"), ("Pilot", AppRolePicks.pilot)]
-    }
-    func name(_ bundle: String) -> String { bundle }
-    func setDefault(_ bundle: String, for handler: DefaultHandler) async throws {
-        if case .contentType(let id) = handler { record("default \(id) → \(bundle)") }
-        defaults[handler] = bundle
-    }
-}
 /// The Mac's grants in memory for Allow the rest: what reads allowed, and every read and ask, in words. Never a real
 /// prompt, pane or read.
 @MainActor

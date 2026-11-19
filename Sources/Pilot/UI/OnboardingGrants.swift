@@ -4,7 +4,6 @@ import CoreGraphics
 import EventKit
 import IOKit.hid
 import PilotCore
-import UserNotifications
 
 /// The grants Permissions shows beyond Accessibility, Full Disk Access and System Events (Sven, 2026-10-28, Q4: "make sure
 /// that we have all permissions shown in the onboarding"): each read without a prompt, and each row's Allow, which asks
@@ -19,22 +18,20 @@ final class OnboardingGrants {
 
     /// The rows read here, each without a prompt.
     struct Reading {
-        var screenRecording = false, inputMonitoring = false, notifications = false, bluetooth = false, location = false, calendars = false
+        var screenRecording = false, inputMonitoring = false, bluetooth = false, location = false, calendars = false
         var reminders = false
 
         func apply(to s: inout Onboarding.Status) {
-            s.screenRecording = screenRecording; s.inputMonitoring = inputMonitoring; s.notifications = notifications
+            s.screenRecording = screenRecording; s.inputMonitoring = inputMonitoring
             s.bluetooth = bluetooth; s.location = location; s.calendars = calendars; s.reminders = reminders
         }
     }
 
-    /// Nil in a test run: it has no bundle to answer for, and UNUserNotificationCenter throws without one.
+    /// Nil in a test run, which reads no grant of the Mac's.
     func read() async -> Reading? {
         guard !isTestRun else { return nil }
-        let notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
         return Reading(screenRecording: CGPreflightScreenCaptureAccess(),   // a read, no prompt (ADR 0012, amended 2026-10-28)
                        inputMonitoring: IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted,
-                       notifications: [.authorized, .provisional].contains(notifications),
                        bluetooth: CBManager.authorization == .allowedAlways,
                        location: BarReadings.coreWLAN.locationAccess() == .allowed,
                        calendars: EKEventStore.authorizationStatus(for: .event) == .fullAccess,
@@ -47,17 +44,6 @@ final class OnboardingGrants {
         switch row {
         case .screenRecording: PilotCapture.shared.askScreenRecording()
         case .inputMonitoring: engine.mouseButtons.requestAccess()
-        case .notifications:
-            Task {
-                let center = UNUserNotificationCenter.current()
-                let status = await center.notificationSettings().authorizationStatus
-                guard still() else { return }
-                if status == .denied {
-                    SystemModule.pane("com.apple.Notifications-Settings.extension?id=dev.banozz.pilot")
-                } else {
-                    _ = try? await center.requestAuthorization(options: [.alert])
-                }
-            }
         case .bluetooth:
             if bluetooth.authorization() == .denied { NSWorkspace.shared.open(SetupBluetooth.settingsPane); return }
             Task { _ = await bluetooth.requestAccess() }
@@ -110,9 +96,6 @@ final class LiveGrants: GrantSystem {
         // A read, no prompt, once the walk's step showed: its press counts as a capture press (ADR 0012).
         case .screenRecording: return CGPreflightScreenCaptureAccess()
         case .inputMonitoring: return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
-        case .notifications:
-            guard !isTestRun else { return false }
-            return [.authorized, .provisional].contains(await UNUserNotificationCenter.current().notificationSettings().authorizationStatus)
         case .accessibility, .conflicts, .bluetooth, .location, .calendars, .reminders: return false
         }
     }
@@ -133,7 +116,7 @@ final class LiveGrants: GrantSystem {
         case .microphone:
             if MicrophoneGrant.shared.status == .notDetermined { Task { await MicrophoneGrant.shared.ask() } } else { MicrophoneGrant.openSettings() }
         case .screenRecording: PilotCapture.shared.askScreenRecording()
-        case .inputMonitoring, .notifications:
+        case .inputMonitoring:
             guard let engine = Engine.shared else { return }
             OnboardingGrants.shared.ask(row, engine: engine, still: still)
         case .accessibility, .conflicts, .bluetooth, .location, .calendars, .reminders: break
@@ -283,7 +266,7 @@ final class GrantWalk {
         switch row {
         case .fullDiskAccess: "Switch Pilot on in System Settings; drag it in from the helper if it is not listed. It may read allowed only after Pilot reopens: Skip then."
         case .screenRecording: "Switch Pilot on in System Settings; drag it in from the helper if it is not listed."
-        case .systemEvents, .microphone, .inputMonitoring, .notifications: "Answer macOS's prompt, or switch Pilot on in System Settings."
+        case .systemEvents, .microphone, .inputMonitoring: "Answer macOS's prompt, or switch Pilot on in System Settings."
         default: ""
         }
     }
