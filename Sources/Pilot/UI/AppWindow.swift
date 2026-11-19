@@ -67,19 +67,20 @@ final class AppWindowModel {
     private static let signposts = OSSignposter(subsystem: "dev.banozz.pilot", category: .pointsOfInterest)
 
     /// How long a page switch holds the main thread (bug 8, tester's feedback 2026-11-18: Keys → Windows stutters): from
-    /// the pick to the run loop's next turn, once SwiftUI has built, laid out and drawn the new page. A "page switch"
-    /// interval for Instruments, and one line in the log: `log stream --predicate 'subsystem == "dev.banozz.pilot" AND
-    /// category == "window"'`.
+    /// the pick until the run loop is about to wait again, after Core Animation's commit, once SwiftUI has built and laid
+    /// out the new page (an observer ordered after the commit's). A "page switch" interval for Instruments, and one line
+    /// in the log: `log stream --predicate 'subsystem == "dev.banozz.pilot" AND category == "window"'`.
     private static func timeSwitch(from: AppPage, to: AppPage) {
         let start = ContinuousClock.now
         let interval = signposts.beginInterval("page switch", "\(from.rawValue) → \(to.rawValue)")
-        RunLoop.main.perform(inModes: [.common]) {
+        let done = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { _, _ in
             MainActor.assumeIsolated {
                 signposts.endInterval("page switch", interval)
                 let ms = Int((ContinuousClock.now - start) / .milliseconds(1))
                 log.notice("page switch: \(from.rawValue, privacy: .public) → \(to.rawValue, privacy: .public) in \(ms) ms")
             }
         }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), done, .commonModes)
     }
 
     init(defaults: UserDefaults = .pilot()) {
