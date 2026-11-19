@@ -27,6 +27,12 @@ struct OnboardingRenders {
         DisplayFaces.directory = LookThemeTests.fonts
         DisplayFaces.register()
         let engine = try SharedLook.HomeRenders.engine()
+        // PILOT_RENDER_APP=<a built Pilot.app>: Pilot's icon for Access's drag, as Pilot shows it (a test's own is a folder).
+        if let app = Self.env["PILOT_RENDER_APP"] {
+            let icon = NSWorkspace.shared.icon(forFile: app)
+            icon.size = NSSize(width: 256, height: 256)
+            NSApp.applicationIconImage = icon
+        }
         // A fresh Mac's Hyper key, Caps Lock alone, so the screens read as a new user sees them (the moved home may hold
         // other renders' picks). The tap never runs here, so no key mapping is written.
         engine.settings.setLayerKeys([.capsLock], from: .onboarding)
@@ -47,6 +53,8 @@ struct OnboardingRenders {
         setup.load()
         // Set up offers the main things only (Sven's critique, 2026-11-18): the two keys and launch at login.
         #expect(setup.everything == [.filesKey, .notesKey, .launchAtLogin] && setup.noAppBefore.isEmpty && !setup.asksForMacLogin)
+        // The theme is offered but only taken once picked (Sven, 2026-11-19): it installs nothing.
+        #expect(setup.themes.map(\.id) == ["tokyo-night", "nord"] && SetupItem.theme.needs.isEmpty && setup.themeNote.hasPrefix("Installs nothing"))
         let grants = RecordingGrants()
         let model = OnboardingModel(setup: setup, walk: GrantWalk(system: grants))
 
@@ -57,29 +65,52 @@ struct OnboardingRenders {
         }
         model.step = .welcome
         try toybox(model, engine, "1-hyper", dir)
+        model.step = .permissions
+        try toybox(model, engine, "2-access", dir)
+        // Access after Allow, with System Settings open: step 2 is live (no Allow is pressed here, so nothing opens).
+        // On a model of its own, never started, so no refresh reads the Mac's own Settings or grant into it.
+        let waiting = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
+        waiting.step = .permissions
+        waiting.accessAsked = true
+        waiting.settingsOpen = true
+        try instrument(waiting, engine, "2b-access-waiting", dir)
         model.step = .extras
         try toybox(model, engine, "3a-fork", dir)
+        // A theme picked: Set up everything takes it, and says what it does.
+        setup.themePick = "tokyo-night"
+        #expect(setup.everything == [.filesKey, .notesKey, .theme, .launchAtLogin])
+        try instrument(model, engine, "3a-fork-theme", dir)
+        setup.themePick = nil
 
         // Pick by hand: the Files key and launch at login.
         setup.phase = .pick
         setup.set(.filesKey, true)
         setup.set(.launchAtLogin, true)
-        #expect(setup.picked == [.filesKey, .launchAtLogin])
+        setup.themePick = "nord"
+        #expect(setup.picked == [.filesKey, .launchAtLogin, .theme])
         try instrument(model, engine, "3b-pick", dir)
         setup.set(.filesKey, false)
         setup.set(.launchAtLogin, false)
+        setup.themePick = nil
         setup.phase = .fork
 
-        // Set up everything on a fresh Mac of its own: three changes, done at once, no Terminal run.
+        // Set up everything on a fresh Mac of its own, a theme picked: four changes, no Terminal run.
         let freshMac = RecordingMac(defaults: defaults)
         let fresh = OnboardingSetup(system: freshMac, defaults: defaults)
         fresh.load()
+        fresh.themePick = "tokyo-night"
         fresh.start(fresh.everything)
-        #expect(freshMac.scripts.isEmpty && fresh.title == "Set up · 3 of 3 done" && freshMac.log == ["launch at login on"])
+        for _ in 0..<50 where fresh.ledger[.theme]?.state != .done { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(freshMac.scripts.isEmpty && fresh.title == "Set up · 4 of 4 done" && freshMac.log == ["launch at login on", "theme tokyo-night"])
+        #expect(fresh.ledger[.theme]?.before == nil)
         let ran3 = OnboardingModel(setup: fresh)
         ran3.step = .extras
         try instrument(ran3, engine, "3c-run", dir)
         try toybox(ran3, engine, "3c-run", dir)
+        // Its Undo puts the look back: no theme was applied before, so Pilot's own.
+        fresh.undo([.theme])
+        for _ in 0..<50 where fresh.ledger[.theme]?.state != .undone { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(freshMac.log.last == "theme restore" && fresh.ledger[.theme]?.state == .undone)
         defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
 
         // An earlier release's run, which offered every item: its record keeps each row and Undo here.
@@ -116,6 +147,13 @@ struct OnboardingRenders {
         model.startTryIt()
         try instrument(model, engine, "4a-try-it", dir)
         try toybox(model, engine, "4a-try-it", dir)
+        // The demo done (Sven, 2026-11-19): the whole tab says so, the rail's step ticked.
+        let demo = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
+        demo.startTryIt()
+        demo.seedDemoDone()
+        #expect(demo.demoDone(engine))
+        try instrument(demo, engine, "4e-demo-done", dir)
+        try toybox(demo, engine, "4e-demo-done", dir)
         // More open (tester, 2026-11-18): the panels scroll inside Set up's height, so the window stays on the screen.
         model.showsMore = true
         try instrument(model, engine, "4d-try-it-more", dir)
@@ -329,6 +367,10 @@ final class RecordingMac: SetupSystem {
         return nil
     }
     func runInTerminal(_ command: String, title: String, onSuccess: String) { log.append("terminal \(title): \(command)") }
+    var themes: [(id: String, title: String)] { [("tokyo-night", "Tokyo Night"), ("nord", "Nord")] }
+    var appliedTheme: String?
+    var themeRecolours: [String] { ["Ghostty", "Zed"] }
+    func applyTheme(_ id: String?) async -> String? { log.append("theme \(id ?? "restore")"); appliedTheme = id; return nil }
 }
 
 /// Default apps in memory: Pilot listed for both kinds, .txt on TextEdit, .md on nothing.
