@@ -48,8 +48,9 @@ struct FocusedWindowRenders {
             look.defocusStrength = dim.blur; look.defocusDim = dim.dim
         }
         // The front lands on the block (a place on it, as a link does), which sits under Gaps at the panel's width.
-        func shot(_ file: String, _ place: AppPlace) throws {
+        func shot(_ file: String, _ place: AppPlace, ring key: String? = nil) throws {
             model.go(place)
+            if let key { model.ring(key) }
             RunLoop.main.run(until: Date().addingTimeInterval(0.7))
             frame.layoutSubtreeIfNeeded()
             let rep = try #require(snapshot(frame, scale: 2))
@@ -70,6 +71,14 @@ struct FocusedWindowRenders {
             try shot("\(name)-custom", AppPlace(.focusedWindow))
             try shot("\(name)-custom-more", AppPlace(.tilingMore))
         }
+        // Search results: T5's "Border around the focused window" rings its row on the front; a shake's swings, on More,
+        // open More with the row ringed.
+        look.themeID = Self.looks[0].theme
+        AppWindowController.applyLook(look, to: window)
+        try shot("dark-ring-border", AppPlace(.tiling), ring: "look.windowBorder")
+        #expect(model.section(of: .tiling) != .tilingMore, "a ringed setting on the front stays on the front")
+        try shot("dark-ring-swings", AppPlace(.tiling), ring: "look.defocusShakeSwings")
+        #expect(model.section(of: .tiling) == .tilingMore, "a ringed setting on More opens More")
     }
 }
 }
