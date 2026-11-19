@@ -230,11 +230,11 @@ struct RingsPage: View {
             } else if let moving, moving.ring == ring.id {
                 Text("\(MouseKeys.buttonName(moving.hold.n)) held opens \(moving.from)").foregroundStyle(ink.text).lineLimit(1)
                 Button("Use it here") { setHold(ring, moving.hold); self.moving = nil }.buttonStyle(.pilotPrimary)
-                Button("Cancel") { self.moving = nil }.buttonStyle(.pilot)
+                Button("Cancel") { self.moving = nil }.buttonStyle(.pilot).keyboardShortcut(.cancelAction)
             } else if let taken, taken.ring == ring.id {
                 Text("\(taken.key.label) is \(engine.action(taken.by)?.label ?? taken.by)").foregroundStyle(ink.text).lineLimit(1)
                 Button("Use it") { engine.binds.replace(ring.openID, with: taken.key); self.taken = nil }.buttonStyle(.pilotPrimary)
-                Button("Cancel") { self.taken = nil }.buttonStyle(.pilot)
+                Button("Cancel") { self.taken = nil }.buttonStyle(.pilot).keyboardShortcut(.cancelAction)
             } else {
                 if let key {
                     Kbd(text: key.label, small: true)

@@ -26,7 +26,8 @@ enum HUD {
     /// A one-line message in the middle of the screen that fades after `seconds` (3 by default; `.infinity` keeps it up
     /// until it is closed or replaced, as Convert's progress tip); a click on it or Escape closes it at once
     /// (wireframe ol5Ak83dAho section 5, the alert scripts raise through pilot://alert). Never a modal, never a
-    /// notification. Escape still reaches the app in front: the tip only watches for it. `action` puts its button
+    /// notification. Escape in another app still reaches that app: the tip only watches for it; in Pilot's own windows the
+    /// Escape that closes the tip stops there, so it never also closes the panel under it. `action` puts its button
     /// after the words: pressing it closes the tip, then runs the action, so a tip the action raises stays up. `top`
     /// shows it near the top of the screen instead, clear of the text an action just changed (Quick AI's fix).
     /// `onClose` runs once the tip goes, however it goes (faded, clicked, Escape, its button, another tip): a bind

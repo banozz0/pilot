@@ -411,7 +411,7 @@ final class AppWindowController: NSObject {
 
     /// The window closed: it goes with its SwiftUI tree, every page's views, pictures and observers, which a closed
     /// window kept in memory for as long as Pilot ran (2026-10-10, idle RAM 164 MB against 45). The next open makes it
-    /// again where it was (its frame is autosaved), on the page shown last (the model stays).
+    /// again, centred (the panel keeps no frame, T2), on the page shown last (the model stays).
     private func release(_ closing: NSWindow) {
         guard closing === window else { return }
         windowObservers.forEach(NotificationCenter.default.removeObserver)
