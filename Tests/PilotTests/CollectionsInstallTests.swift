@@ -4,12 +4,11 @@ import Testing
 import WebApps
 @testable import Pilot
 
-/// CLI W16: Install's catalogue, its search, Get and Remove as `pilot list catalogue|removable`, `pilot install` and
-/// `pilot remove removable`. Nothing installs, nothing is searched on the network and no browser opens: the catalogue
-/// is a fixture, the search and Remove's rows are the test's, the terminal and the page opener are recorders and the
+/// CLI W16: Install's search, Get and Remove as `pilot list removable`, `pilot install` and `pilot remove removable`.
+/// Nothing installs, nothing is searched on the network and no browser opens: the search and Remove's rows are the test's, the terminal and the page opener are recorders and the
 /// Trash is a temp folder. The gate's decider is the test's; no prompt shows.
 @MainActor
-@Suite("Collections: install catalogue, search and remove")
+@Suite("Collections: install search and remove")
 final class CollectionsInstallTests {
     let home = URL(filePath: NSTemporaryDirectory()).appending(path: "pilot-install-\(UUID().uuidString)", directoryHint: .isDirectory)
     let install = ControlInstall()
@@ -18,33 +17,16 @@ final class CollectionsInstallTests {
     var allow = false
     var ran: [(command: String, title: String, onSuccess: String)] = []
     var opened: [URL] = []
-    var recommend = true
-    var installedIDs: Set<String> = ["obsidian"]
     var reads = 0, measures = 0
     var rows: [RemoveRow]? = []
     var searched: [String] = []
     var groups: [InstallSearch.Group] = []
     var helpers: Set<String> = ["homebrew", "mole"]
 
-    static let entries = [
-        CatalogueEntry(id: "obsidian", name: "Obsidian", category: "Notes", method: .package(Package(.cask, "obsidian")!), check: .bundle("md.obsidian"),
-                       vendor: "https://obsidian.md", checked: "2026-10-01"),
-        CatalogueEntry(id: "hello", name: "Hello", category: "Tools", method: .package(Package(.formula, "hello")!), check: .command("hello"),
-                       vendor: "https://gnu.org/software/hello", checked: "2026-10-01"),
-        CatalogueEntry(id: "zen", name: "Zen", category: "Browsers", method: .download("https://zen-browser.app/download"),
-                       check: .bundle("app.zen-browser.zen"), vendor: "https://zen-browser.app", checked: "2026-10-01"),
-        CatalogueEntry(id: "hermes-context", name: "Hermes context", category: "Tools",
-                       method: .script("https://github.com/o/r/releases/download/v1/install.sh"), check: .command("hermes-context"),
-                       vendor: "https://github.com/o/r", checked: "2026-10-01"),
-    ]
-
     init() throws {
         try FileManager.default.createDirectory(at: home.appending(path: "Trash"), withIntermediateDirectories: true)
         install.gate = ControlGate(wait: .seconds(5)) { [unowned self] ask, _ in asked.append(ask); return allow }
-        install.entries = { Self.entries }
-        install.isInstalled = { [unowned self] in installedIDs.contains($0.id) }
         install.helpers = { [unowned self] in helpers }
-        install.recommend = { [unowned self] in recommend }
         install.search = { [unowned self] text in
             await MainActor.run { searched.append(text) }
             return await (InstallSearch.Query(text)!, MainActor.run { groups })
@@ -76,21 +58,7 @@ final class CollectionsInstallTests {
         return rows.compactMap { if case .object(let row) = $0 { row } else { nil } }
     }
 
-    @Test("list catalogue reads each entry with how it installs and whether it is installed; none while Recommend apps is off")
-    func catalogue() async {
-        let listed = await list("catalogue")
-        #expect(listed.map { $0["key"] } == ["cask:obsidian", "formula:hello", "download:zen", "download:hermes-context"].map { .string($0) })
-        #expect(listed[0] == ["key": .string("cask:obsidian"), "id": .string("obsidian"), "name": .string("Obsidian"), "category": .string("Notes"),
-                              "via": .string("Homebrew app"), "installed": .bool(true), "vendor": .string("https://obsidian.md"),
-                              "checked": .string("2026-10-01"), "command": .string("brew install --cask obsidian")])
-        #expect(listed[2]["page"] == .string("https://zen-browser.app/download") && listed[2]["command"] == nil)
-        #expect(listed[3]["command"] == .string("curl -fsSL 'https://github.com/o/r/releases/download/v1/install.sh' | sh"))
-        recommend = false
-        #expect(await list("catalogue").isEmpty)
-        #expect(await answer("add", ["catalogue", "--key", "x"]).error == ControlError(.badValue, "catalogue is read-only"))
-    }
-
-    @Test("install search answers the catalogue's matches and every source's results and trouble, as the page shows them")
+    @Test("install search answers every source's results and trouble, as the page shows them")
     func search() async {
         groups = [
             InstallSearch.Group(source: .homebrew, results: [
@@ -104,7 +72,6 @@ final class CollectionsInstallTests {
         let found = await answer("install", ["search", "obsid", "ian"])
         #expect(searched == ["obsid ian"])
         guard case .object(let o) = found.result else { Issue.record("no answer: \(String(describing: found.error))"); return }
-        // The catalogue may answer "obsid ian" now: a typo finds its best match (Sven, 2026-10-19).
         #expect(o["query"] == .string("obsid ian"))
         #expect(o["groups"] == .array([
             .object(["source": .string("homebrew"), "title": .string("Homebrew"), "results": .array([
@@ -118,35 +85,9 @@ final class CollectionsInstallTests {
                      "trouble": .string("Offline, so GitHub was not searched")]),
         ]))
 
-        guard case .object(let matched) = await answer("install", ["search", "obsidian"]).result else { return }
-        guard case .array(let inCatalogue) = matched["catalogue"] else { return }
-        #expect(inCatalogue.count == 1)
-        recommend = false
-        guard case .object(let off) = await answer("install", ["search", "obsidian"]).result else { return }
-        #expect(off["catalogue"] == .array([]), "with Recommend apps off the catalogue offers nothing")
-
         #expect(await answer("install", ["search", "o"]).error?.code == .badValue)
         #expect(await answer("install", ["search", "-rf"]).error?.code == .badValue)
-        #expect(searched.count == 3, "a refused query searches nothing")
-    }
-
-    @Test("install pick: installed says so; a vendor's https page opens unasked; a script and a package ask with the command")
-    func pickCatalogue() async {
-        #expect(await answer("install", ["pick", "obsidian"]).result == .object(["key": .string("cask:obsidian"), "name": .string("Obsidian"), "installed": .bool(true)]))
-        #expect(await answer("install", ["pick", "download:zen"]).result == .object(["key": .string("download:zen"), "opened": .string("https://zen-browser.app/download")]))
-        #expect(opened == [URL(string: "https://zen-browser.app/download")!] && asked.isEmpty)
-
-        #expect(await answer("install", ["pick", "hermes-context"]).error?.code == .denied && ran.isEmpty)
-        #expect(await answer("install", ["pick", "formula:hello"]).error?.code == .denied && ran.isEmpty)
-        let script = "curl -fsSL 'https://github.com/o/r/releases/download/v1/install.sh' | sh"
-        #expect(asked == [ControlGate.Ask("Install Hermes context", script), ControlGate.Ask("Install package", "brew install hello")])
-
-        allow = true
-        #expect(await answer("install", ["pick", "download:hermes-context"]).ok)
-        #expect(await answer("install", ["pick", "formula:hello"]).ok)
-        #expect(ran.map(\.command) == [script, "brew install hello"])
-        #expect(ran.map(\.title) == ["Install Hermes context", "Install Hello"])
-        #expect(ran.map(\.onSuccess) == [VisibleRun.waitForReturn, "open -g 'pilot://installed?package=formula:hello'"])
+        #expect(searched.count == 1, "a refused query searches nothing")
     }
 
     @Test("install pick on a search row: a GitHub file asks with its download; an https page opens; the App Store app asks; a foreign key is refused")

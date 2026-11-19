@@ -385,11 +385,8 @@ struct InstallSearchTests {
 
     // MARK: The menu
 
-    @Test("In the menu each source heads its own rows, in the sources' order, after the catalogue's matches and before the branches")
+    @Test("In the menu each source heads its own rows, in the sources' order, before the branches")
     func menu() async throws {
-        let catalogue = MenuEntries.install([CatalogueEntry(id: "rectangle-app", name: "Rectangle Pro", category: "Utilities",
-                                                            method: .package(Package(.cask, "rectangle-pro")!), check: .bundle("x"),
-                                                            vendor: "https://rectangleapp.com/", checked: "2026-10-09")], installed: [])
         let query = Q("rectangle")!
         let groups = await InstallSearch.search(query, tools: [.npm], brew: { arguments in
             arguments == ["search", "--cask", "rectangle"] ? "rect\n"
@@ -404,18 +401,13 @@ struct InstallSearchTests {
         #expect(limited.target == .package("page:https://github.com/search?q=rectangle&type=repositories"))
 
         for branch in [MenuBranch.install, .homebrew] {
-            var nav = MenuNavigator(entries: catalogue, branch: branch)
+            var nav = MenuNavigator(entries: [], branch: branch)
             nav.provide(.package, home: .homebrew, rows)
             nav.query = "rectangle"
             let heads = MenuGroups.headings(nav.rows, searching: false, branch: branch).sorted { $0.key < $1.key }.map(\.value)
             let sources: [MenuGroups.Group] = [.section("Homebrew"), .section("GitHub"), .section("Web")]
-            #expect(heads == (branch == .install ? [.section("Catalogue")] + sources : sources), "\(branch)")
+            #expect(heads == sources, "\(branch)")
             #expect(nav.rows.last?.title == "Search the web for “rectangle”")
         }
-        var nav = MenuNavigator(entries: catalogue, branch: .install)
-        nav.provide(.package, home: .homebrew, rows)
-        nav.provide(.package, home: .homebrew, [])
-        nav.query = "rectangle"
-        #expect(nav.rows.map(\.title) == ["Rectangle Pro"], "clearing the search leaves the catalogue")
     }
 }

@@ -2,18 +2,13 @@ import Foundation
 import PilotCore
 import WebApps
 
-/// What Install's catalogue, its search and Remove reach (CLI W16): the shipped catalogue, every source's search, and
-/// Remove's list (Homebrew, each npm tree, apps Homebrew did not install, web apps). A test hands in its own entries,
+/// What Install's search and Remove reach (CLI W16): every source's search, and Remove's list (Homebrew, each npm tree, apps Homebrew did not install, web apps). A test hands in its own
 /// search, rows, terminal, Trash and pages, so nothing installs, nothing goes to the Trash and no browser opens.
 @MainActor
 final class ControlInstall {
     var gate = AllowPrompt.gate
-    var entries: @MainActor () -> [CatalogueEntry] = { InstallModule.catalogue }
-    var isInstalled: @MainActor (CatalogueEntry) -> Bool = InstallModule.isInstalled
     /// The helpers installed, by id (Helper.installed).
     var helpers: @MainActor () -> Set<String> = { Helper.installed() }
-    /// Recommend apps: the catalogue is the recommendations, so with it off Install shows none.
-    var recommend: @MainActor () -> Bool = { Recommendations.shared.show }
     var search: @Sendable (String) async -> (query: InstallSearch.Query, groups: [InstallSearch.Group])? = { await InstallSearcher.search($0) }
     var removeRows: @Sendable () async -> [RemoveRow]? = { await InstallModule.removeRows() }
     var measure: @Sendable ([RemoveRow]) async -> [RemoveRow] = { await InstallModule.measure($0) }
@@ -47,16 +42,10 @@ final class ControlInstall {
 }
 
 extension ControlVerbs {
-    /// Install › Catalogue and Remove as collections, and `install` for search and pick (CLI W16). Every install and
+    /// Remove as a collection, and `install` for search and pick (CLI W16). Every install and
     /// remove waits on the Allow gate, which stands in for Install's confirm step; a command then runs in Install's
     /// visible terminal as Return there runs it. A vendor's https page opens with nothing asked, as a web link does.
     func registerInstall(_ s: ControlInstall) {
-        register(ControlCollection("catalogue", help: "Install's catalogue: every app and tool Pilot offers, by category, each with how it installs and whether it is installed. None while Recommend apps is off (recommendations.show), as the page; pilot install pick <key> installs one.",
-                                   rowKey: "key", list: {
-            guard s.recommend() else { return .array([]) }
-            return .array(s.entries().map { .object(Self.row($0, installed: s.isInstalled($0))) })
-        }))
-
         register(ControlCollection("removable", help: "Remove's list: Homebrew's formulae and casks, each npm tree's global tools, apps Homebrew did not install and web apps, Pilot's installs first, with size and last used (reads up to a minute). remove asks Allow, then runs the command in a terminal or moves the app to the Trash.",
                                    rowKey: "key", list: { () throws(ControlError) in
             .array(try await s.readRemovable(measured: true).map { .object(Self.row($0)) })
@@ -74,22 +63,6 @@ extension ControlVerbs {
         }))
 
         registerInstallVerb(s)
-    }
-
-    /// A catalogue entry as its card shows it: what it is, how it installs, the exact command when one runs, and the
-    /// vendor page it was checked against.
-    static func row(_ e: CatalogueEntry, installed: Bool) -> [String: JSONValue] {
-        // How it arrives, as the card says it (CataloguePage.how).
-        let via = e.method.package.map { $0.kind == .cask && e.category == "Fonts" ? "Homebrew font" : $0.via } ?? e.method.label
-        var row: [String: JSONValue] = ["key": .string(e.key), "id": .string(e.id), "name": .string(e.name), "category": .string(e.category),
-                                        "via": .string(via), "installed": .bool(installed), "vendor": .string(e.vendor),
-                                        "checked": .string(e.checked)]
-        switch e.method {
-        case .package(let p): row["command"] = .string(p.install)
-        case .script: row["command"] = e.method.scriptCommand.map(JSONValue.string)
-        case .download(let page): row["page"] = .string(page)
-        }
-        return row
     }
 
     private static func row(_ r: RemoveRow) -> [String: JSONValue] {

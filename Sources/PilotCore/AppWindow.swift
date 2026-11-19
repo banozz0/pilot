@@ -184,8 +184,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the rest moved with their controls to Captures' More places (simplify-pages T13).
         case .captures: ["capture", "screenshot", "screen shot", "pictures", "after capture", "area", "full screen", "captures folder"]
         case .notes: ["notes", "quick notes", "scratch", "markdown", "notes folder", "vault", "inbox"]
-        // Recommend apps and the self-updating casks moved with their switches to More (simplify-pages T16).
-        case .install: ["install", "catalogue", "search to install"]
+        case .install: ["install", "search to install"]
         // The front's words; the role keys' moved with them to More (simplify-pages T11).
         case .openWith: ["default app", "open with", "main editor", "editor", "vs code", "browser", "defaults", "text", "markdown",
                          "all kinds"]
@@ -457,8 +456,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
     /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
-    /// What Install and Update list, Recommend apps and the self-updating casks: a place on Install's Catalogue (on its More,
-    /// beside `helpers` and `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
+    /// What Update lists, the self-updating casks: a place on Install's front (on its More, beside `helpers` and
+    /// `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
     /// System's places on its front: the sound input, the keyboard layout and the mouse's speeds (on a More tab from
     /// simplify-pages T17 until Sven, 2026-11-11, after 2276). Each part's keys sit in its own card (pages round 5).
@@ -586,7 +585,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .duplicates: "Duplicates"
         case .folders: "Folders"
         case .reports: "Reports"
-        case .catalogue: "Catalogue"
+        case .catalogue: "Search"
         case .webApps: "Web apps"
         case .helpers: "Command-line tools"
         case .hiddenApps: "Hidden apps"
@@ -663,7 +662,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .duplicates: ["duplicate", "identical", "same file", "copies", "free space", "wasted space"]
         case .folders: ["folder", "folder icon", "folder design", "folder colour", "custom icon", "dress folders", "reset folder icon"]
         case .reports: ["report", "run", "output", "exit code"]
-        case .catalogue: ["install catalogue", "catalogue", "homebrew", "cask", "formula"]
+        case .catalogue: ["install search", "homebrew", "cask", "formula", "app store"]
         case .webApps: ["web app", "url", "site", "sign out"]
         case .helpers: ["helper", "helpers", "homebrew", "brew", "mole", "mas", "npm", "cargo", "command-line tools"]
         case .hiddenApps: ["hide app", "hidden app", "unhide", "hide from finder", "declutter", "chess"]
@@ -691,7 +690,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .soundInput: ["input", "microphone", "mic", "input volume", "input device"]
         case .keyboardLayout: ["keyboard layout", "input source", "layout", "typing in"]
         case .mouseSpeed: ["pointer speed", "tracking speed", "mouse speed", "cursor speed", "cycle speeds"]
-        case .installLists: ["recommend apps", "recommendations", "picks", "self-updating", "casks", "update themselves"]
+        case .installLists: ["self-updating", "casks", "update themselves"]
         case .menuExtras: ["more rows", "add a row", "extra rows", "rows to add", "rows you can add"]
         case .translate: ["translate", "translation", "language", "translate into"]
         case .captureOptions: ["capture menu", "hide desktop icons", "hide icons", "thumbnail", "thumbnail place", "scrolling capture",

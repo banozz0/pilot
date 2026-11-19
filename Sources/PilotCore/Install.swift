@@ -92,117 +92,27 @@ public struct Package: Hashable, Sendable {
     }
 }
 
-/// One app or tool Install offers (SPEC.md, Install catalogue): how it installs, how Pilot tells it is installed, the
-/// vendor page it was checked against and the day.
-public struct CatalogueEntry: Equatable, Sendable {
-    public enum Method: Equatable, Sendable {
-        case package(Package)
-        /// A vendor's download page, opened in the browser: no command runs.
-        case download(String)
-        /// The vendor's own install script, a GitHub release's `.sh` piped to sh in the visible terminal after the
-        /// confirm step (Sven 2026-10-09: hermes-context installs this way).
-        case script(String)
+/// Whether an app or tool is installed: when an app with this bundle id is registered, when any of these paths exists (`~` is home), or when
+/// this command is in one of the folders Homebrew or a vendor's own installer puts commands in: a tool installed by
+/// its vendor's script (Claude Code in ~/.local/bin) is still found, so Install never offers a second copy.
+public enum InstallCheck: Hashable, Sendable {
+    case bundle(String), paths([String]), command(String)
 
-        public var package: Package? { if case .package(let p) = self { p } else { nil } }
+    /// Where commands land: Homebrew's two prefixes, then the vendors' own installers. Not /usr/bin, which holds
+    /// macOS's own copies (ruby, vim). Pilot runs with launchd's short PATH, so PATH cannot say.
+    public static let commandFolders = ["/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.cargo/bin", "~/.bun/bin", "~/.deno/bin"]
 
-        /// What runs on yes for a script: `curl -fsSL '<url>' | sh`; nil for any other method.
-        public var scriptCommand: String? { if case .script(let url) = self { "curl -fsSL \(VisibleRun.quoted(url)) | sh" } else { nil } }
+    /// Every copy of a command in those folders, in their order (Update reads each npm's own tree).
+    public static func copies(of name: String, isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> [String] {
+        commandFolders.map { NSString(string: "\($0)/\(name)").expandingTildeInPath }.filter(isExecutable)
+    }
 
-        /// How it arrives, in a word or two, as the menu's row says it.
-        public var label: String {
-            switch self {
-            case .package(let p): p.kindLabel
-            case .download: "download"
-            case .script: "install script"
-            }
+    public func isMet(bundleInstalled: (String) -> Bool, fileExists: (String) -> Bool) -> Bool {
+        switch self {
+        case .bundle(let id): bundleInstalled(id)
+        case .paths(let paths): paths.contains { fileExists(NSString(string: $0).expandingTildeInPath) }
+        case .command(let name): Self.paths(Self.commandFolders.map { "\($0)/\(name)" }).isMet(bundleInstalled: bundleInstalled, fileExists: fileExists)
         }
-    }
-
-    /// Installed when an app with this bundle id is registered, when any of these paths exists (`~` is home), or when
-    /// this command is in one of the folders Homebrew or a vendor's own installer puts commands in: a tool installed by
-    /// its vendor's script (Claude Code in ~/.local/bin) is still found, so Install never offers a second copy.
-    public enum Check: Hashable, Sendable {
-        case bundle(String), paths([String]), command(String)
-
-        /// Where commands land: Homebrew's two prefixes, then the vendors' own installers. Not /usr/bin, which holds
-        /// macOS's own copies (ruby, vim). Pilot runs with launchd's short PATH, so PATH cannot say.
-        public static let commandFolders = ["/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin", "~/.cargo/bin", "~/.bun/bin", "~/.deno/bin"]
-
-        /// Every copy of a command in those folders, in their order (Update reads each npm's own tree).
-        public static func copies(of name: String, isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> [String] {
-            commandFolders.map { NSString(string: "\($0)/\(name)").expandingTildeInPath }.filter(isExecutable)
-        }
-
-        public func isMet(bundleInstalled: (String) -> Bool, fileExists: (String) -> Bool) -> Bool {
-            switch self {
-            case .bundle(let id): bundleInstalled(id)
-            case .paths(let paths): paths.contains { fileExists(NSString(string: $0).expandingTildeInPath) }
-            case .command(let name): Self.paths(Self.commandFolders.map { "\($0)/\(name)" }).isMet(bundleInstalled: bundleInstalled, fileExists: fileExists)
-            }
-        }
-    }
-
-    public let id: String, name: String, category: String
-    public let method: Method, check: Check
-    public let vendor: String, checked: String
-
-    /// The menu row's id: the package's key, or `download:<id>`.
-    public var key: String { method.package?.key ?? "download:\(id)" }
-}
-
-/// The shipped catalogue (`Packaging/install-catalogue.json`, copied into the app's Resources): one flat list of
-/// entries, each a JSON object of strings, its category one of them. The file's order is the menu's.
-public enum InstallCatalogue {
-    public enum Problem: Error, Equatable {
-        case notJSON
-        case missing(entry: String, field: String)
-        case malformed(entry: String, field: String)
-    }
-
-    public static func parse(_ data: Data) throws(Problem) -> [CatalogueEntry] {
-        guard let file = try? JSONDecoder().decode(File.self, from: data) else { throw .notJSON }
-        return try file.entries.map { row throws(Problem) in try entry(row) }
-    }
-
-    /// The categories in the order their first entry appears.
-    public static func categories(_ entries: [CatalogueEntry]) -> [String] {
-        entries.map(\.category).reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
-    }
-
-    /// One entry as the file holds it: one of cask, formula, uv, download or script, and one of bundle, path, paths or
-    /// command. A script is a GitHub release's `.sh` only.
-    private struct Row: Decodable {
-        var id, name, category, cask, formula, uv, download, script, bundle, path, command, vendor, checked: String?
-        var paths: [String]?
-    }
-    private struct File: Decodable { var entries: [Row] }
-
-    private static func entry(_ row: Row) throws(Problem) -> CatalogueEntry {
-        let id = row.id ?? "?"
-        func required(_ value: String?, _ field: String) throws(Problem) -> String {
-            guard let value, !value.isEmpty else { throw .missing(entry: id, field: field) }
-            return value
-        }
-        let package = row.cask.map { Package(.cask, $0) } ?? row.formula.map { Package(.formula, $0) } ?? row.uv.map { Package(.uv, $0) }
-        let method: CatalogueEntry.Method
-        switch (package, row.download, row.script) {
-        case (let p??, _, _): method = .package(p)
-        case (.some(nil), _, _): throw .malformed(entry: id, field: "method")
-        case (nil, let url?, _): method = .download(url)
-        case (nil, nil, let url?):
-            guard url.hasPrefix("https://github.com/"), url.contains("/releases/"), url.hasSuffix(".sh") else { throw .malformed(entry: id, field: "script") }
-            method = .script(url)
-        case (nil, nil, nil): throw .missing(entry: id, field: "method")
-        }
-        let checks: [CatalogueEntry.Check] = [row.bundle.map { .bundle($0) }, row.path.map { .paths([$0]) },
-                                              row.paths.flatMap { $0.isEmpty ? nil : .paths($0) }, row.command.map { .command($0) }].compactMap { $0 }
-        guard let check = checks.first else { throw .missing(entry: id, field: "installed-check") }
-        guard checks.count == 1 else { throw .malformed(entry: id, field: "installed-check") }
-        let vendor = try required(row.vendor, "vendor"), checked = try required(row.checked, "checked")
-        guard vendor.hasPrefix("https://") else { throw .malformed(entry: id, field: "vendor") }
-        guard (try? Date.ISO8601FormatStyle().year().month().day().parse(checked)) != nil else { throw .malformed(entry: id, field: "checked") }
-        return CatalogueEntry(id: try required(row.id, "id"), name: try required(row.name, "name"), category: try required(row.category, "category"),
-                              method: method, check: check, vendor: vendor, checked: checked)
     }
 }
 
@@ -313,21 +223,5 @@ struct JSONFile<Value: Codable> {
         encoder.dateEncodingStrategy = .iso8601
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try encoder.encode(value).write(to: url, options: .atomic)
-    }
-}
-
-extension MenuEntries {
-    /// Install's rows (wireframe section 8): a branch per category naming its apps, then each entry in its category,
-    /// with its method and whether it is installed (`installed`: entry ids).
-    public static func install(_ entries: [CatalogueEntry], installed: Set<String>) -> [MenuEntry] {
-        let categories = InstallCatalogue.categories(entries).map { c in
-            MenuEntry(title: c, target: .branch(.category(c)), home: .install,
-                      detail: entries.filter { $0.category == c }.map(\.name).joined(separator: ", "), icon: MenuIcon.category(c))
-        }
-        return categories + entries.map { e in
-            let kind = e.method.label
-            return MenuEntry(title: e.name, target: .package(e.key), home: .category(e.category),
-                             detail: installed.contains(e.id) ? "\(kind) · installed" : kind, icon: MenuIcon.catalogue(e))
-        }
     }
 }

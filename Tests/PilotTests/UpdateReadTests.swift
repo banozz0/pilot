@@ -27,7 +27,7 @@ struct UpdateReadTests {
     }
 
     @Test("npm's list is read even though npm exits 1 when it lists anything, once per tree",
-          .enabled(if: !CatalogueEntry.Check.copies(of: "npm").isEmpty))
+          .enabled(if: !InstallCheck.copies(of: "npm").isEmpty))
     func npmRead() async {
         let rows = await InstallModule.moreUpdateRows(read: Self.fake(npm: Self.npm))
         #expect(rows.map(\.item) == [.npm("agent-browser", prefix: "/opt/homebrew")])

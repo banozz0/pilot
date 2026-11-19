@@ -50,19 +50,15 @@ struct HomebrewSearchTests {
 
     @Test("Search Homebrew is Install's first row; its results are found only inside it, ranked by what is typed")
     func branch() throws {
-        let catalogue = MenuEntries.install([CatalogueEntry(id: "coteditor", name: "CotEditor", category: "Editors",
-                                                            method: .package(Package(.cask, "coteditor")!),
-                                                            check: .bundle("com.coteditor.CotEditor"), vendor: "https://coteditor.com/",
-                                                            checked: "2026-10-05")], installed: [])
         let entries = MenuEntries.build(apps: [], actions: [], store: BindStore(defaults: [:]), roleApps: [:], menu: "apps.launcher",
-                                        openID: { "apps.open:\($0)" }, running: []) + catalogue
+                                        openID: { "apps.open:\($0)" }, running: [])
         var nav = MenuNavigator(entries: entries, branch: .install)
         #expect(nav.rows.first?.target == .branch(.homebrew))
         #expect(nav.rows.first?.title == "Search packages")
-        // Card agent-bo-95422994, G13: Make a web app follows, before the catalogue's categories.
+        // Card agent-bo-95422994, G13: Make a web app follows.
         let webApp = MenuEntries.build(apps: [], actions: [BindsPage.ActionInfo(id: "apps.webApp", label: "Make a web app", module: "apps")],
                                        store: BindStore(defaults: [:]), roleApps: [:], menu: "apps.launcher",
-                                       openID: { "apps.open:\($0)" }, running: []) + catalogue
+                                       openID: { "apps.open:\($0)" }, running: [])
         #expect(MenuNavigator(entries: webApp, branch: .install).rows.prefix(2).map(\.target) == [.branch(.homebrew), .action("apps.webApp")])
         #expect(nav.handle(.return) == .handled)
         #expect(nav.path == [.install, .homebrew])
@@ -72,11 +68,6 @@ struct HomebrewSearchTests {
         nav.query = "cow"
         #expect(nav.rows.map(\.title) == ["cowsay"])
         #expect(nav.handle(.return) == .run(nav.rows[0]))
-        _ = nav.handle(.escape)
-        _ = nav.handle(.escape)
-        nav.query = "cotedit"
-        #expect(nav.matched.map(\.target) == [.package("cask:coteditor")])  // the catalogue's, not a Homebrew row
-        #expect(nav.rows[0].home == .category("Editors"))
     }
 }
 

@@ -148,12 +148,12 @@ struct PageView: View {
             switch section {
             case .webApps: WebAppsSettingsView()
             case .installMore: InstallMorePage()
-            default: CataloguePage(category: model.catalogueCategory, search: InstallSearcher.search)
+            default: CataloguePage(query: model.installQuery ?? "", search: InstallSearcher.search)
             }
         case .openWith: OpenWithPage()
         case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
         case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
-        case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.catalogueCategory = CataloguePage.fonts })
+        case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.installQuery = CataloguePage.fonts })
         case .general: GeneralPage()
         case .ai:
             switch section {

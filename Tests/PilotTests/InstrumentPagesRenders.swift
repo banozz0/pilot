@@ -63,9 +63,8 @@ struct InstrumentPagesRenders {
         }
     }
 
-    /// Batch 6's pages (Workspaces and Tiling, Clipboard and Snippets, Install's catalogue and Web apps,
-    /// Defaults, Pilot, Extensions): Nightwatch at 1440 and 760, Paper at 1440. Install's catalogue has no rows in the test
-    /// bundle, so its rows are shot apart, from Packaging's copy, on the page ground at the page's two widths.
+    /// Batch 6's pages (Workspaces and Tiling, Clipboard and Snippets, Install's search and Web apps,
+    /// Defaults, Pilot, Extensions): Nightwatch at 1440 and 760, Paper at 1440.
     static let rest: [(name: String, place: AppPlace)] = [
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("clipboard", AppPlace(.clipboard)),
         ("snippets", AppPlace(.snippets)), ("install", AppPlace(.catalogue)),
@@ -111,8 +110,6 @@ struct InstrumentPagesRenders {
         let only = Self.env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map { $0.split(separator: ",").contains { name.contains($0) } } ?? true }
         let shots: [(theme: String, widths: [Int])] = [("nightwatch", [1440, 760]), ("paper", [1440])]
-        let catalogue = try InstallCatalogue.parse(Data(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().appendingPathComponent("../../Packaging/install-catalogue.json")))
         for (theme, widths) in shots {
             look.themeID = theme
             AppWindowController.applyLook(look, to: window)
@@ -128,16 +125,6 @@ struct InstrumentPagesRenders {
                     try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
                         .write(to: dir.appendingPathComponent("\(name)-\(theme)-\(width).png"))
                 }
-            }
-            // The catalogue's rows on the page's ground, at the page's width beside the sidebar.
-            guard wanted("catalogue") else { continue }
-            for width in widths {
-                let host = NSHostingView(rootView: CatalogueGround { CataloguePage(entries: catalogue) }.styled(.page(.install)).pilotTheme().environment(engine))
-                host.frame.size = NSSize(width: CGFloat(width) - (width < 1000 ? 208 : 232), height: 1500)
-                try await Task.sleep(for: .milliseconds(600))
-                host.layoutSubtreeIfNeeded()
-                try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:]))
-                    .write(to: dir.appendingPathComponent("catalogue-rows-\(theme)-\(width).png"))
             }
         }
     }
@@ -189,13 +176,6 @@ struct InstrumentPagesRenders {
                 .write(to: dir.appendingPathComponent("licence-sheet-\(file).png"))
         }
     }
-}
-
-/// A page on its style's ground, as the window's frame lays it.
-private struct CatalogueGround<Content: View>: View {
-    @Environment(\.ink) private var ink
-    @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
 }
 }
 #endif

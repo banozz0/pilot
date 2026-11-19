@@ -5,46 +5,19 @@ import WebApps
 
 let ilog = Logger(subsystem: "dev.banozz.pilot", category: "install")
 
-/// Install, Remove and Update (stories 81 to 85, 97 to 100; SPEC.md, Install catalogue): the shipped catalogue, the
-/// confirm step that shows the exact command, and the visible terminal that runs it.
+/// Install, Remove and Update (stories 81 to 85, 97 to 100): Install's search (its recommended apps, the shipped
+/// catalogue, went for good: Sven, 2026-11-18, Q243), the confirm step that shows the exact command, and the visible
+/// terminal that runs it.
 @MainActor
 enum InstallModule {
-    /// The catalogue in the app's Resources; empty, and logged, when the file is missing or broken.
-    static let catalogue = BundledJSON.load("install-catalogue", log: ilog, empty: [CatalogueEntry]()) { try InstallCatalogue.parse($0) }
-
-    static func isInstalled(_ entry: CatalogueEntry) -> Bool {
-        entry.check.isMet(bundleInstalled: AppsModule.isInstalled, fileExists: FileManager.default.fileExists(atPath:))
-    }
-
-    /// Install's rows as the menu opens, each entry's installed-check read now; none while Recommend apps is off, since
-    /// the catalogue is the recommendations (Sven 2026-10-09): Install is then its search alone.
-    static func menuEntries(recommend: Bool = Recommendations.shared.show) -> [MenuEntry] {
-        recommend ? MenuEntries.install(catalogue, installed: Set(catalogue.filter(isInstalled).map(\.id))) : []
-    }
-
-    /// The catalogue's icons by package key, for Update's and Remove's rows (Sven 2026-10-09): an entry's app once
-    /// installed, else its shipped picture.
-    static let catalogueIcons = Dictionary(catalogue.compactMap { e in e.method.package.map { ($0.key, MenuIcon.catalogue(e)) } }) { a, _ in a }
-
-    /// Return on a package row: an installed entry says so, a download opens its page in Zen, anything else asks
-    /// first with the exact command, then runs it in the visible terminal; a search row is named as the search showed it.
+    /// Return on a package row: a helper or a search row asks first with the exact command, then runs it in the visible
+    /// terminal, named as the search showed it.
     /// A search's page (N9) opens with nothing run, the App Store's in the App Store; a GitHub release's file asks with
     /// its download command first, as a package does.
     static func pick(_ key: String, confirm: Confirm = confirm, run: @escaping Run = visibleRun,
                      open: @escaping @MainActor (URL) -> Void = openPage) {
         if let helper = Helper(key: key) { return install(helper, confirm: confirm, run: run) }
-        let entry = catalogue.first { $0.key == key }
-        if let entry, isInstalled(entry) { return HUD.tip("\(entry.name) is installed") }
-        if case .download(let page)? = entry?.method, let url = URL(string: page) {
-            ilog.notice("install \(entry?.id ?? "?", privacy: .public): download page")
-            AppsModule.open(url, in: MyBinds.zen)
-            return
-        }
-        if let entry, let command = entry.method.scriptCommand {
-            let name = "Install \(entry.name)"
-            return confirm(name, command) { run(command, name, VisibleRun.waitForReturn) }
-        }
-        let title = entry?.name ?? InstallSearch.title(key)
+        let title = InstallSearch.title(key)
         switch InstallSearch.Method(key: key) {
         case .page(let url)?:
             ilog.notice("install \(title ?? "?", privacy: .public): opens \(LinkToken.redact(url.absoluteString), privacy: .public)")
@@ -244,7 +217,7 @@ enum InstallModule {
     @concurrent nonisolated static func eachNPM<Row: Sendable>(_ read: @escaping UpdateReader, _ arguments: [String],
                                                                parse: @escaping @Sendable (Data) -> [Row], key: @Sendable (Row) -> String) async -> [Row] {
         await withTaskGroup(of: [Row].self) { group in
-            for npm in CatalogueEntry.Check.copies(of: "npm") {
+            for npm in InstallCheck.copies(of: "npm") {
                 group.addTask { parse(Data((await read(npm, arguments, [0, 1]) ?? "").utf8)) }
             }
             var seen = Set<String>(), rows: [Row] = []
@@ -328,7 +301,7 @@ enum InstallModule {
         let macOS = ([v.majorVersion, v.minorVersion] + (v.patchVersion > 0 ? [v.patchVersion] : [])).map(String.init).joined(separator: ".")
         async let system = read("/usr/sbin/softwareupdate", ["--list"], [0])
         async let mas = read(Homebrew.cli("mas"), ["outdated"], [0])
-        async let bun = read(CatalogueEntry.Check.copies(of: "bun").first, ["outdated", "-g"], [0])
+        async let bun = read(InstallCheck.copies(of: "bun").first, ["outdated", "-g"], [0])
         async let npm = eachNPM(read, ["outdated", "-g", "--json"], parse: UpdateList.parseNPM, key: \.item.key).sorted { $0.item.key < $1.item.key }
         async let cargo = cargoRows(read)
         return UpdateList.parseSoftwareUpdate(await system ?? "", macOS: macOS) + UpdateList.parseMas(await mas ?? "") + (await npm)
@@ -347,7 +320,7 @@ enum InstallModule {
 
     /// cargo's crates.io crates, each asked of crates.io with `cargo search`, at once; one that is current is left out.
     @concurrent nonisolated private static func cargoRows(_ read: @escaping UpdateReader) async -> [UpdateRow] {
-        guard let cargo = CatalogueEntry.Check.copies(of: "cargo").first, let list = await read(cargo, ["install", "--list"], [0]) else { return [] }
+        guard let cargo = InstallCheck.copies(of: "cargo").first, let list = await read(cargo, ["install", "--list"], [0]) else { return [] }
         return await withTaskGroup(of: UpdateRow?.self) { group in
             for crate in UpdateList.cargoCrates(list) {
                 group.addTask {
@@ -366,7 +339,7 @@ enum InstallModule {
     /// or an npm tree last changed: Remove's rows are read again only when this moves.
     nonisolated static func removeStamp() -> [Date?] {
         let prefix = Homebrew.prefix.map { URL(filePath: $0) }
-        let npmTrees = CatalogueEntry.Check.copies(of: "npm").map { URL(filePath: $0).deletingLastPathComponent().deletingLastPathComponent().appending(path: "lib/node_modules") }
+        let npmTrees = InstallCheck.copies(of: "npm").map { URL(filePath: $0).deletingLastPathComponent().deletingLastPathComponent().appending(path: "lib/node_modules") }
         let paths = [prefix?.appending(path: "Cellar"), prefix?.appending(path: "Caskroom"), InstalledStore.standard.url].compactMap(\.self)
             + appFolders + AppsModule.homeApps().folders.map { URL(filePath: $0) } + npmTrees
         return paths.map { (try? FileManager.default.attributesOfItem(atPath: $0.path))?[.modificationDate] as? Date }

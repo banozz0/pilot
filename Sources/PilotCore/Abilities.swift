@@ -90,7 +90,7 @@ public enum Abilities {
     /// the app is here and they are added from Launcher › Abilities › More abilities. One that holds a key is always listed,
     /// so a bind never hides. The app links a preset makes (`apps.open:`, `apps.url:`) need no entry: one that holds a key is listed (Pilot default's Ghostex, Codex…).
     /// Each needs what Install's catalogue checks for: an app by bundle id, a file, or a command.
-    public static let optional: [String: CatalogueEntry.Check] = [
+    public static let optional: [String: InstallCheck] = [
         "apps.bitwardenFill": .bundle(Bitwarden.bundle), "apps.bitwardenForget": .bundle(Bitwarden.bundle),
         "apps.bitwardenLock": .bundle(Bitwarden.bundle), "apps.bitwardenGenerator": .bundle(Bitwarden.bundle),
         "apps.bitwardenSearch": .bundle(Bitwarden.bundle), "apps.generatePassword": .bundle(Bitwarden.bundle),
@@ -112,14 +112,14 @@ public enum Abilities {
 
     /// Whether the Binds screen, the menu and Abilities list an action: a shipped one always, an optional one while it
     /// holds a key, or once added with what it needs here.
-    public static func isListed(_ id: String, bound: Bool, added: Set<String>, has: (CatalogueEntry.Check) -> Bool) -> Bool {
+    public static func isListed(_ id: String, bound: Bool, added: Set<String>, has: (InstallCheck) -> Bool) -> Bool {
         guard let need = optional[id] else { return true }
         return bound || (added.contains(id) && has(need))
     }
 
     /// More abilities: the optional ones not listed whose app is here, by name, for Add; `actions` is every action,
     /// the unlisted included.
-    public static func addable(actions: [BindsPage.ActionInfo], listed: (String) -> Bool, has: (CatalogueEntry.Check) -> Bool,
+    public static func addable(actions: [BindsPage.ActionInfo], listed: (String) -> Bool, has: (InstallCheck) -> Bool,
                                search: String = "") -> [Ability] {
         let rows = actions.compactMap { a -> (row: Ability, fields: [String])? in
             guard let need = optional[a.id], !listed(a.id), has(need) else { return nil }
@@ -218,7 +218,7 @@ public enum Abilities {
         "apps.reports": "Shows every Update and Clean run kept: what ran, how it ended, its output.",
         "apps.update": "Opens Update in Hyper+Space: what can be updated, run only after you confirm.",
         "apps.themeCatalogue": "Opens Look › Catalogue: every theme in Pilot's catalogue on its own desk, to get, update, apply or remove.",
-        "apps.install": "Opens Install, the apps Pilot recommends, each installed through Homebrew after you confirm.",
+        "apps.install": "Opens Install: search Homebrew, the App Store, GitHub and the package tools, each installed after you confirm.",
         "apps.clean": "Opens Clean in Hyper+Space: what Mole would clear, run only after you confirm.",
         "apps.bitwardenFill": "Fills the login for the site in front from Bitwarden.",
         "apps.bitwardenForget": "Forgets the unlocked Bitwarden session, so the next fill asks again.",

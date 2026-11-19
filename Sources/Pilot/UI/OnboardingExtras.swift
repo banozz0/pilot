@@ -4,12 +4,11 @@ import ImageScale
 import PilotCore
 
 /// Try it's optional panel, "More, if you want" (Onboarding 1.1, Q843): the extras that are no part of Set up, each
-/// acting on its own button or switch: the AI provider, Extensions, Recommend apps, the upscaler's Max quality and the
+/// acting on its own button or switch: the AI provider, Extensions, the upscaler's Max quality and the
 /// terminal (T76).
 @MainActor
 enum OnboardingExtras {
     static let extensionsDetail = "Pomodoro and the rest of the catalogue, from GitHub"
-    static let recommendDetail = "Install suggests apps and tools for this Mac; off, its search still finds anything"
     static let upscalerTitle = "Upscaler, Max quality"
     static var upscalerDetail: String { "sharper 4x upscales; the General model is already in Pilot · \(upscalerMegabytes) MB" }
 
@@ -35,12 +34,6 @@ enum OnboardingExtras {
     static var terminalState: String? {
         if let d = ExtrasDownloads.shared.downloads.first(where: { $0.title == terminalTitle }) { return d.words }
         return TerminalPack.isInstalled() ? "On this Mac" : nil
-    }
-
-    /// Recommend apps (C5), the same switch as Defaults' and Install's.
-    static func recommend(_ on: Bool) {
-        Recommendations.shared.show = on
-        log.notice("onboarding: recommend apps \(on ? "on" : "off", privacy: .public)")
     }
 }
 

@@ -27,25 +27,6 @@ struct MenuIconTests {
         #expect(Set(categories.compactMap(\.icon?.symbol)).count == categories.count, "each category wears its own glyph (card agent-bo-95423022)")
     }
 
-    @Test("Install: every shipped category its own glyph, never the download arrow; a tool a terminal, a font its letters, an app by bundle")
-    func install() throws {
-        let entries = try InstallCatalogue.parse(Data(contentsOf: URL(filePath: #filePath).deletingLastPathComponent()
-            .appending(path: "../../Packaging/install-catalogue.json")))
-        let rows = MenuEntries.install(entries, installed: [])
-        let categories = rows.filter { if case .branch(.category) = $0.target { true } else { false } }
-        #expect(categories.count == InstallCatalogue.categories(entries).count)
-        let symbols = categories.compactMap(\.icon?.symbol)
-        #expect(symbols.count == categories.count)
-        #expect(Set(symbols).count == symbols.count, "two categories share a glyph: \(symbols)")
-        #expect(!symbols.contains("arrow.down.circle"))
-        for e in entries {
-            let icon = MenuIcon.catalogue(e)
-            if e.category == "Fonts" { #expect(icon.symbol == "textformat", "\(e.name)") }
-            if let p = e.method.package, p.kind == .formula { #expect(icon.symbol == "terminal", "\(e.name)") }
-            if case .bundle(let id) = e.check { #expect(icon.bundle == id, "\(e.name)") }
-        }
-    }
-
     @Test("Update: a formula a terminal, an App Store app its own icon by name, macOS the Apple; the run, setting and mas rows differ")
     func update() throws {
         let hello = try #require(Package(.formula, "hello"))

@@ -17,8 +17,8 @@ public struct MenuIcon: Hashable, Sendable {
     public var tint: Tint
     /// An emoji drawn in the glyph's place, a script command's (card agent-bo-95423029).
     public var emoji: String?
-    /// A catalogue entry's own picture shipped in the app (`catalogue-icons/<id>.png`, Scripts/catalogue-icons.swift),
-    /// worn until the app itself is installed (C5); or with its own folder, a folder design's preview (`folder-designs/kraft-preview`, P43).
+    /// A picture shipped in the app by its folder and name: an AI provider's (`provider-icons/claude`, AIPage.icon) or a
+    /// folder design's preview (`folder-designs/kraft-preview`, P43).
     public var bundled: String?
     /// A picture on disk by its path, drawn as it dresses a folder: one of Your designs (P55).
     public var picture: String?
@@ -83,13 +83,13 @@ public struct MenuIcon: Hashable, Sendable {
         }
     }
 
-    /// Each Install catalogue category's glyph, all different (the shipped catalogue's sixteen, plus Pilot's own names);
+    /// Each category's glyph, all different (Install's former catalogue's sixteen, plus Pilot's own names);
     /// a category the table lacks a box.
     public static func category(_ name: String) -> MenuIcon {
         categories[name.lowercased()] ?? glyph("shippingbox", .neutral)
     }
 
-    static let categories: [String: MenuIcon] = [
+    public static let categories: [String: MenuIcon] = [
         "featured": glyph("star", .amber), "chat": glyph("message", .accent),
         "ai agents": glyph("brain.head.profile", .third), "ai": glyph("sparkles", .accent),
         "ades": glyph("rectangle.3.group", .second), "services": glyph("cloud", .accent),
@@ -101,24 +101,6 @@ public struct MenuIcon: Hashable, Sendable {
         "productivity": glyph("checklist", .good), "communication": glyph("bubble.left.and.bubble.right", .accent),
         "design": glyph("paintbrush.pointed", .second), "security": glyph("lock.shield", .amber),
     ]
-
-    /// A catalogue entry: the installed app's own icon by its bundle id or app path, else the picture the app ships for
-    /// it (C5), else a font or a command-line tool by its kind, any other app its category's glyph.
-    public static func catalogue(_ e: CatalogueEntry) -> MenuIcon {
-        var app: String?, bundle: String?
-        switch e.check {
-        case .bundle(let id): bundle = id
-        case .paths(let paths): app = paths.first { $0.hasSuffix(".app") }.map { NSString(string: $0).expandingTildeInPath }
-        case .command: break
-        }
-        var icon: MenuIcon
-        if let p = e.method.package, p.kind.isTool { icon = package(p) }
-        else if let p = e.method.package, p.kind == .cask, package(p) == font { icon = font }
-        else if e.category.lowercased() == "fonts" { icon = font }
-        else { icon = category(e.category).app(path: app, bundle: bundle) }
-        icon.bundled = e.id
-        return icon
-    }
 
     /// What Update lists: each kind its glyph, an App Store app its own icon by name in /Applications.
     public static func updatable(_ item: Updatable, app: String? = nil) -> MenuIcon {

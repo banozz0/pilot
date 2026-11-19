@@ -87,13 +87,13 @@ struct AIPage: View {
         }
     }
 
-    /// Each provider's picture from Install's catalogue icons, already in the app (CatalogueIcons); nil for an endpoint,
-    /// which has none of its own.
+    /// Each provider's picture, shipped in the app (`provider-icons`, CatalogueIcons); nil for an endpoint, which has none
+    /// of its own.
     static func icon(_ route: AIProvider) -> String? {
         switch route {
-        case .claudeCode, .anthropicAPI: "claude"
-        case .codex, .openAI: "chatgpt"
-        case .ollama: "ollama"
+        case .claudeCode, .anthropicAPI: "provider-icons/claude"
+        case .codex, .openAI: "provider-icons/chatgpt"
+        case .ollama: "provider-icons/ollama"
         case .openAICompatible: nil
         }
     }

@@ -90,7 +90,7 @@ struct AbilitiesTests {
         let engine = Engine()
         #expect(Set(Abilities.optional.keys) == Self.appSpecific)
         #expect(Self.appSpecific.isSubset(of: Set(engine.registry.actions.keys)), "every optional id is a registered action")
-        let all = { (_: CatalogueEntry.Check) in true }, none = { (_: CatalogueEntry.Check) in false }
+        let all = { (_: InstallCheck) in true }, none = { (_: InstallCheck) in false }
         // A new Mac: nothing added, no key; every generic ability stays.
         let fresh = engine.registry.sorted.map(\.id).filter { Abilities.isListed($0, bound: false, added: [], has: all) }
         #expect(Set(engine.registry.actions.keys).subtracting(fresh) == Self.appSpecific)

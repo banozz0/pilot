@@ -16,7 +16,7 @@ public struct Helper: Equatable, Sendable, Identifiable {
     public let id: String, name: String
     /// What it unlocks in Pilot, in one line.
     public let unlocks: String
-    /// The command that says it is installed, in the folders Install looks in (CatalogueEntry.Check.commandFolders).
+    /// The command that says it is installed, in the folders Install looks in (InstallCheck.commandFolders).
     public let command: String
     public let route: Route
     /// The source Install's search asks once it is there; nil for one that adds none.
@@ -97,7 +97,7 @@ public struct Helper: Equatable, Sendable, Identifiable {
     /// The path of its command in the folders Install looks in; Pilot runs with launchd's short PATH, so the folders
     /// are read, never PATH.
     public func path(isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> String? {
-        CatalogueEntry.Check.commandFolders.lazy.map { NSString(string: "\($0)/\(self.command)").expandingTildeInPath }.first(where: isExecutable)
+        InstallCheck.commandFolders.lazy.map { NSString(string: "\($0)/\(self.command)").expandingTildeInPath }.first(where: isExecutable)
     }
 
     /// The ids of the helpers installed now.

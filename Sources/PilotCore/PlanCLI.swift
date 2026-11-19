@@ -253,9 +253,9 @@ public enum AICommand {
         return folder
     }
 
-    /// `command` on `path` (the PATH), else in the folders Install looks in (CatalogueEntry.Check.commandFolders).
+    /// `command` on `path` (the PATH), else in the folders Install looks in (InstallCheck.commandFolders).
     public static func find(_ command: String, path: String?, isExecutable: (String) -> Bool) -> String? {
         let onPath = (path ?? "").split(separator: ":").map { "\($0)/\(command)" }
-        return onPath.first(where: isExecutable) ?? CatalogueEntry.Check.copies(of: command, isExecutable: isExecutable).first
+        return onPath.first(where: isExecutable) ?? InstallCheck.copies(of: command, isExecutable: isExecutable).first
     }
 }

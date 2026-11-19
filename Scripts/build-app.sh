@@ -139,7 +139,6 @@ if [[ $ID != - && -n ${PACK:-} ]]; then
 fi
 /usr/libexec/PlistBuddy "${PLIST[@]}" "$APP/Contents/Info.plist"
 cp "$ROOT/Packaging/drive-catalogue.json" "$APP/Contents/Resources/"  # the drive catalogue (DriveModule.catalogue)
-cp "$ROOT/Packaging/install-catalogue.json" "$APP/Contents/Resources/"  # Install's catalogue (SPEC.md, Install catalogue)
 cp "$ROOT/Packaging/themes.json" "$APP/Contents/Resources/"  # Omarchy's theme palettes (OmarchyThemes)
 cp -R "$ROOT/Packaging/ThemePacks" "$APP/Contents/Resources/ThemePacks"  # immutable local factory packs and asset provenance
 cp -R "$ROOT/Packaging/Cursors" "$APP/Contents/Resources/Cursors"  # the cursor sets' grey atlases (lossless WebP) and palettes (CursorSets, P84)
@@ -164,7 +163,7 @@ cp -R "$ROOT/.build/ghosttykit/resources/ghostty" "$ROOT/.build/ghosttykit/resou
 cp "$ROOT/.build/ghosttykit/Ghostty-LICENSE.txt" "$APP/Contents/Resources/Ghostty-LICENSE.txt"  # MIT keeps its notice (libghostty)
 cp "$ROOT/Packaging/Ghostty-THIRD-PARTY.txt" "$APP/Contents/Resources/"  # the libraries and fonts libghostty links, each one's licence
 cp -R "$ROOT/Packaging/Fonts" "$APP/Contents/Resources/Fonts"  # the themes' display faces, OFL, each licence beside it (DisplayFaces)
-cp -R "$ROOT/Packaging/catalogue-icons" "$APP/Contents/Resources/catalogue-icons"  # Install's catalogue pictures, 64 px (CatalogueIcons, Scripts/catalogue-icons.swift)
+cp -R "$ROOT/Packaging/provider-icons" "$APP/Contents/Resources/provider-icons"  # the AI providers' pictures, 64 px (AIPage.icon, CatalogueIcons)
 cp -R "$ROOT/Packaging/webapp-icons" "$APP/Contents/Resources/webapp-icons"  # the recommended web apps' own icons, 128 px (WebAppIdea, Scripts/webapp-icons.swift)
 cp -R "$ROOT/Packaging/folder-designs" "$APP/Contents/Resources/folder-designs"  # the folder designs Pilot draws: 1024 px and 256 px HEIC and a 64 px PNG each (FolderDesigns, P54)
 cp -R "$ROOT/Packaging/ext-template" "$APP/Contents/Resources/ext-template"  # pilot ext new's templates, one folder per mode (ExtensionTemplate)

@@ -36,8 +36,8 @@ final class AppWindowModel {
     var extensionFocus: String?
     /// The extension whose page shows in place of the Extensions page (story 161); any other place clears it.
     var extensionPage: String?
-    /// The category Install's catalogue opens on, from Fonts' Get more fonts; going anywhere else clears it.
-    var catalogueCategory: String?
+    /// What Install's search opens with, from Fonts' Get more fonts; going anywhere else clears it.
+    var installQuery: String?
     /// The repo Developer › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
     /// opens, so a second open of the same repo starts the page on it again.
     var repoPick: String?
@@ -97,7 +97,7 @@ final class AppWindowModel {
     /// Shows `place`: its page, and its part (conflicts open as a sheet over Binds).
     func go(_ place: AppPlace) {
         extensionPage = nil
-        catalogueCategory = nil
+        installQuery = nil
         repoPick = nil
         wallpaperFocus = nil
         blockFocus = nil

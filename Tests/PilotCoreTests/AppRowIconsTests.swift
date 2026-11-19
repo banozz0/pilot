@@ -27,26 +27,22 @@ struct AppRowIconsTests {
         #expect(UpdateList.withApps([Self.zen], info: Data("not json".utf8)).map(\.app) == [nil], "an unreadable answer changes nothing")
     }
 
-    @Test("An Update row wears its cask's app, else the catalogue's icon, else its kind's glyph")
+    @Test("An Update row wears its cask's app, else its kind's glyph")
     func updateIcons() {
-        let catalogue = MenuIcon.glyph("shippingbox", .amber).app(bundle: "x")
-        var withCatalogue = MenuIcon.cask
-        withCatalogue.bundled = "codex"
         let rows = UpdateList.withApps([Self.zen, Self.codex, Self.atuin], info: Self.info)
-        let entries = UpdateList.entries(rows, includeSelfUpdating: true, icons: ["cask:codex": withCatalogue, "cask:zen": catalogue])
+        let entries = UpdateList.entries(rows, includeSelfUpdating: true)
         func icon(_ title: String) -> MenuIcon? { entries.first { $0.title == title }?.icon }
-        #expect(icon("zen")?.appPath == "/Applications/Zen.app", "the app on disk beats the catalogue")
-        #expect(icon("codex")?.bundled == "codex", "a command-line cask wears the catalogue's picture")
+        #expect(icon("zen")?.appPath == "/Applications/Zen.app", "the app on disk")
+        #expect(icon("codex") == MenuIcon.updatable(Self.codex.item), "a command-line cask wears its kind's glyph")
         #expect(icon("atuin") == MenuIcon.formula)
     }
 
-    @Test("A Remove row with an app wears it; one without (a command-line cask) wears the catalogue's picture")
+    @Test("A Remove row with an app wears it; one without (a command-line cask) its kind's glyph")
     func removeIcons() {
         let rows = (try? RemoveList.parse(Self.info)) ?? []
-        var picture = MenuIcon.cask
-        picture.bundled = "codex"
-        let entries = RemoveList.entries(rows, icons: ["cask:codex": picture, "cask:zen": .formula])
+        let entries = RemoveList.entries(rows)
         #expect(entries.first { $0.title == "Zen" }?.icon?.appPath == "/Applications/Zen.app")
-        #expect(entries.first { $0.title == "Codex" }?.icon?.bundled == "codex")
+        let codex = try? #require(rows.first { $0.name == "Codex" || $0.key == "cask:codex" })
+        #expect(entries.first { $0.title == "Codex" }?.icon == codex.map(MenuIcon.remove))
     }
 }

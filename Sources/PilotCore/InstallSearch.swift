@@ -226,9 +226,9 @@ public enum InstallSearch {
     public typealias Tools = Set<Package.Kind>
 
     /// mas and the tools found in the folders Homebrew and the vendors' installers put commands in
-    /// (CatalogueEntry.Check.commandFolders), Go also in its own installer's /usr/local/go.
+    /// (InstallCheck.commandFolders), Go also in its own installer's /usr/local/go.
     public static func tools(isExecutable: (String) -> Bool = FileManager.default.isExecutableFile(atPath:)) -> Tools {
-        let found = Tools([.mas, .npm, .uv, .pipx, .cargo, .go].filter { !CatalogueEntry.Check.copies(of: $0.rawValue, isExecutable: isExecutable).isEmpty })
+        let found = Tools([.mas, .npm, .uv, .pipx, .cargo, .go].filter { !InstallCheck.copies(of: $0.rawValue, isExecutable: isExecutable).isEmpty })
         return isExecutable("/usr/local/go/bin/go") ? found.union([.go]) : found
     }
 

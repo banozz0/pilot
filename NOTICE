@@ -5,7 +5,8 @@ Trademarks
 ----------
 Pilot shows other companies' app icons and logos so you can recognise the apps it installs, opens and drives:
 
-- Packaging/catalogue-icons/: the icons of the apps in Install's catalogue.
+- Packaging/provider-icons/: the icons of the AI providers Pilot's AI page names (Claude, ChatGPT, Ollama).
+- Packaging/catalogue-icons/: the icons of the apps Install's former catalogue showed; no longer shipped in the app.
 - Packaging/webapp-icons/: the icons of the sites Install › Web App offers.
 - The Claude mark on extension gauges (Sources/Pilot/System/ExtensionGaugeIcon.swift), drawn from CodexBar's path.
 

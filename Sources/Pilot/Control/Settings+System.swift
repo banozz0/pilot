@@ -28,10 +28,10 @@ extension SettingsSchema {
         ])
     }
 
-    /// The rest of Pilot's own settings: Look's wallpaper cycle, the overlay's mode, the notes folder, recommendations,
+    /// The rest of Pilot's own settings: Look's wallpaper cycle, the overlay's mode, the notes folder,
     /// This Mac's public IP, Update's self-updating casks and Pilot's switch. The switch's keys wait on the Allow gate, as
     /// the switch is Sven's alone; the live system values (brightness, volume, dark mode …) are actions, not settings.
-    func registerSystem(settings: PilotSettings, wallpaper: WallpaperSettings, recommendations: Recommendations, pilotSwitch: any PilotSwitching,
+    func registerSystem(settings: PilotSettings, wallpaper: WallpaperSettings, pilotSwitch: any PilotSwitching,
                         dictation: PilotDictation, notesIn: @escaping @MainActor (URL) -> Int, changeNotes: @escaping @MainActor (URL) throws -> Void) {
         register([
             .choice("wallpaper.order", "Wallpapers go by name, or shuffled (the page's Shuffle switch)", page: "look", WallpaperCycle.Order.allCases, standard: .name,
@@ -107,8 +107,6 @@ extension SettingsSchema {
                     }),
             .choice(PilotSettings.dictationKeyModeKey, "Dictation key mode", page: "voice", DictationKeyMode.allCases, standard: .toggle,
                     read: { settings.dictationKeyMode }, write: { settings.dictationKeyMode = $0 }),
-            .bool("recommendations.show", "Recommend apps", page: "install", standard: true,
-                  read: { recommendations.show }, write: { recommendations.show = $0 }),
             .bool("system.publicIP", "Show This Mac's public IP", page: "stats", standard: false,
                   read: { settings.showPublicIP }, write: { settings.showPublicIP = $0 }),
             .bool("update.selfUpdatingCasks", "Update lists casks that update themselves", page: "install", standard: false,
