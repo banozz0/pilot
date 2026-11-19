@@ -21,7 +21,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     /// The bundle's CommonJS factory, once it loaded.
     private var factory: JSValue
     private var timers: [Int: DispatchSourceTimer] = [:]
-    private var started = false, inputOpen = true, closing = false, exiting = false
+    private var started = false, inputOpen = true, closing = false
     private let born = Date()
 
     /// Loads the prelude and the bundle's CommonJS factory; a failure is the run's error line.
@@ -106,7 +106,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
     /// Once input has ended or a close came and no timer is pending, exits after the drain unless a timer was set meanwhile.
     private func settle() {
-        guard (closing || !inputOpen), timers.isEmpty, !exiting else { return }
+        guard closing || !inputOpen, timers.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Host.drain) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.timers.isEmpty else { return }
@@ -119,10 +119,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in MainActor.assumeIsolated { self?.finish() } }
     }
 
-    private func finish() {
-        exiting = true
-        exit(0)
-    }
+    private func finish() { exit(0) }
 
     /// An exception no JS caught, from a timer or a call into the context: its error line, and its stack on stderr.
     private func uncaught(_ exception: JSValue?) {
