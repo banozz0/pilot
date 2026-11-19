@@ -30,6 +30,8 @@ public final class ExtensionSession: Sendable {
 
     private struct State {
         var child: ChildProcess.Session?
+        /// A Raycast host's memory watch (ExtensionRun.watchMemory, T4), cancelled once it is gone.
+        var memory: Task<Void, Never>?
         /// The requests waiting for their answers, oldest first, each with its number.
         var waiting: [(id: Int, answer: CheckedContinuation<ListOutcome, Never>)] = []
         var asked = 0
@@ -116,8 +118,10 @@ public final class ExtensionSession: Sendable {
                     }
                     do {
                         let (path, arguments, directory) = try ExtensionRun.launch(command, folder: folder, environment: pilot)
-                        s.child = try ChildProcess.Session(path, arguments, environment: environment, directory: directory,
-                                                           lines: { [weak self] in self?.received($0) }, ended: { [weak self] in self?.ended(status: $0, stderr: $1) })
+                        let child = try ChildProcess.Session(path, arguments, environment: environment, directory: directory,
+                                                             lines: { [weak self] in self?.received($0) }, ended: { [weak self] in self?.ended(status: $0, stderr: $1) })
+                        s.child = child
+                        if raycast { s.memory = ExtensionRun.watchMemory(of: child.pid) { [weak self] in self?.overMemory() } }
                     } catch {
                         let reason = stop(&s, because: "did not start: \(error.localizedDescription)")
                         finish(&s)
@@ -199,6 +203,19 @@ public final class ExtensionSession: Sendable {
         child?.stop()
     }
 
+    /// The host passed the memory stop (T4): it is stopped, and the open view shows why as its error row.
+    private func overMemory() {
+        let reason = ExtensionRun.OverMemory(limitMB: ExtensionRun.memoryStopMB).localizedDescription
+        let (child, watcher) = state.withLock { s -> (ChildProcess.Session?, (@Sendable () -> Void)?) in
+            guard s.stopped == nil else { return (nil, nil) }
+            stop(&s, because: reason)
+            s.newest = View(outcome: .error(reason), loading: false)
+            return (s.child, s.watcher)
+        }
+        child?.stop()
+        watcher?()
+    }
+
     private func ended(status: Int32, stderr: String) {
         state.withLock { s in
             stop(&s, because: status != 0 && !stderr.isEmpty ? "stopped with an error: \(stderr.prefix(120))" : "stopped")
@@ -224,6 +241,7 @@ public final class ExtensionSession: Sendable {
     }
 
     private func finish(_ s: inout State) {
+        s.memory?.cancel()
         s.ended = true
         s.endWaiters.forEach { $0.resume() }
         s.endWaiters = []

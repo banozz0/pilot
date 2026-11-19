@@ -2,15 +2,23 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "limits",
   "title": "Limits",
-  "description": "A fixture for pilot-ext-host's limits: one command allocates past Pilot's memory stop, one never commits in time.",
+  "description": "A fixture for pilot-ext-host's limits: commands that allocate past Pilot's memory stop, and one that never commits in time.",
   "author": "banozz",
   "license": "MIT",
-  "categories": ["Developer Tools"],
+  "categories": [
+    "Developer Tools"
+  ],
   "commands": [
     {
       "name": "hog",
       "title": "Use too much memory",
       "description": "Fills 64 MiB buffers up to 768 MiB, then holds them in a busy loop for 3 s before it lists anything.",
+      "mode": "view"
+    },
+    {
+      "name": "grow",
+      "title": "Grow when pressed",
+      "description": "Lists one row whose action fills 64 MiB buffers up to 768 MiB, then holds them for 3 s: the memory stop on an open view.",
       "mode": "view"
     },
     {

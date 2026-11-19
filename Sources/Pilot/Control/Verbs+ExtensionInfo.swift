@@ -215,7 +215,8 @@ extension ExtensionTools {
     /// A run that failed: the extension's own error message as it said it, but a failed exit (whose reason is the program's
     /// stderr, which can hold anything) as a fixed line, the reason in the log only, as Hyper+Space does.
     func failed(_ command: Extension.Command, _ why: String, in ext: Extension? = nil) -> ControlError {
-        if let ext, why.hasPrefix("says:") || why == ExtensionRun.unreadable || why.hasPrefix("sent no") || why.hasPrefix("did not answer") {
+        if let ext, why.hasPrefix("says:") || why == ExtensionRun.unreadable || why.hasPrefix("sent no") || why.hasPrefix("did not answer")
+            || why.hasPrefix("used more than") {
             return ControlError(why.hasPrefix("did not answer") ? .timeout : .badValue, "\(ext.title) \(why)")
         }
         log.error("ext: \(command.actionID, privacy: .public) failed: \(why, privacy: .private)")
