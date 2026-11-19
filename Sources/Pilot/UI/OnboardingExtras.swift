@@ -4,13 +4,12 @@ import ImageScale
 import PilotCore
 
 /// Try it's optional panel, "More, if you want" (Onboarding 1.1, Q843): the extras that are no part of Set up, each
-/// acting on its own button or switch: the AI provider, Extensions, the upscaler's Max quality and the
-/// terminal (T76).
+/// acting on its own button: the AI provider and Extensions (Sven's critique, 2026-11-18, cut the rest), and the
+/// titles the downloads Try it once started keep.
 @MainActor
 enum OnboardingExtras {
     static let extensionsDetail = "Pomodoro and the rest of the catalogue, from GitHub"
     static let upscalerTitle = "Upscaler, Max quality"
-    static var upscalerDetail: String { "sharper 4x upscales; the General model is already in Pilot · \(upscalerMegabytes) MB" }
 
     /// Max quality's download, as Upscale's own panel says it.
     static let upscalerMegabytes = Int((Double(UpscaleModel.max.download?.bytes ?? 0) / 1_000_000).rounded())
@@ -18,23 +17,7 @@ enum OnboardingExtras {
     /// The menu's Extension catalogue, read from GitHub only as it opens.
     static func browseExtensions() { PilotMenu.shared.pick(live: ExtensionCatalogueMenu.title, source: ExtensionCatalogueMenu()) }
 
-    /// Max quality's download, started from the panel; Pilot's menu-bar item shows it as Set up's downloads.
-    static func fetchUpscaler() { ExtrasDownloads.shared.start(speech: nil, voices: false, upscaler: true) }
-
-    /// The upscaler's line: on this Mac, its download's state, or nil to offer Download.
-    static var upscalerState: String? {
-        if let d = ExtrasDownloads.shared.downloads.first(where: { $0.title == upscalerTitle }) { return d.words }
-        return UpscaleModels.compiled(.max) != nil ? "On this Mac" : nil
-    }
-
     static let terminalTitle = "Terminal"
-    static var terminalDetail: String { "Ghostty for Hyper+T, which otherwise downloads on its first press · \(TerminalPack.pin.megabytes) MB" }
-
-    /// The terminal's line: on this Mac, its download's state, or nil to offer Download.
-    static var terminalState: String? {
-        if let d = ExtrasDownloads.shared.downloads.first(where: { $0.title == terminalTitle }) { return d.words }
-        return TerminalPack.isInstalled() ? "On this Mac" : nil
-    }
 }
 
 /// The downloads Set up and Try it's upscaler started, held past Welcome's close: Try it, Pilot's menu-bar item and its dropdown show

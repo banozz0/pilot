@@ -10,6 +10,8 @@ import SwiftUI
 struct OnboardingRail: View {
     @Environment(\.style) private var style
     let step: OnboardingModel.Step
+    /// The current step is finished too (Try it's demo done): its node shows a tick.
+    var allDone = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -32,7 +34,11 @@ struct OnboardingRail: View {
             ZStack {
                 if current {
                     Circle().fill(style.color(\.accent))
-                    Text("\(s.number)").styleText(\.mono).foregroundStyle(style.color(\.canvas))
+                    if allDone {
+                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(style.color(\.canvas))
+                    } else {
+                        Text("\(s.number)").styleText(\.mono).foregroundStyle(style.color(\.canvas))
+                    }
                 } else {
                     Circle().strokeBorder(style.color(done ? \.line3 : \.line2), lineWidth: 1)
                     if done {
@@ -53,10 +59,19 @@ struct SetupTitled: View {
     @Environment(\.style) private var style
     let title: String
     var detail: String?
+    /// What it breaks, a risky Hyper choice's (Sven, 2026-11-19): a small alert icon after the title, the words only as
+    /// the row's tooltip, which the row sets.
+    var alert: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
+            HStack(spacing: 6) {
+                Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
+                if let alert {
+                    Image(systemName: "exclamationmark.triangle.fill").imageScale(.small).foregroundStyle(style.color(\.warn))
+                        .accessibilityLabel(alert)
+                }
+            }
             if let detail { Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -110,7 +125,7 @@ struct SetupFork: View {
                     .disabled(setup.everything.isEmpty)
             }
             card(eyebrow: "Your way", title: "Pick by hand",
-                 about: "Choose each helper, key and file kind. Nothing changes until you confirm.") {
+                 about: "Choose each key, setting and feature. Nothing changes until you confirm.") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("· starts with nothing ticked").styleText(\.caption).foregroundStyle(style.color(\.text2))
                     Text("· each row says what it gives").styleText(\.caption).foregroundStyle(style.color(\.text2))
@@ -140,48 +155,60 @@ struct SetupFork: View {
 
 // MARK: Pick by hand
 
-/// Pick by hand: the same groups as ticked rows, each with what it gives, nothing ticked at first; what is on this Mac
-/// says so instead of a switch.
+/// Pick by hand: the same groups as ticked rows, each with what it gives, then the features and the helpers each needs
+/// (SetupFeature), nothing ticked at first; what is on this Mac says so instead of a switch.
 struct SetupPickList: View {
     @Environment(\.style) private var style
     let setup: OnboardingSetup
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(SetupGroup.allCases, id: \.self) { group in
+            ForEach(SetupGroup.allCases.filter { !$0.offered.isEmpty }, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 0) {
-                    groupHeading(group)
-                    ForEach(group.items, id: \.self) { item in
-                        InstrumentRule()
-                        HStack(spacing: 14) {
-                            SetupTitled(title: item.title, detail: item.detail)
-                            Spacer(minLength: 8)
-                            if setup.onMac.contains(item) {
-                                Text("On this Mac").styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                            } else if let state = setup.ledger[item]?.state {
-                                // Held by the last run's record: said, never offered twice.
-                                Text(state.words).styleText(\.mono).foregroundStyle(style.color(\.text3)).lineLimit(2)
-                                    .frame(maxWidth: 200, alignment: .trailing)
-                            } else {
-                                toggle(item)
-                            }
-                        }
-                        .padding(.horizontal, 18).padding(.vertical, 10)
+                    groupHeading(group.title, symbol: group.symbol)
+                    ForEach(group.offered, id: \.self) { item in
+                        row(item.title, item.detail, held: setup.held(item),
+                            isOn: Binding(get: { setup.picked.contains(item) }, set: { setup.set(item, $0) }))
                     }
                 }
                 .styleSurface(\.card)
             }
+            // The features, each ticking the helpers it needs (Sven, 2026-11-19).
+            VStack(alignment: .leading, spacing: 0) {
+                groupHeading("Features", symbol: SetupGroup.helpers.symbol)
+                ForEach(SetupFeature.allCases, id: \.self) { feature in
+                    row(feature.title, setup.detail(feature), held: setup.held(feature),
+                        isOn: Binding(get: { setup.picked(feature) }, set: { setup.set(feature, $0) }))
+                }
+            }
+            .styleSurface(\.card)
         }
     }
 
-    private func toggle(_ item: SetupItem) -> some View {
-        Toggle(item.title, isOn: Binding(get: { setup.picked.contains(item) }, set: { setup.set(item, $0) })).labelsHidden().toggleStyle(.pilotSwitch)
+    /// A row: its switch, or in its place what holds it, on this Mac or in the last run's record (never offered twice).
+    private func row(_ title: String, _ detail: String, held: OnboardingSetup.Held?, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 0) {
+            InstrumentRule()
+            HStack(spacing: 14) {
+                SetupTitled(title: title, detail: detail)
+                Spacer(minLength: 8)
+                switch held {
+                case .onMac?:
+                    Text("On this Mac").styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
+                case .ran(let words)?:
+                    Text(words).styleText(\.mono).foregroundStyle(style.color(\.text3)).lineLimit(2).frame(maxWidth: 200, alignment: .trailing)
+                case nil:
+                    Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.pilotSwitch)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10)
+        }
     }
 
-    private func groupHeading(_ group: SetupGroup) -> some View {
+    private func groupHeading(_ title: String, symbol: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: group.symbol).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
-            Text(group.title).styleText(\.title).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
+            Image(systemName: symbol).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+            Text(title).styleText(\.title).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
             Spacer()
         }
         .padding(.horizontal, 18).frame(height: 40)
@@ -314,11 +341,99 @@ struct GrantWalkPanel: View {
     }
 }
 
-/// Try it's "More, if you want", folded: the AI provider, Extensions, the upscaler's Max quality, the
-/// terminal's download (T76), and the other permissions, which live in Settings › Permissions. Never needed for Finish.
-struct OnboardingMore: View {
-    @Environment(\.style) private var style
+extension Engine {
+    /// The label of the Hyper bind on `key`, nil when none: the action a Hyper choice's everyday shortcut would run.
+    func boundLabel(_ key: Key) -> String? { binds.store.action(for: key).flatMap { action($0)?.label } }
+}
 
+/// Access in both styles (Sven, 2026-11-19: mockup C, with A's drag strip and B's plain words): what Accessibility lets
+/// Pilot do and the one thing it never sees; Pilot's icon to drag into the list from this window, no floating helper,
+/// with three steps that follow the real state (Settings running, then the grant); the later grants in one line.
+struct AccessPanel: View {
+    @Environment(\.style) private var style
+    let model: OnboardingModel
+
+    var body: some View {
+        let granted = model.status.accessibility, open = model.settingsOpen || granted
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("With it, Pilot can").styleText(\.title).foregroundStyle(style.color(\.text))
+                ForEach(OnboardingModel.accessCan, id: \.self) { line in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(style.color(\.accent)).accessibilityHidden(true)
+                        Text(line).styleText(\.body).foregroundStyle(style.color(\.text2))
+                    }
+                }
+                Text(OnboardingModel.accessNever).styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(.top, 4)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading).styleSurface(\.card)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    DraggableApp().frame(width: 48, height: 48).help("Drag Pilot into the list")
+                    SetupTitled(title: granted ? "Accessibility is on" : "Drag Pilot into the list",
+                                detail: granted ? "Pilot reads the Hyper key now." : PermissionDragPanel.List.line)
+                    Spacer(minLength: 8)
+                    if granted {
+                        Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityLabel("Allowed")
+                    } else {
+                        SetupButton(title: model.accessAsked ? "Open again" : "Allow", primary: !model.accessAsked) { model.allowAccessibility() }
+                    }
+                }
+                HStack(spacing: 8) {
+                    step("1 · Settings open", "beside this window", done: open, live: !open && model.accessAsked)
+                    step("2 · Drag Pilot in", "or + and pick it", done: granted, live: open && !granted)
+                    step("3 · Switch it on", "Pilot sees it at once", done: granted, live: false)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).styleSurface(\.card)
+            Text(OnboardingModel.laterLine).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func step(_ title: String, _ detail: String, done: Bool, live: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).styleText(\.small).foregroundStyle(style.color(done ? \.accent : live ? \.text : \.text3))
+            Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(style.color(done ? \.accentLine : \.line2), lineWidth: 1))
+    }
+}
+
+/// Try it's demo, done: one line for the whole tab in place of its prompts (Sven, 2026-11-19).
+struct DemoDone: View {
+    @Environment(\.style) private var style
+    let line: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityHidden(true)
+            SetupTitled(title: "Demo done", detail: line)
+        }
+    }
+}
+
+/// Try it's panels in both styles, scrolling inside Set up's height, so More opening never grows the window past the
+/// screen (a tester's grew too tall to reach Finish, 2026-11-18); opening More scrolls to it, tagged `OnboardingModel.moreID`.
+struct TryItScroll<Content: View>: View {
+    let showsMore: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollViewReader { scroll in
+            ScrollView { content }
+                .onChange(of: showsMore) { if showsMore { withAnimation { scroll.scrollTo(OnboardingModel.moreID, anchor: .top) } } }
+        }
+        .frame(maxHeight: OnboardingView.scrollHeight)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Try it's "More, if you want", folded: only the extras that matter on day one, the AI provider and Extensions (Sven's
+/// critique, 2026-11-18). The rest live where they are used: the upscaler's Max
+/// quality in Upscale's Model, Pilot's terminal downloading on Hyper+T's first press, the other permissions in Allow the
+/// rest just above and Settings › Permissions. Never needed for Finish.
+struct OnboardingMore: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             line {
@@ -332,32 +447,6 @@ struct OnboardingMore: View {
                 SetupTitled(title: "Extensions", detail: OnboardingExtras.extensionsDetail)
                 Spacer(minLength: 8)
                 SetupButton(title: "Browse…") { OnboardingExtras.browseExtensions() }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: OnboardingExtras.upscalerTitle, detail: OnboardingExtras.upscalerDetail)
-                Spacer(minLength: 8)
-                if let state = OnboardingExtras.upscalerState {
-                    Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                } else {
-                    SetupButton(title: "Download") { OnboardingExtras.fetchUpscaler() }
-                }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: OnboardingExtras.terminalTitle, detail: OnboardingExtras.terminalDetail)
-                Spacer(minLength: 8)
-                if let state = OnboardingExtras.terminalState {
-                    Text(state).styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                } else {
-                    SetupButton(title: "Download") { ExtrasDownloads.shared.fetchTerminal() }
-                }
-            }
-            InstrumentRule()
-            line {
-                SetupTitled(title: "Other permissions", detail: "System Events, Full Disk Access, Microphone and the rest, each with its Allow")
-                Spacer(minLength: 8)
-                SetupButton(title: "Open Settings") { AppWindowController.shared.open(.permissions) }
             }
         }
     }

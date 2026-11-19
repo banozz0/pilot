@@ -142,8 +142,8 @@ final class LiveGrants: GrantSystem {
 
     func closeHelper(_ row: Onboarding.Row) {
         switch row {
-        case .fullDiskAccess: PermissionDragPanel.close(.fullDiskAccess)
-        case .screenRecording: PermissionDragPanel.close(.screenRecording)
+        case .fullDiskAccess: PermissionDragPanel.close(.fullDiskAccess, reason: "its step ended")
+        case .screenRecording: PermissionDragPanel.close(.screenRecording, reason: "its step ended")
         default: break
         }
     }

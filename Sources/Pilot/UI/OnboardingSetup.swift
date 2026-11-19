@@ -4,10 +4,21 @@ import Observation
 import PilotCore
 
 /// One change Set up makes (Onboarding 1.1, T54, variant C): the seven helpers, two keys, two file kinds, two downloads and
-/// two Pilot settings, 15 in all.
+/// two Pilot settings, 15 in all. Set up offers only `offered`; the rest stay so an earlier run's record keeps its rows
+/// and Undo.
 enum SetupItem: String, CaseIterable, Codable, Hashable {
     case homebrew, mole, mas, ffmpeg, webp, npm, cargo
     case filesKey, notesKey, txt, md, dictation, voices, launchAtLogin, command
+
+    /// What Set up offers (Sven's critique, 2026-11-18: the main things only): the Files and Notes keys and launch at
+    /// login. The helpers live on Install's Command-line tools, .txt and .md on Open with, the dictation model and voices
+    /// on Dictation and Read aloud, the pilot command on General, each with its own button. Pick by hand offers the
+    /// helpers too, by the feature each serves (SetupFeature). No theme: not until resetting one to the defaults is sure
+    /// (Sven, 2026-11-19).
+    static let offered: [SetupItem] = [.filesKey, .notesKey, .launchAtLogin]
+
+    /// What ticking it ticks too, as the run needs it first: a Homebrew formula needs Homebrew.
+    var needs: [SetupItem] { formula != nil ? [.homebrew] : [] }
 
     var group: SetupGroup {
         switch self {
@@ -82,16 +93,10 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         }
     }
 
-    /// What it gives, a helper by the feature it serves (Q555).
+    /// What it gives; a helper's is its feature's (Q555).
     @MainActor var detail: String {
         switch self {
-        case .homebrew: "Update reads its list of apps and tools; Install and Remove use it too. Asks your Mac's password in Terminal."
-        case .mole: "Clean's preview, the clean itself, and Disk usage · installs through Homebrew"
-        case .mas: "App Store apps in Update too; Install gets free App Store apps itself"
-        case .ffmpeg: "Convert: to MP3 and GIF"
-        case .webp: "Convert: to WebP"
-        case .npm: "Install's search and Update: npm packages (comes with Node, runs last)"
-        case .cargo: "Install's search and Update: Rust crates (comes with Rust, runs last)"
+        case .homebrew, .mole, .mas, .ffmpeg, .webp, .npm, .cargo: SetupFeature.allCases.first { $0.helpers.contains(self) }?.detail ?? ""
         case .filesKey: "Hyper+F opens Pilot's own file window instead of Finder"
         case .notesKey: "the Notes key opens Pilot's quick notes instead of an app"
         case .txt: "a .txt file you double-click opens in Pilot's text window"
@@ -121,6 +126,8 @@ enum SetupGroup: CaseIterable, Hashable {
     /// In SetupItem's order, which is the run's: npm and cargo last, as they bring Node and Rust and take the longest
     /// (T54's call).
     var items: [SetupItem] { SetupItem.allCases.filter { $0.group == self } }
+    /// Its items Set up offers (SetupItem.offered); a group with none is not shown before a run.
+    var offered: [SetupItem] { items.filter(SetupItem.offered.contains) }
 
     var title: String {
         switch self {
@@ -149,8 +156,43 @@ enum SetupGroup: CaseIterable, Hashable {
         case .keys: "keys: Files → Pilot Files, Notes → Pilot Notes"
         case .fileKinds: "file kinds: .txt and .md open in Pilot"
         case .downloads: "downloads: dictation model and voices, \(OnboardingSetup.speech.megabytes + KokoroModel.megabytes) MB"
-        case .pilot: "launch at login, the pilot command"
+        case .pilot: offered.map(\.short).joined(separator: ", ")
         }
+    }
+}
+
+/// Pick by hand's feature rows (Sven, 2026-11-19): each feature with the helpers it needs. Ticking a row ticks them, and
+/// Homebrew under a formula (SetupItem.needs); Set up everything offers none of them.
+enum SetupFeature: CaseIterable, Hashable {
+    case update, clean, convert, appStore, npm, cargo
+
+    var helpers: [SetupItem] {
+        switch self {
+        case .update: [.homebrew]
+        case .clean: [.mole]
+        case .convert: [.ffmpeg, .webp]
+        case .appStore: [.mas]
+        case .npm: [.npm]
+        case .cargo: [.cargo]
+        }
+    }
+
+    /// "Convert → ffmpeg and webp".
+    var title: String {
+        let feature = switch self {
+        case .update: "Update"
+        case .clean: "Clean"
+        case .convert: "Convert"
+        case .appStore: "App Store apps"
+        case .npm: "npm packages"
+        case .cargo: "Rust crates"
+        }
+        return "\(feature) → " + helpers.map(\.short).joined(separator: " and ")
+    }
+
+    /// What it gives (Q555): its helper's own words (Install › Helpers'), Convert's for ffmpeg and webp.
+    var detail: String {
+        self == .convert ? "Convert: to MP3, GIF and WebP" : helpers.first?.helper?.unlocks ?? ""
     }
 }
 
@@ -367,7 +409,7 @@ final class OnboardingSetup {
     func load() {
         onMac = Set(SetupItem.allCases.filter(isOnMac))
         picked.subtract(onMac)
-        noAppBefore = [SetupItem.txt, .md].filter { item in !onMac.contains(item) && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
+        noAppBefore = everything.filter { item in item.kind != nil && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
     }
 
     /// The file kinds with no app on this Mac: their Undo cannot put "none" back, which the fork says first.
@@ -387,6 +429,9 @@ final class OnboardingSetup {
         phase = .fork
         log.notice("setup: run again")
     }
+
+    /// Still open to Set up: not on this Mac and not held by the record.
+    private func open(_ item: SetupItem) -> Bool { !onMac.contains(item) && ledger[item] == nil }
 
     private func isOnMac(_ item: SetupItem) -> Bool {
         switch item {
@@ -410,15 +455,50 @@ final class OnboardingSetup {
 
     /// Set up everything's changes: all but what is on this Mac or still held by the record (a quiet mark Run setup
     /// again kept, which a later look settles; `start` never runs one twice).
-    var everything: [SetupItem] { SetupItem.allCases.filter { !onMac.contains($0) && ledger[$0] == nil } }
+    var everything: [SetupItem] { SetupItem.offered.filter(open) }
 
-    /// A formula needs Homebrew: ticking one ticks Homebrew, and unticking Homebrew unticks them while it is missing.
+    /// Ticking an item ticks what it needs (`needs`: a formula, Homebrew), and unticking Homebrew unticks them while it is
+    /// missing.
     func set(_ item: SetupItem, _ on: Bool) {
-        guard !onMac.contains(item), ledger[item] == nil else { return }
+        guard open(item) else { return }
         if on { picked.insert(item) } else { picked.remove(item) }
+        if on { picked.formUnion(item.needs.filter { !onMac.contains($0) }) }
         guard !onMac.contains(.homebrew) else { return }
-        if on && item.formula != nil { picked.insert(.homebrew) }
         if !on && item == .homebrew { picked.subtract(SetupGroup.helpers.items) }
+    }
+
+    /// A feature row's switch: ticks or unticks each of its helpers still to install, with what they need.
+    func set(_ feature: SetupFeature, _ on: Bool) {
+        for item in feature.helpers { set(item, on) }
+    }
+
+    /// A feature row's line: what it gives, and that it ticks Homebrew too while Homebrew is not on this Mac.
+    func detail(_ feature: SetupFeature) -> String {
+        feature.helpers.contains { $0.needs.contains { !onMac.contains($0) } } ? feature.detail + " · ticks Homebrew too" : feature.detail
+    }
+
+    /// A feature row ticks once every helper it still needs is ticked.
+    func picked(_ feature: SetupFeature) -> Bool {
+        let missing = feature.helpers.filter(open)
+        return !missing.isEmpty && missing.allSatisfy(picked.contains)
+    }
+
+    /// What a Pick by hand row says in place of its switch.
+    enum Held: Equatable { case onMac, ran(String) }
+
+    /// An item's: on this Mac, or its state in the last run's record; nil while it can be ticked.
+    func held(_ item: SetupItem) -> Held? {
+        if onMac.contains(item) { return .onMac }
+        return ledger[item].map { .ran($0.state.words) }
+    }
+
+    /// A feature row's: on this Mac when all its helpers are, else its helpers' state in the record, the first unsettled
+    /// one first; nil while one can still be ticked.
+    func held(_ feature: SetupFeature) -> Held? {
+        if feature.helpers.allSatisfy(onMac.contains) { return .onMac }
+        guard !feature.helpers.contains(where: open) else { return nil }
+        let states = feature.helpers.compactMap { ledger[$0]?.state }
+        return (states.first { !$0.settled } ?? states.first).map { .ran($0.words) }
     }
 
     // MARK: The run
@@ -426,7 +506,7 @@ final class OnboardingSetup {
     /// Starts `items` in the plan's order: keys, Pilot's settings and file kinds at once, then the downloads, then the
     /// helpers' Terminal run. Each records what was there before it changes it.
     func start(_ items: [SetupItem]) {
-        let run = SetupItem.allCases.filter { items.contains($0) && !onMac.contains($0) && ledger[$0] == nil }
+        let run = SetupItem.allCases.filter { items.contains($0) && open($0) }
         problem = nil
         phase = .run
         defaults.set(false, forKey: Self.againKey)
@@ -677,11 +757,12 @@ final class OnboardingSetup {
     var forkCount: String {
         let n = everything.count
         let base = "\(n) change\(n == 1 ? "" : "s")"
-        return onMac.isEmpty ? base : "\(base) · \(onMac.count) already on this Mac"
+        let there = onMac.count(where: SetupItem.offered.contains)
+        return there == 0 ? base : "\(base) · \(there) already on this Mac"
     }
 
     /// Whether the helpers' run needs the Mac's login, because Homebrew is in it.
-    var asksForMacLogin: Bool { !onMac.contains(.homebrew) }
+    var asksForMacLogin: Bool { everything.contains(.homebrew) }
 
     #if DEBUG
     /// A render's state in place of a run: what is on its Mac, what is ticked, the ledger.

@@ -6,9 +6,43 @@ public enum Onboarding {
     /// Every layer key, Caps Lock suggested (P68: Control, Option and right Command too).
     public static let hyperChoices = LayerKey.allCases
 
+    /// Apple's vendor ids, USB and Bluetooth: no Apple keyboard, a MacBook's own included, has a right Control key.
+    static let appleVendors: Set<Int> = [0x05AC, 0x004C]
+
+    /// The choices this Mac's keyboards have (Sven, 2026-11-19: no key the Mac lacks): right Control only while a
+    /// keyboard Apple did not make is attached (`vendors`, from the IO registry), or when none could be read. The key in
+    /// use always stays, so it can be switched off.
+    public static func hyperChoices(keyboards vendors: Set<Int>, current: [LayerKey]) -> [LayerKey] {
+        let rightControl = vendors.isEmpty || vendors.contains { !appleVendors.contains($0) } || current.contains(.rightControl)
+        return hyperChoices.filter { $0 != .rightControl || rightControl }
+    }
+
     /// A choice's line under its name: what Caps Lock keeps, or what a modifier no longer does (LayerKey.note).
     public static func hyperDetail(_ key: LayerKey) -> String {
         key == .capsLock ? "suggested · Shift+Caps Lock still types capitals" : key.note
+    }
+
+    /// The everyday shortcuts each modifier side takes over, a fixed pick of what Mac users press most: Command's Return,
+    /// T, Q and C; Control's terminal keys (interrupt, history search, suspend); Option's word jumps.
+    static func everyday(_ key: LayerKey) -> (modifier: String, keys: [String]) {
+        switch key {
+        case .capsLock: ("", [])
+        case .leftCommand, .rightCommand: ("Cmd", ["Return", "T", "Q", "C"])
+        case .leftControl, .rightControl: ("Ctrl", ["C", "R", "Z"])
+        case .leftOption, .rightOption: ("Option", ["←", "→"])
+        }
+    }
+
+    /// What picking `key` as Hyper breaks, its row's tooltip beside a small alert icon (Sven, 2026-11-18 and 2026-11-19);
+    /// nil for Caps Lock.
+    /// The picked side is Hyper alone and the tap swallows every key while Hyper is held (HyperTap), so each everyday
+    /// shortcut on that side runs the Hyper bind on its key, named by `bound` (its label; nil when none: it does
+    /// nothing). A tester's terminals opening by themselves may be Cmd+Return and Cmd+T on a Command side.
+    public static func hyperBreaks(_ key: LayerKey, bound: (Key) -> String?) -> String? {
+        let (modifier, keys) = everyday(key)
+        guard !keys.isEmpty else { return nil }
+        let runs = keys.map { name in "\(modifier)+\(name) \(bound(Key(name)).map { "→ \($0)" } ?? "does nothing")" }
+        return "As Hyper: " + runs.joined(separator: " · ")
     }
 
     public struct Status: Equatable, Sendable {

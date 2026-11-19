@@ -46,6 +46,9 @@ struct SandboxHost {
             try FileManager.default.createDirectory(at: PilotFolder.support, withIntermediateDirectories: true)
             try Data("{}".utf8).write(to: Binds.url)
         }
+        // PILOT_SANDBOX_TOOLS=<folder>: a stand-in Mac for where commands land: `<folder>/home` as home and Homebrew's
+        // prefixes under `<folder>`, so `pilot list helpers` finds a fixture's npm (an nvm or Volta one), never the Mac's.
+        if let tools = ProcessInfo.processInfo.environment["PILOT_SANDBOX_TOOLS"] { InstallCheck.standIn = ("\(tools)/home", tools) }
         // Before the verbs: registering reads Engine.shared, which is weak.
         let engine = Engine()
         // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows

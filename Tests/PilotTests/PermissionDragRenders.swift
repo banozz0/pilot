@@ -8,7 +8,7 @@ import Testing
 
 /// The drag panel beside System Settings' privacy lists (Sven, Build 71), through HUD.makePanel as Pilot shows it, for
 /// Accessibility, Full Disk Access and Screen Recording (asking, then granted with Quit & Reopen) in Instrument dark and light and Toybox; a look of the test's own, no panel shown.
-/// `PILOT_RENDER_DIR=<fresh dir> swift test --filter PermissionDragRenders`
+/// `PILOT_RENDER_DIR=<fresh dir> [PILOT_RENDER_APP=<built Pilot.app>] swift test --filter PermissionDragRenders`
 extension SharedLook {
 @MainActor
 @Suite("Permission drag renders")
@@ -20,6 +20,13 @@ struct PermissionDragRenders {
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("permission-drag")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         testApp()
+        // PILOT_RENDER_APP=<a built Pilot.app>: its icon as the one to drag, as Pilot shows it; a test process's own icon is
+        // a generic folder, which made the render look worse than the live panel (Sven, 2026-11-18).
+        if let app = Self.env["PILOT_RENDER_APP"] {
+            let icon = NSWorkspace.shared.icon(forFile: app)
+            icon.size = NSSize(width: 256, height: 256)  // its large representation, not the 32-point default
+            NSApp.applicationIconImage = icon
+        }
         let faces = DisplayFaces.directory
         DisplayFaces.directory = LookThemeTests.fonts
         defer { DisplayFaces.directory = faces }

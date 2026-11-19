@@ -41,13 +41,14 @@ enum PermissionDragPanel {
     static var shown: List? { model?.list }
 
     static func show(_ list: List) {
-        close()
+        close(reason: "another list's helper opened")
         let m = Model(list: list)
-        let p = HUD.makePanel(PermissionDragView(model: m, close: { close() }, relaunch: relaunch)
+        let p = HUD.makePanel(PermissionDragView(model: m, close: { close(reason: "Close pressed") }, relaunch: relaunch)
             .allowsWindowActivationEvents(true).fixedSize())
         panel = p
         model = m
         settingsSeen = false
+        log.notice("drag panel: shown for \(String(describing: list), privacy: .public)")
         corner(p)
         if let settings = settingsApp() { place(p, settings: settings.processIdentifier) }
         p.orderFrontRegardless()
@@ -64,13 +65,13 @@ enum PermissionDragPanel {
     private static func tick() {
         guard let panel, let model else { return }
         if isGranted(model.list) {
-            guard model.list == .screenRecording else { return close() }
+            guard model.list == .screenRecording else { return close(reason: "granted") }
             // The ask stays until Later or Quit & Reopen, Settings or not.
             model.granted = true
             watch?.invalidate(); watch = nil
             return
         }
-        guard let settings = settingsApp() else { if settingsSeen { close() }; return }
+        guard let settings = settingsApp() else { if settingsSeen { close(reason: "System Settings quit") }; return }
         settingsSeen = true
         place(panel, settings: settings.processIdentifier)
     }
@@ -91,8 +92,10 @@ enum PermissionDragPanel {
         show(.screenRecording)
     }
 
-    static func close(_ list: List? = nil) {
+    /// `reason` goes to the log with the list, so a panel that went is traced to what closed it.
+    static func close(_ list: List? = nil, reason: String) {
         guard list == nil || list == shown else { return }
+        if let shown { log.notice("drag panel: closed for \(String(describing: shown), privacy: .public) (\(reason, privacy: .public))") }
         watch?.invalidate(); watch = nil
         panel?.orderOut(nil)
         panel = nil
@@ -132,6 +135,9 @@ enum PermissionDragPanel {
         guard let f = Screens.focusedScreen?.visibleFrame else { return }
         p.setFrameOrigin(CGPoint(x: f.maxX - p.frame.width - 12, y: f.maxY - p.frame.height - 12))
     }
+
+    /// System Settings is running: Access's first step, read with no grant.
+    static var settingsRunning: Bool { settingsApp() != nil }
 
     private static func settingsApp() -> NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first { !$0.isTerminated }
@@ -181,8 +187,9 @@ struct PermissionDragView: View {
     }
 }
 
-/// Pilot's own icon as a drag source carrying the app's file URL, which the privacy lists take as a dropped app.
-private struct DraggableApp: NSViewRepresentable {
+/// Pilot's own icon as a drag source carrying the app's file URL, which the privacy lists take as a dropped app: in the
+/// helper beside Settings, and in onboarding's Access.
+struct DraggableApp: NSViewRepresentable {
     func makeNSView(context: Context) -> Source {
         let view = Source()
         view.image = NSApp.applicationIconImage
@@ -202,7 +209,12 @@ private struct DraggableApp: NSViewRepresentable {
         override func mouseDown(with event: NSEvent) {
             let item = NSDraggingItem(pasteboardWriter: Bundle.main.bundleURL as NSURL)
             item.setDraggingFrame(bounds, contents: image)
+            log.notice("drag panel: drag started")
             beginDraggingSession(with: [item], event: event, source: self)
+        }
+
+        func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+            log.notice("drag panel: drag ended, \(operation.isEmpty ? "not taken" : "dropped", privacy: .public)")
         }
 
         func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
