@@ -6,8 +6,8 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Launcher › Rings in the whole window (B48): at its narrowest, 760 by 520, where the three columns ran off the right
-/// edge (also 1100 tall, the whole page), and at its first size, 1000 by 660. Instrument on Tokyo Night, solid, in a moved home whose rings.json the run
+/// Launcher › Rings in the whole window (B48): in the 780 by 560 panel, where the three columns once ran off the right
+/// edge at 760 (also 1100 tall, the whole page). Instrument on Tokyo Night, solid, in a moved home whose rings.json the run
 /// reads as Pilot would. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter RingsPageRenders`
 extension SharedLook {
@@ -16,7 +16,7 @@ extension SharedLook {
 struct RingsPageRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Rings fits the window at its narrowest and at its first size",
+    @Test("Rings fits the panel, and its whole page 1100 tall",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func rings() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -40,8 +40,8 @@ struct RingsPageRenders {
         let frame = try #require(window.contentView?.superview)
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("rings-page")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // The narrowest again, tall enough to show the inspector the narrow layout puts under the ring.
-        for size in [AppWindowController.minSize, NSSize(width: AppWindowController.minSize.width, height: 1100), AppWindowController.size] {
+        // The panel's width again, tall enough to show the inspector the narrow layout puts under the ring.
+        for size in [AppWindowController.size, NSSize(width: AppWindowController.size.width, height: 1100)] {
             window.setContentSize(size)
             model.go(AppPlace(.menu, .rings))
             RunLoop.main.run(until: Date().addingTimeInterval(0.8))

@@ -67,11 +67,10 @@ struct SetupBluetoothRenders {
         for theme in ["tokyo-night", "folio"] {
             look.themeID = theme
             look.preview(spot: nil)
-            for window in [AppWindowController.size.width, AppWindowController.minSize.width] {
-                try await shot("refused-\(theme)-\(Int(window))", window: window)
-            }
-            try await shot("ask-again-failed-\(theme)-\(Int(AppWindowController.minSize.width))",
-                           window: AppWindowController.minSize.width, press: "Ask again")
+            // The panel has one width (ADR 0018), so one shot each.
+            let window = AppWindowController.size.width
+            try await shot("refused-\(theme)-\(Int(window))", window: window)
+            try await shot("ask-again-failed-\(theme)-\(Int(window))", window: window, press: "Ask again")
         }
     }
 

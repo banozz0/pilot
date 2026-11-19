@@ -8,9 +8,9 @@ import Testing
 
 /// Files › Folders, design round T63 (Sven on build 7: "the folders designs is a bit too much and save design is at the
 /// very bottom"): five layouts of the whole page, each drawn from Pilot's own parts (KitBlock, BlockRow, SearchBox, Chip,
-/// FolderArtView) over FolderDesignsModel with real designs, at the default window (1000 × 660) inside the real window
+/// FolderArtView) over FolderDesignsModel with real designs, in the 780 × 560 panel inside the real window
 /// frame, in Void and Porcelain, and once with the catalogue scrolled. B, which Sven picked (Q873), is the page itself
-/// (T64): also at the 760 pt minimum width, searched for "pour", and in Void once its Apply has dressed the folders.
+/// (T64): also searched for "pour", and in Void once its Apply has dressed the folders.
 /// The moved home holds Downloads, Documents and Pictures/Screenshots (ticked, so their kinds are suggested) and a git
 /// repository left out; Your designs are the 20 PNGs in `<home>/yours-src`, so the catalogue is Pilot's 66, the 20 and
 /// Your own: 87. Opt-in, `PILOT_RENDER_ONLY=b` for B alone:
@@ -25,7 +25,7 @@ struct FolderPageRenders {
     /// How a layout is drawn: as it opens, scrolled, searched, or after Apply.
     enum Shot: String { case open = "", scrolled = "-scrolled", searched = "-search", applied = "-applied" }
 
-    @Test("Files › Folders in five layouts, Void and Porcelain, at the default window; B at the minimum width too",
+    @Test("Files › Folders in five layouts, Void and Porcelain, in the panel",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RESOURCES"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -98,7 +98,6 @@ struct FolderPageRenders {
         for theme in ["void", "porcelain"] {
             let shots = Layout.allCases.flatMap { layout in (theme == "void" ? [Shot.open, .scrolled] : [.open]).map { (layout, $0) } }
             try await draw(theme, AppWindowController.size, shots + (theme == "void" ? [(.b, .searched)] : []), model: model)
-            try await draw(theme, NSSize(width: AppWindowController.minSize.width, height: AppWindowController.size.height), [(.b, .open)], model: model)
         }
         // Apply, as its button runs it: the three ticked folders dressed in Documents Pour, read back.
         if only.map({ $0.contains("b") }) ?? true {
