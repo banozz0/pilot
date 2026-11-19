@@ -67,18 +67,20 @@ public enum ExtensionRun {
                               surface: Extension.Surface.Kind? = nil, input: String? = nil, inputs: Inputs,
                               environment pilot: [String: String] = ProcessInfo.processInfo.environment,
                               timeout: Duration = noViewTimeout) async throws -> String {
-        let (path, arguments) = try launch(command, environment: pilot)
+        let (path, arguments, directory) = try launch(command, environment: pilot)
         return try await ChildProcess.run(path, arguments, environment: environment(for: command, from: pilot),
                                           input: message(command, query: query, context: context, surface: surface, input: input, inputs: inputs),
-                                          directory: command.program.deletingLastPathComponent(), timeout: timeout)
+                                          directory: directory, timeout: timeout)
     }
 
-    /// What starts `command`: its own program, or for a Raycast-format command (ADR 0017) the extension host with the
-    /// prelude and the command's bundle as its arguments, run in the bundle's folder like any program.
-    static func launch(_ command: Extension.Command, environment pilot: [String: String]) throws -> (path: String, arguments: [String]) {
-        guard command.runtime == .raycast else { return (command.program.path, []) }
+    /// What starts `command` and where: its own program in its own folder, or for a Raycast-format command (ADR 0017) the
+    /// extension host with the prelude and the command's bundle as its arguments, in the extension's folder, where its
+    /// `package.json` and `assets/` are, even when the bundle is in `dist/`.
+    static func launch(_ command: Extension.Command, environment pilot: [String: String]) throws
+        -> (path: String, arguments: [String], directory: URL) {
+        guard command.runtime == .raycast else { return (command.program.path, [], command.program.deletingLastPathComponent()) }
         guard let (host, prelude) = host(environment: pilot) else { throw NoHost() }
-        return (host.path, ["--prelude", prelude.path, command.program.path])
+        return (host.path, ["--prelude", prelude.path, command.program.path], RaycastManifest.folder(of: command.program))
     }
 
     /// pilot-ext-host and pilot-ext-prelude.js: the app's Contents/Helpers and Contents/Resources; outside a bundle (the

@@ -21,6 +21,13 @@ public enum RaycastManifest {
         let description: JSONValue?, version: JSONValue?
     }
 
+    /// The extension folder a command's bundle belongs to: the bundle's own folder when it holds the manifest, else the
+    /// one above (`dist/`), the only two places `bundle(_:in:)` finds one.
+    static func folder(of bundle: URL) -> URL {
+        let folder = bundle.deletingLastPathComponent()
+        return FileManager.default.fileExists(atPath: folder.appending(path: name).path) ? folder : folder.deletingLastPathComponent()
+    }
+
     /// The command file Raycast's build wrote for `command`, when it is a regular file inside `folder`.
     static func bundle(_ command: String, in folder: URL) -> URL? {
         let root = folder.standardizedFileURL.path

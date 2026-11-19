@@ -152,7 +152,10 @@ export function render(component, message) {
       });
     },
   };
-  const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, fail, fail, noop);
+  // Only an error no boundary caught is the run's error line; one a boundary caught, or React recovered from, leaves the
+  // boundary's fallback on screen and goes to stderr alone.
+  const logged = (error) => console.error(error instanceof Error && error.stack ? `${error.message}\n${error.stack}` : String(error));
+  const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, logged, logged, noop);
   const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
   reconciler.updateContainer(createElement(component, props), root, null, null);
   return {
