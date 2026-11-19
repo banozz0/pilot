@@ -1,4 +1,6 @@
+import Darwin
 import Foundation
+import Synchronization
 
 /// Running an extension command (card agent-bo-95423242, ADR 0010): its program as a direct child through ChildProcess,
 /// off the main thread, in its own folder; a Raycast-format command's program is its bundle, which pilot-ext-host runs
@@ -68,9 +70,110 @@ public enum ExtensionRun {
                               environment pilot: [String: String] = ProcessInfo.processInfo.environment,
                               timeout: Duration = noViewTimeout) async throws -> String {
         let (path, arguments, directory) = try launch(command, environment: pilot)
-        return try await ChildProcess.run(path, arguments, environment: environment(for: command, from: pilot),
-                                          input: message(command, query: query, context: context, surface: surface, input: input, inputs: inputs),
-                                          directory: directory, timeout: timeout)
+        let (env, line) = (environment(for: command, from: pilot), message(command, query: query, context: context, surface: surface, input: input, inputs: inputs))
+        guard command.runtime == .raycast else {
+            return try await ChildProcess.run(path, arguments, environment: env, input: line, directory: directory, timeout: timeout)
+        }
+        return try await hosted(path, arguments, environment: env, input: line, directory: directory, timeout: timeout)
+    }
+
+    // MARK: The host's memory stop (ADR 0017, T4)
+
+    /// The most memory (phys_footprint, Activity Monitor's Memory) a host may use before Pilot kills it: 512 MB, so Brew
+    /// Search's 477.6 MB peak runs (Sven, 2026-11-19, Q1, open question 3). MB is MiB, as lean-check counts it.
+    public static let memoryStopMB = 512
+    public static let memoryStopBytes = UInt64(memoryStopMB) << 20
+
+    /// How often Pilot reads a running host's footprint.
+    static let memoryPoll: Duration = .milliseconds(250)
+
+    /// The host passed the memory stop and was killed with every process it started.
+    public struct OverMemory: LocalizedError, Equatable {
+        public let limitMB: Int
+        public var errorDescription: String? { "used more than \(limitMB) MB and was stopped" }
+    }
+
+    /// The process's footprint in bytes, as `proc_pid_rusage` reads it; nil once it is gone.
+    static func footprint(_ pid: pid_t) -> UInt64? {
+        var info = rusage_info_v2()
+        let read = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V2, $0) }
+        }
+        return read == 0 ? info.ri_phys_footprint : nil
+    }
+
+    /// Reads `pid`'s footprint every `memoryPoll` until cancelled, and calls `over` once when it passes `limit`. A host
+    /// stuck in a synchronous JavaScript loop cannot dodge it: the read and the kill are Pilot's.
+    public static func watchMemory(of pid: pid_t, limit: UInt64 = memoryStopBytes, over: @escaping @Sendable () -> Void) -> Task<Void, Never> {
+        Task.detached(priority: .utility) {
+            while !Task.isCancelled {
+                if let used = footprint(pid), used > limit { return over() }
+                try? await Task.sleep(for: memoryPoll)
+            }
+        }
+    }
+
+    /// A one-shot run of the host, as ChildProcess.run runs a program (stdout to its end, TimedOut past `timeout`, a
+    /// failed exit as Failure, cancellation as CancellationError), with its footprint watched: past the stop it is
+    /// killed and throws OverMemory.
+    static func hosted(_ path: String, _ arguments: [String], environment: [String: String], input: Data, directory: URL,
+                       timeout: Duration) async throws -> String {
+        enum Stop { case late, memory, cancelled }
+        struct State {
+            var session: ChildProcess.Session?, watch: Task<Void, Never>?, stop: Stop?, lines: [String] = [], done = false
+            var continuation: CheckedContinuation<String, any Error>?
+        }
+        let state = Mutex(State()), tool = URL(filePath: path).lastPathComponent
+        @Sendable func stop(_ why: Stop) {
+            state.withLock { s in
+                // Late counts only while it still runs: one that exited is answering, its stderr still draining.
+                guard !s.done, s.stop == nil, why != .late || s.session.map({ kill($0.pid, 0) == 0 }) ?? true else { return }
+                s.stop = why
+                s.session?.stop()
+            }
+        }
+        @Sendable func ended(_ status: Int32, _ stderr: String) {
+            state.withLock { s in
+                guard !s.done, let continuation = s.continuation else { return }
+                s.done = true
+                s.watch?.cancel()
+                switch s.stop {
+                case .memory: continuation.resume(throwing: OverMemory(limitMB: memoryStopMB))
+                case .late: continuation.resume(throwing: ChildProcess.TimedOut(tool: tool))
+                case .cancelled: continuation.resume(throwing: CancellationError())
+                case nil:
+                    let stdout = s.lines.joined(separator: "\n")
+                    if status == 0 { continuation.resume(returning: stdout) }
+                    else { continuation.resume(throwing: ChildProcess.Failure(tool: tool, status: status, message: stderr.isEmpty ? stdout : stderr)) }
+                }
+            }
+        }
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                state.withLock { $0.continuation = continuation }
+                let session: ChildProcess.Session
+                do {
+                    session = try ChildProcess.Session(path, arguments, environment: environment, directory: directory,
+                                                       lines: { line in state.withLock { $0.lines.append(line) } }, ended: ended)
+                } catch {
+                    state.withLock { $0.done = true }
+                    return continuation.resume(throwing: error)
+                }
+                let watch = watchMemory(of: session.pid) { stop(.memory) }
+                let stopped = state.withLock { s in
+                    (s.session, s.watch) = (session, watch)
+                    if s.done { watch.cancel() }
+                    return s.stop
+                }
+                if stopped != nil { session.stop() }
+                session.send(input)
+                session.closeInput()
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout.inSeconds) { stop(.late) }
+            }
+        } onCancel: {
+            stop(.cancelled)
+        }
     }
 
     /// What starts `command` and where: its own program in its own folder, or for a Raycast-format command (ADR 0017) the
