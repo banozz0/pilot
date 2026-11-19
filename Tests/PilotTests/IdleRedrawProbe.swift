@@ -75,7 +75,7 @@ struct IdleRedrawProbe {
         let only = Self.env["PILOT_IDLE_ONLY"]?.split(separator: ",").map(String.init)
         for page in AppPage.allCases where only?.contains(page.rawValue) ?? true {
             let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
-            let host = Counting(rootView: AppWindowView(model: model).environment(engine))
+            let host = Counting(rootView: AppWindowView(model: model).environment(engine).environment(\.homeSources, .inert))
             let window = AppWindowController.makeWindow(content: host)
             defer { window.close() }
             window.setContentSize(NSSize(width: 1280, height: 800))

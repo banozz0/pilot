@@ -35,7 +35,7 @@ extension EnvironmentValues {
 /// switches and secrets are never kept, and Home itself is never read, so opening the window on Home opens no store.
 @Observable @MainActor
 final class HomeRecent {
-    static let shared = HomeRecent(defaults: .standard)
+    static let shared = HomeRecent(defaults: .pilot())
 
     /// Where the keys are kept.
     static let key = "home.recentSettings"

@@ -173,14 +173,7 @@ struct StyleTests {
     }
 
     /// Home's sources as fakes: no settings, nothing changed last.
-    func fakes() throws -> HomeSources {
-        var sources = HomeSources()
-        let schema = SettingsSchema()
-        sources.schema = { schema }
-        sources.recent = { [] }
-        sources.remember = { _ in }
-        return sources
-    }
+    func fakes() throws -> HomeSources { .inert }
 
     /// Home on an engine that never starts.
     func homePage(_ engine: Engine) throws -> some View {
@@ -368,5 +361,17 @@ struct StyleTests {
         #expect(instrument != toybox, "the picker did not show Instrument picked")
     }
 }
+}
+extension HomeSources {
+    /// Home's and the window's sources for a test that hosts the window: an empty schema, so neither the search nor Jump
+    /// back in's page reads (InstrumentFrame) build the app's live settings and every store behind them.
+    @MainActor static var inert: HomeSources {
+        var sources = HomeSources()
+        let schema = SettingsSchema()
+        sources.schema = { schema }
+        sources.recent = { [] }
+        sources.remember = { _ in }
+        return sources
+    }
 }
 #endif

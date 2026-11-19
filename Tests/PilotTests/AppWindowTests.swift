@@ -75,7 +75,7 @@ struct AppWindowFrameTests {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         model.go(AppPlace(.menuBar))
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(Engine())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(Engine()).environment(\.homeSources, .inert)))
         defer { window.close() }
         window.contentView?.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
@@ -100,7 +100,7 @@ struct AppWindowFrameTests {
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         model.go(AppPlace(.menuBar))
         let look = Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), defaults: LookTests.defaults())
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model, look: look).environment(Engine())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model, look: look).environment(Engine()).environment(\.homeSources, .inert)))
         defer { window.close() }
         // SwiftUI builds its accessibility tree only for an assistive client; this says one is here.
         let assistive = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -304,7 +304,7 @@ struct AppWindowRenders {
         engine.seedPresses([(Key("return"), "Open terminal"), (Key("2"), "Go to workspace 2"), (Key("return"), "Open terminal"),
                             (Key("space"), "Pilot menu"), (Key("2"), "Go to workspace 2"), (Key("return"), "Open terminal")])
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders")!)
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine).environment(\.homeSources, .inert)))
         // The window's frame view, so the traffic lights are in the picture.
         let frame = try #require(window.contentView?.superview)
         // Every page draws on the window's cards (card agent-bo-95422728): Theme.raised in the page area, right of the

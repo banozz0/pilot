@@ -219,7 +219,7 @@ struct ExtensionsPageViewTests {
         let only = Self.env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine).environment(\.homeSources, .inert)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         let look = Look.shared

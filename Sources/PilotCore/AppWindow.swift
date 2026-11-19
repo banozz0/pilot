@@ -144,7 +144,9 @@ public enum AppPage: String, CaseIterable, Sendable {
     /// The settings the page itself holds, so the search lands on it from a setting's name.
     var keywords: [String] {
         switch self {
-        case .home: ["status", "most used", "problems", "needs you", "this mac", "switch", "bad day", "pilot on/off"]
+        // Home's own since pilot-ui-redesign T6: its four switches, what needs you and Jump back in; Most used and This Mac
+        // went with its blocks.
+        case .home: ["status", "problems", "needs you", "switch", "switches", "bad day", "pilot on/off", "jump back in"]
         case .binds: ["bind", "key", "shortcut", "preset", "omarchy", "my binds", "sublayer", "reset"]
         // The front's words; Translate's and the rows to add moved with them to More (simplify-pages T15).
         case .menu: ["launcher", "menu", "hyper+space", "root", "menu rows", "pin", "order", "reorder", "show first"]

@@ -143,7 +143,8 @@ struct AppWindowTests {
     /// Each page's search words before the cut (main at 5c058ad), by its old name, less the old tiler's config file
     /// ones R3 removed with it (2026-10-10).
     static let oldKeywords: [String: [String]] = [
-        "home": ["status", "most used", "problems", "needs you"],
+        // Most used went with Home's blocks (pilot-ui-redesign T6).
+        "home": ["status", "problems", "needs you"],
         "binds": ["bind", "key", "shortcut", "preset", "omarchy", "my binds", "sublayer", "reset"],
         "plainCombos": ["plain combo", "left option", "alt", "vim"],
         "conflicts": ["clash", "macos shortcut", "mission control"],
