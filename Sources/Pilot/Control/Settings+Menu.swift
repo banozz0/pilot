@@ -18,7 +18,7 @@ extension SettingsSchema {
             .choice("passwords.clearAfter", "Seconds a copied password stays", page: "menu",
                     PasswordSettings.clearChoices.map { String($0) }, standard: "90",
                     read: { String(passwords.clearAfter) }, write: { passwords.clearAfter = Int($0) ?? passwords.clearAfter }),
-            .text("folders.repos", "Repos folder (lazygit's picker)", page: "menu", standard: PilotFolders.standardRepos,
+            .text("folders.repos", "Repos folder (Developer › Repos, its widgets, lazygit's picker)", page: "menu", standard: PilotFolders.standardRepos,
                   read: { folders.repos }, write: { path throws(ControlError) in folders.repos = try Self.folder(path) }),
             .text("folders.gifs", "GIFs folder", page: "menu", standard: PilotFolders.standardGIFs,
                   read: { folders.gifs }, write: { path throws(ControlError) in folders.gifs = try Self.folder(path) }),

@@ -54,10 +54,10 @@ enum ReadyWidgets {
              "draw": "blocks", "data": {"notes": "note"}, "size": {"width": 280, "height": 260},
              "settings": [{"name": "note", "label": "Shows", "type": "note", "default": ""}]}
             """,
-        // ~/code's repos with work not committed or pushed (Q725), a click opening one (WidgetRepos).
+        // The repos folder's repos with work not committed or pushed (Q725), a click opening one (WidgetRepos).
         repos: """
             {"id": "pilot-repos", "title": "Repos", "icon": "🌿", "version": "1.0",
-             "description": "Your repos in ~/code with changes not committed or commits not pushed, read every 5 minutes; a click opens one.",
+             "description": "Your repos in the repos folder (~/code unless picked on Developer › Repos) with changes not committed or commits not pushed, read every 5 minutes; a click opens one.",
              "draw": "blocks", "data": {"repos": true}, "size": {"width": 280, "height": 200}}
             """,
         // A GitHub user's contributions (P82), gh's signed-in user unless Edit widget names one (WidgetGitHub).
@@ -70,7 +70,7 @@ enum ReadyWidgets {
         // GitHub checks: each repo's latest Actions run, passing, failing or running (P79, WidgetCI).
         ci: """
             {"id": "pilot-ci", "title": "GitHub checks", "icon": "🚦", "version": "1.0",
-             "description": "The latest GitHub Actions run of each repo, passing, failing or running, read by the GitHub CLI (gh) every 5 minutes while it shows: the GitHub extension's owners or repos, else your repos in ~/code. Repos with no Actions runs are left out.",
+             "description": "The latest GitHub Actions run of each repo, passing, failing or running, read by the GitHub CLI (gh) every 5 minutes while it shows: the GitHub extension's owners or repos, else your repos in the repos folder. Repos with no Actions runs are left out.",
              "draw": "blocks", "data": {"ci": true}, "size": {"width": 300, "height": 220}}
             """,
         // What the Mac plays, its cover and its controls (Q726, Q727; WidgetNowPlaying).

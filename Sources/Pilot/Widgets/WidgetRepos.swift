@@ -1,7 +1,7 @@
 import AppKit
 import PilotCore
 
-/// The Repos widget's data (`"data": {"repos": true}`, Sven Q725): ~/code's own repos (Repos.list) with files changed or
+/// The Repos widget's data (`"data": {"repos": true}`, Sven Q725): the repos folder's own repos (Repos.list, `folders.repos`) with files changed or
 /// commits not pushed, each its name, branch and counts, drawn by Pilot as blocks; a clean repo is left out. Read by git
 /// in children, four at a time (Repos.statuses), when a placement shows and every 5 minutes while one does; nothing
 /// fetches and nothing watches. One read serves every placement and the Widgets page's preview, and a placement shown
@@ -22,7 +22,7 @@ enum WidgetRepos {
     static func read(fresh: Duration = floor) async -> [RepoStatus] {
         if let last, ContinuousClock.now - last.at < fresh { return last.repos }
         if let reading { return await reading.value }
-        let task = Task.detached(priority: .utility) { [home = ConfigsModule.home] in await Repos.statuses(Repos.list(home: home)) }
+        let task = Task.detached(priority: .utility) { [folder = PilotFolders.shared.reposURL] in await Repos.statuses(Repos.list(in: folder)) }
         reading = task
         let repos = await task.value
         (last, reading) = ((.now, repos), nil)
@@ -38,7 +38,7 @@ enum WidgetRepos {
     /// What the widget draws: the repos with work waiting, by name, each a row that opens it; one line when there are
     /// none. The branch rides in the title, whose tail truncates, so a narrow tile keeps the name and the counts.
     static func blocks(_ repos: [RepoStatus]) -> [Extension.Block] {
-        guard !repos.isEmpty else { return [.note(.init(text: "No repos in ~/code", icon: "info"))] }
+        guard !repos.isEmpty else { return [.note(.init(text: "No repos in \(AppConfigs.tilde(PilotFolders.shared.repos, home: NSHomeDirectory()))", icon: "info"))] }
         let waiting = repos.filter { !$0.clean }
         guard !waiting.isEmpty else {
             return [.note(.init(text: "All clean", aside: repos.count == 1 ? "1 repo" : "\(repos.count) repos", icon: "checkmark.circle"))]

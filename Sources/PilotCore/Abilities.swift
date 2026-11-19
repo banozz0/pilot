@@ -234,7 +234,7 @@ public enum Abilities {
         "apps.files": "Opens a Finder window.",
         "apps.generatePassword": "Makes a strong password with Bitwarden.",
         "apps.launcher": "Opens the Hyper+Space menu: apps, windows, files, actions and answers.",
-        "apps.lazygit": "Picks a repo under ~/code and opens lazygit on it in Ghostty.",
+        "apps.lazygit": "Picks a repo in the repos folder (~/code unless picked) and opens lazygit on it in Ghostty.",
         "apps.mail": "Opens your mail app or site.",
         "apps.messages": "Opens your chat app or site.",
         "apps.music": "Opens your music app or site.",

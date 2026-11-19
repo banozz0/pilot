@@ -9,5 +9,12 @@ extension ControlVerbs {
                                    rowKey: "id", list: { app.rows(.configs) }))
         register(ControlCollection("instructions", help: "Configs › Agents: agents' settings (Claude Code, Codex, Hermes and each profile, Empryo, opencode; known ones not on this Mac last with present false), then their instruction files: Claude Code's CLAUDE.md, Codex's AGENTS.md, Hermes' AGENTS.md, Empryo's EMPRYO.md, each Hermes SOUL.md (generated), Claude Code's skills, agents, output styles and commands, Codex's skills and rules, Hermes' skills (its own, shared and each profile's), ~/code's own brief and each own repo's (a .git folder, not a worktree; not oss or _ folders) AGENTS.md, else its CLAUDE.md, the briefs in its folders up to 3 down and its .claude folder's files, each file once however many links reach it, with the configs' row fields. Read-only.",
                                    rowKey: "id", list: { app.rows(.instructions) }))
+        // Developer › Repos' list, read from the folder the page and `folders.repos` name (tester's feedback 2026-11-18).
+        register(ControlCollection("repos", help: "Developer › Repos: the own repos (a .git folder, not a worktree) directly inside the repos folder (folders.repos, ~/code unless picked), by name: name, path, branch. Read-only.",
+                                   rowKey: "name", list: {
+            let folder = PilotFolders.shared.reposURL
+            let repos = await Task.detached(priority: .userInitiated) { Repos.list(in: folder) }.value
+            return .array(repos.map { .object(["name": .string($0.name), "path": .string($0.url.path), "branch": $0.branch.map(JSONValue.string) ?? .null]) })
+        }))
     }
 }
