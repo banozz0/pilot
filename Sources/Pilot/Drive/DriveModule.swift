@@ -22,7 +22,7 @@ enum DriveModule {
             do { try registry.register(Action(id: "drive.\(c.id)", label: c.label, module: .drive, defaultKey: nil) { run(.keystroke(c.key)) }) }
             catch { dlog.error("drive.\(c.id, privacy: .public): \(String(describing: error), privacy: .public)") }
         }
-        // The front app's next and previous tab (Pilot default, story 149): its own menu item, pressed, never a keystroke.
+        // The front app's next and previous tab (Easy, Complex and Classic, story 149): its own menu item, pressed, never a keystroke.
         for (id, label, next) in [("nextTab", "Next tab", true), ("previousTab", "Previous tab", false)] {
             do { try registry.register(Action(id: "drive.\(id)", label: label, module: .drive, defaultKey: nil) { Task { @MainActor in pressTab(next: next) } }) }
             catch { dlog.error("drive.\(id, privacy: .public): \(String(describing: error), privacy: .public)") }

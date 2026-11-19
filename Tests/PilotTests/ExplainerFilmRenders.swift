@@ -9,7 +9,8 @@ import WebApps
 @testable import Pilot
 
 /// The explainer video's drawn shots beyond the launcher (SH23, rounds 4 and 5; LauncherFilmRenders has the menu): the
-/// hold-Hyper overlay on the Pilot default preset a stranger gets, Binds before and after a key is given, a note filling as
+/// hold-Hyper overlay on Classic (the Pilot default a stranger got when the film was made), Binds before and after a
+/// key is given, a note filling as
 /// dictation types it, Summarise's page, a file's Cmd+K and Convert to… pickers and tips, the Hyper + right-click picker,
 /// the top bar for each scene's windows, Cycle layout's tips, the clipboard in depth (its tabs, a search read from an
 /// image, three picks pasted one by one), the AI chat binding a key behind the Allow prompt, the terminal drop at 1920,
@@ -47,7 +48,7 @@ struct ExplainerFilmRenders {
         return dir
     }
 
-    @Test("The hold-Hyper overlay on the Pilot default preset", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The hold-Hyper overlay on the Classic preset", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func overlay() throws {
         let dir = try Self.prepare("overlay")
         let rows = OverlayPage.rows(store: BindStore(defaults: PilotDefault.binds), actions: Engine().bindActions, sublayer: .hyper,
@@ -56,7 +57,7 @@ struct ExplainerFilmRenders {
         try InstrumentPanelsRenders.render(OverlayView(title: "Hyper", rows: rows) {}, .overlay, "overlay", in: dir)
     }
 
-    @Test("Pilot's window on Binds, the Pilot default preset, before and after Hyper+U opens Ghostty", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Pilot's window on Binds, the Classic preset, before and after Hyper+U opens Ghostty", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func bindsWindow() throws {
         let dir = try Self.prepare("binds")
         let toml = (NSHomeDirectory() as NSString).appendingPathComponent(".aerospace.toml")
@@ -554,7 +555,7 @@ struct ExplainerFilmRenders {
         let shell = NSHostingView(rootView: Shell().styled(.quickAI, look: look).pilotTheme(look: look))
         shell.sizingOptions = []
         shell.frame = CGRect(origin: .zero, size: frame.size)
-        // Hyper+T's key as a stranger's Pilot default labels it.
+        // Hyper+T's key as Classic labels it.
         let key = Dropdown.keyLabel(BindStore(defaults: PilotDefault.binds).trigger(for: TerminalDrop.actionID), layerKeys: [.capsLock])
         let chrome = TerminalDropChrome(shell, look: look, key: key, detail: { "zsh · ~/code/site" }, hide: {})
         chrome.frame = CGRect(origin: .zero, size: frame.size)

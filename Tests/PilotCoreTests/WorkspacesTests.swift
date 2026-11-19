@@ -110,7 +110,7 @@ struct WorkspacesTests {
         #expect(Workspaces.number(inAction: "workspaces.move:7") == "7" && Workspaces.number(inAction: "workspaces.toggleGaps") == nil)
     }
 
-    @Test("Pilot default binds Hyper+1..9 to go to workspace N and Hyper+Shift+1..9 to move the window there")
+    @Test("Classic binds Hyper+1..9 to go to workspace N and Hyper+Shift+1..9 to move the window there")
     func pilotDefault() {
         for n in 1...9 {
             #expect(PilotDefault.binds["workspaces.go:\(n)"] == Key("\(n)"))
@@ -119,7 +119,7 @@ struct WorkspacesTests {
         #expect(PilotDefault.binds["workspaces.go:0"] == nil)
     }
 
-    @Test("Loaded as the Pilot preset, every number key goes and its Shift moves; none clashes")
+    @Test("Loaded as Classic, every number key goes and its Shift moves; none clashes")
     @MainActor func pilotPreset() throws {
         var registry = ActionRegistry()
         try Workspaces.register(into: &registry, kept: { Workspaces.all }, go: { _ in }, move: { _, _ in })

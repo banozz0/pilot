@@ -7,7 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Film v2 (Sven, 2026-10-29, Q578 to Q583): the pages the 1.0 film never showed, in Pilot's window at the film's size and
-/// in its theme (ExplainerFilmRenders.theme, Void), on Pilot default's binds as a new install has them: Keys › Swap keys
+/// in its theme (ExplainerFilmRenders.theme, Void), on Classic's binds (Pilot default until 1.3, as a new install had
+/// them then): Keys › Swap keys
 /// with one swap made, Keys › Plain combos, Launcher › Quicklinks (the shipped four) and Launcher › Aliases (a few saved),
 /// and Tools › Voice; and for the 1.0.3 film and its shorts (P89), the Gallery and the widgets, one at a time. Fakes
 /// throughout, in a moved home: nothing is swapped at the HID level (the tap never runs here), no wallpaper is set, and
@@ -25,7 +26,7 @@ struct FilmV2Renders {
         Alias(key: "app:com.mitchellh.ghostty", alias: "t", title: "Ghostty"),
     ]
 
-    @Test("Pilot's window on Pilot default: Swap keys, Plain combos, Quicklinks, Aliases and Voice",
+    @Test("Pilot's window on Classic: Swap keys, Plain combos, Quicklinks, Aliases and Voice",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func pages() throws {
         let dir = try ExplainerFilmRenders.prepare("v2-pages")
@@ -33,7 +34,7 @@ struct FilmV2Renders {
         try #require(PilotFolder.support.path.hasPrefix(NSHomeDirectory()), "Pilot's folder would land outside the moved home")
         try AliasesStore.standard.save(Aliases(Self.aliases))
         let engine = try HomeRenders.engine()
-        // Pilot default, the preset a new install starts on.
+        // Classic, the preset a new install started on until 1.3.
         try Data(#"{"version": 3, "preset": "pilot", "binds": []}"#.utf8).write(to: engine.binds.fileURL)
         engine.binds.load()
         // A swap reaches the keyboard only through this hook and a running tap; the render never starts the tap, and the hook

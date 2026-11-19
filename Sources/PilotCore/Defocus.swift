@@ -4,7 +4,7 @@ import Foundation
 /// dimmed, toggled by a mouse shake or a bind. The overlay itself is Pilot's DefocusController; this decides the look.
 public enum Defocus {
     public static let actionID = "windows.defocus"
-    /// Hyper+Alt+D: free in My binds and Pilot default.
+    /// Hyper+Alt+D: free in My binds, Easy, Complex and Classic.
     public static let defaultKey = Key("d", .alt)
 
     /// The blur, Off (0) then 1 light to 5 heavy, and the dim, a percent of black from Off (0) to 80 (Sven, 2026-10-16:

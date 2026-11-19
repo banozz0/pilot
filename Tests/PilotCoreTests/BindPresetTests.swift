@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import PilotCore
 
-/// Bind presets (story 149, Sven 2026-10-09): Pilot default ships and is on for a new user, My binds stays Sven's,
-/// Start from scratch and copies make his own, each keeps the keys set in it, and binds.json version 3 lists them all.
+/// Bind presets (story 149, Sven 2026-10-09; T11): Easy ships and is on for a new user, Classic (1.3's Pilot default)
+/// stays for a file on it, My binds stays Sven's, Start from scratch and copies make his own, each keeps the keys set
+/// in it, and binds.json version 3 lists them all.
 @Suite("Bind presets")
 struct BindPresetTests {
     static let tables: [BindStore.Base: [String: Key]] = [
@@ -48,7 +49,7 @@ struct BindPresetTests {
         }
     }
 
-    @Test("Pilot default is Sven's layout (Q531): the menu, the browser, workspaces 1 to 9 and moving to them, focus and move by arrows, tabs on Alt+arrows, close and the drops; one action per key")
+    @Test("Classic, Pilot default until 1.3, is Sven's layout (Q531): the menu, the browser, workspaces 1 to 9 and moving to them, focus and move by arrows, tabs on Alt+arrows, close and the drops; one action per key")
     func pilotDefault() {
         let b = PilotDefault.binds
         #expect(b["apps.launcher"] == Key("space") && b["apps.browser"] == Key("b"))

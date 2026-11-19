@@ -3,12 +3,13 @@ import PilotCore
 import Testing
 @testable import Pilot
 
-/// Pilot default (story 149): every bind in the preset a new install starts on runs an action, so a new user never meets
-/// a dead key: a registered one, or an app, site or picker the engine builds from its id (Sven's layout since Q531).
+/// Classic (story 149; Pilot default until 1.3, T11): every bind in the table an upgraded install keeps runs an action, so
+/// its user never meets a dead key: a registered one, or an app, site or picker the engine builds from its id (Sven's
+/// layout since Q531).
 @MainActor
-@Suite("Pilot default")
+@Suite("Classic")
 struct PilotDefaultTests {
-    @Test("Every Pilot default bind runs an action and a new file has no mouse binds; the tab pair are Drive's next and previous tab")
+    @Test("Every Classic bind runs an action and a new file has no mouse binds; the tab pair are Drive's next and previous tab")
     func registered() {
         let engine = Engine(), registry = engine.registry
         for id in PilotDefault.binds.keys { #expect(engine.action(id) != nil, "\(id)") }

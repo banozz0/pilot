@@ -36,8 +36,8 @@ struct OnboardingRenders {
         // A fresh Mac's Hyper key, Caps Lock alone, so the screens read as a new user sees them (the moved home may hold
         // other renders' picks). The tap never runs here, so no key mapping is written.
         engine.settings.setLayerKeys([.capsLock], from: .onboarding)
-        // Pilot default's binds, as a new user has them, so each Hyper choice's warning names the bind it would run.
-        engine.binds.use(.pilot)
+        // Easy's binds, as a new user has them, so each Hyper choice's warning names the bind it would run.
+        engine.binds.use(.easy)
         let look = Look.shared
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
