@@ -264,7 +264,6 @@ final class PilotMenu {
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
         model?.onRowShown = { [weak self] in self?.moreGiphy(near: $0) }
         readWebSearch()
-        model?.recent = MenuModel.recent(entries, picks: frecency ?? Frecency())
         let updates = updatesSeen.flatMap { $0.at.timeIntervalSinceNow > -3600 ? $0.count : nil }
         model?.waiting = MenuModel.waiting(updates: updates, clean: CleanModule.previewer.ready?.total)
         branchOpened(branch, opening: true)
@@ -324,9 +323,8 @@ final class PilotMenu {
                                           picked: model.emojiCategory)
         }
         model.onClick = { [weak self] in _ = self?.apply($0, from: $1) }
-        // Toybox keeps its own menu (ToyMenu); Instrument draws the Rail or Classic as Look says.
-        model.layout = Look.shared.style == .toybox ? .classic : Look.shared.menuLayout
-        model.goTo = MenuRootSettings.shared.root.listed.shown()
+        // Toybox keeps its own menu (ToyMenu); Instrument draws Line.
+        model.layout = Look.shared.style == .toybox ? .classic : .line
         self.model = model
         let p = Self.makePanel(model)
         panel = p
@@ -1124,7 +1122,6 @@ final class PilotMenu {
         source?.close()
         source = nil
         model?.popAll().forEach { $0.close() }
-        model?.speedTest = nil
         model = nil
         // A picker that closes without a pick says so; run(_:) clears this first when a row was picked.
         let cancelled = onCancel
@@ -1170,8 +1167,6 @@ final class PilotMenu {
     /// A key the panel's monitor offers first (HUD.searchKey): true when the menu takes it, false when it is the search
     /// field's.
     func handle(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ characters: String? = nil) -> Bool {
-        // The Speed test view takes every key, before any row's under it.
-        if let model, let test = model.speedTest { return speedKey(code, flags, test, in: model) }
         // ⌘1 to ⌘9 number the rows Line draws them on: none at its root, none in the Files view, none over Cmd+K.
         let numbers = model.map { $0.layout == .line && !$0.atRoot && !$0.nav.inFiles && $0.nav.actions == nil } ?? false
         // An extension row's action key (To-do B) wins over the menu's own: ⌥↑ moves the row, never the selection.
@@ -1191,8 +1186,6 @@ final class PilotMenu {
             return true
         }
         guard let model, let key = Self.key(code, flags, numbers: numbers) else { return false }
-        // At the Rail's root ↑ and ↓ walk the whole rail, its kinds over Go to's branches (Q119).
-        if model.railKey(key) { return true }
         if model.nav.actions == nil, gridKey(model, key) { return true }
         // Shift+Tab flips these two-way and cycled lists as Tab does.
         let tab = key == .tab || key == .backTab
@@ -1241,14 +1234,9 @@ final class PilotMenu {
         }
     }
 
-    /// Activity's and Stats' keys (Q399, Q400): in Activity ⌘Return force quits the current row once pressed twice on it,
-    /// and any other key but Return forgets that and the foot's note; in Stats, which lists no rows, Return opens Activity;
-    /// in About Escape closes the menu.
+    /// Activity's keys (Q399): ⌘Return force quits the current row once pressed twice on it, and any other key but Return
+    /// forgets that and the foot's note; in About Escape closes the menu.
     private func activityKey(_ model: MenuModel, _ key: MenuNavigator.Key) -> Bool {
-        if model.nav.branch == .stats, !model.nav.isList, key == .return {
-            model.open(.activity)
-            return true
-        }
         // About is a page to read, as Omarchy's is: Escape closes the menu, not back to the root (Q443).
         if model.showsAbout, key == .escape { return apply(.close, from: model.nav.branch) }
         guard model.nav.branch == .activity, !model.nav.isList else { return false }
@@ -1414,30 +1402,6 @@ final class PilotMenu {
         }
     }
 
-    /// Test internet speed in Line (P41): the run shows in the list's place, the menu open. A run going on (Esc left it,
-    /// or the key or `pilot speedtest` started it) is joined, and one that ended since shows its result; else a run starts.
-    private func showSpeedTest() {
-        guard let model else { return }
-        let test = SystemModule.speedTest
-        model.speedTest = test
-        if case .done = test.phase {} else { test.start() }
-        mlog.notice("menu: speed test shown")
-    }
-
-    /// The Speed test view's keys, every other key swallowed so nothing types under it: Escape goes back to the branch
-    /// (a run carries on), Return runs again once it ended, ⌘C copies the result, ⌘. stops the run.
-    private func speedKey(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ test: SpeedTest, in model: MenuModel) -> Bool {
-        let command = flags.contains(.command)
-        switch code {
-        case 53: model.speedTest = nil
-        case 36, 76: if !test.running { test.start() }
-        case 8 where command: if case .done(let result) = test.phase { copy(SpeedTest.line(result.reading)) }
-        case 47 where command: test.stop()
-        default: break
-        }
-        return true
-    }
-
     /// A Cmd+K action the navigator leaves to the panel (card agent-bo-95422968). Uninstall and opening never get here:
     /// the navigator searches Remove for the first and picks the row for the second.
     private func perform(_ action: RowAction, on entry: MenuEntry) {
@@ -1521,7 +1485,6 @@ final class PilotMenu {
         }
         let previous = previousApp, spot = model?.nav.spot
         if let nav = model?.nav { record(entry, from: nav) }
-        Engine.shared?.nudger.picked(entry)
         Self.$origin.withValue(spot) { run(entry, previous: previous) }
     }
 
@@ -1531,8 +1494,6 @@ final class PilotMenu {
         case .app(let bundle):
             close(restoreFocus: false)
             mlog.notice("menu: open \(bundle, privacy: .public) \(RunCaller.with("menu") { AppsModule.open(bundle: bundle) } ? "opened" : "not installed", privacy: .public)")
-        case .action("system.speedTest") where model?.layout == .line:
-            showSpeedTest()
         // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
         case .action(let id) where entry.kind == .menuItem && entry.app != previous?.bundleIdentifier:
             guard let bundle = entry.app, let route = DriveRoute(id: id) else { return }
@@ -1904,23 +1865,14 @@ final class MenuModel {
     /// The layer keys; the first one's sign leads a bind's keys in Instrument.
     var layerKeys: [LayerKey] = [.capsLock]
 
-    /// How Instrument draws the menu (look.menuLayout): the Rail, Classic or Line. Set as the menu opens; Classic until then, so
-    /// a model made elsewhere draws as it did.
+    /// How the menu draws: Line, Instrument's one menu, or Classic for Toybox's own (ToyMenu). Set as the menu opens; Classic
+    /// until then, so a model made elsewhere draws as it did.
     var layout = MenuLayoutStyle.classic
-    /// The root's branches in Sven's order (MenuRoot), which the Rail's Go to lists wherever Sven is.
-    var goTo: [MenuBranch] = MenuRoot().shown()
-    /// At the Rail's root, the kind ↑ and ↓ are on (an index into MenuEntry.Kind.tabOrder); nil while they are on the
-    /// navigator's rows (RailMenu's railKey, Q119).
-    var railCursor: Int?
-    /// The entries picked last, newest first, which the Rail's root lists as Recent.
-    var recent: [MenuEntry] = []
-    /// What waits beside Recent at the Rail's root (frame B1): Update with its count, Clean with its size, each only
+    /// What waits in a root row (Classic's and Line's root): Update with its count, Clean with its size, each only
     /// when it has something.
     var waiting: [MenuEntry] = []
 
-    /// Stats' cards draw in the list's place (MenuStatsScreen), unless Cmd+K's actions are over it.
-    var showsStats: Bool { nav.branch == .stats && !nav.isList && nav.actions == nil && scan == nil }
-    /// About's cards and mark draw in the list's place (MenuAboutScreen, Q443), the same way.
+    /// About's cards and mark draw in the list's place (MenuAboutScreen, Q443), unless Cmd+K's actions are over it.
     var showsAbout: Bool { nav.branch == .about && !nav.isList && nav.actions == nil && scan == nil }
     /// Define's rows and entry draw in the list's place (DefinePane), Cmd+K's actions over their corner.
     var showsDefine: Bool { nav.branch == .define && !nav.isList && scan == nil }
@@ -1940,30 +1892,14 @@ final class MenuModel {
     }
     /// Toybox's search, rule and foot around what the menu lists.
     static let toyChrome: CGFloat = 150
-    /// Instrument's: as tall as what it lists or a scan's wait says, the most while Cmd+K's
-    /// actions show or an extension's detail is read; in the Rail, at least as tall as its rail.
-    var instrumentSize: CGSize {
-        if layout == .classic { return classicSize }
-        if layout == .line { return lineSize }
-        let band = railBand
-        if showsStats { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: MenuStatsScreen.height, room: room) }
-        if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight, room: room) }
-        if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height, room: room) }
-        if scan != nil {
-            return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: waitHeight, room: room)
-        }
-        // The Rail's root lists its rows in the rail, beside the recents, so its rail sets the height.
-        let listed = band == .root
-        return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: listed ? 0 : nav.rows.count, headings: listed ? 0 : headings.count,
-                                  extra: noMatch ? Self.noMatchRoom : 0, bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0,
-                                  full: nav.actions != nil || nav.shownDetail != nil, room: room)
-    }
+    /// Instrument's: as tall as what it lists or a scan's wait says, the most while Cmd+K's actions show or an extension's
+    /// detail is read.
+    var instrumentSize: CGSize { layout == .classic ? classicSize : lineSize }
 
     /// Classic's (ClassicMenu): as tall as its rows, the root's under their rule heading, and
     /// an answer's card where it stands in for its row; the kinds sit in the status line.
     private var classicSize: CGSize {
         if scan != nil { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: waitHeight) }
-        if showsStats { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: aboutHeight) }
         if showsDefine { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         let headings = headings
@@ -1977,9 +1913,7 @@ final class MenuModel {
     /// Line's (LineMenu): Classic's root at 431 wide, else a 750 list as tall as its rows, headings and an answer's card.
     private var lineSize: CGSize {
         if scan != nil { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: waitHeight) }
-        if let speedTest { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: SpeedTestView.height(speedTest)) }
         if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count, room: room) }
-        if showsStats { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: aboutHeight) }
         if showsDefine { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         // The emoji grid's cells and the translation's panes, not rows; the whole height while a chip's list is open.
@@ -1988,7 +1922,7 @@ final class MenuModel {
             return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: room, full: chip != nil)
         }
         let headings = headings
-        let card = cardRoom(headed: headings[0] != nil, row: MenuPanelSize.lineRow) + (statsCards ? StatsStrip.room : 0)
+        let card = cardRoom(headed: headings[0] != nil, row: MenuPanelSize.lineRow)
         return MenuPanelSize.line(shape, rows: nav.rows.count, headings: headings.count, card: card, extra: noMatch ? Self.noMatchRoom : 0,
                                   bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0, full: nav.actions != nil || nav.shownDetail != nil || previewsFile)
     }
@@ -2007,39 +1941,7 @@ final class MenuModel {
         return (headed ? 0 : MenuPanelSize.instrumentHeading) + face + 10 + (card.note == nil ? 0 : 20) - drawn
     }
 
-    /// What the Rail draws beside the list (MenuPanelSize.RailBand): nothing in Classic or a picker; the slim strip inside
-    /// a branch or on an answer; the whole rail at the empty root and at a root search.
-    var railBand: MenuPanelSize.RailBand {
-        guard layout == .rail, !nav.isList else { return .none }
-        if nav.branch != nil || !nav.query.isEmpty && nav.rows.first?.isAnswer == true { return .slim }
-        return atRoot ? .root : .full
-    }
-    /// The rail's rows: the kinds, Go to's branches (at the root, the navigator's own rows) and Clipboard; a slim strip's
-    /// search, branches and Clipboard.
-    var railItems: Int {
-        switch railBand {
-        case .none: 0
-        case .root: MenuEntry.Kind.tabOrder.count + nav.rows.count + 1
-        case .full: MenuEntry.Kind.tabOrder.count + goTo.count + 1
-        case .slim: goTo.count + 2
-        }
-    }
-
-    /// The Rail's Clipboard row: Clipboard's own panel (apps.clipboard), marked as opening it.
-    static let clipboard = MenuEntry(title: "Clipboard", target: .action("apps.clipboard"))
-
-    /// The Rail's root lists as Recent the entries picked last (Frecency's picks), newest first, at most `limit`; none
-    /// before any pick.
-    static func recent(_ entries: [MenuEntry], picks: Frecency, limit: Int = 5) -> [MenuEntry] {
-        var seen = Set<String>()
-        let picked = entries.compactMap { entry -> (entry: MenuEntry, at: Date)? in
-            guard entry.inSearch, let key = entry.frecencyKey, let at = picks.picks[key]?.max(), seen.insert(key).inserted else { return nil }
-            return (entry, at)
-        }
-        return picked.sorted { $0.at > $1.at }.prefix(limit).map(\.entry)
-    }
-
-    /// The Rail's Waiting rows: Update with how many updates its last read listed, Clean with what its kept preview
+    /// The root's Waiting words: Update with how many updates its last read listed, Clean with what its kept preview
     /// would free; neither when it has nothing, or was not read.
     static func waiting(updates: Int?, clean: String?) -> [MenuEntry] {
         var rows: [MenuEntry] = []
@@ -2066,27 +1968,14 @@ final class MenuModel {
     var waitHeight: CGFloat = 330
     /// The menu's own bind ("Hyper+Space" as shipped), which Toybox's search line shows; nil while it has none.
     var ownKey: String?
-    /// Line's Speed test view (P41), shown in the list's place over the branch it was opened from until Escape; the test
-    /// knows it is shown, so it raises no alert of its own.
-    var speedTest: SpeedTest? {
-        didSet {
-            guard oldValue !== speedTest else { return }
-            oldValue?.dismiss()
-            speedTest?.shown = true
-        }
-    }
-
     /// A root search that found nothing but its search offers (Search to install, Search files): Instrument says so under
     /// them, in this much room.
     var noMatch: Bool { searchingRoot && nav.only == nil && !nav.rows.isEmpty && nav.rows.allSatisfy(\.isOffer) }
     static let noMatchRoom: CGFloat = 76
     /// System or one of its sub-branches, whose rows wear their switches (Space flips them), whatever the panel's shape.
     var inSystem: Bool { !nav.isList && nav.branch?.browsed == .system }
-    /// The Rail is narrow only at its empty root: every branch, a search and an answer take the wide panel (notes › Sizes).
-    var shape: MenuPanelSize.Shape {
-        let shape = MenuPanelSize.shape(branch: nav.branch, query: nav.query, isList: nav.isList, only: nav.only)
-        return layout == .rail && (shape != .narrow || nav.branch != nil) ? .wide : shape
-    }
+    /// The panel's shape for what it lists (notes › Sizes).
+    var shape: MenuPanelSize.Shape { MenuPanelSize.shape(branch: nav.branch, query: nav.query, isList: nav.isList, only: nav.only) }
     init(nav: MenuNavigator) { self.nav = nav }
 
     /// The command-line tools this Mac has, which a scan's kinds follow (MenuScan.tools); nil until a scan asks.
@@ -2262,7 +2151,6 @@ extension MenuModel {
         }
         if nav.branch == .stickers { return [("Tab", "GIPHY \(giphyKind.next.title)"), ("Esc", "back")] }
         if nav.branch == .activity, !nav.rows.isEmpty { return [("↵", "quit"), ("⌘↵", "force quit"), ("Esc", "back")] }
-        if nav.branch == .stats { return [("↵", "busiest apps"), ("Esc", "back")] }
         if nav.branch == .about { return [("Esc", "close")] }
         let paste = "paste to \(frontApp ?? "the app")"
         if nav.branch == .emoji, !nav.rows.isEmpty { return [("↵", paste), ("⌘↵", "copy"), ("Esc", "back")] }
@@ -2285,17 +2173,12 @@ struct MenuView: View {
 
     var nav: MenuNavigator { model.nav }
 
-    /// Instrument (the Rail, RailMenu, Classic, ClassicMenu, or Line, LineMenu, as look.menuLayout says; card agent-bo-95423181) and
-    /// Toybox (ToyMenu, card agent-bo-95423182) draw their own menu from the same state, keys and pointer.
+    /// Instrument (Line, LineMenu; card agent-bo-95423181) and Toybox (ToyMenu, card agent-bo-95423182) draw their own menu
+    /// from the same state, keys and pointer.
     var body: some View {
         Group {
             switch style.kind {
-            case .instrument:
-                switch model.layout {
-                case .rail: RailMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                case .classic: ClassicMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                case .line: LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                }
+            case .instrument: LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
             case .toybox: toyBody
             }
         }

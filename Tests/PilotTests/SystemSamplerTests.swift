@@ -142,26 +142,6 @@ struct SystemSamplerTests {
         await home.value
     }
 
-    @Test("Low-battery alerts read the HID batteries with the slow readings, never system_profiler, and hand each reading on")
-    func lowBatteryHID() async throws {
-        nonisolated(unsafe) var asked: [SystemStats.Parts] = []
-        let sampler = SystemSampler(slowInterval: .zero, read: { parts in
-            asked.append(parts)
-            var raw = Self.raw(Double(asked.count), slow: false, processes: false)
-            raw.parts = parts
-            if parts.contains(.bluetoothHID) { raw.slow.bluetooth = [.init(name: "Keychron", level: "19 %")] }
-            return raw
-        }, fetchPublicIP: { nil }, netTop: { nil })
-        var handed: [[SystemStats.BluetoothDevice]] = []
-        sampler.onBluetooth = { handed.append($0) }
-        let alerts = Task { await sampler.watch(every: .milliseconds(10), needs: .lowBattery) }
-        #expect(try await Self.wait { handed.count >= 2 })
-        #expect(asked.contains { $0.contains(.bluetoothHID) } && !asked.contains { $0.contains(.bluetooth) })
-        #expect(handed.first == [.init(name: "Keychron", level: "19 %")])
-        alerts.cancel()
-        await alerts.value
-    }
-
     @Test("The Disk item reads the disk's counters for its graph; a watch that adds what it shows wakes the sampler at once")
     func diskGraphAndWake() async throws {
         let sampler = SystemSampler(read: { parts in

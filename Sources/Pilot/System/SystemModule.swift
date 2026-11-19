@@ -11,10 +11,9 @@ enum SystemModule {
     static func register(into registry: inout ActionRegistry) {
         // The menu's System branch (story 80; MenuLayout lists its rows).
         add(&registry, "menu", "System menu", Key("space", .shift), .system) { PilotMenu.shared.toggle(branch: .system) }
-        // Activity's and Stats' screens in the menu (Q399, Q400), bindable with no default key; the Ring's Pilot ring runs
-        // them for their extra rows (RingMenuSource).
+        // Activity's screen in the menu (Q399), bindable with no default key; the Ring's Pilot ring runs it for its extra
+        // row (RingMenuSource).
         add(&registry, "activityMenu", "Activity menu", nil, .system) { PilotMenu.shared.toggle(branch: .activity) }
-        add(&registry, "statsMenu", "Stats menu", nil, .system) { PilotMenu.shared.toggle(branch: .stats) }
         add(&registry, "lock", "Lock screen", Key("escape"), .system) { lock() }
         add(&registry, "sleep", "Sleep", nil, .system) { systemEvents("sleep") }
         add(&registry, "restart", "Restart", nil, .system) { systemEvents("restart") }
@@ -58,8 +57,6 @@ enum SystemModule {
         add(&registry, "idleLock", "Lock when idle on or off", nil, .system) { HUD.tip(KeepAwake.shared.toggleIdleLock(), seconds: 3) }
         // Vicinae's Kill process, rebuilt (card agent-bo-95422771).
         add(&registry, "killProcess", "Kill a process", nil, .system) { pickProcess() }
-        // Vicinae's Speedtest, rebuilt on macOS's own networkQuality (card agent-bo-95422772).
-        add(&registry, "speedTest", "Test internet speed", nil, .system) { speedTest.start() }
         // Where macOS downloads translation languages (Translate, card agent-bo-95422773).
         add(&registry, "translationLanguages", "Translation languages", nil, .system) { pane("com.apple.Localization-Settings.extension") }
         // Omarchy's notification keys (card agent-bo-95422949): unbound here, since Hyper+comma is focus display left; the
@@ -137,8 +134,6 @@ enum SystemModule {
             }
         }
 
-        // Omarchy's Super+Ctrl+Alt+T, which flashes the time (story 188): the time, date, battery and weather, read on the press.
-        add(&registry, "infoHUD", "Show time, battery and weather", Key("t", [.ctrl, .alt]), .system, tier: .v1_1) { InfoHUD.show() }
         // Sven, 2026-10-23 (Q420): the menu with `event ` typed, whose answer adds the event without opening Calendar.
         add(&registry, "newEvent", "New calendar event", nil, .system) { PilotMenu.shared.open(typing: "event ") }
 
@@ -206,13 +201,6 @@ enum SystemModule {
                                          keywords: keywords, run: run))
         }
         catch { slog.error("\(module.rawValue, privacy: .public).\(id, privacy: .public): \(String(describing: error), privacy: .public)") }
-    }
-
-    /// One networkQuality run at a time, the last 30 results kept; the result stays up long enough to read. The menu's
-    /// Speed test view (P41) shows this one's run.
-    static let speedTest = SpeedTest(history: DayFile("speedtest-runs")) { line in
-        slog.notice("speed test: \(line, privacy: .public)")
-        HUD.tip(line, seconds: 8)
     }
 
     /// The second pick of one pid within 30 s forces it (KillProcess.Kills).

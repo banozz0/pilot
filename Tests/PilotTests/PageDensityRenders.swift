@@ -78,7 +78,7 @@ struct PageDensityRenders {
             for width in Self.env["PILOT_RENDER_WIDTHS"].map({ $0.split(separator: ",").compactMap { Int($0) } }) ?? [1600, 760] {
                 window.setContentSize(NSSize(width: CGFloat(width), height: 2200))
                 // Off the page and back, awaited, so a page that reads on appearing has landed.
-                model.go(AppPlace(place.page == .home ? .stats : .home))
+                model.go(AppPlace(place.page == .home ? .menuBar : .home))
                 try await Task.sleep(for: .milliseconds(150))
                 model.go(place)
                 try await Task.sleep(for: .milliseconds(700))

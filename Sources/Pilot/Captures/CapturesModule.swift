@@ -29,9 +29,7 @@ enum CapturesModule {
         capture(&registry, "scrollingUp", "Capture scrolling, upward", nil, .scrollUp)
         capture(&registry, "delayed", "Capture after a delay", nil, .delayed)
         // P72, after Snapzy's; no key in either preset.
-        capture(&registry, "smartElement", "Capture a UI element", nil, .smartElement)
         capture(&registry, "subject", "Capture a subject", nil, .subject)
-        capture(&registry, "markup", "Capture and mark up", nil, .markup)
         // Q369: the one colour picker, on the key the System colour picker it replaced had (RetiredActions).
         capture(&registry, "pickColour", "Pick a colour with the magnifier", Key("c", shift: true), .colour)
         // Toolbox for Mac's QR tools (Q386), in Trigger beside the colour picker; no key in either preset. Both reads

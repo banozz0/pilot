@@ -11,12 +11,11 @@ import SwiftUI
 // the theme's colour means only the picked tool and the live mode; ⌘S says "Saved a copy".
 
 /// The top bar: Cancel, then undo, redo and delete at the left; the Mark up / Frame switch in the middle; More (save a
-/// copy, pin, upscale, read text, redact, ask AI, add a capture), the drag cap, Copy and Done at the right. The bar's
+/// copy, pin, read text, redact, ask AI, add a capture), the drag cap, Copy and Done at the right. The bar's
 /// empty room drags the window.
 struct EditorTopBar: View {
     @Environment(\.style) private var style
     let model: EditorModel
-    @State private var upscaling = false
     var save: () -> Void = {}
     var copy: () -> Void = {}
     var pin: () -> Void = {}
@@ -65,17 +64,11 @@ struct EditorTopBar: View {
         }
     }
 
-    /// More: what ships or reads the capture besides Copy and Done. Upscale's settings open under the button.
+    /// More: what ships or reads the capture besides Copy and Done.
     private var more: some View {
         Menu {
             Button("Save a Copy", action: save)
             Button("Pin over Your Windows", action: pin)
-            Button("Upscale…") {
-                let size = model.exportSize
-                model.upscale.size(width: Int(size.width), height: Int(size.height))
-                upscaling = true
-            }
-            .disabled(model.upscale.busy)
             Divider()
             Button("Read Text", action: model.startReading)
             Button("Redact Sensitive Text", action: model.redactSensitive)
@@ -89,8 +82,7 @@ struct EditorTopBar: View {
             worded("More", symbol: "ellipsis.circle")
         }
         .menuStyle(.button).buttonStyle(PilotButtonStyle(ghost: true)).menuIndicator(.hidden).fixedSize()
-        .help("Save a copy, pin, upscale, read text, redact, ask AI, or add a capture")
-        .popover(isPresented: $upscaling, arrowEdge: .bottom) { UpscalePopover(model: model) { upscaling = false } }
+        .help("Save a copy, pin, read text, redact, ask AI, or add a capture")
     }
 
     /// Add a capture (C8): History's newest captures by name, then Choose…; the one picked joins this one in a new capture.
@@ -677,31 +669,6 @@ extension ZoomSteps {
 
 extension EditorModel: ZoomSteps {}
 extension ImageViewerModel: ZoomSteps {}
-
-/// More's Upscale: the shared settings, Upscale, and Cancel that stops a run.
-struct UpscalePopover: View {
-    @Environment(\.style) private var style
-    let model: EditorModel
-    let close: () -> Void
-
-    var body: some View {
-        ToolPanel(title: "Upscale") {
-            UpscaleOptions(job: model.upscale)
-        } buttons: {
-            Spacer()
-            ToolButtons(primary: UpscaleOptions.action(model.upscale), disabled: !UpscaleOptions.runs(model.upscale),
-                        cancelTitle: model.upscale.busy ? "Stop" : "Cancel", run: model.startUpscale,
-                        cancel: { if model.upscale.busy { model.upscale.cancel() } else { close() } })
-        }
-        .background(style.color(\.panel))
-        .task {
-            if let image = await model.export(committing: false) {
-                model.upscale.size(width: image.width, height: image.height)
-                await model.upscale.loadPreview(image)
-            }
-        }
-    }
-}
 
 /// Text's options (Sven after build 82, the designer's mock): Font, Size in points, Bold and Italic, the colour, and
 /// Plain or Pill, for the text tool and for a picked text. The swatches fold into one colour menu when the footer is

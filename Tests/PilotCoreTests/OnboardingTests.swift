@@ -29,7 +29,7 @@ struct OnboardingTests {
     @Test("Permissions offers no tiler of its own: no Install row, no second grant; Accessibility alone is needed")
     func noTilerRows() {
         #expect(Onboarding.Row.allCases == [.accessibility, .systemEvents, .fullDiskAccess, .conflicts, .microphone, .screenRecording,
-                                            .inputMonitoring, .notifications, .bluetooth, .location, .calendars, .reminders])
+                                            .inputMonitoring, .bluetooth, .location, .calendars, .reminders])
         #expect(Onboarding.Row.rows(.required) == [.accessibility])
         #expect(Onboarding.Row.rows(.whenUsed) == [.bluetooth, .location, .calendars, .reminders])
     }

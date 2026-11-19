@@ -208,13 +208,10 @@ struct CaptureEditorRenders {
             narrow.pick(.text)
             try write(Self.draw(CaptureEditorView(model: narrow, drag: { NSItemProvider() }), tokens: tokens,
                                 size: EditorLayout.least, scale: 2), "16-smallest-text")
-            // The View pill's Image size and the actions' Upscale, as their popovers draw them.
+            // The View pill's Image size, as its popover draws it.
             let popovers = states[0].1
             let target = ResizeTarget(width: Int(popovers.flatSize.width), height: Int(popovers.flatSize.height))
             try write(Self.draw(ImageSizePanel(model: popovers, target: target), tokens: tokens, size: CGSize(width: 340, height: 230), scale: 2), "17-image-size-panel")
-            popovers.upscale.size(width: target.width, height: target.height)
-            try write(Self.draw(UpscalePopover(model: popovers) {}, tokens: tokens, size: CGSize(width: 340, height: 330), scale: 2),
-                      "18-upscale-panel")
         }
         for (key, set) in sizes { #expect(set.count == 1, "\(key): the window's size changed with its state: \(set.sorted())") }
     }

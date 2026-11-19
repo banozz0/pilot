@@ -18,7 +18,7 @@ extension SettingsSchema {
         let schema = SettingsSchema()
         schema.registerPart1(general: Engine.shared.map { ($0.settings, $0.hyperSwitch) }, look: .shared, clipboard: .shared, recording: .clipboard,
                              files: .shared, passwords: .shared, folders: .shared, giphy: Giphy.keychain, ai: .shared)
-        schema.registerStats(views: .shared, bar: .shared)
+        schema.registerStatsBar(.shared)
         schema.registerImageText(.shared)
         schema.registerSpeech(.shared)
         schema.registerSelection(.shared)
@@ -31,7 +31,7 @@ extension SettingsSchema {
         schema.registerExtensionPublish()
         if let engine = Engine.shared {
             schema.registerRings(engine.rings.store)
-            schema.registerPart2(settings: engine.settings, list: engine.workspaceList, snapshots: engine.snapshots, block: engine.pilotBlock,
+            schema.registerPart2(settings: engine.settings, list: engine.workspaceList, block: engine.pilotBlock,
                                  bar: .shared, topBar: engine.topBar, wallpaper: .shared, pilotSwitch: engine.pilotSwitch)
             schema.registerDock(engine.dock)
             schema.registerMaterial(.of(.shared))
@@ -56,12 +56,12 @@ extension SettingsSchema {
 
     /// Part 2's families (AI helper T5): the engine's stores, so all or none. A test passes its own notes counter and
     /// folder change, so it never lists Sven's notes.
-    func registerPart2(settings: PilotSettings, list: WorkspaceList, snapshots: WorkspaceSnapshots, block: PilotBlockStore, bar: BarItemsStore,
+    func registerPart2(settings: PilotSettings, list: WorkspaceList, block: PilotBlockStore, bar: BarItemsStore,
                        topBar: TopBarController, wallpaper: WallpaperSettings, pilotSwitch: any PilotSwitching,
                        dictation: PilotDictation = .shared, pictures: ShelfPictures = .shared,
                        notesIn: @escaping @MainActor (URL) -> Int = { NotesFolder.notes(in: $0).count },
                        changeNotes: @escaping @MainActor (URL) throws -> Void = { try NotesPanel.shared.changeFolder(to: $0, move: false) }) {
-        registerWorkspaces(list: list, snapshots: snapshots)
+        registerWorkspaces(list: list)
         registerTiling(block: block, settings: settings, pictures: pictures)
         registerBar(bar, topBar: topBar)
         registerSystem(settings: settings, wallpaper: wallpaper, pilotSwitch: pilotSwitch,

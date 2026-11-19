@@ -131,18 +131,15 @@ struct PageView: View {
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
-        case .activity: ActivityPage(onScreen: model.live)
-        // Reports is a place on Update & Clean's front (Sven, 2026-11-16): Open report scrolls there.
-        case .upkeep: UpkeepPage { model.go($0) }
-        case .loginItems: LoginItemsPage()
-        case .stats: StatsPage(onScreen: model.live) { model.go($0) }
+        // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
+        case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
         case .clipboard: ClipboardSettingsView()
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
-            // File search and Duplicates are places on the front (settings tidy), which the window scrolls to.
+            // File search is a place on the front (settings tidy), which the window scrolls to.
             if section == .folders { FolderDesignsView() } else { ConvertPage() }
         case .install:
             switch section {

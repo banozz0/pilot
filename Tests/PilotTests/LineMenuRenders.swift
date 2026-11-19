@@ -20,7 +20,7 @@ struct LineMenuRenders {
 
     @Test("Line's root is Classic's at 431 wide, as tall as its screen holds; a search, a branch and a list are 750 and fit their rows")
     func sizes() async throws {
-        let states = try await Dictionary(uniqueKeysWithValues: Self.states() + Self.speedStates())
+        let states = try Dictionary(uniqueKeysWithValues: Self.states())
         let root = try #require(states["L1-root"])
         #expect(root.atRoot && root.layout == .line)
         #expect(root.instrumentSize.width == MenuPanelSize.lineRootWidth)
@@ -55,13 +55,7 @@ struct LineMenuRenders {
         // The Files view previews the selected file beside the list, at the full height (file search v2).
         #expect(files.previewsFile && files.instrumentSize.height == MenuPanelSize.line(.wide, rows: 0, headings: 0, full: true).height)
         #expect(notes.instrumentSize.height >= MenuPanelSize.lineChrome + CGFloat(min(notes.nav.rows.count, 8)) * MenuPanelSize.lineRow)
-        // Typing stats puts the Mac's cards above the rows, with room for them; the Stats page is still a row (P42).
-        let stats = try #require(states["L24-stats"])
-        #expect(stats.statsCards && stats.nav.rows.contains { $0.title == "Stats" }, "\(stats.nav.rows.map(\.title))")
-        #expect(stats.instrumentSize.height >= MenuPanelSize.lineChrome + StatsStrip.room + MenuPanelSize.lineRow)
-        // Stats' screen draws its cards in the list's place, at their own height (Q400); Activity lists its rows (Q399).
-        let screen = try #require(states["L28-stats"])
-        #expect(screen.showsStats && screen.instrumentSize.height == MenuPanelSize.lineChrome + MenuStatsScreen.height)
+        // Activity lists its rows (Q399).
         let activity = try #require(states["L27-activity"])
         #expect(activity.nav.rows.map(\.section) == ["Apps", "Apps", "Apps", "Background", "Background", "Background"])
         #expect(activity.nav.rows.first?.title == "Google Chrome" && activity.headings.count == 2)
@@ -74,12 +68,6 @@ struct LineMenuRenders {
         #expect(try #require(states["L34-chat-whats-up"]).nav.rows.map(\.target) == [.ask("what's up")])
         let kill = try #require(states["L35-kill-chrome"]).nav
         #expect(kill.branch == .activity && kill.query == "chrome" && kill.rows.first?.title == "Google Chrome", "\(kill.rows.map(\.title))")
-        // The speed test takes the list's place at its own height, whatever the branch lists (P41).
-        for name in ["L20-speed-running", "L21-speed-result", "L22-speed-failed", "L23-speed-root"] {
-            let model = try #require(states[name])
-            let test = try #require(model.speedTest)
-            #expect(model.instrumentSize.height == MenuPanelSize.lineChrome + SpeedTestView.height(test), "\(name)")
-        }
     }
 
     @Test("An answer is a card in the list's top slot with room for it, its Ask row under it (tr's alone, T40); Cmd+K lists the row's actions")
@@ -135,16 +123,9 @@ struct LineMenuRenders {
             let thumbnails = FileThumbnails.shared
             thumbnails.make = FileThumbnailRenders.fake
             defer { thumbnails.make = FileThumbnails.quickLook }
-            for (name, model) in try await Self.states() + Self.speedStates() where only.map(name.contains) ?? true {
+            for (name, model) in try Self.states() where only.map(name.contains) ?? true {
                 try await Self.render(model, name, in: dir, wait: name == "L11-files" ? 1.5 : 0.3)
             }
-        }
-        // Toybox draws Stats' cards in its own frame (Q400).
-        look.style = .toybox
-        let toy = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menu-toybox")
-        try FileManager.default.createDirectory(at: toy, withIntermediateDirectories: true)
-        for (name, model) in try Self.states() where name == "L28-stats" && (only.map(name.contains) ?? true) {
-            try await Self.render(model, name, in: toy, wait: 0.3)
         }
     }
 
@@ -166,7 +147,7 @@ struct LineMenuRenders {
         try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
     }
 
-    /// The menu's rows as RailMenuRenders builds them, with Notes among the apps, so a search for "notes" finds an app.
+    /// The menu's rows, with Notes among the apps, so a search for "notes" finds an app.
     static func built() throws -> [MenuEntry] {
         let engine = Engine()
         return MenuEntries.build(
@@ -202,13 +183,13 @@ struct LineMenuRenders {
             return nav
         }
         var states: [(String, MenuModel)] = [("L1-root", model(MenuNavigator(entries: built)))]
-        // More rows (Sven 2026-10-20): Files, Notes and Stats switched on, Files moved over Apps, the others after System.
-        var extras = MenuRoot(extras: ["files", "notes", "stats"])
+        // More rows (Sven 2026-10-20): Files, Notes and Activity switched on, Files moved over Apps, the others after System.
+        var extras = MenuRoot(extras: ["files", "notes", "activity"])
         if let files = extras.rows().first(where: { $0.extra?.id == "files" }) { extras.move(files, to: 0) }
         states.append(("L1c-root-extras", model(MenuNavigator(entries: built, root: extras))))
         // Sven's 17 Go to rows (T36, 2026-11-04): the root grows to show them all on his 1440 pt screen, and scrolls past
         // an 800 pt one's height. Each screen's visible height is less its menu bar (33 pt).
-        let tall = MenuRoot(extras: ["files", "notes", "activity", "stats", "qr", "reminders", "translate"])
+        let tall = MenuRoot(extras: ["files", "notes", "activity", "qr", "reminders", "translate", "capture"])
         for (name, visible) in [("L1d-root-1440", 1440.0 - 33), ("L1e-root-800", 800.0 - 33)] {
             let m = model(MenuNavigator(entries: built, root: tall))
             let panel = PilotMenu.makePanel(m)
@@ -346,15 +327,6 @@ struct LineMenuRenders {
             states.append((name, model(nav)))
         }
 
-        // Typing stats (P42): the five cards from a seeded sampler, never this Mac's.
-        let sampler = SystemSampler()
-        SharedLook.StatsRenders.seed(sampler)
-        StatsStrip.sampler = sampler
-        var stats = MenuNavigator(entries: built)
-        stats.query = "stats"
-        stats.provideSettings("stats")
-        states.append(("L24-stats", model(stats)))
-
         // P43: Finder's selection rows at a root search for "folder", and the design picker over four folders, one in a git
         // repository. The folders are named, never made: nothing of Sven's is read.
         let folders = ["Projects", "Documents/Design", "Documents/Invoices", "code/pilot"]
@@ -369,8 +341,7 @@ struct LineMenuRenders {
         for _ in 0..<4 { _ = designs.handle(.down) }
         states.append(("L26-folder-designs", model(designs)))
 
-        // Hyper+Space › Activity and › Stats, screens of their own (Q399, Q400): seeded rows, and the readings seeded for
-        // L24, never this Mac's.
+        // Hyper+Space › Activity, a screen of its own (Q399): seeded rows, never this Mac's.
         let helper = Activity.Row(kind: .process, pid: 812, name: "Google Chrome Helper (Renderer)", cpu: 14, memory: 410_000 << 10, rights: .quitAndForce)
         let snapshot = Activity.Snapshot(apps: [
             Activity.Row(kind: .app, pid: 801, name: "Google Chrome", bundlePath: "/Applications/Google Chrome.app", cpu: 38.2,
@@ -388,7 +359,6 @@ struct LineMenuRenders {
         let activityModel = model(activity)
         activityModel.activityRead = true
         states.append(("L27-activity", activityModel))
-        states.append(("L28-stats", model(MenuNavigator(entries: built, branch: .stats))))
         // T42: an action's alias and words acts on them: clipboard history's row searching them, the question alone, and
         // Kill a process's alias opening Activity searching them, as the panel moves it there.
         let actioned = Aliases(Alias.starters + [Alias(key: "action:system.killProcess", alias: "kill", title: "Kill a process"),
@@ -405,43 +375,6 @@ struct LineMenuRenders {
             states.append((name, shown))
         }
         return states
-    }
-
-    /// The Speed test view over System › Connections (P41): measuring with a live reading, a result with six runs before
-    /// it, and a run that failed. Nothing measures: each run's networkQuality is faked.
-    static func speedStates() async throws -> [(String, MenuModel)] {
-        let built = try built()
-        let runs = try DayFile<[SpeedTest.Result]>(url: URL(filePath: NSTemporaryDirectory()).appending(path: "pilot-speedruns-\(UUID().uuidString).json"))
-        defer { try? FileManager.default.removeItem(at: runs.url) }
-        let day = Date().addingTimeInterval(-6 * 86_400)
-        try runs.save([412, 398, 405, 188, 420, 401].enumerated().map { i, down in
-            SpeedTest.Result(reading: .init(download: down, upload: 37.9, responsiveness: 1180), at: day.addingTimeInterval(Double(i) * 86_400), seconds: 19)
-        })
-        func model(_ test: SpeedTest, root: Bool = false) -> MenuModel {
-            var nav = MenuNavigator(entries: built, branch: root ? nil : MenuLayout.system("Connections"))
-            if root { nav.query = "speed" }
-            let m = MenuModel(nav: nav)
-            m.layout = .line
-            m.speedTest = test
-            return m
-        }
-        let json = #"{"dl_throughput":412000000,"ul_throughput":38600000,"responsiveness":1240,"interface_name":"en0","start_date":"2026-10-18 14:01:43.000","end_date":"2026-10-18 14:02:02.000"}"#
-        let running = SpeedTest(live: { live in
-            live(.init(download: 286.4, upload: 31.2, responsiveness: 842))
-            try await Task.sleep(for: .seconds(600))
-            return ""
-        }, history: runs, clock: { Date().addingTimeInterval(-8) }, say: { _ in })
-        running.start()
-        let done = SpeedTest(live: { _ in json }, history: runs, say: { _ in })
-        _ = await done.start()?.value
-        struct Down: Error {}
-        let failed = SpeedTest(measure: { throw Down() }, say: { _ in })
-        _ = await failed.start()?.value
-        // The live reading lands on the main actor after the run starts; the run then waits, never ending in the test.
-        try await Task.sleep(for: .milliseconds(50))
-        // L23: opened from a root search for "speed", where the foot says where Sven is rather than the kinds.
-        return [("L20-speed-running", model(running)), ("L21-speed-result", model(done)), ("L22-speed-failed", model(failed)),
-                ("L23-speed-root", model(done, root: true))]
     }
 
     /// The shipped drive catalogue's commands (P38), with Calendar, Reminders and Music on the Mac.

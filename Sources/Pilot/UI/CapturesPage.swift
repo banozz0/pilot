@@ -151,8 +151,7 @@ struct CapturesPage: View {
         ("captures.area", "Area"), ("captures.activeWindow", "Window"), ("captures.fullscreen", "Full screen"),
         ("captures.scrolling", "Scrolling"), ("captures.scrollingUp", "Scrolling, upward"),
         ("captures.ocr", "Read text and QR codes"),
-        ("captures.smartElement", "A UI element"), ("captures.subject", "A subject, background removed"),
-        ("captures.markup", "Mark up, then save"), ("captures.pickColour", "Pick a colour"),
+        ("captures.subject", "A subject, background removed"), ("captures.pickColour", "Pick a colour"),
         ("captures.repeatArea", "The last area again"), ("captures.delayed", "After a delay"),
         ("captures.editLast", "Edit the last capture"),
     ]

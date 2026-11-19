@@ -107,8 +107,6 @@ extension SettingsSchema {
                     }),
             .choice(PilotSettings.dictationKeyModeKey, "Dictation key mode", page: "voice", DictationKeyMode.allCases, standard: .toggle,
                     read: { settings.dictationKeyMode }, write: { settings.dictationKeyMode = $0 }),
-            .bool("system.publicIP", "Show This Mac's public IP", page: "stats", standard: false,
-                  read: { settings.showPublicIP }, write: { settings.showPublicIP = $0 }),
             .bool("update.selfUpdatingCasks", "Update lists casks that update themselves", page: "install", standard: false,
                   read: { settings.updateSelfUpdatingCasks }, write: { settings.updateSelfUpdatingCasks = $0 }),
             .bool("switch.on", "Pilot on (its binds armed)", page: "home", standard: true, confirms: true,

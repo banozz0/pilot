@@ -10,7 +10,7 @@ public enum CombineLayout {
         public var title: String { self == .sideBySide ? "Side by side" : "Stacked" }
     }
 
-    /// The largest side a combined picture may have, the upscaler's (ImageScale's UpscaleTarget).
+    /// The largest side a combined picture may have, a resize's (ImageScale's ResizeTarget.limit).
     public static let most: CGFloat = 16_384
 
     /// Each picture's frame in the combined one (top-left origin, pixels) and its size: every picture scaled to the first's

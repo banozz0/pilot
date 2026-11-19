@@ -124,7 +124,13 @@ public enum AppLeftovers {
         guard let job = plist(url), let label = job["Label"] as? String else { return nil }
         let associated = (job["AssociatedBundleIdentifiers"] as? [String]) ?? (job["AssociatedBundleIdentifiers"] as? String).map { [$0] } ?? []
         let program = job["Program"] as? String ?? (job["ProgramArguments"] as? [String])?.first
-        return Job(label: label, associated: associated.map { $0.lowercased() }, appPath: program.flatMap(LoginItems.app))
+        return Job(label: label, associated: associated.map { $0.lowercased() }, appPath: program.flatMap(appBundle))
+    }
+
+    /// The `.app` a path sits in: "/Applications/Foo.app/Contents/MacOS/foo" is "/Applications/Foo.app".
+    static func appBundle(_ path: String) -> String? {
+        guard let range = path.range(of: ".app/", options: .caseInsensitive) else { return path.lowercased().hasSuffix(".app") ? path : nil }
+        return String(path[..<range.lowerBound]) + ".app"
     }
 
     private static func isLink(_ url: URL) -> Bool {

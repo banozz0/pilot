@@ -8,7 +8,7 @@ import Testing
 
 extension SharedLook {
 /// Story 154: Look's Apps show as is saved, every list's app row follows it, and the menu (Apps and Remove › Apps in each
-/// style) and the Activity page render in all three modes. The renders are opt-in like the others:
+/// style) render in all three modes. The renders are opt-in like the others:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter AppsShowAsRenders`
 @MainActor
 @Suite("Apps show as renders")
@@ -40,7 +40,7 @@ struct AppsShowAsRenders {
         #expect(title > 60 && both == title + 18 + 8, "Icon and title is the icon, the gap and the name: \(title) \(both)")
     }
 
-    @Test("The menu and the Activity page render in all three modes", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The menu renders in all three modes", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -57,7 +57,6 @@ struct AppsShowAsRenders {
         let toml = (home as NSString).appendingPathComponent(".aerospace.toml")
         if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
         let engine = try SharedLook.HomeRenders.engine()
-        ActivityMonitor.shared.seed(SharedLook.ActivityRenders.seeded, quitting: [])
 
         let apps = [("Finder", "com.apple.finder"), ("Safari", "com.apple.Safari"), ("TextEdit", "com.apple.TextEdit"),
                     ("Notes", "com.apple.Notes"), ("System Settings", "com.apple.systempreferences")]
@@ -73,9 +72,6 @@ struct AppsShowAsRenders {
             var remove = SharedLook.MenuBrowseRenders.remove()
             _ = remove.handle(.return)
             try SharedLook.InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: remove)), "menu-remove-apps-\(mode.rawValue)", in: root)
-            let page = ActivityPage(onScreen: false, start: SharedLook.ActivityRenders.states).styleLayout().background(Theme.background)
-                .styled(.page(.activity)).environment(engine).frame(width: 1000, height: 1200).pilotTheme(look: look)
-            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: root.appendingPathComponent("page-activity-\(mode.rawValue).png"))
         }
     }
 }

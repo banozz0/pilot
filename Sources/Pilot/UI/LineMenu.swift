@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The Hyper+Space menu as Line draws it (menu-morph T1; look.menuLayout = line; Sven Q149, Q164, Q165): at the root,
+/// The Hyper+Space menu as Line draws it (menu-morph T1; Sven Q149, Q164, Q165): at the root,
 /// Classic's list at Omarchy's 431 width, the root's rows in JetBrains Mono; once Sven types, Tabs a
 /// kind or opens a branch, the menu's 750 list in Instrument's rows at 36 pt. One search line for both, 60 pt, what is
 /// typed in JetBrains Mono 20 with the caret in the accent; at its right the menu's own keys at the root, what Return
@@ -34,8 +34,6 @@ struct LineMenu: View {
                     // Cmd+K steps into the row (T3): its actions take the list's place, the row a token in the line.
                     if let actions = model.nav.actions {
                         LineActions(model: model, menu: actions, pointer: pointer).frame(width: size.width)
-                    } else if let speedTest = model.speedTest {
-                        SpeedTestView(test: speedTest).frame(width: size.width)
                     } else if root {
                         ClassicRoot(model: model, pointer: pointer, row: MenuPanelSize.lineRow).style(ClassicMenu.face(style))
                             .frame(width: size.width).transition(LineMorph.root(reduce: reduceMotion))
@@ -85,13 +83,11 @@ private struct LineSearch: View {
     var actionsFocused: FocusState<Bool>.Binding
 
     var body: some View {
-        let nav = model.nav, stepped = nav.actions, speed = model.speedTest
-        // Cmd+K's row or the Speed test covers the field, which stays in the tree hidden so it is never rebuilt.
-        let typing = stepped == nil && speed == nil
+        let nav = model.nav, stepped = nav.actions
+        // Cmd+K's row covers the field, which stays in the tree hidden so it is never rebuilt.
+        let typing = stepped == nil
         HStack(spacing: 12) {
-            if speed != nil {
-                InstrumentCrumb(symbol: "gauge.with.dots.needle.67percent", text: "Speed test")
-            } else if let stepped {
+            if let stepped {
                 LineToken(row: stepped.row, windows: model.windows)
             } else if let branch = nav.path.last, !nav.isList {
                 InstrumentCrumb(symbol: InstrumentRowIcon.glyph(of: branch), text: branch.title)
@@ -99,10 +95,7 @@ private struct LineSearch: View {
                 InstrumentMark(size: 18).foregroundStyle(style.color(\.text2))
             }
             ZStack(alignment: .leading) {
-                if let speed {
-                    Text(SpeedTestView.status(speed) ?? "").font(style.font(\.search, size: 16 / style.scale))
-                        .foregroundStyle(style.color(\.text3)).lineLimit(1).allowsHitTesting(false)
-                } else if nav.query.isEmpty, stepped == nil {
+                if nav.query.isEmpty, stepped == nil {
                     Text(prompt).styleText(\.search).foregroundStyle(style.color(\.text3)).lineLimit(1).allowsHitTesting(false)
                 }
                 if typing, let best = completion {
@@ -143,9 +136,7 @@ private struct LineSearch: View {
 
     @ViewBuilder private var trailing: some View {
         let nav = model.nav
-        if let speed = model.speedTest {
-            SpeedTestTrailing(test: speed)
-        } else if let stepped = nav.actions {
+        if let stepped = nav.actions {
             Text("\(stepped.visible.count)").styleText(\.mono).foregroundStyle(style.color(\.text3))
         } else if let title = nav.title {
             InstrumentCrumb(text: title)
@@ -252,7 +243,7 @@ private struct LineFoot: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if model.searchingRoot, model.speedTest == nil {
+            if model.searchingRoot {
                 kinds
             } else if model.nav.branch == .activity, let note = model.footerNote {
                 // Activity's refusal, or the force quit waiting for its second ⌘Return, in the place's room (Q399).
@@ -275,7 +266,6 @@ private struct LineFoot: View {
     /// The keys. At a root search the kinds already say Tab and the line says what Return does, so neither repeats here
     /// and the kinds keep their whole words.
     private var hints: [KeyHint] {
-        if let speed = model.speedTest { return SpeedTestView.hints(speed) }
         let all = model.footer + model.footerTrailing + model.footerCommands
         guard model.searchingRoot else { return Array(all.prefix(4)) }
         return all.filter { !$0.key.contains("Tab") && !$0.key.contains("⇥") && $0.key != "↵" }

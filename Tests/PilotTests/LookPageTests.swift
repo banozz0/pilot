@@ -75,38 +75,6 @@ struct LookPageTests {
         #expect(picks == 1)
     }
 
-    /// Menu Rail and Classic T9, menu-morph T4: the Hyper+Space menu tiles, Line (the default, Q165), Classic and Rail, each a
-    /// third of the picker's width; a mouse click on a tile writes `look.menuLayout`, saved under its key.
-    @Test("A click on a Hyper+Space menu tile writes look.menuLayout")
-    func menuLayoutClick() throws {
-        let defaults = LookTests.defaults()
-        let look = Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), defaults: defaults)
-        #expect(look.menuLayout == .line, "Line is not the default")
-        let picker = MenuLayoutPicker(look: look).frame(width: 600).pilotTheme(look: look)
-        try hosted(picker, height: 220) { (host: NSView) throws in
-            let window = try #require(host.window)
-            @MainActor func click(at share: CGFloat) throws {
-                let point = host.convert(CGPoint(x: host.bounds.width * share, y: host.bounds.midY), to: nil)
-                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                    let event = try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                                                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-                    window.sendEvent(event)
-                    PanelTestSupport.pump(0.05)
-                }
-                PanelTestSupport.pump(0.2)
-            }
-            try click(at: 0.84)
-            #expect(look.menuLayout == .rail)
-            #expect(defaults.string(forKey: "look.menuLayout") == "rail")
-            try click(at: 0.5)
-            #expect(look.menuLayout == .classic)
-            #expect(defaults.string(forKey: "look.menuLayout") == "classic")
-            try click(at: 0.16)
-            #expect(look.menuLayout == .line)
-            #expect(defaults.string(forKey: "look.menuLayout") == "line")
-        }
-    }
-
     @Test("The page draws the picked theme, the style and the Glass switch")
     func pageDrawsChoices() throws {
         func page(more: Bool = false, _ change: (Look) -> Void = { _ in }) throws -> some View {
@@ -157,24 +125,6 @@ struct LookPageTests {
             #expect(try Self.click("Garnet", in: host), "no Garnet card on the page")
             #expect(look.themeID == "garnet")
             #expect(ghostty.written.last?.theme?.id == PilotTheme.named("garnet")?.source)
-        }
-    }
-
-    /// Menu Rail and Classic T9 on the page: Hyper+Space menu with its Rail tile (tagged Default) and Classic's, and a
-    /// click on Classic's name picks it. A Vision read, so it runs only with PILOT_LIVE=1; `menuLayoutClick` and
-    /// `pageDrawsChoices` stand in for it in every run.
-    @Test("The page shows Hyper+Space menu, and Classic's tile picks Classic", .enabled(if: ProcessInfo.processInfo.environment["PILOT_LIVE"] == "1"))
-    func menuLayoutOnPage() throws {
-        let (look, _) = look()
-        let page = LookPage(look: look, more: true).frame(width: 1000, height: 1600).pilotTheme(look: look)
-        try hosted(page, height: 1600) { (host: NSView) throws in
-            let words = try recognisedText(in: try #require(snapshot(host, scale: 2))).map(\.text)
-            for label in ["Hyper+Space menu", "Rail", "Default", "Classic"] {
-                #expect(words.contains { Self.reads($0, label) || $0.hasPrefix(label + " ") }, "no \(label) on the page: \(words)")
-            }
-            #expect(look.menuLayout == .rail)
-            #expect(try Self.click("Classic", in: host), "no Classic tile on the page")
-            #expect(look.menuLayout == .classic)
         }
     }
 

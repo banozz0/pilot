@@ -116,8 +116,8 @@ enum AppsModule {
     /// `apps.url:<bundle id>:<url>` and `apps.private:<bundle id>`. Not in the registry; the bind store keeps the id and
     /// the engine rebuilds the action from it.
     static func openID(bundle: String) -> String { AppLink.open(bundle: bundle).id }
-    /// Each role's action id → the app it opens today (the menu's keys, bind hints). Not Agent's: a command is no app, and
-    /// finding it reads the disk on every app switch (BindNudger).
+    /// Each role's action id → the app it opens today (the menu's keys). Not Agent's: a command is no app, and finding it
+    /// reads the disk.
     static func roleApps() -> [String: String] {
         Dictionary(uniqueKeysWithValues: AppRole.allCases.filter { $0 != .agent }.map { (id($0.rawValue), resolved($0)) })
     }

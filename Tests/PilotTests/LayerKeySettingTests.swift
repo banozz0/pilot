@@ -86,19 +86,6 @@ struct LayerKeySettingTests {
         #expect(fired == 2)
     }
 
-    /// Card agent-bo-95422831: This Mac's public IP calls the internet, so it is off until switched on.
-    @Test("The public IP switch starts off, notifies what observes it, and persists to the next launch")
-    func publicIPSetting() throws {
-        let (settings, defaults) = try settings()
-        #expect(!settings.showPublicIP)
-        nonisolated(unsafe) var fired = 0
-        withObservationTracking { _ = settings.showPublicIP } onChange: { fired += 1 }
-        settings.showPublicIP = true
-        #expect(fired == 1 && defaults.object(forKey: "system.publicIP") as? Bool == true)
-        #expect(PilotSettings(defaults: defaults, loginItem: LoginItem(service: .init(status: { .enabled }, register: {}, unregister: {})))
-                .showPublicIP)
-    }
-
     @Test("A quick-tap change persists, reads back at the next launch and reaches the engine's tap hook once")
     func quickTapApplies() throws {
         let (settings, defaults) = try settings()

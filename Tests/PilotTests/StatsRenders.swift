@@ -6,11 +6,8 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Stats as the approved mockup ErxOpOTBN8U (card agent-bo-95422992): the strip under the chips redraws as a chip is
-/// clicked, every run; and, opt-in like the other renders, the whole window at 1440, 1000 and 760 in
-/// Tokyo Night on the mockup's Mac mini (seeded readings, the menu bar showing CPU, Memory, Storage and Temperature), the
-/// CPU chart's hover, 1 hour and Today, Graph and One item, and the chooser before and after Network's chip is clicked:
-/// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter StatsRenders`
+/// The sampler's seeded readings every render draws (the mockup's Mac mini: seeded readings, the menu bar showing CPU,
+/// Memory, Storage and Temperature), and the menu bar strip's two layout checks.
 extension SharedLook {
 @MainActor
 @Suite("Stats renders")
@@ -136,84 +133,6 @@ struct StatsRenders {
         let lastTwo = try await PilotTests.pixels(rendering: HStack(spacing: 12) { block(1); block(2) }
             .frame(width: 143, alignment: .trailing).background(.black))
         #expect(strip == lastTwo)
-    }
-
-    @Test("Stats renders as the mockup at 1440, 1000 and 760", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func render() throws {
-        let home = try #require(Self.env["CFFIXED_USER_HOME"])
-        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
-        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("stats")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        testApp()
-        DisplayFaces.directory = LookThemeTests.fonts
-        DisplayFaces.register()
-        let toml = (home as NSString).appendingPathComponent(".aerospace.toml")
-        if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
-
-        // Today's minutes, one a minute since midnight, in the moved home's stats-today.json, read as at launch.
-        let file = DayFile<StatsHistory>("stats-today")
-        try #require(file.url.path.hasPrefix(home), "the minute history would land outside the moved home")
-        var minutes = StatsHistory()
-        let now = Date(), midnight = Calendar.current.startOfDay(for: now)
-        let count = Int(now.timeIntervalSince(midnight) / 60) + 1
-        let day = SystemSampler()
-        Self.seed(day, count: count)
-        for (i, values) in day.history.enumerated() { minutes.record(values, at: midnight.addingTimeInterval(Double(i) * 60)) }
-        minutes.record(day.history[0], at: now.addingTimeInterval(60))   // closes the last minute
-        try FileManager.default.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try file.save(minutes)
-        SystemSampler.shared.loadMinutes()
-
-        let engine = Engine()
-        Self.seed(SystemSampler.shared)
-        engine.observers.tiler.seed(focused: "1", occupied: [OccupiedWorkspace(name: "1", apps: ["Ghostex"]), OccupiedWorkspace(name: "2", apps: ["Zen"])])
-        let store = BarItemsStore.shared
-        Self.pickMockup(store)
-        // PILOT_RENDER_ONLY narrows the renders to the file names holding it.
-        let only = Self.env["PILOT_RENDER_ONLY"]
-        func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }
-
-        let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.stats")!)
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
-        defer { window.close() }
-        let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "tokyo-night"
-        defer { Look.shared.themeID = PilotTheme.defaultID }
-        for width in [1440, 1000, 760] where wanted("window-\(width)") {
-            window.setContentSize(NSSize(width: CGFloat(width), height: width == 760 ? 3000 : 1900))
-            model.go(AppPlace(.stats))
-            RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-            frame.layoutSubtreeIfNeeded()
-            try RestyledRenders.writeTrimmed(try #require(snapshot(frame, scale: 2)), from: 207,
-                                             to: dir.appendingPathComponent("window-\(width).png"))
-        }
-        // The page alone at the window's page width: the CPU chart's hover, then 1 hour and Today.
-        let pageWidth = CGFloat(1000 - 207)
-        for (name, start) in [("hover", StatsPage.Start(hover: 0.72)), ("hour", StatsPage.Start(range: .hour, hover: 0.72)),
-                              ("today", StatsPage.Start(range: .today))] where wanted("page-\(name)") {
-            let page = StatsPage(onScreen: false, start: start).environment(engine)
-                .frame(width: pageWidth, height: 1900).pilotTheme(look: .shared).background(Theme.background)
-            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(name).png"))
-        }
-        // The Overview in each view in the narrowest window and a wide one: no card runs under the next.
-        for view in StatsView.allCases {
-            for width in [760, 1440] where wanted("overview-\(view.rawValue)-\(width)") {
-                StatsViewsStore.shared.setAll(view)
-                window.setContentSize(NSSize(width: CGFloat(width), height: 1000))
-                model.go(AppPlace(.stats))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-                frame.layoutSubtreeIfNeeded()
-                let rep = try #require(snapshot(frame, scale: 2))
-                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("overview-\(view.rawValue)-\(width).png"))
-            }
-        }
-        StatsViewsStore.shared.reset()
-        // The Menu bar page, where the readings are chosen as bar items (card agent-bo-95423024; Q185).
-        if wanted("menubar") {
-            let page = MenuBarPage(onScreen: false).environment(engine)
-                .frame(width: 793, height: 1900).pilotTheme(look: .shared).background(Theme.background)
-            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("menubar.png"))
-        }
     }
 }
 }

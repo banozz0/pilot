@@ -28,7 +28,7 @@ struct MenuPreviewRenders {
         (look.style, look.themeID, look.glass) = (.instrument, "dracula", false)
         let settings = MenuRootSettings.shared, saved = settings.root
         defer { settings.root = saved }
-        for extra in ["files", "notes", "activity", "stats"] { settings.root.show(extra: extra, true) }
+        for extra in ["files", "notes", "activity"] { settings.root.show(extra: extra, true) }
         let rows = settings.root.shownRows()
         print("PREVIEW rows \(rows.count): " + rows.map(\.title).joined(separator: ", "))
         let page = MenuPage(section: nil).frame(width: 1560, height: 1000).pilotTheme(look: look).background(Theme.background)

@@ -165,7 +165,7 @@ struct WorkspaceEditor: View {
 }
 
 /// What the Workspaces page adds to the editor's right column: the apps that always land on the workspace (the Pilot
-/// block's rules) and its snapshot.
+/// block's rules).
 struct WorkspacePageExtras {
     /// The workspaces kept, which a rule can move an app to.
     let workspaces: [String]
@@ -178,10 +178,6 @@ struct WorkspacePageExtras {
     let addRule: (String) -> Void
     let removeRule: (String) -> Void
     let moveRule: (String, String) -> Void
-    let snapshot: Snapshot?
-    let restore: () -> Void
-    let deleteSnapshot: () -> Void
-    let reopenApps: Binding<Bool>
     /// The page's drag and the workspace shown: the preview's tiles and the rules' rows pick an app up (Sven, 2026-11-15).
     var drag: (WorkspaceDrag, workspace: String)?
 }
@@ -195,7 +191,7 @@ struct WorkspaceEditorPanel: View {
     @Environment(\.ink) private var ink
     enum Mode {
         case popup(close: () -> Void, fit: (CGFloat) -> Void)
-        /// The page's front: the preview, the layouts with the rules, a preset and the snapshot under them, and what opens
+        /// The page's front: the preview, the layouts with the rules and a preset under them, and what opens
         /// here (the rules on More until Sven's round 3 notes on build 2300, 2026-11-11).
         case page(extras: WorkspacePageExtras)
     }
@@ -356,7 +352,7 @@ struct WorkspaceEditorPanel: View {
     }
 
     /// The page's middle: the front's preview takes the height the page gives it, the layouts down the right with the rules,
-    /// a preset and the snapshot under them (under 600 pt they stack, the preview 260 tall), then what opens here. The page
+    /// and a preset under them (under 600 pt they stack, the preview 260 tall), then what opens here. The page
     /// scrolls, not the panel.
     private var pageMiddle: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -379,7 +375,7 @@ struct WorkspaceEditorPanel: View {
     }
 
     /// Under the layouts, where the page had room to spare (Sven's round 3 notes on build 2300, 2026-11-11; on More as
-    /// Rules and snapshot until then): the apps that always land here, a preset and the window snapshot.
+    /// Rules until then): the apps that always land here and a preset.
     @ViewBuilder private var rules: some View {
         if let extras {
             VStack(alignment: .leading, spacing: 22) {
@@ -389,7 +385,6 @@ struct WorkspaceEditorPanel: View {
                     PartLabel(title: "From a preset", line: "a saved set of apps", info: Self.presetInfo)
                     savedPresets
                 }
-                SnapshotPart(extras: extras)
             }
             .id(AppSection.workspaceRules)
         }
@@ -512,7 +507,7 @@ struct WorkspaceEditorPanel: View {
     }
 
     static let openMissingInfo = "Switching here also opens each of these apps that has no window yet, instead of only pulling in the windows already open."
-    static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off. Restore is different: it puts back a window snapshot."
+    static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off."
     static let keepLayoutInfo = "On (the default): Pilot lays this workspace out again in this layout every time a window opens or closes on it. Off: a new window goes wherever the tiler puts it."
     static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Home's keys. It saves when you press Return or click elsewhere."
     static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two spots to set how wide each is, before or after apps are in them, and − and + take a spot away or add one. Every change saves at once."
@@ -650,51 +645,6 @@ private struct RulesPart: View {
                 .padding(.top, extras.rules.isEmpty ? 0 : 6)
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .blockSurface()
-        }
-    }
-}
-
-/// The workspace's window snapshot (Sven 2026-10-17: "what is snapshot?"): where its windows sat when it was saved and
-/// what it holds, Restore and Delete; the keys that save and restore, and whether a restore reopens closed apps.
-private struct SnapshotPart: View {
-    @Environment(\.ink) private var ink
-    let extras: WorkspacePageExtras
-
-    static let info = "Saves where this workspace's windows sit and how big they are, so one key puts them all back. Splits inside splits come back side by side."
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PartLabel(title: "Window snapshot", line: "one key puts windows back", info: Self.info)
-            VStack(alignment: .leading, spacing: 8) {
-                if let saved = extras.snapshot {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: "camera.viewfinder").font(ink.ui(11)).foregroundStyle(ink.muted).accessibilityHidden(true)
-                        Text("saved \(saved.savedAt.formatted(.relative(presentation: .named)))").font(ink.ui(12.5)).foregroundStyle(ink.text)
-                    }
-                    Text(WorkspacesBody.apps(saved)).font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(2)
-                    HStack(spacing: 8) {
-                        Button(action: extras.restore) { Label("Restore", systemImage: "arrow.uturn.backward").labelStyle(.titleAndIcon) }.buttonStyle(.pilot)
-                        Button("Delete", action: extras.deleteSnapshot).buttonStyle(PilotButtonStyle(destructive: true, ghost: true))
-                    }
-                } else {
-                    Text("None saved yet").font(ink.ui(12.5)).foregroundStyle(ink.text2)
-                }
-                ink.line.frame(height: 1)
-                HStack(spacing: 6) {
-                    Text("Save").foregroundStyle(ink.muted); BindKey(action: "workspaces.saveSnapshot")
-                    InfoMark(text: "Saves where the windows on the workspace in front sit and how big they are, replacing its last snapshot.")
-                }
-                HStack(spacing: 6) {
-                    Text("Restore").foregroundStyle(ink.muted); BindKey(action: "workspaces.restoreSnapshot")
-                    InfoMark(text: "Puts the windows of the workspace in front back where its snapshot has them.")
-                }
-                Toggle("Restore reopens closed apps", isOn: extras.reopenApps)
-                    .toggleStyle(.pilotSwitchRow(info: "A restore also opens the snapshot's apps that are not running, then puts their windows back."))
-                    .font(ink.ui(12.5))
-            }
-            .font(ink.ui(12))
-            .padding(.horizontal, 10).padding(.vertical, 10)
             .blockSurface()
         }
     }

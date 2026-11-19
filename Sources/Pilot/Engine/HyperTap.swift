@@ -34,7 +34,7 @@ final class HyperTap {
     /// plain combo too).
     var captureNext: ((Key) -> Void)?
     /// The capture takes Hyper keys alone: a Cmd, Ctrl or Alt combo and every plain key go on as if none waited, so typing
-    /// in the front app goes on under the bind hint's wait (story 122).
+    /// in the front app goes on while it waits (story 122).
     var captureOnlyHyper = false
     /// While set, every Hyper key comes here too: the Binds board picks it (card agent-bo-95422993, G5). A bound one
     /// still runs, so every bind works with the board in front (T48, Sven 2026-11-04); a free one only picks. Plain

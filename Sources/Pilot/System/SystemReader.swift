@@ -66,8 +66,8 @@ enum SystemReader {
             raw.slow.batteryHealth = properties(services("AppleSmartBattery"), ["CycleCount", "AppleRawMaxCapacity", "NominalChargeCapacity",
                                                                                "DesignCapacity"]).lazy.compactMap(SystemStats.BatteryHealth.reading).first
         }
-        if !parts.isDisjoint(with: [.bluetooth, .bluetoothHID]) {
-            // system_profiler's earbuds only with .bluetooth; empty data reads as none.
+        if parts.contains(.bluetooth) {
+            // Empty data reads as none.
             raw.slow.bluetooth = SystemStats.bluetooth(hid: properties(services("AppleDeviceManagementHIDEventService"), ["Product", "BatteryPercent"]),
                                                        profiler: Data((await profiler ?? "").utf8))
         }

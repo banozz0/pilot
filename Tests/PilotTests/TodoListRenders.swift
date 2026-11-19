@@ -113,16 +113,16 @@ struct TodoListRenders {
 
         for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
             (look.themeID, look.style) = (theme, style)
-            let layouts: [MenuLayoutStyle] = style == .instrument ? [.classic, .rail, .line] : [.classic]
+            let layouts: [MenuLayoutStyle] = style == .instrument ? [.line] : [.classic]
             for layout in layouts {
                 let name = style == .instrument ? layout.rawValue : "toybox"
                 try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.dated, layout: layout)), "menu-dated-\(name)", in: out)
                 try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.tidy, layout: layout)), "menu-tidy-\(name)", in: out)
             }
-            let keys = try Self.model(Self.dated, layout: .classic)
+            let keys = try Self.model(Self.dated, layout: style == .instrument ? .line : .classic)
             _ = keys.nav.handle(.down)
             _ = keys.nav.handle(.commandK)
-            try InstrumentMenuRenders.render(MenuView(model: keys), "menu-actions-\(style == .instrument ? "classic" : "toybox")", in: out)
+            try InstrumentMenuRenders.render(MenuView(model: keys), "menu-actions-\(style == .instrument ? "line" : "toybox")", in: out)
 
             let tokens = StyleTokens.of(style, theme: look.theme)
             for (name, answer) in [("dated", Self.datedPopover), ("tidy", Self.tidyPopover)] {

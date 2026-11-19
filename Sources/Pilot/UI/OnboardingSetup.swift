@@ -3,15 +3,15 @@ import Foundation
 import Observation
 import PilotCore
 
-/// One change Set up makes (Onboarding 1.1, T54, variant C): the seven helpers, two keys, two file kinds, two downloads and
-/// two Pilot settings, 15 in all. Set up offers only `offered`; the rest stay so an earlier run's record keeps its rows
-/// and Undo.
+/// One change Set up makes (Onboarding 1.1, T54, variant C): the seven helpers, two keys, two downloads and two Pilot
+/// settings, 13 in all. The two file kinds (.txt and .md in Pilot) went with Pilot's text window (2026-11-19). Set up
+/// offers only `offered`; the rest stay so an earlier run's record keeps its rows and Undo.
 enum SetupItem: String, CaseIterable, Codable, Hashable {
     case homebrew, mole, mas, ffmpeg, webp, npm, cargo
-    case filesKey, notesKey, txt, md, dictation, voices, launchAtLogin, command
+    case filesKey, notesKey, dictation, voices, launchAtLogin, command
 
     /// What Set up offers (Sven's critique, 2026-11-18: the main things only): the Files and Notes keys and launch at
-    /// login. The helpers live on Install's Command-line tools, .txt and .md on Open with, the dictation model and voices
+    /// login. The helpers live on Install's Command-line tools, the dictation model and voices
     /// on Dictation and Read aloud, the pilot command on General, each with its own button. Pick by hand offers the
     /// helpers too, by the feature each serves (SetupFeature). No theme: not until resetting one to the defaults is sure
     /// (Sven, 2026-11-19).
@@ -24,7 +24,6 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         switch self {
         case .homebrew, .mole, .mas, .ffmpeg, .webp, .npm, .cargo: .helpers
         case .filesKey, .notesKey: .keys
-        case .txt, .md: .fileKinds
         case .dictation, .voices: .downloads
         case .launchAtLogin, .command: .pilot
         }
@@ -68,8 +67,6 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .webp: "webp"
         case .filesKey: "Files → Pilot Files"
         case .notesKey: "Notes → Pilot Notes"
-        case .txt: ".txt → Pilot"
-        case .md: ".md → Pilot"
         case .dictation: "dictation model"
         case .voices: "voices"
         case .launchAtLogin: "launch at login"
@@ -83,8 +80,6 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         switch self {
         case .filesKey: "Files key opens Pilot Files"
         case .notesKey: "Notes key opens Pilot Notes"
-        case .txt: ".txt files open in Pilot"
-        case .md: ".md files open in Pilot"
         case .dictation: "Dictation: \(OnboardingSetup.speech.name)"
         case .voices: "Read aloud voices"
         case .launchAtLogin: "Launch Pilot at login"
@@ -99,8 +94,6 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .homebrew, .mole, .mas, .ffmpeg, .webp, .npm, .cargo: SetupFeature.allCases.first { $0.helpers.contains(self) }?.detail ?? ""
         case .filesKey: "Hyper+F opens Pilot's own file window instead of Finder"
         case .notesKey: "the Notes key opens Pilot's quick notes instead of an app"
-        case .txt: "a .txt file you double-click opens in Pilot's text window"
-        case .md: "a .md file you double-click opens in Pilot, formatted"
         case .dictation: "\(OnboardingSetup.speech.size) · \(OnboardingSetup.speech.note)"
         case .voices: "Kokoro's natural English voices, US and UK, run on this Mac · \(KokoroModel.size)"
         case .launchAtLogin: "so Pilot is there after a restart"
@@ -108,20 +101,13 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         }
     }
 
-    /// The key it sets, and the file kind.
+    /// The key it sets.
     var role: AppRole? { self == .filesKey ? .files : self == .notesKey ? .notes : nil }
-    var kind: FileKind? {
-        switch self {
-        case .txt: FileKinds.groups.lazy.flatMap(\.kinds).first { $0.id == "public.plain-text" }
-        case .md: FileKinds.groups.lazy.flatMap(\.kinds).first { $0.id == "net.daringfireball.markdown" }
-        default: nil
-        }
-    }
 }
 
 /// Set up's groups, in the run's order.
 enum SetupGroup: CaseIterable, Hashable {
-    case helpers, keys, fileKinds, downloads, pilot
+    case helpers, keys, downloads, pilot
 
     /// In SetupItem's order, which is the run's: npm and cargo last, as they bring Node and Rust and take the longest
     /// (T54's call).
@@ -133,7 +119,6 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "Helpers"
         case .keys: "Keys"
-        case .fileKinds: "File kinds"
         case .downloads: "Downloads"
         case .pilot: "Pilot"
         }
@@ -143,7 +128,6 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "shippingbox"
         case .keys: "command"
-        case .fileKinds: "doc.text"
         case .downloads: "arrow.down.circle"
         case .pilot: "power"
         }
@@ -154,7 +138,6 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "helpers: " + items.map(\.short).joined(separator: ", ")
         case .keys: "keys: Files → Pilot Files, Notes → Pilot Notes"
-        case .fileKinds: "file kinds: .txt and .md open in Pilot"
         case .downloads: "downloads: dictation model and voices, \(OnboardingSetup.speech.megabytes + KokoroModel.megabytes) MB"
         case .pilot: offered.map(\.short).joined(separator: ", ")
         }
@@ -200,7 +183,6 @@ enum SetupFeature: CaseIterable, Hashable {
 @MainActor
 protocol SetupSystem: AnyObject {
     var picks: AppRolePicks { get }
-    var defaultApps: DefaultAppsSystem { get }
     /// Whether a helper's command is on this Mac.
     func installed(_ item: SetupItem) -> Bool
     /// A download's state: ready when it is on this Mac.
@@ -231,7 +213,6 @@ protocol SetupSystem: AnyObject {
 @MainActor
 final class LiveSetupSystem: SetupSystem {
     var picks: AppRolePicks { .shared }
-    let defaultApps: DefaultAppsSystem = LaunchServicesDefaults()
 
     func installed(_ item: SetupItem) -> Bool {
         if let helper = item.helper { return helper.path() != nil }
@@ -246,7 +227,7 @@ final class LiveSetupSystem: SetupSystem {
     var hasSpeechModel: Bool { SpeechModels.shared.active != nil }
 
     func startDownloads(dictation: Bool, voices: Bool) {
-        ExtrasDownloads.shared.start(speech: dictation ? OnboardingSetup.speech : nil, voices: voices, upscaler: false)
+        ExtrasDownloads.shared.start(speech: dictation ? OnboardingSetup.speech : nil, voices: voices)
     }
 
     func removeDownload(_ item: SetupItem, pick: String?) {
@@ -380,7 +361,6 @@ final class OnboardingSetup {
     @ObservationIgnored let system: SetupSystem
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var timer: Timer?
-    @ObservationIgnored private let openWith: DefaultAppsModel
     /// When a state last changed; see `refresh`.
     @ObservationIgnored private var heard = Date()
     static let quietLimit: TimeInterval = 30 * 60
@@ -395,8 +375,7 @@ final class OnboardingSetup {
     init(system: SetupSystem, defaults: UserDefaults = .pilot()) {
         self.system = system
         self.defaults = defaults
-        openWith = DefaultAppsModel(kinds: [SetupItem.txt, .md].compactMap(\.kind), system: system.defaultApps)
-        if let data = defaults.data(forKey: Self.ledgerKey), let saved = try? JSONDecoder().decode([SetupItem: Change].self, from: data) {
+        if let data = defaults.data(forKey: Self.ledgerKey), let saved = Self.savedLedger(data) {
             ledger = saved
             phase = saved.isEmpty || defaults.bool(forKey: Self.againKey) ? .fork : .run
         }
@@ -409,11 +388,20 @@ final class OnboardingSetup {
     func load() {
         onMac = Set(SetupItem.allCases.filter(isOnMac))
         picked.subtract(onMac)
-        noAppBefore = everything.filter { item in item.kind != nil && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
     }
 
-    /// The file kinds with no app on this Mac: their Undo cannot put "none" back, which the fork says first.
-    private(set) var noAppBefore: [SetupItem] = []
+    /// The saved ledger, JSONEncoder's flat list of item and change, with an item Pilot no longer has (the .txt and .md
+    /// file kinds, 2026-11-19) left out rather than losing the record and every other Undo with it; nil when it does not read.
+    static func savedLedger(_ data: Data) -> [SetupItem: Change]? {
+        guard let flat = try? JSONSerialization.jsonObject(with: data) as? [Any], flat.count.isMultiple(of: 2) else { return nil }
+        var ledger: [SetupItem: Change] = [:]
+        for i in stride(from: 0, to: flat.count, by: 2) {
+            guard let name = flat[i] as? String, let value = try? JSONSerialization.data(withJSONObject: flat[i + 1]),
+                  let change = try? JSONDecoder().decode(Change.self, from: value) else { return nil }
+            if let item = SetupItem(rawValue: name) { ledger[item] = change }
+        }
+        return ledger
+    }
 
     /// Settings › General's Run setup again (Sven, Q847, Q848): a run in progress resumes; otherwise the fork shows again,
     /// read afresh, offering only what is not set up. Nothing is undone, and the record of what is still in place is
@@ -437,7 +425,6 @@ final class OnboardingSetup {
         switch item {
         case .homebrew, .mole, .mas, .ffmpeg, .webp, .npm, .cargo: system.installed(item)
         case .filesKey, .notesKey: item.role.map { system.picks.picks[$0] == AppRolePicks.pilot } ?? false
-        case .txt, .md: item.kind?.handlers.first.flatMap(system.defaultApps.current) == AppRolePicks.pilot
         // A download already under way counts as on this Mac (reviewer, T54): Set up never starts it twice.
         case .dictation: system.hasSpeechModel || Self.underWay(system.download(item))
         case .voices: system.download(item) == .ready || Self.underWay(system.download(item))
@@ -528,9 +515,6 @@ final class OnboardingSetup {
             default: break
             }
         }
-        let kinds = run.filter { $0.kind != nil }
-        if !kinds.isEmpty { Task { await setKinds(kinds) } }
-
         let dictation = run.contains(.dictation), voices = run.contains(.voices)
         if dictation { ledger[.dictation]?.before = system.speechPick }
         if dictation || voices { system.startDownloads(dictation: dictation, voices: voices) }
@@ -554,24 +538,6 @@ final class OnboardingSetup {
         if item == .homebrew { return SetupScript.Step(id: item.rawValue, command: Helper.homebrew.install, check: check, label: "Homebrew's installer") }
         guard let formula = item.formula, let package = Package(.formula, formula) else { return nil }
         return SetupScript.Step(id: item.rawValue, command: package.install, check: check, hook: InstallModule.hook("installed", key: package.key))
-    }
-
-    /// Each kind through Default apps' own code, which reads the change back: Pilot only where macOS lists it for the kind.
-    private func setKinds(_ items: [SetupItem]) async {
-        openWith.load()
-        for item in items {
-            guard let kind = item.kind else { continue }
-            let row = openWith.rows[kind.id]
-            ledger[item]?.before = row?.current
-            guard row?.choices.contains(where: { $0.bundle == AppRolePicks.pilot }) == true else {
-                ledger[item]?.state = .failed("macOS does not list Pilot for \(kind.title) files on this Mac")
-                continue
-            }
-            ledger[item]?.state = .running("setting")
-            await openWith.change(kind, to: AppRolePicks.pilot)
-            ledger[item]?.state = openWith.rows[kind.id]?.message.map(State.failed) ?? .done
-        }
-        save()
     }
 
     /// Whether anything still runs: a helper or download not settled, or a helper's undo in Terminal.
@@ -623,12 +589,6 @@ final class OnboardingSetup {
             case .ready: .done
             case .failed(let why): .failed(why)
             }
-        }
-        // A quiet file kind reads the current default: Pilot's is done, anything else failed with where to set it.
-        for item in [SetupItem.txt, .md] where ledger[item]?.state == quiet {
-            guard let kind = item.kind else { continue }
-            ledger[item]?.state = kind.handlers.first.flatMap(system.defaultApps.current) == AppRolePicks.pilot ? .done
-                : .failed("macOS did not take Pilot for \(kind.title) files; pick it in \(AppPlace(.openWith).path)")
         }
         let still = State.undoFailed(Self.stillReason)
         for item in helpers where (ledger[item]?.state == .undoing || ledger[item]?.state == still) && !system.installed(item) {
@@ -699,26 +659,9 @@ final class OnboardingSetup {
             default: break
             }
         }
-        let kinds = items.filter { $0.kind != nil }
-        if !kinds.isEmpty { Task { await restoreKinds(kinds) } }
         heard = Date()
         save()
         watch()
-    }
-
-    private func restoreKinds(_ items: [SetupItem]) async {
-        openWith.load()
-        for item in items {
-            guard let kind = item.kind else { continue }
-            guard let before = ledger[item]?.before else {
-                ledger[item]?.state = .undoFailed("this Mac had no app for \(kind.title) files before; pick one in Open with")
-                continue
-            }
-            ledger[item]?.state = .undoing
-            await openWith.change(kind, to: before)
-            ledger[item]?.state = openWith.rows[kind.id]?.message.map(State.undoFailed) ?? .undone
-        }
-        save()
     }
 
     /// Homebrew's own uninstaller, which asks before it removes anything.
@@ -726,7 +669,7 @@ final class OnboardingSetup {
 
     // MARK: What the screens say
 
-    /// The run's title: "Setting up · 8 of 15" while it runs, then what came of it.
+    /// The run's title: "Setting up · 8 of 13" while it runs, then what came of it.
     var title: String {
         let total = ledger.count, failed = ledger.values.count { if case .failed = $0.state { true } else { false } }
         if total == 0 { return "Nothing to set up" }
@@ -753,7 +696,7 @@ final class OnboardingSetup {
         return mine.isEmpty ? nil : (mine.count { $0.state.settled }, mine.count { $0.state == .done }, mine.count)
     }
 
-    /// Fork's count: "15 changes", or what of them is on this Mac already.
+    /// Fork's count: "13 changes", or what of them is on this Mac already.
     var forkCount: String {
         let n = everything.count
         let base = "\(n) change\(n == 1 ? "" : "s")"

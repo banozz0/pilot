@@ -112,7 +112,7 @@ struct ControlStatusTests {
         })
         #expect(done == ["accessibility": .bool(false), "systemEvents": .bool(true), "fullDiskAccess": .bool(true), "conflicts": .bool(false),
                          "microphone": .bool(false), "screenRecording": .bool(false), "inputMonitoring": .bool(false),
-                         "notifications": .bool(false), "bluetooth": .bool(false), "location": .bool(false), "calendars": .bool(false),
+                         "bluetooth": .bool(false), "location": .bool(false), "calendars": .bool(false),
                          "reminders": .bool(false)])
     }
 

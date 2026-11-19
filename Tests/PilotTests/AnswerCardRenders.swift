@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Rail's answer cards (menu Rail and Classic T7, frames B4–B6), Tokyo Night and Porcelain: a conversion, a translation in
+/// The menu's answer cards (menu Rail and Classic T7, frames B4–B6, in Line since the trim), Tokyo Night and Porcelain: a conversion, a translation in
 /// Translate and a typed colour, each with the Ask Quick AI row under its card. What the card reads from its row and that it
 /// fits the panel are checked always; the pictures are opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-rh PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AnswerCardRenders`
@@ -46,7 +46,7 @@ struct AnswerCardRenders {
         #expect(said.expressionChip == "Spanish · detected" && said.resultChip == "English" && said.value == "Good morning")
     }
 
-    @Test("A typed colour's card copies the hex, in the Rail and in Classic; rows that copy nothing get no card")
+    @Test("A typed colour's card copies the hex, in Line and in Classic; rows that copy nothing get no card")
     func colourAndNone() throws {
         let row = try #require(ColourAnswer.entries(for: "#2bc4f0").first)
         let card = try #require(MenuAnswer(row, query: "#2bc4f0", branch: nil))
@@ -68,7 +68,7 @@ struct AnswerCardRenders {
         #expect(hex.answerCard(hex.nav.rows[0], at: 0) != nil, "Classic draws the card too (T8)")
     }
 
-    @Test("Each card is the selection Return copies, the Ask row under it (none under tr's, T40), beside the slim rail, and fits unscrolled")
+    @Test("Each card is the selection Return copies, the Ask row under it (none under tr's, T40), and fits unscrolled")
     func fits() throws {
         for (name, model) in try Self.states() {
             let rows = model.nav.rows, alone = name == "B5-translation"
@@ -77,12 +77,11 @@ struct AnswerCardRenders {
             #expect(alone ? rows.allSatisfy(\.isAnswer) : offers, "\(name): \(rows.map(\.title))")
             #expect(rows.first?.isAnswer == true && model.nav.selected?.id == rows.first?.id, "\(name)")
             #expect(alone || rows.dropFirst().first?.title == "Ask AI", "\(name)")
-            #expect(model.railBand == .slim && model.instrumentSize.width == MenuPanelSize.width, "\(name)")
             // The eyebrow, the card (a colour's: 118 swatch, 8, 16 ramp, 24 inset), its insets, the Ask row and the
             // list's own insets, under the search line and over the foot.
             let card: CGFloat = name.contains("colour") ? 118 + 8 + 16 + 24 : 158
             let list = MenuPanelSize.instrumentHeading + card + 10 + (alone ? 0 : MenuPanelSize.instrumentWideRow) + 12
-            #expect(MenuPanelSize.railChrome + list <= model.instrumentSize.height, "\(name)")
+            #expect(MenuPanelSize.lineChrome + list <= model.instrumentSize.height, "\(name)")
         }
     }
 
@@ -117,12 +116,12 @@ struct AnswerCardRenders {
     static let translation = MenuEntry(title: "Good morning", target: .copy("Good morning"), home: .translate,
                                        detail: "Spanish → English · Return copies", isAnswer: true)
 
-    /// Each frame's state: the Rail, the answer and its Ask row as the panel provides them.
+    /// Each frame's state: Line, the answer and its Ask row as the panel provides them.
     static func states() throws -> [(String, MenuModel)] {
-        let built = try RailMenuRenders.built()
+        let built = try LineMenuRenders.built()
         func model(_ nav: MenuNavigator) -> MenuModel {
             let m = MenuModel(nav: nav)
-            m.layout = .rail
+            m.layout = .line
             return m
         }
         func root(_ query: String) -> MenuNavigator {

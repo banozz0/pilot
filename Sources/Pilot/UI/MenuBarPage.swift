@@ -496,7 +496,6 @@ struct MenuBarPage: View {
                     if i > 0 { ink.line.opacity(0.7).frame(height: 1) }
                     itemRow(kind, store: store)
                     if kind == .otherApps { exactItemsRow(store) }
-                    if kind == .bluetoothBatteries { lowBatteryRow }
                     // Each extension's own item under the Extensions item (Surfaces v2), placed as any item is.
                     if kind == .extensions {
                         ForEach(extensionBar.items) { item in
@@ -577,19 +576,6 @@ struct MenuBarPage: View {
                 Button("Allow Screen Recording…") { PermissionDragPanel.openScreenRecording() }
                     .buttonStyle(.link).font(ink.ui(12))
             }
-        }
-        .padding(.leading, 38)
-        .padding(.bottom, 6)
-    }
-
-    /// Low-battery alerts (Q394), on by default, whether or not the item shows.
-    private var lowBatteryRow: some View {
-        @Bindable var alerts = LowBatteryAlerts.shared
-        return VStack(alignment: .leading, spacing: 4) {
-            Toggle("Low-battery alerts", isOn: $alerts.isOn)
-                .toggleStyle(.pilotSwitchRow(info: "Earbuds and headphones alert only while this item or Stats shows them: macOS reads their batteries slowly."))
-                .font(ink.ui(12, .medium))
-            FinePrint(text: "A keyboard, mouse or trackpad at 20 % and again at 10 % shows a tip and a notification, once each.")
         }
         .padding(.leading, 38)
         .padding(.bottom, 6)

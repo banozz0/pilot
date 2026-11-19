@@ -48,7 +48,6 @@ final class ControlSocket {
         verbs.registerSystem(ControlSystem())
         verbs.registerJobs(ControlJobs())
         verbs.registerNetwork(NetworkTools())
-        verbs.registerActivity(ControlActivity(), stats: ControlStats())
         verbs.registerClipboard(clipboard)
         verbs.registerFiles(ControlFiles(), convert: ControlConvert())
         verbs.registerNotes(ControlNotes())

@@ -55,8 +55,8 @@ final class ControlActions {
             "system.bluetoothSettings": .window, "system.wifiSettings": .window, "system.displaySettings": .window,
             "system.focusSettings": .window, "system.translationLanguages": .window,
             "captures.area": .capture, "captures.scrolling": .capture, "captures.ocr": .capture, "captures.activeWindow": .capture,
-            "captures.screenRecording": .capture, "captures.smartElement": .capture, "captures.subject": .capture,
-            "captures.markup": .capture, "captures.pickColour": .capture, "captures.makeQR": .panel, "captures.readQR": .capture, "captures.readQRScreen": .capture,
+            "captures.screenRecording": .capture, "captures.subject": .capture,
+            "captures.pickColour": .capture, "captures.makeQR": .panel, "captures.readQR": .capture, "captures.readQRScreen": .capture,
         ]
         for kind in Feedback.Kind.allCases { kinds[kind.actionID] = .window }
         return kinds

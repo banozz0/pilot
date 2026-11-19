@@ -49,11 +49,14 @@ struct ReportsPageRenders {
         var text = ""
         for style in PilotStyle.allCases {
             look.style = style
-            let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
-            try LookPageTests().hosted(page, height: 1500) { host in
-                let rep = try #require(snapshot(host, scale: 2))
-                if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue).png")) }
-                if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
+            // The front, then More with Reports (the feature trim, 2026-11-19).
+            for more in [false, true] {
+                let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true, more: more) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
+                try LookPageTests().hosted(page, height: 1500) { host in
+                    let rep = try #require(snapshot(host, scale: 2))
+                    if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue)\(more ? "-more" : "").png")) }
+                    if style == .instrument { text += try recognisedText(in: rep).map(\.text).joined(separator: "\n") + "\n" }
+                }
             }
         }
         for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run", "Reports",
@@ -66,35 +69,6 @@ struct ReportsPageRenders {
         #expect(!text.contains("Login and background"), "read: \(text)")
         for query in ["update", "clean", "upgrade", "free space"] { #expect(AppPlace.search(query).first == AppPlace(.upkeep), "\(query)") }
         #expect(AppPlace.search("report").first == AppPlace(.reports))
-    }
-
-    @Test("Login & Background lists each item with its app and kind, Turn off or on where Pilot switches it, Pilot's own pointing at Launch at login; the search lands there")
-    func loginItems() throws {
-        var pilot = LoginItems.Item(label: "Pilot", kind: .loginItem, path: "/Applications/Pilot.app", appPath: "/Applications/Pilot.app")
-        pilot.isPilot = true
-        let items = [
-            LoginItems.Item(label: "Rectangle", kind: .loginItem, path: "/Applications/Rectangle.app", appPath: "/Applications/Rectangle.app"),
-            LoginItems.Item(label: "com.ada.backup", kind: .agent, path: "/Users/ada/agents/com.ada.backup.plist"),
-            LoginItems.Item(label: "org.example.helper", kind: .daemon, path: "/opt/example/org.example.helper.plist", disabled: true),
-            pilot,
-        ]
-        let dir = ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"].map { URL(filePath: $0) }
-        let look = LookPageTests().look().0
-        var text = ""
-        for style in PilotStyle.allCases {
-            look.style = style
-            let page = ReportsGround { LoginItemsPage(seeded: items) }.styled(.page(.loginItems), look: look).frame(width: 1000, height: 600).pilotTheme(look: look)
-            try LookPageTests().hosted(page, height: 600) { host in
-                let rep = try #require(snapshot(host, scale: 2))
-                if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "login-items-\(style.rawValue).png")) }
-                if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
-            }
-        }
-        for line in ["Login and background items", "Open Login Items", "Rectangle", "com.ada.backup", "Your agent", "Background daemon",
-                     "Turn off", "Turn on", "Launch at login"] {
-            #expect(text.contains(line), "\(line) missing, read: \(text)")
-        }
-        for query in ["login items", "background items", "launchd", "daemon"] { #expect(AppPlace.search(query).first == AppPlace(.loginItems), "\(query)") }
     }
 }
 

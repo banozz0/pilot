@@ -83,7 +83,7 @@ struct WorkspacesTests {
         #expect(!WorkspaceRenumber(deleting: nil, from: Workspaces.names(4)).changes)
     }
 
-    @Test("Renumbered, a named preset and a snapshot follow their workspace; an unnamed preset takes its new number's name")
+    @Test("Renumbered, a named preset follows its workspace; an unnamed preset takes its new number's name")
     func renumberData() throws {
         let r = WorkspaceRenumber(deleting: "2", from: Workspaces.names(4))
         let app = WorkspacePreset.App(bundleId: "a", name: "A", percent: 100)
@@ -95,13 +95,6 @@ struct WorkspacesTests {
         #expect(next.workspaces == ["2": "Read", "3": "Workspace 3"])
         #expect(next.presets["Chat"] != nil, "the deleted one's named preset stays to reuse")
         #expect(next.presets["Workspace 4"] == nil && next.presets["Workspace 3"]?.layout == nil)
-        let store = SnapshotStore(url: FileManager.default.temporaryDirectory.appending(path: "pilot-renumber-\(UUID().uuidString).json"))
-        defer { try? FileManager.default.removeItem(at: store.url) }
-        let at = Date(timeIntervalSince1970: 1_700_000_000)
-        for workspace in ["2", "4"] { try store.save(Snapshot(workspace: workspace, layout: "h_tiles", savedAt: at, windows: [])) }
-        let renumbered = try store.renumber(r)
-        #expect(renumbered.keys.sorted() == ["3"] && renumbered["3"]?.workspace == "3")
-        #expect(try store.load() == renumbered)
     }
 
     @Test("Only go and move past the count are removed; every other action, and a named workspace's, never is")

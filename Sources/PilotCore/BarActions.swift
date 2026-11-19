@@ -121,8 +121,8 @@ extension BarKind {
     static let captureGrabs = [("Capture area", "captures.area"), ("Capture window", "captures.activeWindow"),
                                ("Capture screen", "captures.fullscreen"), ("Scrolling capture", "captures.scrolling"),
                                ("Scrolling capture, upward", "captures.scrollingUp"), ("Capture text", "captures.ocr"),
-                               ("Read QR on screen", "captures.readQRScreen"), ("Capture a UI element", "captures.smartElement"), ("Capture a subject", "captures.subject"),
-                               ("Capture and mark up", "captures.markup"), ("Capture the last area again", "captures.repeatArea"),
+                               ("Read QR on screen", "captures.readQRScreen"), ("Capture a subject", "captures.subject"),
+                               ("Capture the last area again", "captures.repeatArea"),
                                ("Capture after a delay", "captures.delayed"), ("Pick a colour", "captures.pickColour")]
     /// The tools after the captures: P73's history, P71's video editor and the image combiner show once registered.
     static let captureTools = [("Edit last capture", "captures.editLast"), ("Pin last capture", "captures.pinLast"),

@@ -56,31 +56,6 @@ struct LookTests {
         #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).windowShape == .tabs)
     }
 
-    @Test("The Hyper+Space menu is Line by default and for an unknown saved value (Q165); the Rail is kept and saved")
-    func menuLayout() {
-        let defaults = Self.defaults()
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).menuLayout == .line)
-        defaults.set("instrument", forKey: "look.menuLayout")
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).menuLayout == .line)
-        Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).menuLayout = .rail
-        #expect(defaults.string(forKey: "look.menuLayout") == "rail")
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).menuLayout == .rail)
-    }
-
-    @Test("A Classic saved before Line existed moves to Line once (Q165); Classic picked after that stays")
-    func menuLayoutMovesToLineOnce() {
-        let defaults = Self.defaults()
-        defaults.set("classic", forKey: "look.menuLayout")
-        let look = Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults)
-        #expect(look.menuLayout == .line && defaults.string(forKey: "look.menuLayout") == "line")
-        look.menuLayout = .classic
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).menuLayout == .classic)
-        // A Rail saved before is kept.
-        let rail = Self.defaults()
-        rail.set("rail", forKey: "look.menuLayout")
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: rail).menuLayout == .rail)
-    }
-
     static let themes = try! OmarchyThemes.parse(Data(contentsOf: URL(filePath: #filePath).deletingLastPathComponent()
         .appending(path: "../../Packaging/themes.json")))
 

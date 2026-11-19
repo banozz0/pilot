@@ -116,10 +116,10 @@ struct MenuBranchesTests {
         #expect(MenuNavigator(entries: entries, branch: .learn).rows.map(\.title) == ["Keybindings"])
     }
 
-    @Test("The root lists the ten top branches, Clean after Update (card agent-bo-95422881), About above System (Q446), System last; Config, Activity and Stats are extra rows")
+    @Test("The root lists the ten top branches, Clean after Update (card agent-bo-95422881), About above System (Q446), System last; Config and Activity are extra rows")
     func branches() {
         #expect(MenuBranch.top == [.apps, .learn, .trigger, .install, .remove, .update, .clean, .extensions, .about, .system])
-        #expect(MenuBranch.searched == MenuBranch.top.dropLast(3) + [.config, .extensions, .about, .system, .activity, .stats])
+        #expect(MenuBranch.searched == MenuBranch.top.dropLast(3) + [.config, .extensions, .about, .system, .activity])
         #expect(MenuBranch.keybindings.parent == .learn)
         #expect(MenuBranch.capture.parent == .trigger)
     }

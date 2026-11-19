@@ -2,9 +2,9 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-// The Hyper+Space menu's parts both layouts draw (menu Rail and Classic, T6): the search line, the bars over the list,
-// what shows under them (an extension's detail, a scan's wait, the empty line or the rows), the rows, Cmd+K's actions
-// and the foot. InstrumentMenu (Classic) and RailMenu compose them; the navigator, keys and rows are one model.
+// The Hyper+Space menu's parts (menu Rail and Classic, T6): the search line, the bars over the list, what shows under
+// them (an extension's detail, a scan's wait, the empty line or the rows), the rows, Cmd+K's actions and the foot. Line
+// and Toybox's menu compose them; the navigator, keys and rows are one model.
 
 /// The bars over the list: the Files view's filters at a root search, Stickers and GIFs' GIFs | Stickers.
 struct MenuBars: View {
@@ -45,9 +45,6 @@ struct MenuBody: View {
                 InstrumentScan(scan: scan, tools: model.tools)
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { model.waitHeight = $0 }
-            } else if model.showsStats {
-                // Stats' cards, which list no rows (Q400).
-                MenuStatsScreen { model.open(.activity) }
             } else if model.showsAbout {
                 // About's mark and cards, which list no rows (Q443).
                 MenuAboutScreen(displays: NSScreen.screens.count)
@@ -96,8 +93,6 @@ struct MenuBody: View {
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    // Typing stats (P42): the Mac's readings above the rows, never a row itself.
-                    if model.statsCards { StatsStrip { model.open($0.page == .stats ? .stats : .activity) } }
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         // One view per row with its heading, so scrolling to a row brings its heading too.
                         // An answer that copies a result draws as its card in the top slot, the same row (T7).

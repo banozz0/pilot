@@ -28,9 +28,7 @@ final class PilotSettings {
         overlayPicks = Set(defaults.stringArray(forKey: "overlayPicks") ?? [])
         overlayDelay = HoldOverlay.clamped(delay: defaults.object(forKey: "overlay.delay") as? Double ?? HoldOverlay.delay)
         overlayEnabled = defaults.object(forKey: "overlay.enabled") as? Bool ?? true
-        showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? Self.dragModifierStart
-        bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? Install.startsOn
         // Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open.
         tiling = defaults.object(forKey: Self.tilingKey) as? Bool ?? Install.startsOn
         // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
@@ -38,6 +36,10 @@ final class PilotSettings {
         let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
         defaults.set(developer, forKey: Self.developerKey)
         self.developer = developer
+        // System and Fonts the same way (the feature trim, 2026-11-19): off for a new install, on once for one that ran before.
+        let more = defaults.object(forKey: Self.morePagesKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
+        defaults.set(more, forKey: Self.morePagesKey)
+        morePages = more
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? Install.startsOn
         translatePair = TranslatePair(defaults: defaults)
@@ -151,20 +153,12 @@ final class PilotSettings {
     var overlayEnabled: Bool {
         didSet { defaults.set(overlayEnabled, forKey: "overlay.enabled") }
     }
-    /// Off until switched on on Home: This Mac's public IP is the one reading that calls the internet (card agent-bo-95422831).
-    var showPublicIP: Bool {
-        didSet { defaults.set(showPublicIP, forKey: "system.publicIP") }
-    }
     /// The key held to move (left drag) or resize (right drag) the window under the mouse (card agent-bo-95422930).
     var dragModifier: DragModifier {
         didSet {
             defaults.set(dragModifier.rawValue, forKey: "windows.dragModifier")
             onDragModifierChange()
         }
-    }
-    /// On unless switched off: a hint names the bind after a mouse open or a menu pick (card agent-bo-95422934).
-    var bindNudges: Bool {
-        didSet { defaults.set(bindNudges, forKey: "general.bindNudges") }
     }
     /// The engine hands the running mouse tap the new modifier here.
     @ObservationIgnored var onDragModifierChange: () -> Void = {}
@@ -174,6 +168,11 @@ final class PilotSettings {
         didSet { defaults.set(developer, forKey: Self.developerKey) }
     }
     static let developerKey = "general.developer"
+    /// General's More pages switch: System and Fonts in the sidebar (AppPage.isMore); MorePages reads it.
+    var morePages: Bool {
+        didSet { defaults.set(morePages, forKey: Self.morePagesKey) }
+    }
+    static let morePagesKey = "general.morePages"
     /// The app's own settings, on its own defaults; never a test's, so a test's switch shows nowhere else.
     static weak var live: PilotSettings?
     /// Off until switched on: a three-finger sideways swipe moves between workspaces (card agent-bo-95422973).
@@ -257,14 +256,11 @@ final class Engine {
     let workspaceMonitors: WorkspaceMonitorStore
     let workspaceList: WorkspaceList
     let rescue: WindowRescue
-    let snapshots: WorkspaceSnapshots
     let layouts: WorkspaceLayouts
     let presets: WorkspacePresets
     let topBar: TopBarController
     /// Pilot's dock (spec pilot-dock): off by default.
     let dock: DockController
-    /// Bind hints (card agent-bo-95422934).
-    @ObservationIgnored private(set) lazy var nudger = BindNudger(engine: self)
     /// The Window shelf on Stage workspaces (ADR 0015), its first place under the top bar's room and the outer gap.
     @ObservationIgnored private(set) lazy var shelf = WindowShelf(tiler: observers.tiler, tiling: { [tilingSwitch] in tilingSwitch.isOn },
                                                                   top: { [pilotBlock] name in
@@ -340,12 +336,11 @@ final class Engine {
         workspaceMonitors = WorkspaceMonitorStore(tiler: observers.tiler, block: pilotBlock)
         workspaceList = WorkspaceList(tiler: observers.tiler, block: pilotBlock, monitors: workspaceMonitors)
         rescue = WindowRescue(tiler: observers.tiler)
-        snapshots = WorkspaceSnapshots(observers: observers)
         layouts = WorkspaceLayouts(observers: observers)
         presets = WorkspacePresets(observers: observers)
         presets.onSave = { [layouts] workspace, preset, auto in layouts.set(workspace, layouts.layout(workspace).saving(preset, auto: auto)) }
         // Deleting a workspace closes its number (Sven's Q233): what is tied to a number follows it.
-        workspaceList.follow(presets: presets, layouts: layouts, snapshots: snapshots, wallpaper: .shared)
+        workspaceList.follow(presets: presets, layouts: layouts, wallpaper: .shared)
         workspaceList.closeGaps()
         tilingSwitch = TilingSwitch(observers.tiler, settings: settings)
         hyperSwitch = SessionSwitch { [tap] on in tap.setHyper(on); log.notice("Hyper key \(on ? "on" : "off", privacy: .public)") }
@@ -568,7 +563,6 @@ final class Engine {
         }
         WidgetDesk.shared.start(tiler: observers.tiler)
         shelf.start()
-        nudger.start()
         presets.start()
         // Look › Wallpaper per workspace (Q333): a switch puts a workspace's own image, or the screen's own again, on its screen.
         observers.tiler.onWorkspaceShown = { workspace, previous, display in
@@ -773,7 +767,6 @@ final class Engine {
         WindowsModule.register(into: &registry, observers: observers)
         WorkspacesModule.register(into: &registry, tiler: observers.tiler, block: pilotBlock, layouts: layouts)
         WindowRescue.register(into: &registry, rescue: rescue)
-        WorkspaceSnapshots.register(into: &registry, snapshots: snapshots)
         WorkspacePresets.register(into: &registry, presets: presets)
         AppsModule.register(into: &registry)
         CapturesModule.register(into: &registry)
@@ -783,7 +776,6 @@ final class Engine {
         SystemModule.register(into: &registry)
         DictationModule.register(into: &registry)
         RingsModule.register(into: &registry, rings: rings)
-        GhosttyBridge.register(into: &registry)
         NotesPanel.register(into: &registry)
         QuickAIActions.register(into: &registry)
         ReadAloud.register(into: &registry)
@@ -882,7 +874,7 @@ final class Engine {
     }
 
     /// The Binds editor's Record: the next Hyper key, or plain combo, comes to `done` instead of running; nil stops
-    /// listening. `onlyHyper` leaves every other key to run or type as usual (the bind hint's wait, story 122).
+    /// listening. `onlyHyper` leaves every other key to run or type as usual (Rings' Record key).
     func recordKey(onlyHyper: Bool = false, _ done: ((Key) -> Void)?) {
         tap.captureNext = done
         tap.captureOnlyHyper = done != nil && onlyHyper

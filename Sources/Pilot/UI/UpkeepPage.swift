@@ -2,9 +2,9 @@ import PilotCore
 import SwiftUI
 
 /// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports): Update and Clean themselves, each with its
-/// last run and an Open report link to that run, and under them their Reports (ReportsBlock; a tab from simplify-pages T16
-/// until Sven, 2026-11-16, when Login and background items left for Login & Background). A run still in its terminal is
-/// read again every 2 s until it ends, so its last run and its report follow it.
+/// last run and an Open report link to that run; their Reports (ReportsBlock) on the page's More since the feature trim
+/// (2026-11-19), where Open report goes. A run still in its terminal is read again every 2 s until it ends, so its last run
+/// and its report follow it.
 struct UpkeepPage: View {
     @Environment(\.ink) private var ink
     var store = ReportStore.standard
@@ -12,6 +12,8 @@ struct UpkeepPage: View {
     var mole = CleanModule.mole != nil
     /// Homebrew is there for Update to read and Mole to install through; a render says which.
     var homebrew = Helper.homebrew.path() != nil
+    /// The More tab: Reports.
+    var more = false
     /// Opens a place in the window: Open report goes to `AppSection.reports`, which scrolls the page there.
     var go: (AppPlace) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
@@ -24,13 +26,21 @@ struct UpkeepPage: View {
     @State private var wake = 0
 
     static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
-    static let introInfo = "Clean runs Mole. Each run is kept under Reports with what it printed; the last \(ReportStore.keep) are kept."
+    static let introInfo = "Clean runs Mole. Each run is kept under More › Reports with what it printed; the last \(ReportStore.keep) are kept."
+
+    /// More's index: Reports alone.
+    static let entries = [MoreEntry(id: .reports, symbol: "list.bullet", controls: 1)]
 
     var body: some View {
-        KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {
-            start
-            ReportsBlock(store: store, records: records, picked: $picked, output: output)
-        } }
+        Group {
+            if more {
+                KitMore(entries: Self.entries) {
+                    ReportsBlock(store: store, records: records, picked: $picked, output: output).moreBlock(.reports)
+                }
+            } else {
+                KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) { start } }
+            }
+        }
             .onChange(of: picked) { readOutput() }
             .task(id: wake) {
                 reload()

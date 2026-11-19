@@ -67,8 +67,7 @@ struct MenuTypingTimings {
     func keystrokes() throws {
         let menu = try Catalogue()
         defer { menu.restore() }
-        for layout in [MenuLayoutStyle.line, .rail, .classic] {
-            Look.shared.menuLayout = layout
+        for layout in [MenuLayoutStyle.line] {
             let host = NSHostingView(rootView: MenuView(model: menu.model(layout)))
             host.frame.size = CGSize(width: 760, height: 560)
             let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -104,7 +103,7 @@ struct MenuTypingTimings {
     struct Catalogue {
         let entries: [MenuEntry], windows: [AeroWindow], menuItems: [MenuEntry], emoji: [Emoji]
         /// The look and the faces as they were, put back after (restore), so a later suite in the run draws as it did.
-        private let saved = (style: Look.shared.style, layout: Look.shared.menuLayout, faces: DisplayFaces.directory)
+        private let saved = (style: Look.shared.style, faces: DisplayFaces.directory)
 
         init() throws {
             try #require(NSHomeDirectory() == env["CFFIXED_USER_HOME"], "the home directory did not move; refusing to touch Sven's data")
@@ -127,7 +126,7 @@ struct MenuTypingTimings {
             print("menu timings: \(entries.count) entries, \(windows.count) windows, \(menuItems.count) menu items, \(emoji.count) emoji")
         }
 
-        func restore() { (Look.shared.style, Look.shared.menuLayout, DisplayFaces.directory) = saved }
+        func restore() { (Look.shared.style, DisplayFaces.directory) = saved }
 
         /// A fresh menu at the root with its windows and menu items listed, as they arrive after it opens.
         func navigator() -> MenuNavigator {

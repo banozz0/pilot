@@ -7,8 +7,8 @@ import PilotTiler
 /// can customise each workspace ... why is half the screen empty"; simplify-pages T18): Add and Delete (Sven 2026-10-17:
 /// Delete takes the picked one), the workspaces in one compact row of nine (Sven's Q37), each a small screen of its apps
 /// in their spots over its number, and under them the picked one in the editor itself: its name, the preview whose spots
-/// take an app, the layout pictures with the apps that always land there, a preset and its window snapshot under them
-/// (back from More, Sven's round 3 notes on build 2300), and what opens there with its two rules (back from More, Sven
+/// take an app, the layout pictures with the apps that always land there and a preset under them (back from More, Sven's
+/// round 3 notes on build 2300), and what opens there with its two rules (back from More, Sven
 /// 2026-11-11, after 2276), then each workspace's monitor (back from More, pages round 4). More edits the same pick:
 /// while it is Scrolling, that layout's centre mode and column rules, the window shelf's pictures (from Tiling, Sven
 /// 2026-11-11, after 2276) and the swipe between workspaces (Sven's Q207 page map, from Tiling). Every change saves at once
@@ -20,7 +20,7 @@ struct WorkspacesSettingsView: View {
     var more = false
 
     var body: some View {
-        WorkspacesBody(block: engine.pilotBlock, layouts: engine.layouts, presets: engine.presets, snapshots: engine.snapshots,
+        WorkspacesBody(block: engine.pilotBlock, layouts: engine.layouts, presets: engine.presets,
                        list: engine.workspaceList, focused: engine.observers.tiler.focused, settings: engine.settings,
                        monitors: engine.workspaceMonitors, tiler: engine.observers.tiler, more: more)
     }
@@ -32,7 +32,6 @@ struct WorkspacesBody: View {
     let block: PilotBlockStore
     let layouts: WorkspaceLayouts
     let presets: WorkspacePresets
-    let snapshots: WorkspaceSnapshots
     /// Which workspaces are kept, with Add and Delete; nil draws all nine without them.
     var list: WorkspaceList? = nil
     /// The workspace on screen: it is picked first and marked on its card.
@@ -74,7 +73,7 @@ struct WorkspacesBody: View {
     private func shown(_ names: [String]) -> String { [picked, focused].compactMap { $0 }.first(where: names.contains) ?? names[0] }
 
     /// The front: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
-    /// in their spots, rules, preset, snapshot and what opens there, then each workspace's monitor.
+    /// in their spots, rules, preset and what opens there, then each workspace's monitor.
     private func front(_ name: String, names: [String]) -> some View {
         KitLanding { FillScroll {
             VStack(alignment: .leading, spacing: 14) {
@@ -90,8 +89,7 @@ struct WorkspacesBody: View {
                 HStack(alignment: .top, spacing: 6) {
                     ForEach(names, id: \.self) { workspace in
                         WorkspaceCard(name: workspace, title: presets.contents.title(for: workspace), draft: draft(workspace),
-                                      picked: workspace == name, onScreen: workspace == focused,
-                                      snapshot: snapshots.saved[workspace] != nil, drag: dragging) {
+                                      picked: workspace == name, onScreen: workspace == focused, drag: dragging) {
                             withAnimation(Kit.change) { picked = workspace }
                         }
                     }
@@ -210,7 +208,7 @@ struct WorkspacesBody: View {
     }
 
     @ViewBuilder private var problems: some View {
-        if let error = refused ?? block.lastError ?? list?.lastError ?? snapshots.lastError ?? monitors?.lastError {
+        if let error = refused ?? block.lastError ?? list?.lastError ?? monitors?.lastError {
             FinePrint(text: error, color: ink.red)
         }
     }
@@ -236,7 +234,6 @@ struct WorkspacesBody: View {
     }
 
     private func extras(_ workspace: String) -> WorkspacePageExtras {
-        @Bindable var snapshots = snapshots
         let rules = block.block.rules
         return WorkspacePageExtras(
             workspaces: list?.names ?? Workspaces.all,
@@ -252,17 +249,7 @@ struct WorkspacesBody: View {
                 }
                 land(.init(kind: .rule, bundle: bundle, name: AppsModule.appName(bundle) ?? bundle, from: workspace), on: .workspace(other))
             },
-            snapshot: snapshots.saved[workspace],
-            restore: { snapshots.restore(workspace) },
-            deleteSnapshot: { snapshots.delete(workspace) },
-            reopenApps: $snapshots.reopenApps,
             drag: dragging.map { ($0, workspace) })
-    }
-
-    /// "Zen (2 windows), Obsidian": each app once, first seen first.
-    static func apps(_ snapshot: Snapshot) -> String {
-        AppCounts.firstSeen(snapshot.windows.map(\.appName)).map { $0.count > 1 ? "\($0.name) (\($0.count) windows)" : $0.name }
-            .joined(separator: ", ")
     }
 }
 
@@ -277,7 +264,7 @@ private struct ListRow: View {
     let added: (String) -> Void
     let deleted: () -> Void
 
-    static let info = "Add makes the next number, on the main display. Delete removes the workspace picked below: its windows move to the one before it, and each workspace after it moves down a number, taking its name, apps, snapshot and monitor along. Hyper+3 is always the third workspace."
+    static let info = "Add makes the next number, on the main display. Delete removes the workspace picked below: its windows move to the one before it, and each workspace after it moves down a number, taking its name, apps and monitor along. Hyper+3 is always the third workspace."
 
     var body: some View {
         let n = list.count
@@ -532,7 +519,6 @@ struct WorkspaceCard: View {
     let draft: WorkspacePresetDraft
     let picked: Bool
     let onScreen: Bool
-    let snapshot: Bool
     /// The page's drag: its tiles pick an app up, the card and its tiles take the drop; nil drags nothing.
     var drag: WorkspaceDrag?
     let pick: () -> Void
@@ -564,9 +550,9 @@ struct WorkspaceCard: View {
     static let screenShape: CGFloat = 16 / 10
     static let widest: CGFloat = 150
 
-    /// Its name, then what the dot and the mark say: on screen now, a window snapshot saved.
+    /// Its name, then what the dot says: on screen now.
     private var tip: String {
-        ([title] + (onScreen ? ["on screen now"] : []) + (snapshot ? ["window snapshot saved"] : [])).joined(separator: ", ")
+        ([title] + (onScreen ? ["on screen now"] : [])).joined(separator: ", ")
     }
 
     var body: some View {
@@ -578,7 +564,6 @@ struct WorkspaceCard: View {
                 HStack(spacing: 4) {
                     Text(name).font(ink.ui(12, .semibold)).foregroundStyle(picked && toybox ? ink.onAccent : ink.text)
                     if onScreen { Circle().fill(ink.green).frame(width: 5, height: 5).accessibilityHidden(true) }
-                    if snapshot { Image(systemName: "camera.viewfinder").font(ink.ui(9)).foregroundStyle(ink.muted).accessibilityHidden(true) }
                 }
             }
             .padding(6)

@@ -136,11 +136,6 @@ struct InstrumentWorkspaces: View {
             HStack(spacing: 8) {
                 Text("Go to").styleText(\.caption).foregroundStyle(style.color(\.text3))
                 InstrumentKeys(caps: ["1–\(top)"])
-                style.color(\.line2).frame(width: 1, height: 16).padding(.horizontal, 6)
-                Button { engine.action("workspaces.saveSnapshot")?.run() } label: {
-                    InstrumentKeyedLabel(title: "Save snapshot", trigger: engine.binds.store.trigger(for: "workspaces.saveSnapshot"))
-                }
-                .buttonStyle(InstrumentButtonStyle(kind: .ghost))
             }
         } content: {
             if tiler.focused == nil {

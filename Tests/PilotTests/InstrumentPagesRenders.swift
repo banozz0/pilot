@@ -47,9 +47,9 @@ struct InstrumentPagesRenders {
         for (theme, widths) in shots {
             look.themeID = theme
             AppWindowController.applyLook(look, to: window)
-            for page in [AppPage.look, .system, .activity] where only.map({ $0.split(separator: ",").contains { page.rawValue.contains($0) } }) ?? true {
+            for page in [AppPage.look, .system] where only.map({ $0.split(separator: ",").contains { page.rawValue.contains($0) } }) ?? true {
                 // Look's and Setup's foot too, in a window tall enough for all of it, at the widest under Nightwatch.
-                let tall = theme == "nightwatch" && page != .activity ? [(1440, 2000, "-tall")] : []
+                let tall = theme == "nightwatch" ? [(1440, 2000, "-tall")] : []
                 for (width, height, suffix) in widths.map({ ($0, 900, "") }) + tall {
                     window.setContentSize(NSSize(width: CGFloat(width), height: CGFloat(height)))
                     model.go(AppPlace(page))
@@ -69,7 +69,7 @@ struct InstrumentPagesRenders {
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("clipboard", AppPlace(.clipboard)),
         ("snippets", AppPlace(.snippets)), ("install", AppPlace(.catalogue)),
         ("webapps", AppPlace(.webApps)), ("openwith", AppPlace(.openWith)), ("configs", AppPlace(.configs)), ("general", AppPlace(.general)),
-        ("ai", AppPlace(.ai)), ("menu", AppPlace(.menu)), ("stats", AppPlace(.stats)), ("extensions", AppPlace(.extensions)),
+        ("ai", AppPlace(.ai)), ("menu", AppPlace(.menu)), ("extensions", AppPlace(.extensions)),
     ]
 
     @Test("Batch 6's pages render in Instrument at two widths and in two themes",

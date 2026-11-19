@@ -60,7 +60,7 @@ struct MenuSystemTests {
         let before = ["system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.darkMode",
                       "system.keepAwake", "system.nightShift", "system.idleLock", "system.wifi", "system.bluetoothSettings",
                       "system.displaySettings", "system.focusSettings", "system.nextWallpaper", "system.previousWallpaper",
-                      "workspaces.rescue", "system.killProcess", "system.speedTest"]
+                      "workspaces.rescue", "system.killProcess"]
         for id in before { #expect(Self.ids.filter { $0 == id }.count == 1, "\(id)") }
     }
 

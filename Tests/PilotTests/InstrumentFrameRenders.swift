@@ -15,7 +15,7 @@ extension SharedLook {
 @Suite("Instrument frame renders")
 struct InstrumentFrameRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
-    static let pages: [AppPage] = [.look, .workspaces, .system, .activity, .install, .clipboard]
+    static let pages: [AppPage] = [.look, .workspaces, .system, .install, .clipboard]
 
     @Test("Unrestyled pages render in Instrument's frame dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {

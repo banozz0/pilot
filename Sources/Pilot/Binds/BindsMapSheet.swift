@@ -132,7 +132,7 @@ struct BindsMapModel {
         "terminal.drop": "rectangle.bottomthird.inset.filled", "notes.toggle": "note.text", "speech.readAloud": "speaker.wave.2.bubble",
         "apps.pastePlain": "doc.plaintext", "drive.copy": "doc.on.doc", "bar.peekMenuBar": "menubar.rectangle",
         "system.brightnessDown": "sun.min", "system.brightnessUp": "sun.max", "system.brightnessDownAll": "sun.min.fill",
-        "system.brightnessUpAll": "sun.max.fill", "system.infoHUD": "info.circle", "system.menu": "switch.2",
+        "system.brightnessUpAll": "sun.max.fill", "system.menu": "switch.2",
         "system.nextWallpaper": "photo", "system.previousWallpaper": "photo.on.rectangle", "windows.defocus": "circle.dotted",
         "windows.popOut": "rectangle.portrait.and.arrow.forward", "windows.grow": "plus.rectangle", "windows.shrink": "minus.rectangle",
     ]

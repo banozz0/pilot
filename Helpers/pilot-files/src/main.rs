@@ -18,12 +18,8 @@
 //! before it finishes gets no answer. `from` is where the file came from (source.rs), left out when unknown; a request's
 //! `"from":"whatsapp"` keeps only files whose source holds it, before the limit.
 //!
-//! `{"id":N,"dupes":true}` asks for identical files instead (dupes.rs); its answer comes once the files are read,
-//! with searches answered meanwhile.
-//!
 //! The engine is Cardinal's (vendor/cardinal, MIT); its dev CLI `lsf` is the shape this follows.
 
-mod dupes;
 mod filter;
 mod rank;
 mod source;
@@ -38,7 +34,7 @@ use std::{
     io::{BufRead, Write},
     path::{Path, PathBuf},
     sync::atomic::AtomicBool,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 static NEVER_STOPPED: AtomicBool = AtomicBool::new(false);
@@ -125,40 +121,31 @@ fn main() {
         save(&mut cache, &config.cache);
     }
 
-    let (searches, scans) = read_stdin();
-    serve(&mut cache, &config, &searches, &scans);
+    let searches = read_stdin();
+    serve(&mut cache, &config, &searches);
     save(&mut cache, &config.cache);
 }
 
-/// Each stdin line is a search; reading it makes it the active one, so the search running cancels itself. A
-/// duplicates scan goes on its own channel, so it neither cancels a search nor is dropped for a newer one.
-fn read_stdin() -> (Receiver<(String, CancellationToken)>, Receiver<dupes::Scan>) {
+/// Each stdin line is a search; reading it makes it the active one, so the search running cancels itself.
+fn read_stdin() -> Receiver<(String, CancellationToken)> {
     let (tx, rx) = unbounded();
-    let (scan_tx, scan_rx) = unbounded();
     std::thread::spawn(move || {
         for (version, line) in std::io::stdin().lock().lines().map_while(Result::ok).enumerate() {
-            let sent = match dupes::Scan::parse(&line) {
-                Some(scan) => scan_tx.send(scan).is_ok(),
-                None => tx.send((line, CancellationToken::new(version as u64 + 1))).is_ok(),
-            };
-            if !sent {
+            if tx.send((line, CancellationToken::new(version as u64 + 1))).is_err() {
                 break;
             }
         }
     });
-    (rx, scan_rx)
+    rx
 }
 
-/// Answers searches and applies file changes until stdin closes; a duplicates scan sizes its files a step at a time
-/// whenever neither is waiting.
-fn serve(cache: &mut SearchCache, config: &Config, searches: &Receiver<(String, CancellationToken)>, scans: &Receiver<dupes::Scan>) {
+/// Answers searches and applies file changes until stdin closes.
+fn serve(cache: &mut SearchCache, config: &Config, searches: &Receiver<(String, CancellationToken)>) {
     let watch = |cache: &mut SearchCache| {
         EventWatcher::spawn(config.root.to_string_lossy().into_owned(), cache.last_event_id(), LATENCY_SECONDS, cache.ignore_paths()).1
     };
     let mut watcher = watch(cache);
-    let mut sizing: Option<dupes::Sizing> = None;
     loop {
-        let idle = if sizing.is_some() { Duration::ZERO } else { Duration::from_secs(3600) };
         select! {
             recv(searches) -> search => {
                 let Ok(mut search) = search else { return };
@@ -178,15 +165,6 @@ fn serve(cache: &mut SearchCache, config: &Config, searches: &Receiver<(String, 
                     drop(std::mem::replace(&mut watcher, EventWatcher::noop()));
                     cache.rescan();
                     watcher = watch(cache);
-                }
-            }
-            recv(scans) -> scan => {
-                let Ok(scan) = scan else { continue };
-                sizing = Some(dupes::Sizing::start(cache, scan));
-            }
-            default(idle) => {
-                if sizing.as_mut().is_some_and(|s| s.step(cache, &config.root)) {
-                    sizing = None;
                 }
             }
         }
@@ -264,7 +242,7 @@ fn save(cache: &mut SearchCache, path: &Path) {
     }
 }
 
-/// One JSON line out; a scan's reading thread writes its answer here too, a whole line at a time.
+/// One JSON line out, a whole line at a time.
 fn send(value: &impl Serialize) {
     let mut out = std::io::stdout().lock();
     let _ = serde_json::to_writer(&mut out, value);

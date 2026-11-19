@@ -229,7 +229,7 @@ struct CollectionsMenuTests {
 
     @Test("Abilities: list shows what each does and its key, typed ones with what Try types; add and remove an optional one")
     func abilities() async throws {
-        let id = "look.ghosttyApply", need = try #require(Abilities.optional[id])
+        let id = "apps.bitwardenLock", need = try #require(Abilities.optional[id])
         let typed = await rows("abilities").filter { $0["group"] == .string("Type in the menu") }
         #expect(typed.contains { $0["name"] == .string("File search") && $0["typing"] != nil && $0["action"] == nil })
         #expect(await rows("abilities").contains { $0["id"] == .string("apps.clipboard") && $0["what"] != nil && $0["listed"] == .bool(true) })

@@ -8,7 +8,7 @@ import Testing
 
 /// Offscreen renders of Workspaces (and its Tiling tab), Install (Catalogue and Web apps) and Defaults (card
 /// agent-bo-95422897) for Moody beside the approved artifact 5sh21HWjCjsWYAwWKTibcE: the whole window in Tokyo Night and
-/// Folio, on an engine in a moved home with app rules, floats, layouts and two snapshots seeded; Defaults
+/// Folio, on an engine in a moved home with app rules, floats, layouts seeded; Defaults
 /// again with All kinds open. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter RestyledRenders`
 extension SharedLook {
@@ -36,17 +36,7 @@ struct RestyledRenders {
         block.gaps = .init(inner: 10, outer: 14)
         UserDefaults.standard.set(try JSONEncoder().encode(block), forKey: "pilotBlock")
         WorkspaceLayout.save(["1": .init(preset: .mainStack, auto: true), "2": .init(preset: .scrolling, auto: false)], to: .standard)
-        let snapshots = """
-        {"1": {"workspace": "1", "layout": "h_tiles", "savedAt": "\(ISO8601DateFormatter().string(from: .now.addingTimeInterval(-7200)))",
-               "windows": [{"bundleId": "com.mitchellh.ghostty", "appName": "Ghostty", "title": "zsh", "floating": false, "frame": [[0, 0], [700, 900]]}]},
-         "3": {"workspace": "3", "layout": "h_tiles", "savedAt": "\(ISO8601DateFormatter().string(from: .now.addingTimeInterval(-86400 * 3)))",
-               "windows": [{"bundleId": "md.obsidian", "appName": "Obsidian", "title": "Vault", "floating": false, "frame": [[0, 0], [1400, 900]]}]}}
-        """
-        try FileManager.default.createDirectory(at: SnapshotStore.standard.url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(snapshots.utf8).write(to: SnapshotStore.standard.url)
-
         let engine = Engine()
-        try #require(engine.snapshots.saved.count == 2, "the seeded snapshots did not load")
         engine.observers.tiler.seed(focused: "2", occupied: [OccupiedWorkspace(name: "1", apps: ["Ghostty"]), OccupiedWorkspace(name: "2", apps: ["Zen"])])
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.restyled")!)
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))

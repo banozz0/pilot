@@ -55,8 +55,8 @@ struct CollectionsNotesTests {
         func onDisk(_ id: String) -> String? { try? String(contentsOf: folder.appending(path: id), encoding: .utf8) }
     }
 
-    static func object(_ value: JSONValue?) -> [String: JSONValue] { ControlActivityTests.object(value) }
-    static func array(_ value: JSONValue?) -> [JSONValue] { ControlActivityTests.array(value) }
+    static func object(_ value: JSONValue?) -> [String: JSONValue] { if case .object(let o)? = value { o } else { [:] } }
+    static func array(_ value: JSONValue?) -> [JSONValue] { if case .array(let a)? = value { a } else { [] } }
     static func string(_ value: JSONValue?) -> String? { if case .string(let s)? = value { s } else { nil } }
     static func ids(_ answer: ControlAnswer) -> [String] { array(answer.result).compactMap { string(object($0)["id"]) } }
 

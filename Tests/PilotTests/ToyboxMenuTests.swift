@@ -28,10 +28,10 @@ struct ToyboxMenuTests {
 
     @Test("Toybox keeps its own menu and draws an answer's card in it: the first answer row, the Ask row a row under it (T13)")
     func answerCards() throws {
-        let built = try RailMenuRenders.built()
+        let built = try LineMenuRenders.built()
         for query in ["22 km to mi", "#2bc4f0"] {
             let model = MenuModel(nav: ToyboxMenuRenders.answer(query, built))
-            #expect(model.layout == .classic && model.railBand == .none, "\(query): Toybox draws no rail")
+            #expect(model.layout == .classic, "\(query): Toybox sizes its menu as Classic did")
             let rows = model.nav.rows
             try #require(rows.count >= 2, "\(query): \(rows.map(\.title))")
             #expect(model.answerCard(rows[0], at: 0) != nil && model.answerCard(rows[1], at: 1) == nil, "\(query)")

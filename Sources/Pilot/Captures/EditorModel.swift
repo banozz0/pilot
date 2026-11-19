@@ -116,9 +116,6 @@ final class EditorModel {
     /// The Image size chip's resize (Q246), applied after the export is flattened, so marks and crop stay in the capture's
     /// points; a later crop keeps its factor. Nil keeps the pixels. The canvas keeps showing the capture as taken.
     private(set) var resized: ResizeTarget?
-    /// The toolbar's Upscale (Q248): its settings and run, and the window's start, which exports and hands it on.
-    let upscale = UpscaleJob()
-    @ObservationIgnored var startUpscale: () -> Void = {}
     /// The window's answer to an outcome; it flattens through `export()`, off the main thread.
     @ObservationIgnored var finish: (Outcome) -> Void = { _ in }
     @ObservationIgnored private var dragStart: CGPoint?

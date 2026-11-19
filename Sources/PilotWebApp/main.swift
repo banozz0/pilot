@@ -511,7 +511,7 @@ struct PrintingNotifier: Notifier {
 }
 
 /// One shown while the web app is in front still shows; a click brings it forward and runs the page's onclick.
-/// macOS calls these on its own queue, so they are nonisolated and hop to the main actor (as NoteReminders does).
+/// macOS calls these on its own queue, so they are nonisolated and hop to the main actor.
 extension WebNotifications: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {

@@ -24,9 +24,6 @@ extension MenuView {
             } else if let scan = model.scan {
                 ToyScan(scan: scan, tools: model.tools)
                 Spacer(minLength: 0)
-            } else if model.showsStats {
-                MenuStatsScreen { model.open(.activity) }
-                Spacer(minLength: 0)
             } else if model.showsAbout {
                 MenuAboutScreen(displays: NSScreen.screens.count)
                 Spacer(minLength: 0)

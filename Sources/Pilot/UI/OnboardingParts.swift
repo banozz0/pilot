@@ -114,11 +114,6 @@ struct SetupFork: View {
                         }
                     }
                     Text(setup.forkCount).styleText(\.mono).foregroundStyle(style.color(\.text3)).padding(.top, 2)
-                    if !setup.noAppBefore.isEmpty {
-                        // Said before the run (reviewer, T54): Undo cannot put "no app" back.
-                        Text("\(setup.noAppBefore.map { $0 == .txt ? ".txt" : ".md" }.joined(separator: " and ")): no app opens it now, so its Undo can't go back to none.")
-                            .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
-                    }
                 }
             } button: {
                 SetupButton(title: "Set up everything", primary: true, wide: true) { setup.start(setup.everything) }
@@ -321,19 +316,15 @@ struct GrantWalkPanel: View {
                 }
             case .finished:
                 Text(walk.done).styleText(\.mono).foregroundStyle(style.color(\.text2))
-                // Settings › Permissions has each but Notifications, which only System Settings has, and Screen Recording,
-                // which it shows only once Menu bar › Other apps asks for it (ADR 0012).
-                let pilot = walk.skipped.filter { $0 != .notifications && $0 != .screenRecording }
+                // Settings › Permissions has each but Screen Recording, which it shows only once Menu bar › Other apps asks
+                // for it (ADR 0012).
+                let pilot = walk.skipped.filter { $0 != .screenRecording }
                 if !pilot.isEmpty {
                     Text("Skipped: \(pilot.map(GrantWalk.name).joined(separator: ", ")). Each is in \(AppPlace(.permissions).path).")
                         .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
                 }
                 if walk.skipped.contains(.screenRecording) {
                     Text("Screen Recording: \(AppPlace(.menuBar).path) › Other apps, or System Settings › Privacy & Security › Screen Recording.")
-                        .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
-                }
-                if walk.skipped.contains(.notifications) {
-                    Text("Notifications: System Settings › Notifications › Pilot.")
                         .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -430,9 +421,8 @@ struct TryItScroll<Content: View>: View {
 }
 
 /// Try it's "More, if you want", folded: only the extras that matter on day one, the AI provider and Extensions (Sven's
-/// critique, 2026-11-18). The rest live where they are used: the upscaler's Max
-/// quality in Upscale's Model, Pilot's terminal downloading on Hyper+T's first press, the other permissions in Allow the
-/// rest just above and Settings › Permissions. Never needed for Finish.
+/// critique, 2026-11-18). The rest live where they are used: Pilot's terminal downloading on Hyper+T's first press, the
+/// other permissions in Allow the rest just above and Settings › Permissions. Never needed for Finish.
 struct OnboardingMore: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

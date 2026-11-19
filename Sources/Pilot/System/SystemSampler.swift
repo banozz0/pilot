@@ -22,8 +22,6 @@ final class SystemSampler: ScreenPausing {
         static let history = Needs(rawValue: 8)
         /// The busiest apps by CPU and by memory alone (the menu's stats cards, P42): the process list without nettop.
         static let apps = Needs(rawValue: 16)
-        /// Low-battery alerts: the Bluetooth HID batteries with the slow readings, system_profiler only while shown.
-        static let lowBattery = Needs(rawValue: 32)
     }
     /// What the minute history reads: every reading Stats charts over time.
     static let historyParts: SystemStats.Parts = [.cpu, .memory, .gpu, .network, .diskIO, .sensors]
@@ -104,8 +102,6 @@ final class SystemSampler: ScreenPausing {
     @ObservationIgnored var combineProcesses = false {
         didSet { if combineProcesses != oldValue { relist = true } }
     }
-    /// Handed each reading of the Bluetooth batteries (LowBatteryAlerts).
-    @ObservationIgnored var onBluetooth: (@MainActor ([SystemStats.BluetoothDevice]) -> Void)?
     /// The loop's wait between ticks; a watch asking for a shorter interval cuts it short.
     @ObservationIgnored private var waiting: Task<Void, Never>?
     /// While the screen is locked or the display sleeps nothing is read (card agent-bo-95422839, ScreenEvents).
@@ -228,7 +224,6 @@ final class SystemSampler: ScreenPausing {
             let historyDue = needs.contains(.history) && historyRead.due()
             var shown = needs.contains(.rows) ? SystemStats.Parts.all
                 : watches.values.flatMap(\.stats).reduce(historyDue ? Self.historyParts : []) { $0.union($1.parts) }
-            if needs.contains(.lowBattery) { shown.insert(.bluetoothHID) }
             var parts = shown.subtracting(.slow)
             // The slow parts every slowInterval, and at once when one is newly shown.
             let slowShown = shown.intersection(.slow).subtracting(.bluetooth)
@@ -309,7 +304,6 @@ final class SystemSampler: ScreenPausing {
             last = now
             latest = now
             latestValues = values
-            if !parts.isDisjoint(with: [.bluetooth, .bluetoothHID]) { onBluetooth?(now.slow.bluetooth) }
             // Chosen after the read, so a shorter watch that came during it counts.
             guard let interval = watches.values.map(\.interval).min() else { break }
             // A tenth of the interval late at most, so macOS can fire the tick with other wake-ups.

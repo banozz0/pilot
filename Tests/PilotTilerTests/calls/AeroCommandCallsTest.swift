@@ -234,60 +234,6 @@ extension TilerTreeTests {
             await #expect(throws: TilerCallRefused.self) { try await tiler().run(.setColumnWidth(id: Int(tiled.windowId), points: 900)) }
         }
 
-        /// Moody's REJECT of T3 v1: the saved root layout is usually the one the workspace still has, and that call alone
-        /// is refused, so a restore runs each step as one eval, as Pilot's WorkspaceSnapshots does. A strip comes back in
-        /// its saved order with each column at its saved width.
-        @Test func restoringAStripOntoAStrip() async throws {
-            config.gaps = Gaps(inner: .init(vertical: 10, horizontal: 10),
-                               outer: .init(left: .constant(10), bottom: .constant(10), top: .constant(10), right: .constant(10)))
-            let workspace = Workspace.get(byName: name)
-            let root = try workspace.rootTilingContainer
-            root.layout = .scrolling
-            let windows = try (1...3).map { try TestWindow.new(id: UInt32($0), parent: root) }
-            #expect(workspace.focusWorkspace())
-            let listed = try await tiler().windows(.workspace(name))
-            let across = workspace.workspaceMonitor.visibleRectPaddedByOuterGaps.width + 10
-            func column(_ fraction: CGFloat) -> CGRect { CGRect(x: 0, y: 0, width: fraction * across - 10, height: 900) }
-            // Saved as 3, 1, 2 at a half, two thirds and a third.
-            let strip = try #require(try await tiler().focusedWorkspace())
-            #expect(strip.rootLayout == "h_scrolling")
-            let snapshot = try #require(Snapshot.capture(strip, windows: [listed[2], listed[0], listed[1]],
-                                                         frames: [3: column(1.0 / 2), 1: column(2.0 / 3), 2: column(1.0 / 3)], at: .now))
-            await #expect(throws: TilerCallRefused.self) { try await tiler().run(.setRootLayout(workspace: name, "h_scrolling")) }
-            let plan = SnapshotRestore(snapshot, current: listed)
-            try await tiler().run(.eval(plan.placeCommands))
-            try await tiler().run(.eval(plan.arrangeCommands(windows: try await tiler().windows(.workspace(name)), frames: [:])))
-            #expect(try root.layoutDescription == .h_scrolling([.window(3), .window(1), .window(2)]))
-            let saved: [CGFloat?] = [2.0 / 3, 1.0 / 3, 1.0 / 2]
-            #expect(windows.map(\.columnWidth) == saved)
-        }
-
-        /// The same for tiles onto tiles: the order and each tile's share come back.
-        @Test func restoringTilesOntoTiles() async throws {
-            let workspace = Workspace.get(byName: name)
-            let windows = try (1...3).map { try TestWindow.new(id: UInt32($0), parent: workspace.rootTilingContainer) }
-            #expect(workspace.focusWorkspace())
-            try await workspace.layoutWorkspace()
-            let listed = try await tiler().windows(.workspace(name))
-            let area = workspace.workspaceMonitor.visibleRectPaddedByOuterGaps
-            func slot(_ from: CGFloat, _ share: CGFloat) -> CGRect { CGRect(x: area.minX + from * area.width, y: area.minY, width: share * area.width, height: area.height) }
-            // Saved as 2, 3, 1 at 30 %, 50 % and 20 %.
-            let tiles = try #require(try await tiler().focusedWorkspace())
-            #expect(tiles.rootLayout == "h_tiles")
-            let snapshot = try #require(Snapshot.capture(tiles, windows: listed,
-                                                         frames: [2: slot(0, 0.3), 3: slot(0.3, 0.5), 1: slot(0.8, 0.2)], at: .now))
-            let plan = SnapshotRestore(snapshot, current: listed)
-            try await tiler().run(.eval(plan.placeCommands))
-            try await workspace.layoutWorkspace()
-            let frames = Dictionary(uniqueKeysWithValues: windows.map { (Int($0.windowId), $0.axRect?.cgRect ?? .zero) })
-            try await tiler().run(.eval(plan.arrangeCommands(windows: try await tiler().windows(.workspace(name)), frames: frames)))
-            try await workspace.layoutWorkspace()
-            #expect(try workspace.rootTilingContainer.layoutDescription == .h_tiles([.window(2), .window(3), .window(1)]))
-            let widths: [CGFloat] = [windows[1], windows[2], windows[0]].map { ($0.axRect?.width ?? 0) / area.width }
-            let near = zip(widths, [0.3, 0.5, 0.2] as [CGFloat]).allSatisfy { abs($0 - $1) < 0.01 }
-            #expect(near, "\(widths)")
-        }
-
         @Test func floatAndTile() async throws {
             let workspace = try twoTiles()
             try await tiler().run(.setFloating(id: 2, true))

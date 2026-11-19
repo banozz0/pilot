@@ -117,37 +117,10 @@ struct SystemStatsMoreTests {
         #expect(SystemStats.rows(previous: nil, now: now).count == SystemStats.rows(previous: nil, now: Self.raw()).count)
     }
 
-    @Test("A HID-only read refreshes the HID devices and keeps system_profiler's earbuds; a full read replaces both")
-    func bluetoothHIDKeepsEarbuds() {
-        var older = SystemStats.Slow(), fresh = SystemStats.Slow()
-        older.bluetooth = [.init(name: "Keychron", level: "40 %"), .init(name: "Old Mouse", level: "50 %"),
-                           .init(name: "AirPods", level: "L 60 % · R 60 %", fromProfiler: true)]
-        fresh.bluetooth = [.init(name: "Keychron", level: "19 %")]
-        #expect(fresh.keeping(older, readNow: .bluetoothHID).bluetooth
-            == [.init(name: "Keychron", level: "19 %"), .init(name: "AirPods", level: "L 60 % · R 60 %", fromProfiler: true)])
-        #expect(fresh.keeping(older, readNow: .bluetooth).bluetooth == fresh.bluetooth)
-        #expect(fresh.keeping(older, readNow: .diskSpace).bluetooth == older.bluetooth)
-    }
-
-    @Test("Low-battery alerts: once at 20 % and once at 10 %, rearmed only 5 points above, a first sighting low alerts once")
-    func lowBattery() {
-        var alerts = LowBattery()
-        func read(_ level: Int, _ name: String = "Keychron V3 Max") -> [LowBattery.Alert] {
-            alerts.record([.init(name: name, level: "\(level) %")])
-        }
-        #expect(read(50).isEmpty)
-        #expect(read(20) == [.init(name: "Keychron V3 Max", percent: 20)])
-        #expect(read(20).isEmpty && read(18).isEmpty)
-        // Back to 24, not past 25: still armed off.
-        #expect(read(24).isEmpty && read(19).isEmpty)
-        #expect(read(10).map(\.text) == ["Keychron V3 Max at 10%. Charge it soon."])
-        #expect(read(9).isEmpty && read(5).isEmpty)
-        // Charged (or reconnected charged): both rearm.
-        #expect(read(100).isEmpty)
-        #expect(read(20).count == 1 && read(10).count == 1)
-        // Seen first at 8 %: one alert, not two, and none at 10 after.
-        #expect(read(8, "Mouse").count == 1 && read(9, "Mouse").isEmpty)
-        // No percent read, no alert.
-        #expect(alerts.record([.init(name: "Speaker", level: "–")]).isEmpty)
+    @Test("The battery reads its percentage, charging or plugged in, then the time to full or left")
+    func battery() {
+        #expect(SystemStats.Battery(percent: 82, charging: true, pluggedIn: true, minutesLeft: 80).phrase == "82 % · charging · 1 h 20 min to full")
+        #expect(SystemStats.Battery(percent: 54, charging: false, minutesLeft: 190).phrase == "54 % · 3 h 10 min left")
+        #expect(SystemStats.Battery(percent: 100, charging: false, pluggedIn: true, minutesLeft: nil).phrase == "100 % · plugged in")
     }
 }

@@ -41,47 +41,9 @@ public enum MenuPanelSize {
         return CGSize(width: width, height: full ? tallest : min(height, tallest))
     }
 
-    // MARK: Rail (menu Rail and Classic, T6)
-
-    /// What the Rail draws beside the list: nothing in a picker; at the empty root the whole rail, 170 pt, beside the
-    /// recents; at a root search or a kind Tab shows, the whole rail, 182 pt, with each kind's count; inside a branch or
-    /// on an answer a 52 pt strip of icons.
-    public enum RailBand: Equatable, Sendable { case none, root, full, slim }
-
-    /// The rail's widths, in points as drawn: the mockups' are already a step up, so they skip `s`.
-    public static let railRootWidth: CGFloat = 170, railWidth: CGFloat = 182, railSlimWidth: CGFloat = 52
-    /// A rail row is 30 pt, not the mockup's 32, so the root's 17 rows (6 kinds, 10 branches, Clipboard) and Go to fit
-    /// in 650 (Q81); a slim strip's icon is 32 pt with 2 between.
-    public static let railRow: CGFloat = 30, railHeading: CGFloat = 24, railSlimRow: CGFloat = 32, railInset: CGFloat = 6
-    /// The whole rail reaches 650 pt, at the root (Q81) and beside a search, since Go to lists the root's branches and
-    /// Clipboard: it never scrolls (coordinator, build mode).
-    public static let railTallest: CGFloat = 650
     /// How tall a menu that lists Go to may grow: `room`, the face's height the screen holds (MenuModel.room), so every Go
     /// to row shows on Sven's screen and the menu still fits a small one (T36); 650 where no screen is known.
-    public static func goToTallest(_ room: CGFloat?) -> CGFloat { room ?? railTallest }
-    /// The search line and the foot round the rail.
-    public static let railChrome: CGFloat = 58 + s(42)
-
-    /// The rail's own height: `items` rows (kinds, branches, Clipboard) under one Go to heading, or a slim strip's icons.
-    public static func railHeight(_ band: RailBand, items: Int) -> CGFloat {
-        switch band {
-        case .none: 0
-        case .root, .full: CGFloat(items) * railRow + railHeading + 2 * railInset
-        case .slim: CGFloat(items) * railSlimRow + CGFloat(max(items - 1, 0)) * 2 + 2 * railInset
-        }
-    }
-
-    /// The Rail's panel: the menu's 750 width; as tall as Instrument's list would be
-    /// or as the rail, whichever is taller, up to `room` (goToTallest) wherever the whole rail shows and the shape's tallest
-    /// beside the slim strip. The top edge stays put as it changes (MenuSizer).
-    public static func rail(_ shape: Shape, band: RailBand, railItems: Int, rows: Int, headings: Int, extra: CGFloat = 0, bar: CGFloat = 0,
-                            full: Bool = false, room: CGFloat? = nil) -> CGSize {
-        let list = instrument(shape, rows: rows, headings: headings, extra: extra, bar: bar, full: full)
-        guard band != .none else { return list }
-        let tallest = band == .slim ? instrument(shape, rows: 0, headings: 0, full: true).height : goToTallest(room)
-        let rail = railHeight(band, items: railItems) + railChrome
-        return CGSize(width: list.width, height: full ? tallest : min(max(list.height, rail), tallest))
-    }
+    public static func goToTallest(_ room: CGFloat?) -> CGFloat { room ?? 650 }
 
     // MARK: Classic (menu Rail and Classic, T8)
 

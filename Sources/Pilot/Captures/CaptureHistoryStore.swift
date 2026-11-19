@@ -69,7 +69,7 @@ final class CaptureHistoryStore {
         else { note(url, kind: .recording) }
     }
 
-    /// A picture Pilot made from a capture (the editor's Done or Save a copy, Combine, an upscale): the app of the file it
+    /// A picture Pilot made from a capture (the editor's Done or Save a copy, Combine): the app of the file it
     /// came from, never the app in front, which is Pilot's editor by then; none for a picture made from no file. The
     /// editor's Done over a file Pilot neither named nor noted (a Screenshot or IMG of Sven's) is not noted, so it never
     /// comes under the size cap; the page still lists again.
@@ -80,7 +80,7 @@ final class CaptureHistoryStore {
         note(url, kind: .capture, app: noted?.app)
     }
 
-    /// Finder's Resize and Upscale with Pilot write beside any picture: only a result in Pilot's captures folder is history.
+    /// Finder's Resize with Pilot writes beside any picture: only a result in Pilot's captures folder is history.
     func noteResults(_ urls: [URL]) {
         let folder = settings.folder(.capture).standardizedFileURL
         for url in urls where url.deletingLastPathComponent().standardizedFileURL == folder { note(url, madeFrom: nil) }

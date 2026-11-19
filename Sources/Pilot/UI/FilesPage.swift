@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Files' first tab (Sven 2026-10-10: "the file converter is mentioned nowhere; it's a very good feature we will be
 /// shipping"): story 139 said in full: a drop zone that converts what lands on it, the two ways in from Finder and
-/// Hyper+Space, every format by kind and the two tools some need. File search and Duplicates follow as blocks, tabs of
-/// their own until the settings tidy (Sven 2026-11-14: "files pages look so empty"); Folders keeps its tab, as its
+/// Hyper+Space, every format by kind and the two tools some need. File search follows as a block, a tab of its own
+/// until the settings tidy (Sven 2026-11-14: "files pages look so empty"); Folders keeps its tab, as its
 /// gallery scrolls on its own.
 struct ConvertPage: View {
     @Environment(\.ink) private var ink
@@ -15,7 +15,7 @@ struct ConvertPage: View {
     @State private var tools: Set<ConvertTool>?
     @State private var targeted = false
 
-    static let intro = "Convert files, choose what file search skips and find duplicates, all on this Mac. Nothing is uploaded."
+    static let intro = "Convert files and choose what file search skips, all on this Mac. Nothing is uploaded."
     static let introInfo = "A converted file lands beside the old one."
 
     static let otherWays = "Or in Finder: right-click, Services › Convert with Pilot…; in Hyper+Space: ⌘K on a file, Convert to…"
@@ -29,7 +29,6 @@ struct ConvertPage: View {
             }
             KitBlock(title: "Formats", symbol: "list.bullet") { formats }
             FileSearchBlock(settings: .shared)
-            DuplicatesView()
         } }
         .task { tools = Self.installedTools() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

@@ -416,10 +416,9 @@ public indirect enum MenuBranch: Hashable, Sendable {
     case stickers
     /// Trigger → Emoji, the grid (P39).
     case emoji
-    /// What runs on this Mac and its readings, as screens of their own in the menu (Sven 2026-10-21, Q399 and Q400): extra
-    /// rows only, off until switched on, found by name at a root search. Activity lists the apps and the background, live;
-    /// Stats draws its cards in place of rows (MenuStatsScreen).
-    case activity, stats
+    /// What runs on this Mac, as a screen of its own in the menu (Sven 2026-10-21, Q399): an extra row only, off until
+    /// switched on, found by name at a root search; it lists the apps and the background, live.
+    case activity
     /// About (Sven 2026-10-24, Q443): this Mac and Pilot, Omarchy's About as a screen of its own in the menu
     /// (MenuAboutScreen), above System as Omarchy keeps it.
     case about
@@ -436,13 +435,13 @@ public indirect enum MenuBranch: Hashable, Sendable {
     public static let allCases: [MenuBranch] = [.apps, .learn, .trigger, .install, .remove, .update, .clean, .config, .extensions, .about, .system,
                                                 .keybindings, .capture,
                                                 .homebrew, .translate, .reminders, .snippets, .notes, .stickers, .emoji,
-                                                .activity, .stats, .qr, .define]
+                                                .activity, .qr, .define]
 
     /// The branches under the root, which a root search finds by name: `top` and Config.
     public static let searched = allCases.filter { $0.parent == nil }
 
-    /// The branches the root lists. Config, Activity and Stats are extra rows, off until switched on (Sven 2026-10-21).
-    public static let top = searched.filter { ![.config, .activity, .stats].contains($0) }
+    /// The branches the root lists. Config and Activity are extra rows, off until switched on (Sven 2026-10-21).
+    public static let top = searched.filter { ![.config, .activity].contains($0) }
 
     /// The branch a category browses (Install, Remove or Update); any other branch itself.
     public var browsed: MenuBranch { if case .category(_, let b) = self { b } else { self } }
@@ -1563,7 +1562,7 @@ public enum MenuLayout {
                    .branch(.qr), .action("ai.ask"), .action("ai.chat"), .action("ai.fix"), .action("ai.selection"),
                    .action("speech.readAloud")],
         .capture: ["captures.area", "captures.activeWindow", "captures.fullscreen", "captures.scrolling", "captures.screenRecording",
-                   "captures.ocr", "captures.readQRScreen", "captures.smartElement", "captures.subject", "captures.markup",
+                   "captures.ocr", "captures.readQRScreen", "captures.subject",
                    "captures.scrollingUp", "captures.repeatArea", "captures.delayed", "captures.editLast", "captures.editVideo", "captures.pinLast", "captures.restoreThumbnail", "captures.toggleDesktopIcons"].map { .action($0) },
         .qr: [.action("captures.makeQR"), .action("captures.readQR")],
         .system: systemSections.map { .branch(system($0.title)) },
@@ -1581,7 +1580,7 @@ public enum MenuLayout {
         Section(title: "Power", symbol: "power", ids: ["system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut",
                                                        "system.keepAwake", "system.idleLock"]),
         Section(title: "Sound", symbol: "speaker.wave.2", ids: ["system.soundSettings"]),
-        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetooth", "system.bluetoothSettings", "system.speedTest"]),
+        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetooth", "system.bluetoothSettings"]),
         Section(title: "Display", symbol: "display", ids: ["system.darkMode", "system.nightShift", "system.desktopIcons", "system.displaySettings", "system.rotateDisplay", "system.nextWallpaper",
                                                            "system.previousWallpaper", "system.nextWallpaperAll", "system.previousWallpaperAll"]),
         Section(title: "Focus", symbol: "moon.stars", ids: ["system.focusSettings"]),

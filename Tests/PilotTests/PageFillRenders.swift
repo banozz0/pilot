@@ -22,7 +22,7 @@ struct PageFillRenders {
 
     /// The places, by file name.
     static let places: [(String, AppPlace, SetupSection?)] = [
-        ("home", AppPlace(.home), nil), ("stats", AppPlace(.stats), nil), ("menubar", AppPlace(.menuBar), nil),
+        ("home", AppPlace(.home), nil), ("menubar", AppPlace(.menuBar), nil),
         ("install-catalogue", AppPlace(.install, .catalogue), nil), ("install-webapps", AppPlace(.install, .webApps), nil),
         ("openwith", AppPlace(.openWith), nil), ("look", AppPlace(.look), nil), ("clipboard", AppPlace(.clipboard), nil),
         ("general", AppPlace(.general), nil), ("files-folders", AppPlace(.files, .folders), nil),
@@ -154,8 +154,8 @@ struct PageFillRenders {
                 let rep = try #require(snapshot(frame, scale: 1))
                 let png = try #require(rep.representation(using: .png, properties: [:]))
                 try png.write(to: dir.appendingPathComponent("\(name)-\(width).png"))
-                // Stats and Menu bar fill the window (card agent-bo-95423024): no blank run a third of it tall.
-                if ["stats", "menubar"].contains(name) {
+                // Menu bar fills the window (card agent-bo-95423024): no blank run a third of it tall.
+                if name == "menubar" {
                     let blank = FillPagesTests.longestBlank(FillPagesTests.inked(rep, columns: 0.3..<1))
                     #expect(blank < 1.0 / 3, "\(name)-\(width): \(blank)")
                 }

@@ -108,9 +108,9 @@ extension HomeLayout.Block {
         switch self {
         case .workspaces: AppPlace(.workspaces)
         case .keyboard: AppPlace(.binds)
-        case .mostUsed: AppPlace(.activity)
+        case .mostUsed: AppPlace(.binds)
         case .greeting, .pilot: AppPlace(.general)
-        case .thisMac: AppPlace(.stats)
+        case .thisMac: AppPlace(.menuBar)
         case .clipboard: AppPlace(.clipboard)
         case .quickActions: AppPlace(.menu)
         }

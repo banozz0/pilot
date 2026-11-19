@@ -59,7 +59,7 @@ public enum AeroCommand: Equatable, Sendable {
     /// T10: the window's column full width and back; the window out of its column's stack into a column of its own.
     case maximiseColumn(id: Int)
     case leaveStack(id: Int)
-    /// A snapshot's restore (spec scrolling-layout, T3): the window's column back to the width it was saved at, in points.
+    /// A window's column at a width in points (spec scrolling-layout, T3).
     case setColumnWidth(id: Int, points: Int)
     case focusMonitor(Direction)
     case moveToMonitor(id: Int, Direction)
@@ -68,8 +68,8 @@ public enum AeroCommand: Equatable, Sendable {
     /// Pop out (spec omarchy-ideas T1): on floats the window and pins it, so it follows every workspace its monitor
     /// shows; off unpins it and tiles it where you are.
     case setPinned(id: Int, Bool)
-    /// Snapshot restore (story 71): flatten the workspace, set its root layout, order tiles with moves that stop at the
-    /// workspace's edge (the default would wrap the window in a new container); sizes go through `resize`.
+    /// A layout's rebuild: flatten the workspace, set its root layout, order tiles with moves that stop at the workspace's
+    /// edge (the default would wrap the window in a new container); sizes go through `resize`.
     case flatten(workspace: String)
     case setRootLayout(workspace: String, String)
     case move(id: Int, Direction)

@@ -21,7 +21,7 @@ public struct MenuRoot: Equatable, Sendable {
 
     /// A row the root can list among its branches, off until switched on (Sven 2026-10-20): a branch that lives deeper
     /// (Trigger › Notes), which opens where it lives, or Config, which only this row lists; an action with no branch of
-    /// its own (Dictation), which runs; a screen of its own in the menu (Activity, Stats), or the Files view.
+    /// its own (Dictation), which runs; a screen of its own in the menu (Activity), or the Files view.
     public struct Extra: Identifiable, Equatable, Sendable {
         public let id: String, title: String, symbol: String, target: MenuEntry.Target
     }
@@ -41,8 +41,7 @@ public struct MenuRoot: Equatable, Sendable {
         Extra(id: "clipboard", title: "Clipboard", symbol: "doc.on.clipboard", target: .action("apps.clipboard")),
         Extra(id: "dictation", title: "Dictation", symbol: "mic", target: .action("dictation.toggle")),
         Extra(id: "aiChat", title: "AI chat", symbol: "bubble.left.and.text.bubble.right", target: .action("ai.chat")),
-        Extra(id: "activity", title: "Activity", symbol: AppPage.activity.symbol, target: .branch(.activity)),
-        Extra(id: "stats", title: "Stats", symbol: AppPage.stats.symbol, target: .branch(.stats)),
+        Extra(id: "activity", title: "Activity", symbol: "gauge.with.dots.needle.67percent", target: .branch(.activity)),
     ]
 
     /// One row of the root as Sven arranges it: a branch, or an extra switched on.

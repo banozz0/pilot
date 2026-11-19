@@ -14,10 +14,10 @@ import Foundation
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
-/// Windows area's sidebar. Login and background items left Update & Clean for a Mac page of its own, and Reports came onto
-/// Update & Clean's front under the Update and Clean block (Sven, 2026-11-16: "login and background should have its own page").
+/// Windows area's sidebar. Reports came onto Update & Clean's front under the Update and Clean block
+/// (Sven, 2026-11-16).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, loginItems, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -35,10 +35,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .pilotMenu: "Pilot menu"
         case .look: "Look"
         case .system: "System"
-        case .activity: "Activity"
         case .upkeep: "Update & Clean"
-        case .loginItems: "Login & Background"
-        case .stats: "Stats"
         case .clipboard: "Clipboard"
         case .captures: "Captures"
         case .snippets: "Snippets"
@@ -70,10 +67,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .pilotMenu: "list.bullet.below.rectangle"
         case .look: "paintpalette"
         case .system: "slider.horizontal.3"
-        case .activity: "gauge.with.dots.needle.67percent"
         case .upkeep: "arrow.triangle.2.circlepath"
-        case .loginItems: "power.circle"
-        case .stats: "chart.xyaxis.line"
         case .clipboard: "doc.on.clipboard"
         case .captures: "camera.viewfinder"
         case .snippets: "text.quote"
@@ -98,15 +92,18 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
-        case .menu, .menuBar, .dock, .pilotMenu, .general, .activity: 3
-        case .install, .extensions, .files, .stats, .fonts, .repos: 4
-        case .openWith, .configs, .notes, .loginItems: 5
+        case .menu, .menuBar, .dock, .pilotMenu, .general: 3
+        case .install, .extensions, .files, .fonts, .repos: 4
+        case .openWith, .configs, .notes: 5
         }
     }
 
     /// Developer pages (Pilot 1.0.2, Sven Q715): Configs, with its Agents tab, and Repos show only while General's Developer
     /// switch is on; off, the sidebar, the searches and `pilot open` leave them out and nothing reads their files.
     public var isDeveloper: Bool { self == .configs || self == .repos }
+    /// System and Fonts (the feature trim, Sven 2026-11-19: hide): off the sidebar and Ctrl+Tab unless General's More pages
+    /// switch is on; a link, the window's search and `pilot open` still reach them.
+    public var isMorePage: Bool { self == .system || self == .fonts }
 
     /// The parts a page holds as tabs or places on it (Binds' conflicts open as a sheet, not a tab).
     public var sections: [AppSection] { AppSection.allCases.filter { $0.page == self } }
@@ -172,12 +169,7 @@ public enum AppPage: String, CaseIterable, Sendable {
                        "bluetooth", "headphones", "airpods", "connect", "wi-fi", "wifi", "network", "join", "display", "resolution", "monitor",
                        "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
                        "volume up", "volume down"]
-        case .activity: ["activity monitor", "process", "running", "quit", "force quit", "kill", "task manager", "hog", "helper"]
         case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run"]
-        case .loginItems: ["login items", "open at login", "startup", "startup items", "launch agent", "launchd", "daemon", "background items",
-                           "runs in the background", "turn off at login"]
-        case .stats: ["stats", "history", "readings", "cpu", "memory", "ram", "storage", "disk", "network", "temperature", "heat", "fan", "graphics",
-                      "gpu", "battery", "bluetooth", "busiest", "this mac"]
         // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10).
         case .clipboard: ["clipboard", "history", "paste", "keep", "keep the last", "images", "save images", "passwords", "skip passwords",
                           "clear history", "open clipboard"]
@@ -234,9 +226,8 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .desktop: [.menuBar, .dock, .pilotMenu, .widgets]
         case .look: [.look, .fonts]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
-        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split). Login & Background beside Update & Clean
-        // (Sven, 2026-11-16).
-        case .mac: [.upkeep, .loginItems, .system, .activity, .stats]
+        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
+        case .mac: [.upkeep, .system]
         case .tools: [.clipboard, .notes, .files, .voice, .captures, .snippets]
         case .apps: [.openWith, .install]
         case .developer: [.configs, .repos]
@@ -296,8 +287,10 @@ public enum AppArea: String, CaseIterable, Sendable {
     /// "⌘1", or "" for an area with no key.
     public var keyHint: String { key.map { "⌘\($0)" } ?? "" }
 
-    /// Its pages the window lists: all of them while `developer` is on, else all but the developer pages.
-    public func pages(developer: Bool) -> [AppPage] { developer ? pages : pages.filter { !$0.isDeveloper } }
+    /// Its pages the window lists: the developer pages only while `developer` is on, System and Fonts while `more` is.
+    public func pages(developer: Bool, more: Bool = true) -> [AppPage] {
+        pages.filter { (developer || !$0.isDeveloper) && (more || !$0.isMorePage) }
+    }
 
     /// The areas above the foot, in order; Pilot sits apart at the foot.
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
@@ -306,8 +299,8 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static func main(developer: Bool) -> [AppArea] { main.filter { developer || $0 != .developer } }
 
     /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
-    public static func next(after page: AppPage, developer: Bool = true) -> AppPage {
-        let pages = page.area.pages(developer: developer)
+    public static func next(after page: AppPage, developer: Bool = true, more: Bool = true) -> AppPage {
+        let pages = page.area.pages(developer: developer, more: more)
         return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
 }
@@ -375,9 +368,6 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Files' place on its front: what the menu's file search leaves out (Menu's until Sven 2026-10-10; a tab until the
     /// settings tidy, Sven 2026-11-14).
     case fileSearch
-    /// Files' place on its front: identical files and the space they take, moved to the Trash on a yes (Homy-style Files,
-    /// T5; a tab until the settings tidy).
-    case duplicates
     /// Files' tab: folders dressed in Pilot's designs or a picture, and Reset (P43).
     case folders
     /// Update & Clean's place on its front: Reports, every Update and Clean run, under the Update and Clean block (story 153;
@@ -426,7 +416,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case lookMore, lookStyle, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -459,6 +449,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// What Update lists, the self-updating casks: a place on Install's front (on its More, beside `helpers` and
     /// `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
+    /// Update & Clean's More (the feature trim, 2026-11-19): Reports, every run kept, hidden off the front.
+    case upkeepMore
     /// System's places on its front: the sound input, the keyboard layout and the mouse's speeds (on a More tab from
     /// simplify-pages T17 until Sven, 2026-11-11, after 2276). Each part's keys sit in its own card (pages round 5).
     case soundInput, keyboardLayout, mouseSpeed
@@ -477,9 +469,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var page: AppPage {
         switch self {
         case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
-        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .menuLayout, .appsShowAs: .menu
-        case .fileSearch, .duplicates, .folders: .files
-        case .reports: .upkeep
+        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .appsShowAs: .menu
+        case .fileSearch, .folders: .files
+        case .reports, .upkeepMore: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
@@ -514,6 +506,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .voice: .voiceMore
         case .menu: .menuMore
         case .install: .installMore
+        case .upkeep: .upkeepMore
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
         case .look: .lookMore
@@ -525,10 +518,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
                                                      .voiceTakes, .voiceReplacements, .voiceReadAloud,
                                                      .translate, .aliases, .quicklinks,
-                                                     .helpers, .hiddenApps,
+                                                     .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .menuLayout, .windowLayout, .appsShowAs]
+                                                     .lookStyle, .windowLayout, .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -538,7 +531,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
-                                                     .voiceWords, .installLists, .fileSearch, .duplicates, .reports]
+                                                     .voiceWords, .installLists, .fileSearch]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
@@ -582,7 +575,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .aliases: "Aliases"
         case .quicklinks: "Quicklinks"
         case .fileSearch: "File search"
-        case .duplicates: "Duplicates"
         case .folders: "Folders"
         case .reports: "Reports"
         case .catalogue: "Search"
@@ -594,7 +586,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -642,7 +634,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
         case .lookStyle: "Style"
-        case .menuLayout: "Hyper+Space menu"
         case .windowLayout: "Window layout"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
@@ -659,7 +650,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .aliases: ["alias", "aliases", "short name"]
         case .quicklinks: ["quicklink", "keyword", "search link", "bookmark"]
         case .fileSearch: ["file search", "hidden files", "never index", "index", "find files"]
-        case .duplicates: ["duplicate", "identical", "same file", "copies", "free space", "wasted space"]
         case .folders: ["folder", "folder icon", "folder design", "folder colour", "custom icon", "dress folders", "reset folder icon"]
         case .reports: ["report", "run", "output", "exit code"]
         case .catalogue: ["install search", "homebrew", "cask", "formula", "app store"]
@@ -669,17 +659,16 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .permissions: ["accessibility", "full disk access", "permission", "microphone", "screen recording", "input monitoring",
                             "system events", "automation"]
         case .hyperKey: ["hyper keys", "layer keys", "left option", "right option", "left command", "right command", "left control",
-                         "right control", "escape", "quick tap", "bind hints", "nudge", "hold hyper", "overlay delay"]
+                         "right control", "escape", "quick tap", "hold hyper", "overlay delay"]
         case .status: ["key engine", "keyboard engine", "password field lock", "secure input", "tiler", "health", "diagnostics", "log", "running"]
-        case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
+        case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
-        case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset", "snapshot", "save", "restore",
-                               "reopen"]
+        case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset"]
         case .workspaceScrolling: ["scrolling", "centre column", "center column", "column width", "focus stays"]
         case .workspaceMonitors: ["monitor", "display", "which screen"]
         case .workspaceSwipe: ["swipe", "trackpad", "three fingers"]
@@ -732,7 +721,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
         case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
-        case .menuLayout: ["menu layout", "menu style", "line menu", "classic menu", "rail menu"]
         case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
@@ -762,7 +750,7 @@ public struct AppPlace: Hashable, Sendable {
         "topBar": AppPlace(.menuBar), "topbar": AppPlace(.menuBar), "menubar": AppPlace(.menuBar),
         "pilotmenu": AppPlace(.pilotMenu), "dropdown": AppPlace(.pilotMenu),
         "installCatalogue": AppPlace(.catalogue), "pomodoro": AppPlace(.extensionCatalogue),
-        "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.stats), "defaults": AppPlace(.openWith),
+        "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.menuBar), "stats": AppPlace(.menuBar), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),
         "convert": AppPlace(.files), "ask": AppPlace(.ai), "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
         "instructions": AppPlace(.agents), "launcher": AppPlace(.menu), "windows": AppPlace(.workspaces),
@@ -782,7 +770,7 @@ public struct AppPlace: Hashable, Sendable {
     /// an unknown one (the window opens as usual). A tab that moved off its old page in C3 follows it there:
     /// `page=workspaces&tab=tiling` opens Tiling, `page=binds&tab=abilities` Launcher › Abilities, `page=install&tab=reports`
     /// Update & Clean at its Reports, `page=defaults&tab=configs` Configs. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
-    /// Snippets, `page=menu&tab=fileSearch` Files › File search, `page=activity&tab=stats` (or `tab=history`) Stats.
+    /// Snippets, `page=menu&tab=fileSearch` Files › File search; `page=stats` opens Menu bar, where the readings are.
     public static func linked(_ url: URL) -> AppPlace? {
         guard let place = url.queryValue("page").flatMap(named) else { return nil }
         // System's section, a card on its front or the keyboard layout's or the mouse's place.
@@ -797,8 +785,8 @@ public struct AppPlace: Hashable, Sendable {
     /// The tabs that left their page in C3, or took a new name, by their old `tab=` name.
     static let movedTabs: [String: AppPlace] = [
         "tiling": AppPlace(.tiling), "abilities": AppPlace(.abilities), "reports": AppPlace(.reports), "configs": AppPlace(.configs),
-        "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "history": AppPlace(.stats),
-        "snippets": AppPlace(.snippets), "fileSearch": AppPlace(.fileSearch), "stats": AppPlace(.stats),
+        "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "history": AppPlace(.menuBar),
+        "snippets": AppPlace(.snippets), "fileSearch": AppPlace(.fileSearch), "stats": AppPlace(.menuBar),
         "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
         // The page map (2026-10-17): General's export and import is Binds'; Helpers, once a General block, is Install's.
         "exportImport": AppPlace(.exportImport), "helpers": AppPlace(.helpers),

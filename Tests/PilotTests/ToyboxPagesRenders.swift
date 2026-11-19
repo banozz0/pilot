@@ -20,7 +20,7 @@ struct ToyboxPagesRenders {
     static let places: [(name: String, place: AppPlace)] = [
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)),
         ("clipboard", AppPlace(.clipboard)), ("snippets", AppPlace(.snippets)),
-        ("look", AppPlace(.look)), ("system", AppPlace(.system)), ("stats", AppPlace(.stats)), ("menubar", AppPlace(.menuBar)),
+        ("look", AppPlace(.look)), ("system", AppPlace(.system)), ("menubar", AppPlace(.menuBar)),
         ("install", AppPlace(.catalogue)), ("webapps", AppPlace(.webApps)), ("openwith", AppPlace(.openWith)), ("configs", AppPlace(.configs)),
         ("menu", AppPlace(.menu)), ("general", AppPlace(.general)), ("ai", AppPlace(.ai)), ("extensions", AppPlace(AppPage.extensions)),
     ]

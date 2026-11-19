@@ -3,10 +3,9 @@ import PilotCore
 import Testing
 @testable import Pilot
 
-/// CLI W10: Reports, Update, Clean and the speed test through the registry the socket answers from. Reports live in a
-/// temp folder, Update's rows and Mole's preview are fixtures, the visible terminal is a recorder that keeps the run's
-/// report as the real one does, the gate's decider is the test's, and the speed test measures nothing: no brew, Mole,
-/// networkQuality or terminal runs.
+/// CLI W10: Reports, Update and Clean through the registry the socket answers from. Reports live in a temp folder,
+/// Update's rows and Mole's preview are fixtures, the visible terminal is a recorder that keeps the run's report as the
+/// real one does, and the gate's decider is the test's: no brew, Mole or terminal runs.
 @MainActor
 @Suite("Control jobs")
 final class ControlJobsTests {
@@ -20,8 +19,6 @@ final class ControlJobsTests {
     var reads = 0
     var mole: String? = "/opt/homebrew/bin/mo"
     var previews = 0
-    var speedTest = SpeedTest(measure: { #"{"dl_throughput":887000000,"ul_throughput":54000000,"responsiveness":384}"# }, say: { _ in })
-    var speedTests = 0
 
     static let outdated = [
         UpdateRow(item: .package(Package(.formula, "git")!), from: "2.40", to: "2.41"),
@@ -49,11 +46,6 @@ final class ControlJobsTests {
         jobs.includeSelfUpdating = { false }
         jobs.previewer = CleanPreviewer { [unowned self] _ in previews += 1; return Self.moleOutput }
         jobs.mole = { [unowned self] in mole }
-        jobs.speedTest = { [unowned self] () throws(ControlError) in
-            if let run = speedTest.run { return run }
-            speedTests += 1
-            return speedTest.start()!
-        }
         jobs.every = .milliseconds(20)
         verbs.registerCore()
         verbs.registerJobs(jobs)
@@ -234,26 +226,9 @@ final class ControlJobsTests {
         #expect(asked.count == 1)
     }
 
-    // MARK: Speed test
-
-    @Test("speedtest starts the key's run and answers its line; a run already going is joined, not doubled")
-    func speedtest() async {
-        let answer = await object("speedtest")
-        #expect(answer["result"] == .string("Download 887 Mbit/s · Upload 54 Mbit/s · Responsiveness 384 RPM") && answer["measured"] == .bool(true))
-        #expect(speedTests == 1)
-
-        speedTest.start()
-        _ = await object("speedtest")
-        #expect(speedTests == 1)
-
-        speedTest = SpeedTest(measure: { "networkQuality: no network" }, say: { _ in })
-        let failed = await object("speedtest")
-        #expect(failed["result"] == .string(SpeedTest.failed) && failed["measured"] == .bool(false))
-    }
-
     @Test("every job verb declares its flags and reads in help")
     func help() async {
-        for verb in ["report", "update", "clean", "speedtest"] {
+        for verb in ["report", "update", "clean"] {
             #expect(verbs.verbs[verb]?.flags != nil, "\(verb) declares no flags")
         }
         #expect(await ask("help", "update", "all").result.map { "\($0)".contains("asks Allow") } == true)

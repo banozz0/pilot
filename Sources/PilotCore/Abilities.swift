@@ -95,7 +95,6 @@ public enum Abilities {
         "apps.bitwardenLock": .bundle(Bitwarden.bundle), "apps.bitwardenGenerator": .bundle(Bitwarden.bundle),
         "apps.bitwardenSearch": .bundle(Bitwarden.bundle), "apps.generatePassword": .bundle(Bitwarden.bundle),
         "apps.lazygit": .command("lazygit"),
-        "look.ghosttyApply": .bundle("com.mitchellh.ghostty"), "look.ghosttyRemove": .bundle("com.mitchellh.ghostty"),
     ]
 
     /// Pilot's own actions that work one app, by its bundle id, so typing the app's name lists them under it (T41): the
@@ -151,12 +150,11 @@ public enum Abilities {
 
     static let noTryPrefixes = ["windows.", "drive.", "workspaces.move:", "workspaces.moveFollow:", "scripts.run:", "ext."]
     static let noTry: Set<String> = [
-        "workspaces.saveSnapshot", "workspaces.restoreSnapshot", "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
+        "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
         "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.bluetooth", "system.ejectAll",
         "system.clearAllNotifications", "system.clearNotification", "system.idleLock",
         "engine.hyper", "engine.tilingOff", "engine.openWindow", "bar.peekMenuBar",
         "apps.pastePlain", "apps.bitwardenFill", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "ai.selectionTools", "speech.readAloud",
-        "look.ghosttyApply", "look.ghosttyRemove",
         "dictation.toggle", "dictation.hold", "cursor.spotlight",
     ]
 
@@ -264,9 +262,7 @@ public enum Abilities {
         "captures.toggleDesktopIcons": "Leaves the desktop icons out of captures and recordings, or puts them back in; the desktop never changes.",
         "captures.restoreThumbnail": "Shows the last capture thumbnail you closed again.",
         "captures.delayed": "Counts down, then freezes the screen for you to drag an area, so a menu you opened is in it.",
-        "captures.smartElement": "Freezes the screen and captures the button, list or panel under the pointer; scroll for a bigger one.",
         "captures.subject": "Captures an area with its background removed, on your Mac: a person, a product, a logo.",
-        "captures.markup": "Freezes the screen so you draw arrows, boxes and text on an area, then saves it.",
         "captures.pickColour": "Freezes the screen under a pixel magnifier; a click copies the colour's hex, Shift-click its RGB.",
         "captures.screenRecording": "Records a screen, an app or an area you pick; the key again stops it.",
         "captures.scrolling": "Captures a page taller than the screen; Pilot scrolls it for you, or you do.",
@@ -297,8 +293,6 @@ public enum Abilities {
         "media.volumeUp": "Turns the volume up.",
         // System
         "bar.peekMenuBar": "Shows the macOS menu bar while the key is held.",
-        "look.ghosttyApply": "Gives Ghostty Pilot's theme and font.",
-        "look.ghosttyRemove": "Takes Pilot's look out of Ghostty's config.",
         "system.bluetooth": "Turns Bluetooth on or off; asks first when Bluetooth keyboards and mice are the only input.",
         "system.bluetoothSettings": "Opens System on Bluetooth.",
         "system.brightnessDown": "Dims the screen the window in front is on.",
@@ -314,7 +308,6 @@ public enum Abilities {
         "system.focusSettings": "Opens Focus in System Settings.",
         "system.idleLock": "Locks the Mac after it sits idle, or stops it locking.",
         "cursor.spotlight": "Dims the screen around the pointer while the key is held, with Spotlight on in Look › Cursor.",
-        "system.infoHUD": "Flashes the time, the date, the battery and the weather on the screen in front.",
         "system.keepAwake": "Keeps the Mac awake, or lets it sleep again.",
         "system.newEvent": "Opens the menu with event typed: add the words and a day or time, and Return adds it to your calendar.",
         "dictation.toggle": "Starts or stops dictation: Pilot's own or the app picked under Voice › Dictation.",
@@ -326,7 +319,6 @@ public enum Abilities {
         "system.logOut": "Logs out.",
         "system.menu": "Opens the menu on System: power, sound, Wi-Fi, display, Focus.",
         "system.activityMenu": "Opens the menu on Activity: what runs, busiest first, to quit or force quit.",
-        "system.statsMenu": "Opens the menu on Stats: CPU, memory, storage, network, heat and the busiest apps.",
         "system.missionControl": "Opens Mission Control.",
         "system.pointerSpeedCycle": "Steps the pointer speed through Slow, Normal and Fast, as System › Mouse saves them.",
         "system.pointerSpeedSlow": "Moves the pointer at the Slow speed System › Mouse saves.",
@@ -350,7 +342,6 @@ public enum Abilities {
         "system.shutDown": "Shuts the Mac down.",
         "system.sleep": "Puts the Mac to sleep.",
         "system.soundSettings": "Opens System on Sound.",
-        "system.speedTest": "Measures your internet speed with macOS's own test.",
         "system.translationLanguages": "Opens where macOS downloads languages for Translate.",
         "system.wifi": "Turns Wi-Fi on or off.",
         "system.wifiSettings": "Opens System on Wi-Fi.",
@@ -434,8 +425,6 @@ public enum Abilities {
         "workspaces.openLayout": "Opens the apps the workspace's Opens here lists that are missing and puts each in its spot.",
         "workspaces.previous": "Shows the workspace before.",
         "workspaces.rescue": "Brings back windows stranded off screen or on a lost workspace.",
-        "workspaces.restoreSnapshot": "Reopens and places the workspace's saved windows.",
-        "workspaces.saveSnapshot": "Saves which windows the workspace holds and where.",
         "workspaces.toggleGaps": "Takes the gaps between tiles out, or puts them back.",
     ]
 }

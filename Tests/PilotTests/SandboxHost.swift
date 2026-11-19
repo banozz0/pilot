@@ -116,11 +116,10 @@ struct SandboxHost {
         let info = ProcessInfo.processInfo.environment["PILOT_SANDBOX_INFO"].map { URL(filePath: $0) }
             ?? URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/Info.plist")
         // The notes in this run's throwaway folder, never Sven's Documents › Pilot Notes, which a fresh Engine's nil setting
-        // names; PILOT_SANDBOX_NOTES=<file.md> copies that note in first, so `pilot list notes` reads its reminders (P66).
+        // names; PILOT_SANDBOX_NOTES=<file.md> copies that note in first, so `pilot list notes` lists it.
         let notes = PilotFolder.support.appending(path: "Sandbox Notes", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: notes, withIntermediateDirectories: true)
         if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOTES"].map({ URL(filePath: $0) }) {
-            // Edited now, as a note just written: a line first seen in a note older than a day gets no reminder.
             let copy = notes.appending(path: file.lastPathComponent)
             try FileManager.default.copyItem(at: file, to: copy)
             try FileManager.default.setAttributes([.modificationDate: Date.now], ofItemAtPath: copy.path)

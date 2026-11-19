@@ -18,8 +18,6 @@ final class CaptureOverlay {
         case window(UInt32, owner: Int32, DisplayGrab)
         /// A colour as copied: `#RRGGBB`, or `rgb(r, g, b)`.
         case colour(String)
-        /// Capture markup's area with its marks drawn on, at its scale (P72).
-        case marked(CGImage, CGFloat)
     }
 
     private var panels: [KeyPanel] = []
@@ -27,25 +25,22 @@ final class CaptureOverlay {
     private let grabs: [DisplayGrab]
     private let windows: [CaptureSelection.Window]
     private let mode: CaptureSelection.Mode
-    /// Smart selection on from the start: Capture a UI element (P72).
-    private let smart: Bool
     /// False in tests: the panels are made, never ordered onto Sven's screen.
     private let visible: Bool
     /// What the pick is for: a capture, a recording (story 192), a scrolling capture (CP11), text, a subject cut out,
-    /// marks drawn before saving, or a colour (P72). Only a capture's and a colour's Tab copies a colour; a scrolling
-    /// capture, text and a subject take a clicked window's frame as their area, and markup draws in it.
-    enum Purpose: Equatable { case capture, record, scroll, ocr, subject, markup, colour }
+    /// or a colour (P72). Only a capture's and a colour's Tab copies a colour; a scrolling capture, text and a subject
+    /// take a clicked window's frame as their area.
+    enum Purpose: Equatable { case capture, record, scroll, ocr, subject, colour }
 
     private let purpose: Purpose
     private var done: ((Result) -> Void)?
     private var observers: [NSObjectProtocol] = []
 
-    init(grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: Purpose = .capture, smart: Bool = false,
+    init(grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: Purpose = .capture,
          visible: Bool = true, done: @escaping (Result) -> Void) {
         self.grabs = grabs
         self.windows = windows
         self.mode = mode
-        self.smart = smart
         self.visible = visible
         self.purpose = purpose
         self.done = done
@@ -63,7 +58,7 @@ final class CaptureOverlay {
                     ?? (visible ? nil : CGRect(origin: .zero, size: grab.frame.size)) else { continue }
             let local = CGPoint(x: pointer.x - frame.minX, y: frame.maxY - pointer.y)
             let selection = CaptureSelection(size: grab.frame.size, windows: CaptureSelection.windows(windows, on: grab.frame),
-                                             mode: mode, pointer: local, smart: smart)
+                                             mode: mode, pointer: local)
             let view = CaptureOverlayView(grab: grab, selection: selection, accent: Self.accent(), purpose: purpose) { [weak self] outcome, view in
                 self?.handle(outcome, from: view)
             }
@@ -73,8 +68,7 @@ final class CaptureOverlay {
             panel.isOpaque = true
             panel.backgroundColor = .black
             panel.acceptsMouseMovedEvents = true
-            // Escape while marking up is the markup's: its first press only warns while there are marks.
-            panel.escape = { [weak self, weak view] in if view?.escapeMarkup() != true { self?.close() } }
+            panel.escape = { [weak self] in self?.close() }
             panel.contentView = view
             panel.setFrame(frame, display: false)
             panels.append(panel)
@@ -87,8 +81,6 @@ final class CaptureOverlay {
         first.makeKey()
         first.makeFirstResponder(first.contentView)
         (first.contentView as? CaptureOverlayView)?.cursor.set()
-        // Capture a UI element rings the one under the pointer before it moves.
-        if smart { (first.contentView as? CaptureOverlayView)?.lookUpElement() }
         let center = NotificationCenter.default
         observers = [
             center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] _ in
@@ -104,14 +96,10 @@ final class CaptureOverlay {
 
     /// The panel under the pointer takes the keys, so Space and Tab act on the display Sven is looking at.
     func focus(_ view: CaptureOverlayView) {
-        // Marking up keeps the keys on its display, for its text and its tools.
-        guard let panel = view.window, !panel.isKeyWindow, !marking else { return }
+        guard let panel = view.window, !panel.isKeyWindow else { return }
         panel.makeKey()
         panel.makeFirstResponder(view)
     }
-
-    /// A markup is under way on one of the displays.
-    private var marking: Bool { views.contains { $0.markup != nil } }
 
     private func closeUnlessKey() {
         guard !panels.isEmpty, !panels.contains(where: \.isKeyWindow) else { return }
@@ -120,8 +108,6 @@ final class CaptureOverlay {
 
     /// Closes every panel and reports `result`, once: a second close does nothing.
     func close(_ result: Result = .cancelled) {
-        // Blurred patches a markup drew stay cached until the editor's next open otherwise.
-        if marking { MarkupRenderer.forgetBlurs() }
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         for panel in panels { panel.orderOut(nil); panel.contentView = nil }
@@ -134,18 +120,14 @@ final class CaptureOverlay {
     }
 
     private func handle(_ outcome: CaptureSelection.Outcome, from view: CaptureOverlayView) {
-        // One markup at a time: another display's pick does nothing while one is under way.
-        if marking { return }
         switch outcome {
         case .none: break
         case .close: close()
         // Pick a colour takes nothing but a colour: Return or a click on a window does nothing.
         case .area where purpose == .colour, .window where purpose == .colour: break
-        case .area(let rect) where purpose == .markup: mark(rect, on: view)
         case .area(let rect): close(.area(view.grab, rect))
         case .window(let id):
             let window = view.selection.windows.first { $0.id == id }
-            if purpose == .markup, let window { return mark(window.frame, on: view) }
             if [.scroll, .ocr, .subject].contains(purpose), let window { return close(.area(view.grab, window.frame)) }
             close(.window(id, owner: window?.owner ?? 0, view.grab))
         case .colour(let point):
@@ -158,26 +140,6 @@ final class CaptureOverlay {
             // Over the overlay only: the cursor moves on this display, nothing reaches an app.
             CGWarpMouseCursorPosition(CGPoint(x: view.grab.frame.minX + point.x, y: view.grab.frame.minY + point.y))
         }
-    }
-
-    /// Capture markup: the area stays frozen and takes marks; Save hands the marked area on, Cancel closes.
-    private func mark(_ rect: CGRect, on view: CaptureOverlayView) {
-        let accent = Look.shared.chromeTokens(.hud).colors.accent.rgb
-        guard let markup = CaptureMarkup(grab: view.grab, area: rect.intersection(view.bounds), accent: accent) else {
-            return close()
-        }
-        var saving = false
-        markup.model.finish = { [weak self, weak markup] outcome in
-            // Once Save has started, an Escape before the export lands no longer throws the marks away.
-            guard let self, let markup, !saving else { return }
-            if outcome == .cancel { return close() }
-            saving = true
-            Task { @MainActor in
-                guard let image = await markup.model.export() else { return self.close() }
-                self.close(.marked(image, markup.model.scale))
-            }
-        }
-        view.markup = markup
     }
 
     /// The picked style's one signal colour, as Hyper and the selected tool use it.
@@ -231,45 +193,20 @@ final class CaptureOverlayView: NSView {
         cursor.set()
     }
 
-    /// Capture markup under way on this display (P72): the pointer and the keys draw marks in its area.
-    var markup: CaptureMarkup? {
-        didSet { needsDisplay = true }
-    }
-
-    /// Escape for the markup, true when one is under way: it ends typing, warns once over marks, then cancels.
-    func escapeMarkup() -> Bool {
-        guard let markup else { return false }
-        _ = markup.model.key(.escape)
-        needsDisplay = true
-        return true
-    }
-
     override func mouseMoved(with event: NSEvent) {
-        guard markup == nil else { return }
         update { $0.move(to: point(event)) }
         lookUpElement()
     }
-    /// Hands an event to the markup under way and redraws only its area and bar; false with none.
-    private func marking(_ body: (CaptureMarkup) -> Void) -> Bool {
-        guard let markup else { return false }
-        body(markup)
-        setNeedsDisplay(markup.dirty)
-        return true
-    }
 
     override func mouseDown(with event: NSEvent) {
-        let p = point(event), shift = event.modifierFlags.contains(.shift)
-        guard !marking({ $0.mouseDown(p, shift: shift) }), purpose != .colour else { return }
-        update { $0.press(at: p) }
+        guard purpose != .colour else { return }
+        update { $0.press(at: point(event)) }
     }
     override func mouseDragged(with event: NSEvent) {
-        let p = point(event)
-        guard !marking({ $0.mouseDragged(p) }) else { return }
-        update { $0.move(to: p) }
+        update { $0.move(to: point(event)) }
     }
     override func mouseUp(with event: NSEvent) {
         let p = point(event)
-        guard !marking({ $0.mouseUp(p) }) else { return }
         // Pick a colour: a click copies the pixel's hex, Shift-click its rgb().
         if purpose == .colour {
             update { $0.move(to: p) }
@@ -279,10 +216,6 @@ final class CaptureOverlayView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if let markup {
-            if markup.key(event) { setNeedsDisplay(markup.dirty) }
-            return
-        }
         let key: CaptureSelection.Key? = switch Int64(event.keyCode) {
         case KeyCode.escape: .escape
         case 49: .space
@@ -368,7 +301,6 @@ final class CaptureOverlayView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard markup == nil else { return }
         guard selection.smart else { return zoomLoupe(event) }
         guard !elements.isEmpty, let step = wheelStep(event) else { return }
         level = max(level + step, 0)
@@ -406,15 +338,6 @@ final class CaptureOverlayView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         still.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
-        if let markup {
-            let dim = NSBezierPath(rect: bounds)
-            dim.append(NSBezierPath(rect: markup.area))
-            dim.windingRule = .evenOdd
-            NSColor.black.withAlphaComponent(0.3).setFill()
-            dim.fill()
-            markup.draw(in: bounds, accent: accent)
-            return hint(markup.model.hint ?? "Mark up: 2 to 0 pick a tool   ⌘Z undo   Return save   Esc cancel")
-        }
         let hole: CGRect? = switch selection.mode {
         case .area: selection.area ?? selection.element
         case .window: selection.hovered?.frame
@@ -538,8 +461,7 @@ final class CaptureOverlayView: NSView {
         case (.ocr, .window): "Read text: click a window   Space  area   Esc"
         case (.subject, .area): "Capture subject: drag round it   A  smart   Click a window for all of it   Esc"
         case (.subject, .window): "Capture subject: click a window   Space  area   Esc"
-        case (.markup, .area): "Mark up: drag the area to draw on   A  smart   Click a window   Return  whole screen   Esc"
-        case (.markup, .window): "Mark up: click a window to draw on   Space  area   Esc"
+
         }
     }
 

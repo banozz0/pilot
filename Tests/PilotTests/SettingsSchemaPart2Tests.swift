@@ -40,12 +40,10 @@ struct SettingsSchemaPart2Tests {
         let engine = WorkspaceListTests.FakeTiler()
         let block: PilotBlockStore
         let list: WorkspaceList
-        let snapshots: WorkspaceSnapshots
         let bar: BarItemsStore
         let topBar: TopBarController
         let wallpaper: WallpaperSettings
         let pilotSwitch = FakeSwitch()
-        let views: StatsViewsStore
         let schema = SettingsSchema()
         let verbs = ControlVerbs()
         var asked: [String] = []
@@ -60,20 +58,18 @@ struct SettingsSchemaPart2Tests {
             block = PilotBlockStore(tiler: tiler, defaults: defaults, bundles: { _ in [:] })
             let monitors = WorkspaceMonitorStore(tiler: tiler, block: block, defaults: defaults)
             list = WorkspaceList(tiler: tiler, block: block, monitors: monitors, defaults: defaults)
-            snapshots = WorkspaceSnapshots(observers: EngineObservers(tiler: tiler), defaults: defaults)
             bar = BarItemsStore(defaults: defaults) { [:] }
             topBar = TopBarController(defaults: defaults, autohide: autohide, writeBars: { _ in },
                                       screens: { TopBarControllerTests.screens }, panels: TopBarControllerTests.FakePanels())
             wallpaper = WallpaperSettings(defaults: defaults)
             wallpaper.tick = {}
-            views = StatsViewsStore(defaults: defaults)
-            schema.registerPart2(settings: settings, list: list, snapshots: snapshots, block: block, bar: bar, topBar: topBar,
+            schema.registerPart2(settings: settings, list: list, block: block, bar: bar, topBar: topBar,
                                  wallpaper: wallpaper, pilotSwitch: pilotSwitch,
                                  dictation: PilotDictationTests.Rig().pilot,
                                  pictures: ShelfPictures(defaults: defaults, capture: NoCapture()),
                                  notesIn: { [unowned self] _ in notesLeft },
                                  changeNotes: { [settings] in settings.notesFolder = NotesFolder.setting($0) })
-            schema.registerStats(views: views, bar: bar)
+            schema.registerStatsBar(bar)
             let schema = schema
             verbs.registerSettings(schema) { [unowned self] key, value, _ in
                 asked.append("\(key)=\(value)")
@@ -118,7 +114,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 55)
+        #expect(rig.schema.keys.count == 44)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -223,7 +219,7 @@ struct SettingsSchemaPart2Tests {
     /// Every UserDefaults key Pilot reads or writes, as the source names them (HEAD 1f39db2a, read for this task; the
     /// spec's inventory §1 was never written down). A `*` stands for a provider or role.
     static let inventory: Set = [
-        "layerKey", "quickTapEscape", "general.bindNudges", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay", "system.publicIP",
+        "layerKey", "quickTapEscape", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay",
         "windows.dragModifier", "windows.swipeWorkspaces", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
         "translate.home", "translate.other",
         "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
@@ -236,7 +232,7 @@ struct SettingsSchemaPart2Tests {
         "files.showHidden", "files.excluded", "passwords.length", "passwords.symbols", "passwords.clearAfter",
         "folders.repos", "folders.gifs", "giphy.rating", "menu.rootOrder", "menu.rootHidden", "menu.giphyKind", "abilities.added",
         "ai.provider", "ai.fallback", "ai.chatReset", "ai.model.*", "ai.effort.*", "ai.baseURL.*", "ai.models.*",
-        "workspaces.count", "workspaces.monitors", "workspaces.layouts", "workspaces.atLoginSession", "snapshots.reopenApps",
+        "workspaces.count", "workspaces.monitors", "workspaces.layouts", "workspaces.atLoginSession",
         "pilotBlock", "pilotBlock.yabaiFloatsCarried", "pilotBlock.floatNamesMoved",
         "bar.items", "bar.pagePlacement", "bar.background", "bar.colour", "bar.itemColours",
         "topBar.switch", "topBar.leftOut", "topBar.strips", "menuBar.stats", "topBar.settings", "pomodoro.countdown",
@@ -244,15 +240,14 @@ struct SettingsSchemaPart2Tests {
         "wallpaper.ownFolders", "wallpaper.folders", "wallpaper.screenSources", "wallpaper.fitShape", "wallpaper.workspaces", "wallpaper.workspaceSources",
         "wallpaper.workspaceImages",
         "switch.on",
-        "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.showIn", "dictation.barSide", "dictation.waveColour", "dictation.copy", "dictation.pauseMedia", "home.blocks", "stats.views", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
+        "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.showIn", "dictation.barSide", "dictation.waveColour", "dictation.copy", "dictation.pauseMedia", "home.blocks", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
         "setup.wifi.shown", "setup.bluetooth.shown", "pilot.notifications.decision", "pilot.notifications.macOSOffSaid",
         "AppleInterfaceStyle",
     ]
 
     /// A blob whose fields are keys under other names.
     static let blobs: [String: [String]] = ["pilotBlock": ["tiling.gaps.on", "tiling.gaps.inner", "tiling.gaps.outer", "tiling.scrolling.centre", "tiling.scrolling.look"],
-                                            "topBar.switch": ["topBar.on"],
-                                            "stats.views": ["stats.layout", "stats.show"] + StatsCard.allCases.map { "stats.card.\($0.rawValue)" }]
+                                            "topBar.switch": ["topBar.on"]]
     /// Lists a collection verb edits (`pilot list`, `add`, `remove`).
     static let collections: Set = ["files.excluded", "menu.rootOrder", "menu.rootHidden", "workspaces.monitors", "workspaces.layouts", "bar.items", "wallpaper.sources",
                                    "wallpaper.screenSources", "wallpaper.workspaceSources", "home.blocks"]
@@ -288,20 +283,9 @@ struct SettingsSchemaPart2Tests {
         #expect(listed.filter(isRegistered).isEmpty && listed.isSubset(of: Self.inventory))
     }
 
-    @Test("Stats' keys follow the page: card picks and Show in the layout picked now, mixed while cards differ, helpers on Busiest's store")
-    func stats() async throws {
+    @Test("The busiest-by-memory helpers setting lands on the bar's store")
+    func combineProcesses() async throws {
         let rig = Rig()
-        #expect(await rig.ask("set", "stats.card.storage", "bars").result == .string("bars"))
-        #expect(try await rig.value("stats.show") == .string("mixed") && rig.views.views.view(.storage) == .bars)
-        #expect(await rig.ask("set", "stats.layout", "compact").ok)
-        // Compact keeps its own picks: storage shows its default there, and the cards differ.
-        #expect(try await rig.value("stats.card.storage") == .string("number") && rig.views.views.layout == .compact)
-        #expect(await rig.ask("set", "stats.show", "line").result == .string("line"))
-        #expect(await rig.ask("set", "stats.show", "mixed").error?.code == .badValue)
-        #expect(await rig.ask("set", "stats.layout", "comfortable").ok)
-        #expect(try await rig.value("stats.card.storage") == .string("bars"))
         #expect(await rig.ask("set", "stats.combineProcesses", "on").result == .bool(true) && rig.bar.settings.combineProcesses)
-        // The store saves the views as the page does, so a fresh store over the same defaults reads them.
-        #expect(StatsViewsStore(defaults: rig.defaults).views.view(.storage) == .bars)
     }
 }
