@@ -81,6 +81,33 @@ struct OnboardingRenders {
         waiting.accessAsked = true
         waiting.settingsOpen = true
         try instrument(waiting, engine, "2b-access-waiting", dir)
+
+        // Keys (pilot-ui-redesign T13), at 780 (Q4), in Tokyo Night and Porcelain: each pick as a new install sees it (on
+        // Easy), as T9 drew them; then the keep case on a preset of the user's own, none of the three (as Classic is), so
+        // nothing is picked and Continue keeps it. A fresh store lists no Classic, so `use(.pilot)` would not move it.
+        #expect(KeysPresetCards.cards.map { "\($0.total) \($0.more)" } == ["32 25", "110 81", "0 0"])
+        engine.binds.addPreset(named: "Arrows", copying: true)
+        let own = engine.binds.store.preset
+        let keysStep = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
+        keysStep.step = .keys
+        for theme in ["tokyo-night", "porcelain"] {
+            look.themeID = theme
+            engine.binds.use(.easy)
+            setup.loadKeys(engine.binds.store)
+            #expect(setup.keys == .easy)
+            for pick in Onboarding.Keys.allCases {
+                setup.keys = pick
+                try instrument(keysStep, engine, "2c-keys-\(pick.rawValue)-\(theme)", dir)
+            }
+            engine.binds.use(own)
+            setup.loadKeys(engine.binds.store)
+            #expect(setup.keys == nil && own.id != "easy")
+            try instrument(keysStep, engine, "2c-keys-keep-\(theme)", dir)
+        }
+        look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
+        try toybox(keysStep, engine, "2c-keys-keep", dir)
+        engine.binds.use(.easy)
+        setup.keys = nil
         model.step = .extras
         try toybox(model, engine, "3a-fork", dir)
         // Pick by hand: the Files key, launch at login, and Convert, which ticks ffmpeg, webp and Homebrew (Sven,
@@ -158,6 +185,16 @@ struct OnboardingRenders {
         #expect(demo.demoDone(engine))
         try instrument(demo, engine, "4e-demo-done", dir)
         try toybox(demo, engine, "4e-demo-done", dir)
+        // Try it after a Scratch pick (T13): no key opens the menu, so its row is left out, and the hold says there are
+        // no binds yet. Back on Easy after, for the renders that follow.
+        setup.keys = .scratch
+        setup.useKeys(engine.binds)
+        let scratch = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
+        #expect(engine.binds.store.preset.id == "scratch" && engine.binds.store.binds.isEmpty && scratch.menuKey(engine) == nil)
+        scratch.startTryIt()
+        try instrument(scratch, engine, "4f-try-it-scratch", dir)
+        engine.binds.use(.easy)
+        setup.keys = nil
         // More open (tester, 2026-11-18): the panels scroll inside Set up's height, so the window stays on the screen.
         model.showsMore = true
         try instrument(model, engine, "4d-try-it-more", dir)

@@ -288,6 +288,178 @@ struct SetupRunList: View {
     private func ask(_ items: [SetupItem]) { if items.contains(.homebrew) { asking = items } else { setup.undo(items) } }
 }
 
+// MARK: Keys
+
+/// Keys' three presets side by side (pilot-ui-redesign T13; Q264's Set up B, drawn in T9, widened to 780 by Q4): each
+/// card names its preset, a few of its keys and how many more it has (Sven's one change to the drawing), then its count.
+/// A card's press, or its number key, picks it; the pick is `setup.keys`, applied by Continue (T12). With no pick, the
+/// active preset (Classic or the user's own) is kept.
+struct KeysPresetCards: View {
+    @Environment(\.style) private var style
+    let setup: OnboardingSetup
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(Array(Self.cards.enumerated()), id: \.element.preset) { index, card in
+                let picked = setup.keys == card.preset
+                Button { setup.keys = card.preset } label: { face(card, number: index + 1, picked: picked) }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
+                    .accessibilityLabel("\(card.name), \(card.about) \(card.foot)")
+                    .accessibilityAddTraits(picked ? .isSelected : [])
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func face(_ card: Card, number: Int, picked: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.card, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("\(number)").styleText(\.mono).foregroundStyle(style.color(picked ? \.canvas : \.text3))
+                    .frame(width: 20, height: 20)
+                    .background { if picked { RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous).fill(style.color(\.accent)) } }
+                    .overlay { if !picked { RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous).strokeBorder(style.color(\.line2)) } }
+                Text(card.name).styleText(\.title).foregroundStyle(style.color(\.text)).fixedSize().layoutPriority(1)
+                if card.preset == .easy { Spacer(minLength: 4); InstrumentEyebrow(text: "Recommended") }
+            }
+            Text(card.about).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(card.lines, id: \.label) { line in
+                    row { ForEach(line.caps, id: \.self) { PresetCap(text: $0, lit: picked) } } label: {
+                        Text(line.label).styleText(\.body).foregroundStyle(style.color(\.text2))
+                    }
+                }
+                if card.more > 0 {
+                    row { PresetCap(text: "+\(card.more)", lit: picked, dashed: true) } label: {
+                        Text("and \(card.more) more").styleText(\.body).foregroundStyle(style.color(\.text3))
+                    }
+                }
+                if card.lines.isEmpty {
+                    row { PresetCap(text: "?", lit: false, dashed: true) } label: {
+                        Text("Your first key").styleText(\.body).foregroundStyle(style.color(\.text3))
+                    }
+                }
+            }
+            .padding(.top, 14)
+            Spacer(minLength: 14)
+            InstrumentRule()
+            Text(card.foot).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+        }
+        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 13)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .styleSurface(\.card)
+        // The pick in the signal colour, its one meaning here: what is selected (DESIGN.md).
+        .overlay { if picked { shape.strokeBorder(style.color(\.accentLine), lineWidth: 1.5) } }
+        .contentShape(shape)
+    }
+
+    /// A key line: one column for every card's keys, so the words line up down the card.
+    private func row(@ViewBuilder caps: () -> some View, @ViewBuilder label: () -> some View) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 3) { caps() }.frame(width: 62, alignment: .leading)
+            label()
+        }
+    }
+
+    /// A card: its preset, the line under its name, a few of its keys with the actions each covers, and its foot.
+    struct Card {
+        struct Line { let caps: [String], label: String, actions: [String] }
+        let preset: Onboarding.Keys
+        let name: String, about: String
+        let lines: [Line]
+        /// Every key the preset has, from its table (pilot-key-presets' rules: Easy 32, Complex 110, Scratch 0).
+        let total: Int
+        let foot: String
+        /// "And N more": the preset's keys less the actions its lines cover (Easy 25, Complex 81).
+        var more: Int { lines.isEmpty ? 0 : total - Set(lines.flatMap(\.actions)).count }
+    }
+
+    /// The three cards, as T9 drew them (pilot-key-presets.notes.md, "The rules").
+    static let cards: [Card] = {
+        let workspaces = Workspaces.all
+        let easy = PilotDefault.easy.count, complex = PilotDefault.complex.count
+        return [
+            Card(preset: .easy, name: "Easy", about: "Letters you can guess.", lines: [
+                Line(caps: ["Space"], label: "Pilot menu", actions: ["apps.launcher"]),
+                Line(caps: ["B"], label: "Browser", actions: ["apps.browser"]),
+                Line(caps: ["Return"], label: "Terminal", actions: ["apps.terminal"]),
+                Line(caps: ["V"], label: "Clipboard history", actions: ["apps.clipboard"]),
+                Line(caps: ["S"], label: "Capture area", actions: ["captures.area"]),
+                Line(caps: ["←", "→"], label: "Focus a window", actions: ["windows.focusLeft", "windows.focusRight"]),
+            ], total: easy, foot: "\(easy) keys, all in Complex too."),
+            Card(preset: .complex, name: "Complex", about: "Easy, plus every window move.", lines: [
+                Line(caps: ["⇧←↑↓→"], label: "Swap windows", actions: ["Up", "Down", "Left", "Right"].map { "windows.swap\($0)" }),
+                Line(caps: ["⌃←↑↓→"], label: "Nudge a window", actions: ["Up", "Down", "Left", "Right"].map { "windows.nudge\($0)" }),
+                Line(caps: ["1–9"], label: "Go to workspace", actions: workspaces.map { "workspaces.go:\($0)" }),
+                Line(caps: ["⇧1–9"], label: "Send window", actions: workspaces.map { "workspaces.move:\($0)" }),
+                Line(caps: ["[", "]"], label: "First ¾, last ¼", actions: ["windows.firstThreeQuarters", "windows.lastQuarter"]),
+                Line(caps: ["Z"], label: "Capture scrolling", actions: ["captures.scrolling"]),
+            ], total: complex, foot: "\(complex) keys. None for apps a Mac may lack."),
+            Card(preset: .scratch, name: "Scratch", about: "No keys. Build your own.", lines: [], total: 0,
+                 foot: "0 keys. The menu bar icon still opens Pilot."),
+        ]
+    }()
+    private typealias Line = Card.Line
+
+    // The step's words, the same in both looks.
+    static let title = "Which keys should Pilot start with?"
+    static func about(hyper: String) -> String { "Hyper is \(hyper). You can change any key later in Keys." }
+    static let hint = "Press 1, 2 or 3"
+    /// The primary button: the pick's words, or Keep my keys with no pick.
+    static func button(_ pick: Onboarding.Keys?) -> String {
+        switch pick {
+        case .easy?: "Use Easy keys"
+        case .complex?: "Use Complex keys"
+        case .scratch?: "Start with no keys"
+        case nil: "Keep my keys"
+        }
+    }
+    /// The foot's note while the active preset is none of the three: what Keep keeps.
+    static func keeping(_ name: String) -> String { "Keeping your preset, \(name). Press 1, 2 or 3 to switch." }
+}
+
+/// One key chip on a preset card: each key sign as its line icon (the mono face lacks them), the words between in the
+/// key face; lit in the signal colour on the picked card, dashed for a count or an empty slot.
+private struct PresetCap: View {
+    @Environment(\.style) private var style
+    let text: String
+    let lit: Bool
+    var dashed = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous)
+        HStack(spacing: 1) {
+            ForEach(Array(Self.runs(text).enumerated()), id: \.offset) { InstrumentLegend(text: $1) }
+        }
+        .foregroundStyle(style.color(lit ? \.accent : dashed ? \.text3 : \.text2))
+        .lineLimit(1).fixedSize()
+        .padding(.horizontal, 5).frame(minWidth: style.points(19), minHeight: style.points(19))
+        .background { if !dashed { shape.fill(style.color(\.raised)) } }
+        .overlay {
+            shape.strokeBorder(style.color(lit ? \.accentLine : \.line2), style: StrokeStyle(lineWidth: 1, dash: dashed ? [3, 2] : []))
+        }
+        .accessibilityLabel(text)
+    }
+
+    /// The text cut into its key signs and the words between them: "⇧1–9" is ⇧ then "1–9".
+    static func runs(_ text: String) -> [String] {
+        var runs: [String] = [], word = ""
+        for c in text.map(String.init) {
+            if InstrumentKey.symbols[c] != nil {
+                if !word.isEmpty { runs.append(word); word = "" }
+                runs.append(c)
+            } else {
+                word += c
+            }
+        }
+        if !word.isEmpty { runs.append(word) }
+        return runs
+    }
+}
+
 // MARK: Try it
 
 /// Try it's Allow the rest (T58): the grants Access left for later, walked one after another (GrantWalk), with

@@ -66,14 +66,14 @@ private struct OnboardingSteps: View {
             switch model.step {
             case .welcome: welcome
             case .permissions: access
-            // T12's placeholder until T13 draws Keys: Continue applies the pick.
-            case .keys: Button("Continue") { model.useKeys() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
+            case .keys: keys
             case .extras: setUp
             case .tryIt: tryIt
             }
         }
         .padding(24)
-        .frame(width: 560)
+        // 780, as Instrument's (Q4, pilot-ui-redesign T13): Keys' three cards side by side.
+        .frame(width: 780)
         // The app window's look (card agent-bo-95422728): the style's, dark or light whatever the Mac's appearance, title
         // bar too.
         .buttonStyle(.pilot)
@@ -127,6 +127,25 @@ private struct OnboardingSteps: View {
                 Spacer()
                 Button("Continue") { model.go(.keys) }.keyboardShortcut(.defaultAction).disabled(!Onboarding.canContinue(model.status))
                     .buttonStyle(.pilotPrimary)
+            }
+        }
+    }
+
+    /// Keys (pilot-ui-redesign T13): Instrument's cards and words, in Toybox's look.
+    private var keys: some View {
+        let setup = model.setup
+        let active = engine.binds.store.preset
+        let keeps = Onboarding.Keys.pick(active: active.id) == nil
+        return VStack(alignment: .leading, spacing: 12) {
+            title(KeysPresetCards.title)
+            Text(KeysPresetCards.about(hyper: engine.settings.layerKeys.label)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
+            KeysPresetCards(setup: setup)
+            HStack {
+                Button("Back") { model.go(.permissions) }
+                FinePrint(text: keeps && setup.keys == nil ? KeysPresetCards.keeping(active.name) : KeysPresetCards.hint)
+                Spacer()
+                if keeps && setup.keys != nil { Button("Keep \(active.name)") { setup.keys = nil } }
+                Button(KeysPresetCards.button(setup.keys)) { model.useKeys() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
             }
         }
     }

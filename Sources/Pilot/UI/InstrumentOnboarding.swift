@@ -18,14 +18,15 @@ struct InstrumentOnboarding: View {
             switch model.step {
             case .welcome: welcome
             case .permissions: access
-            // T12's placeholder until T13 draws Keys: Continue applies the pick.
-            case .keys: foot(nil, "Continue") { model.useKeys() }
+            case .keys: keys
             case .extras: setUp
             case .tryIt: tryIt
             }
         }
         .padding(28)
-        .frame(width: 560, alignment: .leading)
+        // 780 for every step, so each Keys card's keys sit side by side (Sven, Q4 on pilot-key-presets, 2026-11-19) and
+        // the window keeps one width from Hyper to Try it. The Welcome scene sizes to it (`.contentSize`, PilotApp).
+        .frame(width: 780, alignment: .leading)
         .foregroundStyle(style.color(\.text))
     }
 
@@ -103,6 +104,34 @@ struct InstrumentOnboarding: View {
         }
     }
 
+    // MARK: Keys
+
+    /// Keys (pilot-ui-redesign T13): the three presets side by side, Back, the number keys' hint, and the pick's button,
+    /// which applies it (T12). With no pick the active preset stays, Keep my keys; a pick can go back to it.
+    private var keys: some View {
+        let setup = model.setup
+        let active = engine.binds.store.preset
+        let keeps = Onboarding.Keys.pick(active: active.id) == nil
+        return VStack(alignment: .leading, spacing: 0) {
+            heading(KeysPresetCards.title) {
+                Text(KeysPresetCards.about(hyper: engine.settings.layerKeys.label)).styleText(\.body).foregroundStyle(style.color(\.text2))
+            }
+            KeysPresetCards(setup: setup)
+            HStack(spacing: 16) {
+                Button("Back") { model.go(.permissions) }.buttonStyle(InstrumentButtonStyle(kind: .raised))
+                Text(keeps && setup.keys == nil ? KeysPresetCards.keeping(active.name) : KeysPresetCards.hint)
+                    .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if keeps && setup.keys != nil {
+                    Button("Keep \(active.name)") { setup.keys = nil }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
+                }
+                Button { model.useKeys() } label: { InstrumentKeyedLabel(title: KeysPresetCards.button(setup.keys), symbol: nil, trigger: nil) }
+                    .keyboardShortcut(.defaultAction).buttonStyle(InstrumentButtonStyle(kind: .primary))
+            }
+            .padding(.top, 20)
+        }
+    }
+
     // MARK: Set up
 
     /// The fork, Pick by hand, or the run in its place.
@@ -159,13 +188,18 @@ struct InstrumentOnboarding: View {
                 if demoDone {
                     line { DemoDone(line: model.demoLine(engine)); Spacer(minLength: 0) }
                 } else {
-                prompt("Hold \(key.label)", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
+                // After Scratch (or any empty set) there is nothing to appear: say so, and where the first key goes.
+                prompt("Hold \(key.label)", engine.binds.store.binds.isEmpty ? "Pilot sees it. No binds yet: add your first in Keys"
+                       : "your binds appear while you hold it", caps: [], done: model.tryIt.held)
                 if let files = model.filesKey(engine) {
                     InstrumentRule()
                     prompt("Press \(key.label) + \(files)", "Pilot Files opens: the key you just set", caps: [files], done: model.filesOpened)
                 }
-                InstrumentRule()
-                prompt("Press \(key.label) + Space", "the Pilot menu", caps: ["Space"], done: model.tryIt.menuOpened)
+                // The menu's own key, left out when none opens it (a Scratch pick; T12's menuKey).
+                if let menu = model.menuKey(engine) {
+                    InstrumentRule()
+                    prompt("Press \(key.label) + \(menu)", "the Pilot menu", caps: [menu], done: model.tryIt.menuOpened)
+                }
                 }
             }
             InstrumentPanel(title: "The other permissions") {
