@@ -20,7 +20,7 @@ struct PageState: Equatable {
             return PageState(text: "\(tiler.occupied.count) in use" + (tiler.focused.map { " · on \($0)" } ?? ""), on: true)
         case .tiling:
             let on = engine.observers.tiler.isAnswering
-            return PageState(text: on ? "Running" : "Stopped", on: on)
+            return PageState(text: !engine.settings.tiling ? "Off" : on ? "Running" : "Stopped", on: on)
         case .menuBar:
             let on = engine.topBar.isOn
             return PageState(text: on ? "Top bar on" : "Top bar off", on: on)

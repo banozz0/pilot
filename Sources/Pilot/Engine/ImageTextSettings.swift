@@ -40,7 +40,7 @@ final class ImageTextSettings {
         self.defaults = defaults
         self.home = home
         self.excluded = excluded
-        enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+        enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? Install.startsOn
         folders = defaults.stringArray(forKey: Self.foldersKey) ?? Self.standardFolders
     }
 

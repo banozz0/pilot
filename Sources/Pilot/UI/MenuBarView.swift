@@ -55,27 +55,30 @@ extension KeepAwake: QuickSwitchable {}
 extension TopBarController: QuickSwitchable {
     func toggle() { set(!isOn) }
 }
-/// The dropdown's Tiling switch (card agent-bo-95422912): `enable off` stops the tiler tiling and managing
-/// windows, and brings the windows of hidden workspaces onto the visible screen (as AeroSpace's enable did);
-/// `enable on` tiles again. Pilot remembers what it last set, as the tiler does not report it; off while the tiler is not
-/// running.
+/// The dropdown's Tiling switch (card agent-bo-95422912), the same one as Windows › Tiling's: off stops the tiler and
+/// brings the windows of hidden workspaces onto the visible screen (as AeroSpace's enable did); on starts it again. Saved
+/// (Settings' `tiling.on`), so off stays off at the next launch; off while the tiler is not running.
 @Observable @MainActor
 final class TilingSwitch: QuickSwitchable {
-    private(set) var tiling = true
+    private(set) var tiling: Bool
     @ObservationIgnored private let answering: @MainActor () -> Bool
     @ObservationIgnored private let enable: @MainActor (Bool) async throws -> Void
 
-    init(answering: @escaping @MainActor () -> Bool, enable: @escaping @MainActor (Bool) async throws -> Void) {
+    init(answering: @escaping @MainActor () -> Bool, enable: @escaping @MainActor (Bool) async throws -> Void, tiling: Bool = true) {
         self.answering = answering
         self.enable = enable
+        self.tiling = tiling
     }
 
-    /// The real one, Pilot's tiler.
-    convenience init(_ tiler: TilerService) {
-        self.init(answering: { tiler.isAnswering }, enable: { on in try await tiler.runner.run(.enable(on)) })
+    /// The real one: Settings' switch, which the engine follows by starting or stopping Pilot's tiler.
+    convenience init(_ tiler: TilerService, settings: PilotSettings) {
+        self.init(answering: { tiler.isAnswering }, enable: { on in settings.tiling = on }, tiling: settings.tiling)
     }
 
     var isOn: Bool { answering() && tiling }
+
+    /// The switch changed elsewhere (its page, `pilot set`): shown as it is now.
+    func follow(_ on: Bool) { tiling = on }
 
     func toggle() {
         let on = !tiling
@@ -83,7 +86,6 @@ final class TilingSwitch: QuickSwitchable {
             do {
                 try await enable(on)
                 tiling = on
-                wslog.notice("tiling \(on ? "on" : "off", privacy: .public)")
             } catch {
                 wslog.error("tiling \(on ? "on" : "off", privacy: .public): \(String(describing: error), privacy: .public)")
             }
@@ -93,17 +95,26 @@ final class TilingSwitch: QuickSwitchable {
 
 /// A quick switch on at every launch, never saved, so it is never forgotten off for good: the clipboard's recording
 /// (card agent-bo-95422912; paused, nothing copied is kept) and the Hyper key (card agent-bo-95422986; off, the layer
-/// key and chord Hyper do what macOS says, plain combos still run).
+/// key and chord Hyper do what macOS says, plain combos still run). With `onceOn`, a new install's starts off (Sven's
+/// pick, 2026-11-19) until the switch is first turned on, which is saved; a pause after that still lasts one launch.
 @Observable @MainActor
 final class SessionSwitch: QuickSwitchable {
-    static let clipboard = SessionSwitch { ClipboardHistory.shared.setRecording($0) }
-    private(set) var isOn = true
+    static let clipboard = SessionSwitch(onceOn: "clipboard.recording") { ClipboardHistory.shared.setRecording($0) }
+    private(set) var isOn: Bool
     @ObservationIgnored private let apply: @MainActor (Bool) -> Void
+    @ObservationIgnored private let onceOn: String?
+    @ObservationIgnored private let defaults: UserDefaults
 
-    init(apply: @escaping @MainActor (Bool) -> Void) { self.apply = apply }
+    init(onceOn: String? = nil, defaults: UserDefaults = .pilot(), apply: @escaping @MainActor (Bool) -> Void) {
+        self.apply = apply
+        self.onceOn = onceOn
+        self.defaults = defaults
+        isOn = onceOn.map { defaults.object(forKey: $0) as? Bool ?? Install.startsOn } ?? true
+    }
 
     func toggle() {
         isOn.toggle()
+        if isOn, let onceOn { defaults.set(true, forKey: onceOn) }
         apply(isOn)
     }
 

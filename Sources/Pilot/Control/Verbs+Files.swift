@@ -26,7 +26,7 @@ extension SettingsSchema {
     /// Files › File search › Text in images' switch. Off clears the text index, as on the page.
     func registerImageText(_ text: ImageTextSettings) {
         register([
-            .bool("files.imageText", "Files finds images by the words in them", page: "files", standard: true,
+            .bool("files.imageText", "Files finds images by the words in them", page: "files", standard: Install.startsOn,
                   read: { text.enabled }, write: { text.enabled = $0 }),
         ])
     }

@@ -30,13 +30,13 @@ extension SettingsSchema {
                       }
                       settings.keySwaps = swaps
                   }),
-            .bool("quickTapEscape", "A tap of the Hyper key is Escape", page: "general", standard: true,
+            .bool("quickTapEscape", "A tap of the Hyper key is Escape", page: "general", standard: Install.startsOn,
                   read: { settings.quickTapEscape }, write: { settings.quickTapEscape = $0 }),
             .number("overlay.delay", "Seconds Hyper is held before the overlay shows", page: "general", range: HoldOverlay.delayRange,
                     standard: HoldOverlay.delay, read: { settings.overlayDelay }, write: { settings.overlayDelay = $0 }),
             .bool("overlay.enabled", "Holding Hyper shows your binds", page: "general", standard: true,
                   read: { settings.overlayEnabled }, write: { settings.overlayEnabled = $0 }),
-            .bool("general.bindNudges", "Show an app's bind after you open it", page: "general", standard: true,
+            .bool("general.bindNudges", "Show an app's bind after you open it", page: "general", standard: Install.startsOn,
                   read: { settings.bindNudges }, write: { settings.bindNudges = $0 }),
             .bool("launchAtLogin", "Launch at login", page: "general", standard: PilotSettings.launchAtLoginDefault,
                   read: { settings.launchAtLogin }, write: { settings.launchAtLogin = $0 }),
@@ -48,7 +48,7 @@ extension SettingsSchema {
             .choice("translate.other", "Your language goes into", page: "menu", TranslatePair.languages,
                     standard: TranslatePair.standard.other,
                     read: { settings.translatePair.other }, write: { settings.translatePair = settings.translatePair.with(other: $0) }),
-            .bool("displays.brightnessKeys", "Brightness keys follow the focused window", page: "system", standard: true,
+            .bool("displays.brightnessKeys", "Brightness keys follow the focused window", page: "system", standard: Install.startsOn,
                   read: { settings.brightnessKeys }, write: { settings.brightnessKeys = $0 }),
         ])
     }

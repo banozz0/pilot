@@ -107,7 +107,7 @@ extension SettingsSchema {
                     }),
             .choice(PilotSettings.dictationKeyModeKey, "Dictation key mode", page: "voice", DictationKeyMode.allCases, standard: .toggle,
                     read: { settings.dictationKeyMode }, write: { settings.dictationKeyMode = $0 }),
-            .bool("recommendations.show", "Recommend apps", page: "install", standard: true,
+            .bool("recommendations.show", "Recommend apps", page: "install", standard: Install.startsOn,
                   read: { recommendations.show }, write: { recommendations.show = $0 }),
             .bool("system.publicIP", "Show This Mac's public IP", page: "stats", standard: false,
                   read: { settings.showPublicIP }, write: { settings.showPublicIP = $0 }),

@@ -8,6 +8,9 @@ import PilotCore
 @Observable @MainActor
 final class Binds {
     static let url = PilotFolder.support.appending(path: "binds.json")
+    /// Pilot ran on this Mac before: every launch's first load writes binds.json, so before that load only an earlier
+    /// launch left it. An existing user keeps what they had (abilities, tiling).
+    static var ranBefore: Bool { FileManager.default.fileExists(atPath: url.path) }
     /// The file this store reads and writes: Self.url, and in any test run one of its own in the run's folder
     /// (PilotFolder), so no test's binds reach another's (Binds' editor drew whatever Home settles left, 2026-10-10). A
     /// render run too: its tests run in parallel in one moved home, and one test's preset switch broke another's bind.

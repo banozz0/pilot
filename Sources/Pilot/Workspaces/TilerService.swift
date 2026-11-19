@@ -14,6 +14,13 @@ let wslog = Logger(subsystem: "dev.banozz.pilot", category: "workspaces")
     func arrange(_ workspace: String, as preset: LayoutPreset) async throws
     func start() async throws
     func stop()
+    /// It lays out the Mac's own windows (Pilot's tiler), so it waits for Accessibility and a crash's stranded windows come
+    /// back before it starts; a sandbox's stand-in moves a file's windows only.
+    var movesRealWindows: Bool { get }
+}
+
+extension TilerEngineRunning {
+    var movesRealWindows: Bool { true }
 }
 
 extension InProcessTiler: TilerEngineRunning {}
@@ -54,6 +61,9 @@ final class TilerService {
     var onWorkspaceShown: (_ workspace: String, _ previous: String?, _ displayUUID: String?) -> Void = { _, _, _ in }
     /// The tiler answered for the first time since it started: At login opens then.
     var onConnected: () -> Void = {}
+    /// Windows › Tiling's switch is on: the engine's settings say so. Off, the other tiler's quit starts nothing and a tiler
+    /// bind tips where to turn tiling on.
+    @ObservationIgnored var isWanted: @MainActor () -> Bool = { true }
 
     /// The other tiler's app runs (OtherTiler); a fake in tests.
     @ObservationIgnored private let otherTilerRunning: @MainActor () -> Bool
@@ -92,6 +102,8 @@ final class TilerService {
     /// its parked windows are hidden, not stranded, and two tilers would fight over every window; the start runs once
     /// that app has quit. Pilot never quits it; one launched later only tips. A running engine only gets its stream again.
     func startEngine(_ settings: @escaping @MainActor () -> TilerSettings, beforeStart: @escaping @MainActor () -> Void = {}) async {
+        // Tiling's switch off (a new install's default): nothing starts, the other tiler's quit included.
+        guard isWanted() else { return wslog.notice("tiler not started: tiling is off (Windows › Tiling)") }
         if otherTilerWatch == nil {
             otherTilerWatch = AppWatcher(OtherTiler.bundleId, launched: { [weak self] _ in
                 wslog.notice("tiler: \(OtherTiler.name, privacy: .public) launched")
@@ -105,7 +117,7 @@ final class TilerService {
         do {
             guard !otherTilerRunning() else { throw OtherTilerRunning() }
             try await engine.apply(settings())
-            beforeStart()
+            if engine.movesRealWindows { beforeStart() }
             try await engine.start()
             subscribe()
         } catch is OtherTilerRunning {
@@ -235,7 +247,7 @@ final class TilerService {
     var tilerName: String { PilotCore.tilerName }
 
     private func notRunning(_ id: String) {
-        let what = "\(tilerName) is not running"
+        let what = isWanted() ? "\(tilerName) is not running" : "Tiling is off: turn it on in Windows › Tiling"
         wslog.error("\(id, privacy: .public): \(what, privacy: .public)")
         tip(what)
     }

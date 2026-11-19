@@ -19,7 +19,7 @@ struct ToyDropdown: View {
 
     var body: some View {
         let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
-                                         tilerRunning: engine.observers.tiler.isAnswering,
+                                         tilerRunning: engine.tilerFine,
                                          lastError: engine.lastError)
         KitPopover(width: 340, inset: 0) {
             VStack(alignment: .leading, spacing: 0) {

@@ -89,7 +89,7 @@ struct HomePage: View {
 
     var body: some View {
         let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
-                                         tilerRunning: engine.observers.tiler.isAnswering,
+                                         tilerRunning: engine.tilerFine,
                                          lastError: engine.lastError)
         // In edit mode Done holds Return.
         let held = editing != nil ? .none : HomeReturn.target(picked: picked != nil, problems: problems, searching: searching)
@@ -323,7 +323,9 @@ enum HomeGreeting {
             }
         }
         guard hyperOn else { return HyperToggle.offWords(layerKey: layerKey) }
-        return "\(layerKey) is your Hyper key; \(tiler) is tiling workspace \(workspace ?? "–")."
+        // No workspace and nothing that needs you: tiling is switched off (a new install's default).
+        guard let workspace else { return "\(layerKey) is your Hyper key; tiling is off." }
+        return "\(layerKey) is your Hyper key; \(tiler) is tiling workspace \(workspace)."
     }
 }
 

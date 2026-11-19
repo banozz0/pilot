@@ -17,6 +17,6 @@ final class Recommendations {
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
-        show = defaults.object(forKey: Self.key) as? Bool ?? true
+        show = defaults.object(forKey: Self.key) as? Bool ?? Install.startsOn
     }
 }

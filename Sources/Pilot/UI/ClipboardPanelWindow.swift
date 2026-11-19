@@ -52,7 +52,8 @@ final class ClipboardHistory: ScreenPausing {
         settings = ClipboardSettings(defaults: defaults)
     }
 
-    func start() {
+    /// `recording` off (a new install's clipboard, SessionSwitch.clipboard) opens the store but watches nothing.
+    func start(recording: Bool = true) {
         guard store == nil else { return }
         do {
             // Pilot's folder: in a test run, the run's own.
@@ -67,7 +68,7 @@ final class ClipboardHistory: ScreenPausing {
             watcher?.onExpire = { [weak self] in self?.model?.refresh() }
             ocr.onRead = { [weak self] in self?.model?.refresh() }
             configure(prune: true)
-            watcher?.start()
+            if recording { watcher?.start() }
             ocr.catchUp()
             cliplog.notice("clipboard history started at \(path.path, privacy: .public)")
         } catch {

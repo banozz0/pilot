@@ -32,6 +32,7 @@ struct TilingBody: View {
         // titles and the mouse and motion too, and Tiling's More with them (pages round 4, Sven's Q98).
         KitLanding {
             KitPage(intro: Self.intro) {
+                tilingSwitch
                 if ink.isInstrument {
                     // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
                     InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
@@ -46,6 +47,17 @@ struct TilingBody: View {
                 }
                 if let error = block.lastError { FinePrint(text: error, color: ink.red).padding(.top, 12) }
             }
+        }
+    }
+
+    /// What Tiling's switch does, its ⓘ's words.
+    static let tilingInfo = "On, Pilot's tiler lays out every window: layouts, workspaces and the window binds. Off, no window is tiled, moved or resized."
+
+    /// The one switch for the whole tiler (Sven, 2026-11-18): off for a new install.
+    private var tilingSwitch: some View {
+        @Bindable var settings = settings
+        return KitBlock(title: "Tiling", symbol: "rectangle.split.2x1") {
+            BlockRow(first: true) { Toggle("Tile windows", isOn: $settings.tiling).toggleStyle(.pilotSwitchRow(info: Self.tilingInfo)) }
         }
     }
 

@@ -91,6 +91,8 @@ final class ShelfPictures: ScreenPausing {
     @ObservationIgnored private var leftWith: Set<Int> = []
 
     static let key = "shelf.pictures"
+    /// Stills for an install from before; off for a new one (Sven's pick, 2026-11-19), so nothing asks Screen Recording.
+    static var start: ShelfPictureMode { Install.isNew ? .off : .stills }
     static let offeredKey = "shelf.pictures.offered"
     /// A card's width in points: the shelf's room less its margins (ShelfGroup).
     static let cardWidth = CGFloat(PilotBlock.shelfWidth) - 28
@@ -108,7 +110,7 @@ final class ShelfPictures: ScreenPausing {
     init(defaults: UserDefaults = .pilot(), capture: any ShelfCapturing = SCShelfCapture()) {
         self.defaults = defaults
         self.capture = capture
-        mode = defaults.string(forKey: Self.key).flatMap(ShelfPictureMode.init(rawValue:)) ?? .stills
+        mode = defaults.string(forKey: Self.key).flatMap(ShelfPictureMode.init(rawValue:)) ?? Self.start
         offered = defaults.bool(forKey: Self.offeredKey)
     }
 
