@@ -45,7 +45,7 @@ final class EngineObservers {
     /// Each read of the focused window: focus, move, resize, the tiler's writes (the window border follows it, card agent-bo-95422950).
     var onFocusedWindow: (WindowBorder.Window?) -> Void = { _ in }
     /// The focused window's title, frame and AX element as one app reports them; tests pass a fake.
-    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = EngineObservers.drawnFocusedWindow
+    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = { EngineObservers.drawnFocusedWindow($0) }
     /// The last read's window server number: the tiler's writes to other windows are not re-read.
     @ObservationIgnored private var focusedWindowID: CGWindowID?
     /// The last read's window and its AX element: a move or resize of that element reads its frame alone.
@@ -79,6 +79,10 @@ final class EngineObservers {
         self.drag = drag
         follower.landed = { [weak self] in self?.frameLanded($0, $1) }
         follower.full = { [weak self] in self?.refreshFocusedWindow() }
+        follower.settled = { [weak self] id, frame in
+            guard let self, focusedWindowID == id else { return }
+            followed(frame)
+        }
         drag.landed = { [weak self] id, frame in
             guard let self, focusedWindowID == id else { return }
             followed(frame)
@@ -120,8 +124,13 @@ final class EngineObservers {
                 Task { @MainActor in self?.refreshFocusedWindow() }
             })
         }
+        // A Space switch that keeps the front app sends no activation: its focused window is read again, so the border
+        // leaves a window that stayed on the other Space (tester bug 9).
         tokens.append(nc.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refreshDesktops() }
+            Task { @MainActor in
+                self?.refreshDesktops()
+                self?.refreshFocusedWindow()
+            }
         })
         TilerFrames.landed = { [weak self] in self?.tilerLanded($0) }
         refreshFocusedApp()
@@ -216,18 +225,25 @@ final class EngineObservers {
         if read.title != focusedWindowTitle { focusedWindowTitle = read.title }
         (focusedWindow, focusedElement) = (read.window, read.element)
         onFocusedWindow(read.window)
+        // Another app's window: the window server's frame again once the app has surely committed it (FrameFollower)
+        if read.element != nil, let id = read.window.windowID { follower.settle(id) }
     }
 
     /// A window of the focused app moved or resized: the focused one's frame is read alone, any other re-reads the
     /// focused window whole, as the last read may be stale; a frame later at most (FrameFollower).
     /// While the mouse holds it, the drag follower reads it every display frame instead (DragFollower).
     func windowMoved(_ element: AXUIElement) {
-        if drag.moved(focusedWindowID) { return }
+        if drag.moved(focusedWindowID) { return follower.cancelSettle() }
         follower.moved(focusedElement.map { CFEqual($0, element) } == true ? .frame(element) : .full)
+        if let focusedWindowID { follower.settle(focusedWindowID) }
     }
 
-    /// The release: one AX read puts the border on the window where the app says it landed.
-    private func settle() { follower.moved(focusedElement.map { .frame($0) } ?? .full) }
+    /// The release: one AX read puts the border on the window where the app says it landed, the settle reads where
+    /// the window server draws it.
+    private func settle() {
+        follower.moved(focusedElement.map { .frame($0) } ?? .full)
+        if let focusedWindowID { follower.settle(focusedWindowID) }
+    }
 
     /// The moved window's frame, read off the main thread; dropped when focus went to another window meanwhile, and
     /// when the read failed: a closed window re-reads on its destroyed notification, and a hung app must not be asked
@@ -248,15 +264,11 @@ final class EngineObservers {
 
     /// The tiler finished writing these windows' frames (TilerFrames): the focused one is re-read, as AX skipped its
     /// glide and its last move can race the gliding mark. With no window server number to match, any write re-reads.
+    /// The read's settle reads catch an app that settles its own frame after the write (one that cannot take its tile,
+    /// or draws it late) while the gliding mark still dropped its AX moves (live bug 2026-11-16).
     func tilerLanded(_ ids: Set<UInt32>) {
         guard focusedApp != nil, focusedWindowID.map(ids.contains) ?? true else { return }
         refreshFocusedWindow()
-        // Pilot (live bug 2026-11-16): again a beat later, for an app that settles its own frame after the write (one
-        // that cannot take its tile, or draws it late) while the gliding mark still dropped its AX moves.
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(250))
-            self?.refreshFocusedWindow()
-        }
     }
 
 
@@ -266,7 +278,11 @@ final class EngineObservers {
     /// subrole and full screen are the window's own, so a dialog, alert or the launcher is never ringed or blurred.
     static func ownKeyWindow(marked: Bool = true) -> FocusedWindowRead? {
         guard let key = NSApp?.keyWindow, !marked || key is BorderedWindow else { return nil }
-        let w = marked ? key : key.sheetParent ?? key.parent ?? key
+        return ownWindow(marked ? key : key.sheetParent ?? key.parent ?? key, marked: marked)
+    }
+
+    /// One of Pilot's windows read from AppKit, as `ownKeyWindow` reads the key one.
+    static func ownWindow(_ w: NSWindow, marked: Bool) -> FocusedWindowRead? {
         guard w.isVisible, let id = CGWindowID(exactly: w.windowNumber) else { return nil }
         return (w.title, WindowBorder.Window(frame: WindowGeometry.flip(w.frame, primaryHeight: Screens.primaryHeight),
                                              subrole: marked ? "AXStandardWindow" : w.accessibilitySubrole()?.rawValue,
@@ -275,14 +291,17 @@ final class EngineObservers {
 
     /// The focused window of app `pid` through Accessibility, at the frame the window server draws it (live bug
     /// 2026-11-16: AX had Photo Booth at its tile while it was drawn off it, and the border ringed empty space): its own
-    /// number's frame, or the app's frontmost drawn window when that number draws nothing (WindowBorder.asDrawn).
-    static func drawnFocusedWindow(_ pid: pid_t) -> FocusedWindowRead? {
-        guard var read = axFocusedWindow(pid) else { return nil }
-        guard let id = read.window.windowID, !read.window.minimised, !read.window.fullScreen else { return read }
+    /// number's frame, or the app's frontmost drawn window when that number draws nothing (WindowBorder.asDrawn); none
+    /// when the app draws no window here (its window is on another Space). Pilot's own window keeps AppKit's frame:
+    /// the window server takes a moved window's frame a run loop turn later, when AppKit commits it, and the read a
+    /// move sets off came first, so the border stayed where the window had been (tester bug 9, 2026-11-19).
+    static func drawnFocusedWindow(_ pid: pid_t, read focused: @MainActor (pid_t) -> FocusedWindowRead? = axFocusedWindow) -> FocusedWindowRead? {
+        guard var read = focused(pid) else { return nil }
+        guard pid != getpid(), let id = read.window.windowID, !read.window.minimised, !read.window.fullScreen else { return read }
         let drawn = DragFollower.drawnBounds(of: id)
-        let front = drawn != nil || pid == getpid() ? nil
-            : normal(onScreen(), skipping: []).first { $0.pid == pid }.map { (id: $0.id, frame: $0.frame) }
-        read.window = WindowBorder.asDrawn(read.window, drawn: drawn, front: front)
+        let front = drawn != nil ? nil : normal(onScreen(), skipping: []).first { $0.pid == pid }.map { (id: $0.id, frame: $0.frame) }
+        guard let shown = WindowBorder.asDrawn(read.window, drawn: drawn, front: front) else { return nil }
+        read.window = shown
         return read
     }
 

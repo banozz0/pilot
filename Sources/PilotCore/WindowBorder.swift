@@ -23,14 +23,17 @@ public enum WindowBorder {
     /// `window` as the window server draws it (live bug 2026-11-16: Photo Booth sat off its tile, smaller, while
     /// Accessibility's focused window had the tile's frame and the border ringed empty space). `drawn`, the server's
     /// frame for the window's number, wins over AX's; when the server draws no window of that number, `front`, the app's
-    /// frontmost drawn window, is the one marked. A minimised or fullscreen window, or one with no number, stays as read.
-    public static func asDrawn(_ window: Window, drawn: CGRect?, front: (id: CGWindowID, frame: CGRect)?) -> Window {
+    /// frontmost drawn window, is the one marked, and with neither nothing is (the window is on another Space: a ring
+    /// at its old frame would hang over this one). A minimised or fullscreen window, or one with no number, stays as read.
+    public static func asDrawn(_ window: Window, drawn: CGRect?, front: (id: CGWindowID, frame: CGRect)?) -> Window? {
         guard window.windowID != nil, !window.minimised, !window.fullScreen else { return window }
         var shown = window
         if let drawn {
             shown.frame = drawn
         } else if let front {
             (shown.frame, shown.windowID) = (front.frame, front.id)
+        } else {
+            return nil
         }
         return shown
     }

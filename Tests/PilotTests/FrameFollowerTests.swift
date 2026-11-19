@@ -13,7 +13,7 @@ import Testing
 struct FrameFollowerTests {
     /// What a drag costs: AX calls on the main thread and off it, full reads, border redraws.
     final class Costs {
-        var mainAX = 0, offMainAX = 0, fullReads = 0, frameReads = 0, shows = 0, boundsReads = 0
+        var mainAX = 0, offMainAX = 0, fullReads = 0, frameReads = 0, shows = 0, boundsReads = 0, settleReads = 0
     }
 
     final class CountingSurface: WindowBorderSurface {
@@ -24,13 +24,18 @@ struct FrameFollowerTests {
         func hide() { shown = nil }
     }
 
-    /// A clock the test moves, and the work FrameFollower parks until a time on it.
+    /// A clock the test moves, and the work FrameFollower parks until a time on it: each runs at its own time, in
+    /// order, so work it parks in turn (the settle reads' timer) lands where it would.
     @MainActor final class Clock {
         var now: TimeInterval = 0
         var due: [(at: TimeInterval, work: @MainActor () -> Void)] = []
         func advance(to t: TimeInterval) {
+            while let i = due.indices.filter({ due[$0].at <= t }).min(by: { due[$0].at < due[$1].at }) {
+                let item = due.remove(at: i)
+                now = max(now, item.at)
+                item.work()
+            }
             now = t
-            while let i = due.firstIndex(where: { $0.at <= t }) { due.remove(at: i).work() }
         }
     }
 
@@ -52,15 +57,19 @@ struct FrameFollowerTests {
         /// Where the dragged window is now.
         let frame: () -> CGRect
         let move: (CGRect) -> Void
+        /// Where the window server draws it, when that is not where the app says it is (Photo Booth).
+        let draw: (CGRect?) -> Void
     }
 
-    static func rig(frame fps: Double = 120) -> Rig {
+    static func rig(frame fps: Double = 120, settle: [TimeInterval] = FrameFollower.settleDelays) -> Rig {
         let clock = Clock(), costs = Costs()
         var current = CGRect(x: 100, y: 50, width: 800, height: 600)
+        var drawn: CGRect?
         let follower = FrameFollower(reader: { element, done in
             costs.offMainAX += 1; costs.frameReads += 1
             done(CFEqual(element, dragged) ? current : nil)
-        }, now: { clock.now }, after: { delay, work in clock.due.append((clock.now + delay, work)) }, frame: 1 / fps)
+        }, now: { clock.now }, after: { delay, work in clock.due.append((clock.now + delay, work)) }, frame: 1 / fps,
+           bounds: { id, done in costs.settleReads += 1; done(id == 7 ? drawn ?? current : nil) }, settleDelays: settle)
         let mouse = Mouse()
         let drag = DragFollower(reader: { id, done in costs.boundsReads += 1; done(id == 7 ? current : nil) },
                                 ticker: { tick in mouse.tick = tick; mouse.links += 1; return { mouse.tick = nil } },
@@ -76,7 +85,8 @@ struct FrameFollowerTests {
                                             screens: { [CGRect(x: 0, y: 0, width: 3840, height: 2160)] }, primaryHeight: { 2160 })
         observers.onFocusedWindow = { border.update($0) }
         observers.refreshFocusedWindow() // focus lands on it, as kAXFocusedWindowChanged does
-        return Rig(observers: observers, clock: clock, costs: costs, surface: surface, mouse: mouse, frame: { current }, move: { current = $0 })
+        return Rig(observers: observers, clock: clock, costs: costs, surface: surface, mouse: mouse, frame: { current }, move: { current = $0 },
+                   draw: { drawn = $0 })
     }
 
     /// A 200 ms drag sending AX a move per millisecond (a 1000 Hz mouse), the window 4 points further each time.
@@ -135,7 +145,9 @@ struct FrameFollowerTests {
         let ax = run(held: false), held = run(held: true)
         print("[border-drag] AX moves every 50 ms, through AX: \(ax.costs.shows) border moves in 200 ms")
         print("[border-drag] held: \(held.costs.shows) border moves, \(held.costs.boundsReads) window server reads, \(held.costs.frameReads) AX frame reads (the release's), \(held.costs.mainAX) AX calls on main")
-        #expect(ax.costs.shows == 4)
+        // Four AX moves, and the settle read after the last puts the border where the window went on to (tester bug 9)
+        #expect(ax.costs.shows == 5)
+        #expect(ax.rig.surface.shown == Self.border(ax.rig.frame()))
         #expect(held.costs.boundsReads == 24 && held.costs.shows == 24, "every 120 Hz frame")
         #expect(held.costs.mainAX == 0 && held.costs.frameReads == 1, "the app is asked once, at the release")
         #expect(held.rig.surface.shown == Self.border(held.rig.frame()))
@@ -172,6 +184,33 @@ struct FrameFollowerTests {
         rig.observers.windowMoved(Self.dragged) // its frame read lands for a window no longer focused
         rig.clock.advance(to: 2)
         #expect(rig.surface.shown == Self.border(CGRect(x: 1000, y: 50, width: 800, height: 600)))
+    }
+
+    /// Live bug 2026-11-16 and tester bug 9 (2026-11-19): a move read takes the app's frame, which it has at once (the
+    /// window server's comes only once the app commits it, and a read of it right after the move found the frame
+    /// before it); the window server's is read once the moves stop, and wins where it differs (Photo Booth drawn off
+    /// its tile). With no settle reads the border stays at AX's frame, ringing empty space.
+    @Test("Moves follow AX's frame; once they stop the window server's frame is read twice and wins (Photo Booth)")
+    func settlesOnTheDrawnFrame() {
+        func run(settle: [TimeInterval]) -> Rig {
+            let rig = Self.rig(settle: settle)
+            rig.clock.advance(to: 1)
+            rig.costs.settleReads = 0; rig.costs.shows = 0
+            rig.move(CGRect(x: 0, y: 30, width: 1920, height: 1050)) // the tile, as AX reports it
+            rig.draw(CGRect(x: 400, y: 300, width: 640, height: 480)) // where the window server draws it
+            rig.observers.windowMoved(Self.dragged)
+            #expect(rig.surface.shown == Self.border(rig.frame()), "the move: AX's frame at once")
+            rig.clock.advance(to: 3)
+            return rig
+        }
+        let before = run(settle: []), after = run(settle: FrameFollower.settleDelays)
+        let drawn = Self.border(CGRect(x: 400, y: 300, width: 640, height: 480))
+        print("[border-settle] no settle reads: border \(before.surface.shown.map { "\($0)" } ?? "nil"), drawn \(drawn)")
+        print("[border-settle] settle reads: border \(after.surface.shown.map { "\($0)" } ?? "nil"), \(after.costs.settleReads) window server reads")
+        #expect(before.surface.shown != drawn)
+        #expect(after.surface.shown == drawn)
+        #expect(after.costs.settleReads == FrameFollower.settleDelays.count && after.costs.shows == 2, "two reads, one move")
+        #expect(after.clock.due.isEmpty, "idle")
     }
 
     @Test("FrameFollower: one read in flight, a pending move waits for it, and the last move is always read")
