@@ -373,7 +373,7 @@ struct AccessPanel: View {
                 HStack(spacing: 14) {
                     DraggableApp().frame(width: 48, height: 48).help("Drag Pilot into the list")
                     SetupTitled(title: granted ? "Accessibility is on" : "Drag Pilot into the list",
-                                detail: granted ? "Pilot reads the Hyper key now." : "Then switch it on. An old Pilot listed? Remove it with − first.")
+                                detail: granted ? "Pilot reads the Hyper key now." : PermissionDragPanel.List.line)
                     Spacer(minLength: 8)
                     if granted {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityLabel("Allowed")

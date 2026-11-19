@@ -139,6 +139,7 @@ struct InstrumentOnboarding: View {
             }
         }
         .onAppear { if setup.phase != .run { setup.load() } }
+        .task { await setup.loadThemes() }
     }
 
     // MARK: Try it
@@ -155,12 +156,10 @@ struct InstrumentOnboarding: View {
     private func tryItPanels(_ key: [LayerKey]) -> some View {
         let demoDone = model.demoDone(engine)
         return VStack(alignment: .leading, spacing: 14) {
-            if demoDone {
-                InstrumentPanel(title: "The Hyper key", note: key.label) {
-                    line { DemoDone(line: model.demoLine(engine)); Spacer(minLength: 0) }
-                }
-            } else {
             InstrumentPanel(title: "The Hyper key", note: key.label) {
+                if demoDone {
+                    line { DemoDone(line: model.demoLine(engine)); Spacer(minLength: 0) }
+                } else {
                 prompt("Hold \(key.label)", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
                 if let files = model.filesKey(engine) {
                     InstrumentRule()
@@ -168,7 +167,7 @@ struct InstrumentOnboarding: View {
                 }
                 InstrumentRule()
                 prompt("Press \(key.label) + Space", "the Pilot menu", caps: ["Space"], done: model.tryIt.menuOpened)
-            }
+                }
             }
             InstrumentPanel(title: "The other permissions") {
                 GrantWalkPanel(walk: model.walk).padding(.horizontal, 18).padding(.vertical, 12)

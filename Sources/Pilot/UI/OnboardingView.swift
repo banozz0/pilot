@@ -166,6 +166,7 @@ private struct OnboardingSteps: View {
             }
         }
         .onAppear { if setup.phase != .run { setup.load() } }
+        .task { await setup.loadThemes() }
     }
 
     private var tryIt: some View {
@@ -407,8 +408,8 @@ final class OnboardingModel {
     static let undoAfter = "Every change can be undone after."
     static let ticksItself = "This step ticks itself"
 
-    /// Access's "Later, from Settings": the recommended and optional grants by name. The when-used ones stay with the
-    /// features that ask for them.
+    /// The recommended and optional grants, which Access's later line names (`laterLine`). The when-used ones stay with
+    /// the features that ask for them.
     static let later = Onboarding.Row.rows(.recommended) + Onboarding.Row.rows(.optional)
 
     /// `setup` and `walk` are the renders' seams; Pilot's are the shared run and the Mac's own grants.
@@ -458,7 +459,6 @@ final class OnboardingModel {
     /// Pilot Files windows on screen: one more than at Try it's start, or one in front, ticks its row.
     private static func filesShown() -> Int { NSApp.windows.count { $0.title == "Pilot Files" && $0.isVisible } }
 
-    /// Try it's Hyper+F row: the Files key's own key, shown only while it opens Pilot Files; nil otherwise.
     /// Try it's demo is done: Hyper held, Pilot Files opened (when its row shows) and the menu opened. The whole tab then
     /// says so at once, with the rail's step ticked (Sven, 2026-11-19).
     func demoDone(_ engine: Engine) -> Bool { tryIt.held && tryIt.menuOpened && (filesKey(engine) == nil || filesOpened) }
@@ -478,6 +478,7 @@ final class OnboardingModel {
     }
     #endif
 
+    /// Try it's Hyper+F row: the Files key's own key, shown only while it opens Pilot Files; nil otherwise.
     func filesKey(_ engine: Engine) -> String? {
         guard setup.system.picks.picks[.files] == AppRolePicks.pilot || setup.ledger[.filesKey]?.state == .done,
               let trigger = engine.binds.store.trigger(for: "apps.files") else { return nil }

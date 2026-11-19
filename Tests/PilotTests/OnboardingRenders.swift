@@ -51,6 +51,7 @@ struct OnboardingRenders {
         mac.log.removeAll()
         let setup = OnboardingSetup(system: mac, defaults: defaults)
         setup.load()
+        await setup.loadThemes()
         // Set up offers the main things only (Sven's critique, 2026-11-18): the two keys and launch at login.
         #expect(setup.everything == [.filesKey, .notesKey, .launchAtLogin] && setup.noAppBefore.isEmpty && !setup.asksForMacLogin)
         // The theme is offered but only taken once picked (Sven, 2026-11-19): it installs nothing.
@@ -367,9 +368,10 @@ final class RecordingMac: SetupSystem {
         return nil
     }
     func runInTerminal(_ command: String, title: String, onSuccess: String) { log.append("terminal \(title): \(command)") }
-    var themes: [(id: String, title: String)] { [("tokyo-night", "Tokyo Night"), ("nord", "Nord")] }
+    func readThemes() async -> (themes: [(id: String, title: String)], recolours: [String]) {
+        ([("tokyo-night", "Tokyo Night"), ("nord", "Nord")], ["Ghostty", "Zed"])
+    }
     var appliedTheme: String?
-    var themeRecolours: [String] { ["Ghostty", "Zed"] }
     func applyTheme(_ id: String?) async -> String? { log.append("theme \(id ?? "restore")"); appliedTheme = id; return nil }
 }
 

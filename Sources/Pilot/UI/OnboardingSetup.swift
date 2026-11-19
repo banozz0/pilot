@@ -204,11 +204,10 @@ protocol SetupSystem: AnyObject {
     func runScript(_ script: String, title: String) -> String?
     /// A command in a visible terminal window (an undo's `brew uninstall`).
     func runInTerminal(_ command: String, title: String, onSuccess: String)
-    /// The themes Set up offers for the style in use, (id, title); the one applied now (nil: none); the apps a theme
-    /// recolours on this Mac (none while Look's Pilot only is on).
-    var themes: [(id: String, title: String)] { get }
+    /// The themes Set up offers for the style in use, (id, title), and the apps a theme recolours on this Mac (none while
+    /// Look's Pilot only is on): read from disk, so off the main thread. The theme applied now (nil: none).
+    func readThemes() async -> (themes: [(id: String, title: String)], recolours: [String])
     var appliedTheme: String? { get }
-    var themeRecolours: [String] { get }
     /// Applies a theme as Look's press does, nil restoring Pilot's own look; why it did not take, else nil.
     func applyTheme(_ id: String?) async -> String?
 }
@@ -231,18 +230,20 @@ final class LiveSetupSystem: SetupSystem {
     var speechPick: String? { SpeechModels.shared.pick?.rawValue }
     var hasSpeechModel: Bool { SpeechModels.shared.active != nil }
 
-    var themes: [(id: String, title: String)] {
-        let style = Look.shared.style.rawValue
-        return ((try? ThemeCoordinator.production().store.list()) ?? []).filter { $0.compatible(with: style) }.map { ($0.id, $0.title) }
+    func readThemes() async -> (themes: [(id: String, title: String)], recolours: [String]) {
+        guard let owner = try? ThemeCoordinator.production() else { return ([], []) }
+        let style = Look.shared.style.rawValue, store = owner.store
+        let packs = (try? await Task.detached { try store.list() }.value) ?? []
+        return (packs.filter { $0.compatible(with: style) }.map { ($0.id, $0.title) }, Self.recolours(owner))
     }
 
     var appliedTheme: String? { (try? ThemeCoordinator.production().appliedTheme())?.id }
 
-    /// Ghostty's config always, then what Look finds: Zed, Obsidian's vaults and the apps ThemeApps knows.
-    var themeRecolours: [String] {
-        guard let owner = try? ThemeCoordinator.production(), (try? owner.appFollowing())?.othersOn != false else { return [] }
-        let found = ThemeCoordinator.detectApps(home: NSHomeDirectory())
-        return ["Ghostty"] + (found.zed == nil ? [] : ["Zed"]) + (found.vaults.isEmpty ? [] : ["Obsidian"]) + found.apps.map(\.kind.name)
+    /// Ghostty's config always, then what Look's switches leave on: Zed, Obsidian's vaults and the apps ThemeApps found.
+    private static func recolours(_ owner: ThemeCoordinator) -> [String] {
+        guard let follow = try? owner.appFollowing(), follow.othersOn else { return [] }
+        return ["Ghostty"] + (follow.zedFound && follow.zedOn ? ["Zed"] : []) + (follow.obsidianOn && follow.vaults.contains(where: \.on) ? ["Obsidian"] : [])
+            + follow.apps.filter(\.on).map(\.name)
     }
 
     func applyTheme(_ id: String?) async -> String? {
@@ -379,7 +380,7 @@ final class OnboardingSetup {
     /// The theme Set up applies, picked by hand: nil keeps the current look (the default), and only a pick puts the theme
     /// in Set up everything or ticks it in Pick by hand.
     var themePick: String? { didSet { if themePick == nil { picked.remove(.theme) } else { picked.insert(.theme) } } }
-    /// The themes and what a theme recolours, read as Set up shows.
+    /// The themes and what a theme recolours, read as Set up shows (`loadThemes`).
     private(set) var themes: [(id: String, title: String)] = []
     private(set) var themeRecolours: [String] = []
     /// What the theme does, said under its picker: nothing to install, its wallpapers, the apps it recolours.
@@ -423,8 +424,6 @@ final class OnboardingSetup {
 
     func load() {
         onMac = Set(SetupItem.allCases.filter(isOnMac))
-        themes = system.themes
-        themeRecolours = system.themeRecolours
         picked.subtract(onMac)
         noAppBefore = everything.filter { item in item.kind != nil && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
     }
@@ -446,6 +445,14 @@ final class OnboardingSetup {
         phase = .fork
         log.notice("setup: run again")
     }
+
+    /// Reads the themes and what a theme recolours, off the main thread: Set up's `.task`.
+    func loadThemes() async {
+        (themes, themeRecolours) = await system.readThemes()
+    }
+
+    /// Still open to Set up: not on this Mac, not held by the record, and a theme only once one is picked.
+    private func open(_ item: SetupItem) -> Bool { (item != .theme || themePick != nil) && !onMac.contains(item) && ledger[item] == nil }
 
     private func isOnMac(_ item: SetupItem) -> Bool {
         switch item {
@@ -471,12 +478,12 @@ final class OnboardingSetup {
 
     /// Set up everything's changes: all but what is on this Mac or still held by the record (a quiet mark Run setup
     /// again kept, which a later look settles; `start` never runs one twice).
-    var everything: [SetupItem] { SetupItem.offered.filter { ($0 != .theme || themePick != nil) && !onMac.contains($0) && ledger[$0] == nil } }
+    var everything: [SetupItem] { SetupItem.offered.filter(open) }
 
     /// Ticking an item ticks what it needs (`needs`: a formula, Homebrew), and unticking Homebrew unticks them while it is
     /// missing. A theme ticks only with a pick (`themePick`).
     func set(_ item: SetupItem, _ on: Bool) {
-        guard !onMac.contains(item), ledger[item] == nil, item != .theme || themePick != nil else { return }
+        guard open(item) else { return }
         if on { picked.insert(item) } else { picked.remove(item) }
         if on { picked.formUnion(item.needs.filter { !onMac.contains($0) }) }
         guard !onMac.contains(.homebrew) else { return }
@@ -488,7 +495,7 @@ final class OnboardingSetup {
     /// Starts `items` in the plan's order: keys, Pilot's settings and file kinds at once, then the downloads, then the
     /// helpers' Terminal run. Each records what was there before it changes it.
     func start(_ items: [SetupItem]) {
-        let run = SetupItem.allCases.filter { items.contains($0) && ($0 != .theme || themePick != nil) && !onMac.contains($0) && ledger[$0] == nil }
+        let run = SetupItem.allCases.filter { items.contains($0) && open($0) }
         problem = nil
         phase = .run
         defaults.set(false, forKey: Self.againKey)
