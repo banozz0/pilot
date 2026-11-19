@@ -121,17 +121,24 @@ public enum TileFit {
     /// where it ends, so no window runs past the room's edge and its bottom lines up with its neighbours'. Some window
     /// overlaps whatever is done; the preset's sizes left the last one running past the screen.
     public static func spans(_ sizes: [CGFloat], gap: CGFloat, minimums: [CGFloat]) -> [(start: CGFloat, size: CGFloat)] {
+        var fitted = sizes, overlap: CGFloat = 0
+        // No least known, the common case on every layout: the sizes as they are.
+        guard minimums.contains(where: { $0 > 0 }) else { return spans(fitted, overlap: overlap) }
         let needs = minimums.indices.map { minimums[$0] > 0 ? minimums[$0] + gapShare($0, of: minimums.count, gap: gap) : 0 }
         let total = sizes.reduce(0, +)
-        var fitted = sizes, overlap: CGFloat = 0
         if needs.count == sizes.count, sizes.count > 1, needs.reduce(0, +) > total + 0.5 {
             fitted = sizes.indices.map { needs[$0] > 0 ? needs[$0] : sizes[$0] }
             overlap = (fitted.reduce(0, +) - total) / CGFloat(sizes.count - 1)
         } else if needs.count == sizes.count {
             fitted = fit(sizes, needs: needs, total: total)
         }
+        return spans(fitted, overlap: overlap)
+    }
+
+    /// Each size's start, one after another, `overlap` back from the end of the one before.
+    private static func spans(_ sizes: [CGFloat], overlap: CGFloat) -> [(start: CGFloat, size: CGFloat)] {
         var start: CGFloat = 0
-        return fitted.map { size in
+        return sizes.map { size in
             defer { start += size - overlap }
             return (start, size)
         }

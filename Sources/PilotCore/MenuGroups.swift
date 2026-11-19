@@ -99,11 +99,7 @@ public enum MenuGroups {
             guard !sections.isEmpty else { return [:] }
             let found = rows.map { MenuLayout.section(of: $0, in: branch) }
             guard found.contains(where: { $0 != nil }) else { return [:] }
-            // Install's search heads the catalogue's own packages as the catalogue (N9).
-            let catalogue = MenuLayout.keepsOrder(branch)
-            for (i, s) in found.enumerated() {
-                head(i, s.map { .section(sections[$0].title) } ?? (catalogue && rows[i].kind == .package ? .section("Catalogue") : .goTo))
-            }
+            for (i, s) in found.enumerated() { head(i, s.map { .section(sections[$0].title) } ?? .goTo) }
             return out
         }
         guard searching else { return [:] }
@@ -120,13 +116,12 @@ public enum MenuGroups {
 
     /// A branch's ranked rows gathered by section: in the sections' order before typing, so System's sub-branches keep
     /// their order whatever was picked; while typing, each section where its best row stood, so the best match stays first.
-    /// Install and Search packages keep their sources' order while typing too (N9): the catalogue's matches, then
-    /// Homebrew to the web, then the branches.
+    /// Install and Search packages keep their sources' order while typing too (N9): Homebrew to the web, then the branches.
     public static func sectioned(_ rows: [MenuEntry], in branch: MenuBranch, searching: Bool) -> [MenuEntry] {
         let count = MenuLayout.sections(branch).count
         guard count > 0 else { return rows }
         if searching, MenuLayout.keepsOrder(branch) {
-            func place(_ row: MenuEntry) -> Int { MenuLayout.section(of: row, in: branch) ?? (row.kind == .package ? -1 : count) }
+            func place(_ row: MenuEntry) -> Int { MenuLayout.section(of: row, in: branch) ?? count }
             return rows.enumerated().sorted { (place($0.element), $0.offset) < (place($1.element), $1.offset) }.map(\.element)
         }
         func opened(_ row: MenuEntry) -> Int? {

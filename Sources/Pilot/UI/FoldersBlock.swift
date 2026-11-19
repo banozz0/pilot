@@ -59,7 +59,8 @@ struct FoldersBlock: View {
                 }
             }
         }
-        .onAppear { hasKey = giphy.exists() }
+        // The Keychain is read only where the GIPHY rows show.
+        .onAppear { if part == .gifs { hasKey = giphy.exists() } }
     }
 
     /// The GIPHY key: saved (Replace…, Remove) or a field to paste one, with where to get one.

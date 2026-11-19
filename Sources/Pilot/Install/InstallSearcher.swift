@@ -104,17 +104,15 @@ final class RemoteIcons {
     }
 }
 
-/// Pictures shipped in the app's Resources, each read once, which memory pressure may drop: the recommended web apps'
-/// (`webapp-icons/<id>.png`, Scripts/webapp-icons.swift), and by an id naming its folder, PNG, SVG or HEIC, the AI
-/// providers' (`provider-icons/claude`) and a folder design's preview (`folder-designs/kraft-preview`, P43,
-/// FolderDesign.preview).
+/// Pictures shipped in the app's Resources by folder and name, PNG, SVG or HEIC, each read once, which memory pressure
+/// may drop: the recommended web apps' (`webapp-icons/<id>`, Scripts/webapp-icons.swift), the AI providers'
+/// (`provider-icons/claude`) and a folder design's preview (`folder-designs/kraft-preview`, P43, FolderDesign.preview).
 @MainActor
 enum CatalogueIcons {
     private static let read = NSCache<NSString, NSImage>()
     private static var missing: Set<String> = []
 
-    static func image(_ id: String, in folder: String? = nil) -> NSImage? {
-        let key = folder.map { "\($0)/\(id)" } ?? id
+    static func image(_ key: String) -> NSImage? {
         if let kept = read.object(forKey: key as NSString) { return kept }
         let (name, place) = ((key as NSString).lastPathComponent, (key as NSString).deletingLastPathComponent)
         guard !missing.contains(key),

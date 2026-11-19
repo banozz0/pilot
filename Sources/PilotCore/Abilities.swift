@@ -89,7 +89,7 @@ public enum Abilities {
     /// Abilities ship minimal (Sven 2026-10-10): these drive one app or one setup, so a new Mac lists none of them until
     /// the app is here and they are added from Launcher › Abilities › More abilities. One that holds a key is always listed,
     /// so a bind never hides. The app links a preset makes (`apps.open:`, `apps.url:`) need no entry: one that holds a key is listed (Pilot default's Ghostex, Codex…).
-    /// Each needs what Install's catalogue checks for: an app by bundle id, a file, or a command.
+    /// Each needs its InstallCheck met: an app by bundle id, a file, or a command.
     public static let optional: [String: InstallCheck] = [
         "apps.bitwardenFill": .bundle(Bitwarden.bundle), "apps.bitwardenForget": .bundle(Bitwarden.bundle),
         "apps.bitwardenLock": .bundle(Bitwarden.bundle), "apps.bitwardenGenerator": .bundle(Bitwarden.bundle),

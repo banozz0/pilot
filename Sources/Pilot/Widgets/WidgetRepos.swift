@@ -60,7 +60,7 @@ enum WidgetRepos {
     /// A row's press: the repo on Developer › Repos while the Developer pages show, else its folder in Finder.
     static func open(_ name: String) {
         guard DeveloperPages.on else {
-            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: ConfigsModule.home.appending(path: "code/\(name)", directoryHint: .isDirectory).path)
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: PilotFolders.shared.reposURL.appending(path: name, directoryHint: .isDirectory).path)
             return
         }
         AppWindowController.shared.openRepo(name)

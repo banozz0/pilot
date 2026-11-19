@@ -160,7 +160,7 @@ extension TilingContainer {
         // that outgrow the room overlap inside it (bug 10, 2026-11-18).
         let rawGap = CGFloat(context.resolvedGaps.inner.get(orientation))
         let weights = try children.map { try $0.getWeight(orientation) }
-        let minimums = WindowMinimums.isEmpty ? Array(repeating: 0, count: children.count) : children.map { $0.leastExtent(orientation, gap: rawGap) }
+        let minimums = WindowMinimums.isEmpty ? [] : children.map { $0.leastExtent(orientation, gap: rawGap) }
         let spans = TileFit.spans(weights, gap: rawGap, minimums: minimums)
         for (i, (child, span)) in zip(children, spans).enumerated() {
             let size = span.size
