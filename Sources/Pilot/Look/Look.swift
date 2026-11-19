@@ -109,10 +109,6 @@ final class Look {
     }
     /// How every list shows an app: icon, title or both (story 154: both).
     var appsShowAs: AppsShowAs { didSet { defaults.set(appsShowAs.rawValue, forKey: Key.appsShowAs) } }
-    /// How the app window draws its areas: the rail and page list. No longer a setting (spec pilot-ui-redesign T2, Open
-    /// question 1): never saved, and the old `look.windowLayout` is cleared at launch; the renders still flip it until
-    /// T3's panel shell takes both shapes away.
-    var windowShape = WindowShape.rail
     /// macOS's Reduce transparency and Increase contrast, followed live (followSystem).
     private(set) var reduceTransparency = false
     private(set) var increaseContrast = false

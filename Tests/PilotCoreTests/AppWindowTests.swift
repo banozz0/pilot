@@ -38,10 +38,9 @@ struct AppWindowTests {
         #expect(AppArea.next(after: .pilotMenu) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
         #expect(AppArea.next(after: .menu) == .menu && AppArea.next(after: .extensions) == .extensions && AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .tiling) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
-        // The window layout: the rail by default, for a name it does not know and for the hub, taken out on 2026-10-11.
-        #expect(WindowShape(saved: nil) == .rail && WindowShape(saved: "nope") == .rail && WindowShape(saved: "hub") == .rail)
-        #expect(WindowShape(saved: "tabs") == .tabs)
-        #expect(WindowShape.allCases.map(\.title) == ["Rail and page list", "Toolbar tabs"])
+        // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.
+        #expect(AppPlace(.reports).tabPath(count: 8, developer: false) == "More › Mac › Update & Clean › Reports")
+        #expect(AppPlace(.reports).tabPath(count: 9, developer: false) == "Mac › Update & Clean › More › Reports")
         // Direction 1: Home takes the width, any other page has its area's list, which folds under 900 pt; a search shows it.
         #expect(!RailLayout.showsList(.home, width: 1440, searching: false) && RailLayout.showsList(.home, width: 1440, searching: true))
         // AI takes the width as Home does, its tabs in the header; Windows lists its pages, Extensions its extensions.

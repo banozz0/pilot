@@ -94,8 +94,8 @@ struct AppWindowFrameTests {
         #expect(model.page == .binds)
     }
 
-    @Test("Look's Window layout swaps the shell: the rail, Toolbar tabs' strip of areas, and back")
-    func layoutSwapsShell() throws {
+    @Test("The panel's tab bar names every tab, and an area opened from More names the More tab (pilot-ui-redesign T3)")
+    func panelTabBar() throws {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         model.go(AppPlace(.menuBar))
@@ -111,14 +111,11 @@ struct AppWindowFrameTests {
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             return FillPagesTests.labels(in: try #require(window.contentView))
         }
-        look.windowShape = .rail
-        let rail = try labels()
-        #expect(!rail.contains("Areas") && !rail.contains(WindowShape.tabs.title) && rail.contains("Desktop"), "\(rail)")
-        look.windowShape = .tabs
+        let split = AppArea.tabs(developer: false)
         let tabs = try labels()
-        #expect(tabs.contains("Areas") && tabs.contains(WindowShape.tabs.title), "\(tabs)")
-        look.windowShape = .rail
-        #expect(!(try labels()).contains(WindowShape.tabs.title))
+        #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains("More"), "\(tabs)")
+        model.go(AppPlace(.general))
+        #expect(try labels().contains("More, Pilot open"))
     }
 
     @Test("The model hears the window stop showing: Cmd+W leaves it off screen (card agent-bo-95422788)", .pilotFocus)

@@ -44,8 +44,8 @@ struct SidebarRenders {
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("sidebar")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let look = Look.shared
-        let saved = (look.themeID, look.style, look.windowShape, look.glass)
-        defer { (look.themeID, look.style, look.windowShape, look.glass) = saved }
+        let saved = (look.themeID, look.style, look.glass)
+        defer { (look.themeID, look.style, look.glass) = saved }
         look.glass = false
 
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
@@ -72,17 +72,13 @@ struct SidebarRenders {
 
         for (name, style, theme) in [("instrument", PilotStyle.instrument, "tokyo-night"), ("toybox", .toybox, "toybox")] {
             (look.style, look.themeID) = (style, theme)
-            for shape in WindowShape.allCases {
-                look.windowShape = shape
-                AppWindowController.applyLook(look, to: window)
-                try shot("\(shape.rawValue)-\(name)-extensions-1440", width: 1440, height: 900) { model.go(AppPlace(.extensions)) }
-                try shot("\(shape.rawValue)-\(name)-now-playing-1440", width: 1440, height: 900) { model.goExtensionPage("now-playing") }
-                if shape == .rail {
-                    try shot("rail-\(name)-ask-1440", width: 1440, height: 900) { model.go(AppPlace(.ai)) }
-                    try shot("rail-\(name)-tools-1440", width: 1440, height: 900) { model.go(AppPlace(.clipboard)) }
-                    try shot("rail-\(name)-extensions-1100x760", width: 1100, height: 760) { model.go(AppPlace(.extensions)) }
-                }
-            }
+            // One shell since the panel (pilot-ui-redesign T3): the tab bar and page list.
+            AppWindowController.applyLook(look, to: window)
+            try shot("panel-\(name)-extensions-1440", width: 1440, height: 900) { model.go(AppPlace(.extensions)) }
+            try shot("panel-\(name)-now-playing-1440", width: 1440, height: 900) { model.goExtensionPage("now-playing") }
+            try shot("panel-\(name)-ask-1440", width: 1440, height: 900) { model.go(AppPlace(.ai)) }
+            try shot("panel-\(name)-tools-1440", width: 1440, height: 900) { model.go(AppPlace(.clipboard)) }
+            try shot("panel-\(name)-extensions-1100x760", width: 1100, height: 760) { model.go(AppPlace(.extensions)) }
         }
     }
 }

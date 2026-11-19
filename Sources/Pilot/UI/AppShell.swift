@@ -10,6 +10,8 @@ struct AppWindowView: View {
     @Bindable var model: AppWindowModel
     /// The Look the frame draws by; tests pass their own.
     var look: Look = .shared
+    /// More's card in the tab bar (PanelTabBar); a render passes one already open.
+    var more = PanelMore()
     @Environment(Engine.self) private var engine
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,7 +19,7 @@ struct AppWindowView: View {
     var body: some View {
         let editing = model.editingWorkspace != nil
         // The window's frame is a surface of its own; each page under it is another (PageView).
-        WindowLayout(model: model, look: look).styled(.window, look: look)
+        WindowLayout(model: model, more: more).styled(.window, look: look)
             // The page under the workspace editor is inert: no clicks, Tab focus or page keys (Esc and Return are the
             // popup's), hidden from VoiceOver.
             .disabled(editing)
@@ -48,18 +50,17 @@ struct AppWindowView: View {
     }
 }
 
-/// The picked style's frame around the page, in the Window layout picked on Look. Direction 1, the rail: ToyFrame and
-/// InstrumentFrame; direction 2, toolbar tabs: TabsFrame, one frame for both styles.
+/// The picked style's frame around the page: Instrument's is the panel's tab bar and page list (pilot-ui-redesign T3);
+/// Toybox keeps its rail until the feature trim takes the style away.
 private struct WindowLayout: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    var look: Look = .shared
+    let more: PanelMore
 
     var body: some View {
-        switch (look.windowShape, style.kind) {
-        case (.tabs, _): TabsFrame(model: model) { PageView(model: model) }
-        case (_, .toybox): ToyFrame(model: model) { PageView(model: model) }
-        case (_, .instrument): InstrumentFrame(model: model)
+        switch style.kind {
+        case .toybox: ToyFrame(model: model) { PageView(model: model) }
+        case .instrument: InstrumentFrame(model: model, more: more)
         }
     }
 }

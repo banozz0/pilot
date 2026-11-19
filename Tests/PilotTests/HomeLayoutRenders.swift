@@ -209,23 +209,19 @@ struct HomeLayoutRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
 
-        // The converted lanes at 900 pt tall, in both window layouts, at 760 drawn tall enough to show all of it. Then the
-        // default alone, every block kept in each class, and Sven's Home before and after at his window and the default one.
-        let saved2 = look.windowShape
-        defer { look.windowShape = saved2 }
-        var states: [(name: String, layout: HomeLayout, shape: WindowShape, width: CGFloat, height: CGFloat)] = []
-        for shape in WindowShape.allCases {
-            for width: CGFloat in [1440, 1000, 760] { states.append(("now-\(shape.rawValue)-\(Int(width))", Self.now, shape, width, width == 760 ? 1400 : 900)) }
-        }
-        states.append(("default-rail-1440", .standard, .rail, 1440, 900))
-        for layout in Widget.SizeClass.allCases { states.append(("layout-\(layout.rawValue)-rail-1440", Self.kept(layout), .rail, 1440, 1100)) }
+        // The converted lanes at 900 pt tall, in the panel's shell (pilot-ui-redesign T3), at 760 drawn tall enough to show
+        // all of it. Then the default alone, every block kept in each class, and Sven's Home before and after at his window
+        // and the default one.
+        var states: [(name: String, layout: HomeLayout, width: CGFloat, height: CGFloat)] = []
+        for width: CGFloat in [1440, 1000, 760] { states.append(("now-panel-\(Int(width))", Self.now, width, width == 760 ? 1400 : 900)) }
+        states.append(("default-panel-1440", .standard, 1440, 900))
+        for layout in Widget.SizeClass.allCases { states.append(("layout-\(layout.rawValue)-panel-1440", Self.kept(layout), 1440, 1100)) }
         for (width, height) in [(1640, 1250), (1000, 660)] {
-            states.append(("svens-before-rail-\(width)", Self.svens, .rail, CGFloat(width), CGFloat(height)))
-            states.append(("svens-goal-rail-\(width)", HomeLayoutTests.svensGoal, .rail, CGFloat(width), CGFloat(height)))
+            states.append(("svens-before-panel-\(width)", Self.svens, CGFloat(width), CGFloat(height)))
+            states.append(("svens-goal-panel-\(width)", HomeLayoutTests.svensGoal, CGFloat(width), CGFloat(height)))
         }
         for state in states {
             if state.layout == .standard { store.reset() } else { store.save(state.layout) }
-            look.windowShape = state.shape
             for (name, style, theme) in Self.styles where wanted("\(name)-\(state.name)") {
                 await film(name == "film")
                 if Self.filming { store.save(Self.filmed(state.layout)) }
@@ -253,7 +249,6 @@ struct HomeLayoutRenders {
             ("reduce", Self.now, fourSizes), ("keys", Self.now, fourSizes), ("keymove", Self.now, fourSizes),
             ("svens-goal", HomeLayoutTests.svensGoal, svensSizes),
         ]
-        look.windowShape = .rail
         for edit in edits {
             if edit.layout == .standard { store.reset() } else { store.save(edit.layout) }
             for (name, style, theme) in themes {

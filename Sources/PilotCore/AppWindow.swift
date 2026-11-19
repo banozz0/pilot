@@ -314,7 +314,8 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
                                              .mac, .apps, .extensions, .pilot, .developer]
 
-    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render).
+    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render,
+    /// WindowRailRenders, 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652).
     public static let tabCount = 8
 
     /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
@@ -329,25 +330,6 @@ public enum AppArea: String, CaseIterable, Sendable {
         let pages = page.area.pages(developer: developer, more: more)
         return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
-}
-
-/// How the window draws the areas (window directions, Sven 2026-10-11: "can we have all 3 implemented, then I test and see
-/// which is best?"): picked on Look as Window layout, each in Instrument and Toybox.
-public enum WindowShape: String, CaseIterable, Sendable {
-    /// Direction 1, the default: a rail of the areas, the area's pages listed beside it, the open page's tabs in its header.
-    case rail
-    /// Direction 2: the areas as big tabs in the toolbar, the area's pages as a row of tabs under it.
-    case tabs
-
-    public var title: String {
-        switch self {
-        case .rail: "Rail and page list"
-        case .tabs: "Toolbar tabs"
-        }
-    }
-
-    /// A saved name, or the rail for none or an unknown one (a saved "hub", the layout taken out on 2026-10-11, among them).
-    public init(saved: String?) { self = saved.flatMap(WindowShape.init(rawValue:)) ?? .rail }
 }
 
 /// Direction 1's rules, both styles: a rail of the areas, and beside it the area's pages, one row each; a page's parts are
@@ -439,10 +421,11 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Catalogue (public-repo-catalogue T22, Sven's variant C): every theme pack in Pilot's catalogue as a gallery
     /// of desks, each acting from its own tile (Get, Update, Apply, Remove).
     case themeCatalogue
-    /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
+    /// Look's More (simplify-pages T20) and its places: the style (the window's layout went with the panel, pilot-ui-redesign
+    /// T2 and T3); the Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case lookMore, lookStyle, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -512,7 +495,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .windowLayout, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -547,7 +530,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .windowLayout, .appsShowAs]
+                                                     .lookStyle, .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -660,7 +643,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
         case .lookStyle: "Style"
-        case .windowLayout: "Window layout"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
         case .cursor: "Cursor"
@@ -747,7 +729,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
         case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
-        case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
         case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
@@ -853,11 +834,13 @@ public struct AppPlace: Hashable, Sendable {
     }
 
     /// The path from the panel's tab bar (pilot-ui-redesign T1): its tab, or More and its area, then `path`, a page named
-    /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean".
+    /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean". Under More a page's own More
+    /// tab is not named again, so More reads once: "More › Mac › Update & Clean › Reports" (pilot-ui-redesign T3).
     public func tabPath(count: Int = AppArea.tabCount, developer: Bool) -> String {
-        let area = page.area, rest = page.title == area.title ? Array(parts.dropFirst()) : parts
-        let lead = AppArea.tabs(count: count, developer: developer).more.contains(area) ? ["More", area.title] : [area.title]
-        return (lead + rest).joined(separator: " › ")
+        let area = page.area, inMore = AppArea.tabs(count: count, developer: developer).more.contains(area)
+        var rest = page.title == area.title ? Array(parts.dropFirst()) : parts
+        if inMore, let more = section?.onMore?.title, let at = rest.firstIndex(of: more) { rest.remove(at: at) }
+        return ((inMore ? ["More", area.title] : [area.title]) + rest).joined(separator: " › ")
     }
     var keywords: [String] { section?.keywords ?? page.keywords }
 }

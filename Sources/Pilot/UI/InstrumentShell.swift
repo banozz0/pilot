@@ -2,44 +2,57 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The app window's frame in Instrument, direction 1 (window directions, Sven 2026-10-11, design 6D3E1T482hjVZaUkgMvvDb):
-/// a 72 pt rail of the areas with Pilot and the Hyper key at its foot; beside it the area's pages, one row each with its
-/// state, the search over them; over the page a toolbar with its name and its parts as tabs (Home adds the date, the
-/// Hyper switch and Open menu). Home takes the whole width. A window under 900 pt folds the list away and the toolbar
-/// carries the area's pages too (RailLayout). Binds draws its own bar (InstrumentBindsPage).
+/// The app window's frame in Instrument: the floating panel (pilot-ui-redesign T3, round 2's shot 7c). The tab bar across
+/// the top (PanelTabBar); under it the open tab's pages listed by name down the left, the tab's name over them; beside the
+/// list the page under its bar, which holds its name, its parts and the search. An area of one page takes the whole width
+/// (Home, Keys, Launcher, AI, Pilot). More's card and what the search finds drop over the page. Binds draws its own bar
+/// (InstrumentBindsPage).
 struct InstrumentFrame: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    /// The window's width, measured: kept to the widths the rules tell apart, so only crossing a line redraws the frame.
-    @State private var width: Double = 1440
+    var more = PanelMore()
 
     var body: some View {
-        let list = RailLayout.showsList(model.page, width: width, searching: model.searchOpen)
-        HStack(spacing: 0) {
-            InstrumentRail(model: model).frame(width: 72).background(style.color(\.sidebar))
-            InstrumentRule(vertical: true)
-            if list {
-                InstrumentPageList(model: model).frame(width: RailLayout.listWidth(width)).background(style.color(\.sidebar))
-                InstrumentRule(vertical: true)
-            }
-            VStack(spacing: 0) {
-                if !Self.pageOwnsBar(model.page, section: model.section(of: model.page)) {
-                    InstrumentToolbar(model: model, listed: list)
-                    InstrumentRule()
-                } else if !list {
-                    // Binds' own bar has no way to its area's pages or its parts: the row over it carries them.
-                    WindowPagesRow(model: model)
+        let list = !RailLayout.fullWidth(model.page.area)
+        let owns = Self.pageOwnsBar(model.page, section: model.section(of: model.page))
+        VStack(spacing: 0) {
+            PanelTabBar(model: model, more: more)
+            HStack(spacing: 0) {
+                if list {
+                    InstrumentPageList(model: model).frame(width: Self.listWidth).background(style.color(\.sidebar))
+                    InstrumentRule(vertical: true)
                 }
-                PageView(model: model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                VStack(spacing: 0) {
+                    if !owns {
+                        InstrumentToolbar(model: model, listed: list)
+                        InstrumentRule()
+                    }
+                    PageView(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                // The ground draws once: whole when solid, else at its strength over Tinted's blur, Glass's tint carrying it.
+                .background(Theme.windowFill(style.color(\.canvas)))
             }
-            // The ground draws once: whole when solid, else at its strength over Tinted's blur, Glass's tint carrying it.
-            .background(Theme.windowFill(style.color(\.canvas)))
         }
-        .onGeometryChange(for: Double.self) { RailLayout.bucket($0.size.width) } action: { width = $0 }
-        // Cmd+F where no list shows opens it for the search.
-        .onChange(of: model.searchRequests) { if !list { model.searchOpen = true } }
+        .overlay(alignment: .topTrailing) {
+            if !owns && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                WindowSearchDrop(model: model).padding(.top, PanelTabBar.height + style.points(52) - 6).padding(.trailing, 16)
+            }
+        }
+        .overlay {
+            if more.open {
+                // A click beside the card closes it.
+                Color.clear.contentShape(.rect).onTapGesture { more.open = false }.accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if more.open { PanelMoreMenu(model: model, more: more).padding(.top, PanelTabBar.height - 6).padding(.trailing, 40) }
+        }
+        .onChange(of: model.page) { more.open = false }
     }
+
+    /// The page list's width, as drawn: Tools' six pages by name without scrolling.
+    static let listWidth: CGFloat = 156
 }
 
 extension InstrumentFrame {
@@ -69,69 +82,22 @@ struct InstrumentPageBar<Content: View>: View {
     }
 }
 
-// MARK: - Rail and page list
+// MARK: - Page list
 
-/// The rail: the traffic lights' inset, Home and the areas, Pilot and the Hyper key at its foot; the open page's area
-/// raised with a tick in the signal colour at the rail's edge. A window too short for the areas' names drops them (P37:
-/// Launcher made nine), then packs them tighter, then scrolls (the pages split made ten, eleven with Developer).
-private struct InstrumentRail: View {
-    @Environment(\.style) private var style
-    @Bindable var model: AppWindowModel
-
-    var body: some View {
-        ViewThatFits(in: .vertical) {
-            // A tighter step still, so the window's least height, 520, shows Pilot and the Hyper cap with Extensions back and
-            // Developer on (Sven's notes on build 19).
-            rail(named: true); rail(named: false); rail(named: false, tight: true); rail(named: false, tight: true, tighter: true)
-            ScrollView { rail(named: false, tight: true, tighter: true) }.scrollIndicators(.never)
-        }
-    }
-
-    private func rail(named: Bool, tight: Bool = false, tighter: Bool = false) -> some View {
-        VStack(spacing: tighter ? 1 : tight ? 2 : 4) {
-            Color.clear.frame(height: tighter ? 40 : 48)   // the traffic lights sit here
-            ForEach(AppArea.shownMain, id: \.self) { item($0, named: named, tight: tight, tighter: tighter) }
-            Spacer(minLength: tight ? 4 : 8)
-            item(.pilot, named: named, tight: tight, tighter: tighter)
-            InstrumentHyperCap().padding(.top, tighter ? 4 : tight ? 6 : 10).padding(.bottom, tighter ? 8 : tight ? 10 : 14)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func item(_ area: AppArea, named: Bool, tight: Bool = false, tighter: Bool = false) -> some View {
-        let on = model.page.area == area
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-        return Button { model.go(AppPlace(area.pages[0])) } label: {
-            VStack(spacing: 4) {
-                Image(systemName: area.symbol).font(style.font(\.icon)).frame(height: 18)
-                if named { Text(area.title).styleText(\.caption).lineLimit(1).minimumScaleFactor(0.8) }
-            }
-            .foregroundStyle(style.color(on ? \.text : \.text3))
-            .frame(width: 58, height: named ? 50 : tighter ? 28 : tight ? 31 : 36)
-            .background { if on { shape.fill(style.color(\.raised)) } }
-            .overlay { if on { shape.strokeBorder(style.color(\.line)) } }
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .leading) { if on { Capsule().fill(style.color(\.accent)).frame(width: 2, height: 18).offset(x: -6) } }
-        .help("\(area.title)  \(area.keyHint)")
-        .accessibilityLabel(area.title)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
-
-/// The Hyper key's cap: lit while Hyper is on; a click turns it on or off (the rail's foot, the tabs' strip).
+/// The Hyper key's cap: lit while Hyper is on; a click turns it on or off (the tab bar's right end).
 struct InstrumentHyperCap: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
+    /// Its side: 28 pt in the panel's tab bar.
+    var side: CGFloat = 44
 
     var body: some View {
         let on = engine.hyperSwitch.isOn
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 3, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: side < 44 ? style.radii.control + 1 : style.radii.control + 3, style: .continuous)
         return Button { engine.hyperSwitch.set(!on) } label: {
             Image(systemName: "arrowshape.up").font(style.font(\.icon))
                 .foregroundStyle(style.color(on ? \.accent : \.text3))
-                .frame(width: 44, height: 44)
+                .frame(width: side, height: side)
                 .background(style.color(on ? \.accentSoft : \.raised), in: shape)
                 .overlay { shape.strokeBorder(style.color(on ? \.accent : \.line)) }
                 .contentShape(shape)
@@ -142,8 +108,8 @@ struct InstrumentHyperCap: View {
     }
 }
 
-/// The area's pages beside the rail: its name, the search, each page with its state (its parts are its header's tabs),
-/// the keys at the foot. While a search holds words, what it finds in place of the pages.
+/// The open tab's pages down the left, by name (S3 B's grouping): the tab's name and its key over them in small capitals,
+/// the open page raised with a hairline, no accent. Extensions lists each extension's page under its own.
 private struct InstrumentPageList: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
@@ -151,21 +117,19 @@ private struct InstrumentPageList: View {
     var body: some View {
         let area = model.page.area
         VStack(alignment: .leading, spacing: 0) {
-            Text(area == .home ? "Search" : area.title).styleText(\.pageTitle).foregroundStyle(style.color(\.text))
-                .accessibilityAddTraits(.isHeader)
-                .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 14)
-            InstrumentSearchField(model: model).padding(.horizontal, 10).padding(.bottom, 12)
+            HStack {
+                Text(area.title).accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 4)
+                Text(area.keyHint).accessibilityHidden(true)
+            }
+            .styleText(\.eyebrow).foregroundStyle(style.color(\.text3)).lineLimit(1)
+            .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, 10)
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    if model.query.trimmingCharacters(in: .whitespaces).isEmpty { pages(area) } else { InstrumentSearchResults(model: model) }
-                }
-                .padding(.horizontal, 10).padding(.bottom, 12)
+                VStack(alignment: .leading, spacing: 2) { pages(area) }
             }
             .scrollIndicators(.never)
-            Text(RailLayout.hint(area, rows: area == .extensions ? ExtensionPages.shared.pageEntries.count : 0)).styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1)
-                .padding(.horizontal, 18).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-                .overlay(alignment: .top) { InstrumentRule() }
         }
+        .padding(.horizontal, 10).padding(.top, 14)
     }
 
     @ViewBuilder private func pages(_ area: AppArea) -> some View {
@@ -177,37 +141,25 @@ private struct InstrumentPageList: View {
     }
 }
 
-/// A page in the list: its name, its state under it with a dot (PageState), raised when open. A view of its own, so a
-/// change of state redraws only its row.
+/// A page in the list: its name, raised when open. A view of its own, so a change of the open page redraws only its row.
 private struct InstrumentPageRow: View {
-    @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let page: AppPage
 
     var body: some View {
         let on = model.shows(page)
-        let state = PageState.of(page, engine: engine, clashes: model.conflictCount)
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 1, style: .continuous)
         Button { model.go(AppPlace(page)) } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(page.title).styleText(\.body).fontWeight(.medium).foregroundStyle(style.color(on ? \.text : \.text2))
-                if let state {
-                    HStack(spacing: 6) {
-                        Circle().fill(style.color(state.on ? \.accent : \.line3)).frame(width: 5, height: 5)
-                        Text(state.text).styleText(\.caption).foregroundStyle(style.color(\.text3))
-                    }
-                }
-            }
-            .lineLimit(1)
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: style.points(36), alignment: .leading)
-            .background { if on { shape.fill(style.color(\.raised)) } }
-            .overlay { if on { shape.strokeBorder(style.color(\.line)) } }
-            .contentShape(shape)
+            Text(page.title).styleText(\.body).foregroundStyle(style.color(on ? \.text : \.text2))
+                .lineLimit(1)
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background { if on { shape.fill(style.color(\.raised)) } }
+                .overlay { if on { shape.strokeBorder(style.color(\.line)) } }
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
@@ -325,6 +277,7 @@ struct InstrumentToolbar: View {
                 }
                 .buttonStyle(InstrumentButtonStyle())
             }
+            InstrumentSearchField(model: model).frame(width: 180)
         }
     }
 
