@@ -195,6 +195,7 @@ extension ControlVerbs {
         ("run", "ext run <action> [--query <text>] [--input <text>]", "Runs a command once after Allow and answers what it printed (none of its actions performed); nothing is read back while a password preference is set."),
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page and Home block show them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] | ext act <id> --handler <id> [--command <name>]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's callback (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, with its host kept open: it answers the rows before and after."),
+        ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -232,6 +233,7 @@ extension ControlVerbs {
             case "run": return try await Self.runExtension(args, tools, peer: call.peer)
             case "page": return try await Self.pageExtension(args, tools, peer: call.peer)
             case "act": return try await Self.actExtension(args, tools, peer: call.peer)
+            case "gaps": return try await Self.extensionGaps(args, tools)
             case "catalogue": return try await Self.catalogue(args, tools)
             case "get": return try await Self.getExtension(args, tools, peer: call.peer)
             case "publish":
@@ -243,6 +245,33 @@ extension ControlVerbs {
             }
         })
         registerExtensionPrefs(tools)
+    }
+
+    /// What pilot-ext-host's gap recorder wrote for one extension, ExtensionData/<id>/gaps.json (ADR 0017, T3).
+    private struct GapFile: Decodable {
+        struct Gap: Decodable { let count: Int?, last: String?, commands: [String]? }
+        let gaps: [String: Gap]?
+    }
+
+    /// `ext gaps [<id>]`: the gaps an installed Raycast-format extension's runs recorded, most used first, then by name.
+    /// Reads Pilot's own file, beside the extension's preferences, so nothing runs and nothing asks.
+    private static func extensionGaps(_ args: ControlArguments, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
+        let id = args.positional.dropFirst().first
+        let chosen = if let id { [try await tools.require(id)] } else {
+            await tools.found().extensions.filter { $0.commands.contains { $0.runtime == .raycast } }
+        }
+        let answers: [JSONValue] = chosen.map { ext in
+            let data = try? Data(contentsOf: tools.data.appending(path: "\(ext.id)/gaps.json"))
+            let gaps = (data.flatMap { try? JSONDecoder().decode(GapFile.self, from: $0) }?.gaps ?? [:])
+                .sorted { ($0.value.count ?? 0, $1.key) > ($1.value.count ?? 0, $0.key) }
+            return .object(["extension": .string(ext.id), "gaps": .array(gaps.map { api, gap in
+                var o: [String: JSONValue] = ["api": .string(api), "runs": .number(Double(gap.count ?? 0)),
+                                              "commands": .array((gap.commands ?? []).map(JSONValue.string))]
+                o["last"] = gap.last.map(JSONValue.string)
+                return .object(o)
+            })])
+        }
+        return id == nil ? .object(["extensions": .array(answers)]) : answers[0]
     }
 
     private static func newExtension(_ args: ControlArguments, _ tools: ExtensionTools, modes: [String], cwd: String?) throws(ControlError) -> JSONValue {

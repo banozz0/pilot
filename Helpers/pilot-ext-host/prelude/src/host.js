@@ -3,11 +3,13 @@
 // commit that changes the answer is written, so data that arrives after the first render fills the view in.
 // Callbacks (T2): each Action's `onAction` goes out as an `invoke` action whose handler id is its host element's serial
 // and the prop's name, so the id stays the same while the element lives and a press always reaches its newest props.
+// Typed actions (T3) go out as the open, copy or paste action Pilot already performs, and a Detail's Metadata as its facts.
 // The table is rebuilt on every answer; an id it lacks is stale. Each query or invoke Pilot numbers (`seq`) is
 // answered by the next line, which carries `ack`: the commit it caused, else the current view again.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
+import { effects } from "./raycast.js";
 
 const native = globalThis.__native;
 
@@ -86,8 +88,18 @@ function accessory(accessories) {
   return undefined;
 }
 
-/** The Actions under `nodes` (an ActionPanel, its sections), in order: each pressable one as an invoke action, its
- *  handler entered in `handlers`. */
+/** A typed action (T3) as the ADR 0010 action Pilot performs itself (raycast.js's effects), with Raycast's title. */
+const typed = {
+  "Action.OpenInBrowser": (p) => [effects.open(p.url), "Open in Browser"],
+  "Action.Open": (p) => [effects.open(p.target), undefined],
+  "Action.OpenWith": (p) => [effects.open(p.path), "Open With"],
+  "Action.ShowInFinder": (p) => [effects.reveal(p.path), "Show in Finder"],
+  "Action.CopyToClipboard": (p) => [effects.copy(p.content), "Copy to Clipboard"],
+  "Action.Paste": (p) => [effects.paste(p.content), "Paste"],
+};
+
+/** The Actions under `nodes` (an ActionPanel, its sections and submenus, flattened), in order: each pressable one as an
+ *  invoke action, its handler entered in `handlers`, each typed one as the action it stands for. */
 function actions(nodes, handlers, out = []) {
   for (const node of nodes) {
     if (node.type === "Action") {
@@ -95,7 +107,29 @@ function actions(nodes, handlers, out = []) {
       const handler = `${node.serial}.onAction`;
       handlers.set(handler, node);
       out.push({ type: "invoke", handler, title: words(node.props.title) || undefined });
-    } else if (node.type === "ActionPanel" || node.type === "ActionPanel.Section") actions(node.children, handlers, out);
+    } else if (typed[node.type]) {
+      const [action, title] = typed[node.type](node.props);
+      if (action) out.push({ ...action, title: words(node.props.title) ?? title });
+    } else if (node.type === "ActionPanel" || node.type === "ActionPanel.Section" || node.type === "ActionPanel.Submenu") actions(node.children, handlers, out);
+  }
+  return out;
+}
+
+/** A Detail's Metadata as Pilot's facts: a label's or link's text, a tag list's tags joined; separators drop. */
+function facts(nodes) {
+  const out = [];
+  for (const node of nodes) {
+    if (!node.type?.endsWith(".Metadata")) continue;
+    for (const part of node.children) {
+      const p = part.props ?? {}, label = words(p.title) ?? "";
+      if (part.type.endsWith(".Label") || part.type.endsWith(".Link")) {
+        const text = words(p.text);
+        if (text) out.push({ label, text });
+      } else if (part.type.endsWith(".TagList")) {
+        const tags = part.children.map((t) => words(t.props?.text)).filter(Boolean);
+        if (tags.length) out.push({ label, text: tags.join(", ") });
+      }
+    }
   }
   return out;
 }
@@ -139,7 +173,10 @@ function answer(container, handlers) {
   const root = view(container.children);
   if (!root) return null;
   if (root.type === "Detail") {
-    return { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
+    const detail = { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
+    const metadata = facts(root.children);
+    if (metadata.length) detail.metadata = metadata;
+    return detail;
   }
   const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
   if (root.props.isLoading === true) list.isLoading = true;

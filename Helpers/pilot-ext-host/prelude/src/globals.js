@@ -1,6 +1,9 @@
 // The globals a bare JSContext lacks and React's scheduler needs before it loads (ADR 0017): console on stderr, timers
-// on the host's native timers, queueMicrotask, performance.now and a small `process`. Stdout carries only Pilot's
-// protocol lines, so nothing here prints there.
+// on the host's native timers, queueMicrotask, performance.now and a small `process`; and the web globals extensions
+// use (T3, web.js): base64, text codecs, URL, AbortController and fetch. Stdout carries only Pilot's protocol lines, so
+// nothing here prints there.
+import { missing, stubs } from "./gaps.js";
+import "./web.js";
 const native = globalThis.__native;
 
 function text(args) {
@@ -51,4 +54,14 @@ globalThis.queueMicrotask = (fn) => { Promise.resolve().then(fn); };
 const started = Date.now();
 globalThis.performance = { now: () => Date.now() - started };
 globalThis.global = globalThis;
-globalThis.process = { env: { NODE_ENV: "production" }, platform: "darwin", argv: [], nextTick: (fn, ...a) => queueMicrotask(() => fn(...a)) };
+// The child's own environment, which Pilot keeps small (HOME, USER, TMPDIR, PATH, LANG and the extension's id).
+const env = { ...native.env(), NODE_ENV: "production" };
+globalThis.process = stubs("process", ["exit", "on", "once", "kill", "chdir", "memoryUsage", "hrtime", "uptime", "stdout", "stderr", "stdin"], {
+  env, platform: "darwin", arch: "arm64", argv: [], pid: 0, version: "v22.14.0", versions: { node: "22.14.0" }, release: { name: "node" },
+  cwd: () => native.cwd(), nextTick: (fn, ...a) => queueMicrotask(() => fn(...a)), emitWarning: (w) => console.warn(String(w)),
+});
+// Node's Buffer and the browser's Blob and friends are not here yet: each is a stub that records its use.
+globalThis.Buffer = stubs("Buffer", ["from", "alloc", "allocUnsafe", "isBuffer", "concat", "byteLength", "compare", "isEncoding"]);
+for (const name of ["Blob", "FormData", "WebSocket", "XMLHttpRequest", "EventSource", "structuredClone"]) {
+  globalThis[name] = missing(`global.${name}`);
+}
