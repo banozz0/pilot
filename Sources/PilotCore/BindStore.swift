@@ -664,9 +664,12 @@ public struct BindStore: Equatable, Sendable {
         }
         var all = stashed
         all[preset.id] = Edits(custom: custom, disabled: disabled)
-        // A built-in on a base 1.3 lacks, with no keys set in it, gets no row: the table rebuilds it, and a file on Classic,
-        // My binds or a preset made in 1.3 stays one 1.3 reads, should the user go back (T11).
-        let written = presets.filter { p in !(p.isBuiltIn && p.base.newerThan13 && (all[p.id] ?? Edits()) == Edits()) }
+        // A built-in on a base 1.3 lacks, with no keys set in it and not the active one, gets no row: the table rebuilds it,
+        // and a file on Classic, My binds or a preset made in 1.3 stays one 1.3 reads, should the user go back (T11). The
+        // active one keeps its row, which Import's Add as preset reads.
+        let written = presets.filter { p in
+            p.id == preset.id || !(p.isBuiltIn && p.base.newerThan13 && (all[p.id] ?? Edits()) == Edits())
+        }
         let presetRows = version < 3 ? nil : written.map { p in
             let edits = all[p.id] ?? Edits()
             return PresetRow(id: p.id, name: p.name, base: p.base.rawValue, binds: edits.custom.keys.sorted().map {
