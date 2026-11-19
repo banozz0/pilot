@@ -670,7 +670,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .permissions: ["accessibility", "full disk access", "permission", "microphone", "screen recording", "input monitoring",
                             "system events", "automation"]
         case .hyperKey: ["hyper keys", "layer keys", "left option", "right option", "left command", "right command", "left control",
-                         "right control", "escape", "quick tap", "bind hints", "nudge", "hold hyper", "overlay delay"]
+                         "right control", "escape", "quick tap", "hold hyper", "overlay delay"]
         case .status: ["key engine", "keyboard engine", "password field lock", "secure input", "tiler", "health", "diagnostics", "log", "running"]
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
                      "ghostty"]

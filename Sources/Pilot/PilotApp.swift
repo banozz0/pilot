@@ -89,8 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A mouse plugged in gets the pointer speed, once Pilot has set one (System › Mouse, Q442).
         PointerSpeed.start()
         Task { await SystemSampler.shared.watch(every: SystemSampler.historyInterval, needs: .history) }
-        // Low-battery alerts (Q394): the Bluetooth batteries with the slow readings while the setting is on.
-        LowBatteryAlerts.shared.follow()
         // Reminders from dated note lines (P66): Done and Snooze answered, the folder's reminders scheduled.
         NoteReminders.shared.start()
         // Other apps' notifications as Pilot's cards, off by default: nothing runs until the setting is on.

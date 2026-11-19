@@ -39,7 +39,7 @@ final class PilotCapture {
     static let shared = PilotCapture()
 
     /// `qr` is Read a QR code's screen area (QRCodes): Capture text's overlay, its codes shown in a panel.
-    enum Request: String { case area, window, fullScreen, record, scroll, scrollUp, ocr, qr, repeatArea, delayed, smartElement, subject, markup, colour }
+    enum Request: String { case area, window, fullScreen, record, scroll, scrollUp, ocr, qr, repeatArea, delayed, subject, colour }
 
     let grabber: any ScreenGrabbing
     let store: CaptureSettingsStore
@@ -141,8 +141,7 @@ final class PilotCapture {
                     return
                 }
                 let windows = (try? await grabber.windows()) ?? []
-                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request),
-                     smart: request == .smartElement)
+                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request))
                 Self.log.notice("capture \(request.rawValue, privacy: .public): grab \(Self.ms(grabbed), privacy: .public) ms, shown \(Self.ms(ContinuousClock.now - start), privacy: .public) ms")
             } catch {
                 guard attempt == mine else { return }
@@ -224,15 +223,13 @@ final class PilotCapture {
         case .scroll, .scrollUp: .scroll
         case .ocr, .qr: .ocr
         case .subject: .subject
-        case .markup: .markup
         case .colour: .colour
         default: .capture
         }
     }
 
-    private func show(_ grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: CaptureOverlay.Purpose,
-                      smart: Bool = false) {
-        let overlay = CaptureOverlay(grabs: grabs, windows: windows, mode: mode, purpose: purpose, smart: smart, visible: overlaysVisible) { [weak self] outcome in
+    private func show(_ grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: CaptureOverlay.Purpose) {
+        let overlay = CaptureOverlay(grabs: grabs, windows: windows, mode: mode, purpose: purpose, visible: overlaysVisible) { [weak self] outcome in
             guard let self else { return }
             if let take = self.areaTaker(purpose) {
                 self.overlay = nil
@@ -368,8 +365,6 @@ final class PilotCapture {
             pasteboard.clearContents()
             pasteboard.setString(hex, forType: .string)
             tell("Copied \(hex)", nil)
-        case .marked(let image, let scale):
-            deliver(image, scale)
         }
     }
 

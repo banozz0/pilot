@@ -36,8 +36,6 @@ extension SettingsSchema {
                     standard: HoldOverlay.delay, read: { settings.overlayDelay }, write: { settings.overlayDelay = $0 }),
             .bool("overlay.enabled", "Holding Hyper shows your binds", page: "general", standard: true,
                   read: { settings.overlayEnabled }, write: { settings.overlayEnabled = $0 }),
-            .bool("general.bindNudges", "Show an app's bind after you open it", page: "general", standard: true,
-                  read: { settings.bindNudges }, write: { settings.bindNudges = $0 }),
             .bool("launchAtLogin", "Launch at login", page: "general", standard: PilotSettings.launchAtLoginDefault,
                   read: { settings.launchAtLogin }, write: { settings.launchAtLogin = $0 }),
             // Q715: Configs, its Agents tab and Repos. Off for a new install; an existing one started on once (PilotSettings).

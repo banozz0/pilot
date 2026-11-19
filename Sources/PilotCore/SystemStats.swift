@@ -122,13 +122,10 @@ public enum SystemStats {
         /// health, charger, machine, disk kind).
         public static let diskSpace = Parts(rawValue: 1 << 7), bluetooth = Parts(rawValue: 1 << 8), slowDetails = Parts(rawValue: 1 << 9)
         public static let processes = Parts(rawValue: 1 << 10)
-        /// Slow too: the Bluetooth HID devices' batteries alone (keyboards, mice, trackpads), a registry walk without
-        /// system_profiler, for Low-battery alerts while nothing shows Bluetooth.
-        public static let bluetoothHID = Parts(rawValue: 1 << 12)
         /// Everything This Mac's rows show; the process list is asked for on its own.
         public static let all: Parts = [.cpu, .memory, .gpu, .network, .battery, .sensors, .details, .diskIO, .diskSpace, .bluetooth,
                                         .slowDetails]
-        public static let slow: Parts = [.diskSpace, .bluetooth, .bluetoothHID, .slowDetails]
+        public static let slow: Parts = [.diskSpace, .bluetooth, .slowDetails]
     }
 
     /// One reading of everything.
@@ -207,12 +204,7 @@ public enum SystemStats {
         public func keeping(_ older: Slow, readNow parts: Parts) -> Slow {
             var merged = older
             if parts.contains(.diskSpace) { merged.disk = disk }
-            if parts.contains(.bluetooth) {
-                merged.bluetooth = bluetooth
-            } else if parts.contains(.bluetoothHID) {
-                // The HID devices afresh; the earbuds system_profiler gave last, as they were.
-                merged.bluetooth = bluetooth + older.bluetooth.filter { old in old.fromProfiler && !bluetooth.contains { $0.name == old.name } }
-            }
+            if parts.contains(.bluetooth) { merged.bluetooth = bluetooth }
             if parts.contains(.slowDetails) {
                 merged.localIP = localIP; merged.interface = interface; merged.machine = machine; merged.wifi = wifi
                 merged.diskKind = diskKind; merged.chargerWatts = chargerWatts; merged.batteryHealth = batteryHealth

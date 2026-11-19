@@ -68,7 +68,7 @@ struct AbilitiesTests {
     @Test("Try is not offered for what would act on Pilot's own window, type into it, power off, cut the network or rewrite settings")
     func tryIsSafe() {
         for id in ["windows.close", "windows.snapLeft", "drive.quitApp", "drive.paste", "workspaces.move:1", "system.shutDown", "system.restart",
-                   "system.logOut", "system.lock", "system.wifi", "system.clearAllNotifications", "engine.hyper", "look.ghosttyApply",
+                   "system.logOut", "system.lock", "system.wifi", "system.clearAllNotifications", "engine.hyper",
                    "scripts.run:x", "ext.y.z", "ai.fix", "apps.pastePlain"] {
             #expect(!Abilities.canTry(id), "\(id)")
         }
@@ -78,11 +78,10 @@ struct AbilitiesTests {
         }
     }
 
-    /// Sven 2026-10-10: a new Mac lists the generic abilities only; Bitwarden, lazygit and Ghostty's look wait under
-    /// More abilities.
+    /// Sven 2026-10-10: a new Mac lists the generic abilities only; Bitwarden and lazygit wait under More abilities.
     static let appSpecific: Set<String> = [
         "apps.bitwardenFill", "apps.bitwardenForget", "apps.bitwardenLock", "apps.bitwardenGenerator", "apps.bitwardenSearch",
-        "apps.generatePassword", "apps.lazygit", "look.ghosttyApply", "look.ghosttyRemove",
+        "apps.generatePassword", "apps.lazygit",
     ]
 
     @Test("Abilities ship minimal: an app-specific one is listed only once added with its app here, or while it holds a key")
@@ -117,10 +116,10 @@ struct AbilitiesTests {
         let existing = AbilitySettings(defaults: old)
         existing.seed(existingUser: true)
         #expect(existing.added == Self.appSpecific)
-        existing.remove("look.ghosttyApply")
+        existing.remove("apps.bitwardenLock")
         existing.seed(existingUser: true)
-        #expect(!existing.added.contains("look.ghosttyApply"), "seeded once only")
-        #expect(AbilitySettings(defaults: old).added == Self.appSpecific.subtracting(["look.ghosttyApply"]))
+        #expect(!existing.added.contains("apps.bitwardenLock"), "seeded once only")
+        #expect(AbilitySettings(defaults: old).added == Self.appSpecific.subtracting(["apps.bitwardenLock"]))
         let fresh = AbilitySettings(defaults: try store())
         fresh.seed(existingUser: false)
         #expect(fresh.added.isEmpty)

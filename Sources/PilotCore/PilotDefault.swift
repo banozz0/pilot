@@ -51,7 +51,6 @@ public enum PilotDefault {
         "system.brightnessDownAll": Key("F1", .shift),
         "system.brightnessUp": Key("F2"),
         "system.brightnessUpAll": Key("F2", .shift),
-        "system.infoHUD": Key("t", [.ctrl, .alt]),
         "system.lock": Key("escape"),
         "system.missionControl": Key("up", .leftAlt, hyper: false),
         "system.nextWallpaper": Key("space", .shift),

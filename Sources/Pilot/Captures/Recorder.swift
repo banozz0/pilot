@@ -27,7 +27,7 @@ enum RecordingSource: Equatable {
             return rect.size == grab.frame.size ? .display(grab.id) : .area(rect, on: grab.id)
         case .window(_, let owner, let grab):
             return owner > 0 ? .app(owner, on: grab.id) : .display(grab.id)
-        case .cancelled, .colour, .marked: return nil
+        case .cancelled, .colour: return nil
         }
     }
 }

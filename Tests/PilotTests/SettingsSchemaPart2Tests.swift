@@ -225,7 +225,7 @@ struct SettingsSchemaPart2Tests {
     /// Every UserDefaults key Pilot reads or writes, as the source names them (HEAD 1f39db2a, read for this task; the
     /// spec's inventory §1 was never written down). A `*` stands for a provider or role.
     static let inventory: Set = [
-        "layerKey", "quickTapEscape", "general.bindNudges", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay", "system.publicIP",
+        "layerKey", "quickTapEscape", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay", "system.publicIP",
         "windows.dragModifier", "windows.swipeWorkspaces", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
         "translate.home", "translate.other",
         "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",

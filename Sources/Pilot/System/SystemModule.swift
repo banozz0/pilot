@@ -137,8 +137,6 @@ enum SystemModule {
             }
         }
 
-        // Omarchy's Super+Ctrl+Alt+T, which flashes the time (story 188): the time, date, battery and weather, read on the press.
-        add(&registry, "infoHUD", "Show time, battery and weather", Key("t", [.ctrl, .alt]), .system, tier: .v1_1) { InfoHUD.show() }
         // Sven, 2026-10-23 (Q420): the menu with `event ` typed, whose answer adds the event without opening Calendar.
         add(&registry, "newEvent", "New calendar event", nil, .system) { PilotMenu.shared.open(typing: "event ") }
 

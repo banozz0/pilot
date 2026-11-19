@@ -1563,7 +1563,7 @@ public enum MenuLayout {
                    .branch(.qr), .action("ai.ask"), .action("ai.chat"), .action("ai.fix"), .action("ai.selection"),
                    .action("speech.readAloud")],
         .capture: ["captures.area", "captures.activeWindow", "captures.fullscreen", "captures.scrolling", "captures.screenRecording",
-                   "captures.ocr", "captures.readQRScreen", "captures.smartElement", "captures.subject", "captures.markup",
+                   "captures.ocr", "captures.readQRScreen", "captures.subject",
                    "captures.scrollingUp", "captures.repeatArea", "captures.delayed", "captures.editLast", "captures.editVideo", "captures.pinLast", "captures.restoreThumbnail", "captures.toggleDesktopIcons"].map { .action($0) },
         .qr: [.action("captures.makeQR"), .action("captures.readQR")],
         .system: systemSections.map { .branch(system($0.title)) },

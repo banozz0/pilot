@@ -16,26 +16,6 @@ enum GhosttyBridge {
     /// Omarchy's palettes from the bundle.
     static let themes = BundledJSON.load("themes", log: looklog, empty: [OmarchyTheme]()) { try OmarchyThemes.parse($0) }
 
-    /// Takes Pilot's block and include out of Ghostty's config, then reloads.
-    static func remove(files: GhosttyFiles = .standard) {
-        change("Pilot's look taken out") {
-            guard ThemeCoordinator.legacyAllowed() else { throw ThemeFailure("Restore the active theme pack before changing legacy Ghostty appearance") }
-            return try files.remove()
-        }
-    }
-
-    /// One write, logged; a change reloads Ghostty.
-    private static func change(_ what: String, _ write: () throws -> Bool) {
-        do {
-            guard try write() else { return looklog.notice("ghostty: \(what, privacy: .public), nothing to change") }
-            looklog.notice("ghostty: \(what, privacy: .public) written")
-            reload()
-        } catch {
-            looklog.error("ghostty: \(String(describing: error), privacy: .public)")
-            HUD.tip("Ghostty's config was not changed: \(error)")
-        }
-    }
-
     /// Every running Ghostty reloads through its menu; a stopped one reads the config at launch.
     static func reload() { DriveModule.pressMenu(bundle, reloadItem, quietWhenNotRunning: true, every: true) }
 
@@ -64,21 +44,5 @@ enum GhosttyBridge {
             return changed
         }
         var isApplied: Bool { GhosttyFiles.standard.isApplied }
-    }
-
-    /// Two keyless actions, in the menu's search and pilot://run: Pilot's look in Ghostty (the picked theme's Omarchy
-    /// palette), and taking it out.
-    /// They write files, so they run after the tap callback.
-    static func register(into registry: inout ActionRegistry) {
-        let actions: [(String, String, @MainActor () -> Void)] = [
-            ("look.ghosttyApply", "Ghostty: use Pilot's look", {
-                Look.shared.restyleGhostty()
-            }),
-            ("look.ghosttyRemove", "Ghostty: take Pilot's look out", { remove() }),
-        ]
-        for (id, label, run) in actions {
-            do { try registry.register(Action(id: id, label: label, module: .system) { DispatchQueue.main.async { run() } }) }
-            catch { looklog.error("\(id, privacy: .public): \(String(describing: error), privacy: .public)") }
-        }
     }
 }

@@ -94,7 +94,7 @@ struct WidgetsPageRenders {
     static let desk: [(String, Double, Double, Double, Double)] = [
         ("desk-weather", 0.006, 0.048, 375, 370), ("desk-calendar", 0.12, 0.048, 375, 370),
         (ReadyWidgets.nowPlaying, 0.006, 0.32, 262, 203), (ReadyWidgets.launcher, 0.0875, 0.32, 430, 203),
-        (ReadyWidgets.github, 0.006, 0.475, 375, 245), (ReadyWidgets.ci, 0.12, 0.475, 375, 245),
+        (ReadyWidgets.github, 0.006, 0.475, 375, 245),
         (ReadyWidgets.thisMac, 0.006, 0.67, 542, 370), (ReadyWidgets.folder, 0.17, 0.67, 765, 370),
         ("desk-todo", 0.755, 0.048, 318, 310), ("desk-ai-usage", 0.852, 0.048, 482, 310),
         (ReadyWidgets.markets, 0.755, 0.28, 318, 258), (ReadyWidgets.notes, 0.852, 0.28, 482, 258),
@@ -417,7 +417,7 @@ struct WidgetsPageRenders {
                        "apps.pastePlain", "system.lockKeyboard", "links.open:x",
                        // Round 3's second review: an allow-shape, not a list: no payload, nothing that acts on the Mac unasked.
                        "windows.closeAll", "windows.close", "system.wifi", "system.sleep", "system.lock", "system.ejectAll",
-                       "system.clearAllNotifications", "engine.hyper", "engine.tilingOff", "look.ghosttyApply", "look.ghosttyRemove",
+                       "system.clearAllNotifications", "engine.hyper", "engine.tilingOff",
                        "dictation.toggle", "ai.fix", "apps.bitwardenLock", "apps.bitwardenFill", "captures.screenRecording", "engine.tilingOn",
                        "apps.open:com.apple.Terminal",
                        "apps.web:https://x.example", "apps.url:com.apple.Safari:https://x.example", "apps.private:com.apple.Safari",

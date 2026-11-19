@@ -42,8 +42,6 @@ final class EngineObservers {
     /// The focused app's pid, read once per refresh so an AX callback asks the app nothing.
     @ObservationIgnored private var focusedPid: pid_t = 0
     private var tokens: [NSObjectProtocol] = []
-    /// An app came to the front (bind hints listen here, card agent-bo-95422934).
-    var onActivate: (NSRunningApplication) -> Void = { _ in }
     /// Each read of the focused window: focus, move, resize, the tiler's writes (the window border follows it, card agent-bo-95422950).
     var onFocusedWindow: (WindowBorder.Window?) -> Void = { _ in }
     /// The focused window's title, frame and AX element as one app reports them; tests pass a fake.
@@ -90,12 +88,8 @@ final class EngineObservers {
 
     func start() {
         let nc = NSWorkspace.shared.notificationCenter
-        tokens.append(nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
-            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            Task { @MainActor in
-                self?.refreshFocusedApp()
-                if let app { self?.onActivate(app) }
-            }
+        tokens.append(nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.refreshFocusedApp() }
         })
         for name in Self.workspaceRefreshNotifications {
             tokens.append(nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in

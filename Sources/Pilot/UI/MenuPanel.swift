@@ -1519,7 +1519,6 @@ final class PilotMenu {
         }
         let previous = previousApp, spot = model?.nav.spot
         if let nav = model?.nav { record(entry, from: nav) }
-        Engine.shared?.nudger.picked(entry)
         Self.$origin.withValue(spot) { run(entry, previous: previous) }
     }
 

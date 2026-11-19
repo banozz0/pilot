@@ -29,7 +29,6 @@ final class PilotSettings {
         overlayEnabled = defaults.object(forKey: "overlay.enabled") as? Bool ?? true
         showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
-        bindNudges = defaults.object(forKey: "general.bindNudges") as? Bool ?? true
         // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
         // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
         let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
@@ -159,10 +158,6 @@ final class PilotSettings {
             onDragModifierChange()
         }
     }
-    /// On unless switched off: a hint names the bind after a mouse open or a menu pick (card agent-bo-95422934).
-    var bindNudges: Bool {
-        didSet { defaults.set(bindNudges, forKey: "general.bindNudges") }
-    }
     /// The engine hands the running mouse tap the new modifier here.
     @ObservationIgnored var onDragModifierChange: () -> Void = {}
     /// General's Developer switch (Pilot 1.0.2, Sven Q715): Configs, its Agents tab, and Repos show only while it is on
@@ -245,8 +240,6 @@ final class Engine {
     let topBar: TopBarController
     /// Pilot's dock (spec pilot-dock): off by default.
     let dock: DockController
-    /// Bind hints (card agent-bo-95422934).
-    @ObservationIgnored private(set) lazy var nudger = BindNudger(engine: self)
     /// The Window shelf on Stage workspaces (ADR 0015), its first place under the top bar's room and the outer gap.
     @ObservationIgnored private(set) lazy var shelf = WindowShelf(tiler: observers.tiler, tiling: { [tilingSwitch] in tilingSwitch.isOn },
                                                                   top: { [pilotBlock] name in
@@ -541,7 +534,6 @@ final class Engine {
         }
         WidgetDesk.shared.start(tiler: observers.tiler)
         shelf.start()
-        nudger.start()
         presets.start()
         // Look › Wallpaper per workspace (Q333): a switch puts a workspace's own image, or the screen's own again, on its screen.
         observers.tiler.onWorkspaceShown = { workspace, previous, display in
@@ -751,7 +743,6 @@ final class Engine {
         SystemModule.register(into: &registry)
         DictationModule.register(into: &registry)
         RingsModule.register(into: &registry, rings: rings)
-        GhosttyBridge.register(into: &registry)
         NotesPanel.register(into: &registry)
         QuickAIActions.register(into: &registry)
         ReadAloud.register(into: &registry)
@@ -850,7 +841,7 @@ final class Engine {
     }
 
     /// The Binds editor's Record: the next Hyper key, or plain combo, comes to `done` instead of running; nil stops
-    /// listening. `onlyHyper` leaves every other key to run or type as usual (the bind hint's wait, story 122).
+    /// listening. `onlyHyper` leaves every other key to run or type as usual (Rings' Record key).
     func recordKey(onlyHyper: Bool = false, _ done: ((Key) -> Void)?) {
         tap.captureNext = done
         tap.captureOnlyHyper = done != nil && onlyHyper

@@ -143,7 +143,7 @@ struct GeneralPage: View {
     // MARK: Groups
 
     /// The Hyper key: where it sits (simplify-pages T8's front block, with its Change to More until pages round 4), then
-    /// a switch per layer key, a quick tap, the bind hints and the hold overlay.
+    /// a switch per layer key, a quick tap and the hold overlay.
     private func hyperKeys(focused: Bool) -> some View {
         @Bindable var settings = engine.settings
         return KitBlock(title: "Hyper key", symbol: "command", focused: focused) {
@@ -164,12 +164,6 @@ struct GeneralPage: View {
             BlockRow {
                 Toggle("A quick tap sends Escape", isOn: $settings.quickTapEscape)
                     .toggleStyle(.pilotSwitchRow(info: "Tap a layer key by itself and it sends Escape; held with another key, it is Hyper."))
-            }
-            BlockRow {
-                Text("Show an app's bind after you open it")
-                InfoMark(text: "After a click opens an app, or a menu pick runs something, that has a bind. At most once an hour per bind.")
-                Spacer()
-                Toggle("Show the bind when I use the mouse or the menu", isOn: $settings.bindNudges).toggleStyle(.pilotSwitch)
             }
             BlockRow {
                 LabelledControls {

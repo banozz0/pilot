@@ -56,13 +56,11 @@ public struct CaptureSelection: Equatable, Sendable {
     /// A drag shorter than this either way is a click.
     public static let click: CGFloat = 4
 
-    /// `smart` starts with smart selection on: Capture a UI element (P72).
-    public init(size: CGSize, windows: [Window] = [], mode: Mode = .area, pointer: CGPoint = .zero, smart: Bool = false) {
+    public init(size: CGSize, windows: [Window] = [], mode: Mode = .area, pointer: CGPoint = .zero) {
         bounds = CGRect(origin: .zero, size: size)
         self.windows = windows
         self.mode = mode
         self.pointer = Self.clamp(pointer, to: bounds)
-        self.smart = smart && mode == .area
     }
 
     /// The window the pointer is over, front first.
