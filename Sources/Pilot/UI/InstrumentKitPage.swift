@@ -4,7 +4,7 @@ import SwiftUI
 // The Kit's Instrument branches for a settings page (card agent-bo-95423181, batch 4; ADR 0008): the page's column level
 // with the toolbar's inset, a panel with its title on a 44 pt header over a hairline, a heading over a group, a glyph on
 // a raised tile, the on/off card, a block's title and the notice row. The Kit's parts (KitPage, PageBody, Tile, KitBlock,
-// CalmHeading, SwitchCard, StatsTitle) call these when the surface draws in Instrument.
+// CalmHeading, SwitchCard) call these when the surface draws in Instrument.
 
 /// A page's column under the frame's toolbar: its intro line, then the blocks `spacing` apart, 28 pt in at each side as
 /// the toolbar's title.

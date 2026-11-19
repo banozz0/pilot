@@ -155,7 +155,7 @@ public enum FolderListing {
     public static func shellQuoted(_ text: String) -> String {
         let safe = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+,:@%=")
         guard text.isEmpty || !text.unicodeScalars.allSatisfy(safe.contains) else { return text }
-        return LoginItems.quoted(text)
+        return "'" + text.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 
     /// What the path bar's typed words name: `~` the home folder, a relative path from `base`, a file URL, and a path

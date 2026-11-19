@@ -1236,14 +1236,9 @@ final class PilotMenu {
         }
     }
 
-    /// Activity's and Stats' keys (Q399, Q400): in Activity ⌘Return force quits the current row once pressed twice on it,
-    /// and any other key but Return forgets that and the foot's note; in Stats, which lists no rows, Return opens Activity;
-    /// in About Escape closes the menu.
+    /// Activity's keys (Q399): ⌘Return force quits the current row once pressed twice on it, and any other key but Return
+    /// forgets that and the foot's note; in About Escape closes the menu.
     private func activityKey(_ model: MenuModel, _ key: MenuNavigator.Key) -> Bool {
-        if model.nav.branch == .stats, !model.nav.isList, key == .return {
-            model.open(.activity)
-            return true
-        }
         // About is a page to read, as Omarchy's is: Escape closes the menu, not back to the root (Q443).
         if model.showsAbout, key == .escape { return apply(.close, from: model.nav.branch) }
         guard model.nav.branch == .activity, !model.nav.isList else { return false }
@@ -1886,9 +1881,7 @@ final class MenuModel {
     /// when it has something.
     var waiting: [MenuEntry] = []
 
-    /// Stats' cards draw in the list's place (MenuStatsScreen), unless Cmd+K's actions are over it.
-    var showsStats: Bool { nav.branch == .stats && !nav.isList && nav.actions == nil && scan == nil }
-    /// About's cards and mark draw in the list's place (MenuAboutScreen, Q443), the same way.
+    /// About's cards and mark draw in the list's place (MenuAboutScreen, Q443), unless Cmd+K's actions are over it.
     var showsAbout: Bool { nav.branch == .about && !nav.isList && nav.actions == nil && scan == nil }
     /// Define's rows and entry draw in the list's place (DefinePane), Cmd+K's actions over their corner.
     var showsDefine: Bool { nav.branch == .define && !nav.isList && scan == nil }
@@ -1914,7 +1907,6 @@ final class MenuModel {
         if layout == .classic { return classicSize }
         if layout == .line { return lineSize }
         let band = railBand
-        if showsStats { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: MenuStatsScreen.height, room: room) }
         if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight, room: room) }
         if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height, room: room) }
         if scan != nil {
@@ -1931,7 +1923,6 @@ final class MenuModel {
     /// an answer's card where it stands in for its row; the kinds sit in the status line.
     private var classicSize: CGSize {
         if scan != nil { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: waitHeight) }
-        if showsStats { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: aboutHeight) }
         if showsDefine { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         let headings = headings
@@ -1946,7 +1937,6 @@ final class MenuModel {
     private var lineSize: CGSize {
         if scan != nil { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: waitHeight) }
         if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count, room: room) }
-        if showsStats { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: aboutHeight) }
         if showsDefine { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: DefinePane.height) }
         // The emoji grid's cells and the translation's panes, not rows; the whole height while a chip's list is open.
@@ -1955,7 +1945,7 @@ final class MenuModel {
             return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: room, full: chip != nil)
         }
         let headings = headings
-        let card = cardRoom(headed: headings[0] != nil, row: MenuPanelSize.lineRow) + (statsCards ? StatsStrip.room : 0)
+        let card = cardRoom(headed: headings[0] != nil, row: MenuPanelSize.lineRow)
         return MenuPanelSize.line(shape, rows: nav.rows.count, headings: headings.count, card: card, extra: noMatch ? Self.noMatchRoom : 0,
                                   bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0, full: nav.actions != nil || nav.shownDetail != nil || previewsFile)
     }
@@ -2219,7 +2209,6 @@ extension MenuModel {
         }
         if nav.branch == .stickers { return [("Tab", "GIPHY \(giphyKind.next.title)"), ("Esc", "back")] }
         if nav.branch == .activity, !nav.rows.isEmpty { return [("↵", "quit"), ("⌘↵", "force quit"), ("Esc", "back")] }
-        if nav.branch == .stats { return [("↵", "busiest apps"), ("Esc", "back")] }
         if nav.branch == .about { return [("Esc", "close")] }
         let paste = "paste to \(frontApp ?? "the app")"
         if nav.branch == .emoji, !nav.rows.isEmpty { return [("↵", paste), ("⌘↵", "copy"), ("Esc", "back")] }

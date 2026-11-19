@@ -20,7 +20,7 @@
   <s>Dictation&nbsp;app</s>&nbsp;·
   <s>File&nbsp;manager</s>&nbsp;·
   <s>File&nbsp;converter</s>&nbsp;·
-  <s>System&nbsp;monitor</s>&nbsp;·
+  <s>Menu&nbsp;bar&nbsp;stats</s>&nbsp;·
   <s>Mac&nbsp;cleaner</s>
 </p>
 
@@ -93,7 +93,7 @@ https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
 
 <kbd>Hyper</kbd>+<kbd>F</kbd> opens Pilot Files: folder sizes, <kbd>⌘</kbd>+<kbd>K</kbd> on every file and undo for every action. File search finds a file through a typo. [Pilot Files](https://pilotformac.com/pilotfiles.html) · [File search](https://pilotformac.com/files.html)
 
-**Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [Mac stats](https://pilotformac.com/stats.html) · the `pilot` command.
+**Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [menu bar stats](https://pilotformac.com/menubar.html) · the `pilot` command.
 
 <p align="center"><a href="https://pilotformac.com/#features"><b>Everything Pilot does, a key at a time</b></a></p>
 

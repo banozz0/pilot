@@ -55,13 +55,7 @@ struct LineMenuRenders {
         // The Files view previews the selected file beside the list, at the full height (file search v2).
         #expect(files.previewsFile && files.instrumentSize.height == MenuPanelSize.line(.wide, rows: 0, headings: 0, full: true).height)
         #expect(notes.instrumentSize.height >= MenuPanelSize.lineChrome + CGFloat(min(notes.nav.rows.count, 8)) * MenuPanelSize.lineRow)
-        // Typing stats puts the Mac's cards above the rows, with room for them; the Stats page is still a row (P42).
-        let stats = try #require(states["L24-stats"])
-        #expect(stats.statsCards && stats.nav.rows.contains { $0.title == "Stats" }, "\(stats.nav.rows.map(\.title))")
-        #expect(stats.instrumentSize.height >= MenuPanelSize.lineChrome + StatsStrip.room + MenuPanelSize.lineRow)
-        // Stats' screen draws its cards in the list's place, at their own height (Q400); Activity lists its rows (Q399).
-        let screen = try #require(states["L28-stats"])
-        #expect(screen.showsStats && screen.instrumentSize.height == MenuPanelSize.lineChrome + MenuStatsScreen.height)
+        // Activity lists its rows (Q399).
         let activity = try #require(states["L27-activity"])
         #expect(activity.nav.rows.map(\.section) == ["Apps", "Apps", "Apps", "Background", "Background", "Background"])
         #expect(activity.nav.rows.first?.title == "Google Chrome" && activity.headings.count == 2)
@@ -133,13 +127,6 @@ struct LineMenuRenders {
                 try await Self.render(model, name, in: dir, wait: name == "L11-files" ? 1.5 : 0.3)
             }
         }
-        // Toybox draws Stats' cards in its own frame (Q400).
-        look.style = .toybox
-        let toy = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menu-toybox")
-        try FileManager.default.createDirectory(at: toy, withIntermediateDirectories: true)
-        for (name, model) in try Self.states() where name == "L28-stats" && (only.map(name.contains) ?? true) {
-            try await Self.render(model, name, in: toy, wait: 0.3)
-        }
     }
 
     /// `model` in the panel Pilot shows Line in (its own face, PilotMenu.makePanel), drawn after `wait` seconds off the main
@@ -196,13 +183,13 @@ struct LineMenuRenders {
             return nav
         }
         var states: [(String, MenuModel)] = [("L1-root", model(MenuNavigator(entries: built)))]
-        // More rows (Sven 2026-10-20): Files, Notes and Stats switched on, Files moved over Apps, the others after System.
-        var extras = MenuRoot(extras: ["files", "notes", "stats"])
+        // More rows (Sven 2026-10-20): Files, Notes and Activity switched on, Files moved over Apps, the others after System.
+        var extras = MenuRoot(extras: ["files", "notes", "activity"])
         if let files = extras.rows().first(where: { $0.extra?.id == "files" }) { extras.move(files, to: 0) }
         states.append(("L1c-root-extras", model(MenuNavigator(entries: built, root: extras))))
         // Sven's 17 Go to rows (T36, 2026-11-04): the root grows to show them all on his 1440 pt screen, and scrolls past
         // an 800 pt one's height. Each screen's visible height is less its menu bar (33 pt).
-        let tall = MenuRoot(extras: ["files", "notes", "activity", "stats", "qr", "reminders", "translate"])
+        let tall = MenuRoot(extras: ["files", "notes", "activity", "qr", "reminders", "translate"])
         for (name, visible) in [("L1d-root-1440", 1440.0 - 33), ("L1e-root-800", 800.0 - 33)] {
             let m = model(MenuNavigator(entries: built, root: tall))
             let panel = PilotMenu.makePanel(m)
@@ -340,15 +327,6 @@ struct LineMenuRenders {
             states.append((name, model(nav)))
         }
 
-        // Typing stats (P42): the five cards from a seeded sampler, never this Mac's.
-        let sampler = SystemSampler()
-        SharedLook.StatsRenders.seed(sampler)
-        StatsStrip.sampler = sampler
-        var stats = MenuNavigator(entries: built)
-        stats.query = "stats"
-        stats.provideSettings("stats")
-        states.append(("L24-stats", model(stats)))
-
         // P43: Finder's selection rows at a root search for "folder", and the design picker over four folders, one in a git
         // repository. The folders are named, never made: nothing of Sven's is read.
         let folders = ["Projects", "Documents/Design", "Documents/Invoices", "code/pilot"]
@@ -363,8 +341,7 @@ struct LineMenuRenders {
         for _ in 0..<4 { _ = designs.handle(.down) }
         states.append(("L26-folder-designs", model(designs)))
 
-        // Hyper+Space › Activity and › Stats, screens of their own (Q399, Q400): seeded rows, and the readings seeded for
-        // L24, never this Mac's.
+        // Hyper+Space › Activity, a screen of its own (Q399): seeded rows, never this Mac's.
         let helper = Activity.Row(kind: .process, pid: 812, name: "Google Chrome Helper (Renderer)", cpu: 14, memory: 410_000 << 10, rights: .quitAndForce)
         let snapshot = Activity.Snapshot(apps: [
             Activity.Row(kind: .app, pid: 801, name: "Google Chrome", bundlePath: "/Applications/Google Chrome.app", cpu: 38.2,
@@ -382,7 +359,6 @@ struct LineMenuRenders {
         let activityModel = model(activity)
         activityModel.activityRead = true
         states.append(("L27-activity", activityModel))
-        states.append(("L28-stats", model(MenuNavigator(entries: built, branch: .stats))))
         // T42: an action's alias and words acts on them: clipboard history's row searching them, the question alone, and
         // Kill a process's alias opening Activity searching them, as the panel moves it there.
         let actioned = Aliases(Alias.starters + [Alias(key: "action:system.killProcess", alias: "kill", title: "Kill a process"),

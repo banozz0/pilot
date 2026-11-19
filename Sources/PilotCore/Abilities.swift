@@ -319,7 +319,6 @@ public enum Abilities {
         "system.logOut": "Logs out.",
         "system.menu": "Opens the menu on System: power, sound, Wi-Fi, display, Focus.",
         "system.activityMenu": "Opens the menu on Activity: what runs, busiest first, to quit or force quit.",
-        "system.statsMenu": "Opens the menu on Stats: CPU, memory, storage, network, heat and the busiest apps.",
         "system.missionControl": "Opens Mission Control.",
         "system.pointerSpeedCycle": "Steps the pointer speed through Slow, Normal and Fast, as System › Mouse saves them.",
         "system.pointerSpeedSlow": "Moves the pointer at the Slow speed System › Mouse saves.",

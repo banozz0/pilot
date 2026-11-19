@@ -27,7 +27,7 @@ struct LauncherFilmRenders {
                                                               ("colour", "#2bc4f0"), ("qn", "quick notes"), ("qr", "make qr"),
                                                               ("lock", "lock keyboard"), ("music", "music"), ("miss", "obsidian"),
                                                               ("typo", "invocie"), ("wall", "next wallpaper"), ("update", "update"),
-                                                              ("clean", "clean"), ("stats", "stats"), ("ports", "open ports"),
+                                                              ("clean", "clean"), ("ports", "open ports"),
                                                               ("gaps", "gaps"), ("summ", "summarise"), ("ctext", "capture text"),
                                                               ("ql", "gh pilot"), ("fix", "fix"), ("aloud", "read aloud")]
 
@@ -54,7 +54,7 @@ struct LauncherFilmRenders {
         let windows = try AeroWindow.parse(ExplainerFilmRenders.windows(["1", "1"]))
         let day = Date(timeIntervalSince1970: 1_791_028_800)
         // Cut 4: an app's name lists its own commands right under it, above the offers (L19's catalogue, Q831); the extension the chat made is
-        // installed by the time "open ports" is typed; the stats cards read a seeded sampler, never this Mac.
+        // installed by the time "open ports" is typed.
         let commands = try LineMenuRenders.withCommands(built)
         let ports = MenuEntry(title: "Open ports", target: .action("ext.open-ports.list"), home: nil, detail: "Open ports",
                               keywords: "ports listen network", icon: .command(emoji: "🔌"))
@@ -63,7 +63,6 @@ struct LauncherFilmRenders {
                                   keywords: "summary youtube page document", icon: .command(emoji: "📝"))
         let sampler = SystemSampler()
         StatsRenders.seed(sampler)
-        StatsStrip.sampler = sampler
         func model(_ query: String, entries: [MenuEntry]? = nil) -> MenuModel {
             var nav = MenuNavigator(entries: entries ?? built)
             nav.query = query

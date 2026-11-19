@@ -409,7 +409,7 @@ final class RingMenuSource {
     }
 
     /// The menu's screens an extra row opens, and the action that opens the menu on each (SystemModule).
-    static let screens: [MenuBranch: String] = [.activity: "system.activityMenu", .stats: "system.statsMenu"]
+    static let screens: [MenuBranch: String] = [.activity: "system.activityMenu"]
 
     private func wedge(_ row: MenuRoot.Row) -> RingSlice? {
         switch row {

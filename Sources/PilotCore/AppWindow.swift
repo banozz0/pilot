@@ -14,10 +14,10 @@ import Foundation
 /// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
-/// Windows area's sidebar. Login and background items left Update & Clean for a Mac page of its own, and Reports came onto
-/// Update & Clean's front under the Update and Clean block (Sven, 2026-11-16: "login and background should have its own page").
+/// Windows area's sidebar. Reports came onto Update & Clean's front under the Update and Clean block
+/// (Sven, 2026-11-16).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, activity, upkeep, loginItems, stats, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -35,10 +35,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .pilotMenu: "Pilot menu"
         case .look: "Look"
         case .system: "System"
-        case .activity: "Activity"
         case .upkeep: "Update & Clean"
-        case .loginItems: "Login & Background"
-        case .stats: "Stats"
         case .clipboard: "Clipboard"
         case .captures: "Captures"
         case .snippets: "Snippets"
@@ -70,10 +67,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .pilotMenu: "list.bullet.below.rectangle"
         case .look: "paintpalette"
         case .system: "slider.horizontal.3"
-        case .activity: "gauge.with.dots.needle.67percent"
         case .upkeep: "arrow.triangle.2.circlepath"
-        case .loginItems: "power.circle"
-        case .stats: "chart.xyaxis.line"
         case .clipboard: "doc.on.clipboard"
         case .captures: "camera.viewfinder"
         case .snippets: "text.quote"
@@ -98,9 +92,9 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
-        case .menu, .menuBar, .dock, .pilotMenu, .general, .activity: 3
-        case .install, .extensions, .files, .stats, .fonts, .repos: 4
-        case .openWith, .configs, .notes, .loginItems: 5
+        case .menu, .menuBar, .dock, .pilotMenu, .general: 3
+        case .install, .extensions, .files, .fonts, .repos: 4
+        case .openWith, .configs, .notes: 5
         }
     }
 
@@ -172,12 +166,7 @@ public enum AppPage: String, CaseIterable, Sendable {
                        "bluetooth", "headphones", "airpods", "connect", "wi-fi", "wifi", "network", "join", "display", "resolution", "monitor",
                        "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
                        "volume up", "volume down"]
-        case .activity: ["activity monitor", "process", "running", "quit", "force quit", "kill", "task manager", "hog", "helper"]
         case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run"]
-        case .loginItems: ["login items", "open at login", "startup", "startup items", "launch agent", "launchd", "daemon", "background items",
-                           "runs in the background", "turn off at login"]
-        case .stats: ["stats", "history", "readings", "cpu", "memory", "ram", "storage", "disk", "network", "temperature", "heat", "fan", "graphics",
-                      "gpu", "battery", "bluetooth", "busiest", "this mac"]
         // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10).
         case .clipboard: ["clipboard", "history", "paste", "keep", "keep the last", "images", "save images", "passwords", "skip passwords",
                           "clear history", "open clipboard"]
@@ -235,9 +224,8 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .desktop: [.menuBar, .dock, .pilotMenu, .widgets]
         case .look: [.look, .fonts]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
-        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split). Login & Background beside Update & Clean
-        // (Sven, 2026-11-16).
-        case .mac: [.upkeep, .loginItems, .system, .activity, .stats]
+        // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
+        case .mac: [.upkeep, .system]
         case .tools: [.clipboard, .notes, .files, .voice, .captures, .snippets]
         case .apps: [.openWith, .install]
         case .developer: [.configs, .repos]
@@ -757,7 +745,7 @@ public struct AppPlace: Hashable, Sendable {
         "topBar": AppPlace(.menuBar), "topbar": AppPlace(.menuBar), "menubar": AppPlace(.menuBar),
         "pilotmenu": AppPlace(.pilotMenu), "dropdown": AppPlace(.pilotMenu),
         "installCatalogue": AppPlace(.catalogue), "pomodoro": AppPlace(.extensionCatalogue),
-        "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.stats), "defaults": AppPlace(.openWith),
+        "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.menuBar), "stats": AppPlace(.menuBar), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),
         "convert": AppPlace(.files), "ask": AppPlace(.ai), "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
         "instructions": AppPlace(.agents), "launcher": AppPlace(.menu), "windows": AppPlace(.workspaces),
@@ -777,7 +765,7 @@ public struct AppPlace: Hashable, Sendable {
     /// an unknown one (the window opens as usual). A tab that moved off its old page in C3 follows it there:
     /// `page=workspaces&tab=tiling` opens Tiling, `page=binds&tab=abilities` Launcher › Abilities, `page=install&tab=reports`
     /// Update & Clean at its Reports, `page=defaults&tab=configs` Configs. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
-    /// Snippets, `page=menu&tab=fileSearch` Files › File search, `page=activity&tab=stats` (or `tab=history`) Stats.
+    /// Snippets, `page=menu&tab=fileSearch` Files › File search; `page=stats` opens Menu bar, where the readings are.
     public static func linked(_ url: URL) -> AppPlace? {
         guard let place = url.queryValue("page").flatMap(named) else { return nil }
         // System's section, a card on its front or the keyboard layout's or the mouse's place.
@@ -792,8 +780,8 @@ public struct AppPlace: Hashable, Sendable {
     /// The tabs that left their page in C3, or took a new name, by their old `tab=` name.
     static let movedTabs: [String: AppPlace] = [
         "tiling": AppPlace(.tiling), "abilities": AppPlace(.abilities), "reports": AppPlace(.reports), "configs": AppPlace(.configs),
-        "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "history": AppPlace(.stats),
-        "snippets": AppPlace(.snippets), "fileSearch": AppPlace(.fileSearch), "stats": AppPlace(.stats),
+        "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "history": AppPlace(.menuBar),
+        "snippets": AppPlace(.snippets), "fileSearch": AppPlace(.fileSearch), "stats": AppPlace(.menuBar),
         "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
         // The page map (2026-10-17): General's export and import is Binds'; Helpers, once a General block, is Install's.
         "exportImport": AppPlace(.exportImport), "helpers": AppPlace(.helpers),

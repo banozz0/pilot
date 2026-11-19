@@ -457,7 +457,7 @@ struct HomeMostUsedRows: View {
         Tile(title: "Most used", symbol: HomeLayout.Block.mostUsed.symbol, fill: fill) {
             Text("\(engine.today.total(now: now)) presses").font(ink.ui(11.5)).foregroundStyle(ink.muted)
         } content: {
-            HomeFoldList(total: top.count, rows: rows, more: HomeMore(title: "Open Activity") { parts.go(AppPlace(.activity)) },
+            HomeFoldList(total: top.count, rows: rows, more: HomeMore(title: "All binds") { parts.go(AppPlace(.binds)) },
                          empty: "Hold \(engine.settings.layerKeys.label) and press a key; it counts here.") { i in
                 let row = top[i]
                 HomeLine(title: engine.action(row.action)?.label ?? row.action, trailing: "\(row.count)") {

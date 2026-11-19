@@ -57,8 +57,8 @@ struct CollectionsConfigsTests {
         func real(_ path: String) -> String { home.appending(path: path).resolvingSymlinksInPath().path }
     }
 
-    static func object(_ value: JSONValue?) -> [String: JSONValue] { ControlActivityTests.object(value) }
-    static func array(_ value: JSONValue?) -> [JSONValue] { ControlActivityTests.array(value) }
+    static func object(_ value: JSONValue?) -> [String: JSONValue] { if case .object(let o)? = value { o } else { [:] } }
+    static func array(_ value: JSONValue?) -> [JSONValue] { if case .array(let a)? = value { a } else { [] } }
     static func strings(_ value: JSONValue?) -> [String] { array(value).compactMap { if case .string(let s) = $0 { s } else { nil } } }
 
     @Test("list configs gives each card's fields in the page's group order, secrets as dots, then the known ones not here")

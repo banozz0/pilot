@@ -27,7 +27,6 @@ final class PilotSettings {
         overlayPicks = Set(defaults.stringArray(forKey: "overlayPicks") ?? [])
         overlayDelay = HoldOverlay.clamped(delay: defaults.object(forKey: "overlay.delay") as? Double ?? HoldOverlay.delay)
         overlayEnabled = defaults.object(forKey: "overlay.enabled") as? Bool ?? true
-        showPublicIP = defaults.bool(forKey: "system.publicIP")
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? .default
         // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
         // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
@@ -146,10 +145,6 @@ final class PilotSettings {
     /// The quick tap's window still follows overlayDelay, so a tap is Escape as before.
     var overlayEnabled: Bool {
         didSet { defaults.set(overlayEnabled, forKey: "overlay.enabled") }
-    }
-    /// Off until switched on on Home: This Mac's public IP is the one reading that calls the internet (card agent-bo-95422831).
-    var showPublicIP: Bool {
-        didSet { defaults.set(showPublicIP, forKey: "system.publicIP") }
     }
     /// The key held to move (left drag) or resize (right drag) the window under the mouse (card agent-bo-95422930).
     var dragModifier: DragModifier {

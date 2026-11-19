@@ -24,11 +24,6 @@ struct SettingsPagesTests {
         ClipboardSettingsView(history: ClipboardHistory(defaults: UserDefaults(suiteName: testSuite())!))
     }
 
-    @Test("What the menu bar shows is picked on the Menu bar page, not on Stats (card agent-bo-95423024)")
-    func readingsOnMenuBar() {
-        #expect(!StatsPage.intro.lowercased().contains("menu bar"), "Stats still says the menu bar is picked there")
-    }
-
     @Test("Pilot's parts are places on its front, its More gone (pages round 4): every old Pilot part and link lands on the page, a place with its block asked for")
     func pilotParts() {
         #expect(AppPage.general.tabs.isEmpty)

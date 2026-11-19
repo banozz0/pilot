@@ -45,9 +45,6 @@ struct MenuBody: View {
                 InstrumentScan(scan: scan, tools: model.tools)
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { model.waitHeight = $0 }
-            } else if model.showsStats {
-                // Stats' cards, which list no rows (Q400).
-                MenuStatsScreen { model.open(.activity) }
             } else if model.showsAbout {
                 // About's mark and cards, which list no rows (Q443).
                 MenuAboutScreen(displays: NSScreen.screens.count)
@@ -96,8 +93,6 @@ struct MenuBody: View {
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    // Typing stats (P42): the Mac's readings above the rows, never a row itself.
-                    if model.statsCards { StatsStrip { model.open($0.page == .stats ? .stats : .activity) } }
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         // One view per row with its heading, so scrolling to a row brings its heading too.
                         // An answer that copies a result draws as its card in the top slot, the same row (T7).

@@ -637,7 +637,7 @@ private struct ToyThisMac: View {
         let cpu = history.map(\.cpu), ram = history.map { Optional($0.ram) }, heat = history.map(\.heat)
         let disk = raw?.slow.disk
         ToyCard(title: "This Mac") {
-            ToyLink(title: "Stats") { parts.go(AppPlace(.stats)) }
+            ToyLink(title: "Top bar") { parts.go(AppPlace(.menuBar)) }
         } content: {
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {

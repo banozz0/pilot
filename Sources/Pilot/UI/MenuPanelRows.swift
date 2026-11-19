@@ -63,7 +63,7 @@ extension MenuBranch {
         .snippets: ("text.quote", 1, ""),
         .notes: ("note.text", 1, ""), .qr: ("qrcode", 0, ""),
         .stickers: ("face.smiling", 2, ""), .emoji: ("face.smiling", 2, ""),
-        .activity: (AppPage.activity.symbol, 5, "what runs, quit it"), .stats: (AppPage.stats.symbol, 4, "this Mac's readings"),
+        .activity: ("gauge.with.dots.needle.67percent", 5, "what runs, quit it"),
         .about: ("info.circle", 0, "this Mac and Pilot"),
     ]
 
@@ -171,7 +171,7 @@ extension MenuEntry {
         "system.bluetooth": ("antenna.radiowaves.left.and.right", .accent),
         "system.displaySettings": ("display", .third), "system.rotateDisplay": ("rotate.right", .third), "system.focusSettings": ("moon.stars", .second),
         "workspaces.rescue": ("lifepreserver", .good), "system.killProcess": ("xmark.circle", .problem),
-        "system.activityMenu": ("cpu", .problem), "system.statsMenu": (AppPage.stats.symbol, .amber),
+        "system.activityMenu": ("cpu", .problem),
         "apps.emoji": ("face.smiling", .amber), "apps.clipboard": ("list.clipboard", .good),
         "captures.area": ("rectangle.dashed", .accent), "captures.activeWindow": ("macwindow.on.rectangle", .third),
         "captures.fullscreen": ("rectangle.inset.filled", .second), "captures.scrolling": ("arrow.up.and.down.text.horizontal", .good),

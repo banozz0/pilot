@@ -75,3 +75,14 @@ extension SettingsSchema {
 }
 
 extension TopBarController: Flipping {}
+
+extension SettingsSchema {
+    /// The busiest-by-memory reading's one setting (the bar's popovers and the dock's): an app's helpers counted under the
+    /// app. Its key keeps the name the Stats page gave it.
+    func registerStatsBar(_ bar: BarItemsStore) {
+        register([
+            .bool("stats.combineProcesses", "Busiest by memory counts an app's helpers under the app", page: "menuBar", standard: false,
+                  read: { bar.settings.combineProcesses }, write: { value throws(ControlError) in try bar.requireWritable(); bar.settings.combineProcesses = value }),
+        ])
+    }
+}

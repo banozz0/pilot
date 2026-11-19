@@ -18,7 +18,7 @@ extension SettingsSchema {
         let schema = SettingsSchema()
         schema.registerPart1(general: Engine.shared.map { ($0.settings, $0.hyperSwitch) }, look: .shared, clipboard: .shared, recording: .clipboard,
                              files: .shared, passwords: .shared, folders: .shared, giphy: Giphy.keychain, ai: .shared)
-        schema.registerStats(views: .shared, bar: .shared)
+        schema.registerStatsBar(.shared)
         schema.registerImageText(.shared)
         schema.registerSpeech(.shared)
         schema.registerSelection(.shared)

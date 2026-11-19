@@ -11,10 +11,9 @@ enum SystemModule {
     static func register(into registry: inout ActionRegistry) {
         // The menu's System branch (story 80; MenuLayout lists its rows).
         add(&registry, "menu", "System menu", Key("space", .shift), .system) { PilotMenu.shared.toggle(branch: .system) }
-        // Activity's and Stats' screens in the menu (Q399, Q400), bindable with no default key; the Ring's Pilot ring runs
-        // them for their extra rows (RingMenuSource).
+        // Activity's screen in the menu (Q399), bindable with no default key; the Ring's Pilot ring runs it for its extra
+        // row (RingMenuSource).
         add(&registry, "activityMenu", "Activity menu", nil, .system) { PilotMenu.shared.toggle(branch: .activity) }
-        add(&registry, "statsMenu", "Stats menu", nil, .system) { PilotMenu.shared.toggle(branch: .stats) }
         add(&registry, "lock", "Lock screen", Key("escape"), .system) { lock() }
         add(&registry, "sleep", "Sleep", nil, .system) { systemEvents("sleep") }
         add(&registry, "restart", "Restart", nil, .system) { systemEvents("restart") }

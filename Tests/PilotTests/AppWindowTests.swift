@@ -59,7 +59,7 @@ struct AppWindowFrameTests {
         // A page saved before the cut reopens where it went.
         let defaults = UserDefaults(suiteName: testSuite())!
         defaults.set("history", forKey: "appWindow.page")
-        #expect(AppWindowModel(defaults: defaults).page == .stats)
+        #expect(AppWindowModel(defaults: defaults).page == .menuBar)
         defaults.set("pilot", forKey: "appWindow.page")
         #expect(AppWindowModel(defaults: defaults).page == .general)
         // Reports is a place on Update & Clean's front (Sven, 2026-11-16): a link or Open report opens the front, scrolled
@@ -68,8 +68,6 @@ struct AppWindowFrameTests {
         #expect(AppPlace.linked(URL(string: "pilot://open?page=install&tab=reports")!) == AppPlace(.reports))
         model.go(AppPlace(.reports))
         #expect(model.page == .upkeep && model.section(of: .upkeep) == nil && model.blockFocus == .reports)
-        model.go(AppPlace(.loginItems))
-        #expect(model.page == .loginItems && model.blockFocus == nil)
     }
 
     @Test("The window's own keys answer before the main menu's: Cmd+, opens Pilot (not the menu's Open Pilot…), Ctrl+Tab the area's next page, Cmd+2 Keys")
@@ -340,7 +338,7 @@ struct AppWindowRenders {
             // catalogue, instructions, extensions, Look's theme catalogue before its index reads): no card to find. Configs and
             // its Agents part, and Repos, read this Mac's files off the main thread, which never hands back while this test
             // holds it: ConfigsListTests and ReposPageRenders draw their cards from a home of their own.
-            let lists: Set = ["activity", "loginItems", "install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
+            let lists: Set = ["install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
             if cards < enough && !lists.contains(name) { withoutCards.append(name) }
         }
         // The Binds page searched (card agent-bo-95422785): each hit under its own layer's heading.

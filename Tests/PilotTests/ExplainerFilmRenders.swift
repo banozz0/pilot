@@ -888,7 +888,6 @@ struct ExplainerFilmRenders {
         }
         try #require(engine.pilotBlock.block.gaps == PilotBlock.Gaps(inner: i, outer: o), "gaps \(engine.pilotBlock.block.gaps)")
         StatsRenders.seed(SystemSampler.shared)
-        ActivityMonitor.shared.seed(ActivityRenders.seeded, quitting: [])
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }
@@ -903,8 +902,7 @@ struct ExplainerFilmRenders {
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
         try shoot(AppPlace(.tiling), "tiling")
-        for (place, name) in [(AppPlace(.workspaces), "workspaces"), (AppPlace(.stats), "stats"),
-                              (AppPlace(.upkeep), "upkeep"), (AppPlace(.reports), "reports"), (AppPlace(.activity), "activity")] {
+        for (place, name) in [(AppPlace(.workspaces), "workspaces"), (AppPlace(.upkeep), "upkeep"), (AppPlace(.reports), "reports")] {
             try shoot(place, name)
         }
     }
