@@ -34,7 +34,8 @@ enum Installer {
     static let externals: Set<String> = ["@raycast/api", "react"]
     static let registry = "https://registry.npmjs.org/"
     /// npm's package names, the legacy ones with capitals included: letters, digits, . _ ~ and -, never first . or _,
-    /// and an optional @scope/ of the same.
+    /// and an optional @scope/ of the same. Pilot holds the plan to the same pattern again (GitHubInstall.npm in
+    /// Sources/PilotCore/ExtensionInstaller.swift; this package links no PilotCore): change both together.
     nonisolated(unsafe) static let npmName = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
     /// A preference's name as the question shows it: a letter, then letters, digits, _ and -.
     nonisolated(unsafe) static let preferenceName = #/[A-Za-z][A-Za-z0-9_-]*/#
@@ -103,12 +104,12 @@ enum Installer {
         }
         guard wanted.contains(where: { $0.path == "package.json" }) else { throw Refused("\(path) has no package.json") }
         guard wanted.count <= mostFiles else { throw Refused("\(path) has \(wanted.count) files to fetch, more than \(mostFiles)") }
-        if let big = wanted.first(where: { $0.size > fileLimit }) { throw Refused("\(big.path) is \(big.size) bytes, past \(fileLimit)") }
+        if let big = wanted.first(where: { $0.size > fileLimit }) { throw Refused("\(cut(big.path)) is \(big.size) bytes, past \(fileLimit)") }
         let total = wanted.reduce(0) { $0 + $1.size }
         guard total <= folderLimit else { throw Refused("\(path) is \(total) bytes to fetch, past \(folderLimit)") }
         let source = workspace.appending(path: "source")
         for file in wanted {
-            guard safe(file.path) else { throw Refused("\(file.path) leaves its folder") }
+            guard safe(file.path) else { throw Refused("\(cut(file.path)) leaves its folder") }
             let encoded = (path + "/" + file.path).split(separator: "/").map {
                 $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? String($0)
             }.joined(separator: "/")
@@ -117,7 +118,7 @@ enum Installer {
             // A git blob's id is sha1("blob <size>\0" + bytes): the file is the one the listing named, whatever HEAD is now.
             let blob = Data("blob \(body.count)\0".utf8) + body
             guard hex(Array(Insecure.SHA1.hash(data: blob))) == file.sha else {
-                throw Refused("\(file.path) from GitHub does not match its listing's blob \(file.sha.prefix(12)); nothing was installed")
+                throw Refused("\(cut(file.path)) from GitHub does not match its listing's blob \(file.sha.prefix(12)); nothing was installed")
             }
             fetched(url, file.path, body.count, "git blob \(file.sha.prefix(12))")
             let to = source.appending(path: file.path)
@@ -147,13 +148,14 @@ enum Installer {
         // Every remote word the question shows is held to a rule here, and again in GitHubInstall.fetch: the id and command
         // names to Pilot's id rule (Extension.isName), the modes to Raycast's three, preference names to an identifier, each
         // package's key, real name and version to npm's (below), the version through ExtensionCatalogue.Version when shown.
-        // The title is the one free text, cut to 80 Unicode scalars and last on its line, where the prompt writes out any
-        // break or hidden scalar (ControlGate.Ask.visible). The tree is the listing's own 40 hex digits (fetch).
+        // The title is the one free text, cut to 80 Unicode scalars, last on its line and escaped by Pilot when it builds the
+        // question (ControlGate.Ask.visible), as is every refusal text below that quotes a remote word (cut, at most 120
+        // scalars). The tree is the listing's own 40 hex digits (fetch).
         let name = #/[a-z0-9][a-z0-9-]*/#
-        guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(id.prefix(64))\", not an id of a-z, 0-9 and hyphens") }
+        guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(cut(id, 64))\", not an id of a-z, 0-9 and hyphens") }
         for command in commands {
             let c = command["name"] as? String ?? ""
-            guard c.wholeMatch(of: name) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(c.prefix(64))\", not a-z, 0-9 and hyphens") }
+            guard c.wholeMatch(of: name) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(cut(c, 64))\", not a-z, 0-9 and hyphens") }
             guard ["view", "no-view", "menu-bar"].contains(command["mode"] as? String ?? "view") else { throw Refused("command \(c) has a mode Raycast does not have") }
         }
         // The extension's, then each command's, a name given twice kept once (RaycastManifest.preferences).
@@ -161,7 +163,7 @@ enum Installer {
         for list in [manifest["preferences"]] + commands.map({ $0["preferences"] }) {
             for name in (list as? [[String: Any]] ?? []).map({ $0["name"] as? String ?? "" }) where !preferences.contains(name) {
                 guard name.wholeMatch(of: preferenceName) != nil, name.count <= 64 else {
-                    throw Refused("a preference in its package.json is named \"\(name.prefix(64))\", not a letter then letters, digits, _ and -")
+                    throw Refused("a preference in its package.json is named \"\(cut(name, 64))\", not a letter then letters, digits, _ and -")
                 }
                 preferences.append(name)
             }
@@ -196,17 +198,17 @@ enum Installer {
             guard !externals.contains(name) else { continue }
             guard let key = resolve(name, from: from) else {
                 if optional { continue }
-                throw Refused("its package-lock.json lacks \(name), which \(from.isEmpty ? "it" : from) needs")
+                throw Refused("its package-lock.json lacks \(cut(name)), which \(from.isEmpty ? "it" : cut(from)) needs")
             }
             guard seen.insert(key).inserted else { continue }
             let entry = packages[key] ?? [:]
             if entry["inBundle"] as? Bool == true { continue }
-            if entry["link"] as? Bool == true { throw Refused("\(key) is a link in its lockfile, which Pilot does not install") }
+            if entry["link"] as? Bool == true { throw Refused("\(cut(key)) is a link in its lockfile, which Pilot does not install") }
             // A platform package for another Mac or system is skipped when optional, refused when not.
             let os = entry["os"] as? [String], cpu = entry["cpu"] as? [String]
             if os.map({ !$0.contains("darwin") }) ?? false || cpu.map({ !$0.contains("arm64") }) ?? false {
                 if optional || entry["optional"] as? Bool == true { continue }
-                throw Refused("\(key) is not built for this Mac (os \(os ?? []), cpu \(cpu ?? []))")
+                throw Refused("\(cut(key)) is not built for this Mac (os \(cut("\(os ?? [])")), cpu \(cut("\(cpu ?? [])")))")
             }
             needed.append(key)
             let peersOptional = (entry["peerDependenciesMeta"] as? [String: [String: Any]] ?? [:]).filter { $0.value["optional"] as? Bool == true }.keys
@@ -217,7 +219,7 @@ enum Installer {
         guard needed.count <= mostPackages else { throw Refused("it needs \(needed.count) packages, more than \(mostPackages)") }
         plan["packages"] = try needed.map { key -> [String: Any] in
             let entry = packages[key] ?? [:]
-            guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(key) leaves its folder") }
+            guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(cut(key)) leaves its folder") }
             // Each name on the key's path is the folder Node requires it by, an alias when the lockfile says so (npm:
             // string-width-cjs is string-width); the real name, the entry's own `name` else the key's last name, is the one
             // the registry serves it under: <name>/-/<name less its scope>-<version>.tgz. Both are held to npm's names,
@@ -226,10 +228,10 @@ enum Installer {
             let version = entry["version"] as? String ?? ""
             let real = entry["name"] as? String ?? names.last ?? ""
             guard (names + [real]).allSatisfy({ $0.wholeMatch(of: npmName) != nil && $0.count <= 214 }),
-                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(key) is not an npm package name and version") }
+                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(cut(key)) is not an npm package name and version") }
             let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
             guard let resolved = entry["resolved"] as? String, resolved == expected else {
-                throw Refused("\(key) does not come from its own place on \(registry) (\(entry["resolved"] as? String ?? "no resolved URL"))")
+                throw Refused("\(key) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
             }
             guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
                 throw Refused("\(key) has no sha512 integrity in its lockfile")
@@ -282,7 +284,7 @@ enum Installer {
             let root = source.standardizedFileURL.resolvingSymlinksInPath().path + "/"
             // An absolute input is refused as it stands: appending it to the folder would read it as inside.
             if let outside = inputs.first(where: { $0.hasPrefix("/") || !source.appending(path: $0).standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) }) {
-                throw Refused("command \(name) would bundle \(outside), which is outside the extension's folder; nothing was installed")
+                throw Refused("command \(name) would bundle \(cut(outside)), which is outside the extension's folder; nothing was installed")
             }
             say(["type": "bundle", "command": name, "entry": entry,
                  "bytes": (try? fm.attributesOfItem(atPath: built.appending(path: "dist/\(name).js").path)[.size] as? Int) ?? 0])
@@ -364,7 +366,7 @@ enum Installer {
         process.waitUntilExit()
         errors.done.wait()
         guard process.terminationStatus == 0 else {
-            throw Refused("esbuild stopped: " + String(decoding: errors.data, as: UTF8.self).prefix(600))
+            throw Refused("esbuild stopped: " + cut(String(decoding: errors.data, as: UTF8.self), 600))
         }
         return String(decoding: output, as: UTF8.self)
     }
@@ -464,6 +466,12 @@ enum Installer {
         }
     }
 
+    /// A remote word as a refusal quotes it: at most `longest` Unicode scalars, then "…". Pilot writes out its control
+    /// and hidden scalars (ControlGate.Ask.visible) before any of it reaches a terminal or the prompt.
+    static func cut(_ text: String, _ longest: Int = 120) -> String {
+        text.unicodeScalars.count <= longest ? text : String(String.UnicodeScalarView(text.unicodeScalars.prefix(longest))) + "…"
+    }
+
     /// A relative path with no empty, `.` or `..` part.
     static func safe(_ path: String) -> Bool {
         !path.hasPrefix("/") && !path.isEmpty && path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
@@ -541,7 +549,7 @@ enum Installer {
             (paxPath, longName) = (nil, nil)
             let inner = full.split(separator: "/").dropFirst().joined(separator: "/")
             guard !inner.isEmpty else { continue }
-            guard safe(inner) else { throw Refused("a package's archive holds \(full), which leaves its folder") }
+            guard safe(inner) else { throw Refused("a package's archive holds \(cut(full)), which leaves its folder") }
             let to = folder.appending(path: inner)
             switch type {
             case UInt8(ascii: "0"), 0, UInt8(ascii: "7"):

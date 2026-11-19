@@ -132,8 +132,9 @@ public struct GitHubInstall: Sendable {
     /// The plan, once Pilot holds every remote word the question shows to its own rules too, as the host's plan() does:
     /// the id and every command name as Extension.isName, Raycast's three modes, each preference name a letter then
     /// letters, digits, _ and -, the tree 40 lowercase hex digits, each package's key names, real name and version npm's,
-    /// and the title, the one free text, at most 80 Unicode scalars (the prompt writes out its breaks and hidden scalars,
-    /// ControlGate.Ask.visible; the version shows only when ExtensionCatalogue.Version reads it). A workspace over an
+    /// and the title, the one free text, at most 80 Unicode scalars (escaped, never refused: the question and every
+    /// refusal the pilot command echoes pass it through ControlGate.Ask.visible; the version shows only when
+    /// ExtensionCatalogue.Version reads it). A workspace over an
     /// hour old, left by a run that stopped midway, is swept first.
     public func fetch() async throws -> (Plan, [Fetched]) {
         let fm = FileManager.default, support = workspace.deletingLastPathComponent()
@@ -158,7 +159,8 @@ public struct GitHubInstall: Sendable {
     }
 
     /// A package npm could have put there: every name on its key's path and its real name npm's, legacy capitals
-    /// included, and a version of semver's characters.
+    /// included, and a version of semver's characters. The host's plan() holds them to the same pattern first
+    /// (Installer.npmName in Helpers/pilot-ext-host/Sources/pilot-ext-host/Install.swift, a package of its own): change both together.
     static func npm(_ package: Plan.Package) -> Bool {
         let name = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
         guard package.key.hasPrefix("node_modules/") else { return false }
