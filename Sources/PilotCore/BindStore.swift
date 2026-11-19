@@ -16,13 +16,18 @@ public struct BindStore: Equatable, Sendable {
         public init(action: String, trigger: Key, takenBy: String) { self.action = action; self.trigger = trigger; self.takenBy = takenBy }
     }
 
-    /// The key tables a preset starts from (story 149): Pilot default, the starter that ships; My binds, Sven's layout,
-    /// listed only for a file that already holds it (`holdsMyBinds`); empty, Start from scratch's.
+    /// The key tables a preset starts from (story 149; pilot-ui-redesign T11): Easy, the starter that ships; Complex,
+    /// more keys on Easy's own; Scratch, no keys at all; Classic (`pilot`, Pilot default until 1.3), listed beside Easy only
+    /// for a file that holds it; My binds, Sven's layout, listed only for a file that already holds it (`holdsMyBinds`);
+    /// empty, Start from scratch's, Hyper+Space alone so a preset made from it keeps the Pilot menu.
     public enum Base: String, CaseIterable, Sendable {
-        case pilot, myBinds, empty
+        case easy, complex, scratch, pilot, myBinds, empty
         /// The built-in preset on this base; empty has none.
         public var builtIn: Preset? {
-            switch self { case .pilot: .pilot; case .myBinds: .myBinds; case .empty: nil }
+            switch self {
+            case .easy: .easy; case .complex: .complex; case .scratch: .scratch; case .pilot: .pilot; case .myBinds: .myBinds
+            case .empty: nil
+            }
         }
     }
 
@@ -31,7 +36,11 @@ public struct BindStore: Equatable, Sendable {
     public struct Preset: Hashable, Sendable, Identifiable {
         public var id: String, name: String, base: Base
         public init(id: String, name: String, base: Base) { self.id = id; self.name = name; self.base = base }
-        public static let pilot = Preset(id: "pilot", name: "Pilot default", base: .pilot)
+        public static let easy = Preset(id: "easy", name: "Easy", base: .easy)
+        public static let complex = Preset(id: "complex", name: "Complex", base: .complex)
+        public static let scratch = Preset(id: "scratch", name: "Scratch", base: .scratch)
+        /// Classic keeps Pilot default's id, so a 1.3 file on it stays on today's keys (Q3).
+        public static let pilot = Preset(id: "pilot", name: "Classic", base: .pilot)
         public static let myBinds = Preset(id: "myBinds", name: "My binds", base: .myBinds)
         public var title: String { name }
         public var isBuiltIn: Bool { id == base.rawValue }
@@ -96,13 +105,18 @@ public struct BindStore: Equatable, Sendable {
 
     /// `tables` holds each base's default keys; a built-in preset is listed for each one given, empty aside. `actions`
     /// names every registered action, so one with no default key still gets its row in the file. The first built-in,
-    /// Pilot default where it is given, is active.
+    /// Easy where it is given, is active. Beside Easy, Classic is listed only once a file holds it (`init(json:)`).
     public init(presets tables: [Base: [String: Key]], actions: [String] = []) {
         self.tables = tables
-        presets = Base.allCases.compactMap { tables[$0] != nil ? $0.builtIn : nil }
+        presets = Self.builtIns(tables, classic: tables[.easy] == nil)
         preset = presets.first ?? .myBinds
         registered = Set(actions)
         rebuild()
+    }
+
+    /// The built-in preset of each base in `tables`, in `Base` order; Classic only with `classic`.
+    private static func builtIns(_ tables: [Base: [String: Key]], classic: Bool) -> [Preset] {
+        Base.allCases.compactMap { tables[$0] != nil && ($0 != .pilot || classic) ? $0.builtIn : nil }
     }
 
     /// One bind set, as My binds.
@@ -112,14 +126,23 @@ public struct BindStore: Equatable, Sendable {
 
     /// Reads a file of any version up to this one. A hand-edited file with two binds on one trigger keeps the first. A
     /// file before version 3 holds one preset's keys: My binds', or the one it names; Omarchy's land on My binds, with a
-    /// notice, since Omarchy no longer ships.
+    /// notice, since Omarchy no longer ships. A file on Pilot default, or holding it or a preset made from it, lists
+    /// Classic (T11); a preset made by hand on Easy's, Complex's or Scratch's id before they shipped moves to a free id.
     public init(json: Data, presets tables: [Base: [String: Key]], actions: [String] = []) throws(LoadError) {
         self.init(presets: tables, actions: actions)
         let file = try Self.file(from: json)
         fileVersion = file.version
         var all: [String: Edits] = [:], refusals: [String: [Refusal]] = [:]
+        var named = file.preset ?? Preset.myBinds.id
+        if Self.holds(.pilot, named: named, in: file) { presets = Self.builtIns(tables, classic: true) }
         if let rows = file.presets {
-            for row in rows {
+            let ids = Set(rows.map(\.id))
+            for var row in rows {
+                if let builtIn = Base(rawValue: row.id)?.builtIn, row.base != builtIn.base.rawValue {
+                    let id = freeID(row.id, taken: ids)
+                    if named == row.id { named = id }
+                    (row.id, row.name) = (id, freeName(row.name))
+                }
                 let base = try row.resolvedBase
                 if !presets.contains(where: { $0.id == row.id }) {
                     guard !Base.allCases.map(\.rawValue).contains(row.id) else { throw .unreadable("preset \(row.id)") }
@@ -128,7 +151,6 @@ public struct BindStore: Equatable, Sendable {
                 (all[row.id], refusals[row.id]) = try Self.edits(row.binds)
             }
         }
-        let named = file.preset ?? Preset.myBinds.id
         if let found = presets.first(where: { $0.id == named }) {
             preset = found
         } else if file.version < 3, named == "omarchy", presets.contains(.myBinds) {
@@ -210,14 +232,18 @@ public struct BindStore: Equatable, Sendable {
 
     private mutating func add(_ draft: Preset, _ edits: Edits) -> Preset {
         let name = freeName(draft.name)
-        let slug = Notes.slug(name)
-        var id = slug, n = 2
-        while preset(id: id) != nil || Base(rawValue: id) != nil { id = "\(slug)-\(n)"; n += 1 }
-        let new = Preset(id: id, name: name, base: draft.base)
+        let new = Preset(id: freeID(Notes.slug(name)), name: name, base: draft.base)
         presets.append(new)
-        stashed[id] = edits
+        stashed[new.id] = edits
         use(new)
         return new
+    }
+
+    /// `slug`, or that with "-2", "-3"… while a preset, a base or one of `taken` has it.
+    private func freeID(_ slug: String, taken: Set<String> = []) -> String {
+        var id = slug, n = 2
+        while preset(id: id) != nil || Base(rawValue: id) != nil || taken.contains(id) { id = "\(slug)-\(n)"; n += 1 }
+        return id
     }
 
     /// `name` trimmed, or "Untitled", with " 2", " 3"… when another preset than `except` has it.
@@ -750,12 +776,16 @@ public struct BindStore: Equatable, Sendable {
 
     /// Whether a bind file needs My binds' table (SH8): it is on My binds, names no preset (a file before presets), lands
     /// on it from Omarchy, or holds a preset made from it: `init(json:)`'s preset pick. A new user's never does, so Pilot
-    /// lists My binds only for a file that already holds it; a file it cannot read runs Pilot default either way.
+    /// lists My binds only for a file that already holds it; a file it cannot read runs Easy either way.
     public static func holdsMyBinds(_ json: Data) -> Bool {
         guard let file = try? file(from: json) else { return false }
         let named = file.preset ?? Preset.myBinds.id
-        return named == Preset.myBinds.id || (file.version < 3 && named == "omarchy")
-            || file.presets?.contains { $0.base == Base.myBinds.rawValue } == true
+        return holds(.myBinds, named: named, in: file) || (file.version < 3 && named == "omarchy")
+    }
+
+    /// Whether a file holds `base`'s table: on its built-in (`named`, the active preset), or with a preset on it.
+    private static func holds(_ base: Base, named: String, in file: File) -> Bool {
+        named == base.rawValue || file.presets?.contains { $0.base == base.rawValue } == true
     }
 
     /// The migrations: each older version is read in its own shape and brought to this one.

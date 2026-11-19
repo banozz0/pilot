@@ -30,7 +30,7 @@ struct MenuPickerRowsTests {
         #expect(picked == [.main])
     }
 
-    @Test("Binds' preset pick under the window's styles: Pilot default and My binds are enabled, and My binds is picked")
+    @Test("Binds' preset pick under the window's styles: Classic and My binds are enabled, and My binds is picked")
     func presetPick() throws {
         let store = BindStore(presets: [.pilot: [:], .myBinds: [:]])
         var picked: [BindStore.Preset] = []
@@ -41,7 +41,7 @@ struct MenuPickerRowsTests {
             } label: { Text("Preset · \(store.preset.title)").frame(width: 200, height: 32) }
             .menuStyle(.button).buttonStyle(InstrumentButtonStyle()).menuIndicator(.hidden).fixedSize()
         })
-        expectEnabled(menu, ["Preset", "Pilot default", "My binds", "Show as list"])
+        expectEnabled(menu, ["Preset", "Classic", "My binds", "Show as list"])
         try OpenedMenu.choose("My binds", in: menu)
         #expect(picked == [.myBinds])
     }

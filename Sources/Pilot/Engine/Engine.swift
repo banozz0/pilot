@@ -363,7 +363,7 @@ final class Engine {
         let myBinds = MyBinds.preset(registry: registry.defaults)
         AbilitySettings.shared.seed(existingUser: Binds.ranBefore)
         // A new install starts with no mouse binds at all (Sven, Q251): every button stays the app's own until bound.
-        binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys))
+        binds.load(presets: PilotDefault.tables(myBinds: myBinds), actions: Array(registry.actions.keys))
         // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194); a new install binds no
         // mouse button.
         if !Install.isNew, rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }

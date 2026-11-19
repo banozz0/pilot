@@ -74,7 +74,7 @@ struct ControlBindsTests {
         let rig = Rig()
         let listed = Self.rows(await rig.ask("list", "presets"))
         #expect(listed.map { $0["id"] } == rig.store.presets.map { .string($0.id) })
-        #expect(listed.first { $0["id"] == .string("pilot") }?["builtIn"] == .bool(true))
+        #expect(listed.first { $0["id"] == .string("easy") }?["builtIn"] == .bool(true))
         #expect(listed.filter { $0["active"] == .bool(true) }.map { $0["id"] } == [.string(rig.store.preset.id)])
 
         // Names of their own: a run with CFFIXED_USER_HOME shares one binds file with the runs before.
@@ -94,7 +94,7 @@ struct ControlBindsTests {
         let renamed = await rig.ask("add", "presets", "--preset", id, "--name", desk)
         #expect(Self.field(renamed, "name") == .string(desk), "\(renamed)")
         #expect(rig.store.preset(id: id)?.name == desk)
-        #expect(await rig.ask("add", "presets", "--preset", "pilot", "--name", "X").error?.code == .badValue, "a built-in keeps its name")
+        #expect(await rig.ask("add", "presets", "--preset", "easy", "--name", "X").error?.code == .badValue, "a built-in keeps its name")
         #expect(await rig.ask("add", "presets", "--preset", "nosuch", "--name", "X").error?.code == .unknownPreset)
         #expect(await rig.ask("add", "presets", "--nmae", "X").error?.code == .unknownFlag)
     }
@@ -104,7 +104,7 @@ struct ControlBindsTests {
         let rig = Rig()
         let gone = "Gone \(UUID().uuidString.prefix(8))"
         guard case .string(let id)? = Self.field(await rig.ask("add", "presets", "--name", gone), "id") else { Issue.record("not made"); return }
-        #expect(await rig.ask("remove", "presets", "pilot").error?.code == .badValue)
+        #expect(await rig.ask("remove", "presets", "easy").error?.code == .badValue)
         #expect(await rig.ask("remove", "presets", "nosuch").error?.code == .unknownPreset)
         #expect(rig.asked.isEmpty, "a refusal asks nothing")
 
@@ -125,7 +125,7 @@ struct ControlBindsTests {
     @Test("bind --preset and bind all --reset ask as the page confirms; Deny changes nothing; an unknown preset is unknown-preset")
     func gatedPresetAndReset() async throws {
         let rig = Rig()
-        // A new user has Pilot default alone (SH8): a second preset to switch to.
+        // A preset made by hand to switch to, beside a new user's built-ins (SH8, T11).
         rig.engine.binds.addPreset(named: "Other", copying: false)
         let start = rig.store.preset.id, other = rig.store.presets.first { $0.id != start }!
         #expect(await rig.ask("bind", "--preset", other.id).error?.code == .denied)

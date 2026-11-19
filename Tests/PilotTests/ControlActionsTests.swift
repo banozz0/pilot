@@ -52,8 +52,8 @@ struct ControlActionsTests {
 
         /// The binds file as the test engine wrote it.
         func onDisk() throws -> BindStore {
-            try BindStore(json: Data(contentsOf: engine.binds.fileURL), presets: [.pilot: PilotDefault.binds, .myBinds: MyBinds.preset(registry: engine.registry.defaults),
-                                                                       .empty: PilotDefault.scratch], actions: Array(engine.registry.actions.keys))
+            try BindStore(json: Data(contentsOf: engine.binds.fileURL), presets: PilotDefault.tables(myBinds: MyBinds.preset(registry: engine.registry.defaults)),
+                          actions: Array(engine.registry.actions.keys))
         }
     }
 
@@ -186,7 +186,7 @@ struct ControlActionsTests {
         let unknown = await rig.ask("bind", "--preset", "nosuch")
         #expect(unknown.error?.code == .unknownPreset)
         #expect(unknown.error?.message.contains("myBinds") == true)
-        #expect(await rig.ask("bind", "--preset", "pilot").ok, "back to the preset the next rig starts on")
+        #expect(await rig.ask("bind", "--preset", "easy").ok, "back to the preset the next rig starts on")
     }
 
     @Test("A bind of a command asks first: Deny writes nothing, Allow writes it")

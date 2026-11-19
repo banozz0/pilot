@@ -1,10 +1,12 @@
 import Foundation
 
-/// Pilot default (SPEC story 149): the preset a new install starts on. Since 1.0 it is Sven's own layout, his Arrows 2
-/// preset's keys as they were on 2026-10-28 (Sven, Q531: "Your binds exactly as they are"): My binds' table with the
-/// keys he set by hand, frozen here so a registry default that moves later never changes what a stranger gets. Keys
-/// that open an app the Mac lacks stay bound and do nothing but log "not installed".
+/// The built-in key tables (SPEC story 149; pilot-ui-redesign T11, Sven 2026-11-19 on pilot-key-presets.html): Easy, the
+/// preset a new install starts on; Complex, more keys on the same ones; Classic, the 1.3 table an existing install keeps.
+/// Each is a preset's whole table, frozen here so a registry default that moves later never changes what anyone gets.
 public enum PilotDefault {
+    /// Classic: Pilot default from 1.0 to 1.3, Sven's own layout, his Arrows 2 preset's keys as they were on 2026-10-28
+    /// (Sven, Q531: "Your binds exactly as they are"). Kept unchanged for a bind file on preset `pilot` (Q3: the name
+    /// Classic); a new install never gets it. Keys that open an app the Mac lacks stay bound and log "not installed".
     public static let binds: [String: Key] = {
         var b: [String: Key] = [
         "ai.chat": Key("q"),
@@ -112,6 +114,149 @@ public enum PilotDefault {
         return b
     }()
 
-    /// Start from scratch: empty but the Pilot menu, so a new preset never locks its maker out.
+    /// Easy, the new-install default (Q1): letters you can guess, the window keys a Mac with tiling off can use, the
+    /// three capture keys the capture box needs and the two plain combos Q251/Q252 kept. Every key sits on Complex's.
+    public static let easy: [String: Key] = [
+        "ai.chat": Key("q"),
+        "apps.browser": Key("b"),
+        "apps.clipboard": Key("v"),
+        "apps.clipboardOptionV": Key("v", .alt, hyper: false),
+        "apps.emoji": Key("e"),
+        "apps.files": Key("f"),
+        "apps.launcher": Key("space"),
+        "apps.music": Key("m"),
+        "apps.passwords": Key("p"),
+        "apps.terminal": Key("return"),
+        "captures.activeWindow": Key("s", .shift),
+        "captures.area": Key("s"),
+        "captures.screenRecording": Key("r"),
+        "drive.zoomIn": Key("="),
+        "drive.zoomOut": Key("-"),
+        "engine.sheet": Key("/"),
+        "notes.toggle": Key("n"),
+        "system.lock": Key("escape"),
+        "system.missionControl": Key("up", .leftAlt, hyper: false),
+        "windows.centre": Key("c"),
+        "windows.close": Key("w"),
+        "windows.focusDown": Key("down"),
+        "windows.focusLeft": Key("left"),
+        "windows.focusNext": Key("tab"),
+        "windows.focusRight": Key("right"),
+        "windows.focusUp": Key("up"),
+        "windows.fullscreen": Key("f", .shift),
+        "windows.maximise": Key("up", .cmd),
+        "windows.minimise": Key("h"),
+        "windows.showDesktop": Key("down", .leftAlt, hyper: false),
+        "windows.snapLeft": Key("left", .cmd),
+        "windows.snapRight": Key("right", .cmd),
+    ]
+
+    /// Complex (Q1, Q2): Classic less what a stranger's Mac may lack (its app, web and folder keys), plus the role keys
+    /// every Mac answers (Music, AI, Mail), Capture a window and Keybindings. Easy's keys are on the same triggers here.
+    public static let complex: [String: Key] = {
+        var b: [String: Key] = [
+            "ai.chat": Key("q"),
+            "apps.ai": Key("o"),
+            "apps.browser": Key("b"),
+            "apps.clipboard": Key("v"),
+            "apps.clipboardOptionV": Key("v", .alt, hyper: false),
+            "apps.emoji": Key("e"),
+            "apps.files": Key("f"),
+            "apps.launcher": Key("space"),
+            "apps.mail": Key("m", .shift),
+            "apps.music": Key("m"),
+            "apps.passwords": Key("p"),
+            "apps.terminal": Key("return"),
+            "captures.activeWindow": Key("s", .shift),
+            "captures.area": Key("s"),
+            "captures.editLast": Key("e", .shift),
+            "captures.fullscreen": Key("a"),
+            "captures.ocr": Key("x", .shift),
+            "captures.screenRecording": Key("r"),
+            "captures.scrolling": Key("z"),
+            "drive.moveTabLeft": Key("left", [.ctrl, .alt]),
+            "drive.moveTabRight": Key("right", [.ctrl, .alt]),
+            "drive.nextTab": Key("right", .alt),
+            "drive.previousTab": Key("left", .alt),
+            "drive.zoomIn": Key("="),
+            "drive.zoomOut": Key("-"),
+            "engine.sheet": Key("/"),
+            "media.mute": Key("F10"),
+            "media.next": Key("F9"),
+            "media.playPause": Key("F8"),
+            "media.previous": Key("F7"),
+            "media.volumeDown": Key("F11"),
+            "media.volumeUp": Key("F12"),
+            "notes.toggle": Key("n"),
+            "system.brightnessDown": Key("F1"),
+            "system.brightnessDownAll": Key("F1", .shift),
+            "system.brightnessUp": Key("F2"),
+            "system.brightnessUpAll": Key("F2", .shift),
+            "system.lock": Key("escape"),
+            "system.missionControl": Key("up", .leftAlt, hyper: false),
+            "system.nextWallpaper": Key("space", .shift),
+            "system.previousWallpaper": Key("space", .ctrl),
+            "terminal.drop": Key("t"),
+            "windows.centre": Key("c"),
+            "windows.close": Key("w"),
+            "windows.cycle": Key("down", [.ctrl, .alt]),
+            "windows.cycleBack": Key("up", [.ctrl, .alt]),
+            "windows.defocus": Key("d", .shift),
+            "windows.firstThird": Key("left", [.shift, .cmd]),
+            "windows.firstThreeQuarters": Key("["),
+            "windows.focusDisplayLeft": Key(","),
+            "windows.focusDisplayRight": Key("."),
+            "windows.focusDown": Key("down"),
+            "windows.focusLeft": Key("left"),
+            "windows.focusNext": Key("tab"),
+            "windows.focusRight": Key("right"),
+            "windows.focusUp": Key("up"),
+            "windows.fullscreen": Key("f", .shift),
+            "windows.grow": Key("=", .shift),
+            "windows.joinDown": Key("down", [.shift, .alt]),
+            "windows.joinLeft": Key("left", [.shift, .alt]),
+            "windows.joinRight": Key("right", [.shift, .alt]),
+            "windows.joinUp": Key("up", [.shift, .alt]),
+            "windows.lastQuarter": Key("]"),
+            "windows.lastThird": Key("right", [.shift, .cmd]),
+            "windows.maximise": Key("up", .cmd),
+            "windows.middleThird": Key("up", [.shift, .cmd]),
+            "windows.minimise": Key("h"),
+            "windows.nudgeDown": Key("down", .ctrl),
+            "windows.nudgeLeft": Key("left", .ctrl),
+            "windows.nudgeRight": Key("right", .ctrl),
+            "windows.nudgeUp": Key("up", .ctrl),
+            "windows.sendToDisplayLeft": Key(",", .shift),
+            "windows.sendToDisplayRight": Key(".", .shift),
+            "windows.showDesktop": Key("down", .leftAlt, hyper: false),
+            "windows.shrink": Key("-", .shift),
+            "windows.snapBottom": Key("down", [.alt, .cmd]),
+            "windows.snapLeft": Key("left", .cmd),
+            "windows.snapRight": Key("right", .cmd),
+            "windows.snapTop": Key("up", [.alt, .cmd]),
+            "windows.swapDown": Key("down", .shift),
+            "windows.swapLeft": Key("left", .shift),
+            "windows.swapRight": Key("right", .shift),
+            "windows.swapUp": Key("up", .shift),
+            "windows.toggleFloat": Key("t", .shift),
+            "workspaces.former": Key("`"),
+            "workspaces.rescue": Key("escape", .shift),
+            "workspaces.toggleGaps": Key("delete", .shift),
+        ]
+        for name in Workspaces.all {
+            b["workspaces.go:\(name)"] = Key(name)
+            b["workspaces.move:\(name)"] = Key(name, .shift)
+        }
+        for name in Workspaces.all.dropFirst(4) { b["workspaces.moveFollow:\(name)"] = Key(name, .alt) }
+        return b
+    }()
+
+    /// Every base's table, as Pilot loads them: Scratch has no keys at all, My binds is `myBinds` (Sven's layout).
+    public static func tables(myBinds: [String: Key]) -> [BindStore.Base: [String: Key]] {
+        [.easy: easy, .complex: complex, .scratch: [:], .pilot: binds, .myBinds: myBinds, .empty: scratch]
+    }
+
+    /// Start from scratch's base (`BindStore.Base.empty`): empty but the Pilot menu, so a preset made with New preset
+    /// never locks its maker out. The built-in Scratch preset is truly empty (Open 12) and sits on a base of its own.
     public static let scratch: [String: Key] = ["apps.launcher": Key("space")]
 }
