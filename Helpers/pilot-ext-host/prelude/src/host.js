@@ -8,10 +8,15 @@
 // answered by the next line, which carries `ack`: the commit it caused, else the current view again.
 // Icons (T5): a Raycast `Icon` name goes out as the SF Symbol Pilot draws (icons.js), an emoji as itself, and an asset
 // file or an http(s) URL as the row's `image`, read once by the host (Images.swift) and sent in a later line once it lands.
+// The view stack (T8): the run renders its layers, the command's view first, each `Action.Push` target or
+// `useNavigation().push` view over it, every layer kept mounted so a pop finds its state as it was; only the top layer
+// is the answer, so only its handlers can be pressed. An `Action.Push` goes out as an invoke action whose handler ends in
+// `.push`, which Pilot's menu opens as a view of its own; the reserved handler `navigation.pop` is Escape, and at the
+// root it answers the view unchanged.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
-import { effects } from "./raycast.js";
+import { Navigation, effects } from "./raycast.js";
 import { symbols } from "./icons.js";
 
 const native = globalThis.__native;
@@ -110,6 +115,11 @@ function actions(nodes, handlers, out = []) {
       const handler = `${node.serial}.onAction`;
       handlers.set(handler, node);
       out.push({ type: "invoke", handler, title: words(node.props.title) || undefined });
+    } else if (node.type === "Action.Push") {
+      if (node.props.target == null) continue;
+      const handler = `${node.serial}.push`;
+      handlers.set(handler, node);
+      out.push({ type: "invoke", handler, title: words(node.props.title) || "Open" });
     } else if (typed[node.type]) {
       const [action, title] = typed[node.type](node.props);
       if (action) out.push({ ...action, title: words(node.props.title) ?? title });
@@ -209,6 +219,12 @@ function rows(nodes, section, handlers, out) {
   return out;
 }
 
+/** The top layer's view: the first List or Detail in the newest layer, depth first. */
+function top(container) {
+  const layer = container.children[container.children.length - 1];
+  return layer ? view(layer.children) : null;
+}
+
 /** The first List or Detail in the tree, depth first. */
 function view(nodes) {
   for (const node of nodes) {
@@ -222,7 +238,7 @@ function view(nodes) {
 /** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
  *  loading row. */
 function answer(container, handlers) {
-  const root = view(container.children);
+  const root = top(container);
   if (!root) return null;
   if (root.type === "Detail") {
     const detail = { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
@@ -279,7 +295,25 @@ export function render(component, message) {
   const logged = (error) => console.error(error instanceof Error && error.stack ? `${error.message}\n${error.stack}` : String(error));
   const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, logged, logged, noop);
   const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
-  reconciler.updateContainer(createElement(component, props), root, null, null);
+
+  // The view stack: each layer's element and its onPop, the command's own view at the bottom.
+  const stack = [{ key: 0, element: createElement(component, props) }];
+  let layers = 0;
+  const paint = () => reconciler.updateContainer(stack.map(({ key, element }) =>
+    createElement("Pilot.Layer", { key }, createElement(Navigation.Provider, { value: navigation }, element))), root, null, null);
+  const navigation = Object.freeze({
+    push(element, onPop) {
+      stack.push({ key: ++layers, element, onPop });
+      paint();
+    },
+    pop() {
+      if (stack.length < 2) return;
+      const gone = stack.pop();
+      paint();
+      if (typeof gone.onPop === "function") gone.onPop();
+    },
+  });
+  paint();
 
   /** Request `seq`: `work` runs, its commit (flushed in this call's microtasks) carries the ack; when nothing committed,
    *  the current view goes again on the next turn. A throw is the error line, which answers it. */
@@ -302,17 +336,23 @@ export function render(component, message) {
     /** A later search: the List's own onSearchTextChange, when it takes one. */
     search(text, seq) {
       request(seq, () => {
-        const list = view(container.children);
+        const list = top(container);
         const handler = list?.props?.onSearchTextChange;
         if (typeof handler === "function") handler(text);
       });
     },
     /** A press: the callback `id` names in the newest answer, called with the element's props as they are now, at a
-     *  discrete event's priority so its update renders at once, as a click's does. A stale id answers the current view. */
+     *  discrete event's priority so its update renders at once, as a click's does. A push mounts its target over the
+     *  view and calls its onPush; `navigation.pop` goes back a layer. A stale id answers the current view. */
     invoke(id, seq) {
       request(seq, () => {
-        const node = handlers.get(id);
-        const callback = node?.props?.[String(id).split(".").pop()];
+        const node = handlers.get(id), prop = String(id).split(".").pop();
+        let callback = node?.props?.[prop];
+        if (id === "navigation.pop") callback = navigation.pop;
+        else if (node?.type === "Action.Push" && prop === "push") {
+          const { target, onPush, onPop } = node.props;
+          callback = () => { navigation.push(target, onPop); if (typeof onPush === "function") return onPush(); };
+        }
         if (typeof callback !== "function") return console.error(`no handler ${id} in the current view: answering it unchanged`);
         const before = priority;
         priority = DiscreteEventPriority;
