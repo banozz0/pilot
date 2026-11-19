@@ -235,7 +235,11 @@ struct SandboxHost {
         // none), read again while none is listed, so ones installed with `pilot ext install` show in `pilot list
         // bar-extensions`; once one is, no more rounds, so no bar command runs on an item placed after.
         let listsBar = ProcessInfo.processInfo.environment["PILOT_SANDBOX_EXTBAR"] == "1"
+        // A `<socket>.close-editors` file closes every capture editor, as Cancel would, and goes: `pilot clip markup` can
+        // then be shown opening a copy's editor again (Q240).
+        let closeEditors = path.appendingPathExtension("close-editors").path(percentEncoded: false)
         while FileManager.default.fileExists(atPath: hold.path(percentEncoded: false)) && Date.now < deadline {
+            if FileManager.default.fileExists(atPath: closeEditors) { CaptureEditor.closeAll(); try? FileManager.default.removeItem(atPath: closeEditors) }
             if listsBar, ExtensionBar.shared.items.isEmpty { await ExtensionBar.shared.round() }
             try await Task.sleep(for: .milliseconds(200))
         }

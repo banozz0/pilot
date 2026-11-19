@@ -32,9 +32,11 @@ enum CaptureEditor {
     /// Opens the editor on `image` (`scale` pixels a point), saved at `file`, centred on the screen under the pointer;
     /// `backdrop` frames it from the start (Every capture's look, C11; Add a capture's, C8), one undo step. `original`: the
     /// file is a picture of Sven's the image viewer opened, not a capture: Done asks before writing over it, Save a copy
-    /// the default (Q158), and nothing it writes joins the capture history.
-    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture, backdrop: Backdrop? = nil, original: Bool = false) {
-        let key = key(file: file, image: image)
+    /// the default (Q158), and nothing it writes joins the capture history. `key` names an unsaved picture's editor when
+    /// each open decodes a new image of it (a clipboard copy's id, Q240); else the file, or the image itself.
+    static func show(_ image: CGImage, scale: CGFloat, file: URL?, capture: PilotCapture, backdrop: Backdrop? = nil, original: Bool = false,
+                     key given: String? = nil) {
+        let key = given ?? key(file: file, image: image)
         if let panel = open[key] {
             // That capture's editor is open already: it comes to the front, no second one.
             if onScreen { panel.makeKeyAndOrderFront(nil); panel.raised() }

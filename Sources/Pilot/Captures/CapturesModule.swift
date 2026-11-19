@@ -86,11 +86,12 @@ enum CapturesModule {
 
     /// A copied image's bytes in the editor, as a capture not yet saved (the clipboard panel's Mark up); false when they
     /// do not read. Read on the main thread, unlike a file: the bytes are in memory already, and `pilot clip markup`
-    /// counts the editor as soon as it answers.
+    /// counts the editor as soon as it answers. The editor is the copy's (`clip`, its id): a second Mark up of it brings that
+    /// one to the front (Q240).
     @discardableResult
-    static func open(_ data: Data) -> Bool {
+    static func open(_ data: Data, clip: Int64) -> Bool {
         guard let (image, scale) = Pins.load(data) else { return false }
-        CaptureEditor.show(image, scale: scale, file: nil, capture: PilotCapture.shared)
+        CaptureEditor.show(image, scale: scale, file: nil, capture: PilotCapture.shared, key: "clip:\(clip)")
         return true
     }
 
