@@ -92,22 +92,20 @@ private struct OnboardingSteps: View {
             Text(OnboardingModel.hyperAbout)
                 .foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             Card {
-                ForEach(Onboarding.hyperChoices) { key in
+                ForEach(model.hyperChoices(settings.layerKeys)) { key in
                     let on = settings.layerKeys.contains(key)
+                    let breaks = model.hyperBreaks(key, engine)
                     Button { LayerKeyConfirm.pick([key], settings, from: .onboarding, asking: $confirming) } label: {
                         CardRow {
                             Image(systemName: on ? "largecircle.fill.circle" : "circle")
                                 .foregroundStyle(on ? ink.accent : ink.muted).accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 6) {
-                                let breaks = model.hyperBreaks(key, engine)
-                                TitledText(title: key.label, detail: breaks == nil ? Onboarding.hyperDetail(key) : nil)
-                                if let breaks { HyperBreaks(text: breaks) }
-                            }
+                            SetupTitled(title: key.label, detail: Onboarding.hyperDetail(key), alert: breaks)
                             Spacer()
                         }
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .help(breaks ?? "")
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
@@ -166,7 +164,6 @@ private struct OnboardingSteps: View {
             }
         }
         .onAppear { if setup.phase != .run { setup.load() } }
-        .task { await setup.loadThemes() }
     }
 
     private var tryIt: some View {
@@ -369,6 +366,9 @@ final class OnboardingModel {
     /// Each Hyper choice's warning, worked out once: binds do not change during onboarding, and a label lookup walks every
     /// action source.
     @ObservationIgnored private var breaks: [LayerKey: String?] = [:]
+    /// The attached keyboards' vendor ids, read once, as Hyper first shows: which Hyper keys this Mac has.
+    @ObservationIgnored lazy var keyboards = BluetoothPower.keyboardVendors()
+    func hyperChoices(_ current: [LayerKey]) -> [LayerKey] { Onboarding.hyperChoices(keyboards: keyboards, current: current) }
     func hyperBreaks(_ key: LayerKey, _ engine: Engine) -> String? {
         if let known = breaks[key] { return known }
         let line = Onboarding.hyperBreaks(key, bound: engine.boundLabel)

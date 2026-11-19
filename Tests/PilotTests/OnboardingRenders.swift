@@ -51,13 +51,16 @@ struct OnboardingRenders {
         mac.log.removeAll()
         let setup = OnboardingSetup(system: mac, defaults: defaults)
         setup.load()
-        await setup.loadThemes()
         // Set up offers the main things only (Sven's critique, 2026-11-18): the two keys and launch at login.
         #expect(setup.everything == [.filesKey, .notesKey, .launchAtLogin] && setup.noAppBefore.isEmpty && !setup.asksForMacLogin)
-        // The theme is offered but only taken once picked (Sven, 2026-11-19): it installs nothing.
-        #expect(setup.themes.map(\.id) == ["tokyo-night", "nord"] && SetupItem.theme.needs.isEmpty && setup.themeNote.hasPrefix("Installs nothing"))
         let grants = RecordingGrants()
         let model = OnboardingModel(setup: setup, walk: GrantWalk(system: grants))
+        // A MacBook's own keyboard (Sven, 2026-11-19): no right Control to offer; with a keyboard Apple did not make, or
+        // with right Control in use, it is there.
+        model.keyboards = [0x05AC]
+        #expect(model.hyperChoices([.capsLock]) == LayerKey.allCases.filter { $0 != .rightControl })
+        #expect(model.hyperChoices([.rightControl]) == LayerKey.allCases && Onboarding.hyperChoices(keyboards: [0x05AC, 13364], current: []) == LayerKey.allCases)
+        #expect(model.hyperBreaks(.leftCommand, engine)?.hasPrefix("As Hyper: Cmd+Return → ") == true && model.hyperBreaks(.capsLock, engine) == nil)
 
         // Hyper, Access and the fork, as a fresh Mac shows them.
         for (step, name) in [(OnboardingModel.Step.welcome, "1-hyper"), (.permissions, "2-access"), (.extras, "3a-fork")] {
@@ -66,6 +69,9 @@ struct OnboardingRenders {
         }
         model.step = .welcome
         try toybox(model, engine, "1-hyper", dir)
+        let pcKeyboard = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
+        pcKeyboard.keyboards = [13364]
+        try instrument(pcKeyboard, engine, "1b-hyper-other-keyboard", dir)
         model.step = .permissions
         try toybox(model, engine, "2-access", dir)
         // Access after Allow, with System Settings open: step 2 is live (no Allow is pressed here, so nothing opens).
@@ -77,41 +83,39 @@ struct OnboardingRenders {
         try instrument(waiting, engine, "2b-access-waiting", dir)
         model.step = .extras
         try toybox(model, engine, "3a-fork", dir)
-        // A theme picked: Set up everything takes it, and says what it does.
-        setup.themePick = "tokyo-night"
-        #expect(setup.everything == [.filesKey, .notesKey, .theme, .launchAtLogin])
-        try instrument(model, engine, "3a-fork-theme", dir)
-        setup.themePick = nil
-
-        // Pick by hand: the Files key and launch at login.
+        // Pick by hand: the Files key, launch at login, and Convert, which ticks ffmpeg, webp and Homebrew (Sven,
+        // 2026-11-19). Unticking Convert leaves Homebrew; unticking Update, Homebrew, unticks every helper.
         setup.phase = .pick
         setup.set(.filesKey, true)
         setup.set(.launchAtLogin, true)
-        setup.themePick = "nord"
-        #expect(setup.picked == [.filesKey, .launchAtLogin, .theme])
+        setup.set(SetupFeature.convert, true)
+        #expect(setup.picked == [.filesKey, .launchAtLogin, .ffmpeg, .webp, .homebrew])
+        #expect(setup.picked(.convert) && setup.picked(.update) && !setup.picked(.clean) && setup.held(.convert) == nil)
+        #expect(SetupFeature.convert.title == "Convert → ffmpeg and webp" && SetupFeature.clean.title == "Clean → Mole")
+        #expect(setup.detail(.clean).hasSuffix(" · ticks Homebrew too") && !setup.detail(.update).contains("ticks Homebrew"))
         try instrument(model, engine, "3b-pick", dir)
+        // The whole list, as its scroll shows it.
+        try SharedLook.InstrumentPanelsRenders.renderWindow(SetupPickList(setup: setup).frame(width: 504).padding(28)
+            .environment(engine).styled(.onboarding).pilotTheme(), name: "3b-pick-list-instrument", in: dir)
+        setup.set(SetupFeature.clean, true)
+        setup.set(SetupFeature.convert, false)
+        #expect(setup.picked == [.filesKey, .launchAtLogin, .mole, .homebrew])
+        setup.set(SetupFeature.update, false)
+        #expect(setup.picked == [.filesKey, .launchAtLogin])
         setup.set(.filesKey, false)
         setup.set(.launchAtLogin, false)
-        setup.themePick = nil
         setup.phase = .fork
 
-        // Set up everything on a fresh Mac of its own, a theme picked: four changes, no Terminal run.
+        // Set up everything on a fresh Mac of its own: three changes, no Terminal run.
         let freshMac = RecordingMac(defaults: defaults)
         let fresh = OnboardingSetup(system: freshMac, defaults: defaults)
         fresh.load()
-        fresh.themePick = "tokyo-night"
         fresh.start(fresh.everything)
-        for _ in 0..<50 where fresh.ledger[.theme]?.state != .done { try await Task.sleep(for: .milliseconds(20)) }
-        #expect(freshMac.scripts.isEmpty && fresh.title == "Set up · 4 of 4 done" && freshMac.log == ["launch at login on", "theme tokyo-night"])
-        #expect(fresh.ledger[.theme]?.before == nil)
+        #expect(freshMac.scripts.isEmpty && fresh.title == "Set up · 3 of 3 done" && freshMac.log == ["launch at login on"])
         let ran3 = OnboardingModel(setup: fresh)
         ran3.step = .extras
         try instrument(ran3, engine, "3c-run", dir)
         try toybox(ran3, engine, "3c-run", dir)
-        // Its Undo puts the look back: no theme was applied before, so Pilot's own.
-        fresh.undo([.theme])
-        for _ in 0..<50 where fresh.ledger[.theme]?.state != .undone { try await Task.sleep(for: .milliseconds(20)) }
-        #expect(freshMac.log.last == "theme restore" && fresh.ledger[.theme]?.state == .undone)
         defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
 
         // An earlier release's run, which offered every item: its record keeps each row and Undo here.
@@ -289,7 +293,9 @@ struct OnboardingRenders {
         kept.again()
         #expect(kept.phase == .run && kept.ledger[.npm]?.state == .running("installing"))
 
-        let record = (["Allow the rest:"] + walked + ["", "Set up everything:"] + ran + ["", "Its script:", script, "", "Undo:"] + undone + ["", "Homebrew on the Mac:"] + second.log)
+        // Each risky Hyper key's tooltip, for the review page.
+        let tips = LayerKey.allCases.compactMap { key in model.hyperBreaks(key, engine).map { "\(key.label): \($0)" } }
+        let record = (["Hyper tooltips:"] + tips + ["", "Allow the rest:"] + walked + ["", "Set up everything:"] + ran + ["", "Its script:", script, "", "Undo:"] + undone + ["", "Homebrew on the Mac:"] + second.log)
         try record.joined(separator: "\n").write(to: dir.appendingPathComponent("sandbox-run.txt"), atomically: true, encoding: .utf8)
         print(record.joined(separator: "\n"))
     }
@@ -368,11 +374,6 @@ final class RecordingMac: SetupSystem {
         return nil
     }
     func runInTerminal(_ command: String, title: String, onSuccess: String) { log.append("terminal \(title): \(command)") }
-    func readThemes() async -> (themes: [(id: String, title: String)], recolours: [String]) {
-        ([("tokyo-night", "Tokyo Night"), ("nord", "Nord")], ["Ghostty", "Zed"])
-    }
-    var appliedTheme: String?
-    func applyTheme(_ id: String?) async -> String? { log.append("theme \(id ?? "restore")"); appliedTheme = id; return nil }
 }
 
 /// Default apps in memory: Pilot listed for both kinds, .txt on TextEdit, .md on nothing.

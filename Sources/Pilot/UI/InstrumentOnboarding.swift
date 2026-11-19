@@ -63,17 +63,14 @@ struct InstrumentOnboarding: View {
                 }
             }
             InstrumentPanel(title: "Hyper key", note: settings.layerKeys.label) {
-                ForEach(Array(Onboarding.hyperChoices.enumerated()), id: \.element) { index, key in
+                ForEach(Array(model.hyperChoices(settings.layerKeys).enumerated()), id: \.element) { index, key in
                     let on = settings.layerKeys.contains(key)
+                    let breaks = model.hyperBreaks(key, engine)
                     if index > 0 { InstrumentRule() }
                     Button { LayerKeyConfirm.pick([key], settings, from: .onboarding, asking: $confirming) } label: {
                         HStack(spacing: 12) {
                             InstrumentRadio(on: on)
-                            VStack(alignment: .leading, spacing: 6) {
-                                let breaks = model.hyperBreaks(key, engine)
-                                titled(key.label, breaks == nil ? Onboarding.hyperDetail(key) : nil)
-                                if let breaks { HyperBreaks(text: breaks) }
-                            }
+                            SetupTitled(title: key.label, detail: Onboarding.hyperDetail(key), alert: breaks)
                             Spacer(minLength: 8)
                             InstrumentKey(text: key.symbol, hyper: on)
                         }
@@ -81,6 +78,7 @@ struct InstrumentOnboarding: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .help(breaks ?? "")
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
@@ -139,7 +137,6 @@ struct InstrumentOnboarding: View {
             }
         }
         .onAppear { if setup.phase != .run { setup.load() } }
-        .task { await setup.loadThemes() }
     }
 
     // MARK: Try it
@@ -186,7 +183,7 @@ struct InstrumentOnboarding: View {
         HStack(spacing: 14) {
             // One column for every prompt's keys, so their words line up.
             InstrumentKeys(caps: caps).frame(width: 84, alignment: .leading)
-            titled(title, detail)
+            SetupTitled(title: title, detail: detail)
             Spacer(minLength: 8)
             state(done ? "Done" : "Waiting", live: !done)
         }
@@ -199,7 +196,6 @@ struct InstrumentOnboarding: View {
         HStack(spacing: 14) { content() }.padding(.horizontal, 18).padding(.vertical, 12)
     }
 
-    private func titled(_ title: String, _ detail: String?) -> some View { SetupTitled(title: title, detail: detail) }
 
     /// A state in words, in mono: done with a check in the second text colour; what Pilot waits for after the signal's
     /// dot (the live thing).

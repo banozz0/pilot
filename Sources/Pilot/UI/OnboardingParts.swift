@@ -59,10 +59,19 @@ struct SetupTitled: View {
     @Environment(\.style) private var style
     let title: String
     var detail: String?
+    /// What it breaks, a risky Hyper choice's (Sven, 2026-11-19): a small alert icon after the title, the words only as
+    /// the row's tooltip, which the row sets.
+    var alert: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
+            HStack(spacing: 6) {
+                Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
+                if let alert {
+                    Image(systemName: "exclamationmark.triangle.fill").imageScale(.small).foregroundStyle(style.color(\.warn))
+                        .accessibilityLabel(alert)
+                }
+            }
             if let detail { Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -104,13 +113,6 @@ struct SetupFork: View {
                             }
                         }
                     }
-                    // The theme is the user's own pick (Sven, 2026-11-19): kept as it is until one is picked here.
-                    VStack(alignment: .leading, spacing: 4) {
-                        SetupThemePicker(setup: setup)
-                        if setup.themePick != nil {
-                            Text(setup.themeNote).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
                     Text(setup.forkCount).styleText(\.mono).foregroundStyle(style.color(\.text3)).padding(.top, 2)
                     if !setup.noAppBefore.isEmpty {
                         // Said before the run (reviewer, T54): Undo cannot put "no app" back.
@@ -123,7 +125,7 @@ struct SetupFork: View {
                     .disabled(setup.everything.isEmpty)
             }
             card(eyebrow: "Your way", title: "Pick by hand",
-                 about: "Choose each key and setting. Nothing changes until you confirm.") {
+                 about: "Choose each key, setting and feature. Nothing changes until you confirm.") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("· starts with nothing ticked").styleText(\.caption).foregroundStyle(style.color(\.text2))
                     Text("· each row says what it gives").styleText(\.caption).foregroundStyle(style.color(\.text2))
@@ -151,23 +153,10 @@ struct SetupFork: View {
     }
 }
 
-/// Set up's theme menu: Keep the current look (the default), or a theme of the style in use.
-struct SetupThemePicker: View {
-    @Bindable var setup: OnboardingSetup
-
-    var body: some View {
-        Picker("Theme", selection: $setup.themePick) {
-            Text("Theme: keep the current look").tag(String?.none)
-            ForEach(setup.themes, id: \.id) { theme in Text("Theme: \(theme.title)").tag(Optional(theme.id)) }
-        }
-        .labelsHidden().fixedSize()
-    }
-}
-
 // MARK: Pick by hand
 
-/// Pick by hand: the same groups as ticked rows, each with what it gives, nothing ticked at first; what is on this Mac
-/// says so instead of a switch.
+/// Pick by hand: the same groups as ticked rows, each with what it gives, then the features and the helpers each needs
+/// (SetupFeature), nothing ticked at first; what is on this Mac says so instead of a switch.
 struct SetupPickList: View {
     @Environment(\.style) private var style
     let setup: OnboardingSetup
@@ -176,41 +165,50 @@ struct SetupPickList: View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(SetupGroup.allCases.filter { !$0.offered.isEmpty }, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 0) {
-                    groupHeading(group)
+                    groupHeading(group.title, symbol: group.symbol)
                     ForEach(group.offered, id: \.self) { item in
-                        InstrumentRule()
-                        HStack(spacing: 14) {
-                            SetupTitled(title: item.title, detail: item == .theme && setup.themePick != nil ? setup.themeNote : item.detail)
-                            Spacer(minLength: 8)
-                            if item == .theme && setup.ledger[item] == nil {
-                                // Picking one ticks it; Keep the current look unticks it.
-                                SetupThemePicker(setup: setup)
-                            } else if setup.onMac.contains(item) {
-                                Text("On this Mac").styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
-                            } else if let state = setup.ledger[item]?.state {
-                                // Held by the last run's record: said, never offered twice.
-                                Text(state.words).styleText(\.mono).foregroundStyle(style.color(\.text3)).lineLimit(2)
-                                    .frame(maxWidth: 200, alignment: .trailing)
-                            } else {
-                                toggle(item)
-                            }
-                        }
-                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        row(item.title, item.detail, held: setup.held(item),
+                            isOn: Binding(get: { setup.picked.contains(item) }, set: { setup.set(item, $0) }))
                     }
                 }
                 .styleSurface(\.card)
             }
+            // The features, each ticking the helpers it needs (Sven, 2026-11-19).
+            VStack(alignment: .leading, spacing: 0) {
+                groupHeading("Features", symbol: SetupGroup.helpers.symbol)
+                ForEach(SetupFeature.allCases, id: \.self) { feature in
+                    row(feature.title, setup.detail(feature), held: setup.held(feature),
+                        isOn: Binding(get: { setup.picked(feature) }, set: { setup.set(feature, $0) }))
+                }
+            }
+            .styleSurface(\.card)
         }
     }
 
-    private func toggle(_ item: SetupItem) -> some View {
-        Toggle(item.title, isOn: Binding(get: { setup.picked.contains(item) }, set: { setup.set(item, $0) })).labelsHidden().toggleStyle(.pilotSwitch)
+    /// A row: its switch, or in its place what holds it, on this Mac or in the last run's record (never offered twice).
+    private func row(_ title: String, _ detail: String, held: OnboardingSetup.Held?, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 0) {
+            InstrumentRule()
+            HStack(spacing: 14) {
+                SetupTitled(title: title, detail: detail)
+                Spacer(minLength: 8)
+                switch held {
+                case .onMac?:
+                    Text("On this Mac").styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
+                case .ran(let words)?:
+                    Text(words).styleText(\.mono).foregroundStyle(style.color(\.text3)).lineLimit(2).frame(maxWidth: 200, alignment: .trailing)
+                case nil:
+                    Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.pilotSwitch)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10)
+        }
     }
 
-    private func groupHeading(_ group: SetupGroup) -> some View {
+    private func groupHeading(_ title: String, symbol: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: group.symbol).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
-            Text(group.title).styleText(\.title).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
+            Image(systemName: symbol).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+            Text(title).styleText(\.title).foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
             Spacer()
         }
         .padding(.horizontal, 18).frame(height: 40)
@@ -411,20 +409,6 @@ struct DemoDone: View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityHidden(true)
             SetupTitled(title: "Demo done", detail: line)
-        }
-    }
-}
-
-/// What a Hyper key choice breaks, under its name in both styles: an alert icon and Onboarding.hyperBreaks' line (Sven's
-/// critique, 2026-11-18).
-struct HyperBreaks: View {
-    @Environment(\.style) private var style
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(style.color(\.warn)).accessibilityLabel("Breaks")
-            Text(text).styleText(\.caption).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
         }
     }
 }

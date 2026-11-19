@@ -6,6 +6,17 @@ public enum Onboarding {
     /// Every layer key, Caps Lock suggested (P68: Control, Option and right Command too).
     public static let hyperChoices = LayerKey.allCases
 
+    /// Apple's vendor ids, USB and Bluetooth: no Apple keyboard, a MacBook's own included, has a right Control key.
+    static let appleVendors: Set<Int> = [0x05AC, 0x004C]
+
+    /// The choices this Mac's keyboards have (Sven, 2026-11-19: no key the Mac lacks): right Control only while a
+    /// keyboard Apple did not make is attached (`vendors`, from the IO registry), or when none could be read. The key in
+    /// use always stays, so it can be switched off.
+    public static func hyperChoices(keyboards vendors: Set<Int>, current: [LayerKey]) -> [LayerKey] {
+        let rightControl = vendors.isEmpty || vendors.contains { !appleVendors.contains($0) } || current.contains(.rightControl)
+        return hyperChoices.filter { $0 != .rightControl || rightControl }
+    }
+
     /// A choice's line under its name: what Caps Lock keeps, or what a modifier no longer does (LayerKey.note).
     public static func hyperDetail(_ key: LayerKey) -> String {
         key == .capsLock ? "suggested · tap alone for Escape · Shift+Caps Lock still types capitals" : key.note
@@ -22,7 +33,8 @@ public enum Onboarding {
         }
     }
 
-    /// What picking `key` as Hyper breaks, said beside its alert icon (Sven's critique, 2026-11-18); nil for Caps Lock.
+    /// What picking `key` as Hyper breaks, its row's tooltip beside a small alert icon (Sven, 2026-11-18 and 2026-11-19);
+    /// nil for Caps Lock.
     /// The picked side is Hyper alone and the tap swallows every key while Hyper is held (HyperTap), so each everyday
     /// shortcut on that side runs the Hyper bind on its key, named by `bound` (its label; nil when none: it does
     /// nothing). A tester's terminals opening by themselves may be Cmd+Return and Cmd+T on a Command side.
@@ -30,9 +42,7 @@ public enum Onboarding {
         let (modifier, keys) = everyday(key)
         guard !keys.isEmpty else { return nil }
         let runs = keys.map { name in "\(modifier)+\(name) \(bound(Key(name)).map { "→ \($0)" } ?? "does nothing")" }
-        // Left Control's shortcuts move to right Control, and right Control as Hyper has no key: a MacBook has neither.
-        let tail = key == .leftControl || key == .rightControl ? "; a MacBook has no right Control" : ""
-        return runs.joined(separator: " · ") + tail
+        return "As Hyper: " + runs.joined(separator: " · ")
     }
 
     public struct Status: Equatable, Sendable {

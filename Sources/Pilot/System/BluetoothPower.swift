@@ -98,19 +98,38 @@ enum BluetoothPower {
     /// The IO registry's HID devices that are keyboards, mice or trackpads; a device with several interfaces is listed
     /// once per interface, which the warning folds by name.
     nonisolated static func connectedInputs() -> [InputDevice] {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOHIDDevice"), &iterator) == KERN_SUCCESS else { return [] }
-        defer { IOObjectRelease(iterator) }
         var found: [InputDevice] = []
-        while case let service = IOIteratorNext(iterator), service != 0 {
-            defer { IOObjectRelease(service) }
-            let value = { (key: String) in IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() }
+        eachDevice { value in
             guard let page = value("PrimaryUsagePage") as? Int, let usage = value("PrimaryUsage") as? Int,
                   isInput(page: page, usage: usage),
                   let transport = value("Transport") as? String, let bluetooth = link(transport)
-            else { continue }
+            else { return }
             found.append(InputDevice(name: value("Product") as? String ?? "A \(bluetooth ? "Bluetooth" : "wired") device", bluetooth: bluetooth))
         }
         return found
+    }
+
+    /// The vendor ids of the keyboards in the IO registry, virtual ones left out: which Hyper keys onboarding offers
+    /// (Onboarding.hyperChoices).
+    nonisolated static func keyboardVendors() -> Set<Int> {
+        var vendors: Set<Int> = []
+        eachDevice(["PrimaryUsagePage": 1, "PrimaryUsage": 6]) { value in
+            guard let transport = value("Transport") as? String, link(transport) != nil, let vendor = value("VendorID") as? Int else { return }
+            vendors.insert(vendor)
+        }
+        return vendors
+    }
+
+    /// Each HID device in the IO registry with `properties`, its properties read by name: no permission needed.
+    nonisolated private static func eachDevice(_ properties: [String: Int] = [:], _ body: ((String) -> Any?) -> Void) {
+        let match = IOServiceMatching("IOHIDDevice") as NSMutableDictionary
+        match.addEntries(from: properties)
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, match, &iterator) == KERN_SUCCESS else { return }
+        defer { IOObjectRelease(iterator) }
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            body { key in IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() }
+        }
     }
 }
