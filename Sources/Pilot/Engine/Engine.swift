@@ -33,6 +33,10 @@ final class PilotSettings {
         let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
         defaults.set(developer, forKey: Self.developerKey)
         self.developer = developer
+        // System and Fonts the same way (the feature trim, 2026-11-19): off for a new install, on once for one that ran before.
+        let more = defaults.object(forKey: Self.morePagesKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
+        defaults.set(more, forKey: Self.morePagesKey)
+        morePages = more
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? true
         translatePair = TranslatePair(defaults: defaults)
@@ -161,6 +165,11 @@ final class PilotSettings {
         didSet { defaults.set(developer, forKey: Self.developerKey) }
     }
     static let developerKey = "general.developer"
+    /// General's More pages switch: System and Fonts in the sidebar (AppPage.isMore); MorePages reads it.
+    var morePages: Bool {
+        didSet { defaults.set(morePages, forKey: Self.morePagesKey) }
+    }
+    static let morePagesKey = "general.morePages"
     /// The app's own settings, on its own defaults; never a test's, so a test's switch shows nowhere else.
     static weak var live: PilotSettings?
     /// Off until switched on: a three-finger sideways swipe moves between workspaces (card agent-bo-95422973).

@@ -63,9 +63,9 @@ struct AppWindowTests {
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
         #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
-        // Reports on Update & Clean's front under the runs' block (Sven, 2026-11-16), Install's tools and hidden apps on its More (simplify-pages T16).
-        #expect(AppPage.upkeep.tabs.isEmpty)
-        #expect(AppSection.reports.onFront && AppSection.reports.page == .upkeep)
+        // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
+        #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
+        #expect(AppSection.reports.onMore == .upkeepMore && AppSection.reports.page == .upkeep)
         #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "More"])
         // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])

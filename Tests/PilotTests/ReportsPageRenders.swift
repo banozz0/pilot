@@ -49,11 +49,14 @@ struct ReportsPageRenders {
         var text = ""
         for style in PilotStyle.allCases {
             look.style = style
-            let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
-            try LookPageTests().hosted(page, height: 1500) { host in
-                let rep = try #require(snapshot(host, scale: 2))
-                if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue).png")) }
-                if style == .instrument { text = try recognisedText(in: rep).map(\.text).joined(separator: "\n") }
+            // The front, then More with Reports (the feature trim, 2026-11-19).
+            for more in [false, true] {
+                let page = ReportsGround { UpkeepPage(store: store, mole: false, homebrew: true, more: more) }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
+                try LookPageTests().hosted(page, height: 1500) { host in
+                    let rep = try #require(snapshot(host, scale: 2))
+                    if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-\(style.rawValue)\(more ? "-more" : "").png")) }
+                    if style == .instrument { text += try recognisedText(in: rep).map(\.text).joined(separator: "\n") + "\n" }
+                }
             }
         }
         for line in ["Update and Clean", "Clean runs through Mole", "Install Mole", "Open report", "Last run", "Reports",

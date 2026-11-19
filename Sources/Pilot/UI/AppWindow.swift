@@ -134,7 +134,7 @@ final class AppWindowModel {
     /// ⌃Tab: the next page in the area, round to the first; on Extensions, Installed then each extension that opens a page,
     /// as the sidebar lists them, round to Installed.
     func nextPage(entries: [ExtensionPages.Link] = ExtensionPages.shared.pageEntries) {
-        let after = AppPlace(AppArea.next(after: page, developer: DeveloperPages.on))
+        let after = AppPlace(AppArea.next(after: page, developer: DeveloperPages.on, more: MorePages.on))
         guard page == .extensions, !entries.isEmpty else { return go(after) }
         let at = extensionPage.flatMap { id in entries.firstIndex { $0.id == id } }
         let next = at.map { $0 + 1 } ?? 0
@@ -500,9 +500,16 @@ final class MaterialBackdrop: NSView {
     static let help = "Developer pages: Configs, Agents and Repos, for people who live in config files and repos."
 }
 
+/// General's More pages switch as the sidebar and Ctrl+Tab read it (the feature trim, 2026-11-19): System and Fonts listed
+/// only while it is on; on where there are no settings (a test), so a test's areas stay whole.
+@MainActor enum MorePages {
+    static var on: Bool { PilotSettings.live?.morePages ?? true }
+    static let help = "More pages: System, for sound, Bluetooth, Wi-Fi and displays, and Fonts. Links and the search reach them either way."
+}
+
 extension AppArea {
     /// Its pages the window lists now: the developer pages only while the switch is on.
-    @MainActor var shown: [AppPage] { pages(developer: DeveloperPages.on) }
+    @MainActor var shown: [AppPage] { pages(developer: DeveloperPages.on, more: MorePages.on) }
     /// The areas the rail lists above Pilot now: Developer only while the switch is on.
     @MainActor static var shownMain: [AppArea] { main(developer: DeveloperPages.on) }
     /// Every area the toolbar tabs list now, Pilot last.

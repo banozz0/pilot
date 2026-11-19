@@ -286,6 +286,9 @@ struct GeneralPage: View {
                 Toggle("Developer pages", isOn: $settings.developer).toggleStyle(.pilotSwitchRow(info: DeveloperPages.help))
             }
             BlockRow {
+                Toggle("More pages", isOn: $settings.morePages).toggleStyle(.pilotSwitchRow(info: MorePages.help))
+            }
+            BlockRow {
                 TitledText(title: "Uninstall", detail: "Speech models, caches, your data or Pilot itself, to the Trash").padding(.vertical, 4)
                 InfoMark(text: "Lists everything Pilot put on this Mac with its size; nothing of another app's. Ticked items go to the Trash, where Finder can put them back.")
                 Spacer()

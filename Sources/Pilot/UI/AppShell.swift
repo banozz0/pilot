@@ -131,8 +131,8 @@ struct PageView: View {
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
-        // Reports is a place on Update & Clean's front (Sven, 2026-11-16): Open report scrolls there.
-        case .upkeep: UpkeepPage { model.go($0) }
+        // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
+        case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
         case .clipboard: ClipboardSettingsView()
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }

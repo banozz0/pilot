@@ -41,6 +41,9 @@ extension SettingsSchema {
             // Q715: Configs, its Agents tab and Repos. Off for a new install; an existing one started on once (PilotSettings).
             .bool("general.developer", "Developer pages: Configs, Agents and Repos", page: "general", standard: false,
                   read: { settings.developer }, write: { settings.developer = $0 }),
+            // The feature trim (2026-11-19): System and Fonts in the sidebar. Off for a new install; an existing one started on.
+            .bool("general.morePages", "More pages: System and Fonts in the sidebar", page: "general", standard: false,
+                  read: { settings.morePages }, write: { settings.morePages = $0 }),
             .choice("translate.home", "Translate into", page: "menu", TranslatePair.languages, standard: TranslatePair.standard.home,
                     read: { settings.translatePair.home }, write: { settings.translatePair = settings.translatePair.with(home: $0) }),
             .choice("translate.other", "Your language goes into", page: "menu", TranslatePair.languages,

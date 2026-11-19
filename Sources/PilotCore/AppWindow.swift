@@ -101,6 +101,9 @@ public enum AppPage: String, CaseIterable, Sendable {
     /// Developer pages (Pilot 1.0.2, Sven Q715): Configs, with its Agents tab, and Repos show only while General's Developer
     /// switch is on; off, the sidebar, the searches and `pilot open` leave them out and nothing reads their files.
     public var isDeveloper: Bool { self == .configs || self == .repos }
+    /// System and Fonts (the feature trim, Sven 2026-11-19: hide): off the sidebar and Ctrl+Tab unless General's More pages
+    /// switch is on; a link, the window's search and `pilot open` still reach them.
+    public var isMorePage: Bool { self == .system || self == .fonts }
 
     /// The parts a page holds as tabs or places on it (Binds' conflicts open as a sheet, not a tab).
     public var sections: [AppSection] { AppSection.allCases.filter { $0.page == self } }
@@ -285,8 +288,10 @@ public enum AppArea: String, CaseIterable, Sendable {
     /// "⌘1", or "" for an area with no key.
     public var keyHint: String { key.map { "⌘\($0)" } ?? "" }
 
-    /// Its pages the window lists: all of them while `developer` is on, else all but the developer pages.
-    public func pages(developer: Bool) -> [AppPage] { developer ? pages : pages.filter { !$0.isDeveloper } }
+    /// Its pages the window lists: the developer pages only while `developer` is on, System and Fonts while `more` is.
+    public func pages(developer: Bool, more: Bool = true) -> [AppPage] {
+        pages.filter { (developer || !$0.isDeveloper) && (more || !$0.isMorePage) }
+    }
 
     /// The areas above the foot, in order; Pilot sits apart at the foot.
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
@@ -295,8 +300,8 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static func main(developer: Bool) -> [AppArea] { main.filter { developer || $0 != .developer } }
 
     /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
-    public static func next(after page: AppPage, developer: Bool = true) -> AppPage {
-        let pages = page.area.pages(developer: developer)
+    public static func next(after page: AppPage, developer: Bool = true, more: Bool = true) -> AppPage {
+        let pages = page.area.pages(developer: developer, more: more)
         return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
 }
@@ -445,6 +450,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// What Install and Update list, Recommend apps and the self-updating casks: a place on Install's Catalogue (on its More,
     /// beside `helpers` and `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
+    /// Update & Clean's More (the feature trim, 2026-11-19): Reports, every run kept, hidden off the front.
+    case upkeepMore
     /// System's places on its front: the sound input, the keyboard layout and the mouse's speeds (on a More tab from
     /// simplify-pages T17 until Sven, 2026-11-11, after 2276). Each part's keys sit in its own card (pages round 5).
     case soundInput, keyboardLayout, mouseSpeed
@@ -465,7 +472,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
         case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .appsShowAs: .menu
         case .fileSearch, .folders: .files
-        case .reports: .upkeep
+        case .reports, .upkeepMore: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
@@ -500,6 +507,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .voice: .voiceMore
         case .menu: .menuMore
         case .install: .installMore
+        case .upkeep: .upkeepMore
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
         case .look: .lookMore
@@ -511,7 +519,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
                                                      .voiceTakes, .voiceReplacements, .voiceReadAloud,
                                                      .translate, .aliases, .quicklinks,
-                                                     .helpers, .hiddenApps,
+                                                     .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
                                                      .lookStyle, .windowLayout, .appsShowAs]
@@ -524,7 +532,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
-                                                     .voiceWords, .installLists, .fileSearch, .reports]
+                                                     .voiceWords, .installLists, .fileSearch]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
@@ -579,7 +587,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -654,10 +662,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .hyperKey: ["hyper keys", "layer keys", "left option", "right option", "left command", "right command", "left control",
                          "right control", "escape", "quick tap", "hold hyper", "overlay delay"]
         case .status: ["key engine", "keyboard engine", "password field lock", "secure input", "tiler", "health", "diagnostics", "log", "running"]
-        case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "uninstall", "terminal",
+        case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .menuMore, .installMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
