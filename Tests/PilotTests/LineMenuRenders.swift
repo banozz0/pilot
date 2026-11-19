@@ -153,7 +153,9 @@ struct LineMenuRenders {
         return MenuEntries.build(
             apps: [("Ghostty", "com.mitchellh.ghostty"), ("Ghostex", "com.madda.ghostex.host"), ("Finder", "com.apple.finder"),
                    ("Notes", "com.apple.Notes"), ("TextEdit", "com.apple.TextEdit"), ("Bitwarden", "com.bitwarden.desktop")],
-            actions: engine.bindActions,
+            // Generate a password as Bitwarden's ability added: a new install's Easy holds no key for it (T11), so a
+            // fresh Engine no longer lists it on its own (Classic's Hyper+Shift+P did).
+            actions: engine.bindActions(including: ["apps.generatePassword"]),
             store: BindStore(defaults: ["apps.terminal": Key("return"), AppsModule.openID(bundle: "com.madda.ghostex.host"): Key("g"),
                                         "system.lock": Key("escape"), "system.darkMode": Key("d", shift: true),
                                         "captures.menu": Key("c", .ctrl), "apps.emoji": Key("e", .ctrl)]),
