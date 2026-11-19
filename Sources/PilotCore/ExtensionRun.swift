@@ -1,7 +1,8 @@
 import Foundation
 
 /// Running an extension command (card agent-bo-95423242, ADR 0010): its program as a direct child through ChildProcess,
-/// off the main thread, in its own folder. Pilot writes one JSON line on its stdin, `{"type":"run",...}`, and closes it;
+/// off the main thread, in its own folder; a Raycast-format command's program is its bundle, which pilot-ext-host runs
+/// (ADR 0017). Pilot writes one JSON line on its stdin, `{"type":"run",...}`, and closes it;
 /// the program prints JSON lines on stdout. The child gets a small fixed environment, never Pilot's own, so the link
 /// token and any key Pilot was started with stay out of it.
 public enum ExtensionRun {
@@ -66,10 +67,35 @@ public enum ExtensionRun {
                               surface: Extension.Surface.Kind? = nil, input: String? = nil, inputs: Inputs,
                               environment pilot: [String: String] = ProcessInfo.processInfo.environment,
                               timeout: Duration = noViewTimeout) async throws -> String {
-        try await ChildProcess.run(command.program.path, [], environment: environment(for: command, from: pilot),
-                                   input: message(command, query: query, context: context, surface: surface, input: input, inputs: inputs),
-                                   directory: command.program.deletingLastPathComponent(), timeout: timeout)
+        let (path, arguments) = try launch(command, environment: pilot)
+        return try await ChildProcess.run(path, arguments, environment: environment(for: command, from: pilot),
+                                          input: message(command, query: query, context: context, surface: surface, input: input, inputs: inputs),
+                                          directory: command.program.deletingLastPathComponent(), timeout: timeout)
     }
+
+    /// What starts `command`: its own program, or for a Raycast-format command (ADR 0017) the extension host with the
+    /// prelude and the command's bundle as its arguments, run in the bundle's folder like any program.
+    static func launch(_ command: Extension.Command, environment pilot: [String: String]) throws -> (path: String, arguments: [String]) {
+        guard command.runtime == .raycast else { return (command.program.path, []) }
+        guard let (host, prelude) = host(environment: pilot) else { throw NoHost() }
+        return (host.path, ["--prelude", prelude.path, command.program.path])
+    }
+
+    /// pilot-ext-host and pilot-ext-prelude.js: the app's Contents/Helpers and Contents/Resources; outside a bundle (the
+    /// sandbox host, `swift run`) the folder `PILOT_EXT_HOST` names, holding both; nil when neither has them.
+    static func host(environment pilot: [String: String], bundle: URL = Bundle.main.bundleURL) -> (host: URL, prelude: URL)? {
+        let bundled = (bundle.appending(path: "Contents/Helpers/\(hostName)"), bundle.appending(path: "Contents/Resources/\(preludeName)"))
+        let named = pilot["PILOT_EXT_HOST"].map { folder in
+            (URL(filePath: folder).appending(path: hostName), URL(filePath: folder).appending(path: preludeName))
+        }
+        return [bundled, named].compactMap { $0 }
+            .first { FileManager.default.isExecutableFile(atPath: $0.0.path) && FileManager.default.fileExists(atPath: $0.1.path) }
+    }
+
+    static let hostName = "pilot-ext-host", preludeName = "pilot-ext-prelude.js"
+
+    /// No extension host in this Pilot, so a Raycast-format command cannot run.
+    struct NoHost: LocalizedError { var errorDescription: String? { "needs the extension host, which this Pilot does not have" } }
 
     /// Runs a no-view command and says what it showed.
     public static func noView(_ command: Extension.Command, context: JSONValue? = nil, input: String? = nil, inputs: Inputs,

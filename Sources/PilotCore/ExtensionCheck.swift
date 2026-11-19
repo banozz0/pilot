@@ -18,6 +18,8 @@ public enum ExtensionCheck {
         do { _ = try Extension(folder: folder) } catch {
             problems.append((error as? Extension.Problem)?.reason ?? error.localizedDescription)
         }
+        // The catalogue's own rules for a Raycast-format entry come with its new format (raycast-extensions T17).
+        guard !RaycastManifest.holds(folder) else { return problems }
         for problem in catalogue(folder) where !problems.contains(problem) { problems.append(problem) }
         return problems
     }
@@ -497,7 +499,9 @@ extension ExtensionCheck {
         typealias C = ExtensionCatalogue
         let listed = listing(folder)
         if let unsafe = listed.first(where: { !C.isSafe($0.path) }) { throw C.Problem.failed("file path \"\(unsafe.path)\" leaves its folder") }
-        guard listed.contains(where: { $0.path == Extension.manifestName }) else { throw C.Problem.failed("it has no \(Extension.manifestName)") }
+        guard listed.contains(where: { [Extension.manifestName, RaycastManifest.name].contains($0.path) }) else {
+            throw C.Problem.failed("it has no \(Extension.manifestName) or Raycast \(RaycastManifest.name)")
+        }
         guard listed.count <= C.mostFiles else { throw C.Problem.failed("it has \(listed.count) files, more than the \(C.mostFiles) an extension may have") }
         let fm = FileManager.default
         let copy = fm.temporaryDirectory.appending(path: "pilot-ext-install-\(UUID().uuidString)").appending(path: folder.lastPathComponent)
