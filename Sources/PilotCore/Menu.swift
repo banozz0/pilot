@@ -1581,7 +1581,7 @@ public enum MenuLayout {
         Section(title: "Power", symbol: "power", ids: ["system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut",
                                                        "system.keepAwake", "system.idleLock"]),
         Section(title: "Sound", symbol: "speaker.wave.2", ids: ["system.soundSettings"]),
-        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetooth", "system.bluetoothSettings", "system.speedTest"]),
+        Section(title: "Connections", symbol: "wifi", ids: ["system.wifi", "system.wifiSettings", "system.bluetooth", "system.bluetoothSettings"]),
         Section(title: "Display", symbol: "display", ids: ["system.darkMode", "system.nightShift", "system.desktopIcons", "system.displaySettings", "system.rotateDisplay", "system.nextWallpaper",
                                                            "system.previousWallpaper", "system.nextWallpaperAll", "system.previousWallpaperAll"]),
         Section(title: "Focus", symbol: "moon.stars", ids: ["system.focusSettings"]),

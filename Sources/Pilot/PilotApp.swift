@@ -89,8 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A mouse plugged in gets the pointer speed, once Pilot has set one (System › Mouse, Q442).
         PointerSpeed.start()
         Task { await SystemSampler.shared.watch(every: SystemSampler.historyInterval, needs: .history) }
-        // Reminders from dated note lines (P66): Done and Snooze answered, the folder's reminders scheduled.
-        NoteReminders.shared.start()
         // Other apps' notifications as Pilot's cards, off by default: nothing runs until the setting is on.
         PilotNotifications.shared.startLive(presenter: NotificationPanels())
         // A kill or a logout sends SIGTERM; route it through terminate so the Caps Lock remap is undone.
@@ -126,16 +124,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ?edit=1 opens that page; no link token needed: it only changes bar.items (BarRoute, card agent-bo-95423017).
     /// pilot://view?file=<path>&token=… opens a picture in the image viewer, as `pilot files open` does (the token always:
     /// a page must not put Sven's pictures on his screen).
-    /// A .txt or .md file (Finder's Open With, a default Sven picked, a drop on the Dock icon) opens in its own window
-    /// (TextWindows, T49); PNG, JPEG, HEIC, GIF, WebP, TIFF and BMP files in the image viewer, one window for the open's
-    /// pictures (ImageViewer, Q158, Q161).
+    /// PNG, JPEG, HEIC, GIF, WebP, TIFF and BMP files (Finder's Open With, a default Sven picked, a drop on the Dock icon)
+    /// open in the image viewer, one window for the open's pictures (ImageViewer, Q158, Q161); other files are not Pilot's.
     func application(_ application: NSApplication, open urls: [URL]) {
         // The pictures of one open, together: one viewer steps through them (Q161), never a window a picture.
         let pictures = urls.filter { $0.isFileURL && ViewerImages.viewable($0) }
         if !pictures.isEmpty, ImageViewer.show(pictures) == nil { log.error("not opened: \(pictures.count) picture(s)") }
         for url in urls where !pictures.contains(url) {
             if url.isFileURL {
-                if TextWindows.open(url) == nil { log.error("not opened: \(url.lastPathComponent, privacy: .private)") }
+                // Not a picture: Pilot opens no other file, so say where to pick the app that should.
+                log.error("not opened: \(url.lastPathComponent, privacy: .private)")
+                HUD.tip("Pilot opens pictures only. Pick the app for \(url.pathExtension.isEmpty ? "this file" : ".\(url.pathExtension) files") in \(AppPlace(.openWith).path).")
                 continue
             }
             switch url.host {
@@ -175,8 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// moment its first panel went, about 150 ms after launch (lane 1's P1 after card agent-bo-95422912).
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Pilot edits text files (Info.plist's document types) but never opens an empty one by itself: not at a login
-    /// launch, not on a Dock click.
+    /// Pilot never opens an empty document by itself: not at a login launch, not on a Dock click.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { false }
 
     /// Opening Pilot.app while it runs (a double-click, Spotlight, `open -a Pilot`) opens its window; while Welcome is
@@ -187,8 +185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    /// Text files with unsaved edits were asked about already: NSApplication's terminate reviews the open documents
-    /// (TextWindows, T49) before it asks here.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // A recording running or closing is finished first, so quitting never loses it (story 192); with the dock's
         // switch on, Sven's Dock auto-hide goes back first (spec pilot-dock). Both at once, then quit; at most 10 s.

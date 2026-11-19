@@ -58,8 +58,6 @@ enum SystemModule {
         add(&registry, "idleLock", "Lock when idle on or off", nil, .system) { HUD.tip(KeepAwake.shared.toggleIdleLock(), seconds: 3) }
         // Vicinae's Kill process, rebuilt (card agent-bo-95422771).
         add(&registry, "killProcess", "Kill a process", nil, .system) { pickProcess() }
-        // Vicinae's Speedtest, rebuilt on macOS's own networkQuality (card agent-bo-95422772).
-        add(&registry, "speedTest", "Test internet speed", nil, .system) { speedTest.start() }
         // Where macOS downloads translation languages (Translate, card agent-bo-95422773).
         add(&registry, "translationLanguages", "Translation languages", nil, .system) { pane("com.apple.Localization-Settings.extension") }
         // Omarchy's notification keys (card agent-bo-95422949): unbound here, since Hyper+comma is focus display left; the
@@ -204,13 +202,6 @@ enum SystemModule {
                                          keywords: keywords, run: run))
         }
         catch { slog.error("\(module.rawValue, privacy: .public).\(id, privacy: .public): \(String(describing: error), privacy: .public)") }
-    }
-
-    /// One networkQuality run at a time, the last 30 results kept; the result stays up long enough to read. The menu's
-    /// Speed test view (P41) shows this one's run.
-    static let speedTest = SpeedTest(history: DayFile("speedtest-runs")) { line in
-        slog.notice("speed test: \(line, privacy: .public)")
-        HUD.tip(line, seconds: 8)
     }
 
     /// The second pick of one pid within 30 s forces it (KillProcess.Kills).

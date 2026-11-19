@@ -20,7 +20,7 @@ struct LineMenuRenders {
 
     @Test("Line's root is Classic's at 431 wide, as tall as its screen holds; a search, a branch and a list are 750 and fit their rows")
     func sizes() async throws {
-        let states = try await Dictionary(uniqueKeysWithValues: Self.states() + Self.speedStates())
+        let states = try Dictionary(uniqueKeysWithValues: Self.states())
         let root = try #require(states["L1-root"])
         #expect(root.atRoot && root.layout == .line)
         #expect(root.instrumentSize.width == MenuPanelSize.lineRootWidth)
@@ -74,12 +74,6 @@ struct LineMenuRenders {
         #expect(try #require(states["L34-chat-whats-up"]).nav.rows.map(\.target) == [.ask("what's up")])
         let kill = try #require(states["L35-kill-chrome"]).nav
         #expect(kill.branch == .activity && kill.query == "chrome" && kill.rows.first?.title == "Google Chrome", "\(kill.rows.map(\.title))")
-        // The speed test takes the list's place at its own height, whatever the branch lists (P41).
-        for name in ["L20-speed-running", "L21-speed-result", "L22-speed-failed", "L23-speed-root"] {
-            let model = try #require(states[name])
-            let test = try #require(model.speedTest)
-            #expect(model.instrumentSize.height == MenuPanelSize.lineChrome + SpeedTestView.height(test), "\(name)")
-        }
     }
 
     @Test("An answer is a card in the list's top slot with room for it, its Ask row under it (tr's alone, T40); Cmd+K lists the row's actions")
@@ -135,7 +129,7 @@ struct LineMenuRenders {
             let thumbnails = FileThumbnails.shared
             thumbnails.make = FileThumbnailRenders.fake
             defer { thumbnails.make = FileThumbnails.quickLook }
-            for (name, model) in try await Self.states() + Self.speedStates() where only.map(name.contains) ?? true {
+            for (name, model) in try Self.states() where only.map(name.contains) ?? true {
                 try await Self.render(model, name, in: dir, wait: name == "L11-files" ? 1.5 : 0.3)
             }
         }
@@ -405,43 +399,6 @@ struct LineMenuRenders {
             states.append((name, shown))
         }
         return states
-    }
-
-    /// The Speed test view over System › Connections (P41): measuring with a live reading, a result with six runs before
-    /// it, and a run that failed. Nothing measures: each run's networkQuality is faked.
-    static func speedStates() async throws -> [(String, MenuModel)] {
-        let built = try built()
-        let runs = try DayFile<[SpeedTest.Result]>(url: URL(filePath: NSTemporaryDirectory()).appending(path: "pilot-speedruns-\(UUID().uuidString).json"))
-        defer { try? FileManager.default.removeItem(at: runs.url) }
-        let day = Date().addingTimeInterval(-6 * 86_400)
-        try runs.save([412, 398, 405, 188, 420, 401].enumerated().map { i, down in
-            SpeedTest.Result(reading: .init(download: down, upload: 37.9, responsiveness: 1180), at: day.addingTimeInterval(Double(i) * 86_400), seconds: 19)
-        })
-        func model(_ test: SpeedTest, root: Bool = false) -> MenuModel {
-            var nav = MenuNavigator(entries: built, branch: root ? nil : MenuLayout.system("Connections"))
-            if root { nav.query = "speed" }
-            let m = MenuModel(nav: nav)
-            m.layout = .line
-            m.speedTest = test
-            return m
-        }
-        let json = #"{"dl_throughput":412000000,"ul_throughput":38600000,"responsiveness":1240,"interface_name":"en0","start_date":"2026-10-18 14:01:43.000","end_date":"2026-10-18 14:02:02.000"}"#
-        let running = SpeedTest(live: { live in
-            live(.init(download: 286.4, upload: 31.2, responsiveness: 842))
-            try await Task.sleep(for: .seconds(600))
-            return ""
-        }, history: runs, clock: { Date().addingTimeInterval(-8) }, say: { _ in })
-        running.start()
-        let done = SpeedTest(live: { _ in json }, history: runs, say: { _ in })
-        _ = await done.start()?.value
-        struct Down: Error {}
-        let failed = SpeedTest(measure: { throw Down() }, say: { _ in })
-        _ = await failed.start()?.value
-        // The live reading lands on the main actor after the run starts; the run then waits, never ending in the test.
-        try await Task.sleep(for: .milliseconds(50))
-        // L23: opened from a root search for "speed", where the foot says where Sven is rather than the kinds.
-        return [("L20-speed-running", model(running)), ("L21-speed-result", model(done)), ("L22-speed-failed", model(failed)),
-                ("L23-speed-root", model(done, root: true))]
     }
 
     /// The shipped drive catalogue's commands (P38), with Calendar, Reminders and Music on the Mac.

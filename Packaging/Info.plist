@@ -17,21 +17,7 @@
     <key>CFBundleURLName</key><string>dev.banozz.pilot</string>
     <key>CFBundleURLSchemes</key><array><string>pilot</string></array>
   </dict></array>
-  <!-- Pilot opens .txt and .md files (T49, Q834): an Alternate editor, so it is listed in Finder's Open With and Default
-       apps' pickers and never takes over a type by itself; Sven picks it. AppDelegate routes the files to TextWindows. -->
   <key>CFBundleDocumentTypes</key><array><dict>
-    <key>CFBundleTypeName</key><string>Markdown</string>
-    <key>CFBundleTypeRole</key><string>Editor</string>
-    <key>LSHandlerRank</key><string>Alternate</string>
-    <key>LSItemContentTypes</key><array><string>net.daringfireball.markdown</string></array>
-    <key>NSDocumentClass</key><string>PilotTextDocument</string>
-  </dict><dict>
-    <key>CFBundleTypeName</key><string>Plain text</string>
-    <key>CFBundleTypeRole</key><string>Editor</string>
-    <key>LSHandlerRank</key><string>Alternate</string>
-    <key>LSItemContentTypes</key><array><string>public.plain-text</string></array>
-    <key>NSDocumentClass</key><string>PilotTextDocument</string>
-  </dict><dict>
     <!-- Pilot's image viewer (Q158): a Viewer at Alternate rank, so it shows in Open With and Apps › Open with's Images
          pickers and never takes a type by itself. No document class: AppDelegate routes the files to ImageViewer. -->
     <key>CFBundleTypeName</key><string>Image</string>

@@ -171,7 +171,6 @@ extension MenuEntry {
         "system.bluetooth": ("antenna.radiowaves.left.and.right", .accent),
         "system.displaySettings": ("display", .third), "system.rotateDisplay": ("rotate.right", .third), "system.focusSettings": ("moon.stars", .second),
         "workspaces.rescue": ("lifepreserver", .good), "system.killProcess": ("xmark.circle", .problem),
-        "system.speedTest": ("gauge.with.dots.needle.67percent", .third),
         "system.activityMenu": ("cpu", .problem), "system.statsMenu": (AppPage.stats.symbol, .amber),
         "apps.emoji": ("face.smiling", .amber), "apps.clipboard": ("list.clipboard", .good),
         "captures.area": ("rectangle.dashed", .accent), "captures.activeWindow": ("macwindow.on.rectangle", .third),

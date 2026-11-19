@@ -8,8 +8,7 @@ import Testing
 struct MenuLookTests {
     static let systemIDs = ["system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.darkMode",
                             "system.keepAwake", "system.nightShift", "system.idleLock", "workspaces.rescue", "system.wifi",
-                            "system.bluetoothSettings", "system.displaySettings", "system.focusSettings", "system.killProcess",
-                            "system.speedTest"]
+                            "system.bluetoothSettings", "system.displaySettings", "system.focusSettings", "system.killProcess"]
     static let labels = ["system.darkMode": "Dark mode on or off", "system.wifi": "Wi-Fi on or off", "system.keepAwake": "Keep awake on or off",
                          "workspaces.rescue": "Rescue workspaces"]
 

@@ -2,8 +2,8 @@ import Foundation
 import PilotCore
 
 /// What the job verbs reach (CLI W10): the Reports folder, Update's lists, Mole's preview, the visible terminal, the
-/// Allow gate and the key's speed test. Each is reached on the first request; a test sets its own before then, so nothing
-/// reads brew, runs Mole or networkQuality, or opens a terminal.
+/// Allow gate. Each is reached on the first request; a test sets its own before then, so nothing reads brew, runs Mole,
+/// or opens a terminal.
 @MainActor
 final class ControlJobs {
     lazy var gate = AllowPrompt.gate
@@ -21,17 +21,6 @@ final class ControlJobs {
     lazy var includeSelfUpdating: @MainActor () -> Bool = { Engine.shared?.settings.updateSelfUpdatingCasks ?? false }
     lazy var previewer = CleanModule.previewer
     lazy var mole: @MainActor () -> String? = { CleanModule.mole }
-    /// The speed test's run going now, else one started as its key starts it (system.speedTest), so one run at a time holds
-    /// across both.
-    lazy var speedTest: @MainActor () throws(ControlError) -> Task<String, Never> = { () throws(ControlError) in
-        if let run = SpeedTest.current { return run }
-        guard let action = Engine.shared?.action("system.speedTest") else { throw ControlError(.notReady, "Pilot's key engine is not running yet") }
-        action.run()
-        guard let run = SpeedTest.current else {
-            throw ControlError(.badValue, "the speed test did not start; system.speedTest may be switched off (pilot actions lists it)")
-        }
-        return run
-    }
     /// How often `report --wait` reads the run again, as the Reports page does, and how long it waits at most.
     var every: Duration = .seconds(2)
     var longest: Duration = .seconds(30 * 60)
@@ -42,12 +31,11 @@ final class ControlJobs {
 }
 
 extension ControlVerbs {
-    /// Reports, Update, Clean and the speed test: Pilot's jobs that end after the request.
+    /// Reports, Update and Clean: Pilot's jobs that end after the request.
     func registerJobs(_ jobs: ControlJobs) {
         registerReports(jobs)
         registerUpdate(jobs)
         registerClean(jobs)
-        registerSpeedTest(jobs)
     }
 
     /// `list reports` and `report <id>`: Update & Clean › Reports, every Update and Clean run.

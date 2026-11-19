@@ -1122,7 +1122,6 @@ final class PilotMenu {
         source?.close()
         source = nil
         model?.popAll().forEach { $0.close() }
-        model?.speedTest = nil
         model = nil
         // A picker that closes without a pick says so; run(_:) clears this first when a row was picked.
         let cancelled = onCancel
@@ -1168,8 +1167,6 @@ final class PilotMenu {
     /// A key the panel's monitor offers first (HUD.searchKey): true when the menu takes it, false when it is the search
     /// field's.
     func handle(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ characters: String? = nil) -> Bool {
-        // The Speed test view takes every key, before any row's under it.
-        if let model, let test = model.speedTest { return speedKey(code, flags, test, in: model) }
         // ⌘1 to ⌘9 number the rows Line draws them on: none at its root, none in the Files view, none over Cmd+K.
         let numbers = model.map { $0.layout == .line && !$0.atRoot && !$0.nav.inFiles && $0.nav.actions == nil } ?? false
         // An extension row's action key (To-do B) wins over the menu's own: ⌥↑ moves the row, never the selection.
@@ -1412,30 +1409,6 @@ final class PilotMenu {
         }
     }
 
-    /// Test internet speed in Line (P41): the run shows in the list's place, the menu open. A run going on (Esc left it,
-    /// or the key or `pilot speedtest` started it) is joined, and one that ended since shows its result; else a run starts.
-    private func showSpeedTest() {
-        guard let model else { return }
-        let test = SystemModule.speedTest
-        model.speedTest = test
-        if case .done = test.phase {} else { test.start() }
-        mlog.notice("menu: speed test shown")
-    }
-
-    /// The Speed test view's keys, every other key swallowed so nothing types under it: Escape goes back to the branch
-    /// (a run carries on), Return runs again once it ended, ⌘C copies the result, ⌘. stops the run.
-    private func speedKey(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ test: SpeedTest, in model: MenuModel) -> Bool {
-        let command = flags.contains(.command)
-        switch code {
-        case 53: model.speedTest = nil
-        case 36, 76: if !test.running { test.start() }
-        case 8 where command: if case .done(let result) = test.phase { copy(SpeedTest.line(result.reading)) }
-        case 47 where command: test.stop()
-        default: break
-        }
-        return true
-    }
-
     /// A Cmd+K action the navigator leaves to the panel (card agent-bo-95422968). Uninstall and opening never get here:
     /// the navigator searches Remove for the first and picks the row for the second.
     private func perform(_ action: RowAction, on entry: MenuEntry) {
@@ -1528,8 +1501,6 @@ final class PilotMenu {
         case .app(let bundle):
             close(restoreFocus: false)
             mlog.notice("menu: open \(bundle, privacy: .public) \(AppsModule.open(bundle: bundle) ? "opened" : "not installed", privacy: .public)")
-        case .action("system.speedTest") where model?.layout == .line:
-            showSpeedTest()
         // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
         case .action(let id) where entry.kind == .menuItem && entry.app != previous?.bundleIdentifier:
             guard let bundle = entry.app, let route = DriveRoute(id: id) else { return }
@@ -1974,7 +1945,6 @@ final class MenuModel {
     /// Line's (LineMenu): Classic's root at 431 wide, else a 750 list as tall as its rows, headings and an answer's card.
     private var lineSize: CGSize {
         if scan != nil { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: waitHeight) }
-        if let speedTest { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: SpeedTestView.height(speedTest)) }
         if atRoot { return MenuPanelSize.lineRoot(rows: nav.rows.count, room: room) }
         if showsStats { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: MenuStatsScreen.height) }
         if showsAbout { return MenuPanelSize.line(shape, rows: 0, headings: 0, extra: aboutHeight) }
@@ -2063,16 +2033,6 @@ final class MenuModel {
     var waitHeight: CGFloat = 330
     /// The menu's own bind ("Hyper+Space" as shipped), which Toybox's search line shows; nil while it has none.
     var ownKey: String?
-    /// Line's Speed test view (P41), shown in the list's place over the branch it was opened from until Escape; the test
-    /// knows it is shown, so it raises no alert of its own.
-    var speedTest: SpeedTest? {
-        didSet {
-            guard oldValue !== speedTest else { return }
-            oldValue?.dismiss()
-            speedTest?.shown = true
-        }
-    }
-
     /// A root search that found nothing but its search offers (Search to install, Search files): Instrument says so under
     /// them, in this much room.
     var noMatch: Bool { searchingRoot && nav.only == nil && !nav.rows.isEmpty && nav.rows.allSatisfy(\.isOffer) }

@@ -343,7 +343,6 @@ public enum Abilities {
         "system.shutDown": "Shuts the Mac down.",
         "system.sleep": "Puts the Mac to sleep.",
         "system.soundSettings": "Opens System on Sound.",
-        "system.speedTest": "Measures your internet speed with macOS's own test.",
         "system.translationLanguages": "Opens where macOS downloads languages for Translate.",
         "system.wifi": "Turns Wi-Fi on or off.",
         "system.wifiSettings": "Opens System on Wi-Fi.",
