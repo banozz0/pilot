@@ -141,7 +141,9 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
 
     /// A saved preset as it was, or a new one named after the workspace, empty, at own sizes; Keep this layout starts
     /// from the workspace's layout row.
-    public init(_ preset: WorkspacePreset?, workspace: String, row: WorkspaceLayout? = nil) {
+    public init(_ saved: WorkspacePreset?, workspace: String, row: WorkspaceLayout? = nil) {
+        // The layout the workspace has now (WorkspacePreset.laidOut): an editor autosave after a bar cycle keeps it.
+        let preset = row.map { saved?.laidOut(as: $0) } ?? saved
         name = preset?.name ?? "Workspace \(workspace)"
         apps = preset?.apps ?? []
         layout = preset?.layout

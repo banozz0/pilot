@@ -201,6 +201,8 @@ struct WorkspacePresetTests {
         #expect(tiler.evals.last == LayoutPreset.mainStack.commands(workspace: "2", windows: [10, 20]))
         // A row with no ready layout (own sizes, or never set) leaves the preset's own.
         #expect(saved.laidOut(as: .unset).layout == .centred)
+        // The editor opens on the cycled layout too, so its next autosave does not write the saved one back.
+        #expect(WorkspacePresetDraft(saved, workspace: "2", row: WorkspaceLayout(preset: .mainStack, auto: true)).layout == .mainStack)
     }
 
     @Test("Other tiles on the workspace follow the preset's apps; a floating preset window is tiled, another floating window stays")
