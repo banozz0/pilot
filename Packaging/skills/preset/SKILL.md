@@ -10,8 +10,8 @@ starter: "Make me a small key preset with only the keys I use."
 
 Make a NEW preset on the active preset's base, shaped by what the user asked: smaller than the one they have, or built
 around keys they name (the arrows, the number row). The base is the active row's `base` in `pilot list presets` (easy
-for Easy, complex for Complex, pilot for Classic, empty for one made from scratch), called <base> below, and its
-built-in's name <table> (Easy, Complex, Classic; "Start from scratch" for empty). A built-in preset (`builtIn: true`:
+for Easy, complex for Complex, scratch for Scratch, pilot for Classic, empty for one made from scratch), called <base>
+below, and its built-in's name <table> (Easy, Complex, Scratch, Classic; "Start from scratch" for empty). A built-in preset (`builtIn: true`:
 Easy, Complex, Scratch, Classic, My binds) is never changed: never `--copy`, and never plan a bind while one is active.
 
 Read first, each once:

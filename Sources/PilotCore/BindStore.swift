@@ -137,7 +137,8 @@ public struct BindStore: Equatable, Sendable {
     /// Reads a file of any version up to this one. A hand-edited file with two binds on one trigger keeps the first. A
     /// file before version 3 holds one preset's keys: My binds', or the one it names; Omarchy's land on My binds, with a
     /// notice, since Omarchy no longer ships. A file on Pilot default, or holding it or a preset made from it, lists
-    /// Classic (T11); a preset made by hand on Easy's, Complex's or Scratch's id before they shipped moves to a free id.
+    /// Classic (T11); a preset made by hand on Easy's, Complex's or Scratch's id before they shipped moves to a free id, and
+    /// one named like a built-in listed beside it (Easy, Classic…) takes a free name.
     public init(json: Data, presets tables: [Base: [String: Key]], actions: [String] = []) throws(LoadError) {
         self.init(presets: tables, actions: actions)
         let file = try Self.file(from: json)
@@ -146,17 +147,18 @@ public struct BindStore: Equatable, Sendable {
         var named = file.preset ?? Preset.myBinds.id
         if Self.holds(.pilot, named: named, in: file) { presets = Self.builtIns(tables, classic: true) }
         if let rows = file.presets {
-            let ids = Set(rows.map(\.id)), names = Set(rows.map { $0.name.lowercased() })
-            for var row in rows {
+            let ids = Set(rows.map(\.id))
+            for (i, var row) in rows.enumerated() {
                 if let builtIn = Base(rawValue: row.id)?.builtIn, row.base != builtIn.base.rawValue {
                     let id = freeID(row.id, taken: ids)
                     if named == row.id { named = id }
-                    (row.id, row.name) = (id, freeName(row.name, reserving: names))
+                    row.id = id
                 }
                 let base = try row.resolvedBase
                 if !presets.contains(where: { $0.id == row.id }) {
                     guard !Base.allCases.map(\.rawValue).contains(row.id) else { throw .unreadable("preset \(row.id)") }
-                    presets.append(Preset(id: row.id, name: row.name, base: base))
+                    let later = Set(rows[(i + 1)...].map { $0.name.lowercased() })
+                    presets.append(Preset(id: row.id, name: freeName(row.name, reserving: later), base: base))
                 }
                 (all[row.id], refusals[row.id]) = try Self.edits(row.binds)
             }
