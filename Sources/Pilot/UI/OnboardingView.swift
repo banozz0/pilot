@@ -3,8 +3,8 @@ import Carbon.HIToolbox
 import PilotCore
 import SwiftUI
 
-/// First-run onboarding (stories 1, 2, 40, 94, 103 and 104; Onboarding 1.1, variant C, Sven 2026-11-04, Q841-Q843): four
-/// screens under one step rail. Hyper picks the key, Access waits for Accessibility alone, Set up runs everything or what
+/// First-run onboarding (stories 1, 2, 40, 94, 103 and 104; Onboarding 1.1, variant C, Sven 2026-11-04, Q841-Q843): five
+/// screens under one step rail. Hyper picks the key, Access waits for Accessibility alone, Keys picks a preset (T12), Set up runs everything or what
 /// is picked by hand with progress and undo (OnboardingSetup), and Try it ticks on a hold, Hyper+F and Hyper+Space. Opens
 /// by itself while Accessibility is missing or a run is unfinished (OnboardingWindow).
 struct OnboardingView: View {
@@ -66,6 +66,8 @@ private struct OnboardingSteps: View {
             switch model.step {
             case .welcome: welcome
             case .permissions: access
+            // T12's placeholder until T13 draws Keys: Continue applies the pick.
+            case .keys: Button("Continue") { model.useKeys() }.keyboardShortcut(.defaultAction).buttonStyle(.pilotPrimary)
             case .extras: setUp
             case .tryIt: tryIt
             }
@@ -338,10 +340,11 @@ private struct DarkWindow: NSViewRepresentable {
 /// Allow the rest (ADR 0012).
 @Observable @MainActor
 final class OnboardingModel {
-    /// The four screens. The raw values are the saved resume points from 1.0 (`onboarding.step`), kept so a run cut off
-    /// mid-way resumes; on screen they read Hyper, Access, Set up, Try it.
+    /// The five screens. The raw values are the saved resume points from 1.0 (`onboarding.step`), kept so a run cut off
+    /// mid-way resumes; on screen they read Hyper, Access, Keys, Set up, Try it. Keys (pilot-ui-redesign T12) comes
+    /// before Set up, as Set up B's drawing has it (Q264), so Try it shows the picked keys.
     enum Step: String, CaseIterable {
-        case welcome, permissions, extras, tryIt
+        case welcome, permissions, keys, extras, tryIt
 
         var number: Int { Self.allCases.firstIndex(of: self)! + 1 }
 
@@ -349,6 +352,7 @@ final class OnboardingModel {
             switch self {
             case .welcome: "Hyper"
             case .permissions: "Access"
+            case .keys: "Keys"
             case .extras: "Set up"
             case .tryIt: "Try it"
             }
@@ -422,6 +426,7 @@ final class OnboardingModel {
         self.engine = engine
         opened = Date()
         if let resume = OnboardingWindow.takeResume() { step = resume }
+        setup.loadKeys(engine.binds.store)
         if step == .tryIt { resetTryIt() }
         log.notice("onboarding: shown at \(self.step.rawValue, privacy: .public)")
         refresh()
@@ -439,6 +444,12 @@ final class OnboardingModel {
         PermissionDragPanel.close(reason: "onboarding moved to \(next.rawValue)")
         step = next
         OnboardingWindow.reached(next)
+    }
+
+    /// Keys' Continue: the picked preset becomes the active one, then Set up.
+    func useKeys() {
+        if let engine { setup.useKeys(engine.binds) }
+        go(.extras)
     }
 
     /// Set up's Continue or Skip: Try it, which counts only what happens from here: a hold, the menu opening and Pilot
@@ -459,13 +470,22 @@ final class OnboardingModel {
     /// Pilot Files windows on screen: one more than at Try it's start, or one in front, ticks its row.
     private static func filesShown() -> Int { NSApp.windows.count { $0.title == "Pilot Files" && $0.isVisible } }
 
-    /// Try it's demo is done: Hyper held, Pilot Files opened (when its row shows) and the menu opened. The whole tab then
-    /// says so at once, with the rail's step ticked (Sven, 2026-11-19).
-    func demoDone(_ engine: Engine) -> Bool { tryIt.held && tryIt.menuOpened && (filesKey(engine) == nil || filesOpened) }
+    /// Try it's demo is done: Hyper held, Pilot Files opened (when its row shows) and the menu opened (when its row
+    /// shows). The whole tab then says so at once, with the rail's step ticked (Sven, 2026-11-19).
+    func demoDone(_ engine: Engine) -> Bool {
+        tryIt.held && (menuKey(engine) == nil || tryIt.menuOpened) && (filesKey(engine) == nil || filesOpened)
+    }
 
-    /// Demo done's line: what the user did, Pilot Files only when its row showed.
+    /// Demo done's line: what the user did, Pilot Files and the menu only when their rows showed.
     func demoLine(_ engine: Engine) -> String {
-        filesKey(engine) == nil ? "You held Hyper and opened the menu." : "You held Hyper and opened Pilot Files and the menu."
+        let opened = [filesKey(engine).map { _ in "Pilot Files" }, menuKey(engine).map { _ in "the menu" }].compactMap { $0 }
+        return opened.isEmpty ? "You held Hyper." : "You held Hyper and opened \(opened.joined(separator: " and "))."
+    }
+
+    /// Try it's Hyper+Space row: the key that opens the Pilot menu; nil when none does, as after a Scratch pick (no keys
+    /// at all; the menu bar icon still opens Pilot, pilot-key-presets' rules), and the row is left out.
+    func menuKey(_ engine: Engine) -> String? {
+        engine.binds.store.trigger(for: "apps.launcher").flatMap { HomeKeys.caps($0, space: "Space").last }
     }
 
     #if DEBUG

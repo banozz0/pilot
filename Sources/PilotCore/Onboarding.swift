@@ -165,6 +165,26 @@ public enum Onboarding {
     public static func systemEvents(answer: Int32, last: Bool) -> Bool { answer == -600 ? last : answer == 0 }
 }
 
+extension Onboarding {
+    /// Set up B's Keys step (pilot-ui-redesign T12; Q264, Sven 2026-11-19): the three built-in presets onboarding offers,
+    /// in the drawing's order, Easy first. Classic and a user's own presets are never offered.
+    public enum Keys: String, CaseIterable, Sendable {
+        case easy, complex, scratch
+
+        public var preset: BindStore.Preset {
+            switch self {
+            case .easy: .easy
+            case .complex: .complex
+            case .scratch: .scratch
+            }
+        }
+
+        /// The step's pick as it shows: the active preset when it is one of the three (Easy on a new install); nil,
+        /// keep the keys you have, for Classic or a preset of your own, so Run setup again never moves an install's keys.
+        public static func pick(active id: String) -> Keys? { Keys(rawValue: id) }
+    }
+}
+
 extension Onboarding.Row {
     /// A grant's name on Access's "Later, from Settings" panel (Onboarding 1.1, T54).
     public var short: String {

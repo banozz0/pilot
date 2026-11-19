@@ -18,6 +18,8 @@ struct InstrumentOnboarding: View {
             switch model.step {
             case .welcome: welcome
             case .permissions: access
+            // T12's placeholder until T13 draws Keys: Continue applies the pick.
+            case .keys: foot(nil, "Continue") { model.useKeys() }
             case .extras: setUp
             case .tryIt: tryIt
             }

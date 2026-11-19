@@ -383,6 +383,22 @@ final class OnboardingSetup {
         if isLive { watch() }
     }
 
+    // MARK: Keys (pilot-ui-redesign T12)
+
+    /// Keys' pick: one of the three presets onboarding offers, or nil to keep the active one (Classic or your own).
+    var keys: Onboarding.Keys?
+
+    /// Onboarding opens: the pick starts on the active preset.
+    func loadKeys(_ store: BindStore) { keys = Onboarding.Keys.pick(active: store.preset.id) }
+
+    /// Keys' Continue: the pick becomes the active preset, before Set up and Try it, so Try it shows its keys. No pick,
+    /// or the one already active, changes nothing.
+    func useKeys(_ binds: Binds) {
+        guard let keys, binds.store.preset.id != keys.rawValue, let preset = binds.store.preset(id: keys.rawValue) else { return }
+        binds.use(preset)
+        log.notice("setup: keys \(keys.rawValue, privacy: .public)")
+    }
+
     // MARK: Before the run
 
     func load() {
