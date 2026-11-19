@@ -23,6 +23,11 @@ final class ControlStatus {
     var clashes: @MainActor (Engine) -> Int = { ShortcutConflicts.shared.clashes(binds: $0.binds.store.binds).count }
     /// Permissions' other grants as onboarding reads them, each without a prompt; nil outside Pilot.
     var grants: @MainActor () async -> OnboardingGrants.Reading? = { await OnboardingGrants.shared.read() }
+    /// Onboarding's step: the open window's, else the saved resume point (nil once finished or never started); and Keys'
+    /// pick (pilot-ui-redesign T12).
+    var onboardingState: @MainActor () -> (step: String?, keys: Onboarding.Keys?) = {
+        (OnboardingWindow.shown?.step.rawValue ?? UserDefaults.pilot().string(forKey: OnboardingWindow.stepKey), OnboardingSetup.shared.keys)
+    }
     /// This Mac's last reading and its values, held until one with a CPU share is newer than the ask (the second tick
     /// makes the rate).
     var sample: @MainActor () async -> (raw: SystemStats.Raw, values: SystemStats.Values?)? = ControlStatus.sampleThisMac
@@ -59,7 +64,7 @@ final class ControlStatus {
             case .update: "how this build updates (sparkle, none, or a debug build's checkout), Sparkle's feed and last check, the commit and checkout, the last count; --check counts"
             case .folder: "Pilot's folder"
             case .workspaces: "the focused workspace and the apps on each occupied one, read from the tiler"
-            case .onboarding: "onboarding's Permissions, each row done or not (runs pgrep and TCC checks)"
+            case .onboarding: "onboarding: its step (the open window's, else the saved one), the steps, Keys' pick and the active preset, and its Permissions, each row done or not (runs pgrep and TCC checks)"
             case .presses: "the 20 most run actions of all time, from the counts behind the overlay's most used"
             case .mac: "This Mac: chip, CPU, memory, disk, temperature (waits up to 5 s for a reading)"
             case .widgets: "the desktop's widgets: each installed one with its trust, each placement shown or hidden and why, each screen's workspace and Show desktop"
@@ -182,7 +187,8 @@ final class ControlStatus {
                         "fix": json(fix), "action": json(p.action)])
     }
 
-    /// Onboarding's Permissions as its window fills it, each row with whether it is done.
+    /// Onboarding: its step and the steps in order, Keys' pick (null until onboarding opens) and the active preset
+    /// (T12), and its Permissions as its window fills them, each row with whether it is done.
     private func onboarding(_ engine: Engine) async -> JSONValue {
         engine.gate.check()
         async let disk = fullDiskAccess(), events = systemEvents()
@@ -191,10 +197,13 @@ final class ControlStatus {
         await grants()?.apply(to: &s)
         systemEventsAllowed = Onboarding.systemEvents(answer: await events, last: systemEventsAllowed)
         s.systemEvents = systemEventsAllowed
-        return .array(Onboarding.Row.allCases.map { row in
+        let state = onboardingState()
+        let rows = JSONValue.array(Onboarding.Row.allCases.map { row in
             .object(["row": .string(String(describing: row)), "title": .string(row.title), "detail": .string(row.detail(s)),
                      "done": .bool(Onboarding.isDone(row, s))])
         })
+        return .object(["step": Self.json(state.step), "steps": .array(OnboardingModel.Step.allCases.map { .string($0.rawValue) }),
+                        "keys": Self.json(state.keys?.rawValue), "preset": .string(engine.binds.store.preset.id), "rows": rows])
     }
 
     /// This Mac's four readings and the chip, as numbers; null fields when not read.

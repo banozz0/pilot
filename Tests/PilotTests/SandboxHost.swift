@@ -12,6 +12,8 @@ import Testing
 @MainActor
 @Suite("sandbox host")
 struct SandboxHost {
+    /// PILOT_SANDBOX_ONBOARDING's model, held while the host serves.
+    static var onboarding: OnboardingModel?
     nonisolated static let socket = ProcessInfo.processInfo.environment["PILOT_SANDBOX"] ?? ProcessInfo.processInfo.environment["PILOT_THEME_FIXTURE"] ?? ProcessInfo.processInfo.environment["PILOT_BAR_FIXTURE"]
 
     @Test("Serves the app's verbs on PILOT_SANDBOX until its hold file goes", .enabled(if: socket != nil))
@@ -60,6 +62,25 @@ struct SandboxHost {
         if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_BINDS"] {
             try Data(contentsOf: URL(filePath: file)).write(to: engine.binds.fileURL)
             engine.binds.load()
+        }
+        // PILOT_SANDBOX_ONBOARDING=<step>[:<pick>] (pilot-ui-redesign T12): onboarding as a run cut off at <step> left it,
+        // its saved resume point taken through the launch's own path and its model started, with no window; a pick (easy,
+        // complex, scratch) is Keys' pick and its Continue, as a press makes them. `status --part onboarding` then reads it.
+        if let seed = ProcessInfo.processInfo.environment["PILOT_SANDBOX_ONBOARDING"] {
+            let words = seed.split(separator: ":").map(String.init), defaults = UserDefaults.pilot()
+            defaults.set(true, forKey: OnboardingWindow.unfinishedKey)
+            defaults.set(words[0], forKey: OnboardingWindow.stepKey)
+            _ = OnboardingWindow.opensAtLaunch(defaults)
+            let model = OnboardingModel()
+            model.start(engine)
+            print("ONBOARDING resumed at \(model.step.rawValue), keys \(model.setup.keys?.rawValue ?? "none")")
+            if words.count > 1 {
+                model.setup.keys = try #require(Onboarding.Keys(rawValue: words[1]), "no preset \(words[1])")
+                model.useKeys()
+                print("ONBOARDING picked \(words[1]), now at \(model.step.rawValue)")
+            }
+            fflush(stdout)
+            Self.onboarding = model
         }
         // PILOT_SANDBOX_ALLOW=1 answers every Allow yes and prints its question, so a gated verb runs on the throwaway stores
         // without a prompt on Sven's screen (P49's publish, against a local bare remote).

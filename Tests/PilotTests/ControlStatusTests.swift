@@ -35,6 +35,7 @@ struct ControlStatusTests {
             app.systemEvents = { 0 }
             app.clashes = { _ in 2 }
             app.grants = { nil }
+            app.onboardingState = { (nil, nil) }
             app.sample = { nil }
             app.refreshOccupied = { _ in }
             verbs.registerCore()
@@ -105,7 +106,7 @@ struct ControlStatusTests {
         #expect(Self.fields(status["mac"]) == ["chip": .string("Apple M4"), "cpuPercent": .number(12), "memoryUsed": .number(Double(6 * gib)),
                                                "memoryTotal": .number(Double(16 * gib)), "diskAvailable": .number(400), "diskTotal": .number(1000),
                                                "temperature": .number(41.3)])
-        guard case .array(let rows)? = status["onboarding"] else { Issue.record("no checklist"); return }
+        guard case .array(let rows)? = Self.fields(status["onboarding"])["rows"] else { Issue.record("no checklist"); return }
         let done = Dictionary(uniqueKeysWithValues: rows.map { row in
             let f = Self.fields(row)
             return (f["row"].flatMap { if case .string(let s) = $0 { s } else { nil } } ?? "?", f["done"])

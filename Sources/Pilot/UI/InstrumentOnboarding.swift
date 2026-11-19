@@ -99,7 +99,7 @@ struct InstrumentOnboarding: View {
             }
             .padding(.bottom, -14)
             AccessPanel(model: model)
-            foot(OnboardingModel.ticksItself, "Continue", enabled: Onboarding.canContinue(model.status)) { model.go(.extras) }
+            foot(OnboardingModel.ticksItself, "Continue", enabled: Onboarding.canContinue(model.status)) { model.go(.keys) }
         }
     }
 

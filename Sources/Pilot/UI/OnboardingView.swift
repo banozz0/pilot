@@ -125,7 +125,7 @@ private struct OnboardingSteps: View {
             HStack {
                 FinePrint(text: OnboardingModel.ticksItself)
                 Spacer()
-                Button("Continue") { model.go(.extras) }.keyboardShortcut(.defaultAction).disabled(!Onboarding.canContinue(model.status))
+                Button("Continue") { model.go(.keys) }.keyboardShortcut(.defaultAction).disabled(!Onboarding.canContinue(model.status))
                     .buttonStyle(.pilotPrimary)
             }
         }
@@ -226,6 +226,8 @@ enum OnboardingWindow {
     /// The step an unfinished run reached, taken once by the model that opens at launch.
     private static var resume: OnboardingModel.Step?
     static let unfinishedKey = "onboarding.unfinished", stepKey = "onboarding.step"
+    /// The model on screen, for `pilot status --part onboarding` (T12): its step, else the saved resume point.
+    static weak var shown: OnboardingModel?
 
     /// Whether Welcome opens by itself at this launch: Accessibility is missing, or a run is unfinished. A Mac set up
     /// before the key existed never wrote it, so it stays quiet.
@@ -427,6 +429,7 @@ final class OnboardingModel {
         opened = Date()
         if let resume = OnboardingWindow.takeResume() { step = resume }
         setup.loadKeys(engine.binds.store)
+        OnboardingWindow.shown = self
         if step == .tryIt { resetTryIt() }
         log.notice("onboarding: shown at \(self.step.rawValue, privacy: .public)")
         refresh()
@@ -508,6 +511,7 @@ final class OnboardingModel {
     func stop() {
         timer?.invalidate()
         timer = nil
+        if OnboardingWindow.shown === self { OnboardingWindow.shown = nil }
         // Welcome closing ends Allow the rest and takes the helper beside Settings with it.
         walk.stop()
         PermissionDragPanel.close(reason: "Welcome closed")
