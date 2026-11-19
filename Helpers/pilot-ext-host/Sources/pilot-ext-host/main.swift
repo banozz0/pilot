@@ -154,6 +154,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 struct HostError: Error { let text: String; init(_ text: String) { self.text = text } }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
+// The GitHub install route's two steps (Install.swift) run no JSContext and keep none of a run's deadlines.
+if let mode = arguments.first, Installer.modes.contains(mode) { Installer.run(arguments) }
 guard arguments.count == 3, arguments[0] == "--prelude" else {
     put("usage: pilot-ext-host --prelude <pilot-ext-prelude.js> <command.js>", to: .standardError)
     exit(64)
