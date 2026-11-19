@@ -234,7 +234,6 @@ final class Engine {
     let workspaceMonitors: WorkspaceMonitorStore
     let workspaceList: WorkspaceList
     let rescue: WindowRescue
-    let snapshots: WorkspaceSnapshots
     let layouts: WorkspaceLayouts
     let presets: WorkspacePresets
     let topBar: TopBarController
@@ -315,12 +314,11 @@ final class Engine {
         workspaceMonitors = WorkspaceMonitorStore(tiler: observers.tiler, block: pilotBlock)
         workspaceList = WorkspaceList(tiler: observers.tiler, block: pilotBlock, monitors: workspaceMonitors)
         rescue = WindowRescue(tiler: observers.tiler)
-        snapshots = WorkspaceSnapshots(observers: observers)
         layouts = WorkspaceLayouts(observers: observers)
         presets = WorkspacePresets(observers: observers)
         presets.onSave = { [layouts] workspace, preset, auto in layouts.set(workspace, layouts.layout(workspace).saving(preset, auto: auto)) }
         // Deleting a workspace closes its number (Sven's Q233): what is tied to a number follows it.
-        workspaceList.follow(presets: presets, layouts: layouts, snapshots: snapshots, wallpaper: .shared)
+        workspaceList.follow(presets: presets, layouts: layouts, wallpaper: .shared)
         workspaceList.closeGaps()
         tilingSwitch = TilingSwitch(observers.tiler)
         hyperSwitch = SessionSwitch { [tap] on in tap.setHyper(on); log.notice("Hyper key \(on ? "on" : "off", privacy: .public)") }
@@ -733,7 +731,6 @@ final class Engine {
         WindowsModule.register(into: &registry, observers: observers)
         WorkspacesModule.register(into: &registry, tiler: observers.tiler, block: pilotBlock, layouts: layouts)
         WindowRescue.register(into: &registry, rescue: rescue)
-        WorkspaceSnapshots.register(into: &registry, snapshots: snapshots)
         WorkspacePresets.register(into: &registry, presets: presets)
         AppsModule.register(into: &registry)
         CapturesModule.register(into: &registry)

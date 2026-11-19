@@ -105,7 +105,7 @@ struct WorkspaceListTests {
         defer { try? FileManager.default.removeItem(at: file) }
         let presets = WorkspacePresets(observers: observers, store: WorkspacePresetStore(url: file), defaults: s.defaults)
         let layouts = WorkspaceLayouts(observers: observers, defaults: s.defaults)
-        s.list.follow(presets: presets, layouts: layouts, snapshots: nil)
+        s.list.follow(presets: presets, layouts: layouts)
         let read = WorkspacePreset(name: "Read", apps: [.init(bundleId: "a", name: "A", percent: 100)], layout: .rows)
         presets.save(read, to: "4")
         layouts.set("4", WorkspaceLayout(preset: .rows, auto: false))

@@ -28,5 +28,3 @@ To make them (at once, or on the user's yes), plan each change, then apply once:
 - `pilot plan apply` asks once and applies them all; report each row from its answer.
 - `pilot undo` puts the last applied plan back after one Allow. It cannot restore a row the add changed in place
   (a workspace's preset): it names those instead, so say so before the change.
-
-`pilot snapshot save` keeps the focused workspace's windows first, so `pilot snapshot restore` can put them back.

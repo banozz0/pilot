@@ -1,7 +1,7 @@
 import CoreGraphics
 
 /// Tiles along one axis as the tiler sizes them: the slots frames fill, and the resizes that move every slot to a
-/// target. Snapshot restore and workspace presets share it.
+/// target. Workspace presets use it.
 public enum TileResize {
     /// Layout order: left to right, or top to bottom along a vertical axis.
     public static func before(_ a: CGRect, _ b: CGRect, vertical: Bool) -> Bool {

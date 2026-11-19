@@ -151,7 +151,6 @@ struct AppWindowTests {
         "plainCombos": ["plain combo", "left option", "alt", "vim"],
         "conflicts": ["clash", "macos shortcut", "mission control"],
         "workspaces": ["app rule", "always opens on", "layout", "float"],
-        "snapshots": ["snapshot", "save", "restore", "reopen"],
         "tiling": ["gaps", "inner", "outer", "rescue"],
         "topBar": ["menu bar", "status bar", "waybar", "hide", "autohide", "clock", "workspaces"],
         "webApps": ["web app", "url", "site", "sign out"],
@@ -196,7 +195,7 @@ struct AppWindowTests {
 
     @Test("Every word that found a page before the cut finds where that page went, and its old title does too")
     func oldKeywordsFindTheirPlace() {
-        #expect(Self.oldKeywords.count == 21 && Set(Self.oldKeywords.keys).isSubset(of: Set(Self.moved.map(\.0))))
+        #expect(Self.oldKeywords.count == 20 && Set(Self.oldKeywords.keys).isSubset(of: Set(Self.moved.map(\.0))))
         for (name, place) in Self.moved where Self.oldKeywords[name] != nil {
             for word in Self.oldKeywords[name] ?? [] {
                 // A word whose control moved to a More tab finds its block there (simplify-pages T8).

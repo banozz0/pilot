@@ -14,7 +14,7 @@ private let flog = Logger(subsystem: "dev.banozz.pilot", category: "files")
 /// found. It skips the never-index list (FileExclusions, Defaults › File search), passed as `--ignore` at each start;
 /// a changed list stops it, and the next start walks again (N5). A child runs under Pilot's own privacy grants, so it waits for Full Disk Access (onboarding asks, card
 /// agent-bo-95422768): without it the first walk would raise macOS's Desktop, Documents and Downloads prompts in
-/// Pilot's name. Files › Duplicates asks it for identical files (`scanDuplicates`), on demand only.
+/// Pilot's name.
 @MainActor
 final class FileIndex {
     static let shared = FileIndex()
@@ -55,9 +55,6 @@ final class FileIndex {
     private var input: FileHandle?
     /// The request the menu waits on, by id; an answer to any other is dropped, since the menu has moved on.
     private var waiting: (id: Int, reply: ([FileSearch.Hit]?) -> Void)?
-    /// The duplicates scan Files › Duplicates waits on, by id: the menu closing leaves it running, and the idle stop
-    /// waits for it.
-    private var scanning: (id: Int, reply: (DuplicateScan.Result) -> Void)?
     /// The last request's id.
     private var asked = 0
     /// Counts `idleStop` from the helper's start or its last search.
@@ -124,18 +121,6 @@ final class FileIndex {
         send(ask.request(id: asked, home: NSHomeDirectory()), "search")
     }
 
-    /// Asks for identical files (Homy-style Files, T5): `reply` gets them once the helper has read the files that share
-    /// a size, `.noAccess` at once without Full Disk Access, `.stopped` when the helper stops first. A newer scan
-    /// replaces this one.
-    func scanDuplicates(reply: @escaping (DuplicateScan.Result) -> Void) {
-        start()
-        guard isRunning else { return reply(lacksAccess ? .noAccess : .stopped) }
-        asked += 1
-        scanning = (asked, reply)
-        used()
-        send(#"{"dupes":true,"id":\#(asked)}"#, "duplicates scan")
-    }
-
     private func send(_ line: String, _ what: String) {
         do { try input?.write(contentsOf: Data((line + "\n").utf8)) } catch {
             flog.error("files: \(what, privacy: .public) not sent, \(error.localizedDescription, privacy: .public)")
@@ -168,10 +153,9 @@ final class FileIndex {
         clear()
     }
 
-    /// `idleStop` passed without a file search; a duplicates scan still reading counts as one.
+    /// `idleStop` passed without a file search.
     private func stop() {
         guard let process else { return }
-        guard scanning == nil else { return used() }
         flog.notice("files: no file search for \(Int(Self.idleStop)) s, helper \(process.processIdentifier) stops")
         // Its stdin closing is Pilot quitting to the helper: it saves its index and exits on its own.
         try? input?.close()
@@ -179,12 +163,6 @@ final class FileIndex {
     }
 
     private func received(_ line: String) {
-        if let (id, scan) = DuplicateScan.answer(line) {
-            guard let scanning, scanning.id == id else { return }
-            self.scanning = nil
-            used()
-            return scanning.reply(.found(scan))
-        }
         guard let answer = FileSearch.answer(line) else {
             return flog.notice("files: \(line, privacy: .public)")  // the ready line: files indexed, walked or read
         }
@@ -206,44 +184,5 @@ final class FileIndex {
         waiting = nil
         idleTimer?.cancel()
         idleTimer = nil
-        let scan = scanning
-        scanning = nil
-        scan?.reply(.stopped)
-    }
-}
-
-/// Identical files the index found (pilot-files, dupes.rs): groups of files with the same contents, the ones that free
-/// the most first, at most 200; `more` counts the groups left out.
-struct DuplicateScan: Equatable, Sendable {
-    struct Group: Equatable, Sendable, Decodable {
-        /// Each copy's size in bytes.
-        var size: Int64
-        var files: [FileSearch.Hit]
-    }
-
-    enum Result: Equatable, Sendable {
-        case found(DuplicateScan)
-        /// Pilot lacks Full Disk Access, so no helper runs.
-        case noAccess
-        /// The helper stopped (or never started) before it answered.
-        case stopped
-    }
-
-    var groups: [Group]
-    var more = 0
-
-    /// A scan's answer line, with its request id; nil for any other line.
-    static func answer(_ line: String) -> (id: Int, scan: DuplicateScan)? {
-        struct Answer: Decodable {
-            var id: Int
-            var dupes: [Group]
-            var more: Int
-        }
-        // Every search answer passes here: only a line naming dupes is decoded.
-        guard line.contains(#""dupes""#) else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-        guard let answer = try? decoder.decode(Answer.self, from: Data(line.utf8)) else { return nil }
-        return (answer.id, DuplicateScan(groups: answer.dupes, more: answer.more))
     }
 }

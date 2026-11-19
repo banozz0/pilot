@@ -9,7 +9,48 @@ import Testing
 @MainActor
 struct WorkspacePresetTests {
     static func window(_ id: Int, _ app: String, workspace: String, layout: String = "h_tiles") -> AeroWindow {
-        SnapshotTests.window(id, app, "\(app) \(id)", layout: layout, workspace: workspace)
+        AeroWindow(id: id, appName: app, bundleId: "com.apple.\(app.lowercased())", pid: Int32(id), workspace: workspace,
+                   monitorId: 1, layout: layout, title: "\(app) \(id)")
+    }
+
+    /// The tiler's sizes for a row of tiles, as resizes and moves change them (from the snapshot tests, 2026-11-19).
+    struct AeroModel {
+        var order: [Int]
+        var weights: [Int: CGFloat]
+        var gap: CGFloat = 10
+        var vertical = false
+        let origin: CGFloat = 8, across = CGRect(x: 8, y: 33, width: 1904, height: 1039)
+
+        func frames() -> [Int: CGRect] {
+            var point = origin, out: [Int: CGRect] = [:]
+            for (i, id) in order.enumerated() {
+                let w = weights[id]!
+                let share = gap - (i == 0 ? gap / 2 : 0) - (i == order.count - 1 ? gap / 2 : 0)
+                let start = i == 0 ? point : point + gap / 2
+                out[id] = vertical ? CGRect(x: across.minX, y: start, width: across.width, height: w - share)
+                                   : CGRect(x: start, y: across.minY, width: w - share, height: across.height)
+                point += w
+            }
+            return out
+        }
+
+        mutating func apply(_ commands: [AeroCommand]) {
+            for command in commands {
+                let args = command.arguments
+                let id = Int(args[args.firstIndex(of: "--window-id")! + 1])!
+                switch args[0] {
+                case "resize":
+                    let unit = args.last!, number = CGFloat(Int(unit.trimmingCharacters(in: ["+", "-"]))!)
+                    let diff = unit.hasPrefix("+") ? number : unit.hasPrefix("-") ? -number : number - weights[id]!
+                    for other in order where other != id { weights[other]! -= diff / CGFloat(order.count - 1) }
+                    weights[id]! += diff
+                case "move":
+                    let at = order.firstIndex(of: id)!
+                    if at > 0 { order.swapAt(at, at - 1) }
+                default: Issue.record("unexpected \(args)")
+                }
+            }
+        }
     }
 
     static func app(_ name: String, _ percent: Int = 50) -> WorkspacePreset.App {
@@ -184,7 +225,7 @@ struct WorkspacePresetTests {
         let opener = FakeOpener(tiler, lands: "2")
         let preset = WorkspacePreset(name: "Work", apps: [Self.app("Finder", 70), Self.app("TextEdit", 30)], layout: nil)
         // After the first eval the tiler shows them in order at equal slots, gap 10.
-        var model = SnapshotTests.AeroModel(order: [10, 11], weights: [10: 1000, 11: 1000])
+        var model = Self.AeroModel(order: [10, 11], weights: [10: 1000, 11: 1000])
         _ = try await Self.apply(preset, tiler, opener, frames: { model.frames() })
         try #require(tiler.evals.count == 2)
         #expect(tiler.evals[0] == LayoutPreset.sideBySide(workspace: "2", windows: [10, 11]))
@@ -197,7 +238,7 @@ struct WorkspacePresetTests {
         let tiler = FakeTiler(windows: [Self.window(10, "Finder", workspace: "2"), Self.window(11, "TextEdit", workspace: "2"),
                                                 Self.window(20, "Ghostty", workspace: "2")], focused: "2")
         let preset = WorkspacePreset(name: "Work", apps: [Self.app("Finder", 70), Self.app("TextEdit", 30)], layout: nil)
-        var model = SnapshotTests.AeroModel(order: [10, 11, 20], weights: [10: 600, 11: 600, 20: 600])
+        var model = Self.AeroModel(order: [10, 11, 20], weights: [10: 600, 11: 600, 20: 600])
         _ = try await Self.apply(preset, tiler, FakeOpener(tiler, lands: "2"), frames: { model.frames() })
         try #require(tiler.evals.count == 2)
         model.apply(tiler.evals[1])

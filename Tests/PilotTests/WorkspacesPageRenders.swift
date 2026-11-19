@@ -43,7 +43,7 @@ struct WorkspacesPageRenders {
         let settings = PilotSettings(defaults: defaults, loginItem: SwipeWorkspacesTests.item)
         let page = { (more: Bool, focused: String, picked: String?) in
             WorkspacesBody(block: block, layouts: WorkspaceLayouts(observers: observers, defaults: defaults), presets: presets,
-                           snapshots: WorkspaceSnapshots(observers: observers, defaults: defaults), list: list, focused: focused,
+                           list: list, focused: focused,
                            start: .init(apps: []), settings: settings, monitors: monitors,
                            displays: [ConnectedDisplay(name: "LG ULTRAFINE", id: "B")], more: more, picked: picked)
         }
@@ -96,9 +96,9 @@ struct WorkspacesPageRenders {
         presets.save(WorkspacePreset(name: "Chat", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 60),
                                                          .init(bundleId: "com.apple.Notes", name: "Notes", percent: 40)], layout: nil), to: "2")
         let drag = WorkspaceDrag()
-        let layouts = WorkspaceLayouts(observers: observers, defaults: defaults), snapshots = WorkspaceSnapshots(observers: observers, defaults: defaults)
+        let layouts = WorkspaceLayouts(observers: observers, defaults: defaults)
         let page = {
-            WorkspacesBody(block: block, layouts: layouts, presets: presets, snapshots: snapshots, list: list, focused: "2",
+            WorkspacesBody(block: block, layouts: layouts, presets: presets, list: list, focused: "2",
                            start: .init(apps: []), monitors: monitors, displays: [], tiler: tiler, drag: drag)
         }
         let look = Look.shared

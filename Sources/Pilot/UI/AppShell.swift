@@ -142,7 +142,7 @@ struct PageView: View {
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
-            // File search and Duplicates are places on the front (settings tidy), which the window scrolls to.
+            // File search is a place on the front (settings tidy), which the window scrolls to.
             if section == .folders { FolderDesignsView() } else { ConvertPage() }
         case .install:
             switch section {

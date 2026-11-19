@@ -70,7 +70,7 @@ struct RestyledPagesTests {
     static func workspacesBody() -> WorkspacesBody {
         let observers = EngineObservers()
         return WorkspacesBody(block: PilotBlockStore(tiler: observers.tiler), layouts: WorkspaceLayouts(observers: observers, defaults: LookTests.defaults()),
-                              presets: WorkspacePresets(observers: observers), snapshots: WorkspaceSnapshots(observers: observers))
+                              presets: WorkspacePresets(observers: observers))
     }
 
     /// The page shows `block` and its `intro`.

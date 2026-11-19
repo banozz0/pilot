@@ -3,9 +3,8 @@ import PilotCore
 import Testing
 @testable import Pilot
 
-/// `pilot list|add|remove` on the desktop's and the bar's lists, plus `snapshot` and `bar` (AI helper T8): every change
-/// read back from the store object its page binds to, on throwaway defaults, a temporary presets file, the test run's
-/// own Pilot folder for snapshots, a fake tiler, fake screens and a throwaway wallpaper folder. Nothing of Sven's is written
+/// `pilot list|add|remove` on the desktop's and the bar's lists, plus `bar` (AI helper T8): every change read back from
+/// the store object its page binds to, on throwaway defaults, a temporary presets file, a fake tiler, fake screens and a throwaway wallpaper folder. Nothing of Sven's is written
 /// (wallpaper reset counts ~/Pictures/Wallpapers, read only), the running Pilot is never touched, no restore runs and no
 /// wallpaper is set: the verbs are asked through the registry the socket answers from.
 @MainActor
@@ -20,15 +19,12 @@ struct CollectionsDesktopTests {
         let layouts: WorkspaceLayouts
         let block: PilotBlockStore
         let monitors: WorkspaceMonitorStore
-        let snapshots: WorkspaceSnapshots
         let list: WorkspaceList
         let bar: BarItemsStore
         let wallpaper: WallpaperSettings
         /// Two images in a throwaway folder, the wallpaper cycle's only source.
         let pictures = FileManager.default.temporaryDirectory.appending(path: "pilot-w19-\(UUID().uuidString)")
         let verbs = ControlVerbs()
-        /// Every workspace a restore was asked for, "" for the focused one.
-        var restored: [String] = []
         /// The HUD's tip as the readbacks see it: a fake, so no tip is ever shown.
         var tip: (id: ObjectIdentifier, text: String)?
         /// Two screens; a step records what it was asked and moves the screen's wallpaper on, as WallpaperSwitch would.
@@ -38,43 +34,29 @@ struct CollectionsDesktopTests {
         var asked: [ControlGate.Ask] = []
         var allow = true
 
-        /// `snapshot` is saved in the run's Pilot folder before the stores read it.
-        init(snapshot: Snapshot? = nil) throws {
+        init() throws {
             defaults = try #require(UserDefaults(suiteName: testSuite()))
             // Saved first, so no store carries anything over from an AeroSpace config.
             defaults.set(try JSONEncoder().encode(PilotBlock()), forKey: "pilotBlock")
             WorkspaceMonitors.save([:], in: defaults)
             // All nine kept already, so the list pins none of them on Main as a first launch would.
             Workspaces.save(kept: Workspaces.all, in: defaults)
-            if let snapshot { try SnapshotStore.standard.save(snapshot) }
             tiler = TilerService(engine: engine, tip: { _ in })
             let observers = EngineObservers(tiler: tiler)
             presets = WorkspacePresets(observers: observers, store: WorkspacePresetStore(url: presetsFile), defaults: defaults)
             layouts = WorkspaceLayouts(observers: observers, defaults: defaults)
             block = PilotBlockStore(tiler: tiler, defaults: defaults) { _ in [:] }
             monitors = WorkspaceMonitorStore(tiler: tiler, block: block, defaults: defaults)
-            snapshots = WorkspaceSnapshots(observers: observers, defaults: defaults)
-            snapshots.reopenApps = false
             list = WorkspaceList(tiler: tiler, block: block, monitors: monitors, defaults: defaults)
-            // As the engine wires it, but the snapshots file every test shares is left alone.
-            list.follow(presets: presets, layouts: layouts, snapshots: nil)
+            // As the engine wires it.
+            list.follow(presets: presets, layouts: layouts)
             bar = BarItemsStore(defaults: defaults) { [:] }
             wallpaper = WallpaperSettings(defaults: defaults)
             // As the engine wires it: a save sets the workspace's layout row, with Keep this layout.
             presets.onSave = { [layouts] workspace, preset, auto in layouts.set(workspace, layouts.layout(workspace).saving(preset, auto: auto)) }
-            var lists = DesktopLists(presets: presets, layouts: layouts, block: block, monitors: monitors, snapshots: snapshots, tiler: tiler, list: list)
+            var lists = DesktopLists(presets: presets, layouts: layouts, block: block, monitors: monitors, tiler: tiler, list: list)
             lists.displays = { [ConnectedDisplay(name: "LG ULTRAFINE", id: "B")] }
-            lists.save = { [unowned self, snapshots] in
-                snapshots.save()
-                say("Workspace 3 saved: 2 windows")
-            }
-            lists.restore = { [unowned self] in
-                restored.append($0 ?? "")
-                say("Workspace \($0 ?? "1") restored")
-            }
             let readback = RunReadback(wait: .milliseconds(200), every: .milliseconds(10), tip: { [unowned self] in tip })
-            lists.readback = readback
-            lists.restoreReadback = readback
             verbs.registerDesktop({ lists }, bar: { [bar] in bar })
 
             try FileManager.default.createDirectory(at: pictures, withIntermediateDirectories: true)
@@ -139,13 +121,12 @@ struct CollectionsDesktopTests {
         let names = all.compactMap { Self.field($0, "name") }
         // Each row says which field remove names (W1).
         let keys = ["workspace-presets": "workspace", "app-rules": "app", "column-rules": "app", "float-apps": "app", "float-titles": "title", "monitor-pins": "workspace",
-                    "layouts": "workspace", "snapshots": "workspace", "workspaces": "workspace", "saved-presets": "name",
+                    "layouts": "workspace", "workspaces": "workspace", "saved-presets": "name",
                     "wallpaper-sources": "path", "wallpaper-screens": "screen"]
         for name in keys.keys.sorted() + ["bar-items"] { #expect(names.contains(.string(name)), "\(name) not listed") }
         for (name, key) in keys { #expect(try Self.field(rig.verbs.schema(collection: name), "rowKey") == .string(key), "\(name)") }
-        #expect(rig.verbs.verbs["snapshot"] != nil && rig.verbs.verbs["bar"] != nil && rig.verbs.verbs["wallpaper"] != nil)
+        #expect(rig.verbs.verbs["bar"] != nil && rig.verbs.verbs["wallpaper"] != nil)
         // The verbs declare their flags, so a typo is refused rather than dropped.
-        #expect(await rig.ask("snapshot", "save", "--all").error?.code == .unknownFlag)
         #expect(await rig.ask("wallpaper", "next", "--screens", "LG").error?.code == .unknownFlag)
     }
 
@@ -244,40 +225,6 @@ struct CollectionsDesktopTests {
         #expect(await rig.ask("add", "layouts", "--workspace", "6", "--layout", "rows").error?.message.contains("preset") == true)
     }
 
-    @Test("Snapshots: list reads the saved ones, save runs the Save snapshot action on the tiler, restore hands the workspace to Restore, remove deletes")
-    func snapshots() async throws {
-        let workspace = "t8-\(UUID().uuidString.prefix(8))"
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let saved = try decoder.decode(Snapshot.self, from: Data(#"""
-            {"workspace": "\#(workspace)", "layout": "h_tiles", "savedAt": "2026-10-11T09:00:00Z", "windows": [{"bundleId": "com.apple.finder",
-             "appName": "Finder", "title": "Home", "floating": false, "frame": [[0, 0], [800, 600]]}]}
-            """#.utf8))
-        let rig = try Rig(snapshot: saved)
-        let row = await rig.rows("snapshots").first { Self.field($0, "workspace") == .string(workspace) }
-        #expect(row.flatMap { Self.field($0, "windows") } == .array([.string("Finder 'Home'")]))
-
-        let save = await rig.ok("snapshot", "save")
-        #expect(save.flatMap { Self.field($0, "hud") } == .string("Workspace 3 saved: 2 windows"))
-        // The action's own run asks the tiler for the focused workspace; the fake names none, so nothing is written.
-        let deadline = ContinuousClock.now + .seconds(2)
-        while !rig.engine.commands.contains(.focusedWorkspace), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(rig.engine.commands.contains(.focusedWorkspace))
-
-        let restore = await rig.ok("snapshot", "restore", workspace)
-        #expect(restore.flatMap { Self.field($0, "hud") } == .string("Workspace \(workspace) restored"))
-        _ = await rig.ok("snapshot", "restore")
-        #expect(rig.restored == [workspace, ""])
-        #expect(await rig.ask("snapshot", "restore", "no-such-workspace").error?.code == .badValue)
-        #expect(await rig.ask("snapshot", "take").error?.code == .badRequest)
-        #expect(await rig.ask("add", "snapshots").error?.code == .badValue)
-
-        _ = await rig.ok("remove", "snapshots", workspace)
-        let left = try SnapshotStore.standard.load()
-        #expect(rig.snapshots.saved[workspace] == nil && left[workspace] == nil)
-        #expect(await rig.ask("remove", "snapshots", workspace).error?.code == .badValue)
-    }
-
     @Test("Workspace presets: add changes the saved preset as the editor does, keeping what is left out; From a preset and shared names")
     func workspacePresetEdits() async throws {
         let rig = try Rig()
@@ -322,7 +269,7 @@ struct CollectionsDesktopTests {
         #expect(await rig.ask("remove", "saved-presets", "Write").error?.code == .badValue)
     }
 
-    @Test("Workspaces: each kept workspace with its name, on screen, its apps, preset and snapshot, as the page reads them; add and remove as Add and Delete")
+    @Test("Workspaces: each kept workspace with its name, on screen, its apps and preset, as the page reads them; add and remove as Add and Delete")
     func workspaces() async throws {
         let rig = try Rig()
         func row(_ name: String) async -> JSONValue? { await rig.rows("workspaces").first { Self.field($0, "workspace") == .string(name) } }
@@ -332,7 +279,7 @@ struct CollectionsDesktopTests {
         _ = await rig.ok("add", "workspace-presets", "--workspace", "2", "--apps", "com.apple.finder", "--name", "Files")
         let two = try #require(await row("2"))
         #expect(Self.field(two, "focused") == .bool(true) && Self.field(two, "preset") == .string("Files") && Self.field(two, "name") == .string("Files"))
-        #expect(Self.field(two, "apps") == .array([.string("Finder"), .string("Ghostty")]) && Self.field(two, "snapshot") == .null)
+        #expect(Self.field(two, "apps") == .array([.string("Finder"), .string("Ghostty")]))
         #expect(await row("3").flatMap { Self.field($0, "focused") } == .bool(false))
         #expect(await row("3").flatMap { Self.field($0, "name") } == .null, "no name of its own")
         // Delete takes the one named and closes its number (Q233): Files, on 2, is 1 now; Add appends; nine is the most.

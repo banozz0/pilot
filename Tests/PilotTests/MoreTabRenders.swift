@@ -149,7 +149,7 @@ private struct MorePage {
             .chip("Tiler", info: "The tiler that places your windows and runs the workspaces.", chip: "running", live: true),
         ]),
         MoreSection(id: "Data", symbol: "folder", rows: [
-            .titled("Pilot's folder", detail: "Binds, settings, history and snapshots", info: "Opens the folder in Finder.", buttons: ["Show in Finder"]),
+            .titled("Pilot's folder", detail: "Binds, settings and history", info: "Opens the folder in Finder.", buttons: ["Show in Finder"]),
             .chip("pilot command", info: "Links the pilot command into ~/.local/bin.", chip: "in ~/.local/bin", live: true),
             .toggle("Developer pages", on: false, info: DeveloperPages.help),
             .titled("Uninstall", detail: "Speech models, caches, your data or Pilot itself", info: "Ticked items go to the Trash.", buttons: ["Uninstall…"]),

@@ -40,7 +40,6 @@ struct SettingsSchemaPart2Tests {
         let engine = WorkspaceListTests.FakeTiler()
         let block: PilotBlockStore
         let list: WorkspaceList
-        let snapshots: WorkspaceSnapshots
         let bar: BarItemsStore
         let topBar: TopBarController
         let wallpaper: WallpaperSettings
@@ -61,7 +60,6 @@ struct SettingsSchemaPart2Tests {
             block = PilotBlockStore(tiler: tiler, defaults: defaults, bundles: { _ in [:] })
             let monitors = WorkspaceMonitorStore(tiler: tiler, block: block, defaults: defaults)
             list = WorkspaceList(tiler: tiler, block: block, monitors: monitors, defaults: defaults)
-            snapshots = WorkspaceSnapshots(observers: EngineObservers(tiler: tiler), defaults: defaults)
             bar = BarItemsStore(defaults: defaults) { [:] }
             topBar = TopBarController(defaults: defaults, autohide: autohide, writeBars: { _ in },
                                       screens: { TopBarControllerTests.screens }, panels: TopBarControllerTests.FakePanels())
@@ -69,7 +67,7 @@ struct SettingsSchemaPart2Tests {
             wallpaper.tick = {}
             recommendations = Recommendations(defaults: defaults)
             views = StatsViewsStore(defaults: defaults)
-            schema.registerPart2(settings: settings, list: list, snapshots: snapshots, block: block, bar: bar, topBar: topBar,
+            schema.registerPart2(settings: settings, list: list, block: block, bar: bar, topBar: topBar,
                                  wallpaper: wallpaper, recommendations: recommendations, pilotSwitch: pilotSwitch,
                                  dictation: PilotDictationTests.Rig().pilot,
                                  pictures: ShelfPictures(defaults: defaults, capture: NoCapture()),
@@ -120,7 +118,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 55)
+        #expect(rig.schema.keys.count == 54)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -238,7 +236,7 @@ struct SettingsSchemaPart2Tests {
         "files.showHidden", "files.excluded", "passwords.length", "passwords.symbols", "passwords.clearAfter",
         "folders.repos", "folders.gifs", "giphy.rating", "menu.rootOrder", "menu.rootHidden", "menu.giphyKind", "abilities.added",
         "ai.provider", "ai.fallback", "ai.chatReset", "ai.model.*", "ai.effort.*", "ai.baseURL.*", "ai.models.*",
-        "workspaces.count", "workspaces.monitors", "workspaces.layouts", "workspaces.atLoginSession", "snapshots.reopenApps",
+        "workspaces.count", "workspaces.monitors", "workspaces.layouts", "workspaces.atLoginSession",
         "pilotBlock", "pilotBlock.yabaiFloatsCarried", "pilotBlock.floatNamesMoved",
         "bar.items", "bar.pagePlacement", "bar.background", "bar.colour", "bar.itemColours",
         "topBar.switch", "topBar.leftOut", "topBar.strips", "menuBar.stats", "topBar.settings", "pomodoro.countdown",

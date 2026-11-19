@@ -195,7 +195,6 @@ extension MenuEntry {
         "windows.closeAll": ("xmark.app", .problem), "windows.cycle": ("arrow.2.squarepath", .second),
         // Workspaces'.
         "workspaces.toggleGaps": ("squareshape.split.2x2.dotted", .third), "workspaces.cycleLayout": ("rectangle.3.offgrid", .accent),
-        "workspaces.saveSnapshot": ("camera", .good), "workspaces.restoreSnapshot": ("clock.arrow.circlepath", .amber),
         "workspaces.openLayout": ("square.grid.3x1.below.line.grid.1x2", .good),
         "workspaces.next": ("chevron.right.2", .accent),
         "workspaces.previous": ("chevron.left.2", .accent),

@@ -276,7 +276,7 @@ struct GeneralPage: View {
         @Bindable var settings = engine.settings
         return KitBlock(title: "Data", symbol: "folder") {
             BlockRow(first: true) {
-                TitledText(title: "Pilot's folder", detail: "Binds, settings, history and snapshots, in Application Support").padding(.vertical, 4)
+                TitledText(title: "Pilot's folder", detail: "Binds, settings and history, in Application Support").padding(.vertical, 4)
                 InfoMark(text: "Opens the folder in Finder: what Pilot keeps of yours lives there, binds.json among it.")
                 Spacer()
                 Button("Show in Finder") { NSWorkspace.shared.open(PilotFolder.support) }.buttonStyle(.pilot)

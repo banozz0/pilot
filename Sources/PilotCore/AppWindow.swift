@@ -376,9 +376,6 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Files' place on its front: what the menu's file search leaves out (Menu's until Sven 2026-10-10; a tab until the
     /// settings tidy, Sven 2026-11-14).
     case fileSearch
-    /// Files' place on its front: identical files and the space they take, moved to the Trash on a yes (Homy-style Files,
-    /// T5; a tab until the settings tidy).
-    case duplicates
     /// Files' tab: folders dressed in Pilot's designs or a picture, and Reset (P43).
     case folders
     /// Update & Clean's place on its front: Reports, every Update and Clean run, under the Update and Clean block (story 153;
@@ -479,7 +476,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         switch self {
         case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
         case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .menuLayout, .appsShowAs: .menu
-        case .fileSearch, .duplicates, .folders: .files
+        case .fileSearch, .folders: .files
         case .reports: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
@@ -539,7 +536,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
-                                                     .voiceWords, .installLists, .fileSearch, .duplicates, .reports]
+                                                     .voiceWords, .installLists, .fileSearch, .reports]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
@@ -583,7 +580,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .aliases: "Aliases"
         case .quicklinks: "Quicklinks"
         case .fileSearch: "File search"
-        case .duplicates: "Duplicates"
         case .folders: "Folders"
         case .reports: "Reports"
         case .catalogue: "Catalogue"
@@ -660,7 +656,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .aliases: ["alias", "aliases", "short name"]
         case .quicklinks: ["quicklink", "keyword", "search link", "bookmark"]
         case .fileSearch: ["file search", "hidden files", "never index", "index", "find files"]
-        case .duplicates: ["duplicate", "identical", "same file", "copies", "free space", "wasted space"]
         case .folders: ["folder", "folder icon", "folder design", "folder colour", "custom icon", "dress folders", "reset folder icon"]
         case .reports: ["report", "run", "output", "exit code"]
         case .catalogue: ["install catalogue", "catalogue", "homebrew", "cask", "formula"]
@@ -679,8 +674,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
-        case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset", "snapshot", "save", "restore",
-                               "reopen"]
+        case .workspaceRules: ["app rule", "always opens on", "always lands here", "from a preset", "preset"]
         case .workspaceScrolling: ["scrolling", "centre column", "center column", "column width", "focus stays"]
         case .workspaceMonitors: ["monitor", "display", "which screen"]
         case .workspaceSwipe: ["swipe", "trackpad", "three fingers"]

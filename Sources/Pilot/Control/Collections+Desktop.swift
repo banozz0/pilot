@@ -1,7 +1,7 @@
 import Foundation
 import PilotCore
 
-/// The desktop's lists (AI helper T8): workspace presets, app rules, floats, monitor pins, layouts and snapshots, each
+/// The desktop's lists (AI helper T8): workspace presets, app rules, floats, monitor pins and layouts, each
 /// read and changed through the store its Settings page binds to, so the page shows a change at once and the tiler gets
 /// it as a page edit gives it. ~/.aerospace.toml stays an import and is never written.
 @MainActor
@@ -10,27 +10,17 @@ struct DesktopLists {
     let layouts: WorkspaceLayouts
     let block: PilotBlockStore
     let monitors: WorkspaceMonitorStore
-    let snapshots: WorkspaceSnapshots
     /// Which workspaces are kept, for `pilot add workspaces` and `pilot remove workspaces <n>`; nil where a test leaves it out.
     var list: WorkspaceList?
     /// The focused workspace and the ones with windows, as the Workspaces page state reads them.
     let tiler: TilerService
     /// The displays a pin may name.
     var displays: @MainActor () -> [ConnectedDisplay] = { ConnectedDisplay.current }
-    /// The Save snapshot action's run.
-    var save: @MainActor () -> Void
-    /// The workspace a restore puts back, the focused one for nil: the Restore snapshot action's run.
-    var restore: @MainActor (String?) -> Void
-    /// The tips a save raises; a restore is watched longer, since it switches, places and settles first.
-    var readback = RunReadback()
-    var restoreReadback = RunReadback(wait: .seconds(3))
 
     init(presets: WorkspacePresets, layouts: WorkspaceLayouts, block: PilotBlockStore, monitors: WorkspaceMonitorStore,
-         snapshots: WorkspaceSnapshots, tiler: TilerService, list: WorkspaceList? = nil) {
-        self.presets = presets; self.layouts = layouts; self.block = block; self.monitors = monitors; self.snapshots = snapshots
+         tiler: TilerService, list: WorkspaceList? = nil) {
+        self.presets = presets; self.layouts = layouts; self.block = block; self.monitors = monitors
         self.tiler = tiler; self.list = list
-        save = { snapshots.save() }
-        restore = { snapshots.restore($0) }
     }
 
     /// A drag's drop on the Workspaces page, which `pilot workspace move` makes too.
@@ -39,7 +29,7 @@ struct DesktopLists {
     /// The engine's stores; nil until the engine is up.
     static var live: DesktopLists? {
         Engine.shared.map { DesktopLists(presets: $0.presets, layouts: $0.layouts, block: $0.pilotBlock, monitors: $0.workspaceMonitors,
-                                         snapshots: $0.snapshots, tiler: $0.observers.tiler, list: $0.workspaceList) }
+                                         tiler: $0.observers.tiler, list: $0.workspaceList) }
     }
 
     /// One of the workspaces Pilot keeps, the ones the pages list.
@@ -73,8 +63,7 @@ struct DesktopLists {
 }
 
 extension ControlVerbs {
-    /// The desktop's and the bar's lists, plus `snapshot` and `bar`, the two verbs whose changes are not a row added or
-    /// removed. Stores are looked up on each request, so the socket may start before the engine.
+    /// The desktop's and the bar's lists, plus `bar`, the verb whose changes are not a row added or removed. Stores are looked up on each request, so the socket may start before the engine.
     func registerDesktop(_ desktop: @escaping @Sendable @MainActor () -> DesktopLists? = { .live },
                          bar: @escaping @Sendable @MainActor () -> BarItemsStore = { .shared }) {
         let lists: @Sendable @MainActor () throws(ControlError) -> DesktopLists = {
@@ -84,15 +73,14 @@ extension ControlVerbs {
         registerPresets(lists)
         registerBlockLists(lists)
         registerPinsAndLayouts(lists)
-        registerSnapshots(lists)
         registerDrops(lists)
         registerBar(bar)
     }
 
     private func registerPresets(_ lists: @escaping @Sendable @MainActor () throws(ControlError) -> DesktopLists) {
         register(ControlCollection(
-            "workspaces", help: "Each workspace Pilot keeps: its name, whether it is on screen, the apps with windows on it, its preset and snapshot "
-                + "(Workspaces). add makes the next number, as the page's Add does; remove <n> deletes that one as Delete does: its windows move to the one before it, and each one after it moves down a number with its name, preset, layout, snapshot, app rules, monitor and windows.",
+            "workspaces", help: "Each workspace Pilot keeps: its name, whether it is on screen, the apps with windows on it, and its preset "
+                + "(Workspaces). add makes the next number, as the page's Add does; remove <n> deletes that one as Delete does: its windows move to the one before it, and each one after it moves down a number with its name, preset, layout, app rules, monitor and windows.",
             rowKey: "workspace",
             list: { () throws(ControlError) in
                 let lists = try lists()
@@ -421,53 +409,6 @@ extension ControlVerbs {
         })
     }
 
-    private func registerSnapshots(_ lists: @escaping @Sendable @MainActor () throws(ControlError) -> DesktopLists) {
-        register(ControlCollection(
-            "snapshots", help: "Each workspace's saved windows (Workspaces); pilot snapshot save|restore makes and uses them.",
-            rowKey: "workspace",
-            list: { () throws(ControlError) in
-                let saved = try lists().snapshots.saved.sorted { OccupiedWorkspace.ordered($0.key, $1.key) }
-                return .array(saved.map { workspace, snapshot in
-                    .object(["workspace": .string(workspace), "layout": .string(snapshot.layout),
-                                    "saved": .string(snapshot.savedAt.ISO8601Format()),
-                                    "windows": .array(snapshot.windows.map { .string("\($0.appName) '\($0.title)'") })])
-                })
-            },
-            remove: { args throws(ControlError) in
-                let snapshots = try lists().snapshots
-                let workspace = try args.word(0, "workspace")
-                guard snapshots.saved[workspace] != nil else { throw ControlError(.badValue, "workspace \(workspace) has no snapshot") }
-                snapshots.delete(workspace)
-                if let failed = snapshots.lastError { throw ControlError(.badValue, failed) }
-                return .string(workspace)
-            }))
-        let subcommands: @Sendable @MainActor () -> JSONValue = { .object(["subcommands": .array(["save", "restore"].map(JSONValue.string))]) }
-        let detail = [
-            "save": "pilot snapshot save: saves the focused workspace's windows, replacing its snapshot, as Save snapshot does; hud says how many or that nothing was saved.",
-            "restore": "pilot snapshot restore [<workspace>]: puts a workspace's saved windows back, the focused one's when none is named, switching there first and reopening closed apps when snapshots.reopenApps is on; hud says what was not found.",
-        ]
-        register(ControlVerb("snapshot", help: "Saves the focused workspace's windows, or restores a workspace's, as the snapshot actions do, and answers with the tips they raised.",
-                             usage: "pilot snapshot save | pilot snapshot restore [<workspace>]", flags: [],
-                             schema: subcommands, index: subcommands, detail: { detail[$0] }) { call throws(ControlError) in
-            let lists = try lists()
-            let args = call.arguments()
-            switch try args.word(0, "save or restore") {
-            case "save":
-                let tips = await lists.readback.watch { lists.save() }
-                return .object(["dispatched": .string("workspaces.saveSnapshot"), "hud": Self.hud(tips)])
-            case "restore":
-                let workspace = args.positional.dropFirst().first
-                if let workspace, lists.snapshots.saved[workspace] == nil {
-                    throw ControlError(.badValue, "workspace \(workspace) has no snapshot")
-                }
-                let tips = await lists.restoreReadback.watch { lists.restore(workspace) }
-                return .object(["dispatched": .string("workspaces.restoreSnapshot"), "workspace": workspace.map(JSONValue.string) ?? .null,
-                                "hud": Self.hud(tips)])
-            case let other: throw ControlError(.badRequest, "pilot snapshot save or restore, not \(other)")
-            }
-        })
-    }
-
     /// The tips a run raised, one per line, as `pilot run` answers them; null for none.
     static func hud(_ tips: [String]) -> JSONValue { tips.isEmpty ? .null : .string(tips.joined(separator: "\n")) }
 
@@ -490,7 +431,7 @@ extension ControlVerbs {
         return .object(row)
     }
 
-    /// A workspace kept: its name (null while it has none), whether it is focused, its apps, preset and snapshot.
+    /// A workspace kept: its name (null while it has none), whether it is focused, its apps and preset.
     private static func row(workspace: String, lists: DesktopLists) -> JSONValue {
         let tiler = lists.tiler, contents = lists.presets.contents
         let apps = tiler.occupied.first { $0.name == workspace }?.apps ?? []
@@ -498,8 +439,7 @@ extension ControlVerbs {
         return .object(["workspace": .string(workspace), "name": contents.name(for: workspace).map(JSONValue.string) ?? .null,
                         "focused": tiler.isAnswering ? .bool(workspace == tiler.focused) : .null,
                         "apps": .array(apps.map(JSONValue.string)),
-                        "preset": contents.workspaces[workspace].map(JSONValue.string) ?? .null,
-                        "snapshot": lists.snapshots.saved[workspace].map { .string($0.savedAt.ISO8601Format()) } ?? .null])
+                        "preset": contents.workspaces[workspace].map(JSONValue.string) ?? .null])
     }
 
     private static func row(_ rule: PilotBlock.AppRule) -> JSONValue {

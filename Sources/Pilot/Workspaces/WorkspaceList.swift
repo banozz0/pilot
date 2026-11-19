@@ -14,7 +14,7 @@ final class WorkspaceList {
     private let block: PilotBlockStore
     private let monitors: WorkspaceMonitorStore
     @ObservationIgnored private let defaults: UserDefaults
-    /// The stores tied to a workspace's number that are not the list's own (presets, layouts, snapshots), renumbered with
+    /// The stores tied to a workspace's number that are not the list's own (presets, layouts, wallpaper), renumbered with
     /// it; the engine sets them (follow).
     @ObservationIgnored private var renumbered: @MainActor (WorkspaceRenumber) -> Void = { _ in }
     private(set) var names: [String]
@@ -40,13 +40,11 @@ final class WorkspaceList {
         }
     }
 
-    /// The stores renumbered with the list; a test leaves `snapshots` and `wallpaper` out, since every test shares the
-    /// snapshots file and the wallpaper store is Pilot's own.
-    func follow(presets: WorkspacePresets, layouts: WorkspaceLayouts, snapshots: WorkspaceSnapshots?, wallpaper: WallpaperSettings? = nil) {
+    /// The stores renumbered with the list; a test leaves `wallpaper` out, since the wallpaper store is Pilot's own.
+    func follow(presets: WorkspacePresets, layouts: WorkspaceLayouts, wallpaper: WallpaperSettings? = nil) {
         renumbered = { r in
             presets.renumber(r)
             layouts.renumber(r)
-            snapshots?.renumber(r)
             wallpaper?.renumber(r)
         }
     }

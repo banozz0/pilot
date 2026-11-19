@@ -150,7 +150,7 @@ public enum Abilities {
 
     static let noTryPrefixes = ["windows.", "drive.", "workspaces.move:", "workspaces.moveFollow:", "scripts.run:", "ext."]
     static let noTry: Set<String> = [
-        "workspaces.saveSnapshot", "workspaces.restoreSnapshot", "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
+        "workspaces.openLayout", "workspaces.rescue", "workspaces.toggleGaps", "workspaces.cycleLayout",
         "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.bluetooth", "system.ejectAll",
         "system.clearAllNotifications", "system.clearNotification", "system.idleLock",
         "engine.hyper", "engine.tilingOff", "engine.openWindow", "bar.peekMenuBar",
@@ -426,8 +426,6 @@ public enum Abilities {
         "workspaces.openLayout": "Opens the apps the workspace's Opens here lists that are missing and puts each in its spot.",
         "workspaces.previous": "Shows the workspace before.",
         "workspaces.rescue": "Brings back windows stranded off screen or on a lost workspace.",
-        "workspaces.restoreSnapshot": "Reopens and places the workspace's saved windows.",
-        "workspaces.saveSnapshot": "Saves which windows the workspace holds and where.",
         "workspaces.toggleGaps": "Takes the gaps between tiles out, or puts them back.",
     ]
 }
