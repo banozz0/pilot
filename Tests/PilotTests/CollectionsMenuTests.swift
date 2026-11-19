@@ -13,7 +13,7 @@ struct CollectionsMenuTests {
     let verbs = ControlVerbs()
     let menu = PilotMenu()
     /// The optional abilities whose app this test says is on the Mac.
-    final class Installed { var checks: Set<CatalogueEntry.Check> = [] }
+    final class Installed { var checks: Set<InstallCheck> = [] }
     let installed = Installed()
 
     init() throws {

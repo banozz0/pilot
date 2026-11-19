@@ -486,7 +486,7 @@ struct WidgetRenders {
         // A worktree's folder (its .git a file) is not an own repo.
         try run(at("clean"), "worktree", "add", "-q", "--detach", code.appending(path: "clean-wt").path)
 
-        let read = await Repos.statuses(Repos.list(home: home))
+        let read = await Repos.statuses(Repos.list(in: home.appendingPathComponent("code")))
         #expect(read.map(\.name) == ["ahead", "branch", "clean", "dirty"])
         let by = Dictionary(uniqueKeysWithValues: read.map { ($0.name, $0) })
         #expect(by["dirty"]?.changed == 2 && by["dirty"]?.ahead == 0 && by["dirty"]?.problem == nil)

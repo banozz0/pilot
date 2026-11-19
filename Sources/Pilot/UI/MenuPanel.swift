@@ -405,7 +405,7 @@ final class PilotMenu {
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
         // Each app's own commands (P38), from the drive catalogue.
-        return MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle))) + InstallModule.menuEntries()
+        return MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle)))
             + MenuEntries.quicklinks(QuicklinkBook.shared.links)
     }
 
@@ -1015,8 +1015,7 @@ final class PilotMenu {
 
     private func showUpdate() {
         guard let model, let rows = updateRows else { return }
-        model.nav.provide(.package, home: .update, UpdateList.entries(rows, includeSelfUpdating: includeSelfUpdating, masInstalled: masInstalled,
-                                                                       recommend: Recommendations.shared.show, icons: InstallModule.catalogueIcons))
+        model.nav.provide(.package, home: .update, UpdateList.entries(rows, includeSelfUpdating: includeSelfUpdating, masInstalled: masInstalled))
     }
 
     /// Return in Update: a row asks to update it with its exact command (a pinned one asks to unpin instead), Update all
@@ -1088,7 +1087,7 @@ final class PilotMenu {
 
     private func showRemove() {
         guard let model, let rows = removeRows?.rows else { return }
-        model.nav.provide(.package, home: .remove, RemoveList.entries(RemoveList.sorted(rows, model.removeOrder), icons: InstallModule.catalogueIcons))
+        model.nav.provide(.package, home: .remove, RemoveList.entries(RemoveList.sorted(rows, model.removeOrder)))
     }
 
     private func close(restoreFocus: Bool) {

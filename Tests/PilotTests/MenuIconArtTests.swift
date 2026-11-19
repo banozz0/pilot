@@ -30,8 +30,7 @@ struct MenuIconArtTests {
 
     @Test("Every glyph the menu names is an SF Symbol this Mac draws")
     func symbolsExist() throws {
-        let entries = try InstallCatalogue.parse(Data(contentsOf: RestyledPagesTests.shipped))
-        var symbols = InstallCatalogue.categories(entries).map { MenuIcon.category($0).symbol }
+        var symbols = MenuIcon.categories.values.map(\.symbol)
         symbols += [MenuIcon.formula, .font, .cask, .uv, .npm, .bun, .cargo, .appStore, .macOS, .webApp, .app, .download].map(\.symbol)
         symbols += ["Chrome cache", "Xcode", "logs", "Trash", "Downloads", "Slack", "Spotify", "System", "App leftovers", "other"]
             .map { MenuIcon.clean(title: $0, section: "").symbol }

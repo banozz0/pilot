@@ -156,9 +156,8 @@ struct StyleTests {
     @Test("Every page draws, and draws Instrument and Toybox apart")
     func pages() throws {
         let (look, _) = LookPageTests().look()
-        let entries = RestyledPagesTests.inView
         let pages: [(AppPage, AnyView)] = [
-            (.workspaces, AnyView(RestyledPagesTests.workspacesBody())), (.install, AnyView(CataloguePage(entries: entries))),
+            (.workspaces, AnyView(RestyledPagesTests.workspacesBody())), (.install, AnyView(CataloguePage())),
             (.openWith, AnyView(OpenWithPage())), (.configs, AnyView(ConfigsPage(configs: ConfigsListTests.fixture))),
             (.menu, AnyView(RestyledPagesTests.menuPage(.quicklinks))), (.system, AnyView(SettingsPagesTests.setup())),
             (.clipboard, AnyView(SettingsPagesTests.clipboard())),

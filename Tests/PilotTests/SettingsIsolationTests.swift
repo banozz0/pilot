@@ -28,12 +28,10 @@ struct SettingsIsolationTests {
     @Test("Stores built without defaults leave the runner's shared defaults as they were")
     func storesLeaveStandardAlone() {
         let shared = UserDefaults.standard
-        let keys = ["appWindow.page", "recommendations.show", "snapshots.reopenApps"]
+        let keys = ["appWindow.page", "snapshots.reopenApps"]
         let before = keys.map { shared.object(forKey: $0) as? NSObject }
         let model = AppWindowModel()
         model.page = model.page == .binds ? .home : .binds
-        let recommendations = Recommendations()
-        recommendations.show.toggle()
         let snapshots = WorkspaceSnapshots(observers: EngineObservers())
         snapshots.reopenApps.toggle()
         let after = keys.map { shared.object(forKey: $0) as? NSObject }

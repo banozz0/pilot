@@ -192,9 +192,7 @@ public enum RemoveList {
 
     /// The rows Remove shows (card agent-bo-95423022, after Install's): a branch per category that has rows, with its
     /// count and their size, then each row in its category with where it came from, its size and what Pilot knows of it.
-    /// A row with no app of its own on disk (a command-line cask, a formula) wears `icons`' by package key: the Install
-    /// catalogue's shipped picture (Sven 2026-10-09).
-    public static func entries(_ rows: [RemoveRow], icons: [String: MenuIcon] = [:], home: String = NSHomeDirectory()) -> [MenuEntry] {
+    public static func entries(_ rows: [RemoveRow], home: String = NSHomeDirectory()) -> [MenuEntry] {
         let categories = Category.allCases.compactMap { c -> MenuEntry? in
             let mine = rows.filter { $0.category == c }
             guard !mine.isEmpty else { return nil }
@@ -208,7 +206,7 @@ public enum RemoveList {
             let detail = [r.origin(home: home), r.size.map(size), r.pilot ? "installed by Pilot" : nil, r.needed ? "needed by other packages" : nil, used]
                 .compactMap(\.self).joined(separator: " · ")
             return MenuEntry(title: r.name, target: .remove(.row(r.key)), home: r.category.branch, detail: detail, inSearch: false,
-                             icon: r.app == nil ? icons[r.key] ?? MenuIcon.remove(r) : MenuIcon.remove(r))
+                             icon: MenuIcon.remove(r))
         }
     }
 

@@ -346,11 +346,13 @@ final class Look {
     private(set) var trialID: String?
 
     func tryOn(id: String, pack: ThemePack?) { trialID = id; trial = pack; resolve() }
-    /// Leaving the page. `keep` makes a designed theme Pilot's own, as a pick does, without touching Ghostty.
-    func endTrial(keep: Bool) {
-        let id = trialID
+    /// Leaving the page, or an Apply or Restore done: what was tried on goes, and the theme is what an Apply left. Only
+    /// Apply changes it, through the ownership ledger, so Restore default brings back what was there before (bug 7,
+    /// tester's feedback 2026-11-18: leaving kept a clicked designed theme as `themeID`, the pre-pack baseline, and the
+    /// default was forgotten).
+    func endTrial() {
         trial = nil; trialID = nil
-        if keep, let id, PilotTheme.named(id) != nil, themeID != id { themeID = id } else { resolve() }
+        resolve()
     }
 
     /// An Apply or Restore press from Look is running. The controls for the parts a theme owns (theme, Glass, Transparency,

@@ -12,37 +12,6 @@ import Testing
 @MainActor
 @Suite("Fill pages")
 struct FillPagesTests {
-    static func entries() throws -> [CatalogueEntry] { try InstallCatalogue.parse(Data(contentsOf: RestyledPagesTests.shipped)) }
-
-    @Test("An empty search shows every category as its own section with all its entries, and no Suggested (Sven 2026-10-09)")
-    func catalogueSections() throws {
-        let entries = try Self.entries()
-        let sections = CataloguePage.sections(entries, query: "", category: nil)
-        #expect(sections.map(\.title) == InstallCatalogue.categories(entries))
-        #expect(sections.map(\.entries.count).reduce(0, +) == entries.count)
-    }
-
-    /// Sven 2026-10-09: Recommend apps is the whole catalogue of quick installs; off, Install is its search alone.
-    @Test("With Recommend apps off the catalogue lists nothing: no category, no search match, no chosen category")
-    func catalogueWithoutRecommendations() throws {
-        let entries = try Self.entries()
-        let first = try #require(entries.first)
-        #expect(CataloguePage.sections(entries, query: "", category: nil, recommend: false).isEmpty)
-        #expect(CataloguePage.sections(entries, query: first.name, category: nil, recommend: false).isEmpty)
-        #expect(CataloguePage.sections(entries, query: "", category: first.category, recommend: false).isEmpty)
-    }
-
-    @Test("Only an app wearing its category's glyph shows its initial; a tool keeps its terminal, a font its glyph")
-    func catalogueLetters() throws {
-        let entries = try Self.entries()
-        let tool = try #require(entries.first { $0.method.package?.kind == .formula })
-        let font = try #require(entries.first { $0.category == "Fonts" })
-        let app = try #require(entries.first { $0.method.package?.kind == .cask && $0.category != "Fonts" && MenuIcon.catalogue($0).symbol == MenuIcon.category($0.category).symbol })
-        #expect(CataloguePage.letter(tool) == nil)
-        #expect(CataloguePage.letter(font) == nil)
-        #expect(CataloguePage.letter(app) == String(app.name.prefix(1)))
-    }
-
     @Test("Clean's glyphs match whole words: Archives is not Arc's cache, Login items are not logs; plurals still match")
     func cleanWholeWords() {
         let browser = MenuIcon.clean(title: "Arc cache", section: "").symbol, logs = MenuIcon.clean(title: "System logs", section: "").symbol
@@ -51,16 +20,6 @@ struct FillPagesTests {
         #expect(MenuIcon.clean(title: "Downloads", section: "").symbol == "arrow.down.circle")
         #expect(MenuIcon.clean(title: "App leftovers", section: "").symbol == "app.badge")
         #expect(MenuIcon.clean(title: "Xcode DerivedData", section: "").symbol == "hammer")
-    }
-
-    @Test("A category chip shows that category alone; a search its matches alone")
-    func catalogueNarrowed() throws {
-        let entries = try Self.entries()
-        let one = CataloguePage.sections(entries, query: "", category: "Browsers")
-        #expect(one.map(\.title) == ["Browsers"] && one[0].entries.allSatisfy { $0.category == "Browsers" })
-        let found = CataloguePage.sections(entries, query: "ghostty", category: nil)
-        #expect(found.count == 1 && found[0].entries.map(\.name) == ["Ghostty"])
-        #expect(CataloguePage.sections(entries, query: "zzzz", category: nil).first?.entries.isEmpty == true)
     }
 
     @Test("Web apps recommends 10 to 16 well-known sites, each its own https site with its own 128 px icon shipped, marked once made")

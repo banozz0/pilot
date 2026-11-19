@@ -15,7 +15,7 @@ final class MenuCollectionStores {
     lazy var menuRoot = MenuRootSettings.shared
     lazy var abilities = AbilitySettings.shared
     /// Whether an optional ability's app is on this Mac.
-    lazy var has: (CatalogueEntry.Check) -> Bool = { [unowned self] in abilities.has($0) }
+    lazy var has: (InstallCheck) -> Bool = { [unowned self] in abilities.has($0) }
     lazy var engine: () -> Engine? = { Engine.shared }
     /// The menu, whose copy of the ranking a reset goes through.
     lazy var menu = PilotMenu.shared

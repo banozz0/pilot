@@ -21,7 +21,7 @@ struct MenuScan {
 
     /// The command-line tools the kinds ask for that this Mac has: Homebrew's own, or anywhere a catalogue check looks.
     static func tools() -> Set<String> {
-        let found = ["brew", "mas", "npm", "uv", "pipx", "bun", "cargo"].filter { Homebrew.cli($0) != nil || !CatalogueEntry.Check.copies(of: $0).isEmpty }
+        let found = ["brew", "mas", "npm", "uv", "pipx", "bun", "cargo"].filter { Homebrew.cli($0) != nil || !InstallCheck.copies(of: $0).isEmpty }
         return Set(found).union(InstallSearch.tools().map(\.rawValue))
     }
 

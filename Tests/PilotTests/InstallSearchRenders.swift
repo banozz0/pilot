@@ -4,9 +4,8 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Install finds anything (N9) and its pictures (C5), drawn offscreen: a search's results grouped by source under the
-/// catalogue's matches, each saying how it installs, and the Recommend apps switch on the page. The groups are made
-/// here, pictures off, so nothing reaches the network. PILOT_RENDER_DIR keeps the PNG.
+/// Install finds anything (N9), drawn offscreen: a search's results grouped by source, each saying how it installs.
+/// The groups are made here, pictures off, so nothing reaches the network. PILOT_RENDER_DIR keeps the PNG.
 @MainActor
 @Suite("Install search renders")
 struct InstallSearchRenders {
@@ -22,13 +21,10 @@ struct InstallSearchRenders {
                                             method: .page(URL(string: "https://www.google.com/search?q=rectangle")!))]),
     ]
 
-    @Test("A search lists each source under its heading in order and how each result installs (Recommend apps is on More since simplify-pages T16)")
+    @Test("A search lists each source under its heading in order and how each result installs")
     func grouped() throws {
         RemoteIcons.shared.enabled = false
-        let entries = [CatalogueEntry(id: "rectangle-pro", name: "Rectangle Pro", category: "Window manager",
-                                      method: .package(Package(.cask, "rectangle-pro")!), check: .bundle("x.none"),
-                                      vendor: "https://rectangleapp.com/", checked: "2026-10-09")]
-        let page = CataloguePage(entries: entries, query: "rectangle", found: Self.groups)
+        let page = CataloguePage(query: "rectangle", found: Self.groups)
         let look = try LookPageTests().look().0   // its other parts vary by branch; only the look is needed
         var lines: [(text: String, box: CGRect)] = []
         try LookPageTests().hosted(page.frame(width: 1000, height: 1100).pilotTheme(look: look)) { host in
@@ -40,7 +36,7 @@ struct InstallSearchRenders {
         }
         let text = lines.map(\.text).joined(separator: "\n")
         // The rows stand top to bottom in the sources' order (Vision's boxes rise from the bottom).
-        let heights = ["Rectangle Pro", "Billiards", "videorc", "Search the web"].map { title in
+        let heights = ["Homebrew app", "Billiards", "videorc", "Search the web"].map { title in
             lines.first { $0.text.hasPrefix(title) }?.box.midY
         }
         #expect(heights.allSatisfy { $0 != nil }, "read: \(text)")
@@ -50,19 +46,4 @@ struct InstallSearchRenders {
         }
     }
 
-    @Test("A catalogue entry not on this Mac wears its shipped picture in the menu and on the page; a font keeps its glyph")
-    func catalogueIcons() throws {
-        let packaging = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appending(path: "Packaging/catalogue-icons")
-        let shipped = try FileManager.default.contentsOfDirectory(atPath: packaging.path).filter { $0.hasSuffix(".png") }
-        #expect(shipped.count >= 60)
-        let catalogue = try InstallCatalogue.parse(Data(contentsOf: packaging.deletingLastPathComponent().appending(path: "install-catalogue.json")))
-        // Every app has its picture; only fonts and the command-line tools with no logo of their own keep their glyph.
-        let bare = catalogue.filter { !shipped.contains("\($0.id).png") }.map(\.id)
-        #expect(bare.allSatisfy { $0.hasPrefix("font-") || ["telegram-tools", "discord-tools-cli", "easy-cd", "lazygit", "ripgrep", "fzf", "bat", "zoxide", "fd", "jq", "tmux"].contains($0) }, "\(bare)")
-        let spotify = try #require(catalogue.first { $0.id == "spotify" })
-        #expect(MenuIcon.catalogue(spotify).bundled == "spotify")
-        #expect(MenuEntries.install(catalogue, installed: []).first { $0.title == "Spotify" }?.icon?.bundled == "spotify",
-                "the menu's Install row carries the same picture")
-    }
 }

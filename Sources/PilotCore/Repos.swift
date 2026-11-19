@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// One own repo under ~/code as Developer › Repos lists it (Pilot 1.0.2, Sven Q716): its name, branch and last commit's subject.
+/// One own repo in the repos folder as Developer › Repos lists it (Pilot 1.0.2, Sven Q716): its name, branch and last commit's subject.
 public struct RepoSummary: Sendable, Identifiable, Equatable {
     public let name: String
     public let url: URL
@@ -34,7 +34,7 @@ public enum RepoPreview: Sendable, Equatable {
     case unreadable(String)
 }
 
-/// Developer › Repos (Pilot 1.0.2, Sven Q716): own repos under ~/code, their files as a tree and a preview. Read-only: Pilot
+/// Developer › Repos (Pilot 1.0.2, Sven Q716): own repos in the repos folder, their files as a tree and a preview. Read-only: Pilot
 /// never writes into a repo, and git runs only with GIT_OPTIONAL_LOCKS=0: the page's `git log`, and the Repos widget's
 /// `status` (RepoStatus), which without it would rewrite the index. Everything is read when the page asks for it: no
 /// watcher, no polling, nothing kept once the page closes.
@@ -50,10 +50,9 @@ public enum Repos {
                                             "venv", "__pycache__", ".swiftpm", ".gradle", ".turbo", ".cache", "coverage"]
     static let never: Set<String> = [".git", ".DS_Store"]
 
-    /// ~/code's own repos, by name: a top-level folder AgentInstructions.isOwnRepo takes (its `.git` a folder; a
-    /// worktree's `.git` is a file).
-    public static func list(home: URL) -> [RepoSummary] {
-        let code = home.appendingPathComponent("code")
+    /// The own repos in `code` (the repos folder, `folders.repos`: ~/code unless picked, the tester's ~/dev), by name: a
+    /// top-level folder AgentInstructions.isOwnRepo takes (its `.git` a folder; a worktree's `.git` is a file).
+    public static func list(in code: URL) -> [RepoSummary] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: code.path)) ?? []
         return names.filter { AgentInstructions.isOwnRepo($0, in: code) }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }

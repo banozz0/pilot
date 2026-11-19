@@ -44,7 +44,6 @@ struct SettingsSchemaPart2Tests {
         let bar: BarItemsStore
         let topBar: TopBarController
         let wallpaper: WallpaperSettings
-        let recommendations: Recommendations
         let pilotSwitch = FakeSwitch()
         let views: StatsViewsStore
         let schema = SettingsSchema()
@@ -67,10 +66,9 @@ struct SettingsSchemaPart2Tests {
                                       screens: { TopBarControllerTests.screens }, panels: TopBarControllerTests.FakePanels())
             wallpaper = WallpaperSettings(defaults: defaults)
             wallpaper.tick = {}
-            recommendations = Recommendations(defaults: defaults)
             views = StatsViewsStore(defaults: defaults)
             schema.registerPart2(settings: settings, list: list, snapshots: snapshots, block: block, bar: bar, topBar: topBar,
-                                 wallpaper: wallpaper, recommendations: recommendations, pilotSwitch: pilotSwitch,
+                                 wallpaper: wallpaper, pilotSwitch: pilotSwitch,
                                  dictation: PilotDictationTests.Rig().pilot,
                                  pictures: ShelfPictures(defaults: defaults, capture: NoCapture()),
                                  notesIn: { [unowned self] _ in notesLeft },
@@ -120,7 +118,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 56)
+        #expect(rig.schema.keys.count == 55)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -245,7 +243,7 @@ struct SettingsSchemaPart2Tests {
         "wallpaper.sources", "wallpaper.order", "wallpaper.seed", "wallpaper.scope", "wallpaper.interval",
         "wallpaper.ownFolders", "wallpaper.folders", "wallpaper.screenSources", "wallpaper.fitShape", "wallpaper.workspaces", "wallpaper.workspaceSources",
         "wallpaper.workspaceImages",
-        "recommendations.show", "switch.on",
+        "switch.on",
         "editor.pick", "apps.pick.*", "dictation.model", "dictation.whileSpeaking", "dictation.showIn", "dictation.barSide", "dictation.waveColour", "dictation.copy", "dictation.pauseMedia", "home.blocks", "stats.views", "appWindow.page", "notes.last", "notes.frameMargins", "notes.welcomed",
         "setup.wifi.shown", "setup.bluetooth.shown", "pilot.notifications.decision", "pilot.notifications.macOSOffSaid",
         "AppleInterfaceStyle",

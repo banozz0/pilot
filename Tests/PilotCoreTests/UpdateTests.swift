@@ -250,13 +250,6 @@ struct UpdateListTests {
         #expect(Set(e.compactMap { if case .update(.row(let k)) = $0.target { k } else { nil } }).count == Self.more().count)
     }
 
-    @Test("With Recommend apps off, mas missing offers no Install mas; the updates stay (card agent-bo-95423241)")
-    func noMasOfferWithoutRecommendations() {
-        let e = UpdateList.entries(Self.more(), includeSelfUpdating: false, masInstalled: false, recommend: false)
-        #expect(!e.contains { $0.target == .update(.installMas) })
-        #expect(e.count == UpdateList.entries(Self.more(), includeSelfUpdating: false, masInstalled: true).count)
-    }
-
     @Test("A tool that exits 1 when it lists something, as npm outdated does, is still read when 1 counts as success")
     func exitOne() async throws {
         let script = "printf listed; exit 1"

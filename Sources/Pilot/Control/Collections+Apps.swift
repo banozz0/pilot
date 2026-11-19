@@ -9,8 +9,8 @@ import WebApps
 final class AppCollectionStores {
     lazy var gate = AllowPrompt.gate
     lazy var installed = InstalledStore.standard
-    /// Whether a catalogue entry for the package is installed already, as Install's own row says it.
-    lazy var packageInstalled: @MainActor (Package) -> Bool = { p in InstallModule.catalogue.first { $0.key == p.key }.map(InstallModule.isInstalled) ?? false }
+    /// Whether Pilot has installed the package already, by its record (installed.json).
+    lazy var packageInstalled: @MainActor (Package) -> Bool = { [unowned self] p in (try? installed.load())?[p.key] != nil }
     /// The visible terminal Install runs its command in.
     lazy var run: InstallModule.Run = InstallModule.visibleRun
     lazy var webApps = WebAppStamper.applicationsFolder

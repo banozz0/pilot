@@ -4,7 +4,7 @@ import PilotCore
 
 /// Defaults › File search (N5, Sven 2026-10-09): whether the Files view opens with hidden and system files shown, and
 /// the never-index list (FileExclusions), which the file index skips entirely. A changed list stops the running helper,
-/// so the next file search walks with it. Its own store, as Recommendations is, so pages that render without an engine
+/// so the next file search walks with it. Its own store, as PilotFolders is, so pages that render without an engine
 /// read it.
 @Observable @MainActor
 final class FileSearchSettings {

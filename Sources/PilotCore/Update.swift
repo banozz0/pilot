@@ -247,8 +247,8 @@ public enum UpdateList {
 
     /// Update's rows (card agent-bo-95423022, browsed as Install is): Update all with its exact command, a branch per
     /// category with something outdated, naming it, each row there with its versions and where it came from, the switch
-    /// for self-updating casks, and Install mas while mas is missing and recommendations show (Install's Recommend apps,
-    /// card agent-bo-95423241). Return on a row asks to update that one.
+    /// for self-updating casks, and Install mas while mas is missing (card agent-bo-95423241). Return on a row asks to
+    /// update that one.
     /// The outdated casks' tokens, for `brew info --json=v2 --cask`, which names each one's app.
     public static func caskTokens(_ rows: [UpdateRow]) -> [String] {
         rows.compactMap { if case .package(let p) = $0.item, p.kind == .cask { p.name } else { nil } }
@@ -261,10 +261,9 @@ public enum UpdateList {
         return rows.map { var r = $0; r.app = apps[r.item.key] ?? r.app; return r }
     }
 
-    /// Each row wears its app's own icon: a cask's app, else `icons`' (the Install catalogue's by package key: its app
-    /// once installed, else its shipped picture), else its kind's glyph.
-    public static func entries(_ rows: [UpdateRow], includeSelfUpdating: Bool, masInstalled: Bool = true, recommend: Bool = true,
-                               icons: [String: MenuIcon] = [:], home: String = NSHomeDirectory()) -> [MenuEntry] {
+    /// Each row wears its app's own icon: a cask's app, else its kind's glyph.
+    public static func entries(_ rows: [UpdateRow], includeSelfUpdating: Bool, masInstalled: Bool = true,
+                               home: String = NSHomeDirectory()) -> [MenuEntry] {
         let shown = visible(rows, includeSelfUpdating: includeSelfUpdating)
         let run = MenuEntry(title: "Update all", target: .update(.all), home: .update,
                             detail: all(shown, includeSelfUpdating: includeSelfUpdating)
@@ -283,11 +282,11 @@ public enum UpdateList {
                 .compactMap(\.self).joined(separator: " · ")
             return MenuEntry(title: r.item.name, target: .update(unpin(r) == nil ? .row(r.item.key) : .unpin(r.item.key)),
                              home: r.category.branch, detail: detail, inSearch: false,
-                             icon: r.app.map { MenuIcon.updatable(r.item, app: $0) } ?? icons[r.item.key] ?? MenuIcon.updatable(r.item))
+                             icon: r.app.map { MenuIcon.updatable(r.item, app: $0) } ?? MenuIcon.updatable(r.item))
         }
         let setting = MenuEntry(title: "Apps that update themselves: \(includeSelfUpdating ? "On" : "Off")", target: .update(.selfUpdating),
                                 home: .update, inSearch: false, icon: .glyph("arrow.triangle.2.circlepath", .second))
-        let mas = masInstalled || !recommend ? [] : [MenuEntry(title: "App Store apps: install mas", target: .update(.installMas), home: .update,
+        let mas = masInstalled ? [] : [MenuEntry(title: "App Store apps: install mas", target: .update(.installMas), home: .update,
                                                  detail: Helper.mas.install, inSearch: false, icon: MenuIcon.appStore)]
         return [run] + branches + [setting] + mas + [reports] + listed
     }

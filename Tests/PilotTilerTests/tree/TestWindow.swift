@@ -65,6 +65,9 @@ final class TestWindow: Window, CustomStringConvertible {
     /// Pilot: the last write's glide length and the x it was to keep within (scrolling layout).
     var lastGlideDuration = GlideSet.duration
     var lastSpan: ClosedRange<CGFloat>?
+    /// Pilot (bug 10, 2026-11-18): the least size its app lets it be, as an NSWindow's contentMinSize holds it: a write
+    /// asking for less takes this, and the tiler hears what it took, as an AX read-back tells it (WindowMinimums).
+    var minimum: CGSize?
 
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?, glidingFrom: Rect? = nil, duration: Duration = GlideSet.duration,
                              span: ClosedRange<CGFloat>? = nil, screen: GlideScreen? = nil) {
@@ -74,7 +77,9 @@ final class TestWindow: Window, CustomStringConvertible {
         frameWrites += 1
         let old = _rect ?? Rect(topLeftX: 0, topLeftY: 0, width: 0, height: 0)
         let topLeft = topLeft ?? old.topLeftCorner
-        let size = size ?? old.size
+        let asked = size ?? old.size
+        let size = minimum.map { CGSize(width: max(asked.width, $0.width), height: max(asked.height, $0.height)) } ?? asked
         _rect = Rect(topLeftX: topLeft.x, topLeftY: topLeft.y, width: size.width, height: size.height)
+        if minimum != nil { let id = windowId; MainActor.assumeIsolated { _ = WindowMinimums.learn(id, asked: asked, took: size) } }
     }
 }

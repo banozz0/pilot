@@ -95,21 +95,6 @@ struct ToyboxPagesRenders {
                 w.close()
             }
         }
-        // Install's catalogue with its rows: the test bundle carries no install-catalogue.json, so the page in the window
-        // shows none; this one reads Packaging's copy.
-        let catalogue = try InstallCatalogue.parse(Data(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().appendingPathComponent("../../Packaging/install-catalogue.json")))
-        for (suffix, style, dark) in [("toybox-dark", PilotStyle.toybox, true), ("toybox-light", .toybox, false), ("instrument", .instrument, true)] {
-            let name = "catalogue-rows-\(suffix)"
-            guard wanted(name) else { continue }
-            look.style = style
-            let host = NSHostingView(rootView: InkGround { CataloguePage(entries: catalogue) }.styled(.page(.install)).pilotTheme().environment(engine))
-            host.frame.size = NSSize(width: 1100, height: 1300)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-            host.layoutSubtreeIfNeeded()
-            try #require(snapshot(host, scale: 2)?.representation(using: .png, properties: [:]))
-                .write(to: dir.appendingPathComponent("\(name).png"))
-        }
         // Apps › Fonts, Use fonts in (Q711) and Get more fonts, in both styles: every app shown, on configs seeded in the moved home, one pick made so
         // its Undo shows, Cursor without settings yet.
         if wanted("fonts") {

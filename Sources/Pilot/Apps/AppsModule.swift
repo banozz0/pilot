@@ -64,7 +64,7 @@ enum AppsModule {
         add(&registry, "update", "Update apps", nil, keywords: "upgrade homebrew brew mas upkeep") { PilotMenu.shared.open(branch: .update) }
         // Look › Catalogue (public-repo-catalogue T22): the catalogue's theme packs, to get, update, apply and remove.
         add(&registry, "themeCatalogue", "Theme catalogue", nil, keywords: "themes browse download get gallery look") { show(AppPlace(.themeCatalogue)) }
-        add(&registry, "install", "Install apps", nil, keywords: "recommended apps casks homebrew") { show(AppPlace(.install)) }
+        add(&registry, "install", "Install apps", nil, keywords: "search apps casks homebrew app store") { show(AppPlace(.install)) }
         add(&registry, "clean", "Clean this Mac", nil, keywords: "mole caches junk free space upkeep") { PilotMenu.shared.open(branch: .clean) }
         add(&registry, "lazygit", "lazygit: pick a repo", Key("g", .shift)) { pickRepo() }
         // Vicinae's Bitwarden extension, rebuilt (card agent-bo-95422774): the app's own menu items and bw generate. Pilot

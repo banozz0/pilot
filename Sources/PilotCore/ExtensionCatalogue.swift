@@ -488,7 +488,7 @@ extension ExtensionCatalogue {
         }
 
         /// gh where Homebrew or its own installer puts it (Pilot runs with launchd's short PATH); nil when there is none.
-        @Sendable public static func ghPath() -> String? { CatalogueEntry.Check.copies(of: "gh").first }
+        @Sendable public static func ghPath() -> String? { InstallCheck.copies(of: "gh").first }
 
         /// Pilot's own: GitHub.
         public static let live = github()

@@ -39,8 +39,8 @@ enum WidgetCI {
         if let reading { return await reading.value }
         let now = ContinuousClock.now
         let quiet = Set(emptyAt.filter { now - $0.value < emptyEvery }.keys)
-        let task = Task.detached(priority: .utility) { [home = ConfigsModule.home] in
-            let all = repos(home: home)
+        let task = Task.detached(priority: .utility) { [folder = PilotFolders.shared.reposURL] in
+            let all = repos(in: folder)
             let read = Dictionary(await fetch(all.filter { !quiet.contains($0) }).map { ($0.repo, $0) }, uniquingKeysWith: { first, _ in first })
             return all.map { read[$0] ?? Run(repo: $0, problem: noRuns) }
         }
@@ -66,12 +66,12 @@ enum WidgetCI {
 
     // MARK: Which repos
 
-    /// The `owner/repo` names to read: the GitHub extension's `only` setting's repos, then ~/code's GitHub repos its
-    /// owners own; with no such setting, every ~/code repo with a GitHub origin. Sorted, no repeats.
-    nonisolated static func repos(home: URL) -> [String] {
+    /// The `owner/repo` names to read: the GitHub extension's `only` setting's repos, then the repos folder's GitHub repos
+    /// its owners own; with no such setting, every repo there with a GitHub origin. Sorted, no repeats.
+    nonisolated static func repos(in folder: URL) -> [String] {
         let github = Extension.find().extensions.first { $0.id == "github" }
         let only = github.flatMap { ExtensionStorage().values(of: $0)["only"]?.string } ?? ""
-        let local = Repos.list(home: home).compactMap { origin(of: $0.url) }
+        let local = Repos.list(in: folder).compactMap { origin(of: $0.url) }
         return pick(only: only, local: local)
     }
 

@@ -16,7 +16,7 @@ struct WebAppIdea: Identifiable {
     func isMade(hosts: Set<String>) -> Bool { hosts.contains { SameSite.normalized($0) == host } }
 
     /// The site's own icon, 128 px.
-    @MainActor var icon: NSImage? { CatalogueIcons.image(id, in: "webapp-icons") }
+    @MainActor var icon: NSImage? { CatalogueIcons.image("webapp-icons/\(id)") }
 
     static let all: [WebAppIdea] = [
         WebAppIdea(id: "gmail", name: "Gmail", link: "https://mail.google.com"),

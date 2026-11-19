@@ -151,20 +151,20 @@ extension Window {
 extension TilingContainer {
     @MainActor
     fileprivate func layoutTiles(_ point: CGPoint, width: CGFloat, height: CGFloat, virtual: Rect, _ context: LayoutContext) async throws {
-        var point = point
-        var virtualPoint = virtual.topLeftCorner
-
         guard let delta = ((orientation == .h ? width : height) - CGFloat(try children.sumOfDouble { try $0.getWeight(orientation) }))
             .div(children.count) else { return }
 
         for child in children { try child.setWeight(orientation, try child.getWeight(orientation) + delta) }
         // Pilot (live bug 2026-11-16): a window that cannot shrink to its tile gets its least size, the tiles beside it
-        // giving way (TileFit, WindowMinimums); the weights stay the preset's, so its shares come back once it goes.
+        // giving way (TileFit, WindowMinimums); the weights stay the preset's, so its shares come back once it goes. Leasts
+        // that outgrow the room overlap inside it (bug 10, 2026-11-18).
         let rawGap = CGFloat(context.resolvedGaps.inner.get(orientation))
         let weights = try children.map { try $0.getWeight(orientation) }
-        let sizes = WindowMinimums.isEmpty ? weights
-            : TileFit.sizes(weights, gap: rawGap, minimums: children.map { $0.leastExtent(orientation, gap: rawGap) })
-        for (i, (child, size)) in zip(children, sizes).enumerated() {
+        let minimums = WindowMinimums.isEmpty ? [] : children.map { $0.leastExtent(orientation, gap: rawGap) }
+        let spans = TileFit.spans(weights, gap: rawGap, minimums: minimums)
+        for (i, (child, span)) in zip(children, spans).enumerated() {
+            let size = span.size
+            let point = point.addingOffset(orientation, span.start), virtualPoint = virtual.topLeftCorner.addingOffset(orientation, span.start)
             // Gaps: half the inner gap is each side's that has a neighbour (TileFit.gapShare)
             let gap = TileFit.gapShare(i, of: children.count, gap: rawGap)
             try await child.layoutRecursive(
@@ -179,8 +179,6 @@ extension TilingContainer {
                 ),
                 context,
             )
-            virtualPoint = orientation == .h ? virtualPoint.addingXOffset(size) : virtualPoint.addingYOffset(size)
-            point = orientation == .h ? point.addingXOffset(size) : point.addingYOffset(size)
         }
     }
 

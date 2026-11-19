@@ -226,7 +226,7 @@ public struct ClaudeCLI: Sendable {
         self.effort = effort
     }
 
-    /// `claude` on `path` (the PATH), else in the folders Install looks in (CatalogueEntry.Check.commandFolders): Pilot runs
+    /// `claude` on `path` (the PATH), else in the folders Install looks in (InstallCheck.commandFolders): Pilot runs
     /// with launchd's short PATH, and Install and Quick AI must agree on whether Claude Code is there.
     public static func locate(path: String?,
                               isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> ClaudeCLI? {

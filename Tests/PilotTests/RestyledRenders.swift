@@ -62,13 +62,9 @@ struct RestyledRenders {
                 let png = try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
                 try png.write(to: dir.appendingPathComponent("\(theme)-\(name).png"))
             }
-            // The catalogue on the shipped file (the test bundle has no app Resources): suggested, a category, a search.
-            let entries = try InstallCatalogue.parse(Data(contentsOf: RestyledPagesTests.shipped))
-            for (name, page) in [("suggested", CataloguePage(entries: entries)), ("category", CataloguePage(entries: entries, category: entries[0].category)),
-                                 ("search", CataloguePage(entries: entries, query: "code"))] {
-                try writeRender(page.frame(width: 900, height: 900).pilotTheme(look: .shared).background(Theme.background),
-                                to: dir.appendingPathComponent("\(theme)-catalogue-\(name).png"))
-            }
+            // Install's front: its search and What Pilot lists.
+            try writeRender(CataloguePage().frame(width: 900, height: 900).pilotTheme(look: .shared).background(Theme.background),
+                            to: dir.appendingPathComponent("\(theme)-install.png"))
             // Open with's All kinds open, the page alone at the window's page width.
             let page = OpenWithPage(allKinds: true).environment(engine).frame(width: 900, height: 1100).pilotTheme(look: .shared).background(Theme.background)
             try writeRender(page, to: dir.appendingPathComponent("\(theme)-defaults-allkinds.png"))

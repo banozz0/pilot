@@ -70,7 +70,7 @@ struct OGCardRenders {
             let catalogue: ThemePack?
             if PilotTheme.named(id) != nil {
                 catalogue = nil
-                look.endTrial(keep: false)
+                look.endTrial()
                 look.themeID = id
                 look.packChanged(try ThemePack.decode(Data(contentsOf: root.appending(path: "Packaging/ThemePacks/\(id)/manifest.json"))))
             } else {
@@ -86,7 +86,7 @@ struct OGCardRenders {
             }
             try await Self.widgets(store, theme: look.theme, to: dir)
             try ThemeDigest.encoded(DeskWidgetRenders.theme(look.theme)).write(to: dir.appending(path: "theme.json"))
-            look.endTrial(keep: false)
+            look.endTrial()
         }
     }
 

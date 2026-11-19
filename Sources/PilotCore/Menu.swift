@@ -1078,7 +1078,7 @@ public struct MenuNavigator: Sendable {
                 let offers = install + files
                 rows = fallbacks + (Self.looksLikeApp(query) ? offers : offers.reversed())
             } else if only == .package {
-                // Packages lists the catalogue's matches; Install's search follows them (Sven, 1.0.1: "videorc").
+                // Packages: Install's search (Sven, 1.0.1: "videorc").
                 rows += install
             } else {
                 // Something matched, but not an app on this Mac (an emoji for "videorc", Sven 1.0.1): an app's name is still
@@ -1605,7 +1605,7 @@ public enum MenuLayout {
     public static func installSection(_ source: InstallSearch.Source) -> MenuBranch { .category(source.title, in: .homebrew) }
 
     /// A branch whose search also lists another's categories, with their sections: Install lists Search packages'
-    /// sources after its catalogue (N9).
+    /// sources (N9).
     public static let alsoBrowses: [MenuBranch: MenuBranch] = [.install: .homebrew]
 
     /// The sections a branch's search is split into; empty for a branch with none.

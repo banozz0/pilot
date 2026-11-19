@@ -66,7 +66,7 @@ struct AppWindowTests {
         // Reports on Update & Clean's front under the runs' block (Sven, 2026-11-16), Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.isEmpty && AppPage.loginItems.tabs.isEmpty && AppPage.activity.tabs.isEmpty)
         #expect(AppSection.reports.onFront && AppSection.reports.page == .upkeep)
-        #expect(AppPage.install.tabs.map(\.title) == ["Catalogue", "Web apps", "More"])
+        #expect(AppPage.install.tabs.map(\.title) == ["Search", "Web apps", "More"])
         // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
@@ -155,7 +155,7 @@ struct AppWindowTests {
         "tiling": ["gaps", "inner", "outer", "rescue"],
         "topBar": ["menu bar", "status bar", "waybar", "hide", "autohide", "clock", "workspaces"],
         "webApps": ["web app", "url", "site", "sign out"],
-        "installCatalogue": ["install", "homebrew", "cask", "formula", "catalogue"],
+        "installCatalogue": ["install", "homebrew", "cask", "formula"],
         "configs": ["config", "dotfiles", "ghostty", "neovim", "zshrc", "gitconfig", "starship", "tmux"],
         "defaultApps": ["default app", "open with", "main editor", "editor", "vs code"],
         "clipboard": ["clipboard", "history", "paste", "keep", "never record", "images"],

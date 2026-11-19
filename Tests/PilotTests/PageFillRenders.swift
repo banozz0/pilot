@@ -183,8 +183,6 @@ struct PageFillRenders {
                    RemoveRow(source: .package(Package(.uv, "llm")!), name: "llm"),
                    RemoveRow(source: .webApp(bundleID: "dev.banozz.pilot.webapp.chatgpt"), name: "ChatGPT")]
         let removeRows = RemoveList.entries(RemoveList.sorted(remove, .name))
-        let catalogue = try InstallCatalogue.parse(Data(contentsOf: RestyledPagesTests.shipped))
-        let install = MenuEntries.install(catalogue, installed: [])
         let updates = UpdateList.entries([UpdateRow(item: .package(Package(.formula, "lazygit")!), from: "0.55", to: "0.56"),
                                           UpdateRow(item: .package(Package(.cask, "zed")!), from: "0.205", to: "0.206"),
                                           UpdateRow(item: .appStore(id: "497799835", name: "Xcode"), from: "26.0", to: "26.1"),
@@ -213,9 +211,7 @@ struct PageFillRenders {
                                       store: engine.binds.store, roleApps: [:], menu: AppsModule.menuID, openID: AppsModule.openID(bundle:),
                                       running: [], extras: [:], switches: [:])
         let panels: [(String, MenuNavigator)] = [
-            ("remove", MenuNavigator(entries: removeRows, branch: .remove)), ("install", MenuNavigator(entries: install, branch: .install)),
-            ("install-fonts", MenuNavigator(entries: install, branch: .category("Fonts"))),
-            ("install-cli", MenuNavigator(entries: install, branch: .category("Command-line tools"))),
+            ("remove", MenuNavigator(entries: removeRows, branch: .remove)),
             ("update", MenuNavigator(entries: updates, branch: .update)), ("clean", MenuNavigator(entries: clean, branch: .clean)),
             ("clean-previewing", MenuNavigator(entries: [], branch: .clean)),
             ("learn", MenuNavigator(entries: built, branch: .keybindings)), ("trigger", MenuNavigator(entries: built, branch: .trigger)),

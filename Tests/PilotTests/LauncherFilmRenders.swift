@@ -274,7 +274,7 @@ struct LauncherFilmRenders {
                     UpdateRow(item: .npm("@anthropic-ai/claude-code", prefix: "/opt/homebrew"), from: "2.0.1", to: "2.0.5")]
         var update = MenuNavigator(entries: built, branch: .update)
         try await LineMenuRenders.render(Self.line(update), "u0-reading", in: dir, wait: 0.5)
-        update.provide(.package, home: .update, UpdateList.entries(rows, includeSelfUpdating: true, masInstalled: true, recommend: false))
+        update.provide(.package, home: .update, UpdateList.entries(rows, includeSelfUpdating: true, masInstalled: true))
         try await LineMenuRenders.render(Self.line(update), "u1-rows", in: dir, wait: 0.5)
         var clean = MenuNavigator(entries: built, branch: .clean)
         try await LineMenuRenders.render(Self.line(clean), "c0-reading", in: dir, wait: 0.5)

@@ -65,14 +65,13 @@ public indirect enum TileTree: Equatable, Sendable {
                 return
             }
             let extent = sideways ? rect.width : rect.height
-            let sizes = TileFit.sizes(parts.map { $0.share * extent }, gap: gap, minimums: parts.map { least($0.node, sideways: sideways) })
-            var start = sideways ? rect.minX : rect.minY
-            for (i, (part, size)) in zip(parts, sizes).enumerated() {
-                let own = TileFit.gapShare(i, of: parts.count, gap: gap), lead = i == 0 ? 0 : gap / 2
+            let spans = TileFit.spans(parts.map { $0.share * extent }, gap: gap, minimums: parts.map { least($0.node, sideways: sideways) })
+            let origin = sideways ? rect.minX : rect.minY
+            for (i, (part, span)) in zip(parts, spans).enumerated() {
+                let own = TileFit.gapShare(i, of: parts.count, gap: gap), lead = i == 0 ? 0 : gap / 2, start = origin + span.start
                 walk(part.node, sideways
-                    ? CGRect(x: start + lead, y: rect.minY, width: size - own, height: rect.height)
-                    : CGRect(x: rect.minX, y: start + lead, width: rect.width, height: size - own))
-                start += size
+                    ? CGRect(x: start + lead, y: rect.minY, width: span.size - own, height: rect.height)
+                    : CGRect(x: rect.minX, y: start + lead, width: rect.width, height: span.size - own))
             }
         }
         walk(self, area)
@@ -112,15 +111,42 @@ public enum TileFit {
         along ? leasts.reduce(0, +) + gap * CGFloat(max(0, leasts.count - 1)) : leasts.max() ?? 0
     }
 
-    /// `sizes` (each part's room with its gap share, adding up to the split's) with every part at least its window's
-    /// `minimums` along the split plus its gap share: a part short of it gets it, and the rest give way in proportion to
-    /// their sizes, each down to its own least. When the leasts outgrow the room, `sizes` as they were: some window
-    /// overlaps whatever is done, so the layout stays the preset's.
-    public static func sizes(_ sizes: [CGFloat], gap: CGFloat, minimums: [CGFloat]) -> [CGFloat] {
+    /// Where each part starts along the split and the room it takes (its gap share in it), from `sizes` (the preset's,
+    /// adding up to the split's), with every part at least its window's `minimums` along the split plus its gap share: a
+    /// part short of it gets it, and the rest give way in proportion to their sizes, each down to its own least.
+    ///
+    /// When the leasts outgrow the room (bug 10, 2026-11-18: two Ghostex windows, 600 points tall at the least, stacked
+    /// in a 1080-point column), each part with a least takes it and the others their preset size, and the parts overlap
+    /// by the room they lack, shared evenly between neighbours: the first starts where the split does and the last ends
+    /// where it ends, so no window runs past the room's edge and its bottom lines up with its neighbours'. Some window
+    /// overlaps whatever is done; the preset's sizes left the last one running past the screen.
+    public static func spans(_ sizes: [CGFloat], gap: CGFloat, minimums: [CGFloat]) -> [(start: CGFloat, size: CGFloat)] {
+        var fitted = sizes, overlap: CGFloat = 0
+        // No least known, the common case on every layout: the sizes as they are.
+        guard minimums.contains(where: { $0 > 0 }) else { return spans(fitted, overlap: overlap) }
         let needs = minimums.indices.map { minimums[$0] > 0 ? minimums[$0] + gapShare($0, of: minimums.count, gap: gap) : 0 }
         let total = sizes.reduce(0, +)
-        guard needs.count == sizes.count, zip(sizes, needs).contains(where: { $0 < $1 - 0.5 }), needs.reduce(0, +) <= total + 0.5
-        else { return sizes }
+        if needs.count == sizes.count, sizes.count > 1, needs.reduce(0, +) > total + 0.5 {
+            fitted = sizes.indices.map { needs[$0] > 0 ? needs[$0] : sizes[$0] }
+            overlap = (fitted.reduce(0, +) - total) / CGFloat(sizes.count - 1)
+        } else if needs.count == sizes.count {
+            fitted = fit(sizes, needs: needs, total: total)
+        }
+        return spans(fitted, overlap: overlap)
+    }
+
+    /// Each size's start, one after another, `overlap` back from the end of the one before.
+    private static func spans(_ sizes: [CGFloat], overlap: CGFloat) -> [(start: CGFloat, size: CGFloat)] {
+        var start: CGFloat = 0
+        return sizes.map { size in
+            defer { start += size - overlap }
+            return (start, size)
+        }
+    }
+
+    /// `sizes` with every part at least its `needs`, the rest giving way in proportion; the leasts fit in `total`.
+    private static func fit(_ sizes: [CGFloat], needs: [CGFloat], total: CGFloat) -> [CGFloat] {
+        guard zip(sizes, needs).contains(where: { $0 < $1 - 0.5 }) else { return sizes }
         var held = Set(sizes.indices.filter { sizes[$0] < needs[$0] - 0.5 }), fitted = sizes
         while true {
             let free = sizes.indices.filter { !held.contains($0) }

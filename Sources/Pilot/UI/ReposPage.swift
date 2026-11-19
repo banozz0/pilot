@@ -3,13 +3,14 @@ import PilotCore
 import SwiftUI
 
 /// Developer › Repos (Pilot 1.0.2, Sven Q716: "view all repos files etc from inside a pilot page with file trees and also file
-/// previews"): own repos under ~/code with their branch and last commit, and a picked one's files as a tree beside a
+/// previews"): own repos in the repos folder (`folders.repos`, ~/code unless picked here; the tester's ~/dev) with their branch and last commit, and a picked one's files as a tree beside a
 /// preview. Read-only (Repos); a developer page, shown only while General's Developer switch is on (Q715). Everything is
 /// read as the page shows and held in its own state, so nothing stays once it closes.
 struct ReposPage: View {
     @Environment(\.ink) private var ink
     /// Where a render starts: a moved home read at once, a repo picked, folders open, a file previewed, a filter typed.
     struct Start {
+        /// A moved home: its `code` folder is listed.
         var home: URL?
         var repo: String?
         /// Folders open in the tree, by path inside the repo.
@@ -27,8 +28,11 @@ struct ReposPage: View {
     @State private var repos: [RepoSummary] = []
     @State private var loaded = false
     @State private var picked: String?
+    @Bindable private var folders = PilotFolders.shared
 
-    static let intro = "Your repos in ~/code, read-only: pick one to browse its files and preview them."
+    static func intro(_ folder: String) -> String {
+        "Your repos in \(AppConfigs.tilde(folder, home: NSHomeDirectory())), read-only: pick one to browse its files and preview them."
+    }
     static let introInfo = "Pilot never writes into a repo."
 
     init(editor: EditorChoice = .shared, start: Start = .init()) {
@@ -38,24 +42,27 @@ struct ReposPage: View {
     }
 
     var body: some View {
-        KitPage(intro: Self.intro, info: Self.introInfo) {
+        KitPage(intro: Self.intro(folders.repos), info: Self.introInfo) {
             if let repo = repos.first(where: { $0.name == picked }) {
                 RepoBrowser(repo: repo, editor: editor, start: start) { withAnimation(Kit.change) { picked = nil } }.id(repo.name)
             } else if loaded {
                 list
             }
         }
-        .task(load)
+        // A folder picked below lists again at once.
+        .task(id: folders.repos) { await load() }
     }
 
     private var list: some View {
         KitBlock(title: "Repos", symbol: "arrow.triangle.branch") {
+            // Where the repos live, Change… picking another (tester's feedback 2026-11-18: Sven's ~/code, the tester's ~/dev).
+            FoldersBlock(.repos, folders: folders, first: true)
             if repos.isEmpty {
-                BlockRow(first: true) { FinePrint(text: "No repos in ~/code: Pilot lists each folder there with its own .git folder.") }
+                BlockRow { FinePrint(text: "No repos there: Pilot lists each folder in it with its own .git folder.") }
             }
             ForEach(repos.indices, id: \.self) { i in
                 let repo = repos[i]
-                BlockRow(first: i == 0) {
+                BlockRow {
                     Button { withAnimation(Kit.change) { picked = repo.name } } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "folder").font(ink.ui(14)).foregroundStyle(ink.muted).frame(width: 20)
@@ -81,8 +88,8 @@ struct ReposPage: View {
     /// The list and branches from the folders, then each repo's last subject from git, four at a time; a render's moved
     /// home is listed at once, so its first draw has the rows.
     private func load() async {
-        if let home = start.home { repos = Repos.list(home: home) }
-        else { repos = await Task.detached(priority: .userInitiated) { [home = ConfigsModule.home] in Repos.list(home: home) }.value }
+        if let home = start.home { repos = Repos.list(in: home.appendingPathComponent("code")) }
+        else { repos = await Task.detached(priority: .userInitiated) { [folder = folders.reposURL] in Repos.list(in: folder) }.value }
         loaded = true
         let subjects = if let seeded = start.subjects { seeded } else { await Repos.subjects(repos) }
         for i in repos.indices { repos[i].subject = subjects[repos[i].name] }

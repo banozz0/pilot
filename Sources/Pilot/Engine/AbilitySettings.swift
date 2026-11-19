@@ -10,7 +10,7 @@ final class AbilitySettings {
 
     private(set) var added: Set<String> { didSet { defaults.set(added.sorted(), forKey: Self.key) } }
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private var found: [CatalogueEntry.Check: (has: Bool, at: Date)] = [:]
+    @ObservationIgnored private var found: [InstallCheck: (has: Bool, at: Date)] = [:]
     private static let key = "abilities.added"
 
     init(defaults: UserDefaults = .pilot()) {
@@ -30,7 +30,7 @@ final class AbilitySettings {
 
     /// Whether the app or file is on this Mac, asked again after 30 s: the menu lists actions on every open, and an app
     /// installed from Install shows up without a relaunch.
-    func has(_ need: CatalogueEntry.Check) -> Bool {
+    func has(_ need: InstallCheck) -> Bool {
         if let hit = found[need], hit.at.timeIntervalSinceNow > -30 { return hit.has }
         let has = need.isMet(bundleInstalled: AppsModule.isInstalled, fileExists: FileManager.default.fileExists(atPath:))
         found[need] = (has, Date())
