@@ -92,8 +92,9 @@ struct PageView: View {
             }
     }
 
-    /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T17, S1 B).
-    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .clipboard: ClipboardSettingsView.moreKeys]
+    /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T16, T17; S1 B).
+    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .clipboard: ClipboardSettingsView.moreKeys,
+                                                      .tiling: FocusedWindowMore.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
     @ViewBuilder private var page: some View {
@@ -117,7 +118,8 @@ struct PageView: View {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
         case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
-        case .tiling: TilingSettingsView()
+        // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
+        case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).
