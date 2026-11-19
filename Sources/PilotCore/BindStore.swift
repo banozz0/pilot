@@ -223,10 +223,11 @@ public struct BindStore: Equatable, Sendable {
     }
 
     /// New preset on `base`'s default keys alone, none of the keys set in any preset (Ask Pilot's /preset, Q327): it
-    /// becomes the active one. Nil when this store has no table for `base` (My binds on a file that never held it).
+    /// becomes the active one. Nil when this store has no table for `base` (My binds on a file that never held it), and
+    /// for Classic while it is not listed, so a new install never comes to hold it (T11).
     @discardableResult
     public mutating func addPreset(named name: String, base: Base) -> Preset? {
-        guard tables[base] != nil else { return nil }
+        guard tables[base] != nil, base != .pilot || presets.contains(.pilot) else { return nil }
         return add(Preset(id: "", name: name, base: base), Edits())
     }
 
