@@ -59,8 +59,6 @@ final class AppWindowModel {
     var editAlias: Alias?
     /// The snippet Snippets picks and names first (the clipboard panel's Save as snippet); Snippets clears it.
     var editSnippet: UUID?
-    /// The workspace whose editor popup shows over the window (mockup E, card agent-bo-95422980).
-    var editingWorkspace: EditedWorkspace?
     /// Whether the window shows on screen now: open and not hidden, minimised or covered.
     var onScreen = false
     /// Whether the window is key, the one typed into.

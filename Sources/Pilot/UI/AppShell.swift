@@ -14,25 +14,10 @@ struct AppWindowView: View {
     var more = PanelMore()
     @Environment(Engine.self) private var engine
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        let editing = model.editingWorkspace != nil
         // The window's frame is a surface of its own; each page under it is another (PageView).
         WindowLayout(model: model, more: more).styled(.window, look: look)
-            // The page under the workspace editor is inert: no clicks, Tab focus or page keys (Esc and Return are the
-            // popup's), hidden from VoiceOver.
-            .disabled(editing)
-            .blur(radius: editing ? 1.5 : 0)
-            .accessibilityHidden(editing)
-            .background { PageKeys(model: model).disabled(editing) }
-            .overlay {
-                if let edited = model.editingWorkspace {
-                    WorkspacePopup(edited: edited) { model.editingWorkspace = nil }.id(edited.id)
-                }
-            }
-            .animation(reduceMotion ? nil : Kit.change, value: model.editingWorkspace?.id)
-            .environment(\.editWorkspace) { model.editingWorkspace = EditedWorkspace(name: $0) }
+            .background { PageKeys(model: model) }
             .sheet(isPresented: $model.showsConflicts) {
                 ConflictsPage().frame(width: 620, height: 460)
                     .safeAreaInset(edge: .bottom) {

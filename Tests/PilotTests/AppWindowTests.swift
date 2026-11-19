@@ -260,15 +260,6 @@ struct AppWindowFrameTests {
         #expect(w.title == "Pilot" && w.titleVisibility == .hidden)
         #expect(w.styleMask.contains(.fullSizeContentView) && w.styleMask.contains(.closable))
     }
-
-    @Test("The workspace editor popup takes three quarters of the window, at least 680 wide and as tall as its parts need, keeping scrim round it (card agent-bo-95422980)")
-    func workspacePopupSize() {
-        // Mockup E's own window: three quarters of each side.
-        #expect(WorkspacePopup.size(in: CGSize(width: 990, height: 940), ideal: 620) == CGSize(width: 742.5, height: 705))
-        #expect(WorkspacePopup.size(in: CGSize(width: 1440, height: 900), ideal: 640) == CGSize(width: 1080, height: 675))
-        // The panel (780 × 560): at least 680 wide, 20 pt of scrim kept above and below, and the editor scrolls.
-        #expect(WorkspacePopup.size(in: AppWindowController.size, ideal: 680) == CGSize(width: 680, height: 520))
-    }
 }
 
 #if DEBUG   // the renders seed sample state through DEBUG-only hooks
@@ -441,21 +432,6 @@ struct AppWindowRenders {
                         title: "", to: dir.appendingPathComponent("menu-bar-popover.png"))
         try Self.render(BindEditor(action: "apps.terminal", actions: engine.bindActions).environment(engine), title: "",
                         to: dir.appendingPathComponent("sheet-bind-editor.png"))
-        // Sven's example (card agent-bo-95422779): Chrome 50 / Spotify 25 / X 25, own sizes.
-        let example = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.google.Chrome", name: "Google Chrome", percent: 50),
-                                                           .init(bundleId: "com.spotify.client", name: "Spotify", percent: 25),
-                                                           .init(bundleId: "dev.banozz.pilot.webapp.x-com", name: "X", percent: 25)], layout: nil)
-        // The editor is a popup in the window now (mockup E, card agent-bo-95422980): drawn alone at its size in the
-        // default window, on a store in a temporary folder; RestyledRenders draws it over the page.
-        let store = FileManager.default.temporaryDirectory.appending(path: "pilot-render-presets-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: store) }
-        let presets = WorkspacePresets(observers: EngineObservers(), store: WorkspacePresetStore(url: store.appending(path: "workspace-presets.json")))
-        presets.save(example, to: "2")
-        let popup = WorkspacePopup.size(in: AppWindowController.size)
-        try Self.render(WorkspaceEditor(workspace: "2", presets: presets, layouts: WorkspaceLayouts(observers: EngineObservers(), defaults: UserDefaults(suiteName: testSuite())!),
-                                        start: .init(apps: []), close: {})
-                            .frame(width: popup.width, height: popup.height).pilotTheme().environment(engine), title: "",
-                        to: dir.appendingPathComponent("popup-workspace-editor.png"))
         // One screen's top bar on the seeded workspaces (cards agent-bo-95422850 and 911), the strip's height, every item drawn
         // in a style, on the fakes' readings, a sample battery and Wi-Fi; then each popover.
         let readings = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: setupLook,

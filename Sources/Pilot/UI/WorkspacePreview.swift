@@ -16,11 +16,11 @@ struct WorkspacePreview: View {
     @Binding var draft: WorkspacePresetDraft
     @Binding var hovered: Int?
     let picking: WorkspaceEditor.Spot?
-    /// Each spot's frame in the popup, for the picker.
+    /// Each spot's frame in the editor, for the picker.
     @Binding var spots: [WorkspaceEditor.Spot: CGRect]
     let open: (WorkspaceEditor.Spot) -> Void
     /// The Workspaces page's drag: a tile picks its app up, and takes another's drop to trade places (Sven, 2026-11-15);
-    /// nil in the popup.
+    /// nil without one.
     var drag: WorkspaceDrag? = nil
     /// The workspace shown, which the drag's tiles belong to.
     var workspace = ""
@@ -340,7 +340,7 @@ struct AppPicker: View {
     }
 
     let matches: Matches
-    /// The picker's whole height: height(for:), or less where the popup has no more room, the list scrolling.
+    /// The picker's whole height: height(for:), or less where the editor has no more room, the list scrolling.
     let height: CGFloat
     /// Apps already on the workspace, marked "here"; picking one trades spots with it.
     let placed: Set<String>

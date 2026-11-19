@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Workspaces, Binds and Home's editor popup in the whole window (card agent-bo-95423003, Sven 2026-10-07: "half the
+/// Workspaces and Binds in the whole window (card agent-bo-95423003, Sven 2026-10-07: "half the
 /// screen is empty"): at 1440, 1000 and 760 wide, each 4:3 as Sven's 1600 × 1200 window, plus that window itself, in
 /// Tokyo Night. Presets, rules, layouts and a snapshot are seeded in a moved home; nothing reaches the tiler.
 /// The Binds board reads the Mac's keyboard layout (read only). Opt-in like the other renders:
@@ -23,7 +23,7 @@ struct FillRenders {
         return app
     }
 
-    @Test("Workspaces, Binds and Home's popup fill the window at 1440, 1000, 760 and 1600", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Workspaces and Binds fill the window at 1440, 1000, 760 and 1600", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move (\(NSHomeDirectory())); refusing to touch Sven's presets")
@@ -65,24 +65,11 @@ struct FillRenders {
             for (page, place) in [("workspaces", AppPlace(.workspaces)), ("binds", AppPlace(.binds))] {
                 let name = "\(page)-\(Int(size.width))"
                 guard only.map(name.contains) ?? true else { continue }
-                model.editingWorkspace = nil
                 model.go(place)
                 RunLoop.main.run(until: Date().addingTimeInterval(0.9))
                 frame.layoutSubtreeIfNeeded()
                 let png = try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
                 try png.write(to: dir.appendingPathComponent("\(name).png"))
-            }
-            // Home's popup on workspace 2 with the mouse over a placed app: its Replace and Remove.
-            let name = "home-popup-\(Int(size.width))"
-            if only.map(name.contains) ?? true {
-                model.go(AppPlace(.home))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.4))
-                model.editingWorkspace = EditedWorkspace(name: "2", start: .init(hovered: 2, apps: []))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.9))
-                frame.layoutSubtreeIfNeeded()
-                let png = try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:]))
-                try png.write(to: dir.appendingPathComponent("\(name).png"))
-                model.editingWorkspace = nil
             }
         }
         Look.shared.themeID = PilotTheme.defaultID
