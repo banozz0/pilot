@@ -7,7 +7,7 @@ extension ControlVerbs {
     /// (SymbolicHotKeys.Clash). `conflicts` reads com.apple.symbolichotkeys; a test hands in a fake one.
     func registerKeys(_ app: ControlActions, conflicts: @escaping @Sendable @MainActor () -> ShortcutConflicts = { .shared }) {
         register(ControlVerb("keys", help: "Keys free to bind: --free lists the Hyper keys no action holds at --mods (none: Hyper+<key>); --plain lists plain combos that clash with nothing; --base reads a new preset on that base instead of the active one.",
-                             usage: "pilot keys --free [--mods shift,ctrl,alt,cmd] [--plain] [--base pilot]",
+                             usage: "pilot keys --free [--mods shift,ctrl,alt,cmd] [--plain] [--base easy]",
                              flags: [.init("free", help: "the keys no action holds", takesValue: false),
                                      .init("mods", help: "the sublayer: shift, ctrl, alt, cmd; with --plain the combo's modifiers"),
                                      .init("plain", help: "plain combos outside Hyper, minus macOS's shortcuts and keys that type; needs cmd, ctrl or alt", takesValue: false),

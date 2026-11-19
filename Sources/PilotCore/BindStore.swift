@@ -29,6 +29,8 @@ public struct BindStore: Equatable, Sendable {
             case .empty: nil
             }
         }
+        /// Bases Pilot 1.3 and earlier cannot read: a 1.3 reader refuses a whole file with a preset row on one.
+        public var newerThan13: Bool { [.easy, .complex, .scratch].contains(self) }
     }
 
     /// A named bind set (story 149): a base table plus the keys set in it, which stay with it. The built-ins are one per
@@ -119,6 +121,14 @@ public struct BindStore: Equatable, Sendable {
         Base.allCases.compactMap { tables[$0] != nil && ($0 != .pilot || classic) ? $0.builtIn : nil }
     }
 
+    /// An install that ran before but whose file cannot be read keeps Classic's keys, not Easy's (T11): Classic listed,
+    /// where its table is given, and active.
+    public mutating func useClassic() {
+        guard tables[.pilot] != nil else { return }
+        if !presets.contains(.pilot) { presets = Self.builtIns(tables, classic: true) }
+        use(.pilot)
+    }
+
     /// One bind set, as My binds.
     public init(defaults: [String: Key], actions: [String] = []) {
         self.init(presets: [.myBinds: defaults], actions: actions)
@@ -136,12 +146,12 @@ public struct BindStore: Equatable, Sendable {
         var named = file.preset ?? Preset.myBinds.id
         if Self.holds(.pilot, named: named, in: file) { presets = Self.builtIns(tables, classic: true) }
         if let rows = file.presets {
-            let ids = Set(rows.map(\.id))
+            let ids = Set(rows.map(\.id)), names = Set(rows.map { $0.name.lowercased() })
             for var row in rows {
                 if let builtIn = Base(rawValue: row.id)?.builtIn, row.base != builtIn.base.rawValue {
                     let id = freeID(row.id, taken: ids)
                     if named == row.id { named = id }
-                    (row.id, row.name) = (id, freeName(row.name))
+                    (row.id, row.name) = (id, freeName(row.name, reserving: names))
                 }
                 let base = try row.resolvedBase
                 if !presets.contains(where: { $0.id == row.id }) {
@@ -247,11 +257,12 @@ public struct BindStore: Equatable, Sendable {
         return id
     }
 
-    /// `name` trimmed, or "Untitled", with " 2", " 3"… when another preset than `except` has it.
-    private func freeName(_ name: String, except: String? = nil) -> String {
+    /// `name` trimmed, or "Untitled", with " 2", " 3"… when another preset than `except` has it, or one of `reserving`
+    /// (lowercased: a file's rows not read yet).
+    private func freeName(_ name: String, except: String? = nil, reserving: Set<String> = []) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = trimmed.isEmpty ? "Untitled" : trimmed
-        let taken = Set(presets.filter { $0.id != except }.map { $0.name.lowercased() })
+        let taken = Set(presets.filter { $0.id != except }.map { $0.name.lowercased() }).union(reserving)
         var candidate = base, n = 2
         while taken.contains(candidate.lowercased()) { candidate = "\(base) \(n)"; n += 1 }
         return candidate
@@ -268,12 +279,12 @@ public struct BindStore: Equatable, Sendable {
         return true
     }
 
-    /// Deletes a preset made with New preset or an import, and the keys set in it; the active one gives way to the
-    /// first built-in. False for a built-in.
+    /// Deletes a preset made with New preset or an import, and the keys set in it; the active one gives way to Classic
+    /// where it is listed (an upgraded install's), else the first built-in. False for a built-in.
     @discardableResult
     public mutating func deletePreset(_ target: Preset) -> Bool {
         guard let found = preset(id: target.id), !found.isBuiltIn else { return false }
-        if preset.id == found.id, let first = presets.first { use(first) }
+        if preset.id == found.id, let fallback = preset(id: Preset.pilot.id) ?? presets.first { use(fallback) }
         presets.removeAll { $0.id == found.id }
         stashed[found.id] = nil
         return true
@@ -653,7 +664,10 @@ public struct BindStore: Equatable, Sendable {
         }
         var all = stashed
         all[preset.id] = Edits(custom: custom, disabled: disabled)
-        let presetRows = version < 3 ? nil : presets.map { p in
+        // A built-in on a base 1.3 lacks, with no keys set in it, gets no row: the table rebuilds it, and a file on Classic,
+        // My binds or a preset made in 1.3 stays one 1.3 reads, should the user go back (T11).
+        let written = presets.filter { p in !(p.isBuiltIn && p.base.newerThan13 && (all[p.id] ?? Edits()) == Edits()) }
+        let presetRows = version < 3 ? nil : written.map { p in
             let edits = all[p.id] ?? Edits()
             return PresetRow(id: p.id, name: p.name, base: p.base.rawValue, binds: edits.custom.keys.sorted().map {
                 Row(action: $0, custom: true, trigger: edits.custom[$0]!.map(Trigger.init), disabled: edits.disabled.contains($0))

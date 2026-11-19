@@ -367,7 +367,7 @@ final class Engine {
         // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194); a new install binds no
         // mouse button.
         if !Install.isNew, rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
-        for id in Set(PilotDefault.binds.keys).union(MyBinds.extras.keys) where action(id) == nil {
+        for id in Set(PilotDefault.binds.keys).union(PilotDefault.easy.keys).union(PilotDefault.complex.keys).union(MyBinds.extras.keys) where action(id) == nil {
             log.error("binds: a preset names \(LinkToken.redact(id), privacy: .public), which no action has")
         }
         // Pilot owns every Hyper key (card agent-bo-95422751): a key with a bind runs it, whatever the preset. App binds

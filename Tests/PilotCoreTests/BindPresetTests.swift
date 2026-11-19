@@ -14,7 +14,7 @@ struct BindPresetTests {
     ]
     static let actions = ["apps.launcher", "windows.close", "apps.browser", "windows.flipSplit"]
 
-    @Test("A new store is on Pilot default; My binds is listed beside it; switching changes every key and switches back")
+    @Test("A store given no Easy table is on Classic; My binds is listed beside it; switching changes every key and switches back")
     func builtIns() {
         var store = BindStore(presets: Self.tables, actions: Self.actions)
         #expect(store.preset == .pilot)
@@ -81,7 +81,7 @@ struct BindPresetTests {
         #expect(store.presets.map(\.id) == ["pilot", "myBinds", "clean-slate", "untitled", "clean-slate-2"])
     }
 
-    @Test("Rename and Delete work on a preset made by hand, never a built-in; deleting the active one falls back to Pilot default")
+    @Test("Rename and Delete work on a preset made by hand, never a built-in; deleting the active one falls back to Classic")
     func renameDelete() throws {
         var store = BindStore(presets: Self.tables)
         let mine = store.addPreset(named: "Mine", copying: false)

@@ -6,10 +6,10 @@ extension ControlVerbs {
     /// shortcuts a plain combo clashes with (Conflicts). `conflicts` reads and writes ShortcutConflicts; a test hands in
     /// one on a fake domain, so no test touches com.apple.symbolichotkeys.
     func registerBindCollections(_ app: ControlActions, conflicts: @escaping @Sendable @MainActor () -> ShortcutConflicts = { .shared }) {
-        register(ControlCollection("presets", help: "Bind presets: each a default table plus the keys set in it. add makes one from scratch (or --copy of the active one, or --base pilot: Pilot default's keys alone) and switches to it; add --preset <id> --name renames one; remove deletes one, after Allow. pilot bind --preset switches.",
+        register(ControlCollection("presets", help: "Bind presets: each a default table plus the keys set in it. add makes one from scratch (or --copy of the active one, or --base <base>: a built-in preset's keys alone, its base as pilot list presets names it) and switches to it; add --preset <id> --name renames one; remove deletes one, after Allow. pilot bind --preset switches.",
                                    fields: [.init("name", help: "the preset's name; a number is added when another has it"),
                                             .init("copy", help: "bare: start from the active preset's keys; left out: empty but the Pilot menu", required: false),
-                                            .init("base", help: "start from this preset's default keys alone, none set by hand: pilot or empty", required: false),
+                                            .init("base", help: "start from this base's default keys alone, none set by hand: easy, complex, scratch or empty; pilot (Classic) and myBinds only where pilot list presets lists them", required: false),
                                             .init("preset", help: "an existing preset's id: rename it instead (not a built-in)", required: false)],
                                    rowKey: "id",
                                    asks: [.remove],

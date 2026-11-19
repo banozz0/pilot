@@ -375,8 +375,9 @@ struct BindEditorTests {
     func returnInShell() throws {
         let engine = Engine()
         engine.binds.replace("windows.focusLeft", with: Key("y"))
+        engine.binds.replace("terminal.drop", with: Self.t)  // Easy leaves Hyper+T free: the terminal drop holds it here
         let file = engine.binds.fileURL
-        let before = try Data(contentsOf: file), held = engine.binds.store.action(for: Self.t)  // Hyper+T drops the terminal by default
+        let before = try Data(contentsOf: file), held = engine.binds.store.action(for: Self.t)
         let command = DriveRoute.shell("open -g ~/Downloads")
         let shell = BindEditor(action: nil, actions: engine.bindActions, startKey: Self.t, windowHeight: 660,
                                finder: BindFinder(scope: .shell, sources: Self.sources), does: .advanced, advanced: .shell, field: "open -g ~/Downloads")
@@ -401,8 +402,9 @@ struct BindEditorTests {
     func menuStalePath() throws {
         let engine = Engine()
         engine.binds.replace("windows.focusLeft", with: Key("y"))
+        engine.binds.replace("terminal.drop", with: Self.t)  // Easy leaves Hyper+T free: the terminal drop holds it here
         let file = engine.binds.fileURL
-        let before = try Data(contentsOf: file), held = engine.binds.store.action(for: Self.t)  // Hyper+T drops the terminal by default
+        let before = try Data(contentsOf: file), held = engine.binds.store.action(for: Self.t)
         // Zen's File > New Window edited, then Press a menu item and another app (not running) picked.
         let other = "dev.banozz.not-running", finder = BindFinder(scope: .menu, sources: Self.sources)
         let editor = BindEditor(action: nil, actions: engine.bindActions, startKey: Self.t, windowHeight: 660, finder: finder,

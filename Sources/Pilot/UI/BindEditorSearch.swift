@@ -344,7 +344,7 @@ extension BindEditor {
         if !key.hyper { return "A plain combo: no Hyper. Pilot takes it in every app." }
         let store = engine.binds.store
         if let action, store.trigger(for: action) == key, store.isCustom(action) {
-            return "Bound by you · " + (store.defaultTrigger(for: action).map { "Pilot default is \($0.label)." } ?? "no default.")
+            return "Bound by you · " + (store.defaultTrigger(for: action).map { "\(store.preset.name)'s default is \($0.label)." } ?? "no default.")
         }
         let layer = BindsPage.Sublayer(modifiers: key.modifiers)?.title ?? key.label.components(separatedBy: "+").dropLast().joined(separator: "+")
         let state = "\(plan.holderID == nil ? "Free" : "Taken") on \(layer)."

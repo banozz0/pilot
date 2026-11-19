@@ -196,13 +196,14 @@ struct ControlBindsTests {
         #expect(!rig.store.isDisabled(id))
     }
 
-    @Test("export answers the bind file, every preset in it; --link answers the pilot://import link that reads back as it")
+    @Test("export answers the bind file, every preset it writes in it; --link answers the pilot://import link that reads back as it")
     func exporting() async throws {
         let rig = Rig()
         let file = await rig.ask("export")
         #expect(Self.field(file, "version") == .number(Double(BindStore.version)))
         guard case .array(let presets)? = Self.field(file, "presets") else { Issue.record("no presets: \(file)"); return }
-        #expect(presets.count == rig.store.presets.count)
+        // An unedited built-in on a base 1.3 lacks has no row (T11): the table rebuilds it on load.
+        #expect(presets.count == rig.store.presets.filter { !($0.isBuiltIn && $0.base.newerThan13) }.count)
 
         guard case .string(let link)? = Self.field(await rig.ask("export", "--link"), "link"), let url = URL(string: link) else {
             Issue.record("no link"); return

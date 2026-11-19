@@ -44,6 +44,8 @@ final class Binds {
         do { store = try file.map { data throws(BindStore.LoadError) in try BindStore(json: data, presets: tables, actions: actions) } ?? BindStore(presets: tables, actions: actions) }
         catch {
             store = BindStore(presets: tables, actions: actions)
+            // A file is there, so this install ran before: it keeps Classic's keys, never a new install's Easy (T11).
+            store.useClassic()
             lastError = "\(fileURL.path) not read: \(error)"
             return log.error("binds: \(self.lastError ?? "", privacy: .public); the defaults run")
         }
