@@ -20,9 +20,8 @@ struct WidgetEditChoices {
         menu: { WidgetLauncher.choices() })
 }
 
-/// Edit widget (like macOS's): one placement's own settings, on the desktop or on Home, each kept for that placement
-/// alone; a password stays the widget's, in the Keychain, shared by every copy. A desktop placement also picks the
-/// workspace it shows on. Every widget picks its Layout: Auto (by its size) or one of the size classes, kept.
+/// Edit widget (like macOS's): one desktop placement's own settings, each kept for that placement alone; a password
+/// stays the widget's, in the Keychain, shared by every copy. It also picks the workspace it shows on. Every widget picks its Layout: Auto (by its size) or one of the size classes, kept.
 struct WidgetEditSheet: View {
     @Environment(\.ink) private var ink
     let widget: Widget
@@ -62,19 +61,17 @@ struct WidgetEditSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(widget.icon)  \(WidgetAsks.shown(widget.title))").font(ink.ui(15, .semibold)).foregroundStyle(ink.text)
-                Text(placement.onHome ? "On Home: these settings are this one's own." : "On the desktop: these settings are this one's own.")
+                Text("On the desktop: these settings are this one's own.")
                     .font(ink.ui(11.5)).foregroundStyle(ink.muted)
             }
-            if !placement.onHome {
-                field("Shows on") {
-                    Picker("", selection: $workspace) {
-                        Text("All workspaces").tag(String?.none)
-                        ForEach(workspaces, id: \.self) {
-                            Text("Workspace \($0)").tag(String?.some($0))
-                        }
+            field("Shows on") {
+                Picker("", selection: $workspace) {
+                    Text("All workspaces").tag(String?.none)
+                    ForEach(workspaces, id: \.self) {
+                        Text("Workspace \($0)").tag(String?.some($0))
                     }
-                    .labelsHidden().fixedSize()
                 }
+                .labelsHidden().fixedSize()
             }
             if widget.offersLayout {
                 field("Layout") {

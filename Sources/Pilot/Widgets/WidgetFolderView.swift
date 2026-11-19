@@ -288,7 +288,7 @@ struct WidgetFolderView: View {
 
 /// An item's presses: in the list a folder's click goes into it, a file's click picks it and its double-click opens
 /// it; in Square and Strip (`inside` false) a click opens either. Each drags out as its file, tracks the pointer for
-/// the desktop's right-click (WidgetFolder.sections), and has the file menu on Home's right-click.
+/// the desktop's right-click (WidgetFolder.sections).
 private struct FolderItemPress: ViewModifier {
     let item: FolderItem
     let model: WidgetFolderModel

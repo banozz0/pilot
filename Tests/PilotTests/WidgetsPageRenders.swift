@@ -135,14 +135,15 @@ struct WidgetsPageRenders {
         model.store = store
         model.reload()
         let weather = try #require(model.placements.first { $0.widget == "desk-weather" })
-        let clock = try #require(model.placements.first { $0.onHome })
+        // A placement saved on Home before T6 is kept in the file, and the page leaves it out.
+        #expect(model.placements.contains { $0.onHome })
 
         let look = Look.shared
         let saved = (look.themeID, look.style, look.glass)
         defer { (look.themeID, look.style, look.glass) = saved }
-        func shoot(_ name: String, width: CGFloat, selected: String?, home: Bool = false, previews: WidgetPreviews) throws {
+        func shoot(_ name: String, width: CGFloat, selected: String?, previews: WidgetPreviews) throws {
             let page = MonitorsGround {
-                WidgetsPage(model: model, reads: false, previews: previews, displays: [display], selected: selected, home: home)
+                WidgetsPage(model: model, reads: false, previews: previews, displays: [display], selected: selected)
             }
             .styled(.page(.widgets)).frame(width: width, height: 2400).pilotTheme(look: look)
             try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appending(path: "\(name).png"))
@@ -154,7 +155,6 @@ struct WidgetsPageRenders {
             let previews = try await Self.previews(model, store: store, look: look)
             try shoot("map-\(scheme)-1000", width: 716, selected: weather.id, previews: previews)
             try shoot("map-\(scheme)-760", width: 688, selected: weather.id, previews: previews)
-            try shoot("home-\(scheme)-1000", width: 716, selected: clock.id, home: true, previews: previews)
         }
         // Add from the list: the first free cells nearest the room's top left, clear of every other widget.
         let note = try #require(ReadyWidgets.widget(ReadyWidgets.note))

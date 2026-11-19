@@ -45,6 +45,12 @@ final class AppWindowModel {
     /// The block a link or the search asked for on a More tab (simplify-pages T7); More scrolls there, marks it in its
     /// index and clears it. Going anywhere else clears it too.
     var blockFocus: AppSection?
+    /// The setting a search result opened (pilot-ui-redesign T6, S2 B): its row, tagged `.landingRing(key)`, scrolls into
+    /// view and wears the ring for `ringFor`, then this clears. Going anywhere else clears it too.
+    var ringed: String?
+    @ObservationIgnored private var ringEnd: Task<Void, Never>?
+    /// How long a landed row keeps its ring.
+    static let ringFor = Duration.seconds(2)
     /// The Wallpaper row Look lights, from the desktop's Wallpaper settings…; going anywhere else clears it.
     var wallpaperFocus: WallpaperBlock.Focus?
     /// The action whose bind editor Binds opens (the menu's Set Hyper bind, card agent-bo-95422968); Binds clears it.
@@ -102,6 +108,8 @@ final class AppWindowModel {
         repoPick = nil
         wallpaperFocus = nil
         blockFocus = nil
+        ringEnd?.cancel()
+        ringed = nil
         searchOpen = false
         page = place.page
         if let section = place.section {
@@ -182,6 +190,17 @@ final class AppWindowModel {
 
     /// Opens a System Settings pane the search found (Q131); a seam for the tests.
     var openPane: (SystemPane) -> Void = { SystemModule.pane($0.id) }
+
+    /// Rings the row of setting `key` on the page shown now for `ringFor`.
+    func ring(_ key: String) {
+        ringEnd?.cancel()
+        ringed = key
+        ringEnd = Task { [weak self] in
+            try? await Task.sleep(for: Self.ringFor)
+            guard !Task.isCancelled else { return }
+            self?.ringed = nil
+        }
+    }
 
     /// The search's Return: the first place it finds, else the first System Settings pane, as the list orders them.
     func goToFirstResult() {

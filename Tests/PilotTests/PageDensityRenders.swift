@@ -43,7 +43,7 @@ struct PageDensityRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         try SharedLook.HomeRenders.seedPresets()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(SharedLook.HomeRenders.tenWindows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         // A crash report from today in the test run's own folder, so About shows its third button, Reveal crash reports

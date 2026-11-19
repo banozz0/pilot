@@ -9,7 +9,7 @@ import WebKit
 /// widget's tile is drawn live, read once as the Widgets page opens: its readings, its notes, the repos (git's last read
 /// if under a minute old), its note's text, the Launcher's tiles, its buttons; no command runs for a look (a desk page's feed may reach the network or an extension
 /// before anything is added). A locked widget shows the Trust to run card the desktop would. A page is a picture, at
-/// its content's height as the desktop fits it: the one the desktop or Home last drew (kept as it drew its data), else
+/// its content's height as the desktop fits it: the one the desktop last drew (kept as it drew its data), else
 /// one of Pilot's desk pages fed by readings or a setting, loaded once in the desk pages' shared WebContent
 /// (WidgetWebView), fed once and snapshotted, then ended, one at a time; until it has one, a page's tile is the kit's
 /// panel with a line saying it draws once placed, as a command widget's says, so every preview wears one frame (Sven,
@@ -24,7 +24,7 @@ final class WidgetPreviews {
     /// A page's picture by widget id, in `shotsTheme`.
     var shots: [String: NSImage] = [:]
     @ObservationIgnored private var shotsTheme = ""
-    /// Pictures being taken of a desk or Home page, by widget id.
+    /// Pictures being taken of a desk page, by widget id.
     @ObservationIgnored private var taking: Set<String> = []
     /// The see-through tile a page's picture sits on, as a page sits on its tile on the desktop.
     static let pageGround: WidgetTileModel = { let model = WidgetTileModel(); model.page = true; return model }()
@@ -45,13 +45,13 @@ final class WidgetPreviews {
         if WidgetAsks.runsOnShow(widget), !store.trust(of: widget).runs { model.locked = widget; return model }
         if widget.draw == .html {
             model.message = ReadyWidgets.isDesk(widget) && drawsUnplaced(widget) ? "Drawing its preview…"
-                : "Its page draws once it is on the desktop or Home."
+                : "Its page draws once it is on the desktop."
             return model
         }
         if widget.id == ReadyWidgets.folder { model.folder = WidgetFolder.sample() }
         switch widget.data {
-        case .command: model.message = "It shows what its command prints, once it is on the desktop or Home."
-        case .extensionPage(let id): model.message = "It shows extension \(id)'s page, once it is on the desktop or Home."
+        case .command: model.message = "It shows what its command prints, once it is on the desktop."
+        case .extensionPage(let id): model.message = "It shows extension \(id)'s page, once it is on the desktop."
         case .markets: WidgetMarkets.preview(model, values: defaults(widget))
         case .none where model.grid.isEmpty && model.tiles.isEmpty: model.message = widget.description
         default: break
@@ -67,7 +67,7 @@ final class WidgetPreviews {
     /// The preview's tiles go with the page; the pictures stay, small, for its next open.
     func drop() { models = [:] }
 
-    /// A desk or Home page that just drew its data: its picture is kept for the Widgets page, once a theme, so a placed
+    /// A desk page that just drew its data: its picture is kept for the Widgets page, once a theme, so a placed
     /// page previews as it last looked though its panel has hidden since.
     func remember(_ id: String, _ page: WidgetWebView) {
         let theme = Look.shared.theme.id
@@ -123,7 +123,7 @@ final class WidgetPreviews {
         }
     }
 
-    /// A page's picture: the one the desktop or Home shows now, else one of Pilot's desk pages fed by readings or a
+    /// A page's picture: the one the desktop shows now, else one of Pilot's desk pages fed by readings or a
     /// setting (or `data`, a render's), loaded offscreen in the shared WebContent, fed once and fitted to its content's
     /// height as the desk fits it; nil for any other page not showing.
     static func shot(_ widget: Widget, store: WidgetStore, data given: JSONValue? = nil) async -> NSImage? {

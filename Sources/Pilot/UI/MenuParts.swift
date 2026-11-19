@@ -464,7 +464,7 @@ struct InstrumentWindowGlyph: View {
             }
     }
 
-    /// Where window `id` sits on its workspace, as Home's map lays the tiled windows out (three a row, or one a row when
+    /// Where window `id` sits on its workspace, as the workspace maps lay the tiled windows out (three a row, or one a row when
     /// the tiler stacks them), a floating one in the middle; nil when `windows` lacks it.
     static func tile(of id: Int, in windows: [AeroWindow]) -> CGRect? {
         guard let window = windows.first(where: { $0.id == id }) else { return nil }
@@ -718,5 +718,16 @@ extension RowAction {
         case .copyTitle: "textformat"
         default: symbol(on: row)
         }
+    }
+}
+
+extension [AeroWindow] {
+    /// The windows as a workspace screen rows them: one a row when the tiler stacks them, else `tileRows`.
+    var layoutRows: [[AeroWindow]] { first?.layout == "v_tiles" ? map { [$0] } : tileRows }
+
+    /// Up to three windows a row, so six make two rows of three.
+    var tileRows: [[AeroWindow]] {
+        let perRow = count <= 3 ? Swift.max(1, count) : Int((Double(count) / 2).rounded(.up))
+        return stride(from: 0, to: count, by: perRow).map { Array(self[$0..<Swift.min($0 + perRow, count)]) }
     }
 }

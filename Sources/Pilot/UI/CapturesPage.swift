@@ -6,7 +6,8 @@ import SwiftUI
 /// capture ends, the three daily keys, the Captures folder, the capture options and the other capture keys; the newest
 /// captures are on History. Recording: what a recording hears, its count down, its keys, the Recordings folder and its
 /// quality. No More: its blocks went back to the front of their kind (pages round 4, Sven's Q102). Every row has an ⓘ; a
-/// key's is the line Binds shows for it.
+/// key's is the line Binds shows for it. Each setting's row is tagged with its `pilot` key, so a search result lands on
+/// it and rings it (pilot-ui-redesign T6); one on Recording lands on the page's open tab.
 struct CapturesPage: View {
     @Bindable var store: CaptureSettingsStore
     var bar: BarItemsStore = .shared
@@ -59,6 +60,7 @@ struct CapturesPage: View {
                 Segments(selection: $store.settings.afterCapture, options: [(.thumbnail, "Thumbnail"), (.editor, "Open editor"), (.copy, "Copy only")],
                          label: "After capture")
             }
+            .landingRing("capture.afterCapture")
             keyRows(Array(Self.keys.prefix(Self.frontKeys)))
         }
         KitBlock(title: "Folder", symbol: "folder") { folderRow("Captures", kind: .capture, info: Info.capturesFolder) }
@@ -74,6 +76,7 @@ struct CapturesPage: View {
             Segments(selection: menuPlace, options: [(nil, "Off"), (.menuBar, "Menu bar"), (.topBar, "Top bar"), (.both, "Both")], label: "Capture menu")
         }
         BlockRow { Toggle("Hide desktop icons in captures and recordings", isOn: $store.settings.hideDesktopIcons).toggleStyle(.pilotSwitchRow(info: Info.hideIcons)) }
+            .landingRing("capture.hideDesktopIcons")
         if store.settings.afterCapture == .thumbnail {
             BlockRow {
                 label("Thumbnail place", Info.thumbnailPlace)
@@ -82,12 +85,15 @@ struct CapturesPage: View {
                 }
                 .labelsHidden().fixedSize()
             }
+            .landingRing("capture.thumbnailPlace")
         }
         BlockRow { Toggle("Scrolling captures: Pilot scrolls for you", isOn: $store.settings.autoScroll).toggleStyle(.pilotSwitchRow(info: Info.autoScroll)) }
+            .landingRing("capture.autoScroll")
         BlockRow {
             label("Delay", Info.delay)
             Segments(selection: $store.settings.delay, options: [(3, "3 s"), (5, "5 s"), (10, "10 s")], label: "Delay")
         }
+        .landingRing("capture.delay")
     }
 
     @ViewBuilder private var recordingTab: some View {
@@ -97,10 +103,12 @@ struct CapturesPage: View {
                 Segments(selection: $store.settings.audio, options: [(.none, "None"), (.system, "Mac"), (.mic, "Microphone"), (.both, "Both")],
                          label: "Sound")
             }
+            .landingRing("capture.audio")
             BlockRow {
                 label("Count down first", Info.countdown)
                 Segments(selection: $store.settings.countdown, options: [(0, "Off"), (3, "3 seconds")], label: "Count down first")
             }
+            .landingRing("capture.countdown")
             keyRows(Self.recordKeys)
         }
         KitBlock(title: "Folder", symbol: "folder") { folderRow("Recordings", kind: .recording, info: Info.recordingsFolder) }
@@ -113,15 +121,19 @@ struct CapturesPage: View {
             label("Quality", Info.quality)
             Segments(selection: $store.settings.recordQuality, options: [(.standard, "Standard"), (.high, "High"), (.best, "Best")], label: "Quality")
         }
+        .landingRing("capture.recordQuality")
         BlockRow {
             label("Resolution", Info.resolution)
             Segments(selection: $store.settings.recordResolution, options: [(.native, "Retina pixels"), (.points, "1x")], label: "Resolution")
         }
+        .landingRing("capture.recordResolution")
         BlockRow {
             label("Frame rate", Info.frameRate)
             Segments(selection: $store.settings.recordFPS, options: [(30, "30 fps"), (60, "60 fps")], label: "Frame rate")
         }
+        .landingRing("capture.recordFPS")
         BlockRow { Toggle("Show clicks", isOn: $store.settings.showClicks).toggleStyle(.pilotSwitchRow(info: Info.showClicks)) }
+            .landingRing("capture.showClicks")
     }
 
     /// Capture's bar item as Capture menu's pick (P69): off, or on where it is placed; the Menu bar page edits the same entry.

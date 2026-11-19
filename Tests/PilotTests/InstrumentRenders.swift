@@ -1,6 +1,5 @@
 #if DEBUG
 import AppKit
-@testable import Clipboard
 import Foundation
 import PilotCore
 import SwiftUI
@@ -22,25 +21,6 @@ struct InstrumentRenders {
     /// Home's renders' windows, with workspace 4 on a second display.
     static let windows = HomeRenders.windows.replacingOccurrences(
         of: "\"workspace\": \"4\", \"monitor-id\": 1", with: "\"workspace\": \"4\", \"monitor-id\": 2")
-
-    /// The mockup's eight copies, from the apps it names, then six older ones for a panel taller than eight rows.
-    static let clips: [StoredClip] = [
-        (ClipKind.text, "step-commit -m \"redesign A mockups\" --land", "com.mitchellh.ghostty", 20.0),
-        (.link, "https://styles.refero.design/style/3b6a17f0-3bdf-418c", "app.zen-browser.zen", 125),
-        (.image, "", "cc.ffitch.shottr", 540), (.colour, "#FF6B2C", "com.microsoft.VSCode", 840),
-        (.text, "Pilot makes a Mac feel as close to Omarchy as macOS allows.", "md.obsidian", 1860),
-        (.text, "Wait about 0.3 s between chained AeroSpace commands.", "com.anthropic.claudefordesktop", 3700),
-        (.file, "/Users/ada/code/dotfiles/keymap/keymap.toml", "com.apple.finder", 7300),
-        (.text, "swift test --filter BindStoreTests", "com.apple.dt.Xcode", 10_900),
-        (.link, "https://nikitabobko.github.io/AeroSpace/commands", "app.zen-browser.zen", 14_400),
-        (.text, "open -g \"pilot://open?page=look\"", "com.mitchellh.ghostty", 18_000),
-        (.colour, "#EA5410", "com.microsoft.VSCode", 21_600), (.text, "Geist Mono for every changing number.", "md.obsidian", 25_200),
-        (.file, "/Users/ada/code/pilot/SPEC.md", "com.apple.finder", 30_000), (.text, "bd ready --json", "com.mitchellh.ghostty", 36_000),
-    ].enumerated().map { i, c in
-        var clip = StoredClip(id: Int64(i + 1), kind: c.0, text: c.1, sourceApp: c.2, copiedAt: Date().addingTimeInterval(-c.3), pinned: false)
-        if c.0 == .image { clip.customTitle = "Screenshot 09.12.41" }
-        return clip
-    }
 
     /// Where the page ends, in points: under the last row whose pixels right of `x` (the sidebar) differ from the bottom's.
     static func pageEnd(_ rep: NSBitmapImageRep, from x: Int) throws -> CGFloat {
@@ -78,10 +58,7 @@ struct InstrumentRenders {
         engine.observers.tiler.seed(focused: "1", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         SharedLook.StatsRenders.pickMockup(BarItemsStore.shared)
-        var sources = HomeSources()
-        sources.lastCopied = { HomeCopy(text: "bd show agent-bo-95422987", at: Date().addingTimeInterval(-125), count: 48) }
-        sources.pages = { [] }
-        sources.recentCopies = { Self.clips }
+        let sources = HomeSources()
 
         let only = Self.env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }

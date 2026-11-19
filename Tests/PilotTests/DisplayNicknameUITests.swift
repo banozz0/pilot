@@ -165,17 +165,7 @@ struct DisplayNicknameUITests {
         [{"monitor-id":1,"monitor-name":"Same","workspace":"1","display-uuid":"\(Self.first)"},
          {"monitor-id":2,"monitor-name":"Same","workspace":"2","display-uuid":"\(Self.second)"}]
         """)
-        let occupied = [OccupiedWorkspace(name: "1", apps: []), .init(name: "2", apps: [])]
-        func labels(_ metadata: [AeroMonitorWorkspace]) -> [String] {
-            InstrumentWorkspaces.displays(occupied: occupied, windows: [], focused: "1", monitors: metadata, nicknames: names).map(\.name)
-        }
-        #expect(labels(rows) == ["Left", "Right"])
-        #expect(labels(old) == ["Same"])
-        var duplicate = rows
-        duplicate[1].displayUUID = Self.first
-        #expect(labels(duplicate) == ["Same", "Same"])
-        try names.set("", for: Self.first)
-        #expect(labels(rows) == ["Same", "Right"])
+        #expect(rows.map(\.displayUUID) == [Self.first, Self.second])
     }
 
     @Test("HUD and wallpaper labels observe rename and reset without replacing routing data")
@@ -273,21 +263,6 @@ struct DisplayNicknameUITests {
         }
         #expect(rig.displays.nicknames.nickname(for: Self.first) == "Old personal name")
         #expect(rig.hardware.calls.isEmpty && rig.screens.applied.isEmpty)
-    }
-
-    @Test("The actual Home title stays inside a narrow workspace column with a long nickname", .pilotFocus)
-    func homeTitleBounds() throws {
-        let long = String(repeating: "Desk café ", count: 80)
-        let view = InstrumentWorkspaces(width: 150).column(.init(id: 1, name: long, workspaces: []), perRow: 1, each: 150, focused: nil)
-        let panel = PanelTestSupport.open(view.frame(width: 150).pilotTheme())
-        defer { panel.close() }
-        let assistive = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
-        NSApp.accessibilitySetValue(true, forAttribute: assistive)
-        defer { NSApp.accessibilitySetValue(false, forAttribute: assistive) }
-        let root = try #require(panel.contentView)
-        let title = try #require(Self.element(long, in: root) ?? Self.element(long.uppercased(), in: root))
-        let frame = try #require(title.accessibilityFrame?())
-        #expect(frame.width > 0 && frame.width <= 150, "Actual Home title width: \(frame.width)")
     }
 
     @Test("Menu bar rows have independent UUID view identities and follow rename/reset without changing routing", .pilotFocus)

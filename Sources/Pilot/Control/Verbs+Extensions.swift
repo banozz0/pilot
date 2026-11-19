@@ -193,7 +193,7 @@ extension ControlVerbs {
         ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why."),
         ("open", "ext open <id> [--card]", "Opens its own page in Pilot's window, or its card on the Extensions page."),
         ("run", "ext run <action> [--query <text>] [--input <text>]", "Runs a command once after Allow and answers what it printed (none of its actions performed); nothing is read back while a password preference is set."),
-        ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page and Home block show them; nothing is read back while a password preference is set."),
+        ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),

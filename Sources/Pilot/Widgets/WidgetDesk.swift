@@ -18,9 +18,8 @@ private let widgetLog = Logger(subsystem: "dev.banozz.pilot", category: "widgets
 /// never a page (Q680). With no placement nothing is armed: no tiler subscription, no observer, no timer. A right-click
 /// on one opens its menu: Edit widget, Remove from desktop.
 ///
-/// Home's widgets (placements with `home`) have no panel: Home draws their tiles and pages (HomeWidgetBlock) from this
-/// desk's models, each fed only while its tile is drawn on Home in the window on screen, its page ended the moment it
-/// is not (a hidden or icon-sized row draws no tile, so runs nothing).
+/// A placement saved on Home (`home`, before pilot-ui-redesign T6 took Home's blocks out) is kept in the file but never
+/// shown or fed: Home draws no widgets now.
 @MainActor
 final class WidgetDesk: ScreenPausing {
     static let shared = WidgetDesk()
@@ -72,22 +71,16 @@ final class WidgetDesk: ScreenPausing {
     /// A grab's landing on the grid, and the faint grid it shows, while Snap to grid is on (WidgetGridDesk).
     private let gridDrag = WidgetGridDrag()
     private var watchingTheme = false, watchingVeil = false
-    /// How many tiles Home draws now of each Home placement, in the window on screen (Edit Home's carry draws a copy
-    /// beside the one it hides): only a placement drawn at least once is fed and runs a page.
-    private var homeDraws: [String: Int] = [:]
-    private var homeDrawn: Set<String> { Set(homeDraws.keys) }
     /// The note ids a notes widget listed last, by placement: the only notes its presses may open.
     private var noteOpens: [String: Set<String>] = [:]
     /// The repos a repos widget listed last, by placement: the only repos its presses may open.
     private var repoOpens: [String: Set<String>] = [:]
     /// Edit widget on a placement: Pilot's Widgets page opens its sheet (set by the engine; a no-op until it is).
     var editPlacement: (String) -> Void = { _ in }
-    /// Remove from Home: the Widgets page takes the placement off (set by the engine; a no-op until it is).
+    /// Remove: the Widgets page takes the placement off (set by the engine; a no-op until it is).
     var removePlacement: (String) -> Void = { _ in }
     /// A desktop placement's menu, its sections and the picks checked: the Widgets page builds it (set by the engine).
     var placementMenu: (String) -> (sections: [(title: String, items: [(title: String, run: () -> Void)])], checked: Set<String>) = { _ in ([], []) }
-    /// Where Home's layout is kept: a widget taken off Home leaves no row there (reload).
-    var homeLayout: () -> HomeLayoutStore = { .shared }
     /// Told whether any panel shows: the mouse tap watches right presses only then (the menu).
     var shownChanged: (Bool) -> Void = { _ in }
 
@@ -115,14 +108,8 @@ final class WidgetDesk: ScreenPausing {
         // A file that does not read leaves the placements as they were: nothing closes on a read that failed.
         placements = read ?? placements
         for id in Set(models.keys).subtracting(placements.map(\.id)) { close(id) }
-        // A Home row is dropped only for a placement the file, read whole, no longer holds.
-        if let read {
-            let onHome = Set(read.filter(\.onHome).map(\.id))
-            homeLayout().forget { HomeLayout.widgetID($0).map { !onHome.contains($0) } ?? false }
-        }
-        syncHome()
         guard started else { return }
-        // A placement moved between the desktop and Home leaves its panel.
+        // A placement saved on Home has no panel.
         for id in Set(panels.keys).subtracting(placements.filter { !$0.onHome }.map(\.id)) { close(id) }
         if placements.allSatisfy(\.onHome) { disarm() } else { arm(); refresh() }
     }
@@ -191,8 +178,8 @@ final class WidgetDesk: ScreenPausing {
         }
     }
 
-    /// Shows the placements whose screen shows, on their one workspace when they have one; hides the rest. Home's are
-    /// Home's.
+    /// Shows the placements whose screen shows, on their one workspace when they have one; hides the rest. One saved on
+    /// Home shows nowhere.
     private func apply() {
         let live = LiveDisplay.screens
         for placement in placements where !placement.onHome {
@@ -206,10 +193,9 @@ final class WidgetDesk: ScreenPausing {
     /// Tells the mouse tap whether a panel shows (it turns on or off only on a change).
     private func noteShown() { shownChanged(shownCount > 0) }
 
-    /// The desktop read again, and Home's widgets fed or stopped as Home shows: the one resync after any change.
+    /// The desktop read again: the one resync after any change.
     private func resync() {
         refresh()
-        syncHome()
     }
 
     private func show(_ placement: Widget.Placement, on screen: NSScreen) {
@@ -355,14 +341,14 @@ final class WidgetDesk: ScreenPausing {
     /// Pilot's theme changed: every page starts over, so it loads with the new colours from its first data (WidgetWebView
     /// sends the theme with it). Watched only while armed, once at a time.
     private func watchTheme() {
-        guard armed || !homeDrawn.isEmpty, !watchingTheme else { return }
+        guard armed, !watchingTheme else { return }
         watchingTheme = true
         withObservationTracking { _ = Look.shared.theme.id } onChange: { [weak self] in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.watchingTheme = false
-                    guard self.armed || !self.homeDrawn.isEmpty else { return }
+                    guard self.armed else { return }
                     for id in Array(self.pages.keys) { self.restart(id) }
                     self.resync()
                     self.watchTheme()
@@ -373,14 +359,14 @@ final class WidgetDesk: ScreenPausing {
 
     /// Blur, Glass or Transparency changed: each page's veil follows at once, without starting over. Watched as watchTheme is.
     private func watchVeil() {
-        guard armed || !homeDrawn.isEmpty, !watchingVeil else { return }
+        guard armed, !watchingVeil else { return }
         watchingVeil = true
         withObservationTracking { _ = Look.shared.widgetLightTint } onChange: { [weak self] in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.watchingVeil = false
-                    guard self.armed || !self.homeDrawn.isEmpty else { return }
+                    guard self.armed else { return }
                     self.pages.values.forEach { $0.applyVeil() }
                     self.watchVeil()
                 }
@@ -404,33 +390,31 @@ final class WidgetDesk: ScreenPausing {
         return panel
     }
 
-    /// A page the desktop or Home shows now for widget `id`, any placement's: the Widgets page's preview takes its picture
+    /// A page the desktop shows now for widget `id`, any placement's: the Widgets page's preview takes its picture
     /// instead of loading the page again (WidgetPreviews).
     func livePage(of id: String) -> WidgetWebView? {
         placements.lazy.filter { $0.widget == id }.compactMap { self.pages[$0.id] }.first
     }
 
-    /// Its page, made now if it may run and has none: placed over the tile, its corners clipped to the tile's. A Home
-    /// widget's is placed by Home (HomeWidgetPage).
+    /// Its page, made now if it may run and has none: placed over the tile, its corners clipped to the tile's.
     private func page(_ id: String, _ widget: Widget) -> WidgetWebView? {
         if let page = pages[id] { return page }
         let ground = panels[id]?.contentView
-        guard let placement = placements.first(where: { $0.id == id }), ground != nil || homeDrawn.contains(id) && placement.onHome,
-              let page = WidgetWebView(widget: widget, store: store, size: ground?.bounds.size ?? CGSize(width: placement.width, height: placement.height),
+        guard let placement = placements.first(where: { $0.id == id }), let ground,
+              let page = WidgetWebView(widget: widget, store: store, size: ground.bounds.size,
                                        layout: widget.layout(of: placement)) else { return nil }
         page.view.autoresizingMask = [.width, .height]
         page.view.wantsLayer = true
         page.view.layer?.cornerRadius = 18
         page.view.layer?.masksToBounds = true
-        if let ground { page.view.frame = ground.bounds; ground.addSubview(page.view) }
+        page.view.frame = ground.bounds
+        ground.addSubview(page.view)
         pages[id] = page
-        // A Home page goes into the tile Home draws it in (hostPage), if one is up already.
-        if ground == nil { placePage(id) }
         models[id]?.page = page.seeThrough
         // Pilot's desk widgets take their content's height, kept on the screen (Placement.frame); past it they scroll.
         // While fitted, Auto's class is its placement's size's, never the fitted height's: a smaller layout's shorter
         // page would fall into a smaller class still.
-        if ReadyWidgets.isDesk(widget), ground != nil {
+        if ReadyWidgets.isDesk(widget) {
             page.fitted = { [weak self] height in self?.fit(id, height) }
             page.fixed = Self.fixed(placement)
         }
@@ -593,65 +577,6 @@ final class WidgetDesk: ScreenPausing {
         }
     }
 
-    // MARK: Home
-
-    /// One of a Home widget's tiles is drawn, in the window on screen, or no longer (HomeWidgetBlock, each draw paired
-    /// with its own release): its feed starts with the first and stops, its page ended at once, with the last, so a web
-    /// widget on Home runs only while Home draws it.
-    func drawnOnHome(_ id: String, _ drawn: Bool) {
-        let count = (homeDraws[id] ?? 0) + (drawn ? 1 : -1)
-        homeDraws[id] = count > 0 ? count : nil
-        syncHome()
-        if drawn { watchTheme(); watchVeil() }
-    }
-
-    /// Each Home placement fed while its tile is drawn, else stopped, its page ended at once.
-    private func syncHome() {
-        for placement in placements where placement.onHome {
-            let id = placement.id
-            if homeDrawn.contains(id) {
-                if models[id] == nil { models[id] = WidgetTileModel() }
-                if feeds[id] == nil { feeds[id] = feed(placement) }
-            } else {
-                feeds.removeValue(forKey: id)?.cancel()
-                idle.remove(id)
-                endPage(id)
-            }
-        }
-    }
-
-    /// What Home draws for its widgets: each Home placement with its tile's model, which the feed fills (its widget's
-    /// title and icon among the rest), so a redraw reads no file.
-    func homeWidgets() -> [HomeWidget] {
-        placements.filter(\.onHome).map { placement in
-            let model = models[placement.id] ?? { let made = WidgetTileModel(); models[placement.id] = made; return made }()
-            return HomeWidget(placement: placement, model: model)
-        }
-    }
-
-    /// Each Home page's hosts, the views Home draws it in, oldest first: the page sits in the newest, and goes back to
-    /// the one before when that one goes (Edit Home's carry draws a copy over a tile it hides).
-    private var pageHosts: [String: [NSView]] = [:]
-
-    func hostPage(_ id: String, in ground: NSView) {
-        pageHosts[id, default: []].append(ground)
-        placePage(id)
-    }
-
-    func unhostPage(_ id: String, from ground: NSView) {
-        pageHosts[id]?.removeAll { $0 === ground }
-        if pageHosts[id]?.isEmpty == true { pageHosts[id] = nil }
-        placePage(id)
-    }
-
-    /// The page in its newest host, filling it.
-    func placePage(_ id: String) {
-        guard let view = pages[id]?.view, let ground = pageHosts[id]?.last, view.superview !== ground else { return }
-        view.removeFromSuperview()
-        view.frame = ground.bounds
-        ground.addSubview(view)
-    }
-
     // MARK: Menu
 
     /// A right press, plain or with Hyper and no drag, on a shown widget (the mouse tap's, after its callback returned):
@@ -807,7 +732,7 @@ final class WidgetDesk: ScreenPausing {
                                             "seeThrough": models[placement.id]?.page.map(JSONValue.bool) ?? .null,
                                             "layout": .string(widget?.layout(of: placement)?.rawValue ?? "auto")]
             row.merge(gridRow(placement)) { $1 }
-            row["why"] = .string(placement.onHome ? (homeDrawn.contains(placement.id) ? "Home draws it" : "it is on Home, which is not drawing it")
+            row["why"] = .string(placement.onHome ? "it was put on Home, which draws no widgets now"
                                     : !started ? "the desk is not running (Pilot's engine has not started)"
                                     : uuid == nil ? "its screen is not connected" : state.map { placement.why(on: $0).reason } ?? "not read yet")
             // Its settings as it runs with them (its own over its widget's, no password), and the buttons it builds from
@@ -829,7 +754,7 @@ final class WidgetDesk: ScreenPausing {
         return .object(["running": .bool(started), "armed": .bool(armed), "folder": .string(store.widgets.path),
                         "installed": .array(installed), "broken": .array(broken.map { .object(["folder": .string($0.folder), "why": .string($0.why)]) }),
                         "placements": .array(rows), "panelsShown": .number(Double(shownCount)), "pages": .number(Double(pages.count)),
-                        "homeDrawn": .number(Double(homeDrawn.count)), "grid": gridStatus(),
+                        "grid": gridStatus(),
                         "screens": .array(states)])
     }
 
@@ -844,17 +769,6 @@ final class WidgetDesk: ScreenPausing {
 
     /// An AppKit frame (bottom-left origin) in top-left coordinates, and back.
     static func flip(_ frame: CGRect) -> CGRect { WindowGeometry.flip(frame, primaryHeight: Screens.primaryHeight) }
-}
-
-/// A Home placement as Home draws it, with its tile's model, which the desk feeds while Home draws it.
-struct HomeWidget: Identifiable, Sendable {
-    let placement: Widget.Placement
-    let model: WidgetTileModel
-    var id: String { placement.id }
-    /// Its row in Home's layout.
-    var row: String { HomeLayout.widgetRow(placement.id) }
-    /// Its widget's title once fed, else its id.
-    @MainActor var title: String { model.title.isEmpty ? placement.widget : model.title }
 }
 
 /// A widget's panel: borderless, never key, below every window and above the desktop's icons, on every Space, out of

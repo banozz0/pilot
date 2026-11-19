@@ -15,6 +15,8 @@ struct InstrumentFrame: View {
     var more = PanelMore()
     /// What the search finds for the window's words, read once a keystroke for Home's results and the drop alike (T6).
     @State private var hits = SearchHitsModel()
+    /// The page open now and its settings' values as it opened, for Jump back in (HomeVisit); none on Home.
+    @State private var visit: HomeVisit?
 
     var body: some View {
         let list = !RailLayout.fullWidth(model.page.area)
@@ -58,6 +60,15 @@ struct InstrumentFrame: View {
         .environment(\.searchHits, hits)
         .onChange(of: model.query, initial: true) { hits.refresh(model.query, engine: engine, schema: sources.schema) }
         .onChange(of: model.page) { more.open = false }
+        // Jump back in: what the page left changed, then the page entered read (T6, Open question 5).
+        .onChange(of: model.page, initial: true) { _, page in
+            if let visit { sources.remember(visit.changed(schema: sources.schema)) }
+            visit = HomeVisit.opening(page, schema: sources.schema)
+        }
+        .onDisappear {
+            if let visit { sources.remember(visit.changed(schema: sources.schema)) }
+            visit = nil
+        }
     }
 
     /// The page list's width, as drawn: Tools' six pages by name without scrolling.
@@ -314,7 +325,8 @@ private struct SearchResultRow: View {
 @MainActor
 struct SearchHits {
     enum Value: Equatable { case none, text(String), keys(String) }
-    enum Target: Equatable { case place(AppPlace), bind(String), pane(SystemPane) }
+    /// A setting's page and key (its row is rung), a part or a page, a bind's editor, or a System Settings pane.
+    enum Target: Equatable { case setting(String, AppPlace), place(AppPlace), bind(String), pane(SystemPane) }
 
     struct Hit: Identifiable, Equatable {
         let id: String
@@ -355,7 +367,8 @@ struct SearchHits {
             var rows = found.settings.map { setting in
                 let place = AppPlace.named(setting.page) ?? AppPlace(page)
                 return Hit(id: "setting:" + setting.key, title: setting.label,
-                           value: (try? schema.get(setting.key)).map { .text(Self.words($0, kind: setting.kind)) } ?? .none, target: .place(place))
+                           value: (try? schema.get(setting.key)).map { .text(Self.words($0, kind: setting.kind)) } ?? .none,
+                           target: .setting(setting.key, place))
             }
             rows += found.parts.map { Hit(id: "part:" + $0.rawValue, title: $0.title, value: .none, target: .place(AppPlace(page, $0))) }
             if rows.isEmpty { rows = [Hit(id: "page:" + page.rawValue, title: page.title, value: .none, target: .place(AppPlace(page)))] }
@@ -453,10 +466,11 @@ extension View {
 }
 
 extension AppWindowModel {
-    /// A result's Return or click: its page and part (the window lands on its block), the bind's editor on Binds, or the
-    /// System Settings pane; the words go.
+    /// A result's Return or click: a setting's page with its row rung for 2 s, a part's page (the window lands on its
+    /// block), the bind's editor on Binds, or the System Settings pane; the words go.
     func open(_ hit: SearchHits.Hit) {
         switch hit.target {
+        case .setting(let key, let place): go(place); ring(key)
         case .place(let place): go(place)
         case .bind(let action): editBind = action; go(AppPlace(.binds))
         case .pane(let pane): openPane(pane)

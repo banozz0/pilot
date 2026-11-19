@@ -1,6 +1,5 @@
 import AppKit
 @testable import Clipboard
-import CryptoKit
 import Foundation
 @testable import Pilot
 import PilotCore
@@ -129,25 +128,6 @@ struct SandboxHost {
         fflush(stdout)
         let status = ControlStatus()
         status.updates = PilotUpdates(info: NSDictionary(contentsOf: info) as? [String: Any])
-        // PILOT_SANDBOX_HOME_BLOCKS=<file>: Home's layout as a build saved it, written to this run's defaults before its store
-        // first reads them, so `pilot list home-blocks` shows what that layout converts to on first launch (P91), its
-        // extensions' pages listed as installed.
-        var homeBlocks = HomeBlockStores()
-        if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_HOME_BLOCKS"] {
-            let defaults = UserDefaults.pilot(), bytes = try Data(contentsOf: URL(filePath: file))
-            let sha = { (data: Data?) in data.map { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() } ?? "none" }
-            defaults.set(bytes, forKey: HomeLayoutStore.key)
-            print("home.blocks sha256 before: \(sha(bytes))")
-            let store = HomeLayoutStore(defaults: defaults)
-            print("home.blocks sha256 after:  \(sha(defaults.data(forKey: HomeLayoutStore.key)))")
-            print("home.blocks.lanes kept: \(defaults.data(forKey: HomeLayoutStore.lanesKey)?.count ?? 0) bytes; grid \(store.layout.grid.map(String.init) ?? "none"); "
-                  + "drawn as the default: \(store.layout == .standard)")
-            fflush(stdout)
-            homeBlocks.layout = { store }
-            // Its extensions' pages as installed, so their rows list too.
-            let pages = store.layout.rows.compactMap { HomeLayout.extensionID($0.id) }.map { ExtensionPages.Link(id: $0, title: $0, icon: "🧩") }
-            homeBlocks.pages = { pages }
-        }
         // PILOT_SANDBOX_CLIPS=<file>: a throwaway clipboard history in this run's folder, one text copy a line (`\n` for a new
         // line in it), oldest first, timed as the app times them (P65), so `pilot clip list` reads it. A line starting `@old `
         // was copied an hour ago with no timer, as a row from before the timers or from while the switch was off. Other lines
@@ -227,7 +207,7 @@ struct SandboxHost {
         let guides: @Sendable @MainActor () -> [AISkill] = {
             AISkills.guides(AISkills.load { try? String(contentsOf: skills.appending(path: "\($0)/SKILL.md"), encoding: .utf8) })
         }
-        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, homeBlocks: homeBlocks, clipboard: clipboard,
+        let served = ControlSocket(path: path, verbs: ControlSocket.registered(status: status, clipboard: clipboard,
                                                                               extensions: extensions, guides: guides))
         #expect(served.start())
         defer { served.stop() }

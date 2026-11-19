@@ -101,8 +101,7 @@ extension ControlVerbs {
             fields: [.init("widget", help: "an installed widget's id, or a ready one's: \(ReadyWidgets.ids.joined(separator: ", "))"), .init("screen", help: "a display's UUID (pilot status --part widgets lists them); the main display when left out", required: false),
                      .init("x", help: "the left edge, 0 to 1 of the screen's width", required: false), .init("y", help: "the top edge, 0 to 1 of the screen's height", required: false),
                      .init("workspace", help: "the one workspace it shows on, 1 to 9; the widget's own (its widget.json), else every workspace, when left out", required: false),
-                     .init("values", help: "its own settings, as Edit widget keeps them: a JSON object by setting name (a password is never one; an actions setting's picks are kept only as a button may run them); \"layout\" is every widget's: auto (by its size, the default), strip, square, wide or large", required: false),
-                     .init("home", help: "on puts it on Home, the first page of Pilot's window, instead, shown there at once; it runs only while Home draws it", required: false)],
+                     .init("values", help: "its own settings, as Edit widget keeps them: a JSON object by setting name (a password is never one; an actions setting's picks are kept only as a button may run them); \"layout\" is every widget's: auto (by its size, the default), strip, square, wide or large", required: false)],
             rowKey: "id", asks: [.add],
             list: { () throws(ControlError) in .array(tools.store.placements().map(Self.row)) },
             askerAdd: { args, peer throws(ControlError) in
@@ -117,7 +116,6 @@ extension ControlVerbs {
                     return value
                 }
                 let (x, y) = (try fraction("x"), try fraction("y"))
-                let home = try args.value("home").map { word throws(ControlError) in try ControlVerbs.onOff(word, "--home") } ?? false
                 let values: [String: JSONValue]? = try args.value("values").flatMap { text throws(ControlError) in
                     guard let object = try? JSONDecoder().decode([String: JSONValue].self, from: Data(text.utf8)) else {
                         throw ControlError(.badValue, "--values must be a JSON object by setting name")
@@ -140,7 +138,7 @@ extension ControlVerbs {
                 try await tools.gate.allow(tools.placeAsk(id, values: values), peer: peer) { () throws(ControlError) in }
                 var placements = tools.store.placements()
                 var placement = Widget.Placement.new(widget, after: placements.count, screen: args.value("screen"), x: x, y: y,
-                                                     workspace: workspace, home: home)
+                                                     workspace: workspace)
                 placement.values = values
                 placements.append(placement)
                 // As saved: on the grid while Snap to grid is on.

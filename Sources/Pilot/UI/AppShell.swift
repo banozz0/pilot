@@ -97,6 +97,8 @@ struct PageView: View {
             // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
             // KitMore or KitLanding lands there, then clears it.
             .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
+            // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
+            .environment(\.landingRing, model.ringed)
     }
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
@@ -104,8 +106,7 @@ struct PageView: View {
         let section = model.section(of: model.page)
         switch model.page {
         case .home:
-            HomePage(onScreen: model.live, searching: !model.query.trimmingCharacters(in: .whitespaces).isEmpty, clashes: model.conflictCount,
-                     editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openExtension: { model.goExtensionPage($0) }) { model.go($0) }
+            HomePage { model.go($0) }
         case .binds:
             if section == .bindsMore {
                 BindsMorePage { model.editBind = $0; model.go(AppPlace(.binds)) }

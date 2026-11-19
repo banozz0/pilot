@@ -2,19 +2,17 @@ import PilotCore
 import SwiftUI
 
 /// The Widgets page's list to add from (Sven, 2026-11-15, Q252 B): every widget, Pilot's then yours, each a row with
-/// what it shows, how many are placed, its trust and Add; Add puts it on the map's display (on its first free cells) or
-/// on Home, as the switch above says. Its menu holds Duplicate to edit, and for yours Show folder and Uninstall.
+/// what it shows, how many are placed, its trust and Add; Add puts it on the map's display (on its first free cells). Its
+/// menu holds Duplicate to edit, and for yours Show folder and Uninstall.
 struct WidgetsAddList: View {
     @Environment(\.ink) private var ink
     let model: WidgetsPageModel
-    /// Adding to Home, not the desktop.
-    let home: Bool
     let add: (Widget) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                WidgetsEyebrow(text: home ? "Add to Home" : "Add to the desktop")
+                WidgetsEyebrow(text: "Add to the desktop")
                 Spacer(minLength: 6)
                 newWidget
             }
@@ -32,7 +30,7 @@ struct WidgetsAddList: View {
     private func row(_ widget: Widget) -> some View {
         let ready = ReadyWidgets.isReady(widget.id)
         let trust = model.trust[widget.id]
-        let placed = model.placed(widget.id, home: home)
+        let placed = model.placed(widget.id)
         return BlockRow {
             Text(widget.icon).font(.system(size: 16)).frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
@@ -45,7 +43,7 @@ struct WidgetsAddList: View {
                         }
                         .foregroundStyle(ink.text2)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(home ? "On Home \(placed) times" : "On the desktop \(placed) times")
+                        .accessibilityLabel("On the desktop \(placed) times")
                     }
                 }
                 if let description = widget.description {
@@ -58,7 +56,7 @@ struct WidgetsAddList: View {
                 Button("Trust…") { model.asking = widget.id }.buttonStyle(.pilot).help("Trust this widget: what it may do, then Trust")
             }
             Button(placed > 0 ? "Add another" : "Add") { add(widget) }.buttonStyle(.pilot)
-                .help(home ? "Put it on Home" : "Put it on the desktop, on the first free cells")
+                .help("Put it on the desktop, on the first free cells")
             Menu {
                 Button("Duplicate to edit") { model.duplicate(widget) }
                 if !ready {

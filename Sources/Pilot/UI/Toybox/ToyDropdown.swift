@@ -423,3 +423,25 @@ struct ToyStatPopover: View {
         .overlay(alignment: .top) { if !first { style.color(\.line2).frame(height: 1.5) } }
     }
 }
+
+// Kept here from ToyHome, which pilot-ui-redesign T6 removed with Home's blocks: the editor and the dropdown still draw it.
+/// Bars standing on the gauge's foot (`.spark`), each outlined in the ink, a reading at least a sliver.
+struct ToySpark: View {
+    @Environment(\.style) private var style
+    let bars: [Double]
+    let colour: Color
+
+    var body: some View {
+        GeometryReader { g in
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(bars.indices, id: \.self) { i in
+                    let share = bars[i]
+                    let shape = UnevenRoundedRectangle(topLeadingRadius: 4, topTrailingRadius: 4, style: .continuous)
+                    shape.fill(colour).overlay { shape.stroke(style.color(\.outline), lineWidth: 1.5) }
+                        .frame(height: max(4, g.size.height * share))
+                }
+            }
+            .frame(width: g.size.width, height: g.size.height, alignment: .bottomLeading)
+        }
+    }
+}

@@ -9,6 +9,7 @@ import SwiftUI
 /// `.moreBlock(_:)` under its place.
 struct KitMore<Content: View>: View {
     @Environment(\.blockLanding) private var landing
+    @Environment(\.landingRing) private var ring
     let entries: [MoreEntry]
     /// The narrowest the blocks go beside the index: the page's widest row still on one line (Pilot's Hold Hyper needs
     /// 620; simplify-pages T7, coordinator 2026-11-10). Narrower, the index steps aside and the blocks take the column.
@@ -38,7 +39,7 @@ struct KitMore<Content: View>: View {
             .onGeometryChange(for: Bool.self) { $0.size.width - Self.index >= blocks } action: { roomy = $0 }
             .onChange(of: entries.map(\.id), initial: true) { spy.order = entries.map(\.id) }
             // A link or the search: straight there, its block marked.
-            .lands(landing, proxy) { spy.hold($0) }
+            .lands(landing, proxy, ring: ring) { spy.hold($0) }
         }
     }
 }
@@ -62,27 +63,35 @@ struct BlockLanding {
 /// wraps the front's scroll view and scrolls to the block tagged `.id(place)`, as KitMore lands on a More tab.
 struct KitLanding<Content: View>: View {
     @Environment(\.blockLanding) private var landing
+    @Environment(\.landingRing) private var ring
     @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollViewReader { proxy in content.lands(landing, proxy) }
+        ScrollViewReader { proxy in content.lands(landing, proxy, ring: ring) }
     }
 }
 
 extension View {
     /// Scrolls `proxy` to the block `landing` asks for, `first` told before, then clears it: KitMore's and KitLanding's.
-    func lands(_ landing: BlockLanding?, _ proxy: ScrollViewProxy, first: @escaping (AppSection) -> Void = { _ in }) -> some View {
+    /// A ringed setting's row (`ring`, pilot-ui-redesign T6) is scrolled to the middle.
+    func lands(_ landing: BlockLanding?, _ proxy: ScrollViewProxy, ring: String? = nil,
+               first: @escaping (AppSection) -> Void = { _ in }) -> some View {
         onChange(of: landing?.place, initial: true) {
             guard let landing, let place = landing.place else { return }
             first(place)
             proxy.scrollTo(place, anchor: .top)
             landing.landed()
         }
+        .onChange(of: ring, initial: true) {
+            if let ring { proxy.scrollTo(ring, anchor: .center) }
+        }
     }
 }
 
 extension EnvironmentValues {
     @Entry var blockLanding: BlockLanding? = nil
+    /// The setting whose row wears the landing ring now (AppWindowModel.ringed).
+    @Entry var landingRing: String? = nil
     @Entry var moreSpy: MoreSpy? = nil
 }
 
@@ -176,5 +185,29 @@ private struct MoreIndex: View {
         .padding(.leading, toy ? Toy.gutter - 6 : style.density.page - 6)
         .padding(.top, toy ? Toy.blockGap + 6 : style.density.padding + 12)
         .accessibilityElement(children: .contain).accessibilityLabel("On More")
+    }
+}
+
+extension View {
+    /// A setting's row a search result can land on (pilot-ui-redesign T6, S2 B; s7.html's `.ring`): `key` is the setting's
+    /// `pilot` key. While the window rings it, the row scrolls into view and wears a 2 pt accent ring on the selection
+    /// tint, a little wider than the row, for 2 s. Reduce motion shows and drops it without the fade.
+    func landingRing(_ key: String) -> some View { modifier(LandingRingTag(key: key)) }
+}
+
+private struct LandingRingTag: ViewModifier {
+    @Environment(\.landingRing) private var ringed
+    @Environment(\.style) private var style
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let key: String
+
+    func body(content: Content) -> some View {
+        let on = ringed == key
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        content
+            .background { shape.fill(style.color(\.accentSoft)).padding(.horizontal, -8).opacity(on ? 1 : 0) }
+            .overlay { shape.strokeBorder(style.color(\.accent), lineWidth: 2).padding(.horizontal, -8).opacity(on ? 1 : 0).allowsHitTesting(false) }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: on)
+            .id(key)
     }
 }

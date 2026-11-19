@@ -308,11 +308,9 @@ final class Engine {
     @ObservationIgnored private var pressCounts: PressCounts?
     /// The next write of the counts, a moment after the last press rather than one per keystroke.
     @ObservationIgnored private var pressSave: DispatchWorkItem?
-    /// Today's presses for Home (card agent-bo-95422992): its count, most used and presses by hour; saved with the counts.
-    private(set) var today = TodayPresses() { didSet { if (today.day != nil) != pressed { pressed.toggle() } } }
-    /// A press has been counted (today's file holds a day): Home's Most used waits for it (simplify-pages T3). Its own
-    /// property, so Home redraws once when it flips, not on every press as reading `today` would.
-    private(set) var pressed = false
+    /// Today's presses (card agent-bo-95422992): its count, most used and presses by hour, as Binds' inspector and
+    /// `pilot status` read them; saved with the counts.
+    private(set) var today = TodayPresses()
     @ObservationIgnored private let todayFile = DayFile<TodayPresses>("presses-today")
 
     private(set) var hyperHeld = false
@@ -405,8 +403,6 @@ final class Engine {
         do { today = try todayFile.load(or: TodayPresses()) } catch {
             log.error("presses: \(self.todayFile.url.path, privacy: .public) not read: \(String(describing: error), privacy: .public)")
         }
-        // init runs no didSet: a day saved before this launch counts as pressed.
-        pressed = today.day != nil
         overlay.rows = { [unowned self] page in
             OverlayPage.rows(store: binds.store, actions: bindActions, sublayer: page, mode: settings.overlayMode,
                              presses: pressCounts?.counts ?? [:], picks: settings.overlayPicks)

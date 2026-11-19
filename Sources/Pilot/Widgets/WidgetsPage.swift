@@ -41,8 +41,8 @@ final class WidgetsPageModel {
 
     func widget(_ id: String) -> Widget? { byID[id] }
 
-    /// "On the desktop twice", "Not on the desktop"; Home's apart.
-    func placed(_ id: String, home: Bool = false) -> Int { placements.count { $0.widget == id && $0.onHome == home } }
+    /// "On the desktop twice", "Not on the desktop"; one saved on Home not counted (Home draws no widgets now).
+    func placed(_ id: String) -> Int { placements.count { $0.widget == id && !$0.onHome } }
 
     // MARK: Actions
 
@@ -71,8 +71,8 @@ final class WidgetsPageModel {
         return names + (kept.map { names.contains($0) ? [] : [$0] } ?? [])
     }
 
-    /// A desktop widget's menu (its right-click, or a Hyper+right click): Edit widget, Move to Home and Remove from
-    /// desktop under its title, then the workspaces it may show on, the one it shows on checked.
+    /// A desktop widget's menu (its right-click, or a Hyper+right click): Edit widget and Remove from desktop under its
+    /// title, then the workspaces it may show on, the one it shows on checked.
     func menu(for id: String) -> (sections: [(title: String, items: [(title: String, run: () -> Void)])], checked: Set<String>) {
         reload()
         guard let placement = placements.first(where: { $0.id == id }) else { return ([], []) }
@@ -80,38 +80,19 @@ final class WidgetsPageModel {
         let shows: [(title: String, run: () -> Void)] = [(all, { self.show(placement, on: nil) })]
             + workspaces(keeping: placement.workspace).map { name in ("Workspace \(name)", { self.show(placement, on: name) }) }
         return ([(widget(placement.widget)?.title ?? placement.widget,
-                  [("Edit widget…", { self.desk.editPlacement(id) }), ("Move to Home", { self.moveHome(placement) }),
-                   ("Remove from desktop", { self.remove(placement) })]),
+                  [("Edit widget…", { self.desk.editPlacement(id) }), ("Remove from desktop", { self.remove(placement) })]),
                  ("Shows on", shows)],
                 [placement.workspace.map { "Workspace \($0)" } ?? all])
     }
 
-    /// Move to Home: the placement leaves the desktop for Home, its own settings kept.
-    func moveHome(_ placement: Widget.Placement) {
-        var all = store.placements()
-        guard let i = all.firstIndex(where: { $0.id == placement.id }) else { return reload() }
-        (all[i].home, all[i].screen, all[i].workspace) = (true, nil, nil)
-        save(all, done: "\(widget(placement.widget)?.title ?? placement.widget) is on Home now.")
-    }
-
-    /// Takes a placement off by its id (Home's right-click Remove).
+    /// Takes a placement off by its id (the desktop's right-click Remove).
     func remove(id: String) {
         reload()
         if let placement = placements.first(where: { $0.id == id }) { remove(placement) }
     }
 
     func remove(_ placement: Widget.Placement) {
-        save(store.placements().filter { $0.id != placement.id }, done: placement.onHome ? "Taken off Home." : "Taken off the desktop.")
-    }
-
-    /// Add to Home: a new placement on Pilot's Home page, at the widget's own size, shown there at once (HomeLayout
-    /// shows a new widget row); it runs only while Home draws it.
-    @discardableResult func addHome(_ widget: Widget) -> String {
-        var all = store.placements()
-        let placement = Widget.Placement.new(widget, after: all.count, home: true)
-        all.append(placement)
-        save(all, done: "\(widget.title) is on Home, the first page of Pilot's window; Edit Home moves and sizes it.")
-        return placement.id
+        save(store.placements().filter { $0.id != placement.id }, done: "Taken off the desktop.")
     }
 
     /// Add on the Widgets page's map (Q252 B): a new placement on `display`'s first free cells, nearest its room's top
@@ -228,8 +209,7 @@ final class WidgetsPageModel {
 
 /// Look's Widgets page (T20; the desktop map, Sven 2026-11-15, Q252 B): the main display drawn small with each widget
 /// where it sits on the grid, Snap to grid on the map; a click on one shows its own settings under the map, saved as
-/// they are set; Home's widgets the same behind the Desktop / Home switch; and every widget to add in a list, Add
-/// putting it on the map's first free cells (or on Home). Trust this widget, Duplicate to edit, Show folder, Uninstall
+/// they are set; and every widget to add in a list, Add putting it on the map's first free cells. Trust this widget, Duplicate to edit, Show folder, Uninstall
 /// and Import (a folder or .zip, or one dropped on the page) as before. Each widget's own CPU and memory are not shown:
 /// a page's WebContent process is not Pilot's to attribute.
 struct WidgetsPage: View {
@@ -242,14 +222,13 @@ struct WidgetsPage: View {
     /// The displays the map may draw; nil reads the Mac's (a render hands its own).
     var displays: [WidgetsDisplay]?
     @Bindable private var snap = WidgetSnap.shared
-    @State private var home = false
     @State private var selected: String?
     @State private var displayID: String?
 
     init(model: WidgetsPageModel = .shared, reads: Bool = true, previews: WidgetPreviews = .shared, displays: [WidgetsDisplay]? = nil,
-         selected: String? = nil, home: Bool = false) {
+         selected: String? = nil) {
         self.model = model; self.reads = reads; self.previews = previews; self.displays = displays
-        _selected = State(initialValue: selected); _home = State(initialValue: home)
+        _selected = State(initialValue: selected)
     }
 
     static let intro = "Your desktop as it is. Click a widget to change it, or add one from the list."
@@ -263,9 +242,7 @@ struct WidgetsPage: View {
             if let note = model.note { Text(note).font(ink.ui(12)).foregroundStyle(ink.text2).padding(.top, 6) }
             VStack(alignment: .leading, spacing: 10) {
                 header(shown, display)
-                if home {
-                    WidgetsHomeTiles(placements: model.placements.filter(\.onHome), widget: model.widget, selected: $selected)
-                } else if let display {
+                if let display {
                     WidgetsMap(display: display, placements: model.placements.filter { display.holds($0, among: shown) }, widget: model.widget,
                                snap: snap.on, selected: $selected)
                 }
@@ -300,13 +277,10 @@ struct WidgetsPage: View {
         .modifier(WidgetsPageSheets(model: model))
     }
 
-    /// Desktop or Home with their counts, the display and its size (a menu with more than one), Snap to grid.
+    /// The display and its size (a menu with more than one), Snap to grid.
     private func header(_ shown: [WidgetsDisplay], _ display: WidgetsDisplay?) -> some View {
-        let onDesk = model.placements.count { !$0.onHome }, onHome = model.placements.count(where: \.onHome)
-        return HStack(spacing: 12) {
-            Segments(selection: Binding(get: { home }, set: { home = $0; selected = nil }),
-                     options: [(false, "Desktop \(onDesk)"), (true, "Home \(onHome)")], label: "Desktop or Home")
-            if !home, let display {
+        HStack(spacing: 12) {
+            if let display {
                 if shown.count > 1 {
                     Menu("\(display.name) · \(display.size)") {
                         ForEach(shown) { one in Button("\(one.name) · \(one.size)") { displayID = one.id; selected = nil } }
@@ -317,29 +291,26 @@ struct WidgetsPage: View {
                 }
             }
             Spacer(minLength: 8)
-            if !home {
-                HStack(spacing: 6) {
-                    Text("Snap to grid").font(ink.ui(12.5)).foregroundStyle(ink.text).fixedSize()
-                    InfoMark(text: Self.snapInfo)
-                    Toggle("Snap to grid", isOn: $snap.on).toggleStyle(.pilotSwitch).labelsHidden()
-                }
+            HStack(spacing: 6) {
+                Text("Snap to grid").font(ink.ui(12.5)).foregroundStyle(ink.text).fixedSize()
+                InfoMark(text: Self.snapInfo)
+                Toggle("Snap to grid", isOn: $snap.on).toggleStyle(.pilotSwitch).labelsHidden()
             }
         }
     }
 
     @ViewBuilder private var inspector: some View {
-        if let placement = model.placements.first(where: { $0.id == selected && $0.onHome == home }), let widget = model.widget(placement.widget) {
+        if let placement = model.placements.first(where: { $0.id == selected && !$0.onHome }), let widget = model.widget(placement.widget) {
             WidgetsInspector(model: model, placement: placement, widget: widget, previews: previews)
         } else {
-            Text(home ? "Click a widget above to change it." : "Click a widget on the map to change it.")
+            Text("Click a widget on the map to change it.")
                 .font(ink.ui(12)).foregroundStyle(ink.text2)
         }
     }
 
     private func list(_ display: WidgetsDisplay?, _ shown: [WidgetsDisplay]) -> some View {
-        WidgetsAddList(model: model, home: home) { widget in
-            if home { selected = model.addHome(widget) }
-            else if let display { selected = model.add(widget, on: display, among: shown) }
+        WidgetsAddList(model: model) { widget in
+            if let display { selected = model.add(widget, on: display, among: shown) }
             else { model.add(widget) }
         }
     }

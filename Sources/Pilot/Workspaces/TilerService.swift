@@ -167,7 +167,7 @@ final class TilerService {
     /// The tiler answers its stream: a workspace is focused. Observable, unlike isRunning.
     var isAnswering: Bool { focused != nil }
 
-    /// Goes to a workspace, from a click in the dropdown or on Home.
+    /// Goes to a workspace, from a click in the dropdown.
     func go(_ name: String, from caller: String) {
         Task { await perform("\(caller).workspace:\(name)") { try await $0.run(.workspace(name)) } }
     }

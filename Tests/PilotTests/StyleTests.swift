@@ -172,18 +172,19 @@ struct StyleTests {
         }
     }
 
-    /// Home's sources as fakes: nothing copied, no extension pages.
+    /// Home's sources as fakes: no settings, nothing changed last.
     func fakes() throws -> HomeSources {
         var sources = HomeSources()
-        sources.lastCopied = { nil }
-        sources.recentCopies = { [] }
-        sources.pages = { [] }
+        let schema = SettingsSchema()
+        sources.schema = { schema }
+        sources.recent = { [] }
+        sources.remember = { _ in }
         return sources
     }
 
     /// Home on an engine that never starts.
     func homePage(_ engine: Engine) throws -> some View {
-        HomePage(onScreen: false) { _ in }.environment(engine).environment(\.homeSources, try fakes())
+        HomePage { _ in }.environment(engine).environment(\.homeSources, try fakes())
     }
 
     @Test("Home draws Instrument, dark and light, and Toybox apart from it")

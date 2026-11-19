@@ -30,7 +30,7 @@ struct InstrumentPagesRenders {
         if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
 
         let engine = try SharedLook.HomeRenders.engine()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(SharedLook.HomeRenders.tenWindows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
 
@@ -87,7 +87,7 @@ struct InstrumentPagesRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         try SharedLook.HomeRenders.seedPresets()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(SharedLook.HomeRenders.tenWindows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         // Extensions on ExtensionsPageViewTests' fixture (three extensions, two folders not read), one bound.

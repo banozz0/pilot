@@ -8,8 +8,8 @@ import Testing
 
 /// Home in the panel (pilot-ui-redesign T6, round 2's shots 7c-home and 7c-search), opt-in like the other renders: the
 /// window at the panel's 780 by 560 in Tokyo Night and Porcelain, on Home at rest (the four switches and Jump back in),
-/// on Home searching "border" (the grouped results with their values), and Tools › Captures with the same words in its
-/// field's drop (⌘F on any tab). Seeded in a moved home: the mockup's
+/// on Home searching "border" (the grouped results with their values), Tools › Captures with the same words in its
+/// field's drop (⌘F on any tab), and Tools › Captures after Return on "After a capture", its row ringed. Seeded in a moved home: the mockup's
 /// workspaces and binds (fakes; nothing reaches the tiler or the clipboard), a schema on the render's own engine, and
 /// two settings changed last. Its `engine()` and `seedPresets()` seed the other renders too.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter HomeRenders`
@@ -35,6 +35,23 @@ struct HomeRenders {
      {"window-id": 5, "app-name": "Spotify", "app-bundle-id": "rocks.spotifast.Spotifast", "app-pid": 5, "workspace": "4", "monitor-id": 1,
       "window-layout": "h_tiles", "window-title": "Spotify"}]
     """
+
+    /// Ten windows across workspaces 1 to 4, Sven's apps, as the page renders seed the tiler (from the Toybox Home renders,
+    /// gone with Home's blocks in pilot-ui-redesign T6).
+    static let tenWindows: String = {
+        let rows: [(String, String, String)] = [
+            ("Ghostty", "com.mitchellh.ghostty", "1"), ("Ghostex", "com.madda.ghostex.gpui", "1"),
+            ("Zen", "app.zen-browser.zen", "2"), ("Claude", "com.anthropic.claudefordesktop", "2"),
+            ("Obsidian", "md.obsidian", "3"), ("Notes", "com.apple.Notes", "3"), ("Reminders", "com.apple.reminders", "3"),
+            ("Telegram", "com.tdesktop.Telegram", "4"), ("Vesktop", "dev.vencord.vesktop", "4"), ("Spotify", "rocks.spotifast.Spotifast", "4"),
+        ]
+        return "[" + rows.enumerated().map { i, row in
+            """
+            {"window-id": \(i + 1), "app-name": "\(row.0)", "app-bundle-id": "\(row.1)", "app-pid": \(i + 1), "workspace": "\(row.2)", \
+            "monitor-id": 1, "window-layout": "h_tiles", "window-title": "\(row.0)"}
+            """
+        }.joined(separator: ",") + "]"
+    }()
 
     /// The engine with the mockup's binds, workspaces and presses.
     static func engine() throws -> Engine {
@@ -145,6 +162,15 @@ struct HomeRenders {
             try shot("\(name)-home-searching-border", query: "border")
             // ⌘F on another tab: the same results in the drop under its field.
             try shot("\(name)-captures-searching-border", AppPlace(.captures), query: "border")
+            // Return on "After a capture": Tools › Captures, its row rung for 2 s (shot within the first second).
+            let hit = try #require(SearchHits("after capture", engine: engine, schema: schema).rows.first { $0.id == "setting:capture.afterCapture" })
+            model.open(hit)
+            try #require(model.page == .captures && model.ringed == "capture.afterCapture")
+            RunLoop.main.run(until: Date().addingTimeInterval(0.9))
+            frame.layoutSubtreeIfNeeded()
+            try #require(model.ringed == "capture.afterCapture", "the ring went before the shot")
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name)-captures-ringed.png"))
         }
         model.query = ""
     }

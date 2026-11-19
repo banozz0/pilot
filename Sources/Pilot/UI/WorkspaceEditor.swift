@@ -4,8 +4,9 @@ import SwiftUI
 import WebApps
 
 // The workspace editor as mockup E (card agent-bo-95422980, Sven approved 2026-10-07): a popup inside Pilot's window,
-// about three quarters of it, over a dimmed page. Right-click a workspace on Home to open it; the Workspaces page shows
-// the same editor inline (WorkspaceEditorPanel, card agent-bo-95423003).
+// about three quarters of it, over a dimmed page, opened by a workspace's right-click (editsWorkspace), which no view
+// offers since Home's blocks went (pilot-ui-redesign T6). The Workspaces page shows the same editor inline
+// (WorkspaceEditorPanel, card agent-bo-95423003).
 
 /// The workspace the popup edits; `start` is where a render begins (the app never sets it). Each open is its own, so a
 /// popup opened again on the same workspace starts fresh.
@@ -509,7 +510,7 @@ struct WorkspaceEditorPanel: View {
     static let openMissingInfo = "Switching here also opens each of these apps that has no window yet, instead of only pulling in the windows already open."
     static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off."
     static let keepLayoutInfo = "On (the default): Pilot lays this workspace out again in this layout every time a window opens or closes on it. Off: a new window goes wherever the tiler puts it."
-    static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Home's keys. It saves when you press Return or click elsewhere."
+    static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Binds' keys. It saves when you press Return or click elsewhere."
     static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two spots to set how wide each is, before or after apps are in them, and − and + take a spot away or add one. Every change saves at once."
     static let layoutInfo = "How the apps share the screen. Your widths puts them side by side in spots at the widths you set: drag the lines on the preview, and each app you add takes the next spot's width. The others lay the apps out for you."
     static let opensHereInfo = "The apps this workspace opens with, in order: the first fills the first spot. At login opens that app once each time you log in."

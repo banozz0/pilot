@@ -970,3 +970,74 @@ struct BarPresetControls: View {
     }
 }
 
+/// Over its frame, a scroll that is more up-down than sideways (a mouse wheel, an up-down swipe) goes on as the same
+/// scroll sideways, momentum and all, so the Menu bar page's top bar scrolls with either (Sven on build 2372). Clicks and drags
+/// pass through. A gesture belongs where it starts: one begun elsewhere scrolls the page on as the frame passes under
+/// the pointer; and with nothing to scroll sideways the scroll goes to the page too.
+struct SidewaysWheel: NSViewRepresentable {
+    func makeNSView(context: Context) -> Catcher { Catcher() }
+    func updateNSView(_ view: Catcher, context: Context) {}
+    static func dismantleNSView(_ view: Catcher, coordinator: ()) { view.stop() }
+
+    final class Catcher: NSView {
+        private var monitor: Any?
+        /// Whether the gesture under way began over this frame, and when its last event came (a plain wheel has no phases).
+        private var owned = false
+        private var last: TimeInterval = 0
+        /// A plain wheel's notches this close together are one gesture.
+        static let gap: TimeInterval = 0.3
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, event.window === self.window else { return event }
+                return self.turn(event) ? nil : event
+            }
+        }
+
+        /// Hands an up-down scroll over this frame sideways to the view under it; false leaves the event as it is.
+        func turn(_ event: NSEvent) -> Bool {
+            let starts = event.phase == .began || event.phase == .mayBegin
+                || event.phase.isEmpty && event.momentumPhase.isEmpty && event.timestamp - last > Self.gap
+            last = event.timestamp
+            if starts { owned = bounds.contains(convert(event.locationInWindow, from: nil)) }
+            guard owned, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX),
+                  let under = window?.contentView?.hitTest(event.locationInWindow), Self.scrollsSideways(under) else { return false }
+            under.scrollWheel(with: Self.sideways(event))
+            return true
+        }
+
+        /// Whether the sideways scroll holding `view` has more than it shows; one that fits leaves the page its scroll.
+        static func scrollsSideways(_ view: NSView) -> Bool {
+            var scroll = view.enclosingScrollView
+            while let each = scroll {
+                if let document = each.documentView, document.frame.width > each.contentView.bounds.width + 0.5 { return true }
+                scroll = each.enclosingScrollView
+            }
+            return false
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+        /// The event with its up-down deltas moved to the sideways axis; down scrolls on to the right.
+        static func sideways(_ event: NSEvent) -> NSEvent {
+            guard let copy = event.cgEvent?.copy() else { return event }
+            let pairs: [(CGEventField, CGEventField)] = [(.scrollWheelEventDeltaAxis1, .scrollWheelEventDeltaAxis2),
+                                                         (.scrollWheelEventPointDeltaAxis1, .scrollWheelEventPointDeltaAxis2)]
+            for (down, side) in pairs {
+                copy.setIntegerValueField(side, value: copy.getIntegerValueField(down))
+                copy.setIntegerValueField(down, value: 0)
+            }
+            copy.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: copy.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1))
+            copy.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: 0)
+            return NSEvent(cgEvent: copy) ?? event
+        }
+    }
+}

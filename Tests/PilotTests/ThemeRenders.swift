@@ -66,7 +66,7 @@ struct ThemeRenders {
             .map { LiveRow(SystemStats.Row(name: $0.key, value: $0.value, explanation: "")) }
         SystemSampler.shared.seed(history: history, latest: raw, rows: rows, busiest: [.cpu: busy, .ram: busy, .network: busy])
         Look.shared.themeID = PilotTheme.defaultID
-        let page = HomePage(onScreen: false) { _ in }.environment(engine)
+        let page = HomePage { _ in }.environment(engine)
             .frame(width: 1000, height: 1250).pilotTheme().background(Theme.background)
         try render(page, to: dir.appendingPathComponent("home.png"))
         // Binds as a keyboard (card agent-bo-95422894), Tokyo Night and Folio (brackets).

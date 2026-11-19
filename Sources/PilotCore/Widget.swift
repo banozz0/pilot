@@ -743,8 +743,8 @@ extension Widget {
         public var workspace: String?
         /// Sven resized it (Hyper+right-drag, Q695): its size is his, never fitted to its content.
         public var sized: Bool?
-        /// On Pilot's Home page instead of the desktop: Home draws it among its blocks, and it runs only while Home draws it;
-        /// its screen, place and workspace are not read.
+        /// Put on Pilot's Home page before Home's blocks went (pilot-ui-redesign T6): kept in the file as it was, but shown
+        /// and run nowhere.
         public var home: Bool?
         /// Its own settings (Edit widget), over the widget's: each placement keeps its own, as macOS widgets do; never a
         /// password, which stays the widget's, in the Keychain.
@@ -767,13 +767,12 @@ extension Widget {
         public static func newID() -> String { String(UUID().uuidString.prefix(8)).lowercased() }
 
         /// A new placement of `widget` at its own size and on its own workspace (its widget.json's), a step down and right
-        /// from the `count` placed before it, so two never land on each other; what is given overrides. On Home it has no
-        /// screen or workspace.
+        /// from the `count` placed before it, so two never land on each other; what is given overrides.
         public static func new(_ widget: Widget, after count: Int, screen: String? = nil, x: Double? = nil, y: Double? = nil,
-                               workspace: String? = nil, home: Bool = false) -> Placement {
+                               workspace: String? = nil) -> Placement {
             let step = 0.05 + 0.03 * Double(count % 10)
-            return Placement(widget: widget.id, screen: home ? nil : screen, x: x ?? step, y: y ?? step, width: widget.size.width,
-                             height: widget.size.height, workspace: home ? nil : workspace ?? widget.workspace, home: home)
+            return Placement(widget: widget.id, screen: screen, x: x ?? step, y: y ?? step, width: widget.size.width,
+                             height: widget.size.height, workspace: workspace ?? widget.workspace)
         }
 
         /// Its frame on a screen whose frame is `screen`, top-left origin, kept on the screen.
