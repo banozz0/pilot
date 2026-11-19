@@ -17,12 +17,13 @@ final class AccessibilityGate {
 
     /// Shows the macOS prompt (once per app identity) and opens the Accessibility pane with the drag panel beside it, then
     /// watches for the grant. A row left by an older signature of Pilot keeps the prompt from showing: the panel says so.
-    func request() {
+    /// `panel: false` is onboarding's Access, which shows Pilot's icon to drag in its own window (Sven, 2026-11-19).
+    func request(panel: Bool = true) {
         let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         isTrusted = AXIsProcessTrustedWithOptions(opts)
         if isTrusted { onGranted(); return }
         NSWorkspace.shared.open(Self.pane)
-        PermissionDragPanel.show(.accessibility)
+        if panel { PermissionDragPanel.show(.accessibility) }
         startPolling()
     }
 

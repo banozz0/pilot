@@ -14,7 +14,7 @@ struct InstrumentOnboarding: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            OnboardingRail(step: model.step)
+            OnboardingRail(step: model.step, allDone: model.step == .tryIt && model.demoDone(engine))
             switch model.step {
             case .welcome: welcome
             case .permissions: access
@@ -58,7 +58,7 @@ struct InstrumentOnboarding: View {
             heading(OnboardingModel.welcomeTitle) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(OnboardingModel.welcomeLine).styleText(\.strong).foregroundStyle(style.color(\.text))
-                    Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
+                    Text(OnboardingModel.hyperAbout)
                         .styleText(\.body).lineSpacing(3).foregroundStyle(style.color(\.text2))
                 }
             }
@@ -98,25 +98,7 @@ struct InstrumentOnboarding: View {
                 Text(OnboardingModel.accessAbout).styleText(\.body).lineSpacing(3).foregroundStyle(style.color(\.text2))
             }
             .padding(.bottom, -14)
-            HStack(spacing: 14) {
-                Image(systemName: "accessibility").foregroundStyle(style.color(\.text2)).frame(width: 30, height: 30)
-                    .background(style.color(\.raised), in: RoundedRectangle(cornerRadius: 7, style: .continuous)).accessibilityHidden(true)
-                titled("Accessibility", Onboarding.Row.accessibility.detail(model.status))
-                Spacer(minLength: 8)
-                if model.status.accessibility {
-                    state("Allowed")
-                } else {
-                    Button("Allow") { model.allowAccessibility() }.buttonStyle(InstrumentButtonStyle(kind: .raised))
-                }
-            }
-            .padding(.horizontal, 18).padding(.vertical, 14)
-            .styleSurface(\.card)
-            InstrumentPanel(title: "Later, from Settings", note: "\(OnboardingModel.later.count)") {
-                ForEach(Array(OnboardingModel.laterGroups.enumerated()), id: \.offset) { index, group in
-                    if index > 0 { InstrumentRule() }
-                    line { titled(group.title, group.names); Spacer(minLength: 0) }
-                }
-            }
+            AccessPanel(model: model)
             foot(OnboardingModel.ticksItself, "Continue", enabled: Onboarding.canContinue(model.status)) { model.go(.extras) }
         }
     }
@@ -171,7 +153,13 @@ struct InstrumentOnboarding: View {
     }
 
     private func tryItPanels(_ key: [LayerKey]) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let demoDone = model.demoDone(engine)
+        return VStack(alignment: .leading, spacing: 14) {
+            if demoDone {
+                InstrumentPanel(title: "The Hyper key", note: key.label) {
+                    line { DemoDone(line: model.demoLine(engine)); Spacer(minLength: 0) }
+                }
+            } else {
             InstrumentPanel(title: "The Hyper key", note: key.label) {
                 prompt("Hold \(key.label)", "your binds appear while you hold it", caps: [], done: model.tryIt.held)
                 if let files = model.filesKey(engine) {
@@ -180,6 +168,7 @@ struct InstrumentOnboarding: View {
                 }
                 InstrumentRule()
                 prompt("Press \(key.label) + Space", "the Pilot menu", caps: ["Space"], done: model.tryIt.menuOpened)
+            }
             }
             InstrumentPanel(title: "The other permissions") {
                 GrantWalkPanel(walk: model.walk).padding(.horizontal, 18).padding(.vertical, 12)

@@ -10,6 +10,8 @@ import SwiftUI
 struct OnboardingRail: View {
     @Environment(\.style) private var style
     let step: OnboardingModel.Step
+    /// The current step is finished too (Try it's demo done): its node shows a tick.
+    var allDone = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -32,7 +34,11 @@ struct OnboardingRail: View {
             ZStack {
                 if current {
                     Circle().fill(style.color(\.accent))
-                    Text("\(s.number)").styleText(\.mono).foregroundStyle(style.color(\.canvas))
+                    if allDone {
+                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(style.color(\.canvas))
+                    } else {
+                        Text("\(s.number)").styleText(\.mono).foregroundStyle(style.color(\.canvas))
+                    }
                 } else {
                     Circle().strokeBorder(style.color(done ? \.line3 : \.line2), lineWidth: 1)
                     if done {
@@ -98,6 +104,13 @@ struct SetupFork: View {
                             }
                         }
                     }
+                    // The theme is the user's own pick (Sven, 2026-11-19): kept as it is until one is picked here.
+                    VStack(alignment: .leading, spacing: 4) {
+                        SetupThemePicker(setup: setup)
+                        if setup.themePick != nil {
+                            Text(setup.themeNote).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                     Text(setup.forkCount).styleText(\.mono).foregroundStyle(style.color(\.text3)).padding(.top, 2)
                     if !setup.noAppBefore.isEmpty {
                         // Said before the run (reviewer, T54): Undo cannot put "no app" back.
@@ -138,6 +151,19 @@ struct SetupFork: View {
     }
 }
 
+/// Set up's theme menu: Keep the current look (the default), or a theme of the style in use.
+struct SetupThemePicker: View {
+    @Bindable var setup: OnboardingSetup
+
+    var body: some View {
+        Picker("Theme", selection: $setup.themePick) {
+            Text("Theme: keep the current look").tag(String?.none)
+            ForEach(setup.themes, id: \.id) { theme in Text("Theme: \(theme.title)").tag(Optional(theme.id)) }
+        }
+        .labelsHidden().fixedSize()
+    }
+}
+
 // MARK: Pick by hand
 
 /// Pick by hand: the same groups as ticked rows, each with what it gives, nothing ticked at first; what is on this Mac
@@ -154,9 +180,12 @@ struct SetupPickList: View {
                     ForEach(group.offered, id: \.self) { item in
                         InstrumentRule()
                         HStack(spacing: 14) {
-                            SetupTitled(title: item.title, detail: item.detail)
+                            SetupTitled(title: item.title, detail: item == .theme && setup.themePick != nil ? setup.themeNote : item.detail)
                             Spacer(minLength: 8)
-                            if setup.onMac.contains(item) {
+                            if item == .theme && setup.ledger[item] == nil {
+                                // Picking one ticks it; Keep the current look unticks it.
+                                SetupThemePicker(setup: setup)
+                            } else if setup.onMac.contains(item) {
                                 Text("On this Mac").styleText(\.mono).foregroundStyle(style.color(\.text2)).fixedSize()
                             } else if let state = setup.ledger[item]?.state {
                                 // Held by the last run's record: said, never offered twice.
@@ -317,6 +346,73 @@ struct GrantWalkPanel: View {
 extension Engine {
     /// The label of the Hyper bind on `key`, nil when none: the action a Hyper choice's everyday shortcut would run.
     func boundLabel(_ key: Key) -> String? { binds.store.action(for: key).flatMap { action($0)?.label } }
+}
+
+/// Access in both styles (Sven, 2026-11-19: mockup C, with A's drag strip and B's plain words): what Accessibility lets
+/// Pilot do and the one thing it never sees; Pilot's icon to drag into the list from this window, no floating helper,
+/// with three steps that follow the real state (Settings running, then the grant); the later grants in one line.
+struct AccessPanel: View {
+    @Environment(\.style) private var style
+    let model: OnboardingModel
+
+    var body: some View {
+        let granted = model.status.accessibility, open = model.settingsOpen || granted
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("With it, Pilot can").styleText(\.title).foregroundStyle(style.color(\.text))
+                ForEach(OnboardingModel.accessCan, id: \.self) { line in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(style.color(\.accent)).accessibilityHidden(true)
+                        Text(line).styleText(\.body).foregroundStyle(style.color(\.text2))
+                    }
+                }
+                Text(OnboardingModel.accessNever).styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(.top, 4)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading).styleSurface(\.card)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    DraggableApp().frame(width: 48, height: 48).help("Drag Pilot into the list")
+                    SetupTitled(title: granted ? "Accessibility is on" : "Drag Pilot into the list",
+                                detail: granted ? "Pilot reads the Hyper key now." : "Then switch it on. An old Pilot listed? Remove it with − first.")
+                    Spacer(minLength: 8)
+                    if granted {
+                        Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityLabel("Allowed")
+                    } else {
+                        SetupButton(title: model.accessAsked ? "Open again" : "Allow", primary: !model.accessAsked) { model.allowAccessibility() }
+                    }
+                }
+                HStack(spacing: 8) {
+                    step("1 · Settings open", "beside this window", done: open, live: !open && model.accessAsked)
+                    step("2 · Drag Pilot in", "or + and pick it", done: granted, live: open && !granted)
+                    step("3 · Switch it on", "Pilot sees it at once", done: granted, live: false)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).styleSurface(\.card)
+            Text(OnboardingModel.laterLine).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func step(_ title: String, _ detail: String, done: Bool, live: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).styleText(\.small).foregroundStyle(style.color(done ? \.accent : live ? \.text : \.text3))
+            Text(detail).styleText(\.caption).foregroundStyle(style.color(\.text3)).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(style.color(done ? \.accentLine : \.line2), lineWidth: 1))
+    }
+}
+
+/// Try it's demo, done: one line for the whole tab in place of its prompts (Sven, 2026-11-19).
+struct DemoDone: View {
+    @Environment(\.style) private var style
+    let line: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(style.color(\.accent)).accessibilityHidden(true)
+            SetupTitled(title: "Demo done", detail: line)
+        }
+    }
 }
 
 /// What a Hyper key choice breaks, under its name in both styles: an alert icon and Onboarding.hyperBreaks' line (Sven's

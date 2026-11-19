@@ -9,11 +9,17 @@ import PilotCore
 enum SetupItem: String, CaseIterable, Codable, Hashable {
     case homebrew, mole, mas, ffmpeg, webp, npm, cargo
     case filesKey, notesKey, txt, md, dictation, voices, launchAtLogin, command
+    /// A theme for Pilot and the apps it recolours, applied as Look's press does (Sven, 2026-11-19).
+    case theme
 
     /// What Set up offers (Sven's critique, 2026-11-18: the main things only): the Files and Notes keys and launch at
     /// login. The helpers live on Install's Command-line tools, .txt and .md on Open with, the dictation model and voices
     /// on Dictation and Read aloud, the pilot command on General, each with its own button.
-    static let offered: [SetupItem] = [.filesKey, .notesKey, .launchAtLogin]
+    static let offered: [SetupItem] = [.filesKey, .notesKey, .theme, .launchAtLogin]
+
+    /// What ticking it ticks too, as the run needs it first: a Homebrew formula needs Homebrew. A theme installs nothing
+    /// (it recolours the apps already on the Mac and fetches its wallpapers), so it needs none; nor do the keys.
+    var needs: [SetupItem] { formula != nil ? [.homebrew] : [] }
 
     var group: SetupGroup {
         switch self {
@@ -22,6 +28,7 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .txt, .md: .fileKinds
         case .dictation, .voices: .downloads
         case .launchAtLogin, .command: .pilot
+        case .theme: .look
         }
     }
 
@@ -68,6 +75,7 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .dictation: "dictation model"
         case .voices: "voices"
         case .launchAtLogin: "launch at login"
+        case .theme: "theme"
         case .command: "the pilot command"
         default: rawValue
         }
@@ -83,6 +91,7 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .dictation: "Dictation: \(OnboardingSetup.speech.name)"
         case .voices: "Read aloud voices"
         case .launchAtLogin: "Launch Pilot at login"
+        case .theme: "Theme"
         case .command: "The pilot command"
         default: short
         }
@@ -105,6 +114,7 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
         case .dictation: "\(OnboardingSetup.speech.size) · \(OnboardingSetup.speech.note)"
         case .voices: "Kokoro's natural English voices, US and UK, run on this Mac · \(KokoroModel.size)"
         case .launchAtLogin: "so Pilot is there after a restart"
+        case .theme: "Pilot's look and the apps it recolours; installs nothing"
         case .command: "lets a terminal or an AI agent read and change Pilot; links ~/.local/bin/pilot"
         }
     }
@@ -122,7 +132,7 @@ enum SetupItem: String, CaseIterable, Codable, Hashable {
 
 /// Set up's groups, in the run's order.
 enum SetupGroup: CaseIterable, Hashable {
-    case helpers, keys, fileKinds, downloads, pilot
+    case helpers, keys, look, fileKinds, downloads, pilot
 
     /// In SetupItem's order, which is the run's: npm and cargo last, as they bring Node and Rust and take the longest
     /// (T54's call).
@@ -134,6 +144,7 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "Helpers"
         case .keys: "Keys"
+        case .look: "Look"
         case .fileKinds: "File kinds"
         case .downloads: "Downloads"
         case .pilot: "Pilot"
@@ -144,6 +155,7 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "shippingbox"
         case .keys: "command"
+        case .look: "paintpalette"
         case .fileKinds: "doc.text"
         case .downloads: "arrow.down.circle"
         case .pilot: "power"
@@ -155,6 +167,7 @@ enum SetupGroup: CaseIterable, Hashable {
         switch self {
         case .helpers: "helpers: " + items.map(\.short).joined(separator: ", ")
         case .keys: "keys: Files → Pilot Files, Notes → Pilot Notes"
+        case .look: "theme: the one picked below"
         case .fileKinds: "file kinds: .txt and .md open in Pilot"
         case .downloads: "downloads: dictation model and voices, \(OnboardingSetup.speech.megabytes + KokoroModel.megabytes) MB"
         case .pilot: offered.map(\.short).joined(separator: ", ")
@@ -191,6 +204,13 @@ protocol SetupSystem: AnyObject {
     func runScript(_ script: String, title: String) -> String?
     /// A command in a visible terminal window (an undo's `brew uninstall`).
     func runInTerminal(_ command: String, title: String, onSuccess: String)
+    /// The themes Set up offers for the style in use, (id, title); the one applied now (nil: none); the apps a theme
+    /// recolours on this Mac (none while Look's Pilot only is on).
+    var themes: [(id: String, title: String)] { get }
+    var appliedTheme: String? { get }
+    var themeRecolours: [String] { get }
+    /// Applies a theme as Look's press does, nil restoring Pilot's own look; why it did not take, else nil.
+    func applyTheme(_ id: String?) async -> String?
 }
 
 /// Pilot's real objects, the same ones Settings changes.
@@ -210,6 +230,24 @@ final class LiveSetupSystem: SetupSystem {
 
     var speechPick: String? { SpeechModels.shared.pick?.rawValue }
     var hasSpeechModel: Bool { SpeechModels.shared.active != nil }
+
+    var themes: [(id: String, title: String)] {
+        let style = Look.shared.style.rawValue
+        return ((try? ThemeCoordinator.production().store.list()) ?? []).filter { $0.compatible(with: style) }.map { ($0.id, $0.title) }
+    }
+
+    var appliedTheme: String? { (try? ThemeCoordinator.production().appliedTheme())?.id }
+
+    /// Ghostty's config always, then what Look finds: Zed, Obsidian's vaults and the apps ThemeApps knows.
+    var themeRecolours: [String] {
+        guard let owner = try? ThemeCoordinator.production(), (try? owner.appFollowing())?.othersOn != false else { return [] }
+        let found = ThemeCoordinator.detectApps(home: NSHomeDirectory())
+        return ["Ghostty"] + (found.zed == nil ? [] : ["Zed"]) + (found.vaults.isEmpty ? [] : ["Obsidian"]) + found.apps.map(\.kind.name)
+    }
+
+    func applyTheme(_ id: String?) async -> String? {
+        do { _ = try await ThemeCoordinator.production().press(id); return nil } catch { return String(describing: error) }
+    }
 
     func startDownloads(dictation: Bool, voices: Bool) {
         ExtrasDownloads.shared.start(speech: dictation ? OnboardingSetup.speech : nil, voices: voices, upscaler: false)
@@ -338,6 +376,17 @@ final class OnboardingSetup {
     private(set) var onMac: Set<SetupItem> = []
     /// Pick by hand's ticks: nothing at first.
     private(set) var picked: Set<SetupItem> = []
+    /// The theme Set up applies, picked by hand: nil keeps the current look (the default), and only a pick puts the theme
+    /// in Set up everything or ticks it in Pick by hand.
+    var themePick: String? { didSet { if themePick == nil { picked.remove(.theme) } else { picked.insert(.theme) } } }
+    /// The themes and what a theme recolours, read as Set up shows.
+    private(set) var themes: [(id: String, title: String)] = []
+    private(set) var themeRecolours: [String] = []
+    /// What the theme does, said under its picker: nothing to install, its wallpapers, the apps it recolours.
+    var themeNote: String {
+        let apps = themeRecolours.isEmpty ? "only Pilot's own look (Pilot only is on in Look)" : themeRecolours.joined(separator: ", ")
+        return "Installs nothing. Fetches its wallpapers and recolours \(apps). Undo puts the look back."
+    }
     /// The run: each change made, in the plan's order, saved.
     private(set) var ledger: [SetupItem: Change] = [:]
     /// Why the run could not start, said under it.
@@ -374,6 +423,8 @@ final class OnboardingSetup {
 
     func load() {
         onMac = Set(SetupItem.allCases.filter(isOnMac))
+        themes = system.themes
+        themeRecolours = system.themeRecolours
         picked.subtract(onMac)
         noAppBefore = everything.filter { item in item.kind != nil && item.kind?.handlers.first.flatMap(system.defaultApps.current) == nil }
     }
@@ -405,6 +456,8 @@ final class OnboardingSetup {
         case .dictation: system.hasSpeechModel || Self.underWay(system.download(item))
         case .voices: system.download(item) == .ready || Self.underWay(system.download(item))
         case .launchAtLogin: system.launchesAtLogin
+        // Applied or not, a theme is always offered: picking one is the choice.
+        case .theme: false
         case .command: system.commandLinked
         }
     }
@@ -418,14 +471,15 @@ final class OnboardingSetup {
 
     /// Set up everything's changes: all but what is on this Mac or still held by the record (a quiet mark Run setup
     /// again kept, which a later look settles; `start` never runs one twice).
-    var everything: [SetupItem] { SetupItem.offered.filter { !onMac.contains($0) && ledger[$0] == nil } }
+    var everything: [SetupItem] { SetupItem.offered.filter { ($0 != .theme || themePick != nil) && !onMac.contains($0) && ledger[$0] == nil } }
 
-    /// A formula needs Homebrew: ticking one ticks Homebrew, and unticking Homebrew unticks them while it is missing.
+    /// Ticking an item ticks what it needs (`needs`: a formula, Homebrew), and unticking Homebrew unticks them while it is
+    /// missing. A theme ticks only with a pick (`themePick`).
     func set(_ item: SetupItem, _ on: Bool) {
-        guard !onMac.contains(item), ledger[item] == nil else { return }
+        guard !onMac.contains(item), ledger[item] == nil, item != .theme || themePick != nil else { return }
         if on { picked.insert(item) } else { picked.remove(item) }
+        if on { picked.formUnion(item.needs.filter { !onMac.contains($0) }) }
         guard !onMac.contains(.homebrew) else { return }
-        if on && item.formula != nil { picked.insert(.homebrew) }
         if !on && item == .homebrew { picked.subtract(SetupGroup.helpers.items) }
     }
 
@@ -434,7 +488,7 @@ final class OnboardingSetup {
     /// Starts `items` in the plan's order: keys, Pilot's settings and file kinds at once, then the downloads, then the
     /// helpers' Terminal run. Each records what was there before it changes it.
     func start(_ items: [SetupItem]) {
-        let run = SetupItem.allCases.filter { items.contains($0) && !onMac.contains($0) && ledger[$0] == nil }
+        let run = SetupItem.allCases.filter { items.contains($0) && ($0 != .theme || themePick != nil) && !onMac.contains($0) && ledger[$0] == nil }
         problem = nil
         phase = .run
         defaults.set(false, forKey: Self.againKey)
@@ -453,6 +507,14 @@ final class OnboardingSetup {
                 ledger[item]?.state = system.launchAtLogin(true).map(State.failed) ?? .done
             case .command:
                 ledger[item]?.state = system.linkCommand(true).map(State.failed) ?? .done
+            case .theme:
+                guard let id = themePick else { continue }
+                ledger[item]?.before = system.appliedTheme
+                ledger[item]?.state = .running("applying")
+                Task {
+                    ledger[item]?.state = await system.applyTheme(id).map(State.failed) ?? .done
+                    save()
+                }
             default: break
             }
         }
@@ -624,6 +686,14 @@ final class OnboardingSetup {
                 ledger[item]?.state = system.launchAtLogin(false).map(State.undoFailed) ?? .undone
             case .command:
                 ledger[item]?.state = system.linkCommand(false).map(State.undoFailed) ?? .undone
+            case .theme:
+                // The theme applied before, or Pilot's own look when there was none.
+                ledger[item]?.state = .undoing
+                let before = ledger[item]?.before
+                Task {
+                    ledger[item]?.state = await system.applyTheme(before).map(State.undoFailed) ?? .undone
+                    save()
+                }
             default: break
             }
         }

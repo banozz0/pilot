@@ -62,7 +62,7 @@ private struct OnboardingSteps: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            OnboardingRail(step: model.step)
+            OnboardingRail(step: model.step, allDone: model.step == .tryIt && model.demoDone(engine))
             switch model.step {
             case .welcome: welcome
             case .permissions: access
@@ -89,7 +89,7 @@ private struct OnboardingSteps: View {
         return VStack(alignment: .leading, spacing: 12) {
             title(OnboardingModel.welcomeTitle)
             Text(OnboardingModel.welcomeLine).font(ink.ui(15, .medium)).foregroundStyle(ink.text2)
-            Text("Pilot runs on one key, called Hyper. Holding it is like pressing a combination of modifier keys at once, so every Hyper shortcut is free of clashes. Pick which key is Hyper.")
+            Text(OnboardingModel.hyperAbout)
                 .foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true)
             Card {
                 ForEach(Onboarding.hyperChoices) { key in
@@ -121,23 +121,7 @@ private struct OnboardingSteps: View {
         VStack(alignment: .leading, spacing: 12) {
             title("Allow Accessibility")
             Text(OnboardingModel.accessAbout).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
-            Card {
-                CardRow {
-                    TitledText(title: "Accessibility", detail: Onboarding.Row.accessibility.detail(model.status))
-                    Spacer()
-                    if model.status.accessibility {
-                        Chip(text: "allowed", color: ink.green)
-                    } else {
-                        Button("Allow") { model.allowAccessibility() }
-                    }
-                }
-            }
-            PanelHeading(text: "Later, from Settings · \(OnboardingModel.later.count)")
-            Card {
-                ForEach(OnboardingModel.laterGroups, id: \.title) { group in
-                    CardRow { TitledText(title: group.title, detail: group.names) }
-                }
-            }
+            AccessPanel(model: model)
             HStack {
                 FinePrint(text: OnboardingModel.ticksItself)
                 Spacer()
@@ -200,11 +184,15 @@ private struct OnboardingSteps: View {
     private func tryItPanels(_ key: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Card {
-                prompt("Hold \(key)", "your binds appear while you hold it", done: model.tryIt.held)
-                if let files = model.filesKey(engine) {
-                    prompt("Press \(key) + \(files)", "Pilot Files opens: the key you just set", done: model.filesOpened)
+                if model.demoDone(engine) {
+                    CardRow { DemoDone(line: model.demoLine(engine)); Spacer() }
+                } else {
+                    prompt("Hold \(key)", "your binds appear while you hold it", done: model.tryIt.held)
+                    if let files = model.filesKey(engine) {
+                        prompt("Press \(key) + \(files)", "Pilot Files opens: the key you just set", done: model.filesOpened)
+                    }
+                    prompt("Press \(key) + Space", "the Pilot menu", done: model.tryIt.menuOpened)
                 }
-                prompt("Press \(key) + Space", "the Pilot menu", done: model.tryIt.menuOpened)
             }
             PanelHeading(text: "The other permissions")
             Card { CardRow { GrantWalkPanel(walk: model.walk) } }
@@ -297,6 +285,12 @@ enum OnboardingWindow {
         w.makeKeyAndOrderFront(nil)
     }
 
+    /// Access's Allow: Welcome to its screen's left edge, out from under System Settings, which opens near the middle.
+    static func moveAside() {
+        guard let window, let screen = window.screen?.visibleFrame else { return }
+        window.setFrameOrigin(CGPoint(x: screen.minX + 24, y: window.frame.minY))
+    }
+
     /// Finish: closes whichever window holds Welcome, the scene's or Run setup again's.
     static func close() { window?.close() }
 
@@ -368,6 +362,9 @@ final class OnboardingModel {
     var tryIt = Onboarding.TryIt(menuOpens: 0)
     /// Try it's "More, if you want", open.
     var showsMore = false
+    /// Access's Allow was pressed, and System Settings is running since: its three steps follow them.
+    var accessAsked = false
+    var settingsOpen = false
     /// Each Hyper choice's warning, worked out once: binds do not change during onboarding, and a label lookup walks every
     /// action source.
     @ObservationIgnored private var breaks: [LayerKey: String?] = [:]
@@ -390,7 +387,18 @@ final class OnboardingModel {
 
     /// Hyper's screen's head and line (Sven's critique, 2026-11-18, option B): ricing first, then the launcher.
     static let welcomeTitle = "Rice your Mac.", welcomeLine = "A launcher that does the rest."
-    static let accessAbout = "The one grant Pilot waits for: it reads the Hyper key and moves windows. System Settings opens beside this window; switch Pilot on there."
+    /// What Hyper is, in two short lines (Sven, 2026-11-19: shorter and plainer; option A of two).
+    static let hyperAbout = "Pick one key to be Hyper. Hold it and press another key to run a Pilot shortcut."
+    static let accessAbout = "One switch in System Settings, and Pilot is ready."
+    /// What Accessibility lets Pilot do, and the one thing it never sees: each a fact of the code (the tap, the window
+    /// binds, the menu's key; password fields are blind to the tap).
+    static let accessCan = ["read the Hyper key and run your binds", "snap or move a window when you press its key", "open the launcher on Hyper+Space"]
+    static let accessNever = "It never sees password fields: macOS hides them from it."
+    /// The later grants in one line (B): the first two named, the rest counted.
+    static var laterLine: String {
+        let names = later.map(\.short)
+        return "Later, only when a feature needs it: " + names.prefix(2).joined(separator: ", ") + (names.count > 2 ? " and \(names.count - 2) more." : ".")
+    }
     static let passwordNote = "Homebrew asks your Mac's password once, in Terminal."
     /// Says what Undo cannot do (reviewer, T54): it puts back what was there before Set up, over any change since, and
     /// Homebrew keeps what it installed with a helper.
@@ -402,9 +410,6 @@ final class OnboardingModel {
     /// Access's "Later, from Settings": the recommended and optional grants by name. The when-used ones stay with the
     /// features that ask for them.
     static let later = Onboarding.Row.rows(.recommended) + Onboarding.Row.rows(.optional)
-    static let laterGroups: [(title: String, names: String)] = [Onboarding.Need.recommended, .optional].map { need in
-        (need.title, Onboarding.Row.rows(need).map(\.short).joined(separator: " · "))
-    }
 
     /// `setup` and `walk` are the renders' seams; Pilot's are the shared run and the Mac's own grants.
     init(setup: OnboardingSetup = .shared, walk: GrantWalk = GrantWalk()) {
@@ -419,6 +424,8 @@ final class OnboardingModel {
         if step == .tryIt { resetTryIt() }
         log.notice("onboarding: shown at \(self.step.rawValue, privacy: .public)")
         refresh()
+        // A second start (the same model shown again) replaces the first timer rather than leaving it running.
+        self.timer?.invalidate()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
         timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common)
@@ -452,6 +459,25 @@ final class OnboardingModel {
     private static func filesShown() -> Int { NSApp.windows.count { $0.title == "Pilot Files" && $0.isVisible } }
 
     /// Try it's Hyper+F row: the Files key's own key, shown only while it opens Pilot Files; nil otherwise.
+    /// Try it's demo is done: Hyper held, Pilot Files opened (when its row shows) and the menu opened. The whole tab then
+    /// says so at once, with the rail's step ticked (Sven, 2026-11-19).
+    func demoDone(_ engine: Engine) -> Bool { tryIt.held && tryIt.menuOpened && (filesKey(engine) == nil || filesOpened) }
+
+    /// Demo done's line: what the user did, Pilot Files only when its row showed.
+    func demoLine(_ engine: Engine) -> String {
+        filesKey(engine) == nil ? "You held Hyper and opened the menu." : "You held Hyper and opened Pilot Files and the menu."
+    }
+
+    #if DEBUG
+    /// The renders' seam: Try it's demo done, as after a hold, Hyper+F and Hyper+Space.
+    func seedDemoDone() {
+        tryIt = Onboarding.TryIt(menuOpens: -1)
+        tryIt.held = true
+        tryIt.see(menuOpens: 0)
+        filesOpened = true
+    }
+    #endif
+
     func filesKey(_ engine: Engine) -> String? {
         guard setup.system.picks.picks[.files] == AppRolePicks.pilot || setup.ledger[.filesKey]?.state == .done,
               let trigger = engine.binds.store.trigger(for: "apps.files") else { return nil }
@@ -481,12 +507,17 @@ final class OnboardingModel {
             }
         }
         guard step == .permissions else { return }
+        if accessAsked, settingsOpen != PermissionDragPanel.settingsRunning { settingsOpen.toggle() }
         engine.gate.check()
         if status.accessibility != engine.gate.isTrusted { status.accessibility = engine.gate.isTrusted }
     }
 
+    /// Allow: macOS's prompt and the Accessibility pane, without the floating helper (Access shows Pilot's icon to drag),
+    /// and Welcome moved to the screen's left edge, out from under Settings, so the icon can be dragged across.
     func allowAccessibility() {
         log.notice("onboarding: allow accessibility")
-        engine?.gate.request()
+        accessAsked = true
+        OnboardingWindow.moveAside()
+        engine?.gate.request(panel: false)
     }
 }

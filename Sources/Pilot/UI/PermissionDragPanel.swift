@@ -136,6 +136,9 @@ enum PermissionDragPanel {
         p.setFrameOrigin(CGPoint(x: f.maxX - p.frame.width - 12, y: f.maxY - p.frame.height - 12))
     }
 
+    /// System Settings is running: Access's first step, read with no grant.
+    static var settingsRunning: Bool { settingsApp() != nil }
+
     private static func settingsApp() -> NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first { !$0.isTerminated }
     }
@@ -184,8 +187,9 @@ struct PermissionDragView: View {
     }
 }
 
-/// Pilot's own icon as a drag source carrying the app's file URL, which the privacy lists take as a dropped app.
-private struct DraggableApp: NSViewRepresentable {
+/// Pilot's own icon as a drag source carrying the app's file URL, which the privacy lists take as a dropped app: in the
+/// helper beside Settings, and in onboarding's Access.
+struct DraggableApp: NSViewRepresentable {
     func makeNSView(context: Context) -> Source {
         let view = Source()
         view.image = NSApp.applicationIconImage
