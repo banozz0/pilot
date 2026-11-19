@@ -440,6 +440,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
     case floatApps, floatTitles, motion, focusedWindow
+    /// Tiling's More (pilot-ui-redesign T16, S1 B) and its places: the focused window's exact border, and Dim other
+    /// windows' exact blur and darkening with the shake's tuning; the front keeps their presets and the shake's switch.
+    case tilingMore, focusedBorder, focusedDim
     /// Workspaces' More's window shelf (on Tiling's More until Sven, 2026-11-11, after 2276).
     case windowShelf
     /// Clipboard's More (pilot-ui-redesign T17, S1 B; it reverses pages round 4's Q100, which had brought them to the
@@ -494,7 +497,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data: .general
         case .notifications: .menuBar
-        case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
+        case .floatApps, .floatTitles, .motion, .focusedWindow, .tilingMore, .focusedBorder, .focusedDim: .tiling
         case .clipMore, .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .dockMore, .dockLook: .dock
         case .appsForKeys: .openWith
@@ -531,6 +534,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .look: .lookMore
         case .dock: .dockMore
         case .clipboard: .clipMore
+        case .tiling: .tilingMore
         default: nil
         }
     }
@@ -544,7 +548,8 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
                                                      .lookStyle, .appsShowAs,
-                                                     .dockLook, .clipNever, .clipExpire, .clipPanel, .clipTags]
+                                                     .dockLook, .clipNever, .clipExpire, .clipPanel, .clipTags,
+                                                     .focusedBorder, .focusedDim]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -606,8 +611,11 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore: "More"
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+             .tilingMore: "More"
         case .dockLook: "Placement and effects"
+        case .focusedBorder: "Border"
+        case .focusedDim: "Dim other windows"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -686,7 +694,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore: []
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+             .tilingMore: []
         // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
         case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
                          "theme icons", "visualizer", "visualiser", "bars", "taken out", "keep in dock", "removed from dock"]
@@ -729,8 +738,11 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .floatApps: ["always float", "float apps", "float", "floating"]
         case .floatTitles: ["window title", "float titles", "title"]
         case .motion: ["drag", "drag windows", "move windows", "resize", "glide", "animate", "animate windows"]
-        case .focusedWindow: ["focused window", "border width", "border colour", "border color", "how dark", "shake", "swings", "within",
-                              "contrast"]
+        // The front's words: the two presets and the shake's switch (pilot-ui-redesign T16); the exact rows' words moved
+        // with them to Tiling's More.
+        case .focusedWindow: ["focused window", "border", "dim other windows", "soft", "strong", "shake", "shake the mouse"]
+        case .focusedBorder: ["border width", "border colour", "border color", "thick", "thin"]
+        case .focusedDim: ["blur", "darken", "how dark", "defocus", "swings", "how hard to shake", "within", "contrast", "readable"]
         case .windowShelf: ["window shelf", "shelf", "stage", "stills", "live", "window pictures"]
         case .exportImport: ["export", "import", "pack", "second mac", "backup"]
         case .about: ["version", "made with", "licence", "credits", "acknowledgements", "open source", "feedback", "bug", "crash"]
@@ -784,7 +796,7 @@ public struct AppPlace: Hashable, Sendable {
         // System's More, gone since its parts came back to the front (Sven, 2026-11-11, after 2276).
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
-        "tilingMore": AppPlace(.tiling), "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
+        "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
         "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
     ]
 

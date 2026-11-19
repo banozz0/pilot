@@ -133,19 +133,30 @@ struct LookPageTests {
         FocusedWindowBlock(look: look).padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
     }
 
-    /// Card agent-bo-95422950's row, now on Tiling's Focused window block: the border, its width and its switch.
+    /// Tiling's More, the Focused window's exact rows (pilot-ui-redesign T16), drawn on its own for `look`.
+    func focusedWindowMore(_ look: Look) -> some View {
+        FocusedWindowMore(look: look).padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
+    }
+
+    /// Card agent-bo-95422950's row, on Tiling's Focused window block: the border as a preset on the front, Off its switch
+    /// (pilot-ui-redesign T16), and its width on More.
     @Test("Focused window shows the border and its width", .enabled(if: ProcessInfo.processInfo.environment["PILOT_LIVE"] == "1"))
     func border() throws {
         let (look, _) = look()
         look.windowBorderWidth = 3
+        try hosted(focusedWindowMore(look), height: 760) { (host: NSView) throws in
+            let words = try recognisedText(in: try #require(snapshot(host, scale: 2))).map(\.text)
+            #expect(words.contains { Self.reads($0, "Width") }, "no border width row on More: \(words)")
+            // Vision may read the stepper's arrows into the same line ("3 pt *").
+            #expect(words.contains { $0.hasPrefix("3 pt") }, "no border width on More: \(words)")
+        }
         try hosted(focusedWindow(look), height: 760) { (host: NSView) throws in
             let words = try recognisedText(in: try #require(snapshot(host, scale: 2))).map(\.text)
-            #expect(words.contains { Self.reads($0, "Border on the focused window") }, "no border row on the page: \(words)")
-            // Vision may read the stepper's arrows into the same line ("3 pt *").
-            #expect(words.contains { $0.hasPrefix("3 pt") }, "no border width on the page: \(words)")
+            #expect(words.contains { Self.reads($0, "Border") }, "no border row on the front: \(words)")
             #expect(look.windowBorder)
-            #expect(try Self.click("Border on the focused window", in: host))
-            #expect(!look.windowBorder)
+            // The first Off read is the Border row's, above Dim other windows'.
+            #expect(try Self.click("Off", in: host))
+            #expect(!look.windowBorder && look.windowBorderWidth == 3)
         }
     }
 
@@ -154,7 +165,7 @@ struct LookPageTests {
         guard ProcessInfo.processInfo.environment["PILOT_RENDER_DIR"] != nil else { return }
         let (look, _) = look()
         look.windowBorderColour = .custom(0xC62828)
-        try StripStyleTests.write(try rendered(focusedWindow(look), wait: 0.8), "look-border")
+        try StripStyleTests.write(try rendered(focusedWindowMore(look), wait: 0.8), "look-border")
     }
 }
 #endif
