@@ -143,7 +143,7 @@ struct OnboardingRenders {
         let retry = "; install it from \(AppPlace(.helpers).path)"
         #expect(setup.ledger[.npm]?.state == .failed("stopped with exit 1; the Terminal window says why" + retry))
         #expect(setup.ledger[.cargo]?.state == .failed("the Terminal window closed before it finished" + retry))
-        #expect(setup.title == "Set up · 11 done, 2 failed" \&\& !setup.isLive)
+        #expect(setup.title == "Set up · 11 done, 2 failed" && !setup.isLive)
 
         // Try it (T58): no What changed card; Allow the rest reads nothing until it starts, then walks each grant: one
         // already allowed passes without an ask, one allowed in Settings moves on by itself, Skip and Stop leave the rest
