@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 // Resize's settings (Q246), one set of views for the capture editor's popover and Finder's panel:
-// the editor's chrome parts (StyleTokens, Instrument's and Toybox's own), nothing new.
+// the editor's chrome parts (StyleTokens, Instrument's own), nothing new.
 
 /// Width and height in pixels with the aspect lock between them, and the percent presets.
 struct ResizeOptions: View {
@@ -45,29 +45,20 @@ struct PixelField: View {
     }
 }
 
-/// Instrument's or Toybox's segments, as the editor's footer picks them.
+/// Instrument's segments, as the editor's footer picks them.
 struct ToolSegments<Value: Hashable>: View {
-    @Environment(\.style) private var style
     let options: [(value: Value, title: String)]
     let label: String
-    var compact = false
     @Binding var selection: Value
 
     var body: some View {
-        Group {
-            if style.kind == .toybox {
-                ToySegments(selection: $selection, options: options, label: label)
-                    .scaleEffect(compact ? 0.72 : 0.85, anchor: .leading).frame(width: compact ? 250 : nil, height: 34, alignment: .leading)
-            }
-            else { InstrumentSegments(options: options, selection: $selection, height: 22) }
-        }
-        .fixedSize()
+        InstrumentSegments(options: options, selection: $selection, height: 22)
+            .fixedSize()
     }
 }
 
 /// A primary and a ghost button in the style.
 struct ToolButtons: View {
-    @Environment(\.style) private var style
     let primary: String
     var disabled = false
     var cancelTitle = "Cancel"
@@ -76,13 +67,8 @@ struct ToolButtons: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if style.kind == .toybox {
-                Button(cancelTitle, action: cancel).buttonStyle(ToyFaceStyle(ghost: true))
-                Button(primary, action: run).buttonStyle(ToyFaceStyle(primary: true)).disabled(disabled)
-            } else {
-                Button(cancelTitle, action: cancel).buttonStyle(InstrumentButtonStyle(kind: .ghost))
-                Button(primary, action: run).buttonStyle(InstrumentButtonStyle(kind: .primary)).disabled(disabled)
-            }
+            Button(cancelTitle, action: cancel).buttonStyle(InstrumentButtonStyle(kind: .ghost))
+            Button(primary, action: run).buttonStyle(InstrumentButtonStyle(kind: .primary)).disabled(disabled)
         }
     }
 }

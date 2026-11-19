@@ -24,7 +24,7 @@ struct FontUseBlock: View {
 
     var body: some View {
         KitBlock(title: "Use fonts in", symbol: "textformat") {
-            BlockRow(first: true) { pilotRow(.ui, "Words", standard: ink.isInstrument ? "Geist" : "Nunito") }
+            BlockRow(first: true) { pilotRow(.ui, "Words", standard: "Geist") }
             BlockRow { pilotRow(.mono, "Mono", standard: ink.isInstrument ? "Geist Mono" : "JetBrains Mono") }
             ForEach(rows, id: \.place.id) { row in BlockRow { appRow(row) } }
         }

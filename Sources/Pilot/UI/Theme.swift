@@ -122,7 +122,7 @@ struct Card<Content: View>: View {
                 }
             }
         }
-        // The style's block surface (Toybox's chunk).
+        // The style's block surface.
         rows.frame(maxWidth: .infinity, alignment: .leading).styleSurface(\.card)
     }
 }
@@ -206,24 +206,14 @@ extension View {
     func pilotField() -> some View { modifier(PilotField()) }
 }
 
-/// A field in the style: Toybox's sunk well with the ink outline, else today's.
+/// A field in the style: Instrument's well.
 private struct PilotField: ViewModifier {
     @Environment(\.style) private var style
     func body(content: Content) -> some View {
-        if style.kind == .toybox {
-            content.textFieldStyle(.plain).font(style.toyNunito(700, 13)).foregroundStyle(style.color(\.text))
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .toyWell(radius: 10)
-        } else if style.kind == .instrument {
-            content.textFieldStyle(.plain).font(style.font(\.body)).foregroundStyle(style.color(\.text))
-                .padding(.horizontal, 9).padding(.vertical, 5)
-                .instrumentWell()
-        } else { content.currentPilotField() }
+        content.textFieldStyle(.plain).font(style.font(\.body)).foregroundStyle(style.color(\.text))
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .instrumentWell()
     }
-}
-
-extension View {
-    fileprivate func currentPilotField() -> some View { modifier(CurrentPilotField()) }
 }
 
 extension View {
@@ -258,16 +248,6 @@ struct SecureFieldTipLine: View {
     }
 }
 
-private struct CurrentPilotField: ViewModifier {
-    @Environment(\.ink) private var ink
-    func body(content: Content) -> some View {
-        content.textFieldStyle(.plain).font(ink.system(12.5))
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Theme.background, in: .rect(cornerRadius: 6))
-            .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line2) }
-    }
-}
-
 extension View {
     /// Pilot's look for everything under it: the theme's text and accent, 13 pt system text, dark or light with the theme
     /// whatever the Mac's appearance. The app window, onboarding, the sheets and the panels all start from it.
@@ -298,19 +278,9 @@ extension View {
 /// its toolbar's inset.
 struct PageBody<Content: View>: View {
     @Environment(\.style) private var style
-    @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
     var body: some View {
-        if style.kind == .instrument { InstrumentPage(spacing: style.density.gap * 2) { content } } else { toybox }
-    }
-
-    private var toybox: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) { content }
-                // Toybox's column sits level with the frame's title, 32 in (ToyPage).
-                .padding(.horizontal, ink.pageInset).padding(.top, 10).padding(.bottom, 28)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        InstrumentPage(spacing: style.density.gap * 2) { content }
     }
 }
 

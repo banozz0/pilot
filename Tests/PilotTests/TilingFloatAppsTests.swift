@@ -61,7 +61,7 @@ struct TilingFloatAppsTests {
 }
 
 #if DEBUG
-/// The Tiling page in Instrument and Toybox (C8), opt-in like the other renders, on fixed apps so the list is the same on any Mac:
+/// The Tiling page in Instrument (C8), opt-in like the other renders, on fixed apps so the list is the same on any Mac:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter TilingFloatAppsRenders`
 extension SharedLook {
 @MainActor

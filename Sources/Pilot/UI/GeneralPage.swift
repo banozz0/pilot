@@ -97,19 +97,12 @@ struct GeneralPage: View {
 
     /// The header's gap under the page's title: KitBlock's per style.
     private var headerGap: CGFloat {
-        switch style.kind {
-        case .toybox: Toy.blockGap
-        case .instrument: style.density.padding
-        }
+        style.density.padding
     }
 
-    /// Pilot's mark in the style's own drawing: Toybox's keycap, Instrument's four squares.
+    /// Pilot's mark in the style's own drawing: Instrument's four squares.
     @ViewBuilder private var mark: some View {
-        switch style.kind {
-        case .toybox: PilotMark(size: 64)
-        case .instrument:
-            InstrumentMark(size: 34).foregroundStyle(style.color(\.text2)).frame(width: 60, height: 60).styleSurface(\.card)
-        }
+        InstrumentMark(size: 34).foregroundStyle(style.color(\.text2)).frame(width: 60, height: 60).styleSurface(\.card)
     }
 
     /// "Version 0.1.0 · build 1 · 1a2b3c4", or "development build" for a bare binary.
@@ -578,8 +571,7 @@ struct LayerKeyPicture: View {
                             let cap = RoundedRectangle(cornerRadius: ink.radius(4), style: .continuous)
                             cap.fill(on ? ink.accent : ink.keyFill)
                                 .overlay {
-                                    // A style's caps carry its key edge: Toybox's outline (its white caps vanish on its white
-                                    // card without one), Instrument's hairline ring (its dark caps on its dark card).
+                                    // A style's caps carry its key edge: Instrument's hairline ring (its dark caps on its dark card).
                                     let depth = ink.style.depth.key
                                     if depth.outline > 0 { cap.strokeBorder(ink.outline, lineWidth: depth.outline) }
                                     else if let ring = depth.ring { cap.strokeBorder(Color(ring), lineWidth: 1) }

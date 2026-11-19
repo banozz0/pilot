@@ -8,7 +8,7 @@ import Testing
 
 /// The window's built layouts (window directions, Sven 2026-10-11, design 6D3E1T482hjVZaUkgMvvDb), opt-in like the other
 /// renders, each in its own folder: Home, Keys › Binds and Desktop › Menu bar in the whole window at 1440 by 900,
-/// Instrument (Tokyo Night, Porcelain) and Toybox (Toybox Night, Toybox), dark and light; then Menu bar at 760 dark (the rail's
+/// Instrument (Tokyo Night, Porcelain), dark and light; then Menu bar at 760 dark (the rail's
 /// list folds into the header, the tabs drop their names), and the rail's Binds at 1600 dark, full width as every one-page area.
 /// `PILOT_RENDER_SHAPE=tabs` (or rail) renders one layout. Seeded as Home's renders are, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WindowRailRenders`
@@ -20,12 +20,11 @@ struct WindowRailRenders {
     static let pages: [AppPage] = [.home, .binds, .menuBar]
     static let looks: [(name: String, style: PilotStyle, theme: String)] = [
         ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
-        ("toybox-dark", .toybox, "toybox-night"), ("toybox-light", .toybox, "toybox"),
     ]
 
-    @Test("Each built window layout renders in Instrument and Toybox, dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Each built window layout renders in Instrument, dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let root = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.window.rail")!)
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))

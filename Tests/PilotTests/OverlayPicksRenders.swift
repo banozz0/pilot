@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Binds › Overlay and the overlay it picks for (story 56), opt-in like the other renders: the window on Binds › Overlay
-/// in Instrument and Toybox under Tokyo Night at 1440 by 900, at Every bind and after a few switches; the page
+/// in Instrument under Tokyo Night at 1440 by 900, at Every bind and after a few switches; the page
 /// searched; the overlay with 3, 40, 60 and 140 binds in each style, its foot's Edit what shows and "+ N more".
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter OverlayPicksRenders`
 extension SharedLook {
@@ -64,7 +64,7 @@ struct OverlayPicksRenders {
             for id in ["windows.close", "windows.fullscreen", "apps.clipboard"] { engine.settings.showInOverlay(id, false, shown: engine.overlayShown()) }
             try shoot("page-\(name)-picked")
             let page = KitPage { OverlayPicksBlocks(query: "window") }
-                .styleLayout().background(Color(nsColor: .windowBackgroundColor))
+                .background(Color(nsColor: .windowBackgroundColor))
                 .styled(.page(.binds)).environment(engine).frame(width: 1000, height: 600).pilotTheme(look: look)
             try writeRender(page, to: dir.appendingPathComponent("search-\(name).png"))
 

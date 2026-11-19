@@ -63,8 +63,8 @@ struct HomeLayout: Codable, Equatable, Sendable {
             }
         }
 
-        /// Instrument and Toybox leave quick actions to the menu (their mockups have none on Home); Instrument's notices are
-        /// its Pilot block.
+        /// Instrument leaves quick actions to the menu (its mockup has none on Home); Instrument's notices are its Pilot
+        /// block.
         func drawn(in style: PilotStyle) -> Bool {
             switch self {
             case .quickActions: false
@@ -236,13 +236,9 @@ struct HomeLayout: Codable, Equatable, Sendable {
 }
 
 extension HomeLayout {
-    /// The blocks a style draws, in order: the shown ones it can draw. While something needs you Toybox draws the Pilot
-    /// block too, at the top of the board, where it says so (Instrument's notices always do).
+    /// The blocks a style draws, in order: the shown ones it can draw (Instrument's notices say what needs you).
     static func drawn(_ shown: [String], style: PilotStyle, needsYou: Bool) -> [String] {
-        var ids = shown.filter { draws($0, in: style) }
-        let pilot = Block.pilot.rawValue
-        if needsYou && style == .toybox && !ids.contains(pilot) { ids.insert(pilot, at: 0) }
-        return ids
+        shown.filter { draws($0, in: style) }
     }
 }
 

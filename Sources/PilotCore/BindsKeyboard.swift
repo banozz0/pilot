@@ -75,19 +75,6 @@ public enum BindsKeyboard {
         /// The Binds list's tab this keyboard tab shows.
         public var tab: BindsPage.Tab { sublayer.map { .layer($0) } ?? .plain }
 
-        /// Toybox's line under the Binds title (card agent-bo-95423182): how many binds the tab holds, and how to press them.
-        public func summary(count: Int, layerKeys: [LayerKey]) -> String {
-            guard let sublayer else { return "\(count) plain combo\(count == 1 ? "" : "s") · no Hyper, just the combo" }
-            let name = self == .hyper ? "Hyper" : "Hyper \(title)"
-            let held = sublayer.modifiers.labels
-            let how = switch held.count {
-            case 0: "hold \(layerKeys.label) and press"
-            case 1: "hold \(layerKeys.label) and \(held[0]), then press"
-            default: "hold \(layerKeys.label), \(held.dropLast().joined(separator: ", ")) and \(held[held.count - 1]), then press"
-            }
-            return (count == 0 ? "Nothing on \(name) yet" : "\(count) on \(name)") + " · " + how
-        }
-
         /// The tab a Hyper press shows: its sublayer's; nil for a set of modifiers no tab has.
         public init?(hyper key: Key) {
             guard let sublayer = BindsPage.Sublayer(modifiers: key.modifiers), let layer = Self.allCases.first(where: { $0.sublayer == sublayer }) else { return nil }
@@ -122,7 +109,7 @@ public enum BindsKeyboard {
         }
     }
 
-    /// Toybox's Free keys card (card agent-bo-95423182): one key, or a run of them shown as one range that picks its first.
+    /// The Free keys card (card agent-bo-95423182): one key, or a run of them shown as one range that picks its first.
     public struct FreeRun: Equatable, Sendable {
         public let label: String
         public let codes: [Int64]

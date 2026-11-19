@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Binds' list in Instrument (card agent-bo-95423181): what a search and Show as list open, the same list as Toybox's
+/// Binds' list in Instrument (card agent-bo-95423181): what a search and Show as list open, the list
 /// (PilotCore's BindsPage.sections) in Instrument's parts: the page's bar with back to the
 /// keyboard, the search, the preset and Add bind; the layers as a filter; a panel per layer whose rows edit on a click,
 /// each with Reset where Sven set it; a search that finds nothing says so and how to widen it; Reset all at the foot.

@@ -48,18 +48,16 @@ struct AppWindowView: View {
     }
 }
 
-/// The picked style's frame around the page, in the Window layout picked on Look. Direction 1, the rail: ToyFrame and
-/// InstrumentFrame; direction 2, toolbar tabs: TabsFrame, one frame for both styles.
+/// The picked style's frame around the page, in the Window layout picked on Look. Direction 1, the rail:
+/// InstrumentFrame; direction 2, toolbar tabs: TabsFrame.
 private struct WindowLayout: View {
-    @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     var look: Look = .shared
 
     var body: some View {
-        switch (look.windowShape, style.kind) {
-        case (.tabs, _): TabsFrame(model: model) { PageView(model: model) }
-        case (_, .toybox): ToyFrame(model: model) { PageView(model: model) }
-        case (_, .instrument): InstrumentFrame(model: model)
+        switch look.windowShape {
+        case .tabs: TabsFrame(model: model) { PageView(model: model) }
+        case .rail: InstrumentFrame(model: model)
         }
     }
 }
@@ -92,7 +90,7 @@ struct PageView: View {
     @Bindable var model: AppWindowModel
 
     var body: some View {
-        page.styleLayout().styled(.page(model.page))
+        page.styled(.page(model.page))
             // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
             // KitMore or KitLanding lands there, then clears it.
             .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })

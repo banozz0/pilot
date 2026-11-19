@@ -281,14 +281,9 @@ private struct FieldFace: ViewModifier {
     func body(content: Content) -> some View {
         let sized = content.padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
-        if ink.style.kind == .toybox {
-            // Toybox's typed field: a white well in the ink outline, a needed one on the sun's soft fill.
-            sized.toyWell(missing ? \.accentSoft : \.panel, radius: 10).contentShape(.rect)
-        } else {
-            // pilotField's Instrument well, so every field in a list matches; a needed one edged in the signal (attention).
-            sized.instrumentWell()
-                .overlay { if missing { RoundedRectangle(cornerRadius: ink.style.radii.control, style: .continuous).strokeBorder(ink.accent) } }
-                .contentShape(.rect)
-        }
+        // pilotField's Instrument well, so every field in a list matches; a needed one edged in the signal (attention).
+        sized.instrumentWell()
+            .overlay { if missing { RoundedRectangle(cornerRadius: ink.style.radii.control, style: .continuous).strokeBorder(ink.accent) } }
+            .contentShape(.rect)
     }
 }

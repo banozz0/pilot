@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Offscreen renders of the AI chat panel (story 166): empty, a 3-turn conversation (prose with inline code and a
-/// fenced block), and its third answer still streaming, in Instrument and Toybox on Tokyo Night and Toybox's theme.
+/// fenced block), and its third answer still streaming, in Instrument on Tokyo Night.
 /// A fake runner answers. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AIChatPanelRenders`
 extension SharedLook {
@@ -69,7 +69,7 @@ struct AIChatPanelRenders {
 
         for style in PilotStyle.allCases {
             look.style = style
-            for theme in ["tokyo-night", "toybox"] {
+            for theme in ["tokyo-night"] {
                 look.themeID = theme
                 let states = [("1-empty", await Self.model([], streaming: false)),
                               ("2-three-turns", await Self.model(Self.turns, streaming: false)),
@@ -84,7 +84,7 @@ struct AIChatPanelRenders {
         }
     }
 
-    /// Look's Glass on, in Instrument on Tokyo Night (Toybox's panel stays solid), over a stand-in desktop: the notch's ground is clear, so
+    /// Look's Glass on, in Instrument on Tokyo Night, over a stand-in desktop: the notch's ground is clear, so
     /// the desktop shows where the glass will be. The glass itself (NSGlassEffectView) draws nothing offscreen.
     @Test("The AI chat panel over Glass in Instrument", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func glass() async throws {

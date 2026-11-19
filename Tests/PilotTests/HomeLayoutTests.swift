@@ -166,17 +166,11 @@ struct HomeLayoutTests {
         #expect(HomeLayoutStore(defaults: defaults).layout == .standard)
     }
 
-    @Test("Each style draws what it can; in Toybox the Pilot block comes first while something needs you")
+    @Test("Instrument draws what it can")
     func drawn() {
         let shown = ["keyboard", "workspaces", "quickActions", "ext:git"]
         #expect(HomeLayout.drawn(shown, style: .instrument, needsYou: true) == ["keyboard", "workspaces", "ext:git"])
         #expect(HomeLayout.drawn(shown + ["pilot"], style: .instrument, needsYou: false) == ["keyboard", "workspaces", "ext:git"])
-        #expect(HomeLayout.drawn(shown, style: .toybox, needsYou: true) == ["pilot", "keyboard", "workspaces", "ext:git"])
-        #expect(HomeLayout.drawn(shown, style: .toybox, needsYou: false) == ["keyboard", "workspaces", "ext:git"])
-        // Toybox's Pilot block, drawn for what needs you, takes the top of the board; the keyboard and This Mac move down.
-        let cells = HomePage.cells(.standard, blocks: HomeLayout.drawn(HomeLayout.standard.shown(extensions: []), style: .toybox, needsYou: true),
-                                   shown: HomeLayout.standard.shown(extensions: []))
-        #expect(cells["pilot"] == Self.cell(5, 0, 18, 3) && cells["keyboard"] == Self.cell(5, 3, 18, 6))
     }
 
     @Test("Sven's Home from 1.0.2 converts to the same look in cells: the column 5 wide, the board 18, a medium 9, heights in whole rows")

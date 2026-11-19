@@ -327,7 +327,7 @@ final class AppWindowController: NSObject {
     /// The window as `look` says (design round 4, card agent-bo-95422890): Solid is opaque in the theme's ground; Glass
     /// is macOS 26's Liquid Glass (NSGlassEffectView) tinted with the ground at the ground layer's strength (Transparency,
     /// round 15), in Blur's style (the tint alone at Off); Reduce transparency and Transparency 0 % make it Solid. The style grounds it in its canvas, dark or
-    /// light as its theme is; Toybox's window stays opaque whatever the material (Sven, 2026-10-08).
+    /// light as its theme is.
     static func applyLook(_ look: Look, to window: NSWindow) {
         let tokens = StyleTokens.of(look.style, theme: look.theme)
         window.appearance = NSAppearance(named: tokens.dark ? .darkAqua : .aqua)

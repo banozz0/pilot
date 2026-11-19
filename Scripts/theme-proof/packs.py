@@ -264,9 +264,9 @@ def run(seam_only=False, fixes_only=False):
             if kind in ['collision','writable-collision']:
                 dest=f.root/('packs' if kind=='collision' else 'user-packs')/'tokyo-night'; shutil.copytree(f.root/'factory/tokyo-night',dest)
             if kind=='stock-id':
-                dest=f.root/'packs/toybox'; dest.mkdir(); (dest/'manifest.json').write_text(json.dumps(dict(f.packs[0],id='toybox')))
+                dest=f.root/'packs/dracula'; dest.mkdir(); (dest/'manifest.json').write_text(json.dumps(dict(f.packs[0],id='dracula')))
             if kind=='factory-claim': f.save_pack(dict(f.packs[0],factory=True))
-            f.start(); negative(f,('theme','plan','apply','tokyo-night' if 'collision' in kind else ('toybox' if kind=='stock-id' else 'a'))); f.stop()
+            f.start(); negative(f,('theme','plan','apply','tokyo-night' if 'collision' in kind else ('dracula' if kind=='stock-id' else 'a'))); f.stop()
         passed('missing/undecodable/escaping/symlink-folder assets and imported factory self-claims refuse; user and writable-root collisions cannot silently shadow immutable factory data')
 
         # Every wallpaper input is rechecked after Allow as well as before it, without regenerating a plan.

@@ -307,7 +307,7 @@ public enum AppArea: String, CaseIterable, Sendable {
 }
 
 /// How the window draws the areas (window directions, Sven 2026-10-11: "can we have all 3 implemented, then I test and see
-/// which is best?"): picked on Look as Window layout, each in Instrument and Toybox.
+/// which is best?"): picked on Look as Window layout.
 public enum WindowShape: String, CaseIterable, Sendable {
     /// Direction 1, the default: a rail of the areas, the area's pages listed beside it, the open page's tabs in its header.
     case rail
@@ -417,7 +417,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case lookMore, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -487,7 +487,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .windowLayout, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .lookMore, .windowLayout, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -522,7 +522,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .windowLayout, .appsShowAs]
+                                                     .windowLayout, .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -634,7 +634,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: "History"
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
-        case .lookStyle: "Style"
         case .windowLayout: "Window layout"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
@@ -721,7 +720,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "countdown", "count down", "recordings folder"]
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
-        case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
         case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]

@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The Notes page (task N1; direction B, P60), opt-in like the other renders: the whole window on the page in Instrument
-/// and Toybox under Tokyo Night (dark) and Porcelain (light) at 1440 by 900, Instrument at 760 too; then the page alone in
+/// under Tokyo Night (dark) and Porcelain (light) at 1440 by 900, Instrument at 760 too; then the page alone in
 /// each style on Tokyo Night: the docked list searched, asking before the Trash, a note showing a picture pasted in (notes
 /// round 2), empty Scratch's invitation, Cmd+K, and the folder line asking whether to move the notes to a picked folder.
 /// The notes are the panel renders' nine, seeded in a temporary folder, never Pilot's own.
@@ -95,7 +95,7 @@ struct NotesPageRenders {
 private struct NotesGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 

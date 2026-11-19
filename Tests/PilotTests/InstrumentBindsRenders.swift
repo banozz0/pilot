@@ -10,13 +10,26 @@ import Testing
 /// renders: the page as the window hosts it beside the sidebar, at 1207, 767 and 551 pt (the 1440, 1000 and 760 windows
 /// less the sidebar), dark and light: the board with B picked, a free key picked, the Windows module picked, the Plain tab,
 /// the list a search opens and a search that finds nothing, the 1440 window's states also whole below the fold. Seeded as
-/// Toybox's renders are, in a moved home.
+/// HomeRenders seeds Home, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter InstrumentBindsRenders`
 extension SharedLook {
 @MainActor
 @Suite("Instrument Binds renders")
 struct InstrumentBindsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
+
+    /// The engine HomeRenders seeds, in the moved home only.
+    func engine() throws -> Engine {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let toml = (home as NSString).appendingPathComponent(".aerospace.toml")
+        if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
+        try SharedLook.HomeRenders.seedPresets()
+        return try SharedLook.HomeRenders.engine()
+    }
 
     /// Every act does nothing: a render only draws.
     static let acts = BindsKeyboardPage.Acts(pick: { _ in }, show: { _, _ in }, edit: { _ in }, clear: { _ in }, reset: { _ in },
@@ -50,7 +63,7 @@ struct InstrumentBindsRenders {
 
     @Test("Binds renders as mockup A in Instrument dark and light at 1207, 767 and 551, in its states", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("binds-instrument")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         Look.shared.themeID = "nightwatch"
@@ -99,11 +112,11 @@ struct InstrumentBindsRenders {
 
     @Test("Bound keys wear their group's colour with the groups' legend under the board, in each style, on Void, a light theme and a coloured one (Q252)", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func groups() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("binds-groups")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = .instrument }
-        for (style, theme) in [(PilotStyle.instrument, "void"), (.instrument, "folio"), (.instrument, "tokyo-night"), (.toybox, "toybox-night"), (.toybox, "void")] {
+        for (style, theme) in [(PilotStyle.instrument, "void"), (.instrument, "folio"), (.instrument, "tokyo-night")] {
             Look.shared.style = style
             Look.shared.themeID = theme
             let rep = try rendered(hosted(BindsKeyboardPage(search: "") { _ in }, engine, width: 1207, height: 900), wait: 0.9)

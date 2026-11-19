@@ -432,7 +432,6 @@ struct LiveStatPopover: View {
 /// A reading's details, Stats-style: one line per reading with its graph and value (round 3's All in one), then This
 /// Mac's rows for each and the busiest processes for CPU, RAM, disk and network.
 struct StatPopover: View {
-    @Environment(\.style) private var style
     let stats: [MenuBarStats.Stat]
     let rows: [SystemStats.Row]
     /// The busiest processes for each reading that lists them (CPU, RAM, disk, network).
@@ -443,10 +442,7 @@ struct StatPopover: View {
     let openHome: () -> Void
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentStatPopover(popover: self)
-        case .toybox: ToyStatPopover(popover: self)
-        }
+        InstrumentStatPopover(popover: self)
     }
 
 }

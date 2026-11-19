@@ -2,51 +2,10 @@ import Foundation
 import PilotCore
 import Testing
 
-/// The app's styles as data (story 137, ADR 0008, card agent-bo-95423180): Instrument's and Toybox's tokens equal the
-/// approved mockups' CSS custom properties, dark and light (Fixtures/style-mockup-palette.json, read out of each mockup's
-/// src/common.css), so a value typed wrong here fails against the page Sven approved.
+/// The app's style as data (story 137, ADR 0008, card agent-bo-95423180): Instrument's tokens, from the theme, against the
+/// approved mockup's type, corners and depth.
 @Suite("Pilot styles")
 struct PilotStyleTests {
-    typealias Mockup = [String: [String: [String: String]]]
-    static let mockup = try! JSONDecoder().decode(Mockup.self, from: Data(contentsOf: URL(filePath: #filePath)
-        .deletingLastPathComponent().appending(path: "Fixtures/style-mockup-palette.json")))
-
-    /// A CSS colour as a Paint: #RRGGBB, or rgba(r, g, b, a).
-    static func paint(_ css: String) throws -> Paint {
-        if css.hasPrefix("#") { return Paint(try #require(UInt32(css.dropFirst(), radix: 16))) }
-        let parts = css.drop { $0 != "(" }.dropFirst().prefix { $0 != ")" }.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        try #require(parts.count == 4, "not a colour: \(css)")
-        let rgb = try parts.prefix(3).map { try #require(UInt32($0)) }
-        return Paint(rgb[0] << 16 | rgb[1] << 8 | rgb[2], try #require(Double(parts[3])))
-    }
-
-    /// Each style's colour role beside the mockup's custom property it is.
-    nonisolated(unsafe) static let roles: [PilotStyle: [(KeyPath<StyleColors, Paint>, String)]] = [
-        .instrument: [(\.canvas, "--canvas"), (\.sidebar, "--sidebar"), (\.panel, "--panel"), (\.raised, "--raised"), (\.sunken, "--sunken"),
-                      (\.line, "--line"), (\.line2, "--line-2"), (\.line3, "--line-3"), (\.text, "--t1"), (\.text2, "--t2"), (\.text3, "--t3"),
-                      (\.text4, "--t4"), (\.accent, "--accent"), (\.accentText, "--accent-text"), (\.onAccent, "--accent-ink"),
-                      (\.accentSoft, "--accent-soft"), (\.accentLine, "--accent-line"), (\.inverse, "--inverse"), (\.onInverse, "--inverse-ink"),
-                      (\.imageOutline, "--img-outline")],
-        .toybox: [(\.canvas, "--bg"), (\.sidebar, "--surface-sunk"), (\.panel, "--surface"), (\.raised, "--key"), (\.sunken, "--surface-sunk"),
-                  (\.outline, "--line"), (\.text, "--text"), (\.text2, "--text-2"), (\.text3, "--text-3"), (\.accent, "--accent"),
-                  (\.accentEdge, "--accent-edge"), (\.onAccent, "--on-accent"), (\.accentSoft, "--m-pilot-soft"), (\.good, "--ok"),
-                  (\.key, "--key"), (\.keyFree, "--key-free"), (\.scrim, "--scrim")],
-    ]
-
-    @Test("Toybox's colours are its mockup's, dark and light; Instrument's mockup palette stays the reference its theme rule is held to", arguments: [PilotStyle.toybox], [true, false])
-    func colours(_ style: PilotStyle, dark: Bool) throws {
-        let css = try #require(Self.mockup[style.rawValue]?[dark ? "dark" : "light"])
-        let colors = Self.tokens(style, dark: dark).colors
-        for (role, name) in try #require(Self.roles[style]) {
-            #expect(colors[keyPath: role] == (try Self.paint(try #require(css[name], "\(name) missing"))), "\(style) \(dark) \(name)")
-        }
-        if style == .toybox {
-            let modules = ["apps", "windows", "workspaces", "captures", "system", "pilot"]
-            #expect(colors.modules == (try modules.map { try Self.paint(try #require(css["--m-\($0)"])) }))
-            #expect(colors.moduleSoft == (try modules.map { try Self.paint(try #require(css["--m-\($0)-soft"])) }))
-        }
-    }
-
     @Test("Instrument takes every colour from the theme, dark or light as the theme is, with one signal: the accent for Hyper, live and selected; no status or module colour; the sidebar a step off the ground (coordinator for Sven, 2026-10-08)", arguments: PilotTheme.designed)
     func instrumentFromTheme(_ theme: PilotTheme) {
         let tokens = StyleTokens.of(.instrument, theme: theme), c = tokens.colors
@@ -62,13 +21,12 @@ struct PilotStyleTests {
         #expect(c.sidebar != c.canvas && c.sunken != c.canvas, "\(theme.id): the sidebar or well is the ground itself")
     }
 
-    @Test("Binds' bound keys wear a group colour whose ink reads on it in both styles and every theme, Void's near-white accent included; Instrument's six all different (Q252)", arguments: PilotTheme.designed)
+    @Test("Binds' bound keys wear a group colour whose ink reads on it in Instrument and every theme, Void's near-white accent included; Instrument's six all different (Q252)", arguments: PilotTheme.designed)
     func groupColours(_ theme: PilotTheme) {
         for style in PilotStyle.allCases {
             let c = StyleTokens.of(style, theme: theme).colors
             #expect(c.groups.count == BindsKeyboard.modules.count, "\(style) \(theme.id)")
-            // Toybox's are its theme's module colours, which a theme may repeat.
-            if style == .instrument { #expect(Set(c.groups.map(\.rgb)).count == c.groups.count, "\(theme.id)") }
+            #expect(Set(c.groups.map(\.rgb)).count == c.groups.count, "\(theme.id)")
             for fill in c.groups {
                 let second = Contrast.mix(Contrast.rgb(c.onGroup2.rgb), Contrast.rgb(fill.rgb), c.onGroup2.alpha)
                 #expect(Contrast.ratio(c.onGroup.rgb, fill.rgb) >= 4.5, "\(style) \(theme.id) name on \(String(fill.rgb, radix: 16))")
@@ -103,30 +61,9 @@ struct PilotStyleTests {
         #expect(lum(sidebar) > lum(c.canvas) && lum(sidebar) < lum(c.panel))
     }
 
-    /// A style's mockup tokens: Instrument's own, Toybox's mockup palette (its theme-following tokens are below).
+    /// A style's mockup tokens: Instrument's own.
     static func tokens(_ style: PilotStyle, dark: Bool) -> StyleTokens {
-        style == .toybox ? .toyboxMockup(dark: dark) : .of(style, theme: .designed[0])
-    }
-
-    @Test("Toybox follows the theme: its colours and dark or light are the theme's, its shape the mockup's, its words readable")
-    func toyboxFollowsTheme() {
-        for theme in PilotTheme.designed where !StyleTokens.toyboxThemes.contains(theme.id) {
-            let toybox = StyleTokens.of(.toybox, theme: theme), c = toybox.colors
-            #expect(toybox.dark == theme.dark, "\(theme.id): the theme decides dark or light")
-            #expect(c.canvas == Paint(theme.ground) && c.sidebar == Paint(theme.sidebar) && c.panel == Paint(theme.surface), "\(theme.id)")
-            #expect(c.text == Paint(theme.text) && c.accent == Paint(theme.accent) && c.modules == theme.modules.map { Paint($0) }, "\(theme.id)")
-            #expect(toybox.type == StyleTokens.toyboxMockup(dark: theme.dark).type && toybox.depth == StyleTokens.toyboxMockup(dark: theme.dark).depth)
-            #expect(Contrast.ratio(c.accentText.rgb, c.panel.rgb) >= 4.5, "\(theme.id): the accent as words")
-        }
-    }
-
-    @Test("The Toybox themes draw Toybox's mockup palette exactly, dark and light")
-    func toyboxThemes() throws {
-        for (id, dark) in [("toybox", false), ("toybox-night", true)] {
-            let theme = try #require(PilotTheme.named(id))
-            #expect(theme.dark == dark)
-            #expect(StyleTokens.of(.toybox, theme: theme) == StyleTokens.toyboxMockup(dark: dark), "\(id)")
-        }
+        .of(style, theme: .designed[0])
     }
 
     @Test("Each style's type, corners, depth and density are the mockups'")
@@ -145,45 +82,21 @@ struct PilotStyleTests {
         #expect([instrument.radii.control, instrument.radii.card, instrument.radii.pop] == [6, 10, 14])
         // Instrument's depth is one hairline ring, never an outline or a solid edge.
         #expect(instrument.depth.card.outline == 0 && instrument.depth.card.edge == 0 && instrument.depth.card.ring != nil)
-
-        let toybox = StyleTokens.toyboxMockup(dark: false)
-        #expect(toybox.type.display == TypeRole(face: .bundled(StyleTokens.fredoka(600)), size: 44))
-        #expect(toybox.type.body == TypeRole(face: .bundled(StyleTokens.nunito(600)), size: 14))
-        #expect(toybox.type.mono == TypeRole(face: .bundled(StyleTokens.jetBrainsMono(500)), size: 12))
-        #expect([toybox.radii.control, toybox.radii.key, toybox.radii.chip, toybox.radii.card] == [14, 12, 8, 22])
-        // Toybox's depth: a 2 px outline and a solid bottom edge in the outline's colour, never a blurred shadow.
-        #expect([toybox.depth.card.outline, toybox.depth.card.edge] == [2, 5])
-        #expect([toybox.depth.control.outline, toybox.depth.control.edge] == [2, 4])
-        #expect(toybox.depth.card.shadows.isEmpty && toybox.depth.pop.shadows.isEmpty)
-        // binds.html: the keyboard case's 30 px corner and 7 px edge, its keys' 5 px edge (deeper than a chip's 4), and the
-        // case in the Windows grape, a deep indigo in the dark.
-        #expect(toybox.radii.board == 30 && [toybox.depth.board.outline, toybox.depth.board.edge] == [2, 7])
-        #expect([toybox.depth.boardKey.outline, toybox.depth.boardKey.edge] == [2, 5] && toybox.depth.boardKey.edge > toybox.depth.key.edge)
-        #expect(toybox.colors.board == toybox.colors.modules[1])
-        #expect(StyleTokens.toyboxMockup(dark: true).colors.board == Paint(0x3A3270))
-        #expect(toybox.density.row > instrument.density.row, "Toybox is the roomier of the two")
     }
 
-    @Test("Every style has a sidebar tile colour per page; Toybox's are all different, the mockup's where its pages kept them")
+    @Test("Every style has a sidebar tile colour per page")
     func pageTiles() {
         for style in PilotStyle.allCases {
             let tiles = StyleTokens.of(style, theme: .designed[0]).colors.pageTiles
             #expect(tiles.count == AppPage.allCases.count, "\(style)")
         }
-        let toybox = StyleTokens.toyboxMockup(dark: true).colors
-        #expect(Set(toybox.pageTiles.map(\.rgb)).count == AppPage.allCases.count, "two pages share a tile colour")
-        // Home sun, Binds grape, Workspaces mint, Menu bar sky, as src/common.js's NAV draws them; Menu took Stats' pink (C3).
-        let tile = { (page: AppPage) in toybox.pageTiles[AppPage.allCases.firstIndex(of: page)!] }
-        #expect([tile(.home), tile(.binds), tile(.workspaces), tile(.menuBar), tile(.menu)]
-                == [toybox.modules[5], toybox.modules[1], toybox.modules[2], toybox.modules[0], toybox.modules[4]])
-        #expect(toybox.pageTiles == StyleTokens.toyboxMockup(dark: false).colors.pageTiles, "the tiles are the same candy in dark and light")
     }
 
-    @Test("Two styles; a saved Current (removed 2026-10-11, Sven) or anything unknown loads as Instrument, the default")
+    @Test("One style; a saved Current (removed 2026-10-11, Sven), Toybox (removed 2026-11-19) or anything unknown loads as Instrument, the default")
     func saved() {
-        #expect(PilotStyle.allCases == [.instrument, .toybox])
+        #expect(PilotStyle.allCases == [.instrument])
         #expect(PilotStyle(saved: "current") == .instrument && PilotStyle(saved: nil) == .instrument && PilotStyle(saved: "nope") == .instrument)
-        #expect(PilotStyle(saved: "instrument") == .instrument && PilotStyle(saved: "toybox") == .toybox)
+        #expect(PilotStyle(saved: "instrument") == .instrument && PilotStyle(saved: "toybox") == .instrument)
     }
 
     @Test("Every style's body text reads at 4.5:1 on its panel and canvas")

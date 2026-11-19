@@ -4,7 +4,7 @@ import PilotCore
 import SwiftUI
 
 // Home on its grid (P91, model A, Sven Q746/Q747): every block on whole cells of 23 columns, drawn in the class its points
-// pick (Widget.SizeClass, the desktop widgets' rule) or its Layout keeps. Both styles draw this page; each hands it its
+// pick (Widget.SizeClass, the desktop widgets' rule) or its Layout keeps. Instrument draws this page and hands it its
 // own forms for the blocks it draws its own way (today's Large: the keyboard, This Mac, the workspace map…).
 
 /// The page: what needs you across the top, then the grid; Edit Home at the foot, and in edit mode its bar pinned to the
@@ -19,7 +19,7 @@ struct HomeNowPage<Notices: View, Own: View>: View {
     /// The page's margin.
     var side: CGFloat = 28
     @ViewBuilder let notices: Notices
-    /// A block in the style's own form at its size (its Large, and Toybox's Pilot card).
+    /// A block in the style's own form at its size (its Large).
     @ViewBuilder let own: (String, CGSize) -> Own
     /// The page fits the window whole, measured.
     @State private var fits = true
@@ -131,8 +131,8 @@ struct HomeNowPage<Notices: View, Own: View>: View {
                     let drawn = HomeGrid.sizeClass(cell, inner: inner, pin: parts.pin(id))
                     block(id, drawn, rect.size)
                         .frame(width: rect.width, height: rect.height, alignment: .topLeading)
-                        // A block never draws outside its cells, but for the solid foot under a Toybox card.
-                        .clipShape(HomeCellClip(foot: style.kind == .toybox ? HomeCellClip.toyFoot : 0))
+                        // A block never draws outside its cells.
+                        .clipShape(HomeCellClip())
                         .homeFrame(.block(id), edit)
                         .homeEditable(id, parts, drawn: drawn, wide: rect.width > 170)
                         .homeCell(cell)
@@ -179,13 +179,9 @@ private struct EditStart: Equatable {
     let reduce: Bool
 }
 
-/// A block's clip: its cells' frame, and `foot` points below it for the solid foot a Toybox card draws under itself.
+/// A block's clip: its cells' frame.
 struct HomeCellClip: Shape {
-    var foot: CGFloat = 0
-    /// Toybox's card foot, within the 8 pt between rows.
-    static let toyFoot: CGFloat = 6
-
-    func path(in rect: CGRect) -> Path { Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height + foot)) }
+    func path(in rect: CGRect) -> Path { Path(rect) }
 }
 
 /// The page at least the window's height, taller when its blocks need it.
@@ -229,7 +225,6 @@ struct HomeGreetingCard: View {
         let line = HomeGreeting.line(hyperOn: engine.hyperSwitch.isOn, problems: parts.problems, layerKey: engine.settings.layerKeys.label,
                                      workspace: tiler.focused, tiler: tiler.tilerName)
         return HStack(alignment: .top, spacing: 14) {
-            if style.kind == .toybox { PilotMark(size: 46) }
             VStack(alignment: .leading, spacing: 4) {
                 TimelineView(.everyMinute) { context in
                     let date = context.date
@@ -237,7 +232,7 @@ struct HomeGreetingCard: View {
                         Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                             .font(ink.ui(11.5, .medium)).foregroundStyle(ink.muted)
                         Text(HomeGreeting.hello(at: date))
-                            .font(ink.display(style.kind == .toybox ? 24 : 21)).foregroundStyle(ink.text)
+                            .font(ink.display(21)).foregroundStyle(ink.text)
                             .lineLimit(1).minimumScaleFactor(0.8).accessibilityAddTraits(.isHeader)
                     }
                 }
@@ -248,7 +243,7 @@ struct HomeGreetingCard: View {
                 }
                 if showBinds {
                     let binds = engine.binds.store.binds.count
-                    Text("\(binds) \(ToyHome.bindsLine(binds: binds, clashes: parts.clashes))").font(ink.ui(11.5))
+                    Text("\(binds) \(HomeGreeting.bindsLine(binds: binds, clashes: parts.clashes))").font(ink.ui(11.5))
                         .foregroundStyle(parts.clashes > 0 ? ink.warnText : ink.muted).lineLimit(1)
                 }
             }
@@ -262,7 +257,21 @@ extension HomeGreeting {
     static let firstName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
 
     /// "Morning, Sven.": the greeting by the hour of `date`.
-    static func hello(at date: Date) -> String { "\(ToyHome.greeting(Calendar.current.component(.hour, from: date))), \(firstName)." }
+    static func hello(at date: Date) -> String { "\(greeting(Calendar.current.component(.hour, from: date))), \(firstName)." }
+
+    /// The greeting's first word by the hour.
+    static func greeting(_ hour: Int) -> String {
+        switch hour {
+        case 5..<12: "Morning"
+        case 12..<18: "Afternoon"
+        default: "Evening"
+        }
+    }
+
+    /// The words after the bind count in the greeting's binds line.
+    static func bindsLine(binds: Int, clashes: Int) -> String {
+        "\(binds == 1 ? "bind" : "binds"), \(clashes) \(clashes == 1 ? "clash" : "clashes")"
+    }
 }
 
 // MARK: - Small blocks
@@ -306,10 +315,10 @@ struct HomeSmallBlock: View {
     }
 }
 
-/// A list's row height in the style: Toybox's rows are a step taller for its rounder face.
+/// A list's row height in the style.
 @MainActor
 enum HomeRow {
-    static func height(_ style: PilotStyle) -> CGFloat { style == .toybox ? 34 : 30 }
+    static func height(_ style: PilotStyle) -> CGFloat { 30 }
 }
 
 /// Where a list's "N more" goes: the list's own page, with the key that opens it.
@@ -358,7 +367,7 @@ struct HomeFoldList<Row: View>: View {
     private func line(first: Bool, @ViewBuilder _ content: () -> some View) -> some View {
         HStack(spacing: 9) { content() }
             .frame(maxWidth: .infinity, minHeight: HomeRow.height(style.kind), maxHeight: HomeRow.height(style.kind), alignment: .leading)
-            .overlay(alignment: .top) { if !first { ink.line.frame(height: style.kind == .toybox ? 1.5 : 1).opacity(style.kind == .toybox ? 0.5 : 1) } }
+            .overlay(alignment: .top) { if !first { ink.line.frame(height: 1) } }
     }
 }
 

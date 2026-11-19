@@ -191,45 +191,23 @@ struct MenuBarPage: View {
     // MARK: Top bar only
 
     /// Items on in the top bar only show nowhere while it is off (card agent-bo-95422993, G1): one line naming them and the
-    /// button that puts them in the menu bar too. The dropdown's problem row (the amber triangle, the words, the fix) at the
-    /// switch card's corner, so the two sit square.
+    /// button that puts them in the menu bar too.
     @ViewBuilder private func onlyInTopBar(_ store: BarItemsStore, topBarOn: Bool) -> some View {
         let kinds = store.settings.onlyInTopBar
         if let line = BarSettings.onlyInTopBarLine(kinds, topBarOn: topBarOn) {
-            if ink.style.kind == .instrument {
-                // Instrument's notice row (Home's): the eyebrow in the signal's text colour, the line, its fix.
-                HStack(spacing: 14) {
-                    InstrumentEyebrow(text: "Top bar", role: \.accentText)
-                    Text(line).styleText(\.body).foregroundStyle(ink.text).fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Show in the menu bar") {
-                        withAnimation(reduceMotion ? nil : Kit.change) { store.settings.showInMenuBar(kinds) }
-                    }
-                    .buttonStyle(InstrumentButtonStyle())
+            // Instrument's notice row (Home's): the eyebrow in the signal's text colour, the line, its fix.
+            HStack(spacing: 14) {
+                InstrumentEyebrow(text: "Top bar", role: \.accentText)
+                Text(line).styleText(\.body).foregroundStyle(ink.text).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Show in the menu bar") {
+                    withAnimation(reduceMotion ? nil : Kit.change) { store.settings.showInMenuBar(kinds) }
                 }
-                .instrumentNotice()
-                .transition(.opacity)
-            } else {
-                toyboxNotice(line, kinds: kinds, store: store)
+                .buttonStyle(InstrumentButtonStyle())
             }
+            .instrumentNotice()
+            .transition(.opacity)
         }
-    }
-
-    /// Toybox's: the dropdown's problem row (the amber triangle, the words, the fix) on the amber.
-    private func toyboxNotice(_ line: String, kinds: [BarKind], store: BarItemsStore) -> some View {
-        let shape = RoundedRectangle(cornerRadius: ink.blockRadius)
-        return HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle").foregroundStyle(ink.warnText).accessibilityHidden(true)
-            Text(line).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button("Show in the menu bar") {
-                withAnimation(reduceMotion ? nil : Kit.change) { store.settings.showInMenuBar(kinds) }
-            }
-            .buttonStyle(.pilotPrimary)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(ink.yellow.opacity(0.1), in: shape)
-        .transition(.opacity)
     }
 
     // MARK: Strip

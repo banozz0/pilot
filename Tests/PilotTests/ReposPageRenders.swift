@@ -9,7 +9,7 @@ import WebKit
 
 /// Apps › Repos and General's Developer switch (Pilot 1.0.2, Q715, Q716), opt-in like the other renders: fixture repos made
 /// in the moved home (one real repo with a commit, a worktree, `_tools` and `oss`, which the list leaves out), the list,
-/// the tree with a Swift file and with the README's source, and the filter, in Toybox and Instrument; then the window on
+/// the tree with a Swift file and with the README's source, and the filter, in Instrument; then the window on
 /// Repos and on General, the switch on, at Glass on and off; then the README rendered (MarkdownPreview, through WebKit's
 /// own snapshot, as a page render draws no web view): a header in HTML as Pilot's README has, a table, a local image and
 /// a remote one as its alt text. Nothing under the real ~/code is read.
@@ -20,7 +20,7 @@ extension SharedLook {
 struct ReposPageRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Repos and the Developer switch render in both styles", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Repos and the Developer switch render in Instrument", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to read ~/code")
@@ -43,7 +43,7 @@ struct ReposPageRenders {
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument; look.glass = true }
 
         func page(_ name: String, _ start: ReposPage.Start, height: CGFloat = 860) throws {
-            for (suffix, style) in [("toybox", PilotStyle.toybox), ("instrument", .instrument)] {
+            for (suffix, style) in [("instrument", PilotStyle.instrument)] {
                 look.style = style
                 let host = NSHostingView(rootView: Ground { ReposPage(start: start) }.styled(.page(.repos)).pilotTheme().environment(engine))
                 host.frame.size = NSSize(width: 1160, height: height)
@@ -67,7 +67,7 @@ struct ReposPageRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         for (place, name, height) in [(AppPlace(.repos), "window-repos", 900), (AppPlace(.general), "window-general", 1300)] {
-            for (suffix, style, glass) in [("toybox", PilotStyle.toybox, true), ("instrument-glass", .instrument, true), ("instrument-solid", .instrument, false)] {
+            for (suffix, style, glass) in [("instrument-glass", PilotStyle.instrument, true), ("instrument-solid", .instrument, false)] {
                 look.style = style
                 look.glass = glass
                 window.setContentSize(NSSize(width: 1440, height: height))
@@ -80,7 +80,7 @@ struct ReposPageRenders {
         }
     }
 
-    @Test("The README renders as GitHub shows it, in both styles", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The README renders as GitHub shows it, in Instrument", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func readme() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home && home.hasPrefix("/tmp/"), "CFFIXED_USER_HOME must be a fresh folder under /tmp")
@@ -96,7 +96,7 @@ struct ReposPageRenders {
         // A look of its own: this test awaits the page, and Look.shared's style moved meanwhile would redraw other suites'.
         let (look, _) = LookPageTests().look()
         for (name, file, root, height) in [("readme", readme, repo, 1500.0), ("skill", skill, skill.deletingLastPathComponent(), 360)] {
-            for (suffix, style) in [("toybox", PilotStyle.toybox), ("instrument", .instrument)] {
+            for (suffix, style) in [("instrument", PilotStyle.instrument)] {
                 look.style = style
                 let text = try String(contentsOf: file, encoding: .utf8)
                 let host = NSHostingView(rootView: Ground { MarkdownPreview(text: text, file: file, root: root, showsSource: .constant(false)) { EmptyView() } }.styled(.page(.repos), look: look).pilotTheme(look: look))
@@ -226,6 +226,6 @@ struct ReposPageRenders {
 private struct Ground<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 #endif

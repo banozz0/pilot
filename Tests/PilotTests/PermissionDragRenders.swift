@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The drag panel beside System Settings' privacy lists (Sven, Build 71), through HUD.makePanel as Pilot shows it, for
-/// Accessibility, Full Disk Access and Screen Recording (asking, then granted with Quit & Reopen) in Instrument dark and light and Toybox; a look of the test's own, no panel shown.
+/// Accessibility, Full Disk Access and Screen Recording (asking, then granted with Quit & Reopen) in Instrument dark and light; a look of the test's own, no panel shown.
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter PermissionDragRenders`
 extension SharedLook {
 @MainActor
@@ -25,7 +25,7 @@ struct PermissionDragRenders {
         defer { DisplayFaces.directory = faces }
         let look = PanelLookTests.look()
         let passes: [(String, PilotStyle, String)] = [
-            ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"), ("toybox", .toybox, "toybox"),
+            ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
         ]
         for (tag, style, theme) in passes {
             look.style = style

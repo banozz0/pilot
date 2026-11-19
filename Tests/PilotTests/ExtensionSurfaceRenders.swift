@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Story 161's surfaces drawn: an extension's page (AI usage's blocks: stats, meters, a list, markdown, buttons) in
-/// Instrument and Toybox, one with a failure over its last blocks; the top bar with the Extensions item beside the
-/// clock, and its dropdown, in each style. Folders are temporary and the runs fakes. Opt-in like the other renders:
+/// Instrument, one with a failure over its last blocks; the top bar with the Extensions item beside the
+/// clock, and its dropdown. Folders are temporary and the runs fakes. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ExtensionSurfaceRenders`
 extension SharedLook {
 @MainActor
@@ -78,7 +78,6 @@ struct ExtensionSurfaceRenders {
             try writeRender(view, to: out.appendingPathComponent("page-\(name).png"), wait: 0.6)
         }
         try shot("instrument", page, style: .instrument, theme: "nightwatch")
-        try shot("toybox", page, style: .toybox, theme: "toybox")
         try shot("instrument-failed", stale, style: .instrument, theme: "nightwatch")
         try shot("instrument-dimmed", dimmed, style: .instrument, theme: "nightwatch")
 
@@ -96,7 +95,7 @@ struct ExtensionSurfaceRenders {
         var s = BarSettings.defaults
         s.set(.clock, style: .time)
         let sides: [TopBarSide: [BarSlot]] = [.left: [.item(s.entry(.pilot))], .right: [.item(s.entry(.extensions)), .item(s.entry(.clock))]]
-        for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             (look.themeID, look.style) = (theme, style)
             let strip = TopBarStrip(sides: sides) { TopBarSlotView(slot: $0, screen: "Studio", sources: sources, store: .shared) }
                 .styled(.topBar, look: look).pilotTheme(look: look).frame(width: 700, height: 32)
@@ -117,7 +116,7 @@ struct ExtensionSurfaceRenders {
         .meter(.init(label: "Rain today", percent: 10, value: "10%")),
     ]
 
-    @Test("omarchy-ideas T4: Weather's hero and strip in its 380-wide popover in Instrument and Toybox, dark and light, and on its page",
+    @Test("omarchy-ideas T4: Weather's hero and strip in its 380-wide popover in Instrument, dark and light, and on its page",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func heroAndStrip() async throws {
         let out = try Self.out("extension-hero")
@@ -213,7 +212,7 @@ struct ExtensionSurfaceRenders {
 struct SurfaceGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

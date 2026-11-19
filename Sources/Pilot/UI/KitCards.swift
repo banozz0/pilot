@@ -60,27 +60,20 @@ extension View {
     func innerCard() -> some View { modifier(InnerCard()) }
 }
 
-/// An inner card in the style: Toybox's sunk chip with its ink outline and a short edge, Instrument's hairline.
+/// An inner card in the style: Instrument's hairline.
 private struct InnerCard: ViewModifier {
     @Environment(\.style) private var style
     func body(content: Content) -> some View {
-        if style.kind == .toybox {
-            content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .styleSurface(\.key, fill: \.sunken, radius: \.control)
-                .contentShape(RoundedRectangle(cornerRadius: style.radii.control, style: .continuous))
-        } else {
-            // A card on a panel by its hairline alone, as mockup A organises by rules, not fills.
-            let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-            content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .overlay { shape.strokeBorder(style.color(\.line2)) }
-                .contentShape(shape)
-        }
+        // A card on a panel by its hairline alone, as mockup A organises by rules, not fills.
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .overlay { shape.strokeBorder(style.color(\.line2)) }
+            .contentShape(shape)
     }
 }
 
-/// A symbol on a coloured tile: Toybox's tile in its colour; Instrument's glyph on the raised fill.
+/// A symbol on a coloured tile: Instrument's glyph on the raised fill.
 struct KitTile: View {
-    @Environment(\.style) private var style
     let symbol: String
     let colour: TileColour
     let size: CGFloat
@@ -88,12 +81,8 @@ struct KitTile: View {
     var letter: String?
 
     var body: some View {
-        if style.kind == .toybox {
-            ToyTile(symbol: symbol, color: Toy.tile(colour, style), size: size, letter: letter).accessibilityHidden(true)
-        } else {
-            // No module colours in Instrument: the glyph or letter in the second text colour on the raised fill.
-            InstrumentAppIcon(bundle: nil, symbol: symbol, size: size, letter: letter)
-        }
+        // No module colours in Instrument: the glyph or letter in the second text colour on the raised fill.
+        InstrumentAppIcon(bundle: nil, symbol: symbol, size: size, letter: letter)
     }
 }
 

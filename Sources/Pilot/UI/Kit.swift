@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 // Design round 4's components (card agent-bo-95422891), section 5 of the approved artifact 5sh21HWjCjsWYAwWKTibcE, each
-// drawn in the picked style (Instrument's and Toybox's own). Press scale 0.96, 150 ms on colour and position with no
+// drawn in the picked style (Instrument's own). Press scale 0.96, 150 ms on colour and position with no
 // bounce. PilotSwitchStyle, Segments, Kbd, Chip and PilotButtonStyle are the kit's, so every page using them follows the
 // style.
 
@@ -51,8 +51,7 @@ extension View {
 // MARK: - Focus border
 
 extension View {
-    /// The theme's focus treatment on a block of corner radius `radius`, when `on`: Hyprland's gradient, a halo, a lit
-    /// edge, a woodblock's double rule, frost, a sticker's offset shadow, an ink rule, or a camera's corner brackets.
+    /// The focus on a block of corner radius `radius`, when `on`: Instrument's picked ring (a theme's `style` is not drawn).
     func focusBorder(_ style: FocusBorder? = nil, on: Bool, radius: CGFloat) -> some View {
         modifier(FocusBorderModifier(style: style, on: on, radius: radius))
     }
@@ -64,72 +63,18 @@ private struct FocusBorderModifier: ViewModifier {
     let on: Bool
     let radius: CGFloat
 
-    /// The content stays one view whatever the style, so a focus change never rebuilds it; only what lies over and
-    /// under it changes. Instrument's focus is its picked ring alone, the signal at 1.5 pt (no theme effect).
+    /// Instrument's focus is its picked ring alone, the signal at 1.5 pt (no theme effect).
     func body(content: Content) -> some View {
-        if picked.kind == .instrument {
-            content.overlay { if on { shape.strokeBorder(picked.color(\.accent), lineWidth: InstrumentBar.ring) } }
-        } else {
-            themed(content)
-        }
-    }
-
-    /// Toybox's: the theme's focus treatment under and over the block.
-    private func themed(_ content: Content) -> some View {
-        let style = on ? (style ?? Theme.theme.focus) : nil
-        return content
-            .background { if let style { under(style) } }
-            .overlay { if let style { over(style) } }
-            .shadow(color: style == .lit ? Theme.accent.opacity(0.55) : .clear, radius: style == .lit ? 11 : 0, y: style == .lit ? 10 : 0)
+        content.overlay { if on { shape.strokeBorder(picked.color(\.accent), lineWidth: InstrumentBar.ring) } }
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: radius, style: .continuous) }
-
-    @ViewBuilder private func under(_ style: FocusBorder) -> some View {
-        let a = Theme.accent
-        switch style {
-        case .glow: shape.inset(by: -3).fill(a.opacity(0.22))
-        case .soft: shape.inset(by: -4).fill(a.opacity(0.17))
-        case .offset: shape.fill(Theme.second).offset(x: 3, y: 3)
-        case .ink: shape.fill(a.opacity(0.75)).offset(x: 3, y: 3)
-        default: EmptyView()
-        }
-    }
-
-    @ViewBuilder private func over(_ style: FocusBorder) -> some View {
-        let a = Theme.accent
-        switch style {
-        case .gradient:
-            shape.inset(by: -1).strokeBorder(LinearGradient(colors: [a, Theme.second], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2)
-        case .glow, .soft, .offset: shape.strokeBorder(a)
-        case .lit: shape.strokeBorder(a).litEdge(shape, .white.opacity(0.14))
-        case .double: ZStack { shape.strokeBorder(a); shape.inset(by: -3).strokeBorder(a.opacity(0.55)) }
-        case .frost: ZStack { shape.strokeBorder(a).litEdge(shape, .white.opacity(0.2)); shape.inset(by: -1).strokeBorder(a.opacity(0.3)) }
-        case .ink: shape.strokeBorder(Theme.text)
-        case .brackets: ZStack { shape.strokeBorder(Theme.line2); Brackets().stroke(a, lineWidth: 2).padding(-4) }
-        }
-    }
-}
-
-/// A camera's focus: four 11 pt corners.
-private struct Brackets: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let n: CGFloat = 11
-        for (x, y, dx, dy) in [(r.minX, r.minY, 1.0, 1.0), (r.maxX, r.minY, -1.0, 1.0), (r.minX, r.maxY, 1.0, -1.0), (r.maxX, r.maxY, -1.0, -1.0)] {
-            p.move(to: CGPoint(x: x + dx * n, y: y + dy * 1))
-            p.addLine(to: CGPoint(x: x + dx * 1, y: y + dy * 1))
-            p.addLine(to: CGPoint(x: x + dx * 1, y: y + dy * n))
-        }
-        return p
-    }
 }
 
 // MARK: - Blocks
 
-/// One block of a page: Toybox's chunk or Instrument's panel.
+/// One block of a page: Instrument's panel.
 struct Tile<Trailing: View, Content: View>: View {
-    @Environment(\.style) private var style
     var title: String?
     var symbol: String?
     var focused = false
@@ -141,15 +86,12 @@ struct Tile<Trailing: View, Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyBlock(title: title, note: note, fill: fill, trailing: { trailing }, content: { content })
-        case .instrument: InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
-        }
+        InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
     }
 }
 
 extension View {
-    /// A block's surface in the style: Toybox's chunk (ToyKitPage), Instrument's panel under its hairline ring.
+    /// A block's surface in the style: Instrument's panel under its hairline ring.
     func blockSurface() -> some View { frame(maxWidth: .infinity, alignment: .leading).styleSurface(\.card) }
 }
 
@@ -178,17 +120,13 @@ extension Tile where Trailing == EmptyView {
 
 /// The heading over a group of cards, with an optional link on the right.
 struct CalmHeading<Trailing: View>: View {
-    @Environment(\.style) private var style
     let title: String
     /// One muted line under the title saying what the group is for.
     var note: String?
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyHeading(title: title, note: note) { trailing }
-        case .instrument: InstrumentHeading(title: title, note: note) { trailing }
-        }
+        InstrumentHeading(title: title, note: note) { trailing }
     }
 }
 
@@ -199,22 +137,18 @@ extension CalmHeading where Trailing == EmptyView {
 /// A page's scroll in the style: its column under the page's title, its intro line first (Home and Look's spacing). The
 /// intro is one line; what else it would say is `info`, an ⓘ at its end (simplify-pages T5).
 struct KitPage<Content: View>: View {
-    @Environment(\.style) private var style
     var intro: String?
     var info: String?
     var fills = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyPage(intro: intro, info: info, flow: true) { content }
-        case .instrument: InstrumentPage(intro: intro, info: info, flow: true) { content }
-        }
+        InstrumentPage(intro: intro, info: info, flow: true) { content }
     }
 
     /// The least width of a page's column (PageFlow): a row's label stays close to its control, and Pilot's Hold Hyper row
     /// still fits (its label wraps to two lines at 460).
-    static func column(_ kind: PilotStyle) -> CGFloat { kind == .toybox ? 500 : 460 }
+    static func column(_ kind: PilotStyle) -> CGFloat { 460 }
 }
 
 /// A page's intro words, then its ⓘ when `info` says more: the one line every page opens on (simplify-pages T5).
@@ -259,15 +193,9 @@ struct KitBlock<Trailing: View, Content: View>: View {
 
     var body: some View {
         // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`.
-        Group {
-            if style.kind == .toybox {
-                ToyBlock(title: title, note: note, fill: fill, trailing: { trailing }, content: { content }).padding(.top, Toy.blockGap)
-            } else {
-                InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
-                    .padding(.top, style.density.padding)
-            }
-        }
-        .pageFlows()
+        InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
+            .padding(.top, style.density.padding)
+            .pageFlows()
     }
 }
 
@@ -366,15 +294,9 @@ struct BlockRow<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        if style.kind == .toybox {
-            HStack(spacing: 12) { content }
-                .frame(maxWidth: .infinity, minHeight: style.points(46), alignment: .leading)
-                .overlay(alignment: .top) { if !first { Capsule().fill(style.color(\.line)).frame(height: 2) } }
-        } else {
-            HStack(spacing: 10) { content }
-                .frame(maxWidth: .infinity, minHeight: style.points(40), alignment: .leading)
-                .overlay(alignment: .top) { if !first { InstrumentRule() } }
-        }
+        HStack(spacing: 10) { content }
+            .frame(maxWidth: .infinity, minHeight: style.points(40), alignment: .leading)
+            .overlay(alignment: .top) { if !first { InstrumentRule() } }
     }
 }
 
@@ -383,13 +305,12 @@ struct BlockRow<Content: View>: View {
 /// too short. A plain BlockRow squeezes its label to nothing instead, and the label's wrapped detail stretches the row
 /// tall (build 2425: About's three buttons).
 struct LabelledControls<Label: View, Controls: View>: View {
-    @Environment(\.style) private var style
     var least: CGFloat = 150
     @ViewBuilder var label: Label
     @ViewBuilder var controls: Controls
 
     var body: some View {
-        let spacing: CGFloat = style.kind == .toybox ? 12 : 10
+        let spacing: CGFloat = 10
         ViewThatFits(in: .horizontal) {
             HStack(spacing: spacing) {
                 HStack(spacing: spacing) { label }.frame(minWidth: 0, idealWidth: least, maxWidth: .infinity, alignment: .leading)
@@ -409,9 +330,8 @@ struct LabelledControls<Label: View, Controls: View>: View {
     }
 }
 
-/// A module's tile: Toybox's candy tile in `colour`, Instrument's app-icon tile.
+/// A module's tile: Instrument's app-icon tile.
 struct Squircle: View {
-    @Environment(\.style) private var style
     let symbol: String
     var colour = Theme.accent
     /// 30 pt, else 22.
@@ -419,11 +339,7 @@ struct Squircle: View {
 
     var body: some View {
         let s: CGFloat = big ? 30 : 22
-        if style.kind == .toybox {
-            ToyTile(symbol: symbol, color: colour, size: s)
-        } else {
-            InstrumentAppIcon(bundle: nil, symbol: symbol, size: s)
-        }
+        InstrumentAppIcon(bundle: nil, symbol: symbol, size: s)
     }
 }
 
@@ -456,16 +372,9 @@ private struct KitSwitch<Label: View>: View {
     @Binding var isOn: Bool
     @ViewBuilder var label: Label
 
-    @Environment(\.style) private var style
-
     var body: some View {
-        Group {
-            switch style.kind {
-            case .toybox: ToySwitchFace(isOn: isOn)
-            // Instrument's signal colour means Hyper: a page's switch is lit in the text colour.
-            case .instrument: InstrumentSwitchFace(isOn: isOn, lit: false)
-            }
-        }
+        // Instrument's signal colour means Hyper: a page's switch is lit in the text colour.
+        InstrumentSwitchFace(isOn: isOn, lit: false)
             .animation(Kit.change, value: isOn)
             .kitDimmed(isEnabled)
             .contentShape(.rect)
@@ -486,7 +395,6 @@ extension ToggleStyle where Self == PilotSwitchStyle {
 
 /// Strength, gaps (shadcn/ui Slider) in the style.
 struct KitSlider: View {
-    @Environment(\.style) private var style
     @Environment(\.isEnabled) private var isEnabled
     @Binding var value: Double
     var range: ClosedRange<Double> = 0...1
@@ -498,11 +406,7 @@ struct KitSlider: View {
         let w = width ?? 170
         let x = (value - range.lowerBound) / (range.upperBound - range.lowerBound) * w
         ZStack(alignment: .leading) {
-            if style.kind == .toybox {
-                ToySliderFace(fraction: x / w, width: w)
-            } else {
-                InstrumentSliderFace(x: x, width: w)
-            }
+            InstrumentSliderFace(x: x, width: w)
         }
         .frame(width: w, height: 22)
         .contentShape(.rect)
@@ -521,7 +425,6 @@ struct KitSlider: View {
 
 /// One of a few, in the style's segmented control.
 struct Segments<Value: Hashable>: View {
-    @Environment(\.style) private var style
     @Environment(\.isEnabled) private var isEnabled
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
@@ -529,11 +432,7 @@ struct Segments<Value: Hashable>: View {
     var label = ""
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToySegments(selection: $selection, options: options, label: label).kitDimmed(isEnabled)
-        case .instrument:
-            InstrumentSegments(options: options, selection: $selection).kitDimmed(isEnabled).fixedSize().accessibilityLabel(label)
-        }
+        InstrumentSegments(options: options, selection: $selection).kitDimmed(isEnabled).fixedSize().accessibilityLabel(label)
     }
 }
 
@@ -550,22 +449,19 @@ struct KitRow<Content: View>: View {
             .lineLimit(1)
             .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, minHeight: style.points(42), alignment: .leading)
-            .foregroundStyle(style.color(selected && style.kind == .toybox ? \.onAccent : \.text))
+            .foregroundStyle(style.color(\.text))
             .background(KitRowBackground(selected: selected))
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-/// A row's selection: Toybox's sun block, Instrument's raised row.
+/// A row's selection: Instrument's raised row.
 struct KitRowBackground: View {
-    @Environment(\.style) private var style
     let selected: Bool
 
     var body: some View {
         if !selected {
             Color.clear
-        } else if style.kind == .toybox {
-            Toy.block(style, fill: style.color(\.accent), radius: style.radii.control, edge: 2)
         } else {
             // A list's current row (InstrumentKit's instrumentPicked): raised on its hairline ring, the signal's tick.
             Color.clear.instrumentPicked(true)
@@ -665,7 +561,6 @@ private struct PointerRowStyle: ButtonStyle {
 
 /// A count or a filter (shadcn/ui Badge) in the style.
 struct Chip: View {
-    @Environment(\.style) private var style
     let text: String
     /// What the chip says by colour ("granted" green, "clashes" amber). None is a plain chip.
     var color: Color?
@@ -680,11 +575,7 @@ struct Chip: View {
     var remove: (() -> Void)?
 
     var body: some View {
-        if style.kind == .toybox {
-            ToyPageChip(text: text, color: color, on: on, count: count, symbol: symbol, remove: remove)
-        } else {
-            InstrumentChipFace(title: text, count: count, on: on, symbol: symbol, remove: remove, height: 22).lineLimit(1).fixedSize()
-        }
+        InstrumentChipFace(title: text, count: count, on: on, symbol: symbol, remove: remove, height: 22).lineLimit(1).fixedSize()
     }
 }
 
@@ -692,7 +583,6 @@ struct Chip: View {
 
 /// A key cap for a bind or a hint, in the style.
 struct Kbd: View {
-    @Environment(\.style) private var style
     /// The layer key Instrument's Hyper chip shows; none offscreen, where a page is drawn without an engine.
     @Environment(Engine.self) private var engine: Engine?
     let text: String
@@ -700,15 +590,8 @@ struct Kbd: View {
     var small = false
 
     var body: some View {
-        if style.kind == .toybox {
-            // "Hyper+Shift+S" as Toybox's caps: Hyper's sun cap, then each key.
-            let bind = ToyCaps.bind(text)
-            if bind.keys.count + (bind.hyper ? 1 : 0) > 1 { ToyKeys(keys: bind.keys, hyper: bind.hyper, small: true) }
-            else { ToyKeycap(label: text, small: true) }
-        } else {
-            // Instrument's chips: the layer key's sign lit in the signal colour (Hyper), each modifier its sign.
-            InstrumentBindKeys(label: text, layerKeys: engine?.settings.layerKeys ?? [.capsLock])
-        }
+        // Instrument's chips: the layer key's sign lit in the signal colour (Hyper), each modifier its sign.
+        InstrumentBindKeys(label: text, layerKeys: engine?.settings.layerKeys ?? [.capsLock])
     }
 }
 
@@ -887,38 +770,24 @@ struct MiniGraph: View {
 
 /// A page's search (cmdk input) in the style.
 struct SearchBox: View {
-    @Environment(\.ink) private var ink
     @Environment(\.style) private var style
     let prompt: String
     @Binding var text: String
     var focused: FocusState<Bool>.Binding?
 
     var body: some View {
-        if style.kind == .toybox {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").font(ink.system(15, weight: .bold)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
-                ZStack(alignment: .leading) {
-                    if text.isEmpty { Text(prompt).foregroundStyle(style.color(\.text3)).allowsHitTesting(false) }
-                    field.foregroundStyle(style.color(\.text))
-                }
+        // The sidebar's search (mockup A's .search): the glyph and prompt in the third text colour on the raised fill.
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").font(style.font(\.icon)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+            ZStack(alignment: .leading) {
+                if text.isEmpty { Text(prompt).foregroundStyle(style.color(\.text3)).allowsHitTesting(false) }
+                field.foregroundStyle(style.color(\.text))
             }
-            .font(style.toyNunito(700, 14.5))
-            .padding(.horizontal, 14).frame(height: style.points(42))
-            .toyWell(radius: style.radii.control)
-        } else {
-            // The sidebar's search (mockup A's .search): the glyph and prompt in the third text colour on the raised fill.
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").font(style.font(\.icon)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
-                ZStack(alignment: .leading) {
-                    if text.isEmpty { Text(prompt).foregroundStyle(style.color(\.text3)).allowsHitTesting(false) }
-                    field.foregroundStyle(style.color(\.text))
-                }
-            }
-            .font(style.font(\.body))
-            .padding(.horizontal, 10).frame(height: style.points(32))
-            .background(style.color(\.raised), in: searchShape)
-            .overlay { searchShape.strokeBorder(style.color(\.line)) }
         }
+        .font(style.font(\.body))
+        .padding(.horizontal, 10).frame(height: style.points(32))
+        .background(style.color(\.raised), in: searchShape)
+        .overlay { searchShape.strokeBorder(style.color(\.line)) }
     }
 
     private var searchShape: RoundedRectangle { RoundedRectangle(cornerRadius: style.radii.control + 1, style: .continuous) }
@@ -945,20 +814,15 @@ struct PilotButtonStyle: ButtonStyle {
     }
 }
 
-/// The button in the surface's style: Toybox's keycap face (ToyKit), else Instrument's.
+/// The button in the surface's style: Instrument's.
 private struct StyledKitButton: View {
-    @Environment(\.style) private var style
     let configuration: ButtonStyleConfiguration
     let primary, destructive, soft, ghost: Bool
 
     var body: some View {
-        if style.kind == .toybox {
-            ToyButtonFace(configuration: configuration, primary: primary, destructive: destructive, ghost: ghost)
-        } else {
-            // One filled action per view, in the inverse, or red when it ends something; Instrument has no status colour,
-            // so a quiet destructive one is raised.
-            InstrumentButtonStyle(kind: primary ? destructive ? .destructive : .primary : ghost ? .ghost : .raised).makeBody(configuration: configuration)
-        }
+        // One filled action per view, in the inverse, or red when it ends something; Instrument has no status colour,
+        // so a quiet destructive one is raised.
+        InstrumentButtonStyle(kind: primary ? destructive ? .destructive : .primary : ghost ? .ghost : .raised).makeBody(configuration: configuration)
     }
 }
 
@@ -1014,18 +878,13 @@ extension ButtonStyle where Self == PilotButtonStyle {
 
 /// Nothing yet, in the style: a line, the keys that fix it and one action.
 struct EmptyState: View {
-    @Environment(\.style) private var style
     let title: String
     var line: String?
     var keys: [String] = []
     var action: (title: String, run: () -> Void)?
 
     var body: some View {
-        if style.kind == .toybox {
-            ToyEmpty(title: title, line: line, keys: keys, action: action)
-        } else {
-            InstrumentEmpty(title: title, line: line, keys: keys, action: action)
-        }
+        InstrumentEmpty(title: title, line: line, keys: keys, action: action)
     }
 }
 
@@ -1043,10 +902,7 @@ struct KitPopover<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        switch style.kind {
-        case .toybox: toybox
-        case .instrument: instrument
-        }
+        instrument
     }
 
     /// Instrument's (card agent-bo-95423181): the panel colour at the pop radius on the pop's hairline ring, opaque, no
@@ -1066,18 +922,6 @@ struct KitPopover<Content: View>: View {
             }
             .overlay { if glass == nil, let ring = style.depth.pop.ring { shape.strokeBorder(Color(ring)) } }
             .clipShape(shape)
-            .padding(.top, arrow ? PopoverMetrics.arrowHeight : 0)
-    }
-
-    /// Toybox's (card agent-bo-95423182): the style's pop block in the panel colour, no blur and no arrow (its room kept,
-    /// so it hangs where the theme's would), Nunito for the words.
-    private var toybox: some View {
-        VStack(alignment: .leading, spacing: 0) { content }
-            .padding(inset)
-            .frame(width: width - 2 * style.depth.pop.outline, alignment: .leading)
-            .font(style.toyNunito(700, 13))
-            .foregroundStyle(style.color(\.text))
-            .styleSurface(\.pop, fill: \.panel, radius: \.pop)
             .padding(.top, arrow ? PopoverMetrics.arrowHeight : 0)
     }
 }

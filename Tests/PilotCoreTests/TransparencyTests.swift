@@ -78,12 +78,4 @@ struct TransparencyTests {
         #expect(see.depth.card.highlight == Paint(0xFFFFFF, 0.04) && tokens.depth.card.highlight == nil)
         #expect(see.type == tokens.type && see.radii == tokens.radii && see.density == tokens.density)
     }
-
-    @Test("Toybox's tokens come back as they are at any Transparency")
-    func toyboxUnchanged() {
-        for theme in [PilotTheme.standard, PilotTheme.named("porcelain")!, PilotTheme.named("toybox")!] {
-            let tokens = StyleTokens.of(.toybox, theme: theme)
-            #expect(tokens.seeThrough(Layers(transparency: 100)) == tokens, "\(theme.id)")
-        }
-    }
 }

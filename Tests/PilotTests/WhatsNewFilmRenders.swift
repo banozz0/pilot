@@ -373,7 +373,6 @@ struct WhatsNewFilmRenders {
             var nav = nav
             if nav.branch == nil { nav.provide(.window, MenuEntries.windows(windows, excluding: nil)) }
             let m = MenuModel(nav: nav)
-            m.layout = .line
             m.windows = windows
             m.ownKey = "Hyper+Space"
             return m

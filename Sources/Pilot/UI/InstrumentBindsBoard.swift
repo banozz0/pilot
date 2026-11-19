@@ -289,7 +289,7 @@ struct InstrumentBoardKey: View {
 
     @ViewBuilder private var content: some View {
         if function {
-            // The glyph or the name only where it fits beside the legend, as Toybox's keys do: on the whole board's narrow
+            // The glyph or the name only where it fits beside the legend: on the whole board's narrow
             // keys it would run into the next key (simplify-pages T14).
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 4) {

@@ -8,7 +8,7 @@ import Testing
 @MainActor
 @Suite("Overlay picks")
 struct OverlayPicksTests {
-    @Test("Overlay is a place on Keys' front, under the board (pages round 4, Sven's Q95; on More from simplify-pages T14, a Binds tab since story 56), which a link and the window's search reach; Instrument and Toybox give More the frame's bar")
+    @Test("Overlay is a place on Keys' front, under the board (pages round 4, Sven's Q95; on More from simplify-pages T14, a Binds tab since story 56), which a link and the window's search reach; Instrument gives More the frame's bar")
     func place() {
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"],
                 "Abilities went to Menu (C3); Export and import and Cleaning are on More")
@@ -18,7 +18,6 @@ struct OverlayPicksTests {
         #expect(AppPlace.search("cheat sheet").first == AppPlace(.overlay))
         // Named in full: inside #expect's expansion a bare `.overlay` is not read as AppSection's.
         #expect(!InstrumentFrame.pageOwnsBar(.binds, section: AppSection.bindsMore))
-        #expect(!ToyLayout.ownsTitleRow(.binds, section: AppSection.bindsMore))
         #expect(OverlayPicksBlocks.intro(delay: HoldOverlay.delay).hasPrefix("Hold Hyper 0.4 s"), "the page says how to open the overlay")
     }
 

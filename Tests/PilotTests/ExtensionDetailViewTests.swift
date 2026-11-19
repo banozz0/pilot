@@ -180,7 +180,7 @@ struct ExtensionDetailViewTests {
 }
 
 extension SharedLook {
-    /// The detail in the real panel, hidden (alpha 0, no mouse), in Instrument and Toybox, each drawing its own detail: in
+    /// The detail in the real panel, hidden (alpha 0, no mouse), in Instrument, drawing its own detail: in
     /// place of the list, under Cmd+K's actions.
     @MainActor
     @Suite("Extension detail in the menu", .serialized)
@@ -226,7 +226,7 @@ extension SharedLook {
         #if DEBUG
         nonisolated static let env = ProcessInfo.processInfo.environment
 
-        /// The menu with the detail in Instrument and Toybox, dark and light, with Cmd+K's actions over it, drawn through the
+        /// The menu with the detail in Instrument, dark and light, with Cmd+K's actions over it, drawn through the
         /// menu's panel as Instrument's renders draw it, Panels glass off (glass draws nothing offscreen). Opt-in like the other renders, in a moved home:
         /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ExtensionDetailMenuTests`
         @Test("The detail renders in the menu", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -248,12 +248,8 @@ extension SharedLook {
                 ("instrument-dark", .instrument, "tokyo-night", false, false),
                 ("instrument-porcelain", .instrument, "porcelain", false, false),
                 ("instrument-lagoon-actions", .instrument, "tokyo-night", true, false),
-                // Toybox's own detail (batch 7, card agent-bo-95423182), following the theme.
-                ("toybox", .toybox, "toybox", false, false),
-                ("toybox-night-actions", .toybox, "toybox-night", true, false),
                 // pilot-1-1 T9: a detail's blocks in place of its words, its page a Cmd+Return away.
                 ("instrument-blocks", .instrument, "tokyo-night", false, true),
-                ("toybox-blocks", .toybox, "toybox", false, true),
             ]
             for shot in shots {
                 (look.style, look.themeID) = (shot.style, shot.theme)

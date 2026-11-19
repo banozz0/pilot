@@ -11,7 +11,7 @@ struct CollectionsLayoutsTests {
     let defaults = UserDefaults(suiteName: testSuite())!
     let store: HomeLayoutStore
     let verbs = ControlVerbs()
-    final class Picked { var style = PilotStyle.toybox }
+    final class Picked { var style = PilotStyle.instrument }
     let picked = Picked()
 
     init() {
@@ -35,25 +35,17 @@ struct CollectionsLayoutsTests {
     @Test("List: Edit Home's rows in its order, hidden ones and extension pages too, each with its cells and layout, without the blocks the style leaves out")
     func list() async {
         let all = await rows()
-        #expect(await blocks() == ["greeting", "workspaces", "keyboard", "clipboard", "mostUsed", "thisMac", "pilot", "ext:pomo"])
+        #expect(await blocks() == ["greeting", "workspaces", "keyboard", "clipboard", "mostUsed", "thisMac", "ext:pomo"])
         #expect(all.first == ["block": .string("greeting"), "title": .string("Today"), "shown": .bool(true), "cells": .string("0,0,5,2"),
                               "layout": .string("auto"), "at": .number(0)])
         #expect(all[2]["cells"] == .string("5,0,18,6"))
         #expect(all.last == ["block": .string("ext:pomo"), "title": .string("Pomodoro"), "shown": .bool(false), "cells": .null,
-                             "layout": .string("auto"), "at": .number(7)])
-        picked.style = .instrument
+                             "layout": .string("auto"), "at": .number(6)])
         #expect(!(await blocks()).contains("pilot"))
     }
 
-    @Test("Add shows a block at the grid's foot, or on the cells it names (the blocks there moving down), and keeps its layout, answering its row")
+    @Test("Add shows a block on the cells it names (the blocks there moving down), answering its row")
     func add() async {
-        let added = await answer("add", ["home-blocks", "--block", "pilot", "--layout", "strip"])
-        #expect(added.result == .object(["block": .string("pilot"), "title": .string("Pilot"), "shown": .bool(true), "cells": .string("0,11,18,3"),
-                                         "layout": .string("strip"), "at": .number(6)]))
-        #expect(store.layout.shown(extensions: ["pomo"]).contains("pilot") && store.layout.layout(of: "pilot") == .strip)
-        #expect(HomeLayoutStore(defaults: defaults).layout == store.layout, "the change is saved")
-        _ = await answer("add", ["home-blocks", "--block", "pilot", "--layout", "auto"])
-        #expect(store.layout.rows.first { $0.id == "pilot" }?.layout == nil)
         // Pomodoro on the keyboard's top right: it takes the cells, the keyboard moves down under it.
         let placed = await answer("add", ["home-blocks", "--block", "ext:pomo", "--cells", "19,0,4,4"])
         #expect(placed.result.flatMap { if case .object(let row) = $0 { row["cells"] } else { nil } } == .string("19,0,4,4"))
@@ -70,22 +62,16 @@ struct CollectionsLayoutsTests {
         let moved = await answer("add", ["home-blocks", "--block", "ext:pomo", "--at", "4"])
         #expect(moved.result.flatMap { if case .object(let row) = $0 { row["at"] } else { nil } } == .number(4))
         #expect(store.layout == oracle)
-        #expect(await blocks() == ["greeting", "workspaces", "keyboard", "clipboard", "ext:pomo", "mostUsed", "thisMac", "pilot"])
+        #expect(await blocks() == ["greeting", "workspaces", "keyboard", "clipboard", "ext:pomo", "mostUsed", "thisMac"])
         _ = await answer("add", ["home-blocks", "--block", "workspaces", "--at", "99"])
         #expect(await blocks().last == "workspaces")
     }
 
-    @Test("Remove hides a block; back to the default saves nothing, as Edit Home's Done; --reset puts the default back")
+    @Test("Remove hides a block; --reset puts the default back")
     func remove() async {
-        _ = await answer("add", ["home-blocks", "--block", "pilot"])
-        #expect(defaults.data(forKey: HomeLayoutStore.key) != nil)
-        let hidden = await answer("remove", ["home-blocks", "pilot"])
+        let hidden = await answer("remove", ["home-blocks", "workspaces"])
         #expect(hidden.result.flatMap { if case .object(let row) = $0 { row["shown"] } else { nil } } == .bool(false))
-        #expect(store.layout == .standard && defaults.data(forKey: HomeLayoutStore.key) == nil)
-        #expect(await answer("remove", ["home-blocks", "pilot"]).error == ControlError(.badValue, "pilot is already hidden"))
-
-        _ = await answer("remove", ["home-blocks", "workspaces"])
-        _ = await answer("add", ["home-blocks", "--block", "pilot", "--layout", "square"])
+        #expect(await answer("remove", ["home-blocks", "workspaces"]).error == ControlError(.badValue, "workspaces is already hidden"))
         #expect(store.layout != .standard)
         #expect(await answer("remove", ["home-blocks", "--reset"]).ok)
         #expect(store.layout == .standard && defaults.data(forKey: HomeLayoutStore.key) == nil)
@@ -97,13 +83,14 @@ struct CollectionsLayoutsTests {
         #expect(await answer("add", ["home-blocks", "--block", "nope"]).error == ControlError(.badValue, "no block nope" + missing))
         #expect(await answer("add", ["home-blocks", "--block", "quickActions"]).error
             == ControlError(.badValue, "quickActions is not drawn in this style" + missing))
+        #expect(await answer("add", ["home-blocks", "--block", "pilot"]).error == ControlError(.badValue, "pilot is not drawn in this style" + missing))
         #expect(await answer("remove", ["home-blocks", "ext:gone"]).error
             == ControlError(.badValue, "no installed extension with a page is gone" + missing))
-        #expect(await answer("add", ["home-blocks", "--block", "pilot", "--layout", "huge"]).error?.message.hasPrefix("--layout: huge") == true)
-        #expect(await answer("add", ["home-blocks", "--block", "pilot", "--cells", "20,0,5,3"]).error?.message.hasPrefix("--cells: 20,0,5,3") == true)
-        #expect(await answer("add", ["home-blocks", "--block", "pilot", "--cells", "big"]).error?.message.hasPrefix("--cells: big") == true)
-        #expect(await answer("add", ["home-blocks", "--block", "pilot", "--at", "-1"]).error?.message.hasPrefix("--at: -1") == true)
-        #expect(await answer("add", ["home-blocks", "--block", "pilot", "--shown", "false"]).error?.code == .unknownFlag)
+        #expect(await answer("add", ["home-blocks", "--block", "workspaces", "--layout", "huge"]).error?.message.hasPrefix("--layout: huge") == true)
+        #expect(await answer("add", ["home-blocks", "--block", "workspaces", "--cells", "20,0,5,3"]).error?.message.hasPrefix("--cells: 20,0,5,3") == true)
+        #expect(await answer("add", ["home-blocks", "--block", "workspaces", "--cells", "big"]).error?.message.hasPrefix("--cells: big") == true)
+        #expect(await answer("add", ["home-blocks", "--block", "workspaces", "--at", "-1"]).error?.message.hasPrefix("--at: -1") == true)
+        #expect(await answer("add", ["home-blocks", "--block", "workspaces", "--shown", "false"]).error?.code == .unknownFlag)
         #expect(await answer("remove", ["home-blocks", "--all"]).error?.code == .unknownFlag)
         #expect(store.layout == .standard, "nothing refused was saved")
     }

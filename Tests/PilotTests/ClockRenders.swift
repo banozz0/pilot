@@ -86,11 +86,10 @@ struct ClockRenders {
         sources.readings.release(.clock)
     }
 
-    /// Each style on a dark and a light theme.
-    static let looks: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light"),
-                                                        (.toybox, "toybox-night", "dark"), (.toybox, "toybox", "light")]
+    /// Instrument on a dark and a light theme.
+    static let looks: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light")]
 
-    @Test("SPEC story 168, omarchy-ideas T8: the clock's popover in Omarchy's look (hero date, year rail, today outlined) with events off, given (a second zone, coloured events over three days) and refused, in Instrument and Toybox, dark and light",
+    @Test("SPEC story 168, omarchy-ideas T8: the clock's popover in Omarchy's look (hero date, year rail, today outlined) with events off, given (a second zone, coloured events over three days) and refused, in Instrument, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func styles() async throws {
         let dir = try Self.dir("clock-168")

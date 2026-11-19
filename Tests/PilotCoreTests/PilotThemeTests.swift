@@ -54,12 +54,12 @@ struct PilotThemeTests {
                           wallpaper: WallpaperSpot(glow: hex(glow), amount: amount, base: hex(base)))
     }
 
-    @Test("The line-up of 19 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones, Toybox Night, Toybox and Jungle; fourteen dark, five light")
+    @Test("The line-up of 17 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones and Jungle; thirteen dark, four light")
     func designed() {
         #expect(PilotTheme.designed.map(\.id) == ["tokyo-night", "jade", "catppuccin", "gruvbox", "matte-black", "retro-82", "nord", "akane", "ayu-dark", "dracula",
-                                                  "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "toybox-night", "toybox", "jungle"])
+                                                  "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "jungle"])
         #expect(PilotTheme.defaultID == "tokyo-night" && PilotTheme.standard.id == "tokyo-night")
-        #expect(PilotTheme.designed.filter(\.dark).count == 14)
+        #expect(PilotTheme.designed.filter(\.dark).count == 13)
         #expect(PilotTheme.named("void")?.name == "Void" && PilotTheme.named("nope") == nil)
         for retired in PilotTheme.retired.keys { #expect(PilotTheme.named(retired) == nil, "\(retired) is gone") }
     }
@@ -99,12 +99,14 @@ struct PilotThemeTests {
 
     @Test("A saved theme id from round 4 or round 15 becomes the kept theme closest to it; an unknown one the default")
     func migration() {
-        // Sven's maps: round 4's (2026-10-08) carried to their final theme, and the line-up of 18's (2026-11-11).
+        // Sven's maps: round 4's (2026-10-08) carried to their final theme, the line-up of 18's (2026-11-11), and the two
+        // Toybox palettes that went with their style (2026-11-19).
         #expect(PilotTheme.retired == ["nightwatch": "ayu-dark", "ukiyo": "ayu-dark", "fjord": "ayu-dark", "teahouse": "ayu-dark",
                                        "understory": "ayu-dark", "crema": "garnet", "hearth": "void", "nocturne": "void",
                                        "boardwalk": "dracula", "graphite": "void", "paper": "folio", "petal": "porcelain",
                                        "lagoon": "ayu-dark", "orchid": "dracula", "phosphor": "ayu-dark", "cyanotype": "retro-82",
-                                       "verdigris": "ayu-dark", "workshop": "folio", "cinder": "matte-black", "dusk": "void"])
+                                       "verdigris": "ayu-dark", "workshop": "folio", "cinder": "matte-black", "dusk": "void",
+                                       "toybox": "porcelain", "toybox-night": "dracula"])
         for (old, new) in PilotTheme.retired { #expect(PilotTheme.current(old) == new && PilotTheme.named(new) != nil, "\(old)") }
         for t in PilotTheme.designed { #expect(PilotTheme.current(t.id) == t.id) }
         #expect(PilotTheme.current(nil) == "tokyo-night" && PilotTheme.current("") == "tokyo-night" && PilotTheme.current("nope") == "tokyo-night")
@@ -174,12 +176,10 @@ struct PilotThemeTests {
         #expect(night.ink(on: 0x205EA6) == 0xFFFFFF)
         #expect(paper.ink(on: paper.good) == 0xFFFFFF && paper.ink(on: 0xF2EFE4) == 0xFFFFFF)
         // The rule holds unless it reads below 4.5:1 on that accent (Garnet; Sven's themes round, P105).
-        for theme in PilotTheme.designed where !StyleTokens.toyboxThemes.contains(theme.id) {
+        for theme in PilotTheme.designed {
             #expect(Contrast.ratio(theme.onAccent, theme.accent) >= 4.5, "\(theme.id)")
             #expect(theme.onAccent == theme.ink(on: theme.accent) || Contrast.ratio(theme.ink(on: theme.accent), theme.accent) < 4.5, "\(theme.id)")
         }
-        // Toybox's ink, never white, on its sun.
-        #expect(PilotTheme.named("toybox")?.onAccent == 0x221E35 && Contrast.ratio(0x221E35, 0xFFC933) >= 4.5)
         // The neutral tile: in a dark theme the raised colour lifted 16 % toward white; else the second text.
         #expect(night.neutral == Contrast.hex(Contrast.mix([255, 255, 255], Contrast.rgb(night.raised), 0.16)))
         #expect(paper.neutral == paper.text2)

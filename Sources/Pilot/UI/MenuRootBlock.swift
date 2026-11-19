@@ -51,7 +51,7 @@ struct MenuRootBlock: View {
 
     private func row(_ row: MenuRoot.Row, at i: Int, of count: Int, picked on: Bool) -> some View {
         let shown = settings.root.isShown(row)
-        // The pick is KitRow's: Toybox's sun takes the row's ink on it (ink.rowLit), Instrument's raised row keeps its colours.
+        // The pick is KitRow's: Instrument's raised row keeps its colours.
         return HStack(spacing: 10) {
             GripDots().foregroundStyle(ink.rowQuiet(on)).frame(width: 14).help("Drag to move")
             MenuRowIcon(row: row, on: on).font(ink.ui(12.5)).frame(width: 18)

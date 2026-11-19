@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Surfaces v2 drawn (SPEC story 165): the gauge icon as the macOS menu bar shows it, the top bar with two extensions'
-/// own items, in Instrument and Toybox; the AI usage popover (Q138 design A) and provider gauges. Opt-in like the
+/// own items, in Instrument; the AI usage popover (Q138 design A) and provider gauges. Opt-in like the
 /// other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter SurfacesV2Renders`
 extension SharedLook {
@@ -15,7 +15,7 @@ extension SharedLook {
 @Suite("Surfaces v2 renders")
 struct SurfacesV2Renders {
     nonisolated static let env = ProcessInfo.processInfo.environment
-    static let styles: [(PilotStyle, String)] = [(.instrument, "nightwatch"), (.toybox, "toybox")]
+    static let styles: [(PilotStyle, String)] = [(.instrument, "nightwatch")]
 
     static func out() throws -> URL {
         let home = try #require(env["CFFIXED_USER_HOME"])

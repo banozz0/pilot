@@ -6,7 +6,7 @@ import SwiftUI
 /// Home, on its grid (HomeNowPage; P91, model A), its blocks the person's own (story 167): HomeLayout's shown blocks on
 /// their cells, by default the greeting, Workspaces, Clipboard and Most used down the left and the Hyper keyboard and This
 /// Mac beside them; edit mode, on Home itself (spec home-edit), moves, sizes and hides them and adds an installed
-/// extension's page back from its tray. Instrument and Toybox each hand the page their own board
+/// extension's page back from its tray. Instrument hands the page its own board
 /// blocks. Pilot is the whole app, so Home has no Pilot switch; its switch is the Hyper key's (engine.hyperSwitch, Sven 2026-10-07). Every block reads
 /// what it shows itself, so a press or a reading redraws only that block.
 struct HomePage: View {
@@ -24,7 +24,7 @@ struct HomePage: View {
     /// A start handed down the window (a test's or a render's), else the one given.
     @Environment(\.homeStart) private var givenStart
     @Environment(\.homeEditWatch) private var watch
-    /// Instrument and Toybox draw their own Home (InstrumentHome, card agent-bo-95423181; ToyHome, card agent-bo-95423182).
+    /// Instrument draws its own Home (InstrumentHome, card agent-bo-95423181).
     @Environment(\.style) private var style
     /// The app window shows: This Mac samples and the window list refreshes only then.
     let onScreen: Bool
@@ -76,8 +76,7 @@ struct HomePage: View {
         }
     }
 
-    /// The cells Home draws `blocks` at. Toybox's Pilot block, drawn only while something needs you, takes the top of the
-    /// board when it has no cells of its own, the others moving down.
+    /// The cells Home draws `blocks` at.
     static func cells(_ home: HomeLayout, blocks: [String], shown: [String]) -> [String: HomeCell] {
         let pilot = HomeLayout.Block.pilot.rawValue
         guard blocks.contains(pilot), !shown.contains(pilot), home.cell(of: pilot) == nil else { return home.cells(blocks) }
@@ -106,9 +105,7 @@ struct HomePage: View {
                               go: go, editBind: editBind, openExtension: openExtension, sources: sources, restartTiler: { [engine] in engine.startTiler() },
                               cells: Self.cells(home, blocks: blocks, shown: shown), pin: home.layout(of:),
                               style: style.kind, clashes: clashes, widgets: widgets)
-        Group {
-            if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentHome(parts: parts) }
-        }
+        InstrumentHome(parts: parts)
         .environment(\.homeEdit, editing != nil ? HomeNowEdit(frames: frames) : outerEdit)
         .onChange(of: BindsRead(binds: engine.binds.store.binds, presets: engine.presets.contents), initial: true) {
             binds = HomeBinds(engine: engine)
@@ -172,7 +169,7 @@ struct HomeSources: Sendable {
     var page: @MainActor @Sendable (String) -> ExtensionPageModel = { ExtensionPageModel(id: $0) }
     /// An extension's bar item's text, the figure its icon tab shows first.
     var barText: @MainActor @Sendable (String) -> String? = { ExtensionBar.shared.text(for: $0) }
-    /// Instrument's Clipboard panel and Toybox's Clipboard block (cards agent-bo-95423181, 95423182): the newest kept copies, newest first; none while the
+    /// Instrument's Clipboard panel (card agent-bo-95423181): the newest kept copies, newest first; none while the
     /// history is not running.
     var recentCopies: @MainActor @Sendable () -> [StoredClip] = { ClipboardHistory.shared.recent() }
     /// The widgets placed on Home, with the tiles the desk feeds while Home draws them.
@@ -280,7 +277,7 @@ struct HomeParts {
 
     func holdsReturn(_ i: Int) -> Bool { held == .problem(i) }
 
-    /// A key clicked on Instrument's or Toybox's Home board: Binds' editor on its bind, or Binds for a free key.
+    /// A key clicked on Instrument's Home board: Binds' editor on its bind, or Binds for a free key.
     func openKey(_ code: Int64) {
         if let action = binds.bound[code]?.first { editBind(action) } else { go(AppPlace(.binds)) }
     }
@@ -302,7 +299,7 @@ enum HomeFix {
     }
 }
 
-/// The line beside the Hyper switch, as Toybox's greeting says it.
+/// The line beside the Hyper switch.
 @MainActor
 enum HomeGreeting {
     /// The line beside the Hyper switch: first what the switch is, so it never reads as another's, then what needs you

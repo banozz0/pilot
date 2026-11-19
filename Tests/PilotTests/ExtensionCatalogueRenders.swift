@@ -8,7 +8,7 @@ import Testing
 
 /// The one Extensions list (Q601, pilot-1-1 T7) drawn offscreen on the fixture catalogue: Claude Sessions not installed
 /// (its install failed, so its detail says why), Pomodoro installed at 0.9.0 (an update), Ports installed at its version.
-/// In Instrument and Toybox, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
+/// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
 /// when it could not be.
 /// Temporary folders and a fixture source only; opt-in like the other renders:
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter ExtensionCatalogueRenders`
@@ -62,9 +62,8 @@ struct ExtensionCatalogueRenders {
         }
         try await shot("instrument-loaded", loaded, style: .instrument, theme: "nightwatch", pick: "claude-sessions")
         try await shot("instrument-installed", loaded, style: .instrument, theme: "nightwatch", pick: "pomodoro")
-        try await shot("toybox-loaded", loaded, style: .toybox, theme: "toybox", pick: "claude-sessions")
         try await shot("instrument-failed", failed, style: .instrument, theme: "nightwatch")
-        try await shot("toybox-reading", reading, style: .toybox, theme: "toybox")
+        try await shot("instrument-reading", reading, style: .instrument, theme: "nightwatch")
     }
 
     /// The page's state on `model`'s Extensions folder, read, with no Keychain or settings of Sven's.
@@ -83,7 +82,7 @@ struct ExtensionCatalogueRenders {
 private struct Ground<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

@@ -124,7 +124,7 @@ struct CaptureEditorBarWidth {
     }
 }
 
-/// The chat with a capture waiting and once asked, and the thumbnail's hover with Ask AI, in Instrument and Toybox.
+/// The chat with a capture waiting and once asked, and the thumbnail's hover with Ask AI, in Instrument.
 /// Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureAskAIRenders`
 @MainActor
@@ -141,7 +141,7 @@ struct CaptureAskAIRenders {
         look.glass = false
         defer { (look.style, look.themeID, look.glass) = saved }
         let picture = try #require(CaptureAskAI.picture(CaptureAskAITests.capture()))
-        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night")] {
             (look.style, look.themeID) = (style, theme)
             let waiting = AIChatModel()
             waiting.route = "Claude Code · Haiku"

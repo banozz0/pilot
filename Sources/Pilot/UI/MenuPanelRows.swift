@@ -91,7 +91,7 @@ extension MenuEntry {
 private typealias Tint = MenuIcon.Tint
 
 /// A tile's colour as the row names it, a tint role or one of Binds' six modules (BindsKeyboard's order), resolved by
-/// the view that draws it: Instrument in its own colours, Toybox in its candy colours (ToyMenu).
+/// the view that draws it: Instrument in its own colours.
 enum MenuPaint: Equatable {
     case tint(MenuIcon.Tint), module(Int)
 }
@@ -100,7 +100,7 @@ extension MenuEntry {
     /// What the row shows of its app under Apps show as (story 154); a row that lists no app shows both.
     @MainActor var appShows: (icon: Bool, title: Bool) { AppsShowAs.current.shows(appRole) }
 
-    /// What a row's icon draws (InstrumentMenu, ToyMenu).
+    /// What a row's icon draws (InstrumentMenu).
     enum Art {
         /// An app's own icon; `badge` the glyph of what an app's action does.
         case icon(NSImage, badge: String?)

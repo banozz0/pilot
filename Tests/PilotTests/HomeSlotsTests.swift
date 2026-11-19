@@ -112,13 +112,13 @@ struct HomeSlotsTests {
         let look = Look.shared
         let saved = (look.style, look.themeID)
         defer { (look.style, look.themeID) = saved }
-        (look.style, look.themeID) = (style, style == .toybox ? "toybox" : "nightwatch")
+        (look.style, look.themeID) = (style, "nightwatch")
         try body()
     }
 
-    @Test("Check 7: at every window size, in both styles, each block draws on its cells: 23 columns that stretch with the window, none overlapping")
+    @Test("Check 7: at every window size, in Instrument, each block draws on its cells: 23 columns that stretch with the window, none overlapping")
     func everySize() throws {
-        for style in [PilotStyle.instrument, .toybox] {
+        for style in [PilotStyle.instrument] {
             try Self.inStyle(style) {
                 let page = try Page(Self.mix)
                 defer { page.window.close() }

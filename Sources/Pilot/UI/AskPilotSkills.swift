@@ -41,7 +41,6 @@ struct SkillsBubble: View {
 /// for you, and its starter as the example; the style's current row on the one Return picks), and the keys in the foot.
 struct SkillsList: View {
     @Environment(\.ink) private var ink
-    @Environment(\.style) private var style
     let skills: [AISkill]
     let picked: Int
     /// The list's whole height at most: its rows scroll inside what the intro, search and foot leave.
@@ -118,10 +117,6 @@ struct SkillsList: View {
     }
 
     @ViewBuilder private var foot: some View {
-        if style.kind == .toybox {
-            ToyFoot(hints: Self.hints)
-        } else {
-            HStack(spacing: 14) { ForEach(Self.hints, id: \.key) { InstrumentHint(hint: $0) } }.padding(.horizontal, 6)
-        }
+        HStack(spacing: 14) { ForEach(Self.hints, id: \.key) { InstrumentHint(hint: $0) } }.padding(.horizontal, 6)
     }
 }

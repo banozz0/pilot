@@ -62,13 +62,13 @@ struct MenuTypingTimings {
         for (name, ms) in parts.sorted(by: { $0.value > $1.value }) { print("menu timings: \(name) \(String(format: "%.2f", ms / Double(keys))) ms per key") }
     }
 
-    /// The whole keystroke as the panel takes it, then the menu redrawn in a window that is never shown, in each layout.
+    /// The whole keystroke as the panel takes it, then the menu redrawn in a window that is never shown.
     @Test("Each keystroke of a root search, timed", .enabled(if: opted))
     func keystrokes() throws {
         let menu = try Catalogue()
         defer { menu.restore() }
-        for layout in [MenuLayoutStyle.line] {
-            let host = NSHostingView(rootView: MenuView(model: menu.model(layout)))
+        do {
+            let host = NSHostingView(rootView: MenuView(model: menu.model()))
             host.frame.size = CGSize(width: 760, height: 560)
             let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -76,7 +76,7 @@ struct MenuTypingTimings {
             defer { window.close() }
             var search: [Double] = [], draw: [Double] = []
             for line in Self.lines {
-                let model = menu.model(layout)
+                let model = menu.model()
                 host.rootView = MenuView(model: model)
                 host.layoutSubtreeIfNeeded()
                 host.display()
@@ -94,7 +94,7 @@ struct MenuTypingTimings {
                 let s = ms.sorted()
                 return String(format: "median %.2f ms, p90 %.2f ms, worst %.2f ms", s[s.count / 2], s[s.count * 9 / 10], s[s.count - 1])
             }
-            print("menu timings: \(layout.rawValue) search \(spread(search)); draw \(spread(draw)); \(search.count) keys")
+            print("menu timings: line search \(spread(search)); draw \(spread(draw)); \(search.count) keys")
         }
     }
 
@@ -136,10 +136,9 @@ struct MenuTypingTimings {
             return nav
         }
 
-        /// That menu in `layout`, the panel's root providers hearing each search.
-        func model(_ layout: MenuLayoutStyle) -> MenuModel {
+        /// That menu, the panel's root providers hearing each search.
+        func model() -> MenuModel {
             let model = MenuModel(nav: navigator())
-            model.layout = layout
             model.windows = windows
             model.onQuery = { [weak model, emoji] query in
                 guard let model else { return }

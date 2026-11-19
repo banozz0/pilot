@@ -394,7 +394,6 @@ struct DictationBarItem: View {
         .disabled(writing)
         .help("Dictating: click to finish, Esc cancels")
         .accessibilityLabel("Finish dictation")
-        .toyIsland(.pilot)
     }
 }
 

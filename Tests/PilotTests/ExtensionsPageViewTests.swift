@@ -8,7 +8,7 @@ import Testing
 /// The Extensions page (card agent-bo-95423247) drawn offscreen on a folder of its own: three extensions whose
 /// preferences cover all seven types, a required folder left unset, and two folders that are not extensions. Its values
 /// sit in a temporary data folder and a fake Keychain, so nothing reads or writes Sven's Extensions folder, defaults or
-/// Keychain. The whole window's renders (inside Instrument's and Toybox's frames, dark and light) are opt-in like the
+/// Keychain. The whole window's renders (inside Instrument's frame, dark and light) are opt-in like the
 /// others:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter ExtensionsPageViewTests`
 extension SharedLook {
@@ -189,7 +189,7 @@ struct ExtensionsPageViewTests {
 
     // MARK: Renders
 
-    @Test("The page renders inside Instrument's and Toybox's frames, dark and light",
+    @Test("The page renders inside Instrument's frame, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -251,8 +251,6 @@ struct ExtensionsPageViewTests {
         try await shot("instrument-dark-760", size: (760, 620))
         try await shot("instrument-focus-notes", size: (1000, 660), focus: "notes")
         try await shot("instrument-empty", size: (1000, 660), settings: none)
-        try await shot("toybox-dark", style: .toybox)
-        try await shot("toybox-light", style: .toybox, dark: false)
     }
 }
 }

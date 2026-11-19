@@ -68,10 +68,10 @@ extension StyleTokens {
     /// from the token constructor (which the theme-following Instrument rewrites). Each fill takes its role's strength,
     /// except the canvas: the window's ground draws once, as its backdrop's tint or fill (Theme.windowFill). Cards get the
     /// lit hairline. Over glass there are no soft shadows, and the muted text steps up one level, since grey on glass is
-    /// the first thing to stop reading (Sven, Q356: readable through fills and ink, never shadows). Toybox stays solid, so
-    /// it comes back as it is, as does anything while solid.
+    /// the first thing to stop reading (Sven, Q356: readable through fills and ink, never shadows). Anything while solid
+    /// comes back as it is.
     public func seeThrough(_ layers: Layers) -> StyleTokens {
-        guard kind == .instrument, layers.transparency > 0 else { return self }
+        guard layers.transparency > 0 else { return self }
         let at = { (paint: Paint, strength: Double) in Paint(paint.rgb, paint.alpha * strength) }
         var c = colors
         c.sidebar = at(c.sidebar, layers.sidebar)

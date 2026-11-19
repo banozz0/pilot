@@ -10,7 +10,7 @@ import Testing
 /// The explainer video's launcher frames (SH23, round 4): the Hyper+Space menu as Line draws it in the film's theme (Void for film v2), solid, one
 /// still per typed prefix of a query, so a composition can play the typing key by key (an offscreen panel catches only
 /// the morph's first 50 ms, so the video replays LineMorph's timings between the stills); the clipboard panel that
-/// Return opens, its pick moving down; the first look in five looks (cut 3); cut 4's file search
+/// Return opens, its pick moving down; the first look in three looks (cut 3); cut 4's file search
 /// (a typo, the Files view and its filters), Update and Clean while they read and with their rows, and the extension the chat
 /// made, opened; the top bar at 1920 wide, the video's screen; and film v4's (P89): an app's menu items found by typing, and
 /// Cmd+K on an app's row. Built from LineMenuRenders' rows and windows, never this Mac's. Opt-in, in a moved home:
@@ -31,9 +31,8 @@ struct LauncherFilmRenders {
                                                               ("gaps", "gaps"), ("summ", "summarise"), ("ctext", "capture text"),
                                                               ("ql", "gh pilot"), ("fix", "fix"), ("aloud", "read aloud")]
 
-    /// Cut 3's "make it yours": the menu's first look in Instrument and Toybox, dark and light.
-    static let looks: [(PilotStyle, String)] = [(.instrument, "void"), (.instrument, "porcelain"), (.instrument, "dracula"),
-                                                (.toybox, "toybox-night"), (.toybox, "toybox")]
+    /// Cut 3's "make it yours": the menu's first look in Instrument, dark and light.
+    static let looks: [(PilotStyle, String)] = [(.instrument, "void"), (.instrument, "porcelain"), (.instrument, "dracula")]
 
     @Test("The launcher's typed frames, the morph probe and the 1920 top bar", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
@@ -72,7 +71,6 @@ struct LauncherFilmRenders {
             if query == "tr buenos días" { nav.provide(.answer, home: .translate, [AnswerCardRenders.translation]) }
             nav.provideSettings(query)
             let m = MenuModel(nav: nav)
-            m.layout = .line
             m.windows = windows
             m.ownKey = "Hyper+Space"
             return m
@@ -204,7 +202,6 @@ struct LauncherFilmRenders {
 
     static func line(_ nav: MenuNavigator, windows: [AeroWindow] = []) -> MenuModel {
         let m = MenuModel(nav: nav)
-        m.layout = .line
         m.windows = windows
         m.ownKey = "Hyper+Space"
         return m

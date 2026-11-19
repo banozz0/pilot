@@ -321,8 +321,6 @@ final class PilotMenu {
                                           picked: model.emojiCategory)
         }
         model.onClick = { [weak self] in _ = self?.apply($0, from: $1) }
-        // Toybox keeps its own menu (ToyMenu); Instrument draws Line.
-        model.layout = Look.shared.style == .toybox ? .classic : .line
         self.model = model
         let p = Self.makePanel(model)
         panel = p
@@ -385,7 +383,7 @@ final class PilotMenu {
     /// local monitor still saw Return and the arrows (card agent-bo-95422762).
     static func makePanel(_ model: MenuModel) -> NSPanel {
         // Line draws its own face, which morphs inside the window (LineMorph); the others take the panel's.
-        HUD.makePanel(MenuView(model: model), surface: .menu, ownFace: model.layout == .line && Look.shared.style == .instrument)
+        HUD.makePanel(MenuView(model: model), surface: .menu, ownFace: true)
     }
 
     /// The apps as the app picker lists them and the actions as the Binds screen does (MenuEntries); an app runs when
@@ -1166,7 +1164,7 @@ final class PilotMenu {
     /// field's.
     func handle(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ characters: String? = nil) -> Bool {
         // ⌘1 to ⌘9 number the rows Line draws them on: none at its root, none in the Files view, none over Cmd+K.
-        let numbers = model.map { $0.layout == .line && !$0.atRoot && !$0.nav.inFiles && $0.nav.actions == nil } ?? false
+        let numbers = model.map { !$0.atRoot && !$0.nav.inFiles && $0.nav.actions == nil } ?? false
         // An extension row's action key (To-do B) wins over the menu's own: ⌥↑ moves the row, never the selection.
         if let model, !flags.isDisjoint(with: [.command, .option, .control]), model.nav.actions == nil, let row = model.nav.selected,
            let index = row.ownKeys?.firstIndex(where: {
@@ -1203,7 +1201,7 @@ final class PilotMenu {
         let taken = apply(model.nav.handle(key), from: before)
         // Line: out of Cmd+K's actions the search field takes the keyboard back with its text selected (SwiftUI's focus,
         // MenuView); the next key on its way to the field puts the caret after the text first (beforeTyping).
-        if stepped, model.layout == .line, self.model?.nav.actions == nil { caretPending = true }
+        if stepped, self.model?.nav.actions == nil { caretPending = true }
         return taken
     }
 
@@ -1691,11 +1689,10 @@ final class MenuSizer {
     func follow() {
         guard let panel, let model else { return }
         let (face, root) = withObservationTracking {
-            (Look.shared.style == .instrument ? model.instrumentSize : model.toyboxSize, model.atRoot)
+            (model.instrumentSize, model.atRoot)
         } onChange: { [weak self] in
             RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { self?.follow() } }
         }
-        guard model.layout == .line, Look.shared.style == .instrument else { return PilotMenu.fit(panel, face: face) }
         let morph = atRoot.map { $0 != root } ?? false
         atRoot = root
         let frames = LineMorph.window(holding: panel.frame.size, to: face, morph: morph, settling: settling,
@@ -1863,9 +1860,6 @@ final class MenuModel {
     /// The layer keys; the first one's sign leads a bind's keys in Instrument.
     var layerKeys: [LayerKey] = [.capsLock]
 
-    /// How the menu draws: Line, Instrument's one menu, or Classic for Toybox's own (ToyMenu). Set as the menu opens; Classic
-    /// until then, so a model made elsewhere draws as it did.
-    var layout = MenuLayoutStyle.classic
     /// What waits in a root row (Classic's and Line's root): Update with its count, Clean with its size, each only
     /// when it has something.
     var waiting: [MenuEntry] = []
@@ -1881,32 +1875,9 @@ final class MenuModel {
     /// the 650 cap (MenuPanelSize.goToTallest). PilotMenu sets it as the panel opens.
     var room: CGFloat?
 
-    /// Toybox's panel size for where Sven is (MenuPanelSize, card agent-bo-95422981).
-    var toyboxSize: CGSize {
-        let size = MenuPanelSize.toybox(shape, rows: nav.rows.count)
-        // About is taller than Toybox's fixed wide panel: room for its cards under the search and over the foot.
-        if showsDefine { return CGSize(width: size.width, height: max(size.height, Self.toyChrome + DefinePane.height)) }
-        return showsAbout ? CGSize(width: size.width, height: max(size.height, Self.toyChrome + aboutHeight)) : size
-    }
-    /// Toybox's search, rule and foot around what the menu lists.
-    static let toyChrome: CGFloat = 150
     /// Instrument's: as tall as what it lists or a scan's wait says, the most while Cmd+K's actions show or an extension's
     /// detail is read.
-    var instrumentSize: CGSize { layout == .classic ? classicSize : lineSize }
-
-    /// Classic's (ClassicMenu): as tall as its rows, the root's under their rule heading, and
-    /// an answer's card where it stands in for its row; the kinds sit in the status line.
-    private var classicSize: CGSize {
-        if scan != nil { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: waitHeight) }
-        if showsAbout { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: aboutHeight) }
-        if showsDefine { return MenuPanelSize.classic(shape, rows: 0, headings: 0, extra: DefinePane.height) }
-        let headings = headings
-        let card = cardRoom(headed: headings[0] != nil, row: shape == .wide ? MenuPanelSize.classicWideRow : MenuPanelSize.classicRow)
-        return MenuPanelSize.classic(shape, rows: nav.rows.count, headings: atRoot ? 0 : headings.count, root: atRoot,
-                                     card: card,
-                                     extra: noMatch ? Self.noMatchRoom : 0, bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0,
-                                     full: nav.actions != nil || nav.shownDetail != nil || previewsFile, room: room)
-    }
+    var instrumentSize: CGSize { lineSize }
 
     /// Line's (LineMenu): Classic's root at 431 wide, else a 750 list as tall as its rows, headings and an answer's card.
     private var lineSize: CGSize {
@@ -1925,10 +1896,9 @@ final class MenuModel {
                                   bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0, full: nav.actions != nil || nav.shownDetail != nil || previewsFile)
     }
 
-    /// Classic's and Line's Files view shows the selected file's preview beside its list (FilePreviewPane), so it takes the
-    /// full height whatever the rows: room for the pane, and no jump as results come and go. ClassicMenu and LineMenu draw
-    /// the pane by this.
-    var previewsFile: Bool { (layout == .classic || layout == .line) && nav.only == .file && nav.shownDetail == nil && scan == nil && !nav.rows.isEmpty }
+    /// Line's Files view shows the selected file's preview beside its list (FilePreviewPane), so it takes the full height
+    /// whatever the rows: room for the pane, and no jump as results come and go. LineMenu draws the pane by this.
+    var previewsFile: Bool { nav.only == .file && nav.shownDetail == nil && scan == nil && !nav.rows.isEmpty }
 
     /// What Classic's answer card takes past the row it draws (AnswerCard): its eyebrow unless a heading is already
     /// counted, the card (a colour's swatch and ramp in their inset; 158 for the rest), its insets and a note under it.
@@ -1964,7 +1934,7 @@ final class MenuModel {
     var showsGiphyBar: Bool { nav.branch == .stickers && !nav.isList && nav.shownDetail == nil }
     /// How tall Instrument's scan draws at the panel's width, as it measures itself.
     var waitHeight: CGFloat = 330
-    /// The menu's own bind ("Hyper+Space" as shipped), which Toybox's search line shows; nil while it has none.
+    /// The menu's own bind ("Hyper+Space" as shipped), which Line's root shows; nil while it has none.
     var ownKey: String?
     /// A root search that found nothing but its search offers (Search to install, Search files): Instrument says so under
     /// them, in this much room.
@@ -2171,15 +2141,9 @@ struct MenuView: View {
 
     var nav: MenuNavigator { model.nav }
 
-    /// Instrument (Line, LineMenu; card agent-bo-95423181) and Toybox (ToyMenu, card agent-bo-95423182) draw their own menu
-    /// from the same state, keys and pointer.
+    /// Line (LineMenu; card agent-bo-95423181) draws the menu from the state, keys and pointer.
     var body: some View {
-        Group {
-            switch style.kind {
-            case .instrument: LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-            case .toybox: toyBody
-            }
-        }
+        LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
         .tracksPointer(pointer)
         .onChange(of: nav.actions == nil) { if nav.actions == nil { searchFocused = true } else { actionsFocused = true } }
         .onAppear { searchFocused = true }

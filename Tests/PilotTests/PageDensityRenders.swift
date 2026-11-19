@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Every page and each of its tabs, the whole window under Nightwatch in Instrument (Toybox with `PILOT_RENDER_STYLE=toybox`),
+/// Every page and each of its tabs, the whole window under Nightwatch in Instrument,
 /// at 1600 and 760 wide and 2200 tall so a page's foot shows (page density, Sven 2026-11-12: rows stretched too wide and
 /// holes beside short blocks), or at `PILOT_RENDER_WIDTHS=1600,1200,760`. The Menu bar page is shot only as a control, to show
 /// the change leaves it alone. Seeded as InstrumentPagesRenders' rest; opt-in, in a moved home:
@@ -17,6 +17,23 @@ extension SharedLook {
 @Suite("Page density renders")
 struct PageDensityRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
+
+    /// The mockup's workspaces: Ghostty and Ghostex on 1, Zen and Claude on 2, Obsidian, Notes and Reminders on 3,
+    /// Telegram, Vesktop and Spotify on 4.
+    static let windows: String = {
+        let rows: [(String, String, String)] = [
+            ("Ghostty", "com.mitchellh.ghostty", "1"), ("Ghostex", "com.madda.ghostex.gpui", "1"),
+            ("Zen", "app.zen-browser.zen", "2"), ("Claude", "com.anthropic.claudefordesktop", "2"),
+            ("Obsidian", "md.obsidian", "3"), ("Notes", "com.apple.Notes", "3"), ("Reminders", "com.apple.reminders", "3"),
+            ("Telegram", "com.tdesktop.Telegram", "4"), ("Vesktop", "dev.vencord.vesktop", "4"), ("Spotify", "rocks.spotifast.Spotifast", "4"),
+        ]
+        return "[" + rows.enumerated().map { i, row in
+            """
+            {"window-id": \(i + 1), "app-name": "\(row.0)", "app-bundle-id": "\(row.1)", "app-pid": \(i + 1), "workspace": "\(row.2)", \
+            "monitor-id": 1, "window-layout": "h_tiles", "window-title": "\(row.0)"}
+            """
+        }.joined(separator: ",") + "]"
+    }()
 
     /// Every page, each tab of it by name: `general`, `tiling-focusedWindow`.
     static var places: [(name: String, place: AppPlace)] {
@@ -32,8 +49,7 @@ struct PageDensityRenders {
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
-        let toybox = Self.env["PILOT_RENDER_STYLE"] == "toybox"
-        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent(toybox ? "density-toybox" : "density")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("density")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         testApp()
         DisplayFaces.directory = LookThemeTests.fonts
@@ -43,7 +59,7 @@ struct PageDensityRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         try SharedLook.HomeRenders.seedPresets()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(Self.windows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         // A crash report from today in the test run's own folder, so About shows its third button, Reveal crash reports
@@ -69,7 +85,7 @@ struct PageDensityRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
-        look.style = toybox ? .toybox : .instrument
+        look.style = .instrument
         look.themeID = "nightwatch"
         AppWindowController.applyLook(look, to: window)
         let only = Self.env["PILOT_RENDER_ONLY"]

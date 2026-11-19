@@ -5,7 +5,7 @@ import SwiftUI
 /// section 03): the panel is the note. A 34 pt head (the list's key, where the note is listed, its words and time, ⌘K
 /// and +) over the note at a 560 pt measure, no foot. Escape slides the list over the note's left edge as a drawer, its
 /// search focused (180 ms, no slide under Reduce Motion); a format bar rises over a selection; ⌘K holds the rest. The
-/// shared shape, drawn in the picked style by its pieces (InstrumentNotes, ToyNotes); the Notes page docks the same list
+/// shared shape, drawn in the picked style by its pieces (InstrumentNotes); the Notes page docks the same list
 /// beside the same head and note (NotesPage).
 struct NotesPanelView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -209,10 +209,10 @@ struct NotesList: View {
             NotesField(model: model, focused: $searchFocused, docked: docked, count: searching ? matches.count : nil)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: style.kind == .toybox ? 2 : 1) {
+                    LazyVStack(alignment: .leading, spacing: 1) {
                         if searching { matchRows(matches) } else { groupedRows }
                     }
-                    .padding(.horizontal, style.kind == .toybox ? 10 : 6).padding(.top, 4).padding(.bottom, 10)
+                    .padding(.horizontal, 6).padding(.top, 4).padding(.bottom, 10)
                 }
                 .scrollIndicators(.never)
                 .onChange(of: model.selection) { _, id in
@@ -236,7 +236,7 @@ struct NotesList: View {
             if had, !has, model.listFocused { model.leaveList() }
         }
         .frame(maxHeight: .infinity)
-        .background(style.color(style.kind == .toybox ? \.sunken : docked ? \.sidebar : \.panel))
+        .background(style.color(docked ? \.sidebar : \.panel))
         .overlay(alignment: .trailing) { NotesRule(vertical: true, strong: !docked) }
     }
 
@@ -279,7 +279,7 @@ struct NotesList: View {
         let on = listing ? note.id == model.selection : note.id == model.current
         return Button { model.open(note.id) } label: {
             NotesRow(note: note, title: title, line: line, time: time, on: on, open: note.id == model.current,
-                     struck: model.confirmingTrash && note.id == model.current, highlight: listing)
+                     struck: model.confirmingTrash && note.id == model.current)
         }
         .buttonStyle(.plain).focusable(false)
         .id(note.id)
@@ -316,7 +316,7 @@ private struct NotesRowMenu: View {
     }
 }
 
-// MARK: Pieces, drawn by each style (InstrumentNotes, ToyNotes)
+// MARK: Pieces, drawn by each style (InstrumentNotes)
 
 /// A note's row: its glyph (Scratch's scribble, a pin), its title over its line of words, when it was edited; `on` (the
 /// open note, or the highlighted one while the list has the keyboard) picked.
@@ -329,16 +329,11 @@ struct NotesRow: View {
     let on: Bool
     let open: Bool
     var struck = false
-    /// `on` is the list's highlight while it has the keyboard, not the open note: Toybox's sun, not its white cap.
-    var highlight = false
 
     var glyph: String? { note.isScratch ? "scribble" : note.pinned ? "pin" : nil }
 
     var body: some View {
-        switch style.kind {
-        case .instrument: instrument
-        case .toybox: toybox
-        }
+        instrument
     }
 }
 
@@ -367,10 +362,7 @@ struct NotesField: View {
 
     var body: some View {
         Group {
-            switch style.kind {
-            case .instrument: instrument
-            case .toybox: toybox
-            }
+            instrument
         }
         // Off while the note has the keyboard, so nothing hands the field focus behind the list's back.
         .disabled(!model.listFocused)
@@ -394,10 +386,7 @@ struct NotesHeadButton: View {
 
     var body: some View {
         Button(action: action) {
-            switch style.kind {
-            case .instrument: instrument
-            case .toybox: toybox
-            }
+            instrument
         }
         .buttonStyle(.plain).focusable(false)
         .onHover { hovered = $0 }
@@ -415,10 +404,7 @@ struct NotesFormatBar: View {
     static let size = CGSize(width: 216, height: 32)
 
     var body: some View {
-        switch style.kind {
-        case .instrument: instrument
-        case .toybox: toybox
-        }
+        instrument
     }
 
     func help(_ format: MarkdownFormat) -> String { format.key.map { "\(format.title)  \($0)" } ?? format.title }
@@ -435,10 +421,7 @@ struct NotesTrashQuestion: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            switch style.kind {
-            case .instrument: instrument
-            case .toybox: toybox
-            }
+            instrument
             NotesKeyHints(hints: NotesText.trashKeys)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -472,8 +455,8 @@ struct NotesKeyHints: View {
                 HStack(spacing: 6) {
                     NotesCaps(key: hint.key)
                     if !hint.label.isEmpty {
-                        Text(hint.label).font(style.kind == .toybox ? style.toyNunito(700, 12.5) : style.font(\.caption))
-                            .foregroundStyle(style.color(style.kind == .toybox ? \.text2 : \.text3))
+                        Text(hint.label).font(style.font(\.caption))
+                            .foregroundStyle(style.color(\.text3))
                     }
                 }
                 .accessibilityElement(children: .ignore).accessibilityLabel("\(hint.key) \(hint.label)")
@@ -487,15 +470,9 @@ struct NotesKeyHints: View {
 struct NotesCaps: View {
     @Environment(\.style) private var style
     let key: String
-    /// Toybox's on the sun's row.
-    var onSun = false
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentKeys(caps: InstrumentHint.caps(key), hyper: false)
-        case .toybox:
-            HStack(spacing: 3) { ForEach(Array(ToyCaps.hint(key).enumerated()), id: \.offset) { ToyMenuCap(label: $1, onSun: onSun, height: 22) } }
-        }
+        InstrumentKeys(caps: InstrumentHint.caps(key), hyper: false)
     }
 }
 
@@ -505,24 +482,18 @@ struct NotesEyebrow: View {
     let text: String
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentEyebrow(text: text)
-        case .toybox: ToyEyebrow(text: text).accessibilityAddTraits(.isHeader)
-        }
+        InstrumentEyebrow(text: text)
     }
 }
 
-/// A hairline in Instrument, the ink's 2 pt rule in Toybox; `strong` the drawer's edge over the note.
+/// A hairline in Instrument; `strong` the drawer's edge over the note.
 struct NotesRule: View {
     @Environment(\.style) private var style
     var vertical = false
     var strong = false
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentRule(vertical: vertical, role: strong ? \.line2 : \.line)
-        case .toybox: ToyRule(vertical: vertical)
-        }
+        InstrumentRule(vertical: vertical, role: strong ? \.line2 : \.line)
     }
 }
 
@@ -532,10 +503,7 @@ private struct NotesProblem: View {
     let text: String
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentAttention(text: text)
-        case .toybox: FinePrint(text: text, color: style.color(\.problem))
-        }
+        InstrumentAttention(text: text)
     }
 }
 
@@ -580,8 +548,7 @@ enum NotesText {
         }
     }
 
-    /// The title with the typed letters in the text colour on an underline, as the menu marks what was typed (Toybox's in
-    /// the sun's edge).
+    /// The title with the typed letters in the text colour on an underline, as the menu marks what was typed.
     static func marked(_ title: String, _ query: String, style: StyleTokens) -> Text {
         var text = AttributedString(title)
         let lit = lit(query, in: title)
@@ -608,8 +575,8 @@ enum NotesText {
     }
 
     private static func mark(_ run: inout AttributedSubstring, style: StyleTokens) {
-        if style.kind == .instrument { run.foregroundColor = style.color(\.text) }
-        run.underlineStyle = Text.LineStyle(pattern: .solid, color: style.color(style.kind == .toybox ? \.accentEdge : \.text3))
+        run.foregroundColor = style.color(\.text)
+        run.underlineStyle = Text.LineStyle(pattern: .solid, color: style.color(\.text3))
     }
 
     /// Which of `title`'s characters each typed word lights: a run of it (at a word's start first), else its letters at

@@ -158,10 +158,7 @@ struct ExtensionAlertView: View {
     var press: (Int?) -> Void = { _ in }
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentExtensionAlert(alert: alert, extra: extra, below: below, press: press)
-        case .toybox: ToyExtensionAlert(alert: alert, extra: extra, below: below, press: press)
-        }
+        InstrumentExtensionAlert(alert: alert, extra: extra, below: below, press: press)
     }
 
 }

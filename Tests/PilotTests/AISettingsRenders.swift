@@ -8,7 +8,7 @@ import Testing
 
 /// AI › Setup (task N10; any provider, 2026-10-10; its own page since C3; its own tab, page map 2026-10-17), opt-in like the
 /// other renders: the tab alone in
-/// Instrument and Toybox on Tokyo Night, and Instrument on Porcelain, in each state: the subscription signed in, signed out and
+/// Instrument on Tokyo Night and on Porcelain, in each state: the subscription signed in, signed out and
 /// missing, the Anthropic key missing, saved and tested, and rejected, OpenAI with no key, Ollama with a listed model
 /// that is not running, an endpoint set up, and the ChatGPT and Google subscriptions connected, not connected and
 /// missing; Claude Code's picker named by the versions its aliases run (Sven 2026-10-31, build 3); the key field with the
@@ -78,8 +78,7 @@ struct AISettingsRenders {
                 $0.set("vendor/model-x", forKey: AISettings.modelKey(.openAICompatible))
             }),
         ]
-        let looks: [(String, PilotStyle, String)] = [("instrument", .instrument, "tokyo-night"), ("instrument", .instrument, "porcelain"),
-                                                     ("toybox", .toybox, "tokyo-night")]
+        let looks: [(String, PilotStyle, String)] = [("instrument", .instrument, "tokyo-night"), ("instrument", .instrument, "porcelain")]
         for (name, style, theme) in looks {
             look.themeID = theme
             look.style = style
@@ -104,7 +103,7 @@ struct AISettingsRenders {
 private struct Ground<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

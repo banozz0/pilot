@@ -2,8 +2,8 @@ import AppKit
 import Observation
 import PilotCore
 
-/// The tall Pilot menu's saved arrangement (spec desktop-controls T4): block order, hidden and pinned, Instrument only;
-/// Toybox keeps today's Dropdown. Its own store, as WallpaperSettings is, so `pilot set dropdown.*` works without an
+/// The tall Pilot menu's saved arrangement (spec desktop-controls T4): block order, hidden and pinned, Instrument only.
+/// Its own store, as WallpaperSettings is, so `pilot set dropdown.*` works without an
 /// engine. A saved value that no longer decodes (a block renamed or gone) falls back to the standard arrangement.
 @Observable @MainActor
 final class DropdownLayoutStore {

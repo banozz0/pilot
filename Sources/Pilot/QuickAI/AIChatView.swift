@@ -56,7 +56,6 @@ struct AIChatView: View {
 /// (`column`) in the middle of a wide window; the turns fade out under whatever sits above them.
 struct AIChatTranscript<Empty: View>: View {
     @Environment(\.ink) private var ink
-    @Environment(\.style) private var style
     let model: AIChatModel
     var inset: EdgeInsets
     /// The turns' widest, centred; nil runs them edge to edge (the notch).
@@ -112,8 +111,7 @@ struct AIChatTranscript<Empty: View>: View {
                     Text(turn.text).font(ink.ui(13)).foregroundStyle(ink.text).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        // Toybox's raised fill is its panel's white, so its bubble takes the sun's soft fill.
-                        .background(style.kind == .toybox ? ink.selection : ink.selected, in: .rect(cornerRadius: 12, style: .continuous))
+                        .background(ink.selected, in: .rect(cornerRadius: 12, style: .continuous))
                 }
             }
         case .assistant:
@@ -281,7 +279,6 @@ private struct AIChatStreaming: View {
 /// its own, the send inside it, so it reads as the one place to type.
 struct AIChatInput: View {
     @Environment(\.ink) private var ink
-    @Environment(\.style) private var style
     @Bindable var model: AIChatModel
     let send: () -> Void
     var boxed = false
@@ -430,10 +427,7 @@ struct AIChatInput: View {
                     .buttonStyle(.plain).disabled(empty).help("Send (Return)").accessibilityLabel("Send")
             }
         }
-        if boxed && style.kind == .toybox {
-            // Toybox's typed field: the white well in the ink outline, as its other fields.
-            row.padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 8).toyWell(\.panel, radius: 14)
-        } else if boxed {
+        if boxed {
             row.padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 8)
                 .background(ink.background, in: .rect(cornerRadius: ink.blockRadius, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: ink.blockRadius, style: .continuous).strokeBorder(ink.line2, lineWidth: ink.stroke) }

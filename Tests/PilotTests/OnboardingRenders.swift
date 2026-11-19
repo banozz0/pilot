@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Onboarding 1.1 (T54, variant C, Q841-Q843): a sandbox run of Set up with a recording system in place of the Mac, so
-/// nothing installs and no default, key or setting of this Mac changes; then each screen drawn from that run, Instrument
-/// and Toybox. The run's record goes to `sandbox-run.txt` beside the images. Opt-in like the other renders, in a moved
+/// nothing installs and no default, key or setting of this Mac changes; then each screen drawn from that run, Instrument.
+/// The run's record goes to `sandbox-run.txt` beside the images. Opt-in like the other renders, in a moved
 /// home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter OnboardingRenders`
 extension SharedLook {
@@ -49,7 +49,6 @@ struct OnboardingRenders {
             model.step = step
             try instrument(model, engine, name, dir)
         }
-        try toybox(model, engine, "3a-fork", dir)
 
         // Pick by hand: mole ticked ticks Homebrew; the Notes key's row.
         setup.phase = .pick
@@ -79,7 +78,6 @@ struct OnboardingRenders {
         #expect(setup.title == "Setting up · 9 of 13")
         model.step = .extras
         try instrument(model, engine, "3c-run", dir)
-        try toybox(model, engine, "3c-run", dir)
 
         // The end: npm failed, the window closed before cargo.
         mac.status! += "webp done\nnpm installing\nnpm failed exit 1\ncargo installing\nclosed\n"
@@ -97,7 +95,6 @@ struct OnboardingRenders {
         // for Settings › Permissions, and Screen Recording is asked before it is ever read (ADR 0012).
         model.startTryIt()
         try instrument(model, engine, "4a-try-it", dir)
-        try toybox(model, engine, "4a-try-it", dir)
         #expect(grants.log.isEmpty && model.walk.phase == .ready)
         // The walk on a model of its own, drawn without a window's appear and disappear: a closed render window's late
         // onDisappear stops its model's walk, as closing Welcome does.
@@ -124,7 +121,6 @@ struct OnboardingRenders {
         // Allowed, Screen Recording's helper stays for its Quit & Reopen; the next steps close only their own.
         #expect(!grants.log.contains("close helper screenRecording") && grants.log.contains("close helper fullDiskAccess"))
         try instrument(walking, engine, "4c-allow-the-rest-done", dir)
-        try toybox(walking, engine, "4c-allow-the-rest-done", dir)
         let walked = grants.log
 
         // A Stop during an awaited read, or a Skip during a tick's read, ends that turn (reviewer, T58): nothing is asked,
@@ -235,27 +231,6 @@ struct OnboardingRenders {
         Look.shared.style = .instrument
         try SharedLook.InstrumentPanelsRenders.renderWindow(InstrumentOnboarding(model: model, confirming: .constant(nil), finish: {})
             .environment(engine).styled(.onboarding).pilotTheme(), name: "\(name)-instrument", in: dir)
-    }
-
-    /// Toybox's steps through OnboardingView, in its own titled window as PilotApp opens it.
-    private func toybox(_ model: OnboardingModel, _ engine: Engine, _ name: String, _ dir: URL) throws {
-        Look.shared.style = .toybox
-        defer { Look.shared.style = .instrument }
-        let host = NSHostingView(rootView: OnboardingView(model: model).environment(engine))
-        host.frame.size = host.fittingSize
-        let w = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Welcome to Pilot"
-        w.isReleasedWhenClosed = false
-        w.contentView = host
-        defer { w.close() }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-        let chrome = try #require(w.contentView?.superview)
-        chrome.layoutSubtreeIfNeeded()
-        try #require(snapshot(chrome, scale: 2)?.representation(using: .png, properties: [:]))
-            .write(to: dir.appendingPathComponent("\(name)-toybox.png"))
-        w.close()
-        // The window's onDisappear (the model's stop) lands now, not in the middle of what the test does next.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     }
 }
 }

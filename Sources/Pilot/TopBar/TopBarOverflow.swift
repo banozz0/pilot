@@ -24,7 +24,6 @@ struct TopBarOverflow: View {
         .buttonStyle(.kitPress)
         .accessibilityLabel("More items")
         .frame(maxHeight: .infinity)
-        .toyIsland(.group)
     }
 
     private func show(_ gone: [BarSlot]) {
@@ -61,7 +60,7 @@ private struct TopBarOverflowList: View {
                         Spacer(minLength: 8)
                         TopBarSlot(slot: slot, screen: screen, sources: sources, store: store)
                             .environment(\.inTopBar, true)
-                            .font(style.kind == .toybox ? ToyBar.font : style.font(\.caption))
+                            .font(style.font(\.caption))
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     .frame(height: 28)

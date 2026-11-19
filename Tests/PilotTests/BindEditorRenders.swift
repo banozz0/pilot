@@ -19,6 +19,19 @@ extension SharedLook {
 struct BindEditorRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
+    /// The engine HomeRenders seeds, in the moved home only.
+    static func engine() throws -> Engine {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let toml = (home as NSString).appendingPathComponent(".aerospace.toml")
+        if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
+        try SharedLook.HomeRenders.seedPresets()
+        return try SharedLook.HomeRenders.engine()
+    }
+
     /// `view` at its own size once its onAppear has run (an edited bind loads its pick there), at 2x, never shown.
     static func drawn(_ view: some View) throws -> NSBitmapImageRep {
         testApp()
@@ -39,7 +52,7 @@ struct BindEditorRenders {
     @Test("Editor A renders a1–a17 in Instrument dark and light, and fits the least window",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try Self.engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("bind-editor-a")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let look = Look.shared

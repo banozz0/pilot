@@ -71,7 +71,7 @@ struct MouseButtonsRenders {
             for (name, shown, mice, spot) in states {
                 for width in style == .instrument && ["rest", "caught"].contains(name) ? [928.0, 688] : [928] {
                     let page = KitPage { MouseButtonsBlocks(shown: shown, mice: mice, spot: spot) }
-                        .styleLayout().background(Color(nsColor: .windowBackgroundColor))
+                        .background(Color(nsColor: .windowBackgroundColor))
                         .styled(.page(.binds)).environment(engine).frame(width: width, height: 1500).pilotTheme(look: look)
                     let suffix = width == 928 ? "" : "-\(Int(width))"
                     try writeRender(page, to: dir.appendingPathComponent("\(name)-\(style.rawValue)\(suffix).png"))

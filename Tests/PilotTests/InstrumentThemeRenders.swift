@@ -20,7 +20,7 @@ struct InstrumentThemeRenders {
     @Test("Instrument's frame and pages take the theme's colours", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         testApp()
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("instrument-themes")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         DisplayFaces.directory = LookThemeTests.fonts

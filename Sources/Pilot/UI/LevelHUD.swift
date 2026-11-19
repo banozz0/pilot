@@ -119,16 +119,12 @@ enum LevelHUD {
     }
 }
 
-/// The level HUD's face in the picked style: Instrument's or Toybox's.
+/// The level HUD's face in the picked style: Instrument's.
 struct LevelView: View {
-    @Environment(\.style) private var style
     let model: LevelModel
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentLevel(model: model)
-        case .toybox: ToyLevel(model: model)
-        }
+        InstrumentLevel(model: model)
     }
 }
 

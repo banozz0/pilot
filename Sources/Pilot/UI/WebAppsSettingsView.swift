@@ -105,7 +105,6 @@ struct WebAppsSettingsView: View {
             }
             FinePrint(text: "Open web apps change at once. One an older Pilot made updates itself once it has quit.").padding(.vertical, 8)
         }
-        // Toybox's four segments need more than a column beside their label (PageFlow).
         .pageWide()
     }
 

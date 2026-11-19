@@ -66,7 +66,6 @@ struct LookPage: View {
 
     /// What each setting does, the ⓘ's words: one or two plain lines.
     enum Info {
-        static let style = "How Pilot is drawn: Instrument or Toybox. The theme still picks every colour."
         static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
         static let theme = "Click a theme to try it on Pilot; nothing else changes. Apply theme sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Glass puts this window, the panels and widgets on regular glass (Blur Full), Clear on clear glass (Blur Light), still readable; the bar's dropdowns stay glass. Custom shows once you change one of them on its own."
@@ -86,7 +85,6 @@ struct LookPage: View {
     /// More's index (simplify-pages T20): a block's rows, a heading not counted. A row added to or moved off a block changes
     /// its count here.
     static let entries = [
-        MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
         MoreEntry(id: .windowLayout, symbol: "sidebar.left", controls: 1),
     ]
 
@@ -101,7 +99,7 @@ struct LookPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
                 HStack(alignment: .top, spacing: 14) {
-                    LookPreview(look: look).padding(.top, ink.isInstrument ? ink.style.density.padding : Toy.blockGap)
+                    LookPreview(look: look).padding(.top, ink.style.density.padding)
                         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                     VStack(spacing: 0) {
                         // Glass with its Transparency and Blur under the switch, greyed while Glass is off (pages round 5,
@@ -162,11 +160,10 @@ struct LookPage: View {
         }
     }
 
-    /// More: the style and this window's layout, each a place a link or the search lands on.
+    /// More: this window's layout, a place a link or the search lands on.
     private var moreTab: some View {
         @Bindable var look = look
         return KitMore(entries: Self.entries) {
-            headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
             headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
             errorLine.padding(.top, 12)
         }
@@ -509,81 +506,6 @@ extension EnvironmentValues {
     @Entry var lookPreviewStill: NSImage? = nil
 }
 
-// MARK: - Style cards
-
-/// The style picker (story 137, ADR 0008): Instrument and Toybox as two cards, each drawn in its own style's tokens in the
-/// window's theme, the picked one with the window's 2 pt accent border. Dark or light is the theme's (Sven, 2026-10-09:
-/// no switch).
-struct StylePicker: View {
-    let look: Look
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            ForEach(PilotStyle.allCases, id: \.self) { style in
-                StyleCard(tokens: .of(style, theme: look.theme), picked: look.style == style) {
-                    look.style = style
-                }
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// One style's card, drawn in that style: its name and line on its panel, a Hyper key and a plain key in its key caps,
-/// on its canvas.
-private struct StyleCard: View {
-    @Environment(\.ink) private var ink
-    let tokens: StyleTokens
-    let picked: Bool
-    let pick: () -> Void
-
-    var body: some View {
-        let kind = tokens.kind
-        Button(action: pick) {
-            VStack(alignment: .leading, spacing: 8) {
-                name
-                // Narrow (a sidebar beside it at 760), the keys go onto two lines, so no word breaks (760 once broke Spac/e).
-                Text(kind.tagline).styleText(\.caption).foregroundStyle(tokens.color(\.text2)).fixedSize(horizontal: false, vertical: true)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 5) { keys }
-                    VStack(alignment: .leading, spacing: 5) { keys }
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .styleSurface(\.card)
-            .padding(10)
-            .background(tokens.color(\.canvas), in: .rect(cornerRadius: ink.blockRadius))
-            .overlay {
-                // Toybox: the ink outline, the picked one a 3 pt sun.
-                RoundedRectangle(cornerRadius: ink.blockRadius)
-                    .strokeBorder(picked ? ink.accent : ink.edge, lineWidth: picked ? ink.pickedStroke : ink.stroke)
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.kitPress)
-        .animation(Kit.change, value: picked)
-        .style(tokens)
-        .accessibilityLabel(kind.title)
-        .accessibilityAddTraits(picked ? .isSelected : [])
-    }
-
-    private var name: some View {
-        Text(tokens.kind.title).styleText(\.title).foregroundStyle(tokens.color(\.text)).fixedSize()
-    }
-
-    @ViewBuilder private var keys: some View {
-        key("Hyper", fill: \.hyper, ink: \.onHyper)
-        key("Space", fill: \.key, ink: \.text)
-    }
-
-    private func key(_ text: String, fill: KeyPath<StyleColors, Paint>, ink: KeyPath<StyleColors, Paint>) -> some View {
-        Text(text).styleText(\.key).foregroundStyle(tokens.color(ink)).fixedSize()
-            .padding(.horizontal, 7).frame(minHeight: 20)
-            .styleSurface(\.key, fill: fill, radius: \.chip)
-    }
-}
-
 // MARK: - Theme cards
 
 /// The twelve theme cards, four across; Return picks the focused one and the arrows move between them.
@@ -735,10 +657,8 @@ struct ThemeCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(hex: ground), in: shape)
             .overlay {
-                // Toybox: the ink outline and solid edge (toyEdge), the picked one ringed in the sun inside it.
                 if picked { shape.inset(by: ink.stroke).strokeBorder(ink.accent, lineWidth: ink.pickedStroke) }
             }
-            .toyEdge(radius: ink.radius(12) + 2)
             .overlay { if focused && !picked { shape.inset(by: -3).strokeBorder(ink.accent.opacity(0.6), lineWidth: 1.5) } }
             .contentShape(shape)
         }

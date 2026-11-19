@@ -6,7 +6,7 @@ import SwiftUI
 /// T2's panel face (Sven's pick A, cards) fed from today's Dropdown blocks. Status with any problem first, the
 /// workspaces, the six switches, what is running, the rows with their keys (and, while Option is held, the developer rows
 /// and the recent presses), then Check for updates, Settings and Quit. Hung by BarPanel under Pilot's item as before; past
-/// the room under it (`barPopoverRoom`) the face scrolls what is not pinned. Toybox keeps ToyDropdown.
+/// the room under it (`barPopoverRoom`) the face scrolls what is not pinned.
 struct InstrumentDropdown: View {
     @Environment(Engine.self) private var engine
     let switches: QuickSwitches

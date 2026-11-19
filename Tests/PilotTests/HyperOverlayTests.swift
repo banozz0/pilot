@@ -29,7 +29,7 @@ struct HyperOverlayTests {
         overlay.draw(.hyper)
         #expect(overlay.panel === first)
         #expect(first.frame.size == fresh(.hyper))
-        look.style = look.style == .instrument ? .toybox : .instrument
+        look.themeID = look.themeID == "porcelain" ? "tokyo-night" : "porcelain"
         // The change reaches the overlay on the main actor's next turn.
         try await Task.sleep(for: .milliseconds(50))
         overlay.draw(.hyper)

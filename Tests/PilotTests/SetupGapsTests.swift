@@ -79,7 +79,7 @@ struct SetupGapsTests {
         // The styles' own faces, as the app draws them: without, this drew the system face alone and the styles' faces
         // only after another suite had pointed DisplayFaces at them, so Vision read two different pictures.
         DisplayFaces.directory = LookThemeTests.fonts
-        for (name, style) in [("instrument", PilotStyle.instrument), ("toybox", .toybox)] {
+        for (name, style) in [("instrument", PilotStyle.instrument)] {
             look.style = style
             let view = VStack(spacing: 12) {
                 AppRolesBlock(picks: picks) { $0 == .terminal ? "com.mitchellh.ghostty" : $0.appleApp }

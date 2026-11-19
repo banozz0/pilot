@@ -218,7 +218,7 @@ struct MockWindow: View {
 /// The Window shelf's Deck (Q704, Q705, Q708), opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh> PILOT_RENDER_DIR=<fresh> [PILOT_SHELF_WALLPAPER=<png>] swift test --filter ShelfRenders`
 /// - The shelf column (ShelfColumn) at 1x, Sven's screens, and 2x, in Instrument on Tokyo Night (Solid and Glass) and
-///   Porcelain, and Toybox on Toybox Night and Toybox; then every theme in both styles at 1x. ImageRenderer draws them:
+///   Porcelain; then every theme at 1x. ImageRenderer draws them:
 ///   cacheDisplay flattens the cards' 3D turn.
 /// - The stills: the same window as the code before this change asked for it (one scaling pass to 204 px, a bilinear
 ///   stand-in for ScreenCaptureKit's) beside ShelfStill's, magnified, with the pipeline's time and each still's bytes.
@@ -290,8 +290,7 @@ struct ShelfRenders {
         defer { (look.style, look.themeID, look.glass) = saved }
         let looks: [(String, PilotStyle, String, Bool)] = [
             ("Instrument · Tokyo Night", .instrument, "tokyo-night", false), ("Instrument · Tokyo Night · Glass", .instrument, "tokyo-night", true),
-            ("Instrument · Porcelain", .instrument, "porcelain", false), ("Toybox · Night", .toybox, "toybox-night", false),
-            ("Toybox · light", .toybox, "toybox", false),
+            ("Instrument · Porcelain", .instrument, "porcelain", false),
         ]
         for scale in [1, 2] {
             var columns: [(caption: String, rep: NSBitmapImageRep)] = []
@@ -306,7 +305,7 @@ struct ShelfRenders {
         for style in PilotStyle.allCases {
             for theme in PilotTheme.designed {
                 (look.style, look.themeID) = (style, theme.id)
-                themes.append(("\(style == .toybox ? "T" : "I") · \(theme.name)", try ShelfRenderKit.draw(Column(pictures: pictures, height: 760), scale: 1)))
+                themes.append(("I · \(theme.name)", try ShelfRenderKit.draw(Column(pictures: pictures, height: 760), scale: 1)))
             }
         }
         try ShelfRenderKit.write(ShelfRenderKit.sheet(themes, scale: 1), dir.appendingPathComponent("themes-1x.png"))

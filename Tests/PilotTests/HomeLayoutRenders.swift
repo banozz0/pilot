@@ -8,12 +8,12 @@ import Testing
 @testable import Pilot
 
 /// Story 167 on Home's grid (P91, model A): Home with extension blocks (HomeLayoutRenders.now, direction 2's lanes converted
-/// to cells) in the whole window at 1440 and 1000 by 900 and at 760, in Instrument and Toybox, the rail and toolbar tabs
+/// to cells) in the whole window at 1440 and 1000 by 900 and at 760, in Instrument, the rail and toolbar tabs
 /// layouts; the default Home, and every block kept Strip, Square, Wide and Large at 1440; Sven's Home from 1.0.2 converted
 /// and his goal (a big keyboard, This Mac, Weather and AI usage small on the right) at his 1640 × 1250 and at 1000 × 660;
 /// then edit mode (spec home-edit, check 14): edit mode, a corner held mid-resize, the tray of hidden blocks, a block
 /// carried over new cells (its outline and size readout where it lands), Reduce Motion and the keyboard's moves, at
-/// 760×520, 1000×660, 1440×900 and 1720×1440, in Instrument dark and light and Toybox, and his goal in edit mode; each again
+/// 760×520, 1000×660, 1440×900 and 1720×1440, in Instrument dark and light, and his goal in edit mode; each again
 /// in the film's look (`film-`, P89; PILOT_RENDER_ONLY=film draws only those), with made-up clipboard rows and the film's
 /// top bar time. Seeded as
 /// HomeRenders seeds, with fake extension pages (lazygit, AI usage, Weather, Pomodoro, Now playing); nothing reaches the
@@ -25,8 +25,8 @@ extension SharedLook {
 struct HomeLayoutRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    /// The two styles, and the film's look (Instrument in ExplainerFilmRenders.theme) for the 1.0.3 film's Home (P89).
-    static let styles: [(String, PilotStyle, String)] = [("instrument", .instrument, "nightwatch"), ("toybox", .toybox, "toybox"),
+    /// Instrument, and the film's look (Instrument in ExplainerFilmRenders.theme) for the 1.0.3 film's Home (P89).
+    static let styles: [(String, PilotStyle, String)] = [("instrument", .instrument, "nightwatch"),
                                                          ("film", .instrument, ExplainerFilmRenders.theme)]
 
     /// The extension blocks the sizes are drawn with, each with its emoji, its bar item's text and its page.
@@ -240,13 +240,13 @@ struct HomeLayoutRenders {
             }
         }
 
-        // Edit mode at the four window sizes (Sven, Q57) in Instrument dark and light and Toybox: Home as above with nothing
+        // Edit mode at the four window sizes (Sven, Q57) in Instrument dark and light: Home as above with nothing
         // hidden but Pilot's own; the keyboard's corner held mid-resize, four columns in and three rows down; the default
         // Home, whose tray holds the extension pages; Most used carried to the right of the board; Reduce Motion; the
         // keyboard's ring on Clipboard, and Clipboard moved a row up by its arrow. Then Sven's goal in edit mode at his window
         // and the default one, each block's class checked against P91's frames 4 and 5.
         let themes: [(String, PilotStyle, String)] = [("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
-                                                      ("toybox", .toybox, "toybox"), ("film", .instrument, ExplainerFilmRenders.theme)]
+                                                      ("film", .instrument, ExplainerFilmRenders.theme)]
         let fourSizes = [(760, 520), (1000, 660), (1440, 900), (1720, 1440)], svensSizes = [(1000, 660), (1640, 1250)]
         let edits: [(name: String, layout: HomeLayout, sizes: [(Int, Int)])] = [
             ("edit", Self.now, fourSizes), ("resize", Self.now, fourSizes), ("tray", .standard, fourSizes), ("carry", Self.now, fourSizes),

@@ -16,7 +16,7 @@ private final class MemoryKeyStore: StoredKey, @unchecked Sendable {
     func write(_ value: String?) throws { lock.withLock { self.value = value } }
 }
 
-/// Web GIF search in Stickers and GIFs (story 164), drawn offscreen in Instrument and Toybox: GIPHY's rows beside
+/// Web GIF search in Stickers and GIFs (story 164), drawn offscreen in Instrument: GIPHY's rows beside
 /// the folder's with their animated previews, GIPHY's logo and "Powered by GIPHY" on the bar (T39), the row that asks for a key, and the key's
 /// rows under Stickers and GIFs on Launcher › Abilities. Nothing reaches the network. PILOT_RENDER_DIR keeps the PNGs.
 extension SharedLook {

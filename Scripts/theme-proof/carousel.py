@@ -278,7 +278,7 @@ def themes(passed):
 
         # Every pack the style takes, by title, the applied one marked; the apps found on this Mac for the previews.
         packs = [json.loads(p.read_text()) for p in sorted((f.root / 'factory').glob('*/manifest.json'))] + [f.pack]
-        expected = sorted((p for p in packs if (not p['styles'] or 'instrument' in p['styles']) and p['id'] not in ('toybox', 'toybox-night')),
+        expected = sorted((p for p in packs if (not p['styles'] or 'instrument' in p['styles'])),
                           key=lambda p: p['title'].lower())
         before = watched()
         listed = f.call('carousel', '--mode', 'themes', '--screen', 'wide')

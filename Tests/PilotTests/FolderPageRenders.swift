@@ -83,7 +83,7 @@ struct FolderPageRenders {
                 let view = Self.view(layout, model: model, shot: shot)
                     .frame(width: page.width, height: page.height)
                     .background(Theme.background)
-                    .styleLayout().styled(.page(.files)).pilotTheme(look: look).environment(engine)
+                    .styled(.page(.files)).pilotTheme(look: look).environment(engine)
                 let drawn = try rendered(view, wait: 0.8)
                 let out = try Self.composite(chrome, drawn, at: page, window: size)
                 try #require(out.representation(using: .png, properties: [:]))

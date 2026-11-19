@@ -115,7 +115,6 @@ final class SessionSwitch: QuickSwitchable {
 /// and Quit; holding Option adds the developer rows. Everything the old dropdown offered is here (Dropdown.carried).
 struct PilotDropdown: View {
     @Environment(Engine.self) private var engine
-    @Environment(\.style) private var style
     let switches: QuickSwitches
     /// Option is held: the developer rows show, from the press that opened the dropdown or any later one.
     @State private var option: Bool
@@ -125,14 +124,9 @@ struct PilotDropdown: View {
         _option = State(initialValue: option)
     }
 
-    /// Instrument and Toybox draw their own (InstrumentDropdown, ToyDropdown) on the same blocks and switches.
+    /// Instrument draws its own (InstrumentDropdown) on these blocks and switches.
     var body: some View {
-        Group {
-            switch style.kind {
-            case .instrument: InstrumentDropdown(switches: switches, option: option)
-            case .toybox: ToyDropdown(switches: switches, option: option)
-            }
-        }
+        InstrumentDropdown(switches: switches, option: option)
         .onModifierKeysChanged(mask: .option) { _, keys in option = keys.contains(.option) }
         // Check for updates says what it found from the first open, as General's header does on its first show; a window
         // opened or moved since the last workspace change shows up the moment the dropdown opens.

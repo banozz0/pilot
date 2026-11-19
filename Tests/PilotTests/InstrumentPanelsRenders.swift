@@ -21,6 +21,21 @@ extension SharedLook {
 struct InstrumentPanelsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
+    /// The mockup's bar: Pilot, the workspaces and the app in front on the left, the timer in the centre, the readings'
+    /// group, sound, the layout, Wi-Fi, the battery and the clock on the right.
+    static func sides() -> [TopBarSide: [BarSlot]] {
+        var s = BarSettings.defaults
+        func item(_ kind: BarKind, _ style: BarStyle) -> BarSlot {
+            s.set(kind, style: style)
+            return .item(s.entry(kind))
+        }
+        let readings = [BarKind.cpu, .memory, .network].map { kind in s.set(kind, style: .text); return s.entry(kind) }
+        return [.left: [item(.pilot, .iconNumber), item(.workspaces, .numbers), item(.focusedApp, .iconName)],
+                .centre: [item(.timer, .countdown), item(.terminal, .iconName), item(.askAI, .iconName)],
+                .right: [.group(readings), item(.volume, .icon), item(.keyboardLayout, .code), item(.wifi, .icon), item(.battery, .iconPercent),
+                         item(.clock, .dateTime)]]
+    }
+
     @Test("The HUDs, Quick AI and notes panels render in Instrument dark and light, every state",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
@@ -141,7 +156,7 @@ struct InstrumentPanelsRenders {
         defer { (look.style, look.themeID, look.glass) = saved }
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
 
-        // ToyboxTopBarRenders' fakes: the mockup's workspaces, Stats' readings, a focus block at 18:42, Wi-Fi, an 82 % battery.
+        // The fakes: the mockup's workspaces, Stats' readings, a focus block at 18:42, Wi-Fi, an 82 % battery.
         StatsRenders.seed(SystemSampler.shared)
         let clock = HomeRenders.Clock(), start = clock.now
         let timer = ExtensionTimer(now: { clock.now })
@@ -162,7 +177,7 @@ struct InstrumentPanelsRenders {
                                    watchStats: { _ in Task {} }, calendar: ClockCalendar { ClockPopoverTests.FakeStore() })
         let sources = BarSources(readings: readings, observers: observers, sampler: .shared, keepAwake: KeepAwake(power: SetupKeepAwakeTests.FakePower()),
                                  timer: timer, pilotTitle: { "2" })
-        let sides = ToyboxTopBarRenders.sides()
+        let sides = Self.sides()
         var held: Set<BarKind> = []
         readings.hold(Set(sides.values.joined().flatMap(\.kinds)), replacing: &held)
         defer { readings.hold([], replacing: &held) }

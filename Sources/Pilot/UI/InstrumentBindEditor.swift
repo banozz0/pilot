@@ -7,7 +7,7 @@ import SwiftUI
 /// empty, its rows under their groups with scope chips once typed; a pick folds the list to one card, an already keyed
 /// action's move warned under it; the foot says in one sentence what Save does, or why it is off. Solid, no glass, no
 /// popup menus; 560 pt wide, at most the window's height less 60, the list scrolling in a fixed area.
-/// Drawn in BindEditor's own body, so its state redraws it as it does Toybox's sheet.
+/// Drawn in BindEditor's own body, so its state redraws it.
 extension BindEditor {
     var instrument: some View {
         let plan = plan

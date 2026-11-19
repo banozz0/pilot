@@ -9,8 +9,7 @@ import Testing
 /// The Allow prompt (ADR 0013) as `pilot ext` asks it, through HUD.makePanel as AllowPrompt.show builds it, folded and with
 /// its details, for a Weather-like extension made in a moved home: an install, a hostile title and path, a title and a path
 /// each holding a line break, a reinstall over the same version, another title on the same id, a catalogue update and
-/// downgrade, a remove, a test, and an install whose place in Extensions holds something else. Renders only; Toybox draws
-/// the install, the reinstall, the update and the remove.
+/// downgrade, a remove, a test, and an install whose place in Extensions holds something else. Renders only.
 /// Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AllowPromptRenders`
 extension SharedLook {
@@ -78,10 +77,10 @@ struct AllowPromptRenders {
         try Data("not an extension".utf8).write(to: installed.appending(path: "notes.txt"))
         asks.append(("unknown-replacement", tools.installAsk(ext, entry, from: source)))
 
-        for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             look.style = style
             look.themeID = theme
-            for (name, ask) in asks where style == .instrument || ["install", "replace", "update", "remove"].contains(name) {
+            for (name, ask) in asks {
                 for details in [false, true] {
                     try Self.write(AllowPromptView(program: "pilot, from zmx", ask: ask, details: details) { _ in },
                                    to: out.appendingPathComponent("\(style.rawValue)-\(name)\(details ? "-details" : "").png"))

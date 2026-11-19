@@ -133,8 +133,7 @@ struct AbilitiesTests {
         #expect(AppPlace.linked(URL(string: "pilot://open?page=binds&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.linked(URL(string: "pilot://open?page=menu&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.search("what can pilot do").first == AppPlace(.abilities))
-        // Menu takes the frame's bar in both new styles; Binds keeps its own.
+        // Menu takes the frame's bar; Binds keeps its own.
         #expect(!InstrumentFrame.pageOwnsBar(.menu) && InstrumentFrame.pageOwnsBar(.binds))
-        #expect(!ToyLayout.ownsTitleRow(.menu))
     }
 }

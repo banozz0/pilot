@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// To-do B drawn (ADR 0010 amended 2026-10-17): its list in Hyper+Space with due days (sections, the day at each row's
-/// right, the foot naming Return and Undo) and without (one tidy list), in each Instrument layout and Toybox; its Cmd+K
+/// right, the foot naming Return and Undo) and without (one tidy list), in Instrument's Line; its Cmd+K
 /// with every key; and its popover both ways. To-do 2.0's answers, as it prints them. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter TodoListRenders`
 extension SharedLook {
@@ -51,7 +51,7 @@ struct TodoListRenders {
     static let tidy = [row("t", "Reply to Harry about the launch"), row("n", "Buy milk"), row("r", "Renew Malta ID card"),
                        row("d", "Book flights", section: "Done", done: true)]
 
-    static func model(_ rows: [String], query: String = "", layout: MenuLayoutStyle) throws -> MenuModel {
+    static func model(_ rows: [String], query: String = "") throws -> MenuModel {
         let line = #"{"type":"list","items":[\#(rows.joined(separator: ","))]}"#.replacingOccurrences(of: "\n", with: " ")
         guard case .items(let items) = ExtensionRun.answer(line) else {
             throw CancellationError()
@@ -61,7 +61,6 @@ struct TodoListRenders {
         nav.query = query
         nav.replaceList(ExtensionList.entries(items, of: command))
         let model = MenuModel(nav: nav)
-        model.layout = layout
         return model
     }
 
@@ -111,18 +110,14 @@ struct TodoListRenders {
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("todo")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-        for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             (look.themeID, look.style) = (theme, style)
-            let layouts: [MenuLayoutStyle] = style == .instrument ? [.line] : [.classic]
-            for layout in layouts {
-                let name = style == .instrument ? layout.rawValue : "toybox"
-                try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.dated, layout: layout)), "menu-dated-\(name)", in: out)
-                try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.tidy, layout: layout)), "menu-tidy-\(name)", in: out)
-            }
-            let keys = try Self.model(Self.dated, layout: style == .instrument ? .line : .classic)
+            try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.dated)), "menu-dated-line", in: out)
+            try InstrumentMenuRenders.render(MenuView(model: try Self.model(Self.tidy)), "menu-tidy-line", in: out)
+            let keys = try Self.model(Self.dated)
             _ = keys.nav.handle(.down)
             _ = keys.nav.handle(.commandK)
-            try InstrumentMenuRenders.render(MenuView(model: keys), "menu-actions-\(style == .instrument ? "line" : "toybox")", in: out)
+            try InstrumentMenuRenders.render(MenuView(model: keys), "menu-actions-line", in: out)
 
             let tokens = StyleTokens.of(style, theme: look.theme)
             for (name, answer) in [("dated", Self.datedPopover), ("tidy", Self.tidyPopover)] {

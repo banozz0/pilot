@@ -24,10 +24,7 @@ struct ImageViewerView: View {
         // Solid, never Glass: nothing behind the window shows round a picture (Q161).
         .background { style.color(\.canvas) }
         .clipShape(shape)
-        .overlay {
-            if style.kind == .toybox { shape.strokeBorder(style.color(\.outline), lineWidth: 2) }
-            else { shape.strokeBorder(style.color(\.line2)) }
-        }
+        .overlay { shape.strokeBorder(style.color(\.line2)) }
     }
 
     @ViewBuilder private var hint: some View {

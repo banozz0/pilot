@@ -189,7 +189,7 @@ struct PageEditsTests {
 #if DEBUG
 extension SharedLook {
 /// The page edits drawn: Markets' page with its live search box and its watchlist, each row's grip at its left (a row
-/// without an id has none), in Instrument and Toybox. Opt-in like the other renders:
+/// without an id has none), in Instrument. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter PageEditsRenders`
 @MainActor
 @Suite("Page edits renders")

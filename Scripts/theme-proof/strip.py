@@ -168,8 +168,6 @@ def run(seam_only=False, fixes_only=False):
         # Palette-only and item edits never acquire geometry authority.
         for name in ['a','b']:f.apply(name);assert f.geometry()==geometry and f.personal()==personal
         f.restore();assert f.geometry()==geometry and f.personal()==personal and f.call('get','bar.background')=='glass'
-        f.call('theme','fixture-style','toybox');assert f.geometry()==geometry and f.personal()==personal
-        f.call('theme','fixture-style','instrument');assert f.geometry()==geometry and f.personal()==personal
         passed('palette A/B/Restore and actual per-style palette switches preserve personal geometry and all personal items')
         for pack in f.packs:pack['barPreset']='floatingStrip';f.save_pack(pack)
         outgoing=f.root/'strip-export.json';f.call('theme','export','a',str(outgoing))

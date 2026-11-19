@@ -393,7 +393,7 @@ enum HomeMotion {
     static func enterScale(reduce: Bool) -> CGFloat { reduce ? 1 : enterScale }
     static func liftScale(reduce: Bool) -> CGFloat { reduce ? 1 : liftScale }
 
-    /// A block's top a hold enters edit mode on: its title bar (Instrument's is 44 pt, Toybox's about 48).
+    /// A block's top a hold enters edit mode on: its title bar (Instrument's is 44 pt).
     static let titleBar: CGFloat = 48
 
     /// Pick-up: the carried block lifts to 1.03 under a deeper shadow over 120 ms.

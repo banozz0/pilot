@@ -7,14 +7,31 @@ import Testing
 @testable import Pilot
 
 /// Look, Setup and Stats in Instrument (card agent-bo-95423181, batch 5): the whole window, frame and page, under
-/// Nightwatch at 1440, 1000 and 760 wide (Look and Setup also 2000 tall, for their foot), and under Paper (light) and Hearth (warm) at 1440, seeded as ToyboxPagesRenders
-/// does (fakes; nothing reaches the tiler or the network). Opt-in, in a moved home:
+/// Nightwatch at 1440, 1000 and 760 wide (Look and Setup also 2000 tall, for their foot), and under Paper (light) and Hearth (warm) at 1440, seeded
+/// with fakes (nothing reaches the tiler or the network). Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter InstrumentPagesRenders`
 extension SharedLook {
 @MainActor
 @Suite("Instrument pages renders")
 struct InstrumentPagesRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
+
+    /// The mockup's workspaces: Ghostty and Ghostex on 1, Zen and Claude on 2, Obsidian, Notes and Reminders on 3,
+    /// Telegram, Vesktop and Spotify on 4.
+    static let windows: String = {
+        let rows: [(String, String, String)] = [
+            ("Ghostty", "com.mitchellh.ghostty", "1"), ("Ghostex", "com.madda.ghostex.gpui", "1"),
+            ("Zen", "app.zen-browser.zen", "2"), ("Claude", "com.anthropic.claudefordesktop", "2"),
+            ("Obsidian", "md.obsidian", "3"), ("Notes", "com.apple.Notes", "3"), ("Reminders", "com.apple.reminders", "3"),
+            ("Telegram", "com.tdesktop.Telegram", "4"), ("Vesktop", "dev.vencord.vesktop", "4"), ("Spotify", "rocks.spotifast.Spotifast", "4"),
+        ]
+        return "[" + rows.enumerated().map { i, row in
+            """
+            {"window-id": \(i + 1), "app-name": "\(row.0)", "app-bundle-id": "\(row.1)", "app-pid": \(i + 1), "workspace": "\(row.2)", \
+            "monitor-id": 1, "window-layout": "h_tiles", "window-title": "\(row.0)"}
+            """
+        }.joined(separator: ",") + "]"
+    }()
 
     @Test("Look, Setup and Stats render in Instrument at three widths and in three themes",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -30,7 +47,7 @@ struct InstrumentPagesRenders {
         if !FileManager.default.fileExists(atPath: toml) { FileManager.default.createFile(atPath: toml, contents: Data()) }
 
         let engine = try SharedLook.HomeRenders.engine()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(Self.windows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
 
@@ -88,7 +105,7 @@ struct InstrumentPagesRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         try SharedLook.HomeRenders.seedPresets()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(Self.windows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         // Extensions on ExtensionsPageViewTests' fixture (three extensions, two folders not read), one bound.
@@ -195,7 +212,7 @@ struct InstrumentPagesRenders {
 private struct CatalogueGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

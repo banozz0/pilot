@@ -43,8 +43,7 @@ struct VideoEditorView: View {
         .background { if !glass { shape.fill(style.color(\.panel)) } }
         .clipShape(shape)
         .overlay {
-            if style.kind == .toybox { shape.strokeBorder(style.color(\.outline), lineWidth: 2) }
-            else if !glass { shape.strokeBorder(style.color(\.line2)) }
+            if !glass { shape.strokeBorder(style.color(\.line2)) }
         }
     }
 
@@ -87,16 +86,12 @@ struct VideoTopBar: View {
 
 /// Export, the one primary: the edit beside the recording (⌘E).
 struct ExportButton: View {
-    @Environment(\.style) private var style
     let model: VideoEditorModel
 
     var body: some View {
-        Group {
-            if style.kind == .toybox { Button("Export  ⌘E", action: model.export).buttonStyle(ToyFaceStyle(primary: true)) }
-            else { Button("Export  ⌘E", action: model.export).buttonStyle(InstrumentButtonStyle(kind: .primary)) }
-        }
-        .disabled(!model.loaded || model.cropping || model.length <= 0)
-        .help("Export beside the recording, as the Export tab says  ⌘E")
+        Button("Export  ⌘E", action: model.export).buttonStyle(InstrumentButtonStyle(kind: .primary))
+            .disabled(!model.loaded || model.cropping || model.length <= 0)
+            .help("Export beside the recording, as the Export tab says  ⌘E")
     }
 }
 
@@ -115,8 +110,7 @@ struct ExportProgress: View {
             ProgressView(value: progress).progressViewStyle(.linear).tint(style.color(\.accent)).frame(width: 150)
             Text(verbatim: "\(Int((progress * 100).rounded())) %").font(style.font(\.mono, size: 10.5)).foregroundStyle(style.color(\.text)).monospacedDigit()
                 .frame(width: 38, alignment: .trailing)
-            if style.kind == .toybox { Button("Cancel", action: model.cancelExport).buttonStyle(ToyFaceStyle(ghost: true)) }
-            else { Button("Cancel", action: model.cancelExport).buttonStyle(InstrumentButtonStyle(kind: .ghost)) }
+            Button("Cancel", action: model.cancelExport).buttonStyle(InstrumentButtonStyle(kind: .ghost))
         }
         .fixedSize()
         .help("Cancel stops the export  Esc")
@@ -462,7 +456,7 @@ struct VideoTimeline: View {
     /// A lane's name and symbol in the left column, beside its row.
     private func lane(_ name: String, symbol: String, y: CGFloat, height: CGFloat) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 11, weight: style.kind == .toybox ? .bold : .regular))
+            Image(systemName: symbol).font(.system(size: 11, weight: .regular))
             Text(name.uppercased()).styleText(\.eyebrow)
         }
         .foregroundStyle(style.color(\.text3))
@@ -781,23 +775,15 @@ struct InspectorRow<Value: View>: View {
     }
 }
 
-/// The style's segments at the inspector's width, from its leading edge: Toybox's drawn at 85 %, as ToolSegments draws
-/// them, but measured at that size, so six speeds never push the column wider than the inspector.
+/// The style's segments at the inspector's width, from its leading edge.
 struct InspectorSegments<Value: Hashable>: View {
-    @Environment(\.style) private var style
     let options: [(value: Value, title: String)]
     let label: String
     @Binding var selection: Value
 
     var body: some View {
-        if style.kind == .toybox {
-            ToySegments(selection: $selection, options: options, label: label).fixedSize()
-                .scaleEffect(0.85, anchor: .leading)
-                .frame(width: VideoInspector.width - 2 * VideoInspector.inset, height: 34, alignment: .leading)
-        } else {
-            InstrumentSegments(options: options, selection: $selection, height: 22).fixedSize()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        InstrumentSegments(options: options, selection: $selection, height: 22).fixedSize()
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -125,16 +125,15 @@ final class MenuPanelPointerTests {
         defer { panel.orderOut(nil) }
         let list = try list(panel)
         var shown: [MenuEntry.Kind?] = [model.nav.only]
-        // 12 pt apart, under the narrowest kind's width, across the status line Classic draws at the panel's foot (Classic
-        // Shell, Q139), level with that line's middle. A kind shown resizes the panel (it is as tall as its rows), so the
+        // 12 pt apart, under the narrowest kind's width, across the foot Line draws at the panel's foot (LineFoot, s(42)),
+        // level with that foot's middle. A kind shown resizes the panel (it is as tall as its rows), so the
         // panel is fitted again before each click.
-        #expect(model.layout == .classic)
         for x in stride(from: list.minX + 2, to: list.maxX - 2, by: 12) {
             // The panel follows the menu's size as the app's does: the Files view takes the full height for its preview pane.
             PilotMenu.fit(panel, face: model.instrumentSize)
             panel.contentView?.layoutSubtreeIfNeeded()
             let content = try #require(panel.contentView)
-            let line = content.convert(content.bounds, to: nil).minY + MenuPanelSize.classicStatus / 2
+            let line = content.convert(content.bounds, to: nil).minY + MenuPanelSize.s(42) / 2
             PanelTestSupport.click(panel, at: CGPoint(x: x, y: line))
             if model.nav.only != shown.last { shown.append(model.nav.only) }
         }

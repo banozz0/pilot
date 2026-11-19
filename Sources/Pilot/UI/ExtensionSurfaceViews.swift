@@ -38,7 +38,7 @@ struct ExtensionBlocksView: View {
         VStack(alignment: .leading, spacing: compact ? 8 : 12) {
             ForEach(blocks.indices, id: \.self) { i in
                 // Instrument's figures stand apart on hairlines, not on wells (Q475, the Omarchy weather look).
-                if ink.isInstrument, i > 0, Self.ruled(blocks[i - 1], blocks[i]) { InstrumentRule().accessibilityHidden(true) }
+                if i > 0, Self.ruled(blocks[i - 1], blocks[i]) { InstrumentRule().accessibilityHidden(true) }
                 block(blocks[i], at: i)
             }
         }
@@ -143,8 +143,7 @@ struct ExtensionBlocksView: View {
                 blocks
             }
             .padding(.horizontal, 10).padding(.vertical, 9)
-            .background { if !ink.isInstrument { RoundedRectangle(cornerRadius: 9).fill(ink.well) } }
-            .overlay { if ink.isInstrument { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(ink.line) } }
+            .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(ink.line) }
         } else {
             Tile(title: title, note: subtitle, trailing: {
                 if aside != nil || asideNote != nil {
@@ -178,7 +177,7 @@ struct ExtensionBlocksView: View {
     private func colour(_ tone: Extension.Tone?, else plain: Color) -> Color { ink.tone(tone, else: plain) }
 
     @ViewBuilder private func statsRow(_ stats: [Extension.Block.Stat]) -> some View {
-        if ink.isInstrument { instrumentStats(stats) } else { wellStats(stats) }
+        instrumentStats(stats)
     }
 
     /// Instrument's stats (Q475): each label a mono eyebrow over its figure in the light mono, hairlines between them, no
@@ -201,25 +200,8 @@ struct ExtensionBlocksView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func wellStats(_ stats: [Extension.Block.Stat]) -> some View {
-        HStack(spacing: compact ? 6 : 10) {
-            ForEach(stats.indices, id: \.self) { i in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(stats[i].value).font(ink.mono(compact ? 14 : 20, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(colour(stats[i].tone, else: ink.text))
-                    Text(stats[i].label).font(ink.ui(compact ? 10.5 : 11.5)).foregroundStyle(ink.muted).minimumScaleFactor(0.85)
-                }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, compact ? 8 : 12).padding(.vertical, compact ? 6 : 10)
-                .background(ink.well, in: .rect(cornerRadius: compact ? 7 : 10))
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
     @ViewBuilder private func heroView(_ hero: Extension.Block.Hero) -> some View {
-        if ink.isInstrument { instrumentHero(hero) } else { toyHero(hero) }
+        instrumentHero(hero)
     }
 
     /// Instrument's hero (Q475, the Omarchy weather look): a thin line glyph (or the emoji sent), the value in the light
@@ -269,40 +251,8 @@ struct ExtensionBlocksView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// A hero: the glyph big, the value bigger with its unit, the place under them, its small stats at their right.
-    private func toyHero(_ hero: Extension.Block.Hero) -> some View {
-        HStack(alignment: .center, spacing: compact ? 12 : 16) {
-            if let glyph = hero.glyph { ExtensionGlyph(glyph: glyph, size: compact ? 38 : 48) }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(hero.value).font(ink.mono(compact ? 34 : 44, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(colour(hero.tone, else: ink.text))
-                    if let unit = hero.unit { Text(unit).font(ink.ui(compact ? 15 : 18)).foregroundStyle(ink.muted) }
-                }
-                if let place = hero.place { Text(place).font(ink.ui(compact ? 12 : 13.5)).foregroundStyle(ink.muted) }
-            }
-            .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
-            Spacer(minLength: 8)
-            if !hero.stats.isEmpty {
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: compact ? 3 : 5) {
-                    ForEach(hero.stats.indices, id: \.self) { i in
-                        GridRow {
-                            Text(hero.stats[i].label).foregroundStyle(ink.muted)
-                            Text(hero.stats[i].value).font(ink.mono(compact ? 12 : 13, weight: .semibold)).monospacedDigit()
-                                .foregroundStyle(colour(hero.stats[i].tone, else: ink.text)).gridColumnAlignment(.trailing)
-                        }
-                    }
-                }
-                .font(ink.ui(compact ? 11.5 : 12.5)).lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, compact ? 2 : 6)
-        .accessibilityElement(children: .combine)
-    }
-
     @ViewBuilder private func stripView(_ columns: [Extension.Block.Column]) -> some View {
-        if ink.isInstrument { instrumentStrip(columns) } else { wellStrip(columns) }
+        instrumentStrip(columns)
     }
 
     /// Instrument's strip (Q475): its columns on the panel itself, no well, each its label a mono eyebrow, a thin line
@@ -328,27 +278,6 @@ struct ExtensionBlocksView: View {
         .padding(.vertical, compact ? 2 : 4)
     }
 
-    /// A strip: its columns side by side, each its label, glyph, high and low, on a well.
-    private func wellStrip(_ columns: [Extension.Block.Column]) -> some View {
-        HStack(spacing: 0) {
-            ForEach(columns.indices, id: \.self) { i in
-                let column = columns[i]
-                VStack(spacing: compact ? 4 : 6) {
-                    Text(column.label).font(ink.ui(compact ? 10.5 : 11.5, .semibold)).foregroundStyle(ink.muted)
-                    if let glyph = column.glyph { ExtensionGlyph(glyph: glyph, size: compact ? 18 : 22) }
-                    else { Text(" ").font(.system(size: compact ? 18 : 22)).accessibilityHidden(true) }
-                    Text(column.high ?? " ").font(ink.mono(compact ? 12.5 : 14, weight: .semibold)).foregroundStyle(ink.text)
-                    Text(column.low ?? " ").font(ink.mono(compact ? 11.5 : 12.5)).foregroundStyle(ink.muted)
-                }
-                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .padding(.vertical, compact ? 8 : 12).padding(.horizontal, compact ? 4 : 8)
-        .background(ink.well, in: .rect(cornerRadius: compact ? 7 : 10))
-    }
-
     @ViewBuilder private func meterView(_ meter: Extension.Block.Meter) -> some View {
         let value = meter.value ?? "\(Int(meter.percent.rounded())) %"
         if compact {
@@ -363,7 +292,7 @@ struct ExtensionBlocksView: View {
                     }
                 }
                 .lineLimit(1)
-                track(meter, height: ink.isInstrument ? 3 : 5)
+                track(meter, height: 3)
                 if let note = meter.note { Text(note).font(ink.ui(10.5)).foregroundStyle(ink.muted).lineLimit(1) }
             }
             .help(meter.help ?? "")
@@ -378,7 +307,7 @@ struct ExtensionBlocksView: View {
                     Text(value).font(ink.mono(12)).monospacedDigit().foregroundStyle(ink.text2)
                 }
                 .font(ink.ui(13))
-                track(meter, height: ink.isInstrument ? 4 : 8)
+                track(meter, height: 4)
                 if let note = meter.note { Text(note).font(ink.ui(11.5)).foregroundStyle(ink.muted) }
                 // Pilot ticks the countdown itself (Surfaces v2), each minute, while the view shows.
                 if let resetsAt = meter.resetsAt {
@@ -837,34 +766,6 @@ struct InstrumentExtensionRow: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
-
-/// An extension page's row in Toybox's sidebar: its emoji on a tile, the picked one a sun keycap; folded to the rail, the
-/// tile alone, named by its tooltip.
-struct ToyExtensionRow: View {
-    @Environment(\.style) private var style
-    let link: ExtensionPages.Link, on: Bool, rail: Bool, open: () -> Void
-
-    var body: some View {
-        Button(action: open) {
-            HStack(spacing: 11) {
-                Text(link.icon ?? "🧩").font(.system(size: (rail ? 17 : 15) * style.scale)).frame(width: rail ? 32 : 28, height: rail ? 32 : 28)
-                if !rail {
-                    Text(link.title).font(style.toyNunito(700, 14.5)).foregroundStyle(on ? style.color(\.onAccent) : style.color(\.text)).lineLimit(1)
-                    Spacer(minLength: 4)
-                }
-            }
-            .padding(.horizontal, rail ? 0 : 10)
-            .frame(width: rail ? 50 : nil, height: rail ? 46 : style.points(40))
-            .frame(maxWidth: rail ? nil : .infinity, alignment: .leading)
-            .background { if on { Toy.block(style, fill: style.color(\.accent), radius: 13, edge: 4) } }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.kitPress)
-        .help(rail ? link.title : "")
-        .accessibilityLabel(link.title)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

@@ -3,7 +3,7 @@ import PilotCore
 
 /// What the menu says while a branch's list is still being read (Sven, 2026-10-07 for Clean; 2026-10-12 for Update,
 /// Remove and Install): the wait over its live line, the three steps from here with the running one "now", and the kinds
-/// of row the list can hold, each wearing the glyph its rows will wear. Instrument's and Toybox's scan views draw it.
+/// of row the list can hold, each wearing the glyph its rows will wear. Instrument's scan view draws it.
 struct MenuScan {
     struct Step { let icon: MenuIcon, title: String, detail: String }
     /// A kind of row, shown only when this Mac has a tool it needs (`needs`, any of them; none needs nothing).

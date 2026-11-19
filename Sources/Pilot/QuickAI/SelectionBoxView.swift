@@ -18,8 +18,8 @@ struct SelectionBoxView: View {
 
     static let placeholder = "Ask about the selection, or pick a rewrite"
 
-    /// A chip's and a button's ground: Toybox's raised fill is its panel's white, so it takes the sun's soft fill.
-    private var fill: Color { style.kind == .toybox ? ink.selection : ink.selected }
+    /// A chip's and a button's ground.
+    private var fill: Color { ink.selected }
 
     var body: some View {
         let radius = CGFloat(style.radii.pop)

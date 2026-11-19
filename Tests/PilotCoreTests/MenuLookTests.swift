@@ -142,20 +142,6 @@ struct MenuLookTests {
         #expect(MenuPanelSize.instrument(.narrow, rows: 3, headings: 0, full: true).height == s(560))
     }
 
-    @Test("Toybox's panel: its 50 pt rows set a narrow panel's height up to a cap; it keeps its own widths, Instrument's 750 aside (Q130)")
-    func toyboxSize() {
-        let nine = MenuPanelSize.toybox(.narrow, rows: 9), four = MenuPanelSize.toybox(.narrow, rows: 4)
-        #expect(nine.height - four.height == 5 * MenuPanelSize.toyboxRowPitch)
-        #expect(MenuPanelSize.toyboxRowPitch == MenuPanelSize.s(50), "mockup B's 50, one scale step up (C3)")
-        #expect(nine.width == MenuPanelSize.s(440))
-        #expect(MenuPanelSize.toybox(.narrow, rows: 40).height == MenuPanelSize.toybox(.narrow, rows: 30).height, "capped")
-        #expect(MenuPanelSize.toybox(.narrow, rows: 0).height == MenuPanelSize.toybox(.narrow, rows: 2).height, "an empty one keeps room for its line")
-        for shape in [MenuPanelSize.Shape.system, .wide] {
-            #expect(MenuPanelSize.toybox(shape, rows: 3) == MenuPanelSize.toybox(shape, rows: 40), "\(shape) is one size")
-            #expect(MenuPanelSize.toybox(shape, rows: 3).width == MenuPanelSize.s(shape == .wide ? 720 : 480))
-        }
-    }
-
     @Test("An action titled App: verb belongs to that app: its icon, the verb as its title, the app's name beside it")
     func owner() {
         let rows = Self.entries(apps: [("Bitwarden", "com.bitwarden.desktop")],

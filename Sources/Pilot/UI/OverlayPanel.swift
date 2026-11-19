@@ -119,7 +119,6 @@ private struct ShownOverlay: View {
 }
 
 struct OverlayView: View {
-    @Environment(\.style) private var style
     let title: String
     let rows: [BindsPage.Row]
     /// The footer's Edit what shows; nil draws none (Pilot page's preview of the overlay).
@@ -128,17 +127,13 @@ struct OverlayView: View {
     var body: some View {
         // As many binds as five columns hold; the footer counts the rest (InstrumentOverlay.fit).
         let fit = InstrumentOverlay.fit(rows)
-        switch style.kind {
-        case .instrument: InstrumentOverlay(title: title, rows: fit.rows, more: fit.more, edit: edit)
-        case .toybox: ToyOverlay(title: title, rows: fit.rows, more: fit.more, edit: edit)
-        }
+        InstrumentOverlay(title: title, rows: fit.rows, more: fit.more, edit: edit)
     }
 }
 
 /// The overlay's foot (story 56): how many binds did not fit, and Edit what shows, the link to Binds › Overlay. The
 /// panel never takes key focus, so the link takes the first click as the tip's button does. Nothing when neither applies.
 struct OverlayFooter: View {
-    @Environment(\.style) private var style
     @Environment(\.ink) private var ink
     let more: Int
     let edit: (() -> Void)?
@@ -146,10 +141,7 @@ struct OverlayFooter: View {
     var body: some View {
         if more > 0 || edit != nil {
             VStack(spacing: 0) {
-                switch style.kind {
-                case .instrument: InstrumentRule()
-                case .toybox: ToyRule()
-                }
+                InstrumentRule()
                 HStack(spacing: 10) {
                     if more > 0 { Text("+ \(more) more").font(ink.ui(12)).foregroundStyle(ink.muted) }
                     Spacer(minLength: 16)

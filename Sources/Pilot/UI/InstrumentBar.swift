@@ -274,15 +274,11 @@ struct InstrumentHoverPill: ViewModifier {
     let lit: Bool
 
     func body(content: Content) -> some View {
-        if style.kind == .instrument {
-            content.background {
-                if lit {
-                    let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-                    shape.fill(style.color(\.raised)).overlay { shape.strokeBorder(style.color(\.line)) }.padding(.vertical, 3)
-                }
+        content.background {
+            if lit {
+                let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+                shape.fill(style.color(\.raised)).overlay { shape.strokeBorder(style.color(\.line)) }.padding(.vertical, 3)
             }
-        } else {
-            content.modifier(BarHoverPill(lit: lit))
         }
     }
 }
@@ -302,27 +298,25 @@ struct InstrumentBarTooltip: View {
 extension BarInk {
     /// Drawn in Instrument.
     var instrument: Bool { style.kind == .instrument }
-    /// A popover's title: Instrument's Geist 600 13, else BarInk's headline.
-    @MainActor var title: Font { instrument ? style.font(\.title) : headline }
-    /// Numbers: Instrument's Geist Mono, else BarInk's mono.
+    /// A popover's title: Instrument's Geist 600 13.
+    @MainActor var title: Font { style.font(\.title) }
+    /// Numbers: Instrument's Geist Mono.
     @MainActor func readout(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        instrument ? Ink(style: style).mono(size, weight: weight) : mono(size, weight: weight)
+        Ink(style: style).mono(size, weight: weight)
     }
-    /// Small words under a heading: Instrument's caption, else BarInk's detail.
-    @MainActor var words: Font { instrument ? style.font(\.caption) : detail }
-    /// A rule across a popover: Instrument's hairline, Toybox's ink.
-    @MainActor var rule: Color { instrument ? style.color(\.line) : style.color(\.outline) }
+    /// Small words under a heading: Instrument's caption.
+    @MainActor var words: Font { style.font(\.caption) }
+    /// A rule across a popover: Instrument's hairline.
+    @MainActor var rule: Color { style.color(\.line) }
     /// A holiday in the clock's popover (Sven, 2026-10-23, Q418): red in every style, as a destructive action is
-    /// (Ink.destructive); Toybox's salmon faint on cream, so a third of its ink outline in it on a light theme.
+    /// (Ink.destructive).
     @MainActor var holiday: Color {
-        if instrument { return Ink(style: style).destructive }
-        let red = style.colors.problem
-        return style.dark ? Color(red) : Color(Paint(Contrast.hex(Contrast.mix(Contrast.rgb(style.colors.outline.rgb), Contrast.rgb(red.rgb), 0.3))))
+        Ink(style: style).destructive
     }
 }
 
 extension View {
-    /// A popover's button: Instrument's raised or primary, else the kit's (`.pilot`, `.pilotPrimary`).
+    /// A popover's button: Instrument's raised or primary.
     func barButton(primary: Bool = false) -> some View { modifier(BarButton(primary: primary)) }
 }
 
@@ -331,13 +325,7 @@ private struct BarButton: ViewModifier {
     let primary: Bool
 
     func body(content: Content) -> some View {
-        if style.kind == .instrument {
-            content.buttonStyle(InstrumentButtonStyle(kind: primary ? .primary : .raised))
-        } else if primary {
-            content.buttonStyle(.pilotPrimary)
-        } else {
-            content.buttonStyle(.pilot)
-        }
+        content.buttonStyle(InstrumentButtonStyle(kind: primary ? .primary : .raised))
     }
 }
 

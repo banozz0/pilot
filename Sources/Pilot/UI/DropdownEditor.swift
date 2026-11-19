@@ -4,8 +4,7 @@ import SwiftUI
 /// Menu bar › Pilot menu (spec desktop-controls T4), Launcher › Your menu's pattern (MenuRootBlock): the tall menu's
 /// blocks in order, each with up and down arrows, a drag onto another row to move it there, a pin that keeps it above the
 /// scroll, and a switch that shows it; Reset brings the first arrangement back. Status always shows, so it has no switch.
-/// The optional blocks (sound, Wi-Fi and Bluetooth, brightness, now playing, the stats) start hidden. Instrument only:
-/// Toybox keeps today's menu.
+/// The optional blocks (sound, Wi-Fi and Bluetooth, brightness, now playing, the stats) start hidden.
 /// The Pilot menu page (Sven, 2026-11-12, Q182: "the menubar page is now too crowded"): the menu under Pilot's icon,
 /// its blocks and its Extensions card, beside Menu bar in Desktop.
 struct PilotMenuPage: View {

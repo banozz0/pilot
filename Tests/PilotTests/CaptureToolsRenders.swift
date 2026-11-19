@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// The capture editor's new tools (T26; Sven Q805): C3 snap edges, C4 bend any arrow, C5 magnifier, C6 smooth pen,
-/// C7 guides, C10 secure pixelate, each drawn in the real CaptureEditorView over the billing page, in Instrument and
-/// Toybox, dark and light. Opt-in like the other renders, in a moved home:
+/// C7 guides, C10 secure pixelate, each drawn in the real CaptureEditorView over the billing page, in Instrument,
+/// dark and light. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureToolsRenders`
 extension SharedLook {
 @MainActor
@@ -16,7 +16,7 @@ extension SharedLook {
 struct CaptureToolsRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Each new capture tool renders in Instrument and Toybox, dark and light",
+    @Test("Each new capture tool renders in Instrument, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         try CaptureEditorRenders.rendering { look, out in try Self.renderTools(look: look, out: out) }

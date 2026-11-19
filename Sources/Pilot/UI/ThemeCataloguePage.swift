@@ -34,7 +34,6 @@ struct ThemeCataloguePage: View {
             guard pack.compatible(with: style) else { return nil }
             return ThemeCatalogueTile(id: theme.id, theme: PilotTheme.named(theme.id) ?? pack.appearance(keeping: .standard), author: theme.author,
                                       standing: model.standing(of: theme), applied: model.inUse(theme.id),
-                                      toyboxOnly: theme.styles == ["toybox"] || StyleTokens.toyboxThemes.contains(theme.id),
                                       busy: model.busy[theme.id], failure: model.failures[theme.id], picture: model.pictures[theme.id])
         }
     }
@@ -54,7 +53,6 @@ struct ThemeCatalogueTile: Identifiable {
     let author: String?
     let standing: ThemeCatalogueModel.Standing
     var applied = false
-    var toyboxOnly = false
     /// What it is doing now ("Getting 2 of 5…"), and why its last press failed.
     var busy: String?
     var failure: String?
@@ -267,7 +265,6 @@ private struct ThemeTile: View {
             } else {
                 Text("Pilot").lineLimit(1)
             }
-            if tile.toyboxOnly { Text("· Toybox only").lineLimit(1) }
         }
         .font(ink.ui(11.5))
         .foregroundStyle(ink.text2)

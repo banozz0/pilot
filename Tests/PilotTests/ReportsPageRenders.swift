@@ -7,7 +7,7 @@ import Testing
 /// Mac › Update & Clean with its Reports under the Update and Clean block (story 153; Sven, 2026-11-16), drawn offscreen
 /// from a store seeded in a temporary folder, never Pilot's own: an Update all that went through, an Update that failed, a
 /// Clean that freed space and one whose window was closed; Mole missing. Beside it Mac › Login & Background on seeded
-/// items, never this Mac's. Instrument and Toybox; Instrument's text is read back. PILOT_RENDER_DIR keeps the PNGs.
+/// items, never this Mac's. Instrument; its text is read back. PILOT_RENDER_DIR keeps the PNGs.
 @MainActor
 @Suite("Update & Clean and Login & Background renders")
 struct ReportsPageRenders {
@@ -76,5 +76,5 @@ struct ReportsPageRenders {
 private struct ReportsGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }

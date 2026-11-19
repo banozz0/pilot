@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// C3's page map (Sven, 2026-10-10): every page and tab in the whole window, Instrument in Nightwatch and Toybox in Tokyo Night
+/// C3's page map (Sven, 2026-10-10): every page and tab in the whole window, Instrument in Nightwatch
 /// at 1000 and at the least width, 760, and the Hyper+Space menu's root in each, all one scale step bigger; and Home at the
 /// window's first size, 1000 by 660. Seeded as InstrumentPagesRenders is (fakes; nothing reaches the tiler or the network). Opt-in, in
 /// a moved home:
@@ -25,7 +25,7 @@ struct WindowPagesRenders {
         // A place on a front: the front scrolled to its block (Sven, 2026-11-11, after 2276).
         + AppSection.allCases.filter(\.onFront).map { ("\($0.page.rawValue)-front-\($0.rawValue)", AppPlace($0)) }
 
-    @Test("Every page renders in Instrument and Toybox at 1000 and 760", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Every page renders in Instrument at 1000 and 760", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -47,7 +47,7 @@ struct WindowPagesRenders {
         // PILOT_RENDER_ONLY narrows to the file names holding one of its comma-separated words.
         let only = Self.env["PILOT_RENDER_ONLY"]?.split(separator: ",").map(String.init)
         let looks: [(name: String, style: PilotStyle, theme: String, widths: [Int])] = [
-            ("instrument", .instrument, "nightwatch", [1000, 760]), ("toybox", .toybox, "tokyo-night", [1000, 760]),
+            ("instrument", .instrument, "nightwatch", [1000, 760]),
         ]
         for (name, style, theme, widths) in looks {
             look.style = style
@@ -65,7 +65,7 @@ struct WindowPagesRenders {
                     try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
                 }
             }
-            // The window's first size: Instrument's and Toybox's sidebars keep their mockups' rows and footer and scroll
+            // The window's first size: Instrument's sidebar keeps its mockup's rows and footer and scrolls
             // there; the renders show by how much.
             window.setContentSize(AppWindowController.size)
             model.go(AppPlace(.home))

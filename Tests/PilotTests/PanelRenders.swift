@@ -145,8 +145,6 @@ struct PanelRenders {
         let kept = Look.shared.style
         Look.shared.style = .instrument
         try render(ClipboardPanelView(model: keys, returnCopies: false), "06-clipboard-keys", in: dir)
-        Look.shared.style = .toybox
-        try render(ClipboardPanelView(model: keys, returnCopies: false), "06-clipboard-keys-toybox", in: dir)
         Look.shared.style = kept
         try store.tag([try #require(store.recent().last?.id)], with: "omarchy")
         try store.tag([try #require(store.recent().last?.id)], with: "pilot")

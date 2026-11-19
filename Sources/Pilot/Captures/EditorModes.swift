@@ -7,27 +7,21 @@ import SwiftUI
 // one row of fill kinds, padding, shadow, corners and the ratio's menu. One job at a time: the switch in the top bar, M and
 // B, or a tool's key.
 
-/// The top bar's Mark up / Frame switch; the live mode in the accent's soft fill (Instrument) or Toybox's segments.
+/// The top bar's Mark up / Frame switch; the live mode in the accent's soft fill (Instrument).
 struct ModeSwitch: View {
     @Environment(\.style) private var style
     let model: EditorModel
 
     var body: some View {
-        if style.kind == .toybox {
-            ToolSegments(options: [(false, "Mark up"), (true, "Frame")], label: "Mode",
-                         selection: Binding(get: { model.panelOpen }, set: { model.frame($0) }))
-                .help("Mark up  M · Frame  B")
-        } else {
-            let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-            HStack(spacing: 2) {
-                segment("Mark up", symbol: "pencil.tip.crop.circle", key: "M", frame: false)
-                segment("Frame", symbol: "photo.artframe", key: "B", frame: true)
-            }
-            .padding(3)
-            .background(shape.fill(style.color(\.sunken)))
-            .overlay(shape.strokeBorder(style.color(\.line)))
-            .fixedSize()
+        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        HStack(spacing: 2) {
+            segment("Mark up", symbol: "pencil.tip.crop.circle", key: "M", frame: false)
+            segment("Frame", symbol: "photo.artframe", key: "B", frame: true)
         }
+        .padding(3)
+        .background(shape.fill(style.color(\.sunken)))
+        .overlay(shape.strokeBorder(style.color(\.line)))
+        .fixedSize()
     }
 
     private func segment(_ title: String, symbol: String, key: String, frame: Bool) -> some View {
@@ -82,7 +76,7 @@ struct DockTool: View {
     let picked: Bool
 
     static let width: CGFloat = 62
-    static func cap(_ s: StyleTokens) -> CGSize { s.kind == .toybox ? CGSize(width: 40, height: 34) : CGSize(width: 38, height: 32) }
+    static func cap(_ s: StyleTokens) -> CGSize { CGSize(width: 38, height: 32) }
     /// The cap, the gap and the name.
     static func height(_ s: StyleTokens) -> CGFloat { cap(s).height + 4 + 14 }
 
@@ -91,21 +85,12 @@ struct DockTool: View {
     var body: some View {
         let size = Self.cap(style)
         VStack(spacing: 4) {
-            if style.kind == .toybox {
-                Image(systemName: ToolCap.symbol(tool)).font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(picked ? style.color(\.onHyper) : style.color(\.text))
-                    .padding(.bottom, 3)
-                    .frame(width: size.width, height: size.height)
-                    .background(Toy.block(style, fill: picked ? style.color(\.hyper) : style.color(\.raised), radius: style.radii.chip + 2, edge: 3))
-                    .offset(y: picked ? 1 : 0)
-            } else {
-                let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-                Image(systemName: ToolCap.symbol(tool)).font(.system(size: 16))
-                    .foregroundStyle(picked ? style.color(\.accentText) : style.color(\.text2))
-                    .frame(width: size.width, height: size.height)
-                    .background { if picked { shape.fill(style.color(\.accentSoft)) } }
-                    .overlay { if picked { shape.strokeBorder(style.color(\.accentLine)) } }
-            }
+            let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+            Image(systemName: ToolCap.symbol(tool)).font(.system(size: 16))
+                .foregroundStyle(picked ? style.color(\.accentText) : style.color(\.text2))
+                .frame(width: size.width, height: size.height)
+                .background { if picked { shape.fill(style.color(\.accentSoft)) } }
+                .overlay { if picked { shape.strokeBorder(style.color(\.accentLine)) } }
             Text(Self.short(tool)).styleText(\.caption)
                 .foregroundStyle(picked ? style.color(\.text) : style.color(\.text3))
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -146,7 +131,7 @@ struct FrameStrip: View {
 
     static let tile = CGSize(width: 120, height: 76)
     /// The strip's height: its padding, the tiles and their names, the gap, the row of controls.
-    static func height(_ s: StyleTokens) -> CGFloat { 14 + tile.height + 4 + 14 + 12 + (s.kind == .toybox ? 34 : 28) + 14 }
+    static func height(_ s: StyleTokens) -> CGFloat { 14 + tile.height + 4 + 14 + 12 + 28 + 14 }
 
     private var backdrop: Backdrop? { model.backdrop }
     private var accent: UInt32 { style.colors.accent.rgb }
@@ -220,7 +205,7 @@ struct FrameStrip: View {
             }
         }
         tile("Save look", lit: false, help: "Save this backdrop as a look") {
-            Image(systemName: "plus").font(.system(size: 15, weight: style.kind == .toybox ? .bold : .medium)).foregroundStyle(style.color(\.text2))
+            Image(systemName: "plus").font(.system(size: 15, weight: .medium)).foregroundStyle(style.color(\.text2))
         } run: { library.savePreset(base) }
         .disabled(backdrop == nil).opacity(backdrop == nil ? 0.4 : 1)
     }

@@ -52,7 +52,7 @@ struct BindsKeyboardTests {
         #expect(BindsKeyboard.bound(store: store, layer: .hyper)[KeyNames.code(for: "m")!] == nil)
     }
 
-    @Test("Toybox's Free keys: every free key in board order, a run of free F-keys as one range, named keys alone, no modifier; past the limit, a row's run of three or more typed keys as one range (card agent-bo-95423182)")
+    @Test("Free keys: every free key in board order, a run of free F-keys as one range, named keys alone, no modifier; past the limit, a row's run of three or more typed keys as one range (card agent-bo-95423182)")
     func freeKeys() {
         let board = BindsKeyboard.Board(.ansi, compact: true)
         let code = { (name: String) in KeyNames.code(for: name)! }
@@ -73,16 +73,5 @@ struct BindsKeyboardTests {
         #expect(empty.first?.label == "Esc" && empty.contains { $0.label == "F1 – F12" })
         #expect(!empty.contains { $0.label.contains("Shift") || $0.label.contains("Ctrl") || $0.label == "Caps" }, "no modifier is a free key")
         #expect(empty.reduce(0) { $0 + $1.codes.count } == board.codes.count - 1)
-    }
-
-    @Test("Toybox's Binds line under the title: how many binds the tab holds and how to press them, Plain's without Hyper (card agent-bo-95423182)")
-    func summary() {
-        #expect(BindsKeyboard.Layer.hyper.summary(count: 50, layerKeys: [.capsLock]) == "50 on Hyper · hold Caps Lock and press")
-        #expect(BindsKeyboard.Layer.hyper.summary(count: 1, layerKeys: [.rightOption]) == "1 on Hyper · hold Right Option and press")
-        #expect(BindsKeyboard.Layer.shift.summary(count: 12, layerKeys: [.capsLock]) == "12 on Hyper + Shift · hold Caps Lock and Shift, then press")
-        #expect(BindsKeyboard.Layer.shiftCtrl.summary(count: 2, layerKeys: [.capsLock]) == "2 on Hyper + Shift Ctrl · hold Caps Lock, Shift and Ctrl, then press")
-        #expect(BindsKeyboard.Layer.plain.summary(count: 3, layerKeys: [.capsLock]) == "3 plain combos · no Hyper, just the combo")
-        #expect(BindsKeyboard.Layer.plain.summary(count: 1, layerKeys: [.capsLock]) == "1 plain combo · no Hyper, just the combo")
-        #expect(BindsKeyboard.Layer.alt.summary(count: 0, layerKeys: [.capsLock]) == "Nothing on Hyper + Alt yet · hold Caps Lock and Alt, then press")
     }
 }

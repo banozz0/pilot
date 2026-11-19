@@ -2,7 +2,7 @@ import CoreGraphics
 
 /// The menu panel's size (card agent-bo-95422981, mockups A and B; Q130): 750 wide everywhere in Instrument, as Raycast's;
 /// the shape sets how tall it may grow and its rows: short at the root and in Trigger and Capture, System taller for its
-/// sections, a search and every other branch in between. Toybox keeps its own widths.
+/// sections, a search and every other branch in between.
 public enum MenuPanelSize {
     /// `points` one scale step up, as the menu's type and rows are (PilotStyle.scale, C3): every size here goes through it.
     public static func s(_ points: CGFloat) -> CGFloat { (points * PilotStyle.scale).rounded() }
@@ -47,27 +47,10 @@ public enum MenuPanelSize {
 
     // MARK: Classic (menu Rail and Classic, T8)
 
-    /// Classic's rows (Classic Shell, Q139), in points as drawn: 38 at the root and in a narrow list, so the ten branches
-    /// fit 650 under their rule heading (26); 42 in a wide one; the status line at the foot, 32,
-    /// which holds the kinds and the keys.
-    public static let classicRow: CGFloat = 38, classicWideRow: CGFloat = 42, classicStatus: CGFloat = 32, classicRootHeading: CGFloat = 26
-    /// Classic's chrome: the 58 pt prompt line, the list's 6 pt insets and the status line.
-    public static let classicChrome: CGFloat = 58 + 12 + classicStatus
+    /// Classic's root rows (Classic Shell, Q139), which Line's root draws: 38 pt each under their rule heading (26).
+    public static let classicRow: CGFloat = 38, classicRootHeading: CGFloat = 26
     /// The root reaches 650 pt (Sven, Q56), so all ten branches show unscrolled.
     public static let classicTallest: CGFloat = 650
-
-    /// Classic's panel: the menu's 750 width, Classic's chrome and rows, the root's rows under their rule heading
-    /// (`root`), and `card` more where an answer's card stands in for its row. The root reaches `room` (goToTallest),
-    /// narrow 650, wide 582 as Instrument's; `full` takes the shape's tallest (Cmd+K, a detail).
-    public static func classic(_ shape: Shape, rows: Int, headings: Int, root: Bool = false, card: CGFloat = 0,
-                               extra: CGFloat = 0, bar: CGFloat = 0, full: Bool = false, room: CGFloat? = nil) -> CGSize {
-        let today = instrument(shape, rows: 0, headings: 0, full: true)
-        let tallest = root && !full ? goToTallest(room) : shape == .narrow ? classicTallest : today.height
-        let row = shape == .wide ? classicWideRow : classicRow
-        let listed = CGFloat(extra > 0 || root ? rows : max(rows, 2)) * row + CGFloat(headings) * instrumentHeading
-        let height = classicChrome + listed + (root ? classicRootHeading : 0) + card + extra + bar
-        return CGSize(width: today.width, height: full ? tallest : min(height, tallest))
-    }
 
     // MARK: Line (menu-morph T1)
 
@@ -94,19 +77,5 @@ public enum MenuPanelSize {
         let listed = CGFloat(extra > 0 ? rows : max(rows, 2)) * lineRow + CGFloat(headings) * lineHeading
         let height = lineChrome + listed + card + extra + bar
         return CGSize(width: width, height: full ? tallest : min(height, tallest))
-    }
-
-    /// Toybox's row and the gap under it (card agent-bo-95423182, mockup B's `.item`: 50 pt, none between).
-    public static let toyboxRowPitch: CGFloat = s(50)
-
-    /// Toybox's panel, for its bigger type, its 50 pt rows and its search line with the Pilot mark: around a narrow one's
-    /// rows its pop block's outline and edge, the search line, the rule, the list's insets and the foot's caps, as the
-    /// renders measure them.
-    public static func toybox(_ shape: Shape, rows: Int) -> CGSize {
-        switch shape {
-        case .narrow: CGSize(width: s(440), height: s(157) + CGFloat(min(max(rows, 2), MenuBranch.top.count)) * toyboxRowPitch)
-        case .system: CGSize(width: s(480), height: s(640))
-        case .wide: CGSize(width: s(720), height: s(560))
-        }
     }
 }

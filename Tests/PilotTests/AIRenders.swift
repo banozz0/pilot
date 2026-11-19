@@ -8,7 +8,7 @@ import Testing
 
 /// T13 drawn (spec pilot-ai-helper; two tabs, page map 2026-10-17): AI › Chat in the whole window, the chat filling it,
 /// and AI › Setup, each provider on one line with its state and its button, the picked one's set-up, the keys, in both
-/// window layouts (rail and page list, toolbar tabs) and both styles (Instrument on Tokyo Night, Toybox), at 1440 by 900 (two
+/// window layouts (rail and page list, toolbar tabs) and Instrument on Tokyo Night and Porcelain, at 1440 by 900 (two
 /// columns) and 760 by 760 (one); the empty chat with an unready provider picked (one line and Set up…, and Setup with
 /// it); the empty chat with Claude Code (the Skills bubble, P29) at both sizes and its Skills list open, with an API key
 /// (no /extension, Q193), with codex signed in (the same skills, Q203) and with codex not yet signed in to Pilot's own Codex home (Sign in to Codex); a
@@ -20,8 +20,8 @@ extension SharedLook {
 @Suite("AIRenders", .timeLimit(.minutes(1)))
 struct AIRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
-    static let looks: [(name: String, style: PilotStyle, theme: String)] = [("instrument", .instrument, "tokyo-night"), ("toybox", .toybox, "toybox"),
-                                                                         ("porcelain", .instrument, "porcelain"), ("toybox-night", .toybox, "toybox-night")]
+    static let looks: [(name: String, style: PilotStyle, theme: String)] = [("instrument", .instrument, "tokyo-night"),
+                                                                         ("porcelain", .instrument, "porcelain")]
 
     /// Claude Code signed in, Codex not connected, Ollama with a model, an Anthropic key saved and the other keys
     /// missing; `picked` the provider the chat uses.
@@ -42,7 +42,7 @@ struct AIRenders {
     @Test("AI › Chat fills the window with the chat, and AI › Setup lists the providers one line each, in every layout and style",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("ai")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let only = Self.env["PILOT_RENDER_ONLY"]

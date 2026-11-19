@@ -6,8 +6,7 @@ import Testing
 
 extension SharedLook {
 /// The AI chat follows Look's Glass as the window and the other panels do (Sven on build 23: it stayed solid): glass
-/// behind its notch in Instrument, none while Glass is off, under Reduce transparency or in Toybox, whose
-/// window stays solid too; over the glass the notch draws no ground of its own.
+/// behind its notch in Instrument, none while Glass is off or under Reduce transparency; over the glass the notch draws no ground of its own.
 @MainActor
 @Suite("AI chat glass")
 struct AIChatGlassTests {
@@ -27,9 +26,6 @@ struct AIChatGlassTests {
         #expect(effect.frame == CGRect(x: 0, y: 0, width: AIChatPanel.size.width, height: AIChatPanel.size.height + effect.cornerRadius),
                 "its top corners above the window: square at the top, round at the bottom")
         #expect(AIChatPanel.radius(look) == CGFloat(look.chromeTokens(.quickAI).radii.pop), "Instrument's pop corner")
-        look.style = .toybox
-        #expect(Self.backdrop(look).effect == nil, "Toybox stays solid")
-        look.style = .instrument
         look.setAccessibility(reduceTransparency: true, increaseContrast: false)
         #expect(Self.backdrop(look).effect == nil, "Reduce transparency: solid")
     }

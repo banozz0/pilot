@@ -6,7 +6,7 @@ import SwiftUI
 
 // The capture editor's chrome in C, Two modes (Sven, Q238; capture editor round 1): a top bar with the Mark up / Frame
 // switch in its middle, the room with the capture on the solid sunken ground, and under it Mark up's options strip and
-// dock of named tools, or Frame's strip of looks. Drawn from StyleTokens, Instrument's and Toybox's own parts; on Glass
+// dock of named tools, or Frame's strip of looks. Drawn from StyleTokens and Instrument's own parts; on Glass
 // the bars stand on the window's glass. Copy and Done are words, Done the one primary; the selection is a fixed blue, so
 // the theme's colour means only the picked tool and the live mode; ⌘S says "Saved a copy".
 
@@ -28,8 +28,8 @@ struct EditorTopBar: View {
     var add: ((URL, CombineLayout.Direction) -> Void)?
     var library = BackdropLibrary.shared
 
-    static func cap(_ s: StyleTokens) -> CGSize { s.kind == .toybox ? CGSize(width: 36, height: 36) : CGSize(width: 30, height: 28) }
-    static func gap(_ s: StyleTokens) -> CGFloat { s.kind == .toybox ? 6 : 4 }
+    static func cap(_ s: StyleTokens) -> CGSize { CGSize(width: 30, height: 28) }
+    static func gap(_ s: StyleTokens) -> CGFloat { 4 }
 
     var body: some View {
         ZStack {
@@ -96,7 +96,7 @@ struct EditorTopBar: View {
 
     private func worded(_ title: String, symbol: String) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: symbol).font(.system(size: 12, weight: style.kind == .toybox ? .bold : .medium))
+            Image(systemName: symbol).font(.system(size: 12, weight: .medium))
             Text(title)
         }
     }
@@ -138,22 +138,14 @@ struct ActionCap: View {
     var body: some View {
         let size = EditorTopBar.cap(style)
         Group {
-            if style.kind == .toybox {
-                Image(systemName: symbol).font(.system(size: 13.5, weight: .bold)).foregroundStyle(lit ? style.color(\.onHyper) : style.color(\.text))
-                    .padding(EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2))
-                    .frame(width: size.width, height: size.height)
-                    .background(Toy.block(style, fill: lit ? style.color(\.hyper) : style.color(\.raised), radius: style.radii.chip + 2, edge: 4))
-            } else {
-                let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-                Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(lit ? style.color(\.accentText) : style.color(\.text2))
-                    .frame(width: size.width, height: size.height)
-                    .background { if lit { shape.fill(style.color(\.accentSoft)) } }
-                    .overlay { if lit { shape.strokeBorder(style.color(\.accentLine)) } }
-            }
+            let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+            Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(lit ? style.color(\.accentText) : style.color(\.text2))
+                .frame(width: size.width, height: size.height)
+                .background { if lit { shape.fill(style.color(\.accentSoft)) } }
+                .overlay { if lit { shape.strokeBorder(style.color(\.accentLine)) } }
         }
         .overlay(alignment: .bottomTrailing) {
-            // Toybox's cap keeps its 4-point edge under the key, as the tool cap's padding does.
-            if let key { CapKey(key: key, lit: lit).padding(.bottom, style.kind == .toybox ? 4 : 0) }
+            if let key { CapKey(key: key, lit: lit) }
         }
         .opacity(enabled ? 1 : 0.4)
         .contentShape(Rectangle())
@@ -176,7 +168,7 @@ struct EditorFooter: View {
     }
 
     static func mono(_ style: StyleTokens, _ size: CGFloat) -> NSFont {
-        style.kind == .toybox ? DisplayFaces.font(StyleTokens.jetBrainsMono(500), size: size) : DisplayFaces.font(StyleTokens.geistMono(400), size: size)
+        DisplayFaces.font(StyleTokens.geistMono(400), size: size)
     }
 }
 
@@ -300,13 +292,8 @@ struct CapKey: View {
     let lit: Bool
 
     var body: some View {
-        if style.kind == .toybox {
-            Text(key).font(style.toyMono(8.5, bold: true))
-                .foregroundStyle(lit ? style.color(\.onHyper).opacity(0.7) : style.color(\.text3)).padding(.trailing, 4).padding(.bottom, 1)
-        } else {
-            Text(key).font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 9)))
-                .foregroundStyle(lit ? style.color(\.accentText).opacity(0.75) : style.color(\.text3)).padding(.trailing, 3).padding(.bottom, 1)
-        }
+        Text(key).font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 9)))
+            .foregroundStyle(lit ? style.color(\.accentText).opacity(0.75) : style.color(\.text3)).padding(.trailing, 3).padding(.bottom, 1)
     }
 }
 
@@ -334,8 +321,8 @@ struct CropStrip: View {
 }
 
 extension View {
-    /// The editor's floating pills and cards: the panel's fill in the style's card recipe (Toybox's ink outline and solid edge,
-    /// Instrument's hairline ring), no soft shadow, the content clipped to it. A pill keeps its natural size, so a row's
+    /// The editor's floating pills and cards: the panel's fill in the style's card recipe (Instrument's
+    /// hairline ring), no soft shadow, the content clipped to it. A pill keeps its natural size, so a row's
     /// drag room gives way and never a button; `fixed: false` lets a card (the backdrop panel's) fill its column.
     func editorPill(radius: KeyPath<StyleRadii, Double> = \.card, fixed: Bool = true) -> some View {
         modifier(EditorPill(radius: radius, fixed: fixed))
@@ -355,12 +342,6 @@ private struct EditorPill: ViewModifier {
     }
 }
 
-struct ToyFaceStyle: ButtonStyle {
-    var primary = false
-    var ghost = false
-    func makeBody(configuration: Configuration) -> some View { ToyButtonFace(configuration: configuration, primary: primary, ghost: ghost, small: true) }
-}
-
 /// The 1 to 10 slider with its number (SuperCmd's footer); the filled part in the second text colour, never the signal.
 struct SizeSlider: View {
     @Environment(\.style) private var style
@@ -370,20 +351,17 @@ struct SizeSlider: View {
     var set: (Int) -> Void = { _ in }
 
     var body: some View {
-        let toy = style.kind == .toybox
         let fraction = CGFloat(value - 1) / 9
-        let knob: CGFloat = toy ? 16 : 12
+        let knob: CGFloat = 12
         HStack(spacing: 8) {
             Image(systemName: Self.symbol(label))
-                .font(.system(size: 11, weight: toy ? .bold : .regular)).foregroundStyle(style.color(\.text3)).help(label)
+                .font(.system(size: 11, weight: .regular)).foregroundStyle(style.color(\.text3)).help(label)
             ZStack(alignment: .leading) {
-                Capsule().fill(style.color(toy ? \.sunken : \.line2)).frame(height: toy ? 8 : 4)
-                    .overlay { if toy { Capsule().strokeBorder(style.color(\.outline), lineWidth: 2) } }
-                Capsule().fill(style.color(toy ? \.accent : \.text2)).frame(width: max(knob, (width - knob) * fraction + knob / 2), height: toy ? 8 : 4)
-                    .overlay { if toy { Capsule().strokeBorder(style.color(\.outline), lineWidth: 2) } }
+                Capsule().fill(style.color(\.line2)).frame(height: 4)
+                Capsule().fill(style.color(\.text2)).frame(width: max(knob, (width - knob) * fraction + knob / 2), height: 4)
                 Circle().fill(style.color(\.knob))
-                    .overlay { Circle().strokeBorder(style.color(toy ? \.outline : \.line2), lineWidth: toy ? 2 : 1) }
-                    .shadow(color: .black.opacity(toy ? 0 : 0.25), radius: 1, y: 0.5)
+                    .overlay { Circle().strokeBorder(style.color(\.line2), lineWidth: 1) }
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                     .frame(width: knob, height: knob)
                     .offset(x: (width - knob) * fraction)
             }
@@ -392,7 +370,7 @@ struct SizeSlider: View {
             .gesture(DragGesture(minimumDistance: 0).onChanged { g in
                 set(1 + Int(((g.location.x - knob / 2) / (width - knob) * 9).rounded()))
             })
-            Text("\(value)").font(Font(toy ? DisplayFaces.font(StyleTokens.jetBrainsMono(700), size: 12) : DisplayFaces.font(StyleTokens.geistMono(500), size: 11.5)))
+            Text("\(value)").font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 11.5)))
                 .monospacedDigit().foregroundStyle(style.color(\.text)).frame(width: 16, alignment: .trailing)
         }
         .accessibilityElement()
@@ -422,16 +400,15 @@ struct Swatches: View {
     var pick: (Int) -> Void = { _ in }
 
     var body: some View {
-        let toy = style.kind == .toybox
-        let d: CGFloat = toy ? 20 : 16
-        HStack(spacing: toy ? 7 : 6) {
+        let d: CGFloat = 16
+        HStack(spacing: 6) {
             ForEach(Array(palette.enumerated()), id: \.offset) { i, rgb in
                 Button { pick(i) } label: {
                     Circle().fill(Color(Paint(rgb)))
-                        .overlay { Circle().strokeBorder(toy ? style.color(\.outline) : Color(hex: style.dark ? 0xFFFFFF : 0x000000, opacity: 0.14), lineWidth: toy ? 2 : 1) }
+                        .overlay { Circle().strokeBorder(Color(hex: style.dark ? 0xFFFFFF : 0x000000, opacity: 0.14), lineWidth: 1) }
                         .frame(width: d, height: d)
                         .padding(3)
-                        .overlay { if i == picked { Circle().strokeBorder(style.color(\.text), lineWidth: toy ? 2.5 : 1.5) } }
+                        .overlay { if i == picked { Circle().strokeBorder(style.color(\.text), lineWidth: 1.5) } }
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -463,15 +440,14 @@ struct EditorHint: View {
     var body: some View {
         HStack(spacing: 4) {
             if text == "Saved a copy" {
-                if style.kind == .toybox { ToyKeycap(label: "⌘", small: true); ToyKeycap(label: "S", small: true) }
-                else { InstrumentKey(text: "⌘"); InstrumentKey(text: "S") }
+                InstrumentKey(text: "⌘"); InstrumentKey(text: "S")
             }
             Text(text).styleText(\.strong).foregroundStyle(style.color(\.text)).padding(.leading, 4)
             if let undo { Button("Undo", action: undo).buttonStyle(.pilot).help("Put it back  ⌘Z").padding(.leading, 6) }
         }
-        .padding(.horizontal, 10).frame(height: style.kind == .toybox ? 38 : 32)
+        .padding(.horizontal, 10).frame(height: 32)
         .background { RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous).fill(style.color(\.panel)) }
-        .overlay { RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous).strokeBorder(style.color(style.kind == .toybox ? \.outline : \.line2), lineWidth: style.kind == .toybox ? 2 : 1) }
+        .overlay { RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous).strokeBorder(style.color(\.line2), lineWidth: 1) }
     }
 }
 
@@ -504,15 +480,9 @@ struct ReadTip: View {
                     .foregroundStyle(style.color(\.accentText)).frame(width: 20, height: 20).background(style.color(\.accentSoft), in: Circle())
                 Text(CaptureText.said(lines)).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
                 if !lines.isEmpty {
-                    Group {
-                        if style.kind == .toybox { Button("Copy text", action: copy).buttonStyle(ToyFaceStyle(ghost: true)) }
-                        else { Button("Copy text", action: copy).buttonStyle(InstrumentButtonStyle(kind: .ghost)) }
-                    }
+                    Button("Copy text", action: copy).buttonStyle(InstrumentButtonStyle(kind: .ghost))
                     .help("Copy every line it read")
-                    Group {
-                        if style.kind == .toybox { Button("Show text") { showing = true }.buttonStyle(ToyFaceStyle()) }
-                        else { Button("Show text") { showing = true }.buttonStyle(InstrumentButtonStyle(kind: .raised)) }
-                    }
+                    Button("Show text") { showing = true }.buttonStyle(InstrumentButtonStyle(kind: .raised))
                     .popover(isPresented: $showing, arrowEdge: .top) {
                         ScrollView {
                             Text(ReadLines.copied(lines)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(14)
@@ -620,7 +590,7 @@ struct ZoomControl<Model: ZoomSteps>: View {
 
     private func step(_ symbol: String, label: String, key: String, on: Bool, run: @escaping () -> Void) -> some View {
         Button(action: run) {
-            Image(systemName: symbol).font(.system(size: 11, weight: style.kind == .toybox ? .bold : .regular)).foregroundStyle(style.color(\.text2))
+            Image(systemName: symbol).font(.system(size: 11, weight: .regular)).foregroundStyle(style.color(\.text2))
                 .frame(width: 24, height: 22).contentShape(.rect)
         }
         .buttonStyle(.plain).help("\(label)  \(key)").accessibilityLabel(label)

@@ -265,7 +265,6 @@ struct WorkspaceEditorPanel: View {
             .overlay { if popup { shape.strokeBorder(ink.windowLine, lineWidth: 1) } }
             .shadow(color: .black.opacity(popup ? 0.55 : 0), radius: 40, y: 30)
             .shadow(color: .black.opacity(popup ? 0 : 0.06), radius: 1, y: 1)
-            .toyEdge(radius: popup ? 0 : ink.blockRadius)
             if picking != nil { pickerLayer }
         }
         .coordinateSpace(.named(WorkspaceEditor.space))
@@ -662,8 +661,7 @@ private struct PartLabel: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             // Instrument's part label is its mono eyebrow (mockup A).
-            if ink.isInstrument { InstrumentEyebrow(text: title) }
-            else { Text(title).fontWeight(.semibold).accessibilityAddTraits(.isHeader) }
+            InstrumentEyebrow(text: title)
             Text(line).lineLimit(1).truncationMode(.tail)
             if let info { InfoMark(text: info) }
         }
@@ -683,24 +681,14 @@ private struct EdgeFade: View {
     }
 }
 
-/// The workspace's number: Instrument's mono tile, else a lit pebble on the accent.
+/// The workspace's number: Instrument's mono tile.
 private struct NumberBadge: View {
     @Environment(\.ink) private var ink
     let text: String
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        if ink.isInstrument {
-            // Instrument's: the number in mono on a raised tile, its signal kept for the live workspace.
-            InstrumentAppIcon(bundle: nil, size: 34, letter: text)
-        } else {
-            Text(text).font(ink.mono(17, weight: .medium)).foregroundStyle(ink.onAccent).lineLimit(1).minimumScaleFactor(0.6)
-                .frame(width: 34, height: 34)
-                .background(ink.accent, in: shape)
-                .litEdge(shape, .white.opacity(0.25))
-                .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
-                .accessibilityHidden(true)
-        }
+        // Instrument's: the number in mono on a raised tile, its signal kept for the live workspace.
+        InstrumentAppIcon(bundle: nil, size: 34, letter: text)
     }
 }
 

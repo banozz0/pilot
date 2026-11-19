@@ -14,7 +14,7 @@ struct ShelfLeg {
     var delay: CFTimeInterval = 0
 }
 
-/// How a flying window wears its style: Instrument's soft shadow, Toybox's ink outline.
+/// How a flying window wears its style: Instrument's soft shadow.
 struct ShelfFlyLook {
     var outline: CGColor?
     var outlineWidth: CGFloat = 0

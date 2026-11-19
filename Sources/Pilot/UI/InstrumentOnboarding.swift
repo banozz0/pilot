@@ -3,8 +3,7 @@ import SwiftUI
 
 /// Onboarding in Instrument (card agent-bo-95423181, ADR 0008; Onboarding 1.1, variant C, Q841-Q843): the step rail over
 /// each screen, its title in the display face, rows in InstrumentPanels under a hairline header, every state said in
-/// words, and one primary button a screen, at the foot. The same model, parts and words as Toybox's OnboardingSteps;
-/// only the drawing is Instrument's.
+/// words, and one primary button a screen, at the foot.
 struct InstrumentOnboarding: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style

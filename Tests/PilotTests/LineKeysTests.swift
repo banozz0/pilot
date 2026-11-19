@@ -36,7 +36,6 @@ struct LineKeysTests {
     func steppedIn() throws -> (PilotMenu, MenuModel, NSPanel, NSResponder?) {
         testApp()
         let model = MenuModel(nav: MenuNavigator(entries: try SharedLook.LineMenuRenders.built()))
-        model.layout = .line
         let panel = PanelTestSupport.hide(PilotMenu.makePanel(model))
         let menu = PilotMenu()
         menu.adopt(model, in: panel)
@@ -55,7 +54,6 @@ struct LineKeysTests {
     func stepIntoTheRow() throws {
         testApp()
         let model = MenuModel(nav: MenuNavigator(entries: try SharedLook.LineMenuRenders.built()))
-        model.layout = .line
         let panel = PanelTestSupport.hide(PilotMenu.makePanel(model))
         defer { panel.orderOut(nil) }
         let menu = PilotMenu()
@@ -113,7 +111,6 @@ struct LineKeysTests {
     func noNumbersAtTheRoot() throws {
         testApp()
         let model = MenuModel(nav: MenuNavigator(entries: try SharedLook.LineMenuRenders.built()))
-        model.layout = .line
         let menu = PilotMenu()
         menu.adopt(model, in: PanelTestSupport.hide(PilotMenu.makePanel(model)))
         #expect(model.atRoot)

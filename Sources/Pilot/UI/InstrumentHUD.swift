@@ -2,8 +2,7 @@ import PilotCore
 import SwiftUI
 
 // The HUDs in Instrument (mockup A, card agent-bo-95423181, ADR 0008): the tip, the window-rescue prompt and an
-// extension's alert, each on the panel's pop face (PopSurface). The same models, actions, keys and words as
-// Toybox's; only the drawing is Instrument's.
+// extension's alert, each on the panel's pop face (PopSurface).
 
 /// A tip: one line of Geist with tabular digits, so a count ticking up never shifts it; its one button raised, as far in
 /// from the face's edge as keeps its corners concentric with the face's. 44 pt high with a button or without.

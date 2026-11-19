@@ -30,7 +30,7 @@ struct ExtrasByFeatureRenders {
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
         defer { look.themeID = PilotTheme.defaultID; look.style = .instrument }
 
-        look.style = .toybox
+        look.style = .instrument
         var update = MenuNavigator(entries: [], branch: .update)
         update.provide(.package, home: .update, UpdateList.noHomebrew())
         try menu(update, "menu-update-no-homebrew", in: dir)
