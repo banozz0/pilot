@@ -7,21 +7,25 @@ import Darwin
 @Observable @MainActor
 final class ThemeCoordinator {
     fileprivate static var live: ThemeCoordinator?
-    /// An isolated test run's folder is under /var/folders, a link the pack store's no-follow walk refuses, and its real
-    /// /private/var is what ThemeFiles' link resolving (Foundation's) gives back as /var: no folder there serves both. So
-    /// the sandbox host takes PILOT_SANDBOX_THEMES=<a throwaway folder with no link in its path> for the theme system, and
-    /// as the built-in packs a test bundle lacks its `factory` folder when there is one, else the repo's Packaging/ThemePacks.
+    /// The sandbox host takes PILOT_SANDBOX_THEMES=<a throwaway folder with no link in its path> for the theme system, and
+    /// as the built-in packs a test bundle lacks its `factory` folder when there is one, else the repo's Packaging/ThemePacks;
+    /// that folder is resolved as the app's own bundled packs are (`bundledPacks`).
     private static let sandbox: (support: URL, factory: String)? = {
         #if DEBUG
         guard isIsolatedTestRun, let folder = ProcessInfo.processInfo.environment["PILOT_SANDBOX_THEMES"], folder.hasPrefix("/") else { return nil }
         let own = folder + "/factory"
         let factory = FileManager.default.fileExists(atPath: own) ? own
             : URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../../Packaging/ThemePacks").standardizedFileURL.path
-        return (URL(filePath: folder, directoryHint: .isDirectory), factory)
+        return (URL(filePath: folder, directoryHint: .isDirectory), bundledPacks(factory))
         #else
         return nil
         #endif
     }()
+    /// The app's own ThemePacks folder in the spelling the pack store reads: links resolved, as Foundation spells it, so a
+    /// Pilot.app run from /private/tmp, under App Translocation or behind a linked folder lists its packs. Only this
+    /// folder, which comes from the bundle's location and not from a person, is resolved; every folder a person
+    /// hands the store still has to be link-free as given.
+    static func bundledPacks(_ path: String) -> String { URL(fileURLWithPath: path).resolvingSymlinksInPath().path }
     private static var support: URL { sandbox?.support ?? PilotFolder.support.appending(path: "ThemeSystem") }
 
     /// Supported Ghostty destination, locally bound and shown in every plan. Portable data cannot replace it.
@@ -29,7 +33,7 @@ final class ThemeCoordinator {
         if let live { return live }
         let packs = support.appending(path: "packs"), state = support.appending(path: "state")
         for directory in [packs, state] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL?.appending(path: "ThemePacks").path),
+        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL.map { bundledPacks($0.appending(path: "ThemePacks").path) }),
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
                                                 appearance: { Look.shared.packChanged($0) }, ghostty: { isTestRun ? nil : await GhosttyBridge.reloadNow() },

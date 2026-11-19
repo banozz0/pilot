@@ -489,10 +489,16 @@ private final class PackDirectory {
     let fd: Int32
     private let inode: ino_t
     private let device: dev_t
+    /// The macOS root links Foundation's canonical spelling keeps (/tmp, /var, /etc for /private/…): a folder under one,
+    /// such as a Pilot.app run from /private/tmp or under App Translocation in /private/var/folders, is walked through
+    /// /private itself, so no link is followed and the spelling every other check reads stays Foundation's.
+    private static let systemLinks: Set<Substring> = ["tmp", "var", "etc"]
     init(_ path: String) throws {
         guard path.hasPrefix("/"), !path.utf8.contains(0), URL(fileURLWithPath: path).standardizedFileURL.path == path else { throw ThemeFailure("explicit canonical directory required") }
         var current = open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-        for part in path.split(separator: "/") {
+        var parts = path.split(separator: "/")
+        if let first = parts.first, Self.systemLinks.contains(first) { parts.insert("private", at: 0) }
+        for part in parts {
             let next = openat(current, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
             close(current); current = next
             guard current >= 0 else { throw ThemeFailure("unsafe/missing directory") }
