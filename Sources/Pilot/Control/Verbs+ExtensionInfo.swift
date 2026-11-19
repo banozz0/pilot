@@ -188,6 +188,7 @@ extension ExtensionTools {
                   _ body: @MainActor () async throws(ControlError) -> JSONValue) async throws(ControlError) -> JSONValue {
         // Asked before the question and again after Allow, so a password set while it was up still withholds.
         func noPassword() async throws(ControlError) {
+            guard !readsBackPasswords else { return }
             let set = await shown(ext).passwordsSet
             guard set.isEmpty else {
                 throw ControlError(.denied, "\(ext.id) has a password preference set (\(set.sorted().joined(separator: ", "))), so what it prints is not read back: it may hold the password. pilot run <action> runs it; its page shows on screen (pilot ext open \(ext.id))")

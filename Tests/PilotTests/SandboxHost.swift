@@ -25,6 +25,11 @@ struct SandboxHost {
             try await ThemeFixture.serve(fixture)
             return
         }
+        // PILOT_SANDBOX_KEYCHAIN=<file>: every Keychain item is read from and written to that keychain file (made and
+        // unlocked beforehand, its items open to any app, so nothing asks), and ext run, page and act read back an
+        // extension with a password set. Without it there is no keychain: a sandbox run never reaches the login keychain.
+        let keychain = ProcessInfo.processInfo.environment["PILOT_SANDBOX_KEYCHAIN"]
+        KeychainItem.store = keychain.map { .file($0) } ?? .none
         let path = URL(filePath: try #require(Self.socket))
         let hold = path.appendingPathExtension("hold")
         // PILOT_SANDBOX_AI=<provider>:<fallback>: the AI page's picks on its store (each store has its own throwaway suite here),
@@ -213,6 +218,7 @@ struct SandboxHost {
         }
         // A test run's bundle has no Resources: `pilot ext new` makes its folder from the repo's templates, as the app does from its own.
         let extensions = ExtensionTools()
+        extensions.readsBackPasswords = keychain != nil
         extensions.templates = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/ext-template").standardizedFileURL
         // And no skills: `pilot guide` reads the repo's, at each ask, so an edited skill is what the next guide answers.
         let skills = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/skills").standardizedFileURL

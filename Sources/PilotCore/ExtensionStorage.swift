@@ -17,16 +17,41 @@ public protocol ExtensionKeychain: Sendable {
 public struct KeychainItem: Sendable {
     public struct Failure: Error, Equatable { public let status: OSStatus }
 
+    /// Which keychain every item is read from and written to: the login keychain; under the sandbox host only
+    /// (SandboxHost, raycast-extensions T3), a keychain file it names (`PILOT_SANDBOX_KEYCHAIN`) or none at all, so a
+    /// sandbox run never reaches the login keychain. Set once, before any item is asked.
+    public enum Store: Sendable, Equatable { case login, file(String), none }
+    nonisolated(unsafe) public static var store = Store.login
+
     let service: String, account: String, label: String
 
     public init(service: String, account: String, label: String) {
         self.service = service; self.account = account; self.label = label
     }
 
-    private var query: [CFString: Any] { [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account] }
+    /// The item's query, kept to the store's keychain file when there is one; nil when there is no keychain.
+    private var query: [CFString: Any]? {
+        var query: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account]
+        switch Self.store {
+        case .login: break
+        case .none: return nil
+        case .file(let path):
+            guard let keychain = Self.open(path) else { return nil }
+            query[kSecMatchSearchList] = [keychain]
+            query[kSecUseKeychain] = keychain
+        }
+        return query
+    }
+
+    /// A keychain file, opened without adding it to the user's search list.
+    @available(macOS, deprecated: 12.0)
+    private static func open(_ path: String) -> SecKeychain? {
+        var keychain: SecKeychain?
+        return SecKeychainOpen(path, &keychain) == errSecSuccess ? keychain : nil
+    }
 
     public func read() -> String? {
-        var query = query
+        guard var query else { return nil }
         query[kSecReturnData] = true
         query[kSecMatchLimit] = kSecMatchLimitOne
         var result: CFTypeRef?
@@ -36,13 +61,14 @@ public struct KeychainItem: Sendable {
 
     /// Whether the item is there, asked without the secret: attributes need no unlock and raise no prompt.
     public func exists() -> Bool {
-        var query = query
+        guard var query else { return false }
         query[kSecReturnAttributes] = true
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     /// Saves `value`, or removes the item when it is nil.
     public func write(_ value: String?) throws {
+        guard let query else { throw Failure(status: errSecNoSuchKeychain) }
         guard let value else {
             let status = SecItemDelete(query as CFDictionary)
             guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure(status: status) }
@@ -87,8 +113,10 @@ public struct SystemKeychain: ExtensionKeychain {
 public struct ExtensionStorage: Sendable {
     /// ~/Library/Application Support/Pilot/ExtensionData
     public static let dataFolder = PilotFolder.support.appending(path: "ExtensionData")
-    /// ~/Library/Caches/dev.banozz.pilot/Extensions
-    public static let cacheFolder = URL.cachesDirectory.appending(path: "dev.banozz.pilot/Extensions")
+    /// ~/Library/Caches/dev.banozz.pilot/Extensions, and in a test run a folder of the run's own, as Pilot's other caches
+    /// are (a sandbox run wrote the real one until raycast-extensions T3).
+    public static let cacheFolder = isIsolatedTestRun ? PilotFolder.support.appending(path: "Caches/Extensions", directoryHint: .isDirectory)
+        : URL.cachesDirectory.appending(path: "dev.banozz.pilot/Extensions")
 
     /// A required preference with no value: the run does not start.
     public struct Unset: Error, Equatable {

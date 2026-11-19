@@ -14,6 +14,9 @@ final class ExtensionTools {
     /// Where a run's cache folder is made and where its passwords are kept (CLI W15).
     var cache = ExtensionStorage.cacheFolder
     var keychain: any ExtensionKeychain = SystemKeychain()
+    /// Whether ext run, page and act read back an extension with a password set: only the sandbox host sets it, whose
+    /// keychain is a throwaway file or none (KeychainItem.store); for a real run the refusal stands.
+    var readsBackPasswords = false
     /// The catalogue the page and the menu read; a test's reads a fixture.
     var catalogue = ExtensionCatalogueModel.shared
     /// A Pilot action's label, for "Runs Pilot actions: …".
