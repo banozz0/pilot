@@ -249,11 +249,13 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .home)
     }
 
-    @Test("The window opens at 1000 × 660, shrinks to 760 × 520, dark, titled Pilot with the title hidden")
+    @Test("The window is a 780 × 560 panel that never resizes, dark, titled Pilot with the title hidden, closed by Esc (ui-redesign T2)")
     func frame() {
-        let w = AppWindowController.makeWindow(content: NSView())
-        #expect(w.frame.size == AppWindowController.size)
+        let w = AppWindowController.makePanel(content: NSView())
+        #expect(w.frame.size == AppWindowController.size && AppWindowController.size == NSSize(width: 780, height: 560))
         #expect(w.minSize == AppWindowController.minSize)
+        #expect(!w.styleMask.contains(.resizable) && !w.styleMask.contains(.miniaturizable) && w.closesOnEscape)
+        #expect(w.level == .normal && !AppWindowController.makeWindow(content: NSView()).closesOnEscape)
         #expect(w.appearance?.name == .darkAqua)
         #expect(w.title == "Pilot" && w.titleVisibility == .hidden)
         #expect(w.styleMask.contains(.fullSizeContentView) && w.styleMask.contains(.closable))
@@ -264,10 +266,8 @@ struct AppWindowFrameTests {
         // Mockup E's own window: three quarters of each side.
         #expect(WorkspacePopup.size(in: CGSize(width: 990, height: 940), ideal: 620) == CGSize(width: 742.5, height: 705))
         #expect(WorkspacePopup.size(in: CGSize(width: 1440, height: 900), ideal: 640) == CGSize(width: 1080, height: 675))
-        // The window as it opens: taller than three quarters for the parts, 20 pt of scrim kept above and below.
-        #expect(WorkspacePopup.size(in: AppWindowController.size, ideal: 680) == CGSize(width: 750, height: 620))
-        // At its least the window keeps 40 pt of scrim across, and the editor scrolls.
-        #expect(WorkspacePopup.size(in: AppWindowController.minSize, ideal: 680) == CGSize(width: 680, height: 480))
+        // The panel (780 × 560): at least 680 wide, 20 pt of scrim kept above and below, and the editor scrolls.
+        #expect(WorkspacePopup.size(in: AppWindowController.size, ideal: 680) == CGSize(width: 680, height: 520))
     }
 }
 

@@ -156,8 +156,7 @@ struct SettingsSchemaTests {
         _ = await rig.ask("set", "passwords.length", "32")
         _ = await rig.ask("set", "ai.effort.codex", "high")
         _ = await rig.ask("set", "translate.home", "es")
-        _ = await rig.ask("set", "look.windowLayout", "tabs")
-        #expect(rig.look.glass && rig.look.theme.id == "dracula" && rig.look.windowShape == .tabs)
+        #expect(rig.look.glass && rig.look.theme.id == "dracula")
         #expect(rig.clipboard.settings.keepCount == 42 && rig.clipboard.settings.keepDays == nil)
         #expect(!rig.settings.quickTapEscape && rig.passwords.length == 32 && rig.ai.effort(for: .codex) == .high)
         // Picking the second language as the first swaps the pair, as Launcher's Translate block does.
@@ -298,7 +297,7 @@ struct SettingsSchemaTests {
               case .array(let look)? = await rig.ask("settings", "--page", "look").result else { Issue.record("no list"); return }
         guard case .object(let first) = look[0] else { Issue.record("not an object"); return }
         #expect(first["page"] == .string("look") && first["type"] != nil && first["label"] != nil && first["default"] != nil)
-        #expect(all.count == rig.schema.keys.count && look.count == 17)
+        #expect(all.count == rig.schema.keys.count && look.count == 16)
         let nowhere = await rig.ask("settings", "--page", "nowhere")
         #expect(nowhere.error?.code == .unknownPage && nowhere.error?.message.contains("look") == true)
         guard case .object(let schema) = rig.verbs.schema, case .array(let verbs)? = schema["verbs"] else { Issue.record("no schema"); return }
@@ -326,14 +325,15 @@ struct SettingsSchemaTests {
     func helpAndIndex() async throws {
         let rig = Rig()
         let get = try #require(rig.verbs.verbs["get"]?.detail), settings = try #require(rig.verbs.verbs["settings"]?.detail)
-        #expect(try get("look.windowLayout") == "pilot set look.windowLayout <value>\nWindow layout, on the look page.\nTakes one of rail, tabs; default rail.")
+        #expect(try get("look.glassBlur") == "pilot set look.glassBlur <value>\nGlass blur, on the look page.\nTakes one of off, light, full; default full.")
         #expect(try get("layerKey") == "pilot set layerKey <value>\nHyper keys, on the general page.\n"
                 + "Takes one or more of capsLock, leftControl, rightControl, leftOption, rightOption, leftCommand, rightCommand, comma-separated; default capsLock.\nAsks Allow first.")
         #expect(try get("giphy.key") == "pbpaste | pilot set giphy.key --stdin; pilot set giphy.key --unset removes it\nGIPHY key, on the menu page.\n"
                 + "Takes its value from stdin alone, never a word; get says only set or unset; default unset.\nAsks Allow first.")
         #expect(throws: ControlError.self) { try get("no.such.key") }
         let look = try #require(try settings("look"))
-        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.windowLayout") && look.split(separator: "\n").count == 18)
+        #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.theme") && !look.contains("look.windowLayout")
+                && look.split(separator: "\n").count == 17)
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }

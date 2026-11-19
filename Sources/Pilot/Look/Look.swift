@@ -109,9 +109,10 @@ final class Look {
     }
     /// How every list shows an app: icon, title or both (story 154: both).
     var appsShowAs: AppsShowAs { didSet { defaults.set(appsShowAs.rawValue, forKey: Key.appsShowAs) } }
-    /// How the app window draws its areas (window directions, Sven 2026-10-11): the rail and page list by default. Its own
-    /// key: `look.layout` held the removed Tiling Rice pick and is cleared at launch.
-    var windowShape: WindowShape { didSet { defaults.set(windowShape.rawValue, forKey: Key.windowShape) } }
+    /// How the app window draws its areas: the rail and page list. No longer a setting (spec pilot-ui-redesign T2, Open
+    /// question 1): never saved, and the old `look.windowLayout` is cleared at launch; the renders still flip it until
+    /// T3's panel shell takes both shapes away.
+    var windowShape = WindowShape.rail
     /// macOS's Reduce transparency and Increase contrast, followed live (followSystem).
     private(set) var reduceTransparency = false
     private(set) var increaseContrast = false
@@ -198,16 +199,15 @@ final class Look {
     @ObservationIgnored private var followingSystem: NSObjectProtocol?
 
     private enum Key {
-        static let layout = "look.layout", style = "look.style", theme = "look.theme", glass = "look.glass", transparency = "look.transparency",
-                   glassBlur = "look.glassBlur", hiddenThemes = "look.hiddenThemes"
+        static let layout = "look.layout", windowLayout = "look.windowLayout", style = "look.style", theme = "look.theme",
+                   glass = "look.glass", transparency = "look.transparency", glassBlur = "look.glassBlur", hiddenThemes = "look.hiddenThemes"
         /// The Strength slider's and the material's (Solid, Tinted or Glass), read only to carry them over to Transparency
         /// and Glass; left in place, so an older Pilot still reads them.
         static let strength = "look.strength", material = "look.material"
         static let windowBorder = "look.windowBorder", windowBorderWidth = "look.windowBorderWidth", windowBorderColour = "look.windowBorderColour",
                    defocusStrength = "look.defocusStrength", defocusDim = "look.defocusDim",
                    defocusShake = "look.defocusShake", defocusShakeSwings = "look.defocusShakeSwings",
-                   defocusShakeWithin = "look.defocusShakeWithin", appsShowAs = "look.appsShowAs",
-                   windowShape = "look.windowLayout"
+                   defocusShakeWithin = "look.defocusShakeWithin", appsShowAs = "look.appsShowAs"
     }
 
     init(themes: [OmarchyTheme]? = nil, ghostty: any GhosttyWriting = GhosttyBridge.Writer(),
@@ -216,11 +216,13 @@ final class Look {
         self.ghostty = ghostty
         self.defaults = defaults
         keyboard = KeyboardLayouts(system: inputSources)
-        // A saved Current is saved again as Instrument, and the removed layout pick dropped; every other pref stands.
+        // A saved Current is saved again as Instrument, and the removed layout and window layout picks dropped; every
+        // other pref stands.
         let savedStyle = defaults.string(forKey: Key.style), style = PilotStyle(saved: savedStyle)
         self.style = style
         if let savedStyle, savedStyle != style.rawValue { defaults.set(style.rawValue, forKey: Key.style) }
         defaults.removeObject(forKey: Key.layout)
+        defaults.removeObject(forKey: Key.windowLayout)
         let saved = defaults.string(forKey: Key.theme)
         let worn = PilotTheme.current(saved)
         themeID = worn
@@ -258,7 +260,6 @@ final class Look {
         defocusShakeWithin = (defaults.object(forKey: Key.defocusShakeWithin) as? Double).map(ShakeDetector.clamped(within:))
             ?? ShakeDetector.defaultWithin
         appsShowAs = defaults.string(forKey: Key.appsShowAs).flatMap(AppsShowAs.init(rawValue:)) ?? .standard
-        windowShape = WindowShape(saved: defaults.string(forKey: Key.windowShape))
         if themes == nil {
             if let data = defaults.data(forKey: "look.appliedPalette"),
                let palette = (try? JSONDecoder().decode(ThemeNativePalette.self, from: data))?.current,
