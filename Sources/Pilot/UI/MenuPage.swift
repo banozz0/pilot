@@ -47,7 +47,6 @@ struct MenuPage: View {
         MoreEntry(id: .translate, symbol: "character.bubble", controls: 2),
         MoreEntry(id: .aliases, symbol: "character.textbox", controls: 1),
         MoreEntry(id: .quicklinks, symbol: "link", controls: 1),
-        MoreEntry(id: .menuLayout, symbol: "text.magnifyingglass", controls: 1),
         MoreEntry(id: .appsShowAs, symbol: "square.grid.2x2", controls: 1),
     ]
 
@@ -64,7 +63,6 @@ struct MenuPage: View {
                     if let settings { TranslateBlock(settings: settings).moreBlock(.translate) }
                     AliasesList(book: aliases, asked: editAlias, page: scroll).moreBlock(.aliases)
                     QuicklinksList(book: links).moreBlock(.quicklinks)
-                    MenuLayoutBlock(look: .shared)
                     AppsShowAsBlock(look: .shared)
                 }
             }

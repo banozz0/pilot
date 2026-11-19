@@ -147,7 +147,7 @@ struct LineMenuRenders {
         try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
     }
 
-    /// The menu's rows as RailMenuRenders builds them, with Notes among the apps, so a search for "notes" finds an app.
+    /// The menu's rows, with Notes among the apps, so a search for "notes" finds an app.
     static func built() throws -> [MenuEntry] {
         let engine = Engine()
         return MenuEntries.build(
@@ -189,7 +189,7 @@ struct LineMenuRenders {
         states.append(("L1c-root-extras", model(MenuNavigator(entries: built, root: extras))))
         // Sven's 17 Go to rows (T36, 2026-11-04): the root grows to show them all on his 1440 pt screen, and scrolls past
         // an 800 pt one's height. Each screen's visible height is less its menu bar (33 pt).
-        let tall = MenuRoot(extras: ["files", "notes", "activity", "qr", "reminders", "translate"])
+        let tall = MenuRoot(extras: ["files", "notes", "activity", "qr", "reminders", "translate", "capture"])
         for (name, visible) in [("L1d-root-1440", 1440.0 - 33), ("L1e-root-800", 800.0 - 33)] {
             let m = model(MenuNavigator(entries: built, root: tall))
             let panel = PilotMenu.makePanel(m)

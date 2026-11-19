@@ -2,9 +2,9 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-// The Hyper+Space menu's parts both layouts draw (menu Rail and Classic, T6): the search line, the bars over the list,
-// what shows under them (an extension's detail, a scan's wait, the empty line or the rows), the rows, Cmd+K's actions
-// and the foot. InstrumentMenu (Classic) and RailMenu compose them; the navigator, keys and rows are one model.
+// The Hyper+Space menu's parts (menu Rail and Classic, T6): the search line, the bars over the list, what shows under
+// them (an extension's detail, a scan's wait, the empty line or the rows), the rows, Cmd+K's actions and the foot. Line
+// and Toybox's menu compose them; the navigator, keys and rows are one model.
 
 /// The bars over the list: the Files view's filters at a root search, Stickers and GIFs' GIFs | Stickers.
 struct MenuBars: View {

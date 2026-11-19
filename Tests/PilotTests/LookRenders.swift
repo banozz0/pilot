@@ -196,29 +196,6 @@ struct LookRenders {
         Self.resetShared()
     }
 
-    /// Menu Rail and Classic T9: the Hyper+Space menu tiles under the style picker, each layout picked, in a dark theme
-    /// and a light one at the window's default and least widths; then under Toybox, which says it keeps its own menu.
-    @Test("The Look page's Hyper+Space menu picker renders", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func renderMenuLayout() throws {
-        let (look, dir) = try Self.setUp()
-        for id in ["tokyo-night", "porcelain"] {
-            look.themeID = id
-            for layout in MenuLayoutStyle.allCases {
-                look.menuLayout = layout
-                for window in [AppWindowController.size.width, AppWindowController.minSize.width] {
-                    try Self.shot(look, more: true, to: dir.appendingPathComponent("look-menu-\(layout.rawValue)-\(id)-\(Int(window)).png"),
-                                  width: Self.page(window), height: 640)
-                }
-            }
-        }
-        look.themeID = "tokyo-night"
-        look.menuLayout = .rail
-        look.style = .toybox
-        try Self.shot(look, more: true, to: dir.appendingPathComponent("look-menu-toybox-lagoon.png"), width: Self.page(AppWindowController.size.width), height: 760)
-        look.style = .instrument
-        Self.resetShared()
-    }
-
     /// The style picker at every width the page gets (Instrument's sidebar at 1000 and at 760; Toybox's rail at 760, 682),
     /// each style picked: Vision reads every card's name and both keys whole, none broken mid-word as a
     /// page 552 wide once broke Instrum/ent and Spac/e. With PILOT_RENDER_OCR=1 too, as Vision stalls on a loaded Mac.

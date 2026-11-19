@@ -412,7 +412,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, menuLayout, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case lookMore, lookStyle, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -463,7 +463,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var page: AppPage {
         switch self {
         case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
-        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .menuLayout, .appsShowAs: .menu
+        case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .appsShowAs: .menu
         case .fileSearch, .folders: .files
         case .reports: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
@@ -514,7 +514,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .menuLayout, .windowLayout, .appsShowAs]
+                                                     .lookStyle, .windowLayout, .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -627,7 +627,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
         case .lookStyle: "Style"
-        case .menuLayout: "Hyper+Space menu"
         case .windowLayout: "Window layout"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
@@ -715,7 +714,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
         case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
-        case .menuLayout: ["menu layout", "menu style", "line menu", "classic menu", "rail menu"]
         case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]

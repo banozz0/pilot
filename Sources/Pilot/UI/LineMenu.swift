@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The Hyper+Space menu as Line draws it (menu-morph T1; look.menuLayout = line; Sven Q149, Q164, Q165): at the root,
+/// The Hyper+Space menu as Line draws it (menu-morph T1; Sven Q149, Q164, Q165): at the root,
 /// Classic's list at Omarchy's 431 width, the root's rows in JetBrains Mono; once Sven types, Tabs a
 /// kind or opens a branch, the menu's 750 list in Instrument's rows at 36 pt. One search line for both, 60 pt, what is
 /// typed in JetBrains Mono 20 with the caret in the accent; at its right the menu's own keys at the root, what Return

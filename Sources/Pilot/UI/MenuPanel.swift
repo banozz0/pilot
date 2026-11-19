@@ -262,7 +262,6 @@ final class PilotMenu {
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
         model?.onRowShown = { [weak self] in self?.moreGiphy(near: $0) }
         readWebSearch()
-        model?.recent = MenuModel.recent(entries, picks: frecency ?? Frecency())
         let updates = updatesSeen.flatMap { $0.at.timeIntervalSinceNow > -3600 ? $0.count : nil }
         model?.waiting = MenuModel.waiting(updates: updates, clean: CleanModule.previewer.ready?.total)
         branchOpened(branch)
@@ -322,9 +321,8 @@ final class PilotMenu {
                                           picked: model.emojiCategory)
         }
         model.onClick = { [weak self] in _ = self?.apply($0, from: $1) }
-        // Toybox keeps its own menu (ToyMenu); Instrument draws the Rail or Classic as Look says.
-        model.layout = Look.shared.style == .toybox ? .classic : Look.shared.menuLayout
-        model.goTo = MenuRootSettings.shared.root.listed.shown()
+        // Toybox keeps its own menu (ToyMenu); Instrument draws Line.
+        model.layout = Look.shared.style == .toybox ? .classic : .line
         self.model = model
         let p = Self.makePanel(model)
         panel = p
@@ -1186,8 +1184,6 @@ final class PilotMenu {
             return true
         }
         guard let model, let key = Self.key(code, flags, numbers: numbers) else { return false }
-        // At the Rail's root ↑ and ↓ walk the whole rail, its kinds over Go to's branches (Q119).
-        if model.railKey(key) { return true }
         if model.nav.actions == nil, gridKey(model, key) { return true }
         // Shift+Tab flips these two-way and cycled lists as Tab does.
         let tab = key == .tab || key == .backTab
@@ -1867,17 +1863,10 @@ final class MenuModel {
     /// The layer keys; the first one's sign leads a bind's keys in Instrument.
     var layerKeys: [LayerKey] = [.capsLock]
 
-    /// How Instrument draws the menu (look.menuLayout): the Rail, Classic or Line. Set as the menu opens; Classic until then, so
-    /// a model made elsewhere draws as it did.
+    /// How the menu draws: Line, Instrument's one menu, or Classic for Toybox's own (ToyMenu). Set as the menu opens; Classic
+    /// until then, so a model made elsewhere draws as it did.
     var layout = MenuLayoutStyle.classic
-    /// The root's branches in Sven's order (MenuRoot), which the Rail's Go to lists wherever Sven is.
-    var goTo: [MenuBranch] = MenuRoot().shown()
-    /// At the Rail's root, the kind ↑ and ↓ are on (an index into MenuEntry.Kind.tabOrder); nil while they are on the
-    /// navigator's rows (RailMenu's railKey, Q119).
-    var railCursor: Int?
-    /// The entries picked last, newest first, which the Rail's root lists as Recent.
-    var recent: [MenuEntry] = []
-    /// What waits beside Recent at the Rail's root (frame B1): Update with its count, Clean with its size, each only
+    /// What waits in a root row (Classic's and Line's root): Update with its count, Clean with its size, each only
     /// when it has something.
     var waiting: [MenuEntry] = []
 
@@ -1901,23 +1890,9 @@ final class MenuModel {
     }
     /// Toybox's search, rule and foot around what the menu lists.
     static let toyChrome: CGFloat = 150
-    /// Instrument's: as tall as what it lists or a scan's wait says, the most while Cmd+K's
-    /// actions show or an extension's detail is read; in the Rail, at least as tall as its rail.
-    var instrumentSize: CGSize {
-        if layout == .classic { return classicSize }
-        if layout == .line { return lineSize }
-        let band = railBand
-        if showsAbout { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: aboutHeight, room: room) }
-        if showsDefine { return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: DefinePane.height, room: room) }
-        if scan != nil {
-            return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: 0, headings: 0, extra: waitHeight, room: room)
-        }
-        // The Rail's root lists its rows in the rail, beside the recents, so its rail sets the height.
-        let listed = band == .root
-        return MenuPanelSize.rail(shape, band: band, railItems: railItems, rows: listed ? 0 : nav.rows.count, headings: listed ? 0 : headings.count,
-                                  extra: noMatch ? Self.noMatchRoom : 0, bar: showsGiphyBar ? GiphyKindBar.instrumentHeight : 0,
-                                  full: nav.actions != nil || nav.shownDetail != nil, room: room)
-    }
+    /// Instrument's: as tall as what it lists or a scan's wait says, the most while Cmd+K's actions show or an extension's
+    /// detail is read.
+    var instrumentSize: CGSize { layout == .classic ? classicSize : lineSize }
 
     /// Classic's (ClassicMenu): as tall as its rows, the root's under their rule heading, and
     /// an answer's card where it stands in for its row; the kinds sit in the status line.
@@ -1964,39 +1939,7 @@ final class MenuModel {
         return (headed ? 0 : MenuPanelSize.instrumentHeading) + face + 10 + (card.note == nil ? 0 : 20) - drawn
     }
 
-    /// What the Rail draws beside the list (MenuPanelSize.RailBand): nothing in Classic or a picker; the slim strip inside
-    /// a branch or on an answer; the whole rail at the empty root and at a root search.
-    var railBand: MenuPanelSize.RailBand {
-        guard layout == .rail, !nav.isList else { return .none }
-        if nav.branch != nil || !nav.query.isEmpty && nav.rows.first?.isAnswer == true { return .slim }
-        return atRoot ? .root : .full
-    }
-    /// The rail's rows: the kinds, Go to's branches (at the root, the navigator's own rows) and Clipboard; a slim strip's
-    /// search, branches and Clipboard.
-    var railItems: Int {
-        switch railBand {
-        case .none: 0
-        case .root: MenuEntry.Kind.tabOrder.count + nav.rows.count + 1
-        case .full: MenuEntry.Kind.tabOrder.count + goTo.count + 1
-        case .slim: goTo.count + 2
-        }
-    }
-
-    /// The Rail's Clipboard row: Clipboard's own panel (apps.clipboard), marked as opening it.
-    static let clipboard = MenuEntry(title: "Clipboard", target: .action("apps.clipboard"))
-
-    /// The Rail's root lists as Recent the entries picked last (Frecency's picks), newest first, at most `limit`; none
-    /// before any pick.
-    static func recent(_ entries: [MenuEntry], picks: Frecency, limit: Int = 5) -> [MenuEntry] {
-        var seen = Set<String>()
-        let picked = entries.compactMap { entry -> (entry: MenuEntry, at: Date)? in
-            guard entry.inSearch, let key = entry.frecencyKey, let at = picks.picks[key]?.max(), seen.insert(key).inserted else { return nil }
-            return (entry, at)
-        }
-        return picked.sorted { $0.at > $1.at }.prefix(limit).map(\.entry)
-    }
-
-    /// The Rail's Waiting rows: Update with how many updates its last read listed, Clean with what its kept preview
+    /// The root's Waiting words: Update with how many updates its last read listed, Clean with what its kept preview
     /// would free; neither when it has nothing, or was not read.
     static func waiting(updates: Int?, clean: String?) -> [MenuEntry] {
         var rows: [MenuEntry] = []
@@ -2029,11 +1972,8 @@ final class MenuModel {
     static let noMatchRoom: CGFloat = 76
     /// System or one of its sub-branches, whose rows wear their switches (Space flips them), whatever the panel's shape.
     var inSystem: Bool { !nav.isList && nav.branch?.browsed == .system }
-    /// The Rail is narrow only at its empty root: every branch, a search and an answer take the wide panel (notes › Sizes).
-    var shape: MenuPanelSize.Shape {
-        let shape = MenuPanelSize.shape(branch: nav.branch, query: nav.query, isList: nav.isList, only: nav.only)
-        return layout == .rail && (shape != .narrow || nav.branch != nil) ? .wide : shape
-    }
+    /// The panel's shape for what it lists (notes › Sizes).
+    var shape: MenuPanelSize.Shape { MenuPanelSize.shape(branch: nav.branch, query: nav.query, isList: nav.isList, only: nav.only) }
     init(nav: MenuNavigator) { self.nav = nav }
 
     /// The command-line tools this Mac has, which a scan's kinds follow (MenuScan.tools); nil until a scan asks.
@@ -2231,17 +2171,12 @@ struct MenuView: View {
 
     var nav: MenuNavigator { model.nav }
 
-    /// Instrument (the Rail, RailMenu, Classic, ClassicMenu, or Line, LineMenu, as look.menuLayout says; card agent-bo-95423181) and
-    /// Toybox (ToyMenu, card agent-bo-95423182) draw their own menu from the same state, keys and pointer.
+    /// Instrument (Line, LineMenu; card agent-bo-95423181) and Toybox (ToyMenu, card agent-bo-95423182) draw their own menu
+    /// from the same state, keys and pointer.
     var body: some View {
         Group {
             switch style.kind {
-            case .instrument:
-                switch model.layout {
-                case .rail: RailMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                case .classic: ClassicMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                case .line: LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
-                }
+            case .instrument: LineMenu(model: model, pointer: pointer, searchFocused: $searchFocused, actionsFocused: $actionsFocused)
             case .toybox: toyBody
             }
         }

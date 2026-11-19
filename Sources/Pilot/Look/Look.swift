@@ -112,8 +112,6 @@ final class Look {
     /// How the app window draws its areas (window directions, Sven 2026-10-11): the rail and page list by default. Its own
     /// key: `look.layout` held the removed Tiling Rice pick and is cleared at launch.
     var windowShape: WindowShape { didSet { defaults.set(windowShape.rawValue, forKey: Key.windowShape) } }
-    /// How Hyper+Space draws the menu: the Rail by default, or Classic (menu Rail and Classic, Sven 2026-10-12).
-    var menuLayout: MenuLayoutStyle { didSet { defaults.set(menuLayout.rawValue, forKey: Key.menuLayout) } }
     /// macOS's Reduce transparency and Increase contrast, followed live (followSystem).
     private(set) var reduceTransparency = false
     private(set) var increaseContrast = false
@@ -209,7 +207,7 @@ final class Look {
                    defocusStrength = "look.defocusStrength", defocusDim = "look.defocusDim",
                    defocusShake = "look.defocusShake", defocusShakeSwings = "look.defocusShakeSwings",
                    defocusShakeWithin = "look.defocusShakeWithin", appsShowAs = "look.appsShowAs",
-                   windowShape = "look.windowLayout", menuLayout = "look.menuLayout", menuLayoutLine = "look.menuLayoutLine"
+                   windowShape = "look.windowLayout"
     }
 
     init(themes: [OmarchyTheme]? = nil, ghostty: any GhosttyWriting = GhosttyBridge.Writer(),
@@ -261,15 +259,6 @@ final class Look {
             ?? ShakeDetector.defaultWithin
         appsShowAs = defaults.string(forKey: Key.appsShowAs).flatMap(AppsShowAs.init(rawValue:)) ?? .standard
         windowShape = WindowShape(saved: defaults.string(forKey: Key.windowShape))
-        // Line became the default (Q165): a Classic saved before Line existed moves to Line once; one picked after stays.
-        let savedLayout = defaults.string(forKey: Key.menuLayout)
-        var layout = MenuLayoutStyle(saved: savedLayout)
-        if !defaults.bool(forKey: Key.menuLayoutLine), savedLayout == MenuLayoutStyle.classic.rawValue {
-            layout = .line
-            defaults.set(layout.rawValue, forKey: Key.menuLayout)
-        }
-        defaults.set(true, forKey: Key.menuLayoutLine)
-        menuLayout = layout
         if themes == nil {
             if let data = defaults.data(forKey: "look.appliedPalette"),
                let palette = (try? JSONDecoder().decode(ThemeNativePalette.self, from: data))?.current,

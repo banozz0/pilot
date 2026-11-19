@@ -70,12 +70,6 @@ struct MenuFocusRaceTests {
     @Test("Line: Escape out of Cmd+K and a letter in one pass, the filter still drawn: the letter reaches the query")
     func line() throws { try escapeThenLetter(.line) }
 
-    @Test("Classic: the same, through the actions' popover")
-    func classic() throws { try escapeThenLetter(.classic) }
-
-    @Test("Rail: the same")
-    func rail() throws { try escapeThenLetter(.rail) }
-
     @Test("Toybox: the same, through its own menu")
     func toybox() throws { try escapeThenLetter(.classic, toybox: true) }
 

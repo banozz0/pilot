@@ -156,8 +156,7 @@ struct SettingsSchemaTests {
         _ = await rig.ask("set", "ai.effort.codex", "high")
         _ = await rig.ask("set", "translate.home", "es")
         _ = await rig.ask("set", "look.windowLayout", "tabs")
-        _ = await rig.ask("set", "look.menuLayout", "rail")
-        #expect(rig.look.glass && rig.look.theme.id == "dracula" && rig.look.windowShape == .tabs && rig.look.menuLayout == .rail)
+        #expect(rig.look.glass && rig.look.theme.id == "dracula" && rig.look.windowShape == .tabs)
         #expect(rig.clipboard.settings.keepCount == 42 && rig.clipboard.settings.keepDays == nil)
         #expect(!rig.settings.quickTapEscape && rig.passwords.length == 32 && rig.ai.effort(for: .codex) == .high)
         // Picking the second language as the first swaps the pair, as Launcher's Translate block does.
@@ -327,7 +326,6 @@ struct SettingsSchemaTests {
         let rig = Rig()
         let get = try #require(rig.verbs.verbs["get"]?.detail), settings = try #require(rig.verbs.verbs["settings"]?.detail)
         #expect(try get("look.windowLayout") == "pilot set look.windowLayout <value>\nWindow layout, on the look page.\nTakes one of rail, tabs; default rail.")
-        #expect(try get("look.menuLayout") == "pilot set look.menuLayout <value>\nHyper+Space menu, on the menu page.\nTakes one of line, classic, rail; default line.")
         #expect(try get("layerKey") == "pilot set layerKey <value>\nHyper keys, on the general page.\n"
                 + "Takes one or more of capsLock, leftControl, rightControl, leftOption, rightOption, leftCommand, rightCommand, comma-separated; default capsLock.\nAsks Allow first.")
         #expect(try get("giphy.key") == "pbpaste | pilot set giphy.key --stdin; pilot set giphy.key --unset removes it\nGIPHY key, on the menu page.\n"
