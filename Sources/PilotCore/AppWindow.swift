@@ -201,7 +201,7 @@ public enum AppPage: String, CaseIterable, Sendable {
 /// Pilot at the foot. A page shows only inside its area; Cmd+1 to 9 and 0 open the areas top to bottom, Cmd+, opens Pilot, as
 /// any Mac app's settings. Page names and pilot:// links stay as they were: an area is only where a page sits.
 public enum AppArea: String, CaseIterable, Sendable {
-    // Pilot stays last: its key is ",", the rest count down the rail.
+    // The rail's order (the panel's is `tabOrder`); each area's Cmd key is pinned in `key`, Pilot's ",".
     // Look left Desktop for an area of its own, and Developer took Configs and Repos from Apps, shown only while the
     // Developer pages switch is on, last above Pilot so switching it never renumbers the keys (the pages split, Sven 2026-11-15).
     // Windows (Workspaces and Tiling, listed in its sidebar as any area's pages, Q291) sits under Keys (Sven on Q289:
@@ -273,14 +273,23 @@ public enum AppArea: String, CaseIterable, Sendable {
         }
     }
 
-    /// The key that opens it with Cmd: "1" to "9" top to bottom, then "0" for the tenth (AI since the pages split),
-    /// "," for Pilot at the foot; Extensions, the eleventh, and Developer, shown only while its switch is on, have none.
+    /// The key that opens it with Cmd: "1" to "9" in the rail's order, then "0" for AI (the tenth since the pages split),
+    /// "," for Pilot; Extensions and Developer have none. Pinned per area, never by position, so the panel's tab order
+    /// (`tabOrder`) and More move no key (pilot-ui-redesign T1).
     public var key: Character? {
         switch self {
+        case .home: "1"
+        case .keys: "2"
+        case .windows: "3"
+        case .launcher: "4"
+        case .desktop: "5"
+        case .look: "6"
+        case .mac: "7"
+        case .tools: "8"
+        case .apps: "9"
+        case .ai: "0"
         case .pilot: ","
-        case .developer: nil
-        default:
-            (AppArea.allCases.firstIndex(of: self)).flatMap { $0 < 9 ? Character(String($0 + 1)) : $0 == 9 ? "0" : nil }
+        case .extensions, .developer: nil
         }
     }
 
@@ -296,7 +305,24 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
 
     /// The areas above the foot the window shows: Developer only while `developer` is on.
-    public static func main(developer: Bool) -> [AppArea] { main.filter { developer || $0 != .developer } }
+    public static func main(developer: Bool) -> [AppArea] { main.filter { $0.shown(developer: developer) } }
+
+    /// Whether the window shows it: Developer only while `developer` is on.
+    func shown(developer: Bool) -> Bool { developer || self != .developer }
+
+    /// The panel's order, the most used first (pilot-ui-redesign T1): its first `count` are tabs, the rest sit in More.
+    public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
+                                             .mac, .apps, .extensions, .pilot, .developer]
+
+    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render).
+    public static let tabCount = 8
+
+    /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
+    /// Developer only while `developer` is on.
+    public static func tabs(count: Int = tabCount, developer: Bool) -> (tabs: [AppArea], more: [AppArea]) {
+        let shown = tabOrder.filter { $0.shown(developer: developer) }, split = max(count, 1)
+        return (Array(shown.prefix(split)), Array(shown.dropFirst(split)))
+    }
 
     /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
     public static func next(after page: AppPage, developer: Bool = true, more: Bool = true) -> AppPage {
@@ -820,9 +846,18 @@ public struct AppPlace: Hashable, Sendable {
     public var title: String { section.map { $0.title } ?? page.title }
     /// A place on a More tab or on a front's other tab names the tab too: "Pilot › More › Permissions", "Captures ›
     /// Recording › Recording quality".
-    public var path: String {
-        guard let section else { return page.title }
-        return [page.title, section.onMore?.title ?? section.frontTab?.title, section.title].compactMap(\.self).joined(separator: " › ")
+    public var path: String { parts.joined(separator: " › ") }
+    private var parts: [String] {
+        guard let section else { return [page.title] }
+        return [page.title, section.onMore?.title ?? section.frontTab?.title, section.title].compactMap(\.self)
+    }
+
+    /// The path from the panel's tab bar (pilot-ui-redesign T1): its tab, or More and its area, then `path`, a page named
+    /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean".
+    public func tabPath(count: Int = AppArea.tabCount, developer: Bool) -> String {
+        let area = page.area, rest = page.title == area.title ? Array(parts.dropFirst()) : parts
+        let lead = AppArea.tabs(count: count, developer: developer).more.contains(area) ? ["More", area.title] : [area.title]
+        return (lead + rest).joined(separator: " › ")
     }
     var keywords: [String] { section?.keywords ?? page.keywords }
 }

@@ -11,7 +11,7 @@ extension ControlVerbs {
         register(ControlVerb("open", help: "Opens Pilot's window on a page or a part of one; --where and --find only say where, opening nothing.",
                              usage: "pilot open <page|part|pilot://open link> [--section <\(sections.joined(separator: "|"))>] [--where] | pilot open --find <words>",
                              flags: [.init("section", help: "a System section: \(sections.joined(separator: ", "))"),
-                                     .init("where", help: "say where the name or link lands, opening nothing", takesValue: false),
+                                     .init("where", help: "say where the name or link lands from the tab bar (Tools › Captures), opening nothing", takesValue: false),
                                      .init("find", help: "the places the window's search lists for these words, best first, opening nothing")],
                              schema: { .object(["pages": .array(pages().map(JSONValue.string)), "parts": .array(parts()),
                                                 "sections": .array(sections.map(JSONValue.string))]) },
@@ -28,7 +28,7 @@ extension ControlVerbs {
                 guard DeveloperPages.on || !place.page.isDeveloper else {
                     throw ControlError(.unknownPage, "\(place.path) is a developer page and the Developer switch is off: pilot set general.developer on")
                 }
-                return .string(place.path)
+                return .string(place.tabPath(developer: DeveloperPages.on))
             }
             guard let place = AppPlace.named(name) else {
                 throw ControlError(.unknownPage, "no page \(name); pages: \(pages().joined(separator: ", ")); pilot schema lists the parts")
