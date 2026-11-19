@@ -129,7 +129,9 @@ extension ControlVerbs {
 
     /// `ext act <id> <row> [--command <name>]` or `ext act <id> --handler <id>` (T2): a Raycast-format view's row callback,
     /// pressed in a host started for it and kept open until the answer after the press, then closed. The first Allow
-    /// reads the view; the press asks its own. Its answer: the rows before the press and after it.
+    /// reads the view; the press asks its own. Its answer: the rows before the press and after it. `--then <row>` (T8)
+    /// presses again in the same host, in the view the first press left (a pushed one), `escape` going back a view; the
+    /// one Allow names both presses, and the answer adds the rows between them.
     static func actView(_ ext: Extension, _ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let named = args.value("command")
         guard let command = (named.map(ext.view) ?? ext.commands.first { $0.mode != .noView }), command.runtime == .raycast else {
@@ -143,7 +145,7 @@ extension ControlVerbs {
             let inputs = try await tools.inputs(ext)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
-            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, in: session, command, ext, tools, peer: peer)) }
+            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, then: args.value("then"), in: session, command, ext, tools, peer: peer)) }
             catch { answer = .failure(error) }
             session.close()
             await session.ended()
@@ -153,7 +155,7 @@ extension ControlVerbs {
 
     /// Opens the view in `session`, finds the callback (a row's first, row/action, or the handler named), asks Allow for
     /// the press and presses it.
-    private static func press(_ word: String, handler: String?, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
+    private static func press(_ word: String, handler: String?, then: String?, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
                               _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         func shown(_ outcome: ListOutcome) throws(ControlError) -> (items: [Extension.Item], json: [String: JSONValue]) {
             switch outcome {
@@ -171,13 +173,23 @@ extension ControlVerbs {
         }
         let id = target.action.handler ?? word
         let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""
+        let second = then.map { ", then \($0.lowercased() == "escape" ? "Escape (back a view)" : ControlGate.Ask.visible($0)), runs their callbacks" } ?? ", runs its callback"
         let ask = ControlGate.Ask("Press on \(ControlGate.Ask.visible(ext.title))",
-                                  "presses \(ControlGate.Ask.visible(target.path))\(label), runs its callback in pilot-ext-host")
+                                  "presses \(ControlGate.Ask.visible(target.path))\(label)\(second) in pilot-ext-host")
         return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
-            let after = try shown(await session.invoke(id))
-            log.notice("ext act: \(ext.id, privacy: .public) pressed a callback, from the pilot command")
+            var after = try shown(await session.invoke(id))
             var answer: [String: JSONValue] = ["command": .string(command.actionID), "pressed": .string(target.path), "action": Self.action(target.action),
                                                "before": .object(before.json)]
+            if let then {
+                // The second press is found in the view the first left; escape is the host's own back (T8).
+                let next = then.lowercased() == "escape"
+                    ? PageTarget(path: "Escape", action: Extension.Item.Action(kind: .invoke(handler: ExtensionListSession.pop)), box: nil, alt: false)
+                    : try Self.target(then, in: Self.targets([.list(title: nil, items: after.items)]).filter { $0.action.handler != nil }, page: command.actionID)
+                answer["between"] = .object(after.json)
+                answer["then"] = .string(next.path)
+                after = try shown(await session.invoke(next.action.handler ?? then))
+            }
+            log.notice("ext act: \(ext.id, privacy: .public) pressed a callback, from the pilot command")
             answer.merge(after.json) { $1 }
             if session.newest?.loading == true { answer["loading"] = .bool(true) }
             return .object(answer)
