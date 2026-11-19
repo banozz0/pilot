@@ -447,13 +447,13 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// role key opens.
     case appsForKeys
     /// Voice's More (simplify-pages T12) and its places: the recent takes, the replacements, and Read aloud's media and
-    /// better voices; dictation's key and what shows while you speak (Sven, 2026-11-11, after 2276) and the taught words
-    /// (pages round 4, Sven's Q101) are places on the front again.
-    case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud
-    /// Captures' places on its fronts, back from More with its More (pages round 4, Sven's Q102: "recording stuff in
-    /// recording front and capture (screenshot) stuff in capture front"): the capture options and the ten other capture
-    /// keys on Capture, a recording's quality, resolution, frame rate and clicks on Recording.
-    case captureOptions, captureKeys, recordingQuality
+    /// better voices; dictation's keys and switches (pilot-ui-redesign T18, S1 B) and the taught words (pages round 4,
+    /// Sven's Q101) are places on the front. Every speech model and what shows while you speak are on More since T18.
+    case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud, voiceModels, voiceShows
+    /// Captures' More (pilot-ui-redesign T18, S1 B: one row per simple feature on each tab, the rest behind More) and its
+    /// places: the capture options, the other capture keys, and a recording's quality, resolution, frame rate and clicks
+    /// (on their tabs' fronts from pages round 4, Sven's Q102, until T18).
+    case capturesMore, captureOptions, captureKeys, recordingQuality
     /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
     /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
@@ -491,8 +491,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .appsForKeys: .openWith
-        case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud: .voice
-        case .captureOptions, .captureKeys, .recordingQuality: .captures
+        case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows: .voice
+        case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
@@ -515,6 +515,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     public static func more(of page: AppPage) -> AppSection? {
         switch page {
         case .voice: .voiceMore
+        case .captures: .capturesMore
         case .menu: .menuMore
         case .install: .installMore
         case .upkeep: .upkeepMore
@@ -527,7 +528,8 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
-                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud,
+                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows,
+                                                     .captureOptions, .captureKeys, .recordingQuality,
                                                      .translate, .aliases, .quicklinks,
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
@@ -538,7 +540,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags,
-                                                     .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
+                                                     .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
@@ -547,12 +549,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
 
-    /// The tab a front block sits on when it is not the page's first view (pages round 4): a recording's quality on
-    /// Captures' Recording, the AI's fallback, keys and new chat on AI's Setup, and what Install lists on its Catalogue
+    /// The tab a front block sits on when it is not the page's first view (pages round 4): the AI's fallback, keys and new chat on AI's Setup, and what Install lists on its Catalogue
     /// (Install is only its parts). Nil for the page's own first view.
     public var frontTab: AppSection? {
         switch self {
-        case .recordingQuality: .recording
         case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
         case .installLists: .catalogue
         default: nil
@@ -597,7 +597,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -617,6 +617,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureKeys: "More capture keys"
         case .recordingQuality: "Recording quality"
         case .voiceDictation: "Dictation"
+        case .voiceModels: "Speech models"
+        case .voiceShows: "Dictation on screen"
         case .voiceTakes: "Fix what you just said"
         case .voiceWords: "Words"
         case .voiceReplacements: "Replacements"
@@ -674,7 +676,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
@@ -697,8 +699,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureKeys: ["capture keys", "read text", "qr code", "ocr", "ui element", "subject", "background removed", "mark up",
                             "pick a colour", "colour picker", "last area", "edit the last capture", "scrolling upward"]
         case .recordingQuality: ["quality", "resolution", "frame rate", "fps", "show clicks", "retina"]
-        case .voiceDictation: ["dictation key", "while you speak", "show it in", "pill", "position", "waveform", "waveform colour",
-                               "copy the words", "pause media"]
+        case .voiceDictation: ["dictation key", "dictate", "speech model", "microphone", "copy the words", "pause media"]
+        case .voiceModels: ["speech models", "parakeet", "whisper", "download a model", "remove a model", "use a model"]
+        case .voiceShows: ["while you speak", "on screen", "show it in", "pill", "position", "waveform", "waveform colour",
+                           "words as you say them"]
         case .voiceTakes: ["fix a take", "fix what you just said", "recent takes", "take"]
         case .voiceWords: ["words", "vocabulary", "custom words", "teach"]
         case .voiceReplacements: ["replacements", "replace", "replacement"]
@@ -767,7 +771,7 @@ public struct AppPlace: Hashable, Sendable {
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
         "tilingMore": AppPlace(.tiling), "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
-        "capturesMore": AppPlace(.captures), "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
+        "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.

@@ -70,7 +70,7 @@ struct AppWindowTests {
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
         #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
-        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
+        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)

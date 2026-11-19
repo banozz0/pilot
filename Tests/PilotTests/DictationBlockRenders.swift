@@ -7,8 +7,9 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Voice › Dictation (story 194, Q452), in each state of its speech model and microphone, Instrument on
-/// Tokyo Night. A fake helper; nothing downloads or records.
+/// Voice › Dictation (story 194, Q452), in each state of its speech model and microphone, Instrument on Tokyo Night;
+/// then its front and its More blocks (Speech models, While you speak; pilot-ui-redesign T18) under Tokyo Night and
+/// Porcelain, at the panel's page width (780 less the 156 pt page list). A fake helper; nothing downloads or records.
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter DictationBlockRenders`
 extension SharedLook {
 @MainActor
@@ -47,9 +48,30 @@ struct DictationBlockRenders {
                 $0.model.download(); $0.helper.last.heard(.error("The Internet connection appears to be offline.")); $0.helper.last.ended(1)
             }),
         ]
+        let width = AppWindowController.size.width - InstrumentFrame.listWidth
         for (state, block) in states {
-            let page = Ground { block.frame(width: 760, height: 1000, alignment: .top) }.styled(.page(.voice)).pilotTheme(look: look)
+            let page = Ground { block.frame(width: width, height: 1000, alignment: .top) }.styled(.page(.voice)).pilotTheme(look: look)
             try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("\(state).png"))
+        }
+
+        // Front and More in both themes: a model in use and one more on disk, the take shown in both places as words.
+        let rig = PilotDictationTests.Rig()
+        rig.grant = .authorized
+        try rig.onDisk(.parakeetUltra)
+        try rig.onDisk(.whisperTurbo)
+        rig.microphone.refresh()
+        (rig.pilot.showIn, rig.pilot.whileSpeaking, rig.pilot.waveColour) = (.both, .words, .theme)
+        for theme in ["tokyo-night", "porcelain"] {
+            look.themeID = theme
+            let front = Ground { DictationBlock(dictation: rig.pilot, microphone: rig.microphone).frame(width: width, height: 1000, alignment: .top) }
+            let more = Ground {
+                VStack(spacing: 16) { SpeechModelsBlock(dictation: rig.pilot); DictationShowsBlock(dictation: rig.pilot) }
+                    .frame(width: width, height: 1000, alignment: .top)
+            }
+            for (tab, view) in [("front", AnyView(front)), ("more", AnyView(more))] {
+                try RestyledRenders.writeTrimmed(rendered(view.styled(.page(.voice)).pilotTheme(look: look)), from: 0,
+                                                 to: dir.appendingPathComponent("dictation-\(tab)-\(theme).png"))
+            }
         }
     }
 }

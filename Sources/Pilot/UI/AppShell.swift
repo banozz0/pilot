@@ -122,7 +122,7 @@ struct PageView: View {
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
         case .clipboard: ClipboardSettingsView()
         case .captures:
-            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
+            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
