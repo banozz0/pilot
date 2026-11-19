@@ -75,7 +75,7 @@ struct AppWindowFrameTests {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         model.go(AppPlace(.menuBar))
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(Engine())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(Engine()).environment(\.homeSources, .inert)))
         defer { window.close() }
         window.contentView?.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
@@ -94,13 +94,13 @@ struct AppWindowFrameTests {
         #expect(model.page == .binds)
     }
 
-    @Test("Look's Window layout swaps the shell: the rail, Toolbar tabs' strip of areas, and back")
-    func layoutSwapsShell() throws {
+    @Test("The panel's tab bar names every tab, and an area opened from More names the More tab (pilot-ui-redesign T3)")
+    func panelTabBar() throws {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         model.go(AppPlace(.menuBar))
         let look = Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), defaults: LookTests.defaults())
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model, look: look).environment(Engine())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model, look: look).environment(Engine()).environment(\.homeSources, .inert)))
         defer { window.close() }
         // SwiftUI builds its accessibility tree only for an assistive client; this says one is here.
         let assistive = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -111,14 +111,11 @@ struct AppWindowFrameTests {
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             return FillPagesTests.labels(in: try #require(window.contentView))
         }
-        look.windowShape = .rail
-        let rail = try labels()
-        #expect(!rail.contains("Areas") && !rail.contains(WindowShape.tabs.title) && rail.contains("Desktop"), "\(rail)")
-        look.windowShape = .tabs
+        let split = AppArea.tabs(developer: false)
         let tabs = try labels()
-        #expect(tabs.contains("Areas") && tabs.contains(WindowShape.tabs.title), "\(tabs)")
-        look.windowShape = .rail
-        #expect(!(try labels()).contains(WindowShape.tabs.title))
+        #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains("More"), "\(tabs)")
+        model.go(AppPlace(.general))
+        #expect(try labels().contains("More, Pilot open"))
     }
 
     @Test("The model hears the window stop showing: Cmd+W leaves it off screen (card agent-bo-95422788)", .pilotFocus)
@@ -249,25 +246,19 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .home)
     }
 
-    @Test("The window opens at 1000 × 660, shrinks to 760 × 520, dark, titled Pilot with the title hidden")
+    @Test("The window is a 780 × 560 panel that never resizes, dark, titled Pilot with the title hidden, closed by Esc (ui-redesign T2)")
     func frame() {
-        let w = AppWindowController.makeWindow(content: NSView())
-        #expect(w.frame.size == AppWindowController.size)
+        let w = AppWindowController.makePanel(content: NSView())
+        #expect(w.frame.size == AppWindowController.size && AppWindowController.size == NSSize(width: 780, height: 560))
         #expect(w.minSize == AppWindowController.minSize)
+        #expect(!w.styleMask.contains(.resizable) && !w.styleMask.contains(.miniaturizable) && w.closesOnEscape)
+        #expect(w.level == .normal && !AppWindowController.makeWindow(content: NSView()).closesOnEscape)
+        // A frame write at another size (a Hyper right-drag, a size bind) moves the panel, its top-left kept, never resizes it.
+        w.setFrame(NSRect(x: 100, y: 100, width: 1200, height: 900), display: false)
+        #expect(w.frame == NSRect(x: 100, y: 440, width: 780, height: 560), "\(w.frame)")
         #expect(w.appearance?.name == .darkAqua)
         #expect(w.title == "Pilot" && w.titleVisibility == .hidden)
         #expect(w.styleMask.contains(.fullSizeContentView) && w.styleMask.contains(.closable))
-    }
-
-    @Test("The workspace editor popup takes three quarters of the window, at least 680 wide and as tall as its parts need, keeping scrim round it (card agent-bo-95422980)")
-    func workspacePopupSize() {
-        // Mockup E's own window: three quarters of each side.
-        #expect(WorkspacePopup.size(in: CGSize(width: 990, height: 940), ideal: 620) == CGSize(width: 742.5, height: 705))
-        #expect(WorkspacePopup.size(in: CGSize(width: 1440, height: 900), ideal: 640) == CGSize(width: 1080, height: 675))
-        // The window as it opens: taller than three quarters for the parts, 20 pt of scrim kept above and below.
-        #expect(WorkspacePopup.size(in: AppWindowController.size, ideal: 680) == CGSize(width: 750, height: 620))
-        // At its least the window keeps 40 pt of scrim across, and the editor scrolls.
-        #expect(WorkspacePopup.size(in: AppWindowController.minSize, ideal: 680) == CGSize(width: 680, height: 480))
     }
 }
 
@@ -304,7 +295,7 @@ struct AppWindowRenders {
         engine.seedPresses([(Key("return"), "Open terminal"), (Key("2"), "Go to workspace 2"), (Key("return"), "Open terminal"),
                             (Key("space"), "Pilot menu"), (Key("2"), "Go to workspace 2"), (Key("return"), "Open terminal")])
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders")!)
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine).environment(\.homeSources, .inert)))
         // The window's frame view, so the traffic lights are in the picture.
         let frame = try #require(window.contentView?.superview)
         // Every page draws on the window's cards (card agent-bo-95422728): Theme.raised in the page area, right of the
@@ -441,21 +432,6 @@ struct AppWindowRenders {
                         title: "", to: dir.appendingPathComponent("menu-bar-popover.png"))
         try Self.render(BindEditor(action: "apps.terminal", actions: engine.bindActions).environment(engine), title: "",
                         to: dir.appendingPathComponent("sheet-bind-editor.png"))
-        // Sven's example (card agent-bo-95422779): Chrome 50 / Spotify 25 / X 25, own sizes.
-        let example = WorkspacePreset(name: "Work", apps: [.init(bundleId: "com.google.Chrome", name: "Google Chrome", percent: 50),
-                                                           .init(bundleId: "com.spotify.client", name: "Spotify", percent: 25),
-                                                           .init(bundleId: "dev.banozz.pilot.webapp.x-com", name: "X", percent: 25)], layout: nil)
-        // The editor is a popup in the window now (mockup E, card agent-bo-95422980): drawn alone at its size in the
-        // default window, on a store in a temporary folder; RestyledRenders draws it over the page.
-        let store = FileManager.default.temporaryDirectory.appending(path: "pilot-render-presets-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: store) }
-        let presets = WorkspacePresets(observers: EngineObservers(), store: WorkspacePresetStore(url: store.appending(path: "workspace-presets.json")))
-        presets.save(example, to: "2")
-        let popup = WorkspacePopup.size(in: AppWindowController.size)
-        try Self.render(WorkspaceEditor(workspace: "2", presets: presets, layouts: WorkspaceLayouts(observers: EngineObservers(), defaults: UserDefaults(suiteName: testSuite())!),
-                                        start: .init(apps: []), close: {})
-                            .frame(width: popup.width, height: popup.height).pilotTheme().environment(engine), title: "",
-                        to: dir.appendingPathComponent("popup-workspace-editor.png"))
         // One screen's top bar on the seeded workspaces (cards agent-bo-95422850 and 911), the strip's height, every item drawn
         // in a style, on the fakes' readings, a sample battery and Wi-Fi; then each popover.
         let readings = BarReadings(sound: SetupSound(audio: SetupSoundTests.FakeAudio()), look: setupLook,

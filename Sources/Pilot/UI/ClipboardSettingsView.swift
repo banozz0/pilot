@@ -4,21 +4,25 @@ import PilotCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7). One front, its More gone (pages
-/// round 4, Sven's Q100): the newest copies, small, with the app each came from; how long to keep, Save images and the
-/// panel's key; the apps never recorded, card numbers and keys that expire, what Return does and the sort, the tags,
-/// and Clear history.
+/// Clipboard (story 89; on the kit, card agent-bo-95422898, design round 4 section 7). The front (pilot-ui-redesign T17,
+/// S1 B: the simple settings in front, the rest on More; this reverses pages round 4's Q100, which had put everything on
+/// one front): the newest copies, small, with the app each came from; how long to keep, Save images and the panel's
+/// key. More: the apps never recorded, card numbers and keys that expire, what Return does and the sort, the tags, and
+/// Clear history.
 struct ClipboardSettingsView: View {
     @Environment(\.ink) private var ink
     let history: ClipboardHistory
+    /// The page's More tab, not its front.
+    let more: Bool
     @State private var settings: ClipboardSettings
     @State private var tags: [ClipTag]
     @State private var confirmingClear = false
 
     private static let dayChoices: [Int?] = [1, 7, 30, 90, 365, nil]
 
-    init(history: ClipboardHistory = .shared) {
+    init(history: ClipboardHistory = .shared, more: Bool = false) {
         self.history = history
+        self.more = more
         _settings = State(initialValue: history.settings)
         _tags = State(initialValue: history.tags())
     }
@@ -26,23 +30,25 @@ struct ClipboardSettingsView: View {
     static let intro = "What you copy is kept here; passwords never are."
     static let introInfo = "Anything an app marks as secret is never stored."
 
-    /// The newest copies Recent shows: one short row of them (Sven, pages round 4: "make the recent part in front small").
-    static let recentShown = 4
+    /// The newest copies Recent shows: one short row of them (Sven, pages round 4: "make the recent part in front small");
+    /// three, as the 780 pt panel fits three cards to a row and a fourth went to a row of its own (pilot-ui-redesign T17).
+    static let recentShown = 3
+
+    /// The settings on More, by their `pilot` keys: a search result for one opens More (AppShell's `ringsOnMore`).
+    static let moreKeys: Set<String> = ["clipboard.expireSecrets", "clipboard.secretMinutes", "clipboard.returnAction",
+                                        "clipboard.sort", "clipboard.sortReversed"]
+
+    /// More's index: each block's rows, a heading not counted; Never record from's and Tags' grow with their lists.
+    private var entries: [MoreEntry] {
+        [MoreEntry(id: .clipNever, symbol: "nosign", controls: settings.ignoredApps.count + 1),
+         MoreEntry(id: .clipExpire, symbol: "creditcard", controls: settings.expireSecrets ? 2 : 1),
+         MoreEntry(id: .clipPanel, symbol: "doc.on.clipboard", controls: 2),
+         MoreEntry(id: .clipTags, symbol: "tag", controls: max(tags.count, 1))]
+    }
 
     var body: some View {
-        let kept = history.recent()
-        KitLanding {
-            KitPage(intro: Self.intro, info: Self.introInfo) {
-                KitBlock(title: "Recent", symbol: "clock") {
-                    Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
-                } content: { recent(kept.prefix(Self.recentShown)) }
-                keepBlock
-                neverBlock.id(AppSection.clipNever)
-                KitBlock(title: AppSection.clipExpire.title, symbol: "creditcard") { expire }.id(AppSection.clipExpire)
-                KitBlock(title: AppSection.clipPanel.title, symbol: "doc.on.clipboard") { panel }.id(AppSection.clipPanel)
-                KitBlock(title: AppSection.clipTags.title, symbol: "tag") { tagRows }.id(AppSection.clipTags)
-                clear.padding(.top, 16)
-            }
+        Group {
+            if more { moreTab } else { front }
         }
         // A sort changed in the panel while this page is open: take it, so a later edit here does not undo it.
         .onChange(of: history.settings.order) { settings.order = history.settings.order }
@@ -56,6 +62,30 @@ struct ClipboardSettingsView: View {
             Button("Clear history", role: .destructive) { history.clear() }
         } message: {
             Text("Every item goes except the pinned ones.")
+        }
+    }
+
+    /// The front: the newest copies, then how long to keep them.
+    private var front: some View {
+        let kept = history.recent()
+        return KitLanding {
+            KitPage(intro: Self.intro, info: Self.introInfo) {
+                KitBlock(title: "Recent", symbol: "clock") {
+                    Text(kept.isEmpty ? "" : "\(kept.count) kept").font(ink.mono(11.5)).foregroundStyle(ink.muted)
+                } content: { recent(kept.prefix(Self.recentShown)) }
+                keepBlock
+            }
+        }
+    }
+
+    /// More: the apps never recorded, the secrets that expire, the panel's Return and sort, the tags, and Clear history.
+    private var moreTab: some View {
+        KitMore(entries: entries) {
+            neverBlock.moreBlock(.clipNever)
+            KitBlock(title: AppSection.clipExpire.title, symbol: "creditcard") { expire }.moreBlock(.clipExpire)
+            KitBlock(title: AppSection.clipPanel.title, symbol: "doc.on.clipboard") { panel }.moreBlock(.clipPanel)
+            KitBlock(title: AppSection.clipTags.title, symbol: "tag") { tagRows }.moreBlock(.clipTags)
+            clear.padding(.top, 16)
         }
     }
 
@@ -86,7 +116,9 @@ struct ClipboardSettingsView: View {
             }
             .labelsHidden().fixedSize()
         }
+        .landingRing("clipboard.keepDays").landingRing("clipboard.keepCount")
         BlockRow { Toggle("Save images", isOn: $settings.saveImages).toggleStyle(.pilotSwitchRow(info: "Off, a copied picture is left out of the history; text and files are still kept.")) }
+            .landingRing("clipboard.saveImages")
         // Changed on the Binds screen.
         BlockRow {
             Text("Open with")
@@ -102,6 +134,7 @@ struct ClipboardSettingsView: View {
             Toggle("Expire card numbers and keys", isOn: $settings.expireSecrets)
                 .toggleStyle(.pilotSwitchRow(info: "A copied card number or API key leaves the history after the minutes below; a pinned one stays. Off, they are kept like any other copy."))
         }
+        .landingRing("clipboard.expireSecrets")
         if settings.expireSecrets {
             BlockRow {
                 Text("Expire them after")
@@ -110,6 +143,7 @@ struct ClipboardSettingsView: View {
                     .multilineTextAlignment(.trailing).font(ink.mono(12)).pilotField().frame(width: 50)
                 Text("minutes").foregroundStyle(ink.muted)
             }
+            .landingRing("clipboard.secretMinutes")
         }
     }
 
@@ -138,6 +172,7 @@ struct ClipboardSettingsView: View {
             Spacer()
             Segments(selection: $settings.returnAction, options: [(.paste, "Paste"), (.copy, "Copy only")], label: "Return in the panel")
         }
+        .landingRing("clipboard.returnAction")
         // Card agent-bo-95422783: ⌘S and ⇧⌘S in the panel change it too.
         BlockRow {
             Text("Sort by")
@@ -150,6 +185,7 @@ struct ClipboardSettingsView: View {
             Text("Reversed").foregroundStyle(ink.text2)
             Toggle("Reversed", isOn: $settings.order.reversed).toggleStyle(.pilotSwitch)
         }
+        .landingRing("clipboard.sortReversed").landingRing("clipboard.sort")
     }
 
     // Card agent-bo-95422782: made in the panel with ⌘T, renamed, recoloured and deleted here.

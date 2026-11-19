@@ -144,7 +144,9 @@ public enum AppPage: String, CaseIterable, Sendable {
     /// The settings the page itself holds, so the search lands on it from a setting's name.
     var keywords: [String] {
         switch self {
-        case .home: ["status", "most used", "problems", "needs you", "this mac", "switch", "bad day", "pilot on/off"]
+        // Home's own since pilot-ui-redesign T6: its four switches, what needs you and Jump back in; Most used and This Mac
+        // went with its blocks.
+        case .home: ["status", "problems", "needs you", "switch", "switches", "bad day", "pilot on/off", "jump back in"]
         case .binds: ["bind", "key", "shortcut", "preset", "omarchy", "my binds", "sublayer", "reset"]
         // The front's words; Translate's and the rows to add moved with them to More (simplify-pages T15).
         case .menu: ["launcher", "menu", "hyper+space", "root", "menu rows", "pin", "order", "reorder", "show first"]
@@ -170,9 +172,10 @@ public enum AppPage: String, CaseIterable, Sendable {
                        "screen", "refresh rate", "sound in pilot", "wi-fi in pilot", "bluetooth in pilot", "displays in pilot", "media keys",
                        "volume up", "volume down"]
         case .upkeep: ["update", "upgrade", "outdated", "brew upgrade", "clean", "mole", "free space", "cache", "last run"]
-        // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10).
+        // The front's words; the rest moved with their controls to Clipboard's More places (simplify-pages T10, again in
+        // pilot-ui-redesign T17).
         case .clipboard: ["clipboard", "history", "paste", "keep", "keep the last", "images", "save images", "passwords", "skip passwords",
-                          "clear history", "open clipboard"]
+                          "open clipboard"]
         // The front's words; the rest moved with their controls to Captures' More places (simplify-pages T13).
         case .captures: ["capture", "screenshot", "screen shot", "pictures", "after capture", "area", "full screen", "captures folder"]
         case .notes: ["notes", "quick notes", "scratch", "markdown", "notes folder", "vault", "inbox"]
@@ -188,7 +191,8 @@ public enum AppPage: String, CaseIterable, Sendable {
                         "check for updates", "support", "sponsor"]
         case .ai: ["ai", "ask", "chat", "quick ai", "claude", "ask claude", "ai chat"]
         case .extensions: ["extension", "preference", "password", "permission", "extensions folder"]
-        case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "magnification", "magnify", "dock size", "auto-hide", "pins", "keep in dock"]
+        // The front's words; magnification, placement, icon colours, the visualizer and Taken out moved to More (T17).
+        case .dock: ["dock", "pilot dock", "dock widgets", "dock style", "dock size", "auto-hide", "pins", "widgets"]
         case .widgets: ["widget", "widgets", "desktop widget", "ubersicht", "übersicht", "trust this widget", "this mac", "clock", "note", "snap to grid", "grid", "align"]
         // The front's words; the rest moved with their controls to Voice's More places (simplify-pages T12).
         case .voice: ["dictation", "dictate", "read aloud", "speech", "speak", "voice", "text to speech", "tts", "speed", "speech to text",
@@ -314,7 +318,8 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
                                              .mac, .apps, .extensions, .pilot, .developer]
 
-    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render).
+    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render,
+    /// WindowRailRenders, 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652).
     public static let tabCount = 8
 
     /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
@@ -329,25 +334,6 @@ public enum AppArea: String, CaseIterable, Sendable {
         let pages = page.area.pages(developer: developer, more: more)
         return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
-}
-
-/// How the window draws the areas (window directions, Sven 2026-10-11: "can we have all 3 implemented, then I test and see
-/// which is best?"): picked on Look as Window layout, each in Instrument and Toybox.
-public enum WindowShape: String, CaseIterable, Sendable {
-    /// Direction 1, the default: a rail of the areas, the area's pages listed beside it, the open page's tabs in its header.
-    case rail
-    /// Direction 2: the areas as big tabs in the toolbar, the area's pages as a row of tabs under it.
-    case tabs
-
-    public var title: String {
-        switch self {
-        case .rail: "Rail and page list"
-        case .tabs: "Toolbar tabs"
-        }
-    }
-
-    /// A saved name, or the rail for none or an unknown one (a saved "hub", the layout taken out on 2026-10-11, among them).
-    public init(saved: String?) { self = saved.flatMap(WindowShape.init(rawValue:)) ?? .rail }
 }
 
 /// Direction 1's rules, both styles: a rail of the areas, and beside it the area's pages, one row each; a page's parts are
@@ -439,10 +425,11 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Catalogue (public-repo-catalogue T22, Sven's variant C): every theme pack in Pilot's catalogue as a gallery
     /// of desks, each acting from its own tile (Get, Update, Apply, Remove).
     case themeCatalogue
-    /// Look's More (simplify-pages T20) and its places: the style and this window's layout; the Hyper+Space menu's layout
+    /// Look's More (simplify-pages T20) and its places: the style (the window's layout went with the panel, pilot-ui-redesign
+    /// T2 and T3); the Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, windowLayout, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case lookMore, lookStyle, appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -453,22 +440,29 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
     case floatApps, floatTitles, motion, focusedWindow
+    /// Tiling's More (pilot-ui-redesign T16, S1 B) and its places: the focused window's exact border, and Dim other
+    /// windows' exact blur and darkening with the shake's tuning; the front keeps their presets and the shake's switch.
+    case tilingMore, focusedBorder, focusedDim
     /// Workspaces' More's window shelf (on Tiling's More until Sven, 2026-11-11, after 2276).
     case windowShelf
-    /// Clipboard's places on its front, back from More with its More (pages round 4, Sven's Q100): the apps never
-    /// recorded, card numbers and keys that expire, the panel's Return and sort, and the tags.
-    case clipNever, clipExpire, clipPanel, clipTags
+    /// Clipboard's More (pilot-ui-redesign T17, S1 B; it reverses pages round 4's Q100, which had brought them to the
+    /// front) and its places: the apps never recorded, card numbers and keys that expire, the panel's Return and sort, and
+    /// the tags.
+    case clipMore, clipNever, clipExpire, clipPanel, clipTags
+    /// The Dock's More (pilot-ui-redesign T17, S1 B) and its place: magnification, placement, icon colours and the
+    /// visualizer, with the Dock's apps taken out under it.
+    case dockMore, dockLook
     /// Open with's place on its front, back from More with its More (pages round 4, Sven's Q103): the app or site each
     /// role key opens.
     case appsForKeys
     /// Voice's More (simplify-pages T12) and its places: the recent takes, the replacements, and Read aloud's media and
-    /// better voices; dictation's key and what shows while you speak (Sven, 2026-11-11, after 2276) and the taught words
-    /// (pages round 4, Sven's Q101) are places on the front again.
-    case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud
-    /// Captures' places on its fronts, back from More with its More (pages round 4, Sven's Q102: "recording stuff in
-    /// recording front and capture (screenshot) stuff in capture front"): the capture options and the ten other capture
-    /// keys on Capture, a recording's quality, resolution, frame rate and clicks on Recording.
-    case captureOptions, captureKeys, recordingQuality
+    /// better voices; dictation's keys and switches (pilot-ui-redesign T18, S1 B) and the taught words (pages round 4,
+    /// Sven's Q101) are places on the front. Every speech model and what shows while you speak are on More since T18.
+    case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud, voiceModels, voiceShows
+    /// Captures' More (pilot-ui-redesign T18, S1 B: one row per simple feature on each tab, the rest behind More) and its
+    /// places: the capture options, the other capture keys, and a recording's quality, resolution, frame rate and clicks
+    /// (on their tabs' fronts from pages round 4, Sven's Q102, until T18).
+    case capturesMore, captureOptions, captureKeys, recordingQuality
     /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
     /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
@@ -503,16 +497,17 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .workspacesMore, .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data: .general
         case .notifications: .menuBar
-        case .floatApps, .floatTitles, .motion, .focusedWindow: .tiling
-        case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
+        case .floatApps, .floatTitles, .motion, .focusedWindow, .tilingMore, .focusedBorder, .focusedDim: .tiling
+        case .clipMore, .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
+        case .dockMore, .dockLook: .dock
         case .appsForKeys: .openWith
-        case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud: .voice
-        case .captureOptions, .captureKeys, .recordingQuality: .captures
+        case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows: .voice
+        case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .windowLayout, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -530,30 +525,36 @@ public enum AppSection: String, CaseIterable, Sendable {
     public static func more(of page: AppPage) -> AppSection? {
         switch page {
         case .voice: .voiceMore
+        case .captures: .capturesMore
         case .menu: .menuMore
         case .install: .installMore
         case .upkeep: .upkeepMore
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
         case .look: .lookMore
+        case .dock: .dockMore
+        case .clipboard: .clipMore
+        case .tiling: .tilingMore
         default: nil
         }
     }
 
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [.windowShelf,
-                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud,
+                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows,
+                                                     .captureOptions, .captureKeys, .recordingQuality,
                                                      .translate, .aliases, .quicklinks,
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .windowLayout, .appsShowAs]
+                                                     .lookStyle, .appsShowAs,
+                                                     .dockLook, .clipNever, .clipExpire, .clipPanel, .clipTags,
+                                                     .focusedBorder, .focusedDim]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
-                                                     .clipNever, .clipExpire, .clipPanel, .clipTags,
-                                                     .captureOptions, .captureKeys, .recordingQuality, .aiFallback, .aiKeys, .aiNewChat,
+                                                     .aiFallback, .aiKeys, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
@@ -562,12 +563,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
 
-    /// The tab a front block sits on when it is not the page's first view (pages round 4): a recording's quality on
-    /// Captures' Recording, the AI's fallback, keys and new chat on AI's Setup, and what Install lists on its Catalogue
+    /// The tab a front block sits on when it is not the page's first view (pages round 4): the AI's fallback, keys and new chat on AI's Setup, and what Install lists on its Catalogue
     /// (Install is only its parts). Nil for the page's own first view.
     public var frontTab: AppSection? {
         switch self {
-        case .recordingQuality: .recording
         case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
         case .installLists: .catalogue
         default: nil
@@ -612,7 +611,11 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: "More"
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+             .tilingMore: "More"
+        case .dockLook: "Placement and effects"
+        case .focusedBorder: "Border"
+        case .focusedDim: "Dim other windows"
         case .workspaceOpens: "Opens here"
         case .workspaceRules: "Rules and snapshot"
         case .workspaceScrolling: "Scrolling"
@@ -632,6 +635,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureKeys: "More capture keys"
         case .recordingQuality: "Recording quality"
         case .voiceDictation: "Dictation"
+        case .voiceModels: "Speech models"
+        case .voiceShows: "Dictation on screen"
         case .voiceTakes: "Fix what you just said"
         case .voiceWords: "Words"
         case .voiceReplacements: "Replacements"
@@ -660,7 +665,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
         case .lookStyle: "Style"
-        case .windowLayout: "Window layout"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
         case .cursor: "Cursor"
@@ -690,7 +694,11 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore: []
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+             .tilingMore: []
+        // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
+        case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
+                         "theme icons", "visualizer", "visualiser", "bars", "taken out", "keep in dock", "removed from dock"]
         case .themeCatalogue: ["theme catalogue", "browse themes", "more themes", "get theme", "download theme", "update theme", "remove theme",
                                "theme gallery"]
         case .workspaceOpens: ["opens here", "open what is missing", "open now", "at login", "keep this layout"]
@@ -713,8 +721,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureKeys: ["capture keys", "read text", "qr code", "ocr", "ui element", "subject", "background removed", "mark up",
                             "pick a colour", "colour picker", "last area", "edit the last capture", "scrolling upward"]
         case .recordingQuality: ["quality", "resolution", "frame rate", "fps", "show clicks", "retina"]
-        case .voiceDictation: ["dictation key", "while you speak", "show it in", "pill", "position", "waveform", "waveform colour",
-                               "copy the words", "pause media"]
+        case .voiceDictation: ["dictation key", "dictate", "speech model", "microphone", "copy the words", "pause media"]
+        case .voiceModels: ["speech models", "parakeet", "whisper", "download a model", "remove a model", "use a model"]
+        case .voiceShows: ["while you speak", "on screen", "show it in", "pill", "position", "waveform", "waveform colour",
+                           "words as you say them"]
         case .voiceTakes: ["fix a take", "fix what you just said", "recent takes", "take"]
         case .voiceWords: ["words", "vocabulary", "custom words", "teach"]
         case .voiceReplacements: ["replacements", "replace", "replacement"]
@@ -723,12 +733,16 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .clipNever: ["never record", "never record from", "ignore app", "exclude app", "password manager"]
         case .clipExpire: ["expire", "card number", "card numbers", "copied key", "secret", "minutes"]
         case .clipPanel: ["return", "paste or copy", "copy only", "sort", "sort by", "reversed", "order"]
-        case .clipTags: ["tags", "tag", "tag colour"]
+        // Clear history sits under the tags on More (T17).
+        case .clipTags: ["tags", "tag", "tag colour", "clear history"]
         case .floatApps: ["always float", "float apps", "float", "floating"]
         case .floatTitles: ["window title", "float titles", "title"]
         case .motion: ["drag", "drag windows", "move windows", "resize", "glide", "animate", "animate windows"]
-        case .focusedWindow: ["focused window", "border width", "border colour", "border color", "how dark", "shake", "swings", "within",
-                              "contrast"]
+        // The front's words: the two presets and the shake's switch (pilot-ui-redesign T16); the exact rows' words moved
+        // with them to Tiling's More.
+        case .focusedWindow: ["focused window", "border", "dim other windows", "soft", "strong", "shake", "shake the mouse"]
+        case .focusedBorder: ["border width", "border colour", "border color", "thick", "thin"]
+        case .focusedDim: ["blur", "darken", "how dark", "defocus", "swings", "how hard to shake", "within", "contrast", "readable"]
         case .windowShelf: ["window shelf", "shelf", "stage", "stills", "live", "window pictures"]
         case .exportImport: ["export", "import", "pack", "second mac", "backup"]
         case .about: ["version", "made with", "licence", "credits", "acknowledgements", "open source", "feedback", "bug", "crash"]
@@ -747,7 +761,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
         case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
-        case .windowLayout: ["window layout", "toolbar tabs", "rail and page list"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
         case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
@@ -783,8 +796,8 @@ public struct AppPlace: Hashable, Sendable {
         // System's More, gone since its parts came back to the front (Sven, 2026-11-11, after 2276).
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
-        "tilingMore": AppPlace(.tiling), "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
-        "capturesMore": AppPlace(.captures), "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
+        "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
+        "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.
@@ -853,11 +866,13 @@ public struct AppPlace: Hashable, Sendable {
     }
 
     /// The path from the panel's tab bar (pilot-ui-redesign T1): its tab, or More and its area, then `path`, a page named
-    /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean".
+    /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean". Under More a page's own More
+    /// tab is not named again, so More reads once: "More › Mac › Update & Clean › Reports" (pilot-ui-redesign T3).
     public func tabPath(count: Int = AppArea.tabCount, developer: Bool) -> String {
-        let area = page.area, rest = page.title == area.title ? Array(parts.dropFirst()) : parts
-        let lead = AppArea.tabs(count: count, developer: developer).more.contains(area) ? ["More", area.title] : [area.title]
-        return (lead + rest).joined(separator: " › ")
+        let area = page.area, inMore = AppArea.tabs(count: count, developer: developer).more.contains(area)
+        var rest = page.title == area.title ? Array(parts.dropFirst()) : parts
+        if inMore, let more = section?.onMore?.title, let at = rest.firstIndex(of: more) { rest.remove(at: at) }
+        return ((inMore ? ["More", area.title] : [area.title]) + rest).joined(separator: " › ")
     }
     var keywords: [String] { section?.keywords ?? page.keywords }
 }

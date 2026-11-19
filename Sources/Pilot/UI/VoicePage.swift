@@ -4,11 +4,13 @@ import SwiftUI
 
 /// Voice (2026-10-16, Sven could not find Dictation on Open with): Pilot's dictation and Read
 /// aloud's key, speed and voice (story 190, was System › Keyboard), one page in Tools. Its front (simplify-pages T12;
-/// Sven 2026-11-11, after 2276): all of Dictation, the words it spells your way (pages round 4, Sven's Q101), then Read
-/// aloud's key, speed and its voices behind a toggle. Its More: the recent takes, the replacements, and Read aloud's media
-/// and better voices.
+/// pilot-ui-redesign T18, S1 B): Dictation's keys, model in use and two switches, the words it spells your way (pages
+/// round 4, Sven's Q101), then Read aloud's key, speed and its voices behind a toggle. Its More: every speech model, what
+/// shows while you speak, the recent takes, the replacements, and Read aloud's media and better voices. A search that
+/// rings a row on More turns the window to More (AppShell's `ringsOnMore`, from `moreKeys`).
 struct VoicePage: View {
     var speech: ReadAloudSettings = .shared
+    var dictation: PilotDictation = .shared
     /// The More tab shows, not the front.
     var more = false
     /// The voices it lists (SpeechVoice.shown) by language, read when the page first shows, never at launch, and again
@@ -19,6 +21,8 @@ struct VoicePage: View {
 
     /// More's index (simplify-pages T12): a list counts once. A row added to or moved off a block changes its count here.
     static let entries = [
+        MoreEntry(id: .voiceModels, symbol: "cpu", controls: SpeechChoice.offered.count),
+        MoreEntry(id: .voiceShows, symbol: "rectangle.bottomthird.inset.filled", controls: 4),
         MoreEntry(id: .voiceTakes, symbol: "clock.arrow.circlepath", controls: 1),
         MoreEntry(id: .voiceReplacements, symbol: "arrow.left.arrow.right", controls: 2),
         MoreEntry(id: .voiceReadAloud, symbol: "speaker.wave.2", controls: 2),
@@ -28,6 +32,8 @@ struct VoicePage: View {
         Group {
             if more {
                 KitMore(entries: Self.entries) {
+                    SpeechModelsBlock(dictation: dictation).moreBlock(.voiceModels)
+                    DictationShowsBlock(dictation: dictation).moreBlock(.voiceShows)
                     // "Fix what you just said" above the replacements (Q598; Words went to the front, pages round 4).
                     DictationTakesBlock(takes: .shared, vocabulary: .shared).moreBlock(.voiceTakes)
                     DictationReplacementsBlock(vocabulary: .shared).moreBlock(.voiceReplacements)
@@ -37,7 +43,7 @@ struct VoicePage: View {
                 KitLanding {
                     KitPage(intro: Self.intro) {
                         // One column (the designer's layout A, round 2).
-                        DictationBlock().id(AppSection.voiceDictation)
+                        DictationBlock(dictation: dictation).id(AppSection.voiceDictation)
                         DictationWordsBlock(vocabulary: .shared).id(AppSection.voiceWords)
                         ReadAloudBlock(speech: speech, mine: sections.mine, rest: sections.rest, part: .front)
                     }
@@ -49,6 +55,10 @@ struct VoicePage: View {
             sections = SpeechVoice.sections(SpeechVoice.listed(SpeechVoice.shown(speech.voices), preferred: preferred), preferred: preferred)
         }
     }
+
+    /// The settings whose rows are on More; every other dictation and Read aloud row is on the front.
+    static let moreKeys: Set<String> = [PilotDictation.whileSpeakingKey, PilotDictation.showInKey, PilotDictation.barSideKey,
+                                        PilotDictation.waveColourKey, ReadAloudSettings.mediaKey]
 }
 
 /// Read aloud's key, speed and media (Q282), Kokoro's download (Q264), then its voice as a list (Sven Q219, Q238): Automatic first,
@@ -106,6 +116,7 @@ struct ReadAloudBlock: View {
             HStack(spacing: 6) { Text("Media playing"); InfoMark(text: Self.mediaInfo) }.frame(maxWidth: .infinity, alignment: .leading)
             Segments(selection: $speech.media, options: ReadAloudSettings.Media.allCases.map { ($0, $0.label) }, label: "Media playing")
         }
+        .landingRing(ReadAloudSettings.mediaKey)
         BlockRow {
             Image(systemName: "arrow.down.circle").foregroundStyle(ink.muted).frame(width: 18).accessibilityHidden(true)
             TitledText(title: Text("Get better voices"), detail: "Premium and Enhanced voices are free downloads in System Settings › Accessibility › Spoken Content")
@@ -125,8 +136,9 @@ struct ReadAloudBlock: View {
                 HStack(spacing: 6) { Text("Speed"); InfoMark(text: "How fast the voice reads, whichever voice is picked.") }.frame(maxWidth: .infinity, alignment: .leading)
                 KitSlider(value: $speech.rate, range: ReadAloudSettings.rates, step: 0.05, label: "Read aloud speed")
             }
+            .landingRing(ReadAloudSettings.rateKey)
             KokoroRow(model: kokoro)
-            if part == .front { voicesToggle }
+            if part == .front { voicesToggle.landingRing(ReadAloudSettings.voiceKey) }
             if part != .front || voicesOpen { voices(others) }
             if part == .all { moreRows }
     }

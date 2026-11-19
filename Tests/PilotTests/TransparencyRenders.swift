@@ -36,9 +36,7 @@ struct TransparencyRenders {
 
         let engine = try HomeRenders.engine()
         SharedLook.StatsRenders.seed(SystemSampler.shared)
-        var sources = HomeSources()
-        sources.lastCopied = { HomeCopy(text: "pilot://open?page=look", at: Date().addingTimeInterval(-125), count: 48) }
-        sources.recentCopies = { InstrumentRenders.clips }
+        let sources = HomeSources()
 
         let only = Self.env["PILOT_RENDER_ONLY"]
         func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }

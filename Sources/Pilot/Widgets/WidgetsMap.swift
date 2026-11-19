@@ -121,39 +121,3 @@ struct WidgetsMap: View {
         .accessibilityAddTraits(picked ? .isSelected : [])
     }
 }
-
-/// Home's widgets as a row of tiles: Home has no screen to draw, only its order (Edit Home sizes them).
-struct WidgetsHomeTiles: View {
-    @Environment(\.ink) private var ink
-    let placements: [Widget.Placement]
-    let widget: (String) -> Widget?
-    @Binding var selected: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if placements.isEmpty {
-                Text("Nothing on Home yet. Add one from the list below.").font(ink.ui(12)).foregroundStyle(ink.text2)
-                    .frame(maxWidth: .infinity, minHeight: 90).background(ink.well, in: RoundedRectangle(cornerRadius: ink.blockRadius, style: .continuous))
-            } else {
-                CardGrid(minimum: 200, spacing: 8, stretch: true) {
-                    ForEach(placements, id: \.id) { placement in
-                        let picked = placement.id == selected, shape = RoundedRectangle(cornerRadius: ink.radius(8), style: .continuous)
-                        Button { selected = placement.id } label: {
-                            HStack(spacing: 8) {
-                                Text(widget(placement.widget)?.icon ?? "🧩").font(.system(size: 15))
-                                Text(widget(placement.widget)?.title ?? placement.widget).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text).lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 10).frame(height: 40)
-                            .overlay { shape.strokeBorder(picked ? ink.accent : ink.line2, lineWidth: picked ? 2 : 1) }
-                            .contentShape(shape)
-                        }
-                        .buttonStyle(.kitPress)
-                        .accessibilityAddTraits(picked ? .isSelected : [])
-                    }
-                }
-            }
-            Text("Home shows them in this order; Edit Home on Home moves and sizes them.").font(ink.ui(11.5)).foregroundStyle(ink.text2)
-        }
-    }
-}

@@ -77,7 +77,7 @@ extension ControlVerbs {
         }
     }
 
-    /// `ext page <id>`: asks the extension's page command once after Allow, as its page and its Home block do, and answers
+    /// `ext page <id>`: asks the extension's page command once after Allow, as its page does, and answers
     /// the blocks the page would show.
     static func pageExtension(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let ext = try await tools.require(try args.word(1, "id"))

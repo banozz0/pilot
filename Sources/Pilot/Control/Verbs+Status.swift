@@ -61,7 +61,7 @@ final class ControlStatus {
             case .workspaces: "the focused workspace and the apps on each occupied one, read from the tiler"
             case .onboarding: "onboarding's Permissions, each row done or not (runs pgrep and TCC checks)"
             case .presses: "the 20 most run actions of all time, from the counts behind the overlay's most used"
-            case .mac: "Home's This Mac: chip, CPU, memory, disk, temperature (waits up to 5 s for a reading)"
+            case .mac: "This Mac: chip, CPU, memory, disk, temperature (waits up to 5 s for a reading)"
             case .widgets: "the desktop's widgets: each installed one with its trust, each placement shown or hidden and why, each screen's workspace and Show desktop"
             case .shelf: "the Window shelf on each screen showing a Stage workspace, its pictures, and Pilot's memory and CPU over 2 s"
             case .notifications: "other apps' notifications in Pilot: on, observing, counts and whether macOS's banner is hidden, never a word of a notification"
@@ -197,7 +197,7 @@ final class ControlStatus {
         })
     }
 
-    /// Home's This Mac block's four readings and the chip, as numbers; null fields when not read.
+    /// This Mac's four readings and the chip, as numbers; null fields when not read.
     static func thisMac(_ reading: (raw: SystemStats.Raw, values: SystemStats.Values?)?) -> JSONValue {
         guard let (raw, values) = reading else { return .null }
         return .object(["chip": raw.slow.machine.map { .string($0.chip) } ?? .null,
@@ -208,10 +208,15 @@ final class ControlStatus {
                         "temperature": values?.heat.map { .number(($0 * 10).rounded() / 10) } ?? .null])
     }
 
-    /// Holds Home's watch until a reading newer than the ask has its CPU share, at most 5 s; the reading in hand then.
+    /// What This Mac reads: CPU, memory, disk and the sensors (Home's This Mac block read the same, until T6 of
+    /// pilot-ui-redesign took Home's blocks out).
+    static let thisMacReadings: Set<MenuBarStats.Stat> = [.cpu, .ram, .disk, .sensors]
+
+    /// Holds a watch on This Mac's readings until a reading newer than the ask has its CPU share, at most 5 s; the reading
+    /// in hand then.
     static func sampleThisMac() async -> (raw: SystemStats.Raw, values: SystemStats.Values?)? {
         let sampler = SystemSampler.shared, asked = ProcessInfo.processInfo.systemUptime   // Raw.time's clock
-        let watch = Task { await sampler.watch(stats: HomePage.readings) }
+        let watch = Task { await sampler.watch(stats: Self.thisMacReadings) }
         defer { watch.cancel() }
         for _ in 0..<50 {
             if let raw = sampler.latest, raw.time >= asked, sampler.latestValues?.cpu != nil { return (raw, sampler.latestValues) }

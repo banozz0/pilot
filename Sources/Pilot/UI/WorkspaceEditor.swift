@@ -3,77 +3,12 @@ import PilotCore
 import SwiftUI
 import WebApps
 
-// The workspace editor as mockup E (card agent-bo-95422980, Sven approved 2026-10-07): a popup inside Pilot's window,
-// about three quarters of it, over a dimmed page. Right-click a workspace on Home to open it; the Workspaces page shows
-// the same editor inline (WorkspaceEditorPanel, card agent-bo-95423003).
+// The workspace editor as mockup E (card agent-bo-95422980, Sven approved 2026-10-07), inline on the Workspaces page
+// (WorkspaceEditorPanel, card agent-bo-95423003). Its popup over the window went with Home's board, its only opener
+// (pilot-ui-redesign T6, coordinator 2026-11-19).
 
-/// The workspace the popup edits; `start` is where a render begins (the app never sets it). Each open is its own, so a
-/// popup opened again on the same workspace starts fresh.
-struct EditedWorkspace: Identifiable {
-    let name: String
-    var start = WorkspaceEditor.Start()
-    let id = UUID()
-}
-
-private struct EditWorkspaceKey: EnvironmentKey { static let defaultValue: (@MainActor @Sendable (String) -> Void)? = nil }
-
-extension EnvironmentValues {
-    /// Opens the editor popup on a workspace: the app window sets it; nil elsewhere, where a right-click offers nothing.
-    var editWorkspace: (@MainActor @Sendable (String) -> Void)? {
-        get { self[EditWorkspaceKey.self] }
-        set { self[EditWorkspaceKey.self] = newValue }
-    }
-}
-
-extension View {
-    /// Right-click → Edit workspace N…, which opens the editor popup over the window.
-    func editsWorkspace(_ name: String) -> some View { modifier(EditsWorkspace(name: name)) }
-}
-
-private struct EditsWorkspace: ViewModifier {
-    @Environment(\.editWorkspace) private var edit
-    let name: String
-
-    func body(content: Content) -> some View {
-        content.contextMenu { if let edit { Button("Edit workspace \(name)…") { edit(name) } } }
-    }
-}
-
-/// The popup over the whole window: the page dimmed under a scrim that cancels on a click, the editor centred on it.
-struct WorkspacePopup: View {
-    @Environment(Engine.self) private var engine
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let edited: EditedWorkspace
-    let close: () -> Void
-    /// The height the editor's parts take with the preview at its least.
-    @State private var ideal: CGFloat = 0
-
-    /// Three quarters of each side, wider when the window is narrow (at least 680) and taller when the parts need it
-    /// (`ideal`), while the window keeps 24 pt of scrim at each side and 20 above and below; past that the editor scrolls.
-    static func size(in window: CGSize, ideal: CGFloat = 0) -> CGSize {
-        CGSize(width: min(window.width - 48, max(window.width * 0.75, 680)), height: min(window.height - 40, max(window.height * 0.75, ideal)))
-    }
-
-    var body: some View {
-        GeometryReader { g in
-            let size = Self.size(in: g.size, ideal: ideal)
-            ZStack {
-                Color.black.opacity(0.42).contentShape(.rect).onTapGesture(perform: close).accessibilityHidden(true)
-                WorkspaceEditor(workspace: edited.name, presets: engine.presets, layouts: engine.layouts, start: edited.start,
-                                close: close) { ideal = $0 }
-                    .floating()
-                    .frame(width: size.width, height: size.height)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: Kit.pressScale)))
-            }
-            .frame(width: g.size.width, height: g.size.height)
-        }
-        .accessibilityAddTraits(.isModal)
-    }
-}
-
-/// The editor (mockup E) as the popup: its working copy kept here, the panel drawing it with the popup's chrome. Every
-/// change saves once it rests (Sven 2026-10-17, no Save button); Done, Esc and Return close it.
-struct WorkspaceEditor: View {
+/// What the editor's parts share: where a render starts, the preview's spots, the picker's apps and the layouts' sizes.
+enum WorkspaceEditor {
     /// Where a render or a test starts: a tile under the mouse, the picker open on a spot with words typed, the apps the
     /// picker lists (nil reads the Mac's).
     struct Start {
@@ -83,10 +18,6 @@ struct WorkspaceEditor: View {
         /// The picker row under the mouse.
         var pickerHover: Int?
         var apps: [AppChoice]?
-        /// Scrolled to the end, where the workspace's rules sit, as a short window shows them.
-        var scrolled = false
-        /// Hears whether the middle is taller than the popup shows, so a render can prove a window fits it whole.
-        var overflows: ((Bool) -> Void)?
     }
 
     /// A spot on the preview: a placed app's, one of the layout's empty ones or the strip where the next app goes (each
@@ -100,30 +31,10 @@ struct WorkspaceEditor: View {
         var host: String?
     }
 
-    let workspace: String
-    let presets: WorkspacePresets
-    let layouts: WorkspaceLayouts
-    let close: () -> Void
-    /// Hears the height the parts need with the preview at its least, so the popup can grow to it.
-    let fit: (CGFloat) -> Void
-    @State private var draft: WorkspacePresetDraft
-    private let start: Start
-
-    init(workspace: String, presets: WorkspacePresets, layouts: WorkspaceLayouts, start: Start = Start(),
-         close: @escaping () -> Void, fit: @escaping (CGFloat) -> Void = { _ in }) {
-        self.workspace = workspace
-        self.presets = presets
-        self.layouts = layouts
-        self.close = close
-        self.fit = fit
-        self.start = start
-        _draft = State(initialValue: WorkspacePageDrafts.baseline(workspace, saved: presets.contents.preset(for: workspace), row: layouts.layout(workspace)))
-    }
-
-    nonisolated static let space = "workspacePopup"
-    /// How tall a layout picture is: the mockup's 52 while there is room, down to 32 in a short popup.
+    nonisolated static let space = "workspaceEditor"
+    /// How tall a layout picture is: the mockup's 52 while there is room, down to 32.
     static let pictures: ClosedRange<CGFloat> = 32...52
-    /// The layouts' column, popup and page alike: three pictures a row with their names, Main + stack the widest.
+    /// The layouts' column: three pictures a row with their names, Main + stack the widest.
     static let layoutsWidth: CGFloat = 280
     /// The page's preview beside its layouts from this width: the layouts, the gap, the sides and a 260 pt preview, so the
     /// window's first size keeps them side by side (simplify-pages T18).
@@ -131,33 +42,8 @@ struct WorkspaceEditor: View {
     /// Own sizes' name in the editor (Sven 2026-10-17: "what is own sizes"): the apps side by side at the widths you set.
     static let ownSizes = "Your widths"
 
-    var body: some View {
-        WorkspaceEditorPanel(workspace: workspace, presets: presets, draft: $draft, mode: .popup(close: done, fit: fit), start: start) {
-            presets.remove(from: workspace)
-            guard presets.lastError == nil else { return }
-            // Nothing left to write as it closes.
-            draft = WorkspacePageDrafts.baseline(workspace, saved: nil, row: layouts.layout(workspace))
-            close()
-        }
-        // A click on the scrim closes it too: what is still waiting is written then.
-        .savesWhenResting(draft, write: write)
-    }
-
-    /// Writes what is still waiting, then closes.
-    private func done() {
-        write()
-        close()
-    }
-
-    /// The draft once it differs from what is saved (WorkspacePresets.write).
-    private func write() {
-        let saved = presets.contents.preset(for: workspace)
-        guard draft != WorkspacePageDrafts.baseline(workspace, saved: saved, row: layouts.layout(workspace)) else { return }
-        _ = presets.write(draft, to: workspace, layouts: layouts)
-    }
-
     /// The Mac's apps by name, then Pilot's web apps with their sites; a web app is listed once, as a web app.
-    static func installedChoices() -> [AppChoice] {
+    @MainActor static func installedChoices() -> [AppChoice] {
         let web = WebAppDirectory.list().map { AppChoice(name: $0.name, bundle: $0.bundleID, host: $0.url.host) }
         let webIDs = Set(web.map(\.bundle))
         return AppsModule.pickableApps().filter { !webIDs.contains($0.bundle) }.map { AppChoice(name: $0.name, bundle: $0.bundle) } + web
@@ -182,26 +68,22 @@ struct WorkspacePageExtras {
     var drag: (WorkspaceDrag, workspace: String)?
 }
 
-/// The editor's parts (mockup E), drawn as the popup over the window or inline on the Workspaces page (card
-/// agent-bo-95423003, Sven: "this should be how in workspaces looks"): the workspace's number, its preset's name and
+/// The editor's parts (mockup E), inline on the Workspaces page (card agent-bo-95423003, Sven: "this should be how in
+/// workspaces looks"): the workspace's number, its preset's name and
 /// its key; the preview drawn as the screen, whose spots take an app or a web app; the layouts as pictures; the apps in
 /// the order they open, each with At login; the workspace's two rules; Remove preset. Every change saves at once (Sven
-/// 2026-10-17): the popup's Done closes it; the page has no button for it.
+/// 2026-10-17).
 struct WorkspaceEditorPanel: View {
     @Environment(\.ink) private var ink
-    enum Mode {
-        case popup(close: () -> Void, fit: (CGFloat) -> Void)
-        /// The page's front: the preview, the layouts with the rules and a preset under them, and what opens
-        /// here (the rules on More until Sven's round 3 notes on build 2300, 2026-11-11).
-        case page(extras: WorkspacePageExtras)
-    }
     typealias Spot = WorkspaceEditor.Spot
     typealias AppChoice = WorkspaceEditor.AppChoice
 
     let workspace: String
     let presets: WorkspacePresets
     @Binding var draft: WorkspacePresetDraft
-    let mode: Mode
+    /// The page's front: the preview, the layouts with the rules and a preset under them, and what opens here (the rules
+    /// on More until Sven's round 3 notes on build 2300, 2026-11-11).
+    let extras: WorkspacePageExtras
     let remove: () -> Void
     @State private var hovered: Int?
     @State private var picking: Spot?
@@ -211,23 +93,16 @@ struct WorkspaceEditorPanel: View {
     private let start: WorkspaceEditor.Start
     /// Each spot's frame in the panel, for the picker to hang off.
     @State private var spots: [Spot: CGRect] = [:]
-    @State private var bottomHeight: CGFloat = 0
-    @State private var layoutsHeight: CGFloat = 0
-    @State private var pictureHeight = WorkspaceEditor.pictures.upperBound
-    @State private var headerHeight: CGFloat = 0
-    @State private var footerHeight: CGFloat = 0
-    /// More of the middle sits under the footer, or scrolled up under the header: that edge fades.
-    @State private var more = false
-    @State private var scrolledUp = false
     /// The page's panel is wide enough for the right column beside the preview.
     @State private var pageWide = true
 
-    init(workspace: String, presets: WorkspacePresets, draft: Binding<WorkspacePresetDraft>, mode: Mode, start: WorkspaceEditor.Start = .init(),
+    init(workspace: String, presets: WorkspacePresets, draft: Binding<WorkspacePresetDraft>, extras: WorkspacePageExtras,
+         start: WorkspaceEditor.Start = .init(),
          remove: @escaping () -> Void) {
         self.workspace = workspace
         self.presets = presets
         _draft = draft
-        self.mode = mode
+        self.extras = extras
         self.remove = remove
         self.start = start
         _hovered = State(initialValue: start.hovered)
@@ -237,41 +112,21 @@ struct WorkspaceEditorPanel: View {
         _choices = State(initialValue: start.apps ?? [])
     }
 
-    private var popup: Bool { if case .popup = mode { true } else { false } }
-    /// The page's Remove preset sits in the header (card agent-bo-95423182); the popup keeps its footer.
-    private var actionsUp: Bool { !popup }
-    private var extras: WorkspacePageExtras? { if case .page(let extras) = mode { extras } else { nil } }
-
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: popup ? ink.radius(18) : ink.blockRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: ink.blockRadius, style: .continuous)
         ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    header
-                    ink.line.frame(height: 1)
-                }
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-                if popup { middle } else { pageMiddle }
-                if !actionsUp {
-                    VStack(spacing: 0) {
-                        ink.line.frame(height: 1)
-                        footer
-                    }
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
-                }
+                header
+                ink.line.frame(height: 1)
+                pageMiddle
             }
-            .background(popup ? ink.background : ink.surface, in: shape)
+            .background(ink.surface, in: shape)
             .clipShape(shape)
-            .overlay { if popup { shape.strokeBorder(ink.windowLine, lineWidth: 1) } }
-            .shadow(color: .black.opacity(popup ? 0.55 : 0), radius: 40, y: 30)
-            .shadow(color: .black.opacity(popup ? 0 : 0.06), radius: 1, y: 1)
-            .toyEdge(radius: popup ? 0 : ink.blockRadius)
+            .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+            .toyEdge(radius: ink.blockRadius)
             if picking != nil { pickerLayer }
         }
         .coordinateSpace(.named(WorkspaceEditor.space))
-        .onChange(of: headerHeight + top(picture: WorkspaceEditor.pictures.upperBound) + bottomHeight + footerHeight, initial: true) { _, ideal in
-            if case .popup(_, let fit) = mode { fit(ideal) }
-        }
         .task { if start.apps == nil { choices = WorkspaceEditor.installedChoices() } }
     }
 
@@ -280,8 +135,8 @@ struct WorkspaceEditorPanel: View {
     private var header: some View {
         VStack(alignment: .trailing, spacing: 10) {
             headerRow
-            // Narrow, the actions take their own row under the title.
-            if actionsUp && !pageWide { HStack(spacing: 8) { pageActions } }
+            // Narrow, the actions take their own row under the title (card agent-bo-95423182).
+            if !pageWide { HStack(spacing: 8) { pageActions } }
         }
         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 12)
     }
@@ -301,55 +156,12 @@ struct WorkspaceEditorPanel: View {
             }
             .layoutPriority(1)
             Spacer(minLength: 8)
-            if actionsUp && pageWide { pageActions }
+            if pageWide { pageActions }
             BindKey(action: "workspaces.go:\(workspace)")
-            if case .popup(let close, _) = mode { IconButton(symbol: "xmark", label: "Close", action: close) }
         }
     }
 
     // MARK: Middle
-
-    /// The preview's row with the layout pictures `picture` tall and the preview at its least, 150 under its label, and
-    /// the 14 pt above the row: with 52 the height the popup grows to when the window allows, with 32 the least before
-    /// anything scrolls.
-    private func top(picture: CGFloat) -> CGFloat {
-        let rows = CGFloat(LayoutChoice.rows.count)
-        let layouts = max(0, layoutsHeight - rows * pictureHeight) + rows * picture
-        return max(layouts, 20 + 150) + 14
-    }
-
-    /// The popup's middle: the preview and the layouts, then what opens here. Short of room the preview and the layout
-    /// pictures give way first (the preview to 150, the pictures to 32); past that the whole scrolls, its edge faded while
-    /// more is out of sight.
-    private var middle: some View {
-        GeometryReader { g in
-            ScrollView(.vertical) {
-                VStack(spacing: 0) {
-                    HStack(alignment: .top, spacing: 18) {
-                        previewColumn
-                        layoutColumn
-                            .frame(width: WorkspaceEditor.layoutsWidth)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { layoutsHeight = $0 }
-                    }
-                    .padding(.horizontal, 18).padding(.top, 14)
-                    .frame(height: max(top(picture: WorkspaceEditor.pictures.lowerBound), g.size.height - bottomHeight), alignment: .top)
-                    bottom
-                        .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 14)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
-                }
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            // A legacy scroller would take a gutter from the right edge only; the fade says there is more.
-            .scrollIndicators(.never)
-            .defaultScrollAnchor(start.scrolled ? .bottom : .top)
-            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.containerSize.height < $0.contentSize.height - 1 } action: { more = $1 }
-            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 1 } action: { scrolledUp = $1 }
-            .onScrollGeometryChange(for: Bool.self) { $0.contentSize.height > $0.containerSize.height + 0.5 } action: { start.overflows?($1) }
-            .overlay(alignment: .bottom) { if more { EdgeFade(towards: .bottom) } }
-            .overlay(alignment: .top) { if scrolledUp { EdgeFade(towards: .top) } }
-        }
-    }
 
     /// The page's middle: the front's preview takes the height the page gives it, the layouts down the right with the rules,
     /// and a preset under them (under 600 pt they stack, the preview 260 tall), then what opens here. The page
@@ -376,18 +188,16 @@ struct WorkspaceEditorPanel: View {
 
     /// Under the layouts, where the page had room to spare (Sven's round 3 notes on build 2300, 2026-11-11; on More as
     /// Rules until then): the apps that always land here and a preset.
-    @ViewBuilder private var rules: some View {
-        if let extras {
-            VStack(alignment: .leading, spacing: 22) {
-                RulesPart(extras: extras, picking: picking == .rule) { open(.rule) }
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.rule] = $0 }
-                VStack(alignment: .leading, spacing: 6) {
-                    PartLabel(title: "From a preset", line: "a saved set of apps", info: Self.presetInfo)
-                    savedPresets
-                }
+    private var rules: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            RulesPart(extras: extras, picking: picking == .rule) { open(.rule) }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(WorkspaceEditor.space)) } action: { spots[.rule] = $0 }
+            VStack(alignment: .leading, spacing: 6) {
+                PartLabel(title: "From a preset", line: "a saved set of apps", info: Self.presetInfo)
+                savedPresets
             }
-            .id(AppSection.workspaceRules)
         }
+        .id(AppSection.workspaceRules)
     }
 
     private func open(_ spot: Spot) {
@@ -407,7 +217,7 @@ struct WorkspaceEditorPanel: View {
                     spotsStepper
                 }
             }
-            WorkspacePreview(draft: $draft, hovered: $hovered, picking: picking, spots: $spots, open: open, drag: extras?.drag?.0, workspace: workspace)
+            WorkspacePreview(draft: $draft, hovered: $hovered, picking: picking, spots: $spots, open: open, drag: extras.drag?.0, workspace: workspace)
                 .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -432,20 +242,17 @@ struct WorkspaceEditorPanel: View {
     private var layoutColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
             PartLabel(title: "Layout", line: "how the apps share the screen", info: Self.layoutInfo)
-            // Three to a row, the rows sharing the height the column gets, each picture between 32 and 52 tall; From a
-            // preset under them, as wide as the pictures run.
+            // Three to a row, the rows sharing the height the column gets, each picture between 32 and 52 tall.
             VStack(spacing: 8) {
                 ForEach(LayoutChoice.rows, id: \.self) { row in
                     HStack(spacing: 8) { ForEach(row, id: \.self, content: layoutCell) }
                 }
-                // The page keeps From a preset on More (simplify-pages T18).
-                if popup { savedPresets.padding(.horizontal, LayoutPicture.inset) }
             }
         }
     }
 
     private func layoutCell(_ choice: LayoutChoice) -> some View {
-        LayoutPicture(choice: choice, on: draft.layout == choice.preset, measured: choice == LayoutChoice.all[0] ? { pictureHeight = $0 } : nil) {
+        LayoutPicture(choice: choice, on: draft.layout == choice.preset) {
             withAnimation(Kit.change) { draft.layout = choice.preset }
         }
     }
@@ -509,37 +316,16 @@ struct WorkspaceEditorPanel: View {
     static let openMissingInfo = "Switching here also opens each of these apps that has no window yet, instead of only pulling in the windows already open."
     static let openNowInfo = "Opens what is missing from Opens here and puts every app in its spot, switch on or off."
     static let keepLayoutInfo = "On (the default): Pilot lays this workspace out again in this layout every time a window opens or closes on it. Off: a new window goes wherever the tiler puts it."
-    static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Home's keys. It saves when you press Return or click elsewhere."
+    static let nameInfo = "Name this workspace, e.g. Chat: the name shows instead of its number on this page and on Binds' keys. It saves when you press Return or click elsewhere."
     static let previewInfo = "This workspace as a screen. Click a spot to put an app there or swap it. With Your widths, drag the line between two spots to set how wide each is, before or after apps are in them, and − and + take a spot away or add one. Every change saves at once."
     static let layoutInfo = "How the apps share the screen. Your widths puts them side by side in spots at the widths you set: drag the lines on the preview, and each app you add takes the next spot's width. The others lay the apps out for you."
     static let opensHereInfo = "The apps this workspace opens with, in order: the first fills the first spot. At login opens that app once each time you log in."
     static let presetInfo = "A saved set of apps and a layout. Picking one fills this workspace with it; every change saves at once."
 
-    // MARK: Footer
-
-    private var footer: some View {
-        HStack(spacing: 8) {
-            removeButton
-            Spacer(minLength: 8)
-            if case .popup(let close, _) = mode {
-                problem
-                Button(action: close) { Text("Done") }
-                    .buttonStyle(.pilotPrimary)
-                    .keyboardShortcut(picking == nil ? .defaultAction : nil)
-                // Esc closes too; what is typed is saved either way.
-                Button("Close", action: close).keyboardShortcut(picking == nil ? .cancelAction : nil)
-                    .opacity(0).frame(width: 0).accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 18).padding(.vertical, 11)
-    }
-
-    /// The page's Remove preset and why an edit was not saved, for the header (`actionsUp`).
+    /// The page's Remove preset and why an edit was not saved, in the header.
     @ViewBuilder private var pageActions: some View {
-        if case .page = mode {
-            problem
-            removeButton
-        }
+        problem
+        removeButton
     }
 
     @ViewBuilder private var removeButton: some View {
@@ -566,7 +352,7 @@ struct WorkspaceEditorPanel: View {
             let placed = Set(draft.apps.map(\.bundleId))
             let offered = switch spot {
             case .open: choices.filter { !placed.contains($0.bundle) }
-            case .rule: choices.filter { !(extras?.ruled.contains($0.bundle) ?? false) }
+            case .rule: choices.filter { !extras.ruled.contains($0.bundle) }
             case .app: choices
             }
             let matches = AppPicker.Matches(offered, query: query)
@@ -585,7 +371,7 @@ struct WorkspaceEditorPanel: View {
                             switch spot {
                             case .open: draft.add(bundleId: choice.bundle, name: choice.name)
                             case .app(let i): draft.replace(at: i, bundleId: choice.bundle, name: choice.name)
-                            case .rule: extras?.addRule(choice.bundle)
+                            case .rule: extras.addRule(choice.bundle)
                             }
                             picking = nil
                         }
@@ -668,18 +454,6 @@ private struct PartLabel: View {
             if let info { InfoMark(text: info) }
         }
         .font(ink.ui(11)).foregroundStyle(ink.muted)
-    }
-}
-
-/// The popup's ground fading in over the middle's edge where more of it scrolls out of sight.
-private struct EdgeFade: View {
-    @Environment(\.ink) private var ink
-    let towards: VerticalEdge
-
-    var body: some View {
-        LinearGradient(colors: [ink.background.opacity(0), ink.background], startPoint: towards == .bottom ? .top : .bottom,
-                       endPoint: towards == .bottom ? .bottom : .top)
-            .frame(height: 28).allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -806,8 +580,6 @@ private struct LayoutPicture: View {
 
     let choice: LayoutChoice
     let on: Bool
-    /// Hears the picture's height, which the editor needs to know how far the column can shrink.
-    var measured: ((CGFloat) -> Void)?
     let pick: () -> Void
     @State private var hovered = false
 
@@ -815,7 +587,6 @@ private struct LayoutPicture: View {
         Button(action: pick) {
             VStack(spacing: 5) {
                 MiniScreen(blocks: blocks, on: on)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured?($0) }
                 Text(choice.title).font(.system(size: 12, weight: on ? .semibold : .regular)).foregroundStyle(on ? ink.text : ink.text2)
                     .lineLimit(1)
             }

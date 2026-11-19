@@ -21,7 +21,7 @@ enum ReadyWidgets {
     private static let manifests: [String: String] = [
         thisMac: """
             {"id": "pilot-this-mac", "title": "This Mac", "icon": "💻", "version": "1.0",
-             "description": "CPU, memory, disk and battery, as Home's This Mac reads them.",
+             "description": "CPU, memory, disk and battery, as Pilot reads them.",
              "draw": "blocks", "data": {"reading": ["cpu", "memory", "disk", "battery"]}, "size": {"width": 260, "height": 230}}
             """,
         clock: """

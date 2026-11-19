@@ -2,20 +2,27 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Tools › Captures (spec `capture.html`, Q157), in tabs (page map, Sven 2026-10-17; simplify-pages T13). Capture: how a
-/// capture ends, the three daily keys, the Captures folder, the capture options and the other capture keys; the newest
-/// captures are on History. Recording: what a recording hears, its count down, its keys, the Recordings folder and its
-/// quality. No More: its blocks went back to the front of their kind (pages round 4, Sven's Q102). Every row has an ⓘ; a
-/// key's is the line Binds shows for it.
+/// Tools › Captures (spec `capture.html`, Q157), in tabs (page map, Sven 2026-10-17; simplify-pages T13). Since
+/// pilot-ui-redesign T18 (S1 B, shot 1b) each tab's front holds one row per simple feature and the rest is on More.
+/// Capture: how a capture ends, the three daily keys and the Captures folder. Recording: what a recording hears, its count
+/// down, its two keys and the Recordings folder. More: the capture options, the other capture keys and a recording's
+/// quality. The newest captures are on History. Every row has an ⓘ; a key's is the line Binds shows for it. Each setting's
+/// row is tagged with its `pilot` key, so a search result lands on it and rings it (T6); the search opens the page's first
+/// tab, so a ringed row on More turns the window to More (AppShell's `ringsOnMore`, from `moreKeys`) and one on Recording
+/// turns the page to Recording (`recordingKeys`).
 struct CapturesPage: View {
     @Bindable var store: CaptureSettingsStore
     var bar: BarItemsStore = .shared
+    @Environment(AppWindowModel.self) private var window: AppWindowModel?
+    @Environment(\.landingRing) private var ring
 
     /// The Recording tab rather than Capture.
     var recording = false
+    /// The More tab.
+    var more = false
 
-    init(store: CaptureSettingsStore = .shared, recording: Bool = false) {
-        self.store = store; self.recording = recording
+    init(store: CaptureSettingsStore = .shared, recording: Bool = false, more: Bool = false) {
+        self.store = store; self.recording = recording; self.more = more
     }
 
     static let note = "The capture keys freeze the screen and capture with Pilot."
@@ -41,16 +48,37 @@ struct CapturesPage: View {
     /// The keys Capture's first block shows: Area, Window and Full screen; the rest are under More capture keys.
     static let frontKeys = 3
 
+    /// More's index (simplify-pages T7): a block's rows, a heading not counted. A row added or moved changes its count.
+    static let entries = [
+        MoreEntry(id: .captureOptions, symbol: "slider.horizontal.3", controls: 5),
+        MoreEntry(id: .captureKeys, symbol: "keyboard", controls: keys.count - frontKeys),
+        MoreEntry(id: .recordingQuality, symbol: "dial.medium", controls: 4),
+    ]
+
+    /// The settings whose rows are on More and on Recording; every other tagged row is on Capture. A row moved to another
+    /// tab moves here too, so the landing ring still finds it.
+    static let moreKeys: Set<String> = ["capture.hideDesktopIcons", "capture.thumbnailPlace", "capture.autoScroll", "capture.delay",
+                                        "capture.recordQuality", "capture.recordResolution", "capture.recordFPS", "capture.showClicks"]
+    static let recordingKeys: Set<String> = ["capture.audio", "capture.countdown", "capture.recordingsFolder"]
+
     var body: some View {
-        KitLanding {
-            KitPage {
-                if recording { recordingTab } else { captureTab }
+        Group {
+            if more {
+                KitMore(entries: Self.entries) { moreTab }
+            } else {
+                KitLanding { KitPage { if recording { recordingTab } else { captureTab } } }
             }
         }
+        .onChange(of: ring, initial: true) { follow(ring) }
     }
 
-    /// Capture's front (simplify-pages T13): After capture, the three daily keys and the folder, then the capture options
-    /// and the other keys (pages round 4); the newest captures are on History.
+    /// A ringed setting on Recording while Capture shows: the window turns to Recording, whose landing scrolls to the row.
+    private func follow(_ key: String?) {
+        guard let key, Self.recordingKeys.contains(key), !recording, !more, let window else { return }
+        window.sections[.captures] = .recording
+    }
+
+    /// Capture's front: After capture and the three daily keys, then the folder.
     @ViewBuilder private var captureTab: some View {
         CapturePreview(after: store.settings.afterCapture, place: store.settings.thumbnailPlace)
         KitBlock(title: "Capture", symbol: "camera.viewfinder", note: Self.note) {
@@ -59,12 +87,18 @@ struct CapturesPage: View {
                 Segments(selection: $store.settings.afterCapture, options: [(.thumbnail, "Thumbnail"), (.editor, "Open editor"), (.copy, "Copy only")],
                          label: "After capture")
             }
+            .landingRing("capture.afterCapture")
             keyRows(Array(Self.keys.prefix(Self.frontKeys)))
         }
-        KitBlock(title: "Folder", symbol: "folder") { folderRow("Captures", kind: .capture, info: Info.capturesFolder) }
-        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.id(AppSection.captureOptions)
+        KitBlock(title: "Folder", symbol: "folder") { folderRow("Captures", kind: .capture, info: Info.capturesFolder).landingRing("capture.folder") }
+    }
+
+    /// More: the capture options, the other capture keys and the recording quality, each a block the index lists.
+    @ViewBuilder private var moreTab: some View {
+        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.moreBlock(.captureOptions)
         KitBlock(title: AppSection.captureKeys.title, symbol: "keyboard") { keyRows(Array(Self.keys.dropFirst(Self.frontKeys)), first: true) }
-            .id(AppSection.captureKeys)
+            .moreBlock(.captureKeys)
+        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.moreBlock(.recordingQuality)
     }
 
     /// The capture options: the Capture menu, hidden icons, the thumbnail's place, scrolling and the delay.
@@ -74,6 +108,7 @@ struct CapturesPage: View {
             Segments(selection: menuPlace, options: [(nil, "Off"), (.menuBar, "Menu bar"), (.topBar, "Top bar"), (.both, "Both")], label: "Capture menu")
         }
         BlockRow { Toggle("Hide desktop icons in captures and recordings", isOn: $store.settings.hideDesktopIcons).toggleStyle(.pilotSwitchRow(info: Info.hideIcons)) }
+            .landingRing("capture.hideDesktopIcons")
         if store.settings.afterCapture == .thumbnail {
             BlockRow {
                 label("Thumbnail place", Info.thumbnailPlace)
@@ -82,14 +117,18 @@ struct CapturesPage: View {
                 }
                 .labelsHidden().fixedSize()
             }
+            .landingRing("capture.thumbnailPlace")
         }
         BlockRow { Toggle("Scrolling captures: Pilot scrolls for you", isOn: $store.settings.autoScroll).toggleStyle(.pilotSwitchRow(info: Info.autoScroll)) }
+            .landingRing("capture.autoScroll")
         BlockRow {
             label("Delay", Info.delay)
             Segments(selection: $store.settings.delay, options: [(3, "3 s"), (5, "5 s"), (10, "10 s")], label: "Delay")
         }
+        .landingRing("capture.delay")
     }
 
+    /// Recording's front: what it hears, its count down and its two keys, then the folder.
     @ViewBuilder private var recordingTab: some View {
         KitBlock(title: "Recording", symbol: "record.circle", note: Self.recordNote) {
             BlockRow(first: true) {
@@ -97,14 +136,17 @@ struct CapturesPage: View {
                 Segments(selection: $store.settings.audio, options: [(.none, "None"), (.system, "Mac"), (.mic, "Microphone"), (.both, "Both")],
                          label: "Sound")
             }
+            .landingRing("capture.audio")
             BlockRow {
                 label("Count down first", Info.countdown)
                 Segments(selection: $store.settings.countdown, options: [(0, "Off"), (3, "3 seconds")], label: "Count down first")
             }
+            .landingRing("capture.countdown")
             keyRows(Self.recordKeys)
         }
-        KitBlock(title: "Folder", symbol: "folder") { folderRow("Recordings", kind: .recording, info: Info.recordingsFolder) }
-        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.id(AppSection.recordingQuality)
+        KitBlock(title: "Folder", symbol: "folder") {
+            folderRow("Recordings", kind: .recording, info: Info.recordingsFolder).landingRing("capture.recordingsFolder")
+        }
     }
 
     /// The recording quality: quality, resolution, frame rate and clicks.
@@ -113,15 +155,19 @@ struct CapturesPage: View {
             label("Quality", Info.quality)
             Segments(selection: $store.settings.recordQuality, options: [(.standard, "Standard"), (.high, "High"), (.best, "Best")], label: "Quality")
         }
+        .landingRing("capture.recordQuality")
         BlockRow {
             label("Resolution", Info.resolution)
             Segments(selection: $store.settings.recordResolution, options: [(.native, "Retina pixels"), (.points, "1x")], label: "Resolution")
         }
+        .landingRing("capture.recordResolution")
         BlockRow {
             label("Frame rate", Info.frameRate)
             Segments(selection: $store.settings.recordFPS, options: [(30, "30 fps"), (60, "60 fps")], label: "Frame rate")
         }
+        .landingRing("capture.recordFPS")
         BlockRow { Toggle("Show clicks", isOn: $store.settings.showClicks).toggleStyle(.pilotSwitchRow(info: Info.showClicks)) }
+            .landingRing("capture.showClicks")
     }
 
     /// Capture's bar item as Capture menu's pick (P69): off, or on where it is placed; the Menu bar page edits the same entry.

@@ -2,7 +2,7 @@
   "id": "pomodoro",
   "title": "Pomodoro",
   "icon": "🍅",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Work in focused blocks with short breaks, the time left counting down in the menu bar.",
   "examples": ["Focus: 25 minutes start counting down in the menu bar", "At zero Pilot's alert offers Start break; every 4th break is the long one"],
   "runtime": "process",

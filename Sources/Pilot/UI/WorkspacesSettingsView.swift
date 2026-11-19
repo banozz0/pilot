@@ -199,7 +199,7 @@ struct WorkspacesBody: View {
 
     /// The picked workspace's editor.
     private func editor(_ name: String) -> some View {
-        WorkspaceEditorPanel(workspace: name, presets: presets, draft: binding(name), mode: .page(extras: extras(name)),
+        WorkspaceEditorPanel(workspace: name, presets: presets, draft: binding(name), extras: extras(name),
                              start: start) {
             presets.remove(from: name)
             if presets.lastError == nil { drafts.revert(name) }

@@ -8,7 +8,7 @@ import Testing
 @testable import Pilot
 
 /// Toybox's other pages (card agent-bo-95423182, batch 2 on): the whole window at 1440 by 900 in Toybox dark and light on
-/// each page and part, and Instrument beside it, seeded as ToyboxHomeRenders does (fakes; nothing reaches the tiler, the
+/// each page and part, and Instrument beside it, seeded as the Home renders seed the tiler (fakes; nothing reaches the tiler, the
 /// clipboard or the network). `PILOT_RENDER_ONLY=<part of a name>[,<another>]` narrows it; `PILOT_RENDER_THEME=<id>` picks the theme.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter ToyboxPagesRenders`
 extension SharedLook {
@@ -41,7 +41,7 @@ struct ToyboxPagesRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         try SharedLook.HomeRenders.seedPresets()
-        let windows = try AeroWindow.parse(ToyboxHomeRenders.windows)
+        let windows = try AeroWindow.parse(SharedLook.HomeRenders.tenWindows)
         engine.observers.tiler.seed(focused: "2", occupied: OccupiedWorkspace.list(windows), windows: windows)
         SharedLook.StatsRenders.seed(SystemSampler.shared)
 

@@ -674,7 +674,7 @@ extension Ink {
 
 // MARK: - Sidebar
 
-/// The installed extensions for the app window: `links`, the ones that declare a page (Home's blocks, story 161), and
+/// The installed extensions for the app window: `links`, the ones that declare a page (story 161), and
 /// `entries`, every one, for the Extensions area's sidebar (Sven 2026-10-16: "all extensions downloaded should list
 /// here"); read as the window opens and as the Extensions page reads its folder.
 @Observable @MainActor

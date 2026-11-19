@@ -38,10 +38,9 @@ struct AppWindowTests {
         #expect(AppArea.next(after: .pilotMenu) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
         #expect(AppArea.next(after: .menu) == .menu && AppArea.next(after: .extensions) == .extensions && AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .tiling) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
-        // The window layout: the rail by default, for a name it does not know and for the hub, taken out on 2026-10-11.
-        #expect(WindowShape(saved: nil) == .rail && WindowShape(saved: "nope") == .rail && WindowShape(saved: "hub") == .rail)
-        #expect(WindowShape(saved: "tabs") == .tabs)
-        #expect(WindowShape.allCases.map(\.title) == ["Rail and page list", "Toolbar tabs"])
+        // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.
+        #expect(AppPlace(.reports).tabPath(count: 8, developer: false) == "More › Mac › Update & Clean › Reports")
+        #expect(AppPlace(.reports).tabPath(count: 9, developer: false) == "Mac › Update & Clean › More › Reports")
         // Direction 1: Home takes the width, any other page has its area's list, which folds under 900 pt; a search shows it.
         #expect(!RailLayout.showsList(.home, width: 1440, searching: false) && RailLayout.showsList(.home, width: 1440, searching: true))
         // AI takes the width as Home does, its tabs in the header; Windows lists its pages, Extensions its extensions.
@@ -62,7 +61,9 @@ struct AppWindowTests {
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
-        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.snippets.tabs.isEmpty)
+        // Clipboard and the Dock: the simple settings in front, the rest on More (pilot-ui-redesign T17).
+        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
+        #expect(AppPage.snippets.tabs.isEmpty)
         // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
         #expect(AppSection.reports.onMore == .upkeepMore && AppSection.reports.page == .upkeep)
@@ -71,12 +72,13 @@ struct AppWindowTests {
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
         // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
         #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
-        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
+        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
-        // Open with's and Tiling's blocks back on their fronts, their More gone (pages round 4, Sven's Q98, Q103).
-        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty)
+        // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More back for the
+        // Focused window's exact rows (pilot-ui-redesign T16).
+        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.map(\.title) == ["Tiling", "More"])
         // Pilot's blocks back on its front, its More gone (pages round 4, Sven's Q106).
         #expect(AppPage.general.tabs.isEmpty)
     }
@@ -144,7 +146,8 @@ struct AppWindowTests {
     /// Each page's search words before the cut (main at 5c058ad), by its old name, less the old tiler's config file
     /// ones R3 removed with it (2026-10-10).
     static let oldKeywords: [String: [String]] = [
-        "home": ["status", "most used", "problems", "needs you"],
+        // Most used went with Home's blocks (pilot-ui-redesign T6).
+        "home": ["status", "problems", "needs you"],
         "binds": ["bind", "key", "shortcut", "preset", "omarchy", "my binds", "sublayer", "reset"],
         "plainCombos": ["plain combo", "left option", "alt", "vim"],
         "conflicts": ["clash", "macos shortcut", "mission control"],

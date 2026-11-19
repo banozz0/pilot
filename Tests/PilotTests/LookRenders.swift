@@ -128,16 +128,16 @@ struct LookRenders {
         try shot("look-reduce-transparency", height: 1600)
         Look.shared.setAccessibility(reduceTransparency: false, increaseContrast: false)
         look.setAccessibility(reduceTransparency: false, increaseContrast: false)
-        // At the window's least width, Glass off and on: the Transparency row shows only while it is on.
+        // At the panel's fixed width, Glass off and on: the Transparency row shows only while it is on.
         for glass in [false, true] {
             look.glass = glass
-            try shot("look-glass-\(glass ? "on" : "off")-760", width: AppWindowController.minSize.width, height: 1300)
+            try shot("look-glass-\(glass ? "on" : "off")-\(Int(AppWindowController.size.width))", width: AppWindowController.size.width, height: 1300)
         }
         Self.resetShared()
     }
 
     /// Defocus's Blur and Dim rows (Sven, 2026-10-16), on Tiling's Focused window block since the page map (Sven
-    /// 2026-10-17): as they come, dim only, and both off, where the hint says there is nothing to do; then Reduce
+    /// 2026-10-17) and on Tiling's More since pilot-ui-redesign T16: as they come, dim only, and both off, where the hint says there is nothing to do; then Reduce
     /// transparency on, where the badge and Defocus each say so on a line of their own; at the window's least width, in
     /// each style.
     @Test("Tiling's Focused window block renders its Defocus rows and badge", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -145,7 +145,7 @@ struct LookRenders {
         let (look, dir) = try Self.setUp()
         func shot(_ name: String) throws {
             Self.mirror(look, spot: nil)
-            try writeRender(FocusedWindowBlock(look: look).styled(.page(.tiling), look: look).padding(.horizontal, 24)
+            try writeRender(FocusedWindowMore(look: look).styled(.page(.tiling), look: look).padding(.horizontal, 24)
                                 .frame(width: Self.page(AppWindowController.minSize.width), height: 820, alignment: .top)
                                 .pilotTheme(look: look).background(Theme.background),
                             to: dir.appendingPathComponent("focused-window-\(name).png"), wait: 0.8)
@@ -166,16 +166,15 @@ struct LookRenders {
         Self.resetShared()
     }
 
-    /// The page at the window's default and least widths (card agent-bo-95422970): every theme card's line whole, in a dark
-    /// theme and a light one, so a fix at one width or in one theme opens no clip at the other.
-    @Test("The Look page shows every line whole at both window widths", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    /// The page at the panel's one width (card agent-bo-95422970; the panel is fixed, ADR 0018): every theme card's line
+    /// whole, in a dark theme and a light one, so a fix in one theme opens no clip in the other.
+    @Test("The Look page shows every line whole at the panel's width", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderWidths() throws {
         let (look, dir) = try Self.setUp()
         for id in ["tokyo-night", "folio"] {
             look.themeID = id
-            for window in [AppWindowController.size.width, AppWindowController.minSize.width] {
-                try Self.shot(look, to: dir.appendingPathComponent("look-widths-\(id)-\(Int(window)).png"), width: Self.page(window), height: 1400)
-            }
+            let window = AppWindowController.size.width
+            try Self.shot(look, to: dir.appendingPathComponent("look-widths-\(id)-\(Int(window)).png"), width: Self.page(window), height: 1400)
         }
         Self.resetShared()
     }
@@ -196,7 +195,7 @@ struct LookRenders {
         Self.resetShared()
     }
 
-    /// The style picker at every width the page gets (Instrument's sidebar at 1000 and at 760; Toybox's rail at 760, 682),
+    /// The style picker at every width the page gets (Instrument's sidebar in the 780 pt panel; Toybox's rail at 682),
     /// each style picked: Vision reads every card's name and both keys whole, none broken mid-word as a
     /// page 552 wide once broke Instrum/ent and Spac/e. With PILOT_RENDER_OCR=1 too, as Vision stalls on a loaded Mac.
     @Test("The Look page's style picker shows every word whole at every page width", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RENDER_OCR"] != nil))
@@ -206,7 +205,7 @@ struct LookRenders {
         Self.mirror(look, spot: nil)
         for style in PilotStyle.allCases {
             look.style = style
-            for width in [Self.page(AppWindowController.size.width), 682, Self.page(AppWindowController.minSize.width)] {
+            for width in [Self.page(AppWindowController.size.width), 682] {
                 let name = "look-style-words-\(style.rawValue)-\(Int(width))"
                 let rep = try rendered(LookPage(look: look, more: true).styled(.page(.look), look: look).frame(width: width, height: 480, alignment: .top)
                                         .pilotTheme(look: look).background(Theme.background), wait: 0.8)
@@ -253,7 +252,7 @@ struct LookRenders {
                 look.style = style; look.themeID = theme
                 AppWindowController.applyLook(look, to: window)
                 window.setContentSize(AppWindowController.size)
-                let name = "window-660-\(style.rawValue)-\(theme)"
+                let name = "window-\(Int(AppWindowController.size.height))-\(style.rawValue)-\(theme)"
                 look.glass = false
                 try shot(AppPlace(.look), "\(name)-front")
                 try shot(AppPlace(.lookMore), "\(name)-more")

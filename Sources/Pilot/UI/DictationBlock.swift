@@ -2,10 +2,10 @@ import AVFoundation
 import PilotCore
 import SwiftUI
 
-/// Voice › Dictation (Q144; Q452: Pilot's own alone): the two binds and the dictation key, the speech models (each
-/// downloaded, used and removed on its own), what shows while you speak and where with its preview, the waveform's
-/// colour, and the microphone grant. Whole on Voice's front (split front and More by simplify-pages T12 until Sven,
-/// 2026-11-11, after 2276).
+/// Voice › Dictation (Q144; Q452: Pilot's own alone): since pilot-ui-redesign T18 (S1 B, shot 1b) one row per simple
+/// feature: the two binds and the dictation key, the speech model in use, Copy and Pause as one switch each, and the
+/// microphone grant. Every speech model (SpeechModelsBlock) and what shows while you speak (DictationShowsBlock) are on
+/// Voice's More. Each setting's row is tagged with its `pilot` key for the search's landing ring (T6).
 struct DictationBlock: View {
     @Environment(Engine.self) private var engine: Engine?
     var dictation: PilotDictation = .shared
@@ -20,24 +20,84 @@ struct DictationBlock: View {
             BlockRow { HStack(spacing: 6) { Text("Dictate while held"); InfoMark(text: "Listens while you hold the key and stops as you let go.") }.frame(maxWidth: .infinity, alignment: .leading); BindKey(action: DictationModule.holdID) }
             if let settings = engine?.settings { DictationKeyRows(settings: settings) }
             let models = dictation.models
-            BlockRow { Text("Speech models").frame(maxWidth: .infinity, alignment: .leading) }
-            ForEach(models.offered, id: \.choice) { SpeechModelRow(model: $0, models: models) }
-            // What shows while you speak, over the rows that set it (simplify-pages T27).
-            DictationPreview(setup: .init(showIn: dictation.showIn, barSide: dictation.barSide, colour: dictation.waveColour,
-                                          topBarShows: engine?.topBar.isOn ?? false),
-                             words: dictation.whileSpeaking == .words)
-                .padding(.vertical, 10)
-            PilotDictationRows(pilot: dictation, topBarOn: engine?.topBar.isOn ?? false)
-            front(models)
+            // The model in use, or the first to download while none is on this Mac; the others are on More.
+            if let shown = models.active ?? models.offered.first {
+                SpeechModelFrontRow(model: shown, inUse: models.active === shown).landingRing(SpeechModels.key)
+            }
+            DictationSwitchRows(pilot: dictation)
+            foot(models)
         }
     }
 
     /// The block's foot: the microphone grant and what dictation does with what you say.
-    @ViewBuilder private func front(_ models: SpeechModels) -> some View {
+    @ViewBuilder private func foot(_ models: SpeechModels) -> some View {
         MicrophoneRow(microphone: microphone)
         BlockRow {
             FinePrint(text: "Pilot records while you dictate, \(models.active?.choice.name ?? "the speech model") writes it down on this Mac "
-                      + "and Pilot pastes it where you type. Nothing leaves the Mac.").frame(maxWidth: .infinity, alignment: .leading)
+                      + "and Pilot pastes it where you type. Nothing leaves the Mac. The other speech models and what shows while "
+                      + "you speak are on More.").frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// The front's speech model: the one in use, or while none is on this Mac the first to download, with its download's
+/// progress; Use, Remove and the other models are on More (SpeechModelsBlock).
+private struct SpeechModelFrontRow: View {
+    @Environment(\.ink) private var ink
+    let model: SpeechModel
+    let inUse: Bool
+
+    var body: some View {
+        let choice = model.choice
+        BlockRow {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Speech model")
+                    InfoMark(text: "The model that writes down what you say, on this Mac. Every model, to download, use or remove, is on More.")
+                }
+                FinePrint(text: inUse ? "\(choice.name), \(choice.note)" : "\(choice.name), \(choice.size), \(choice.note)")
+            }
+            .padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
+            ModelStateControls(state: model.state, name: choice.name, size: choice.size, download: model.download, cancel: model.cancel) {
+                if inUse { Chip(text: "in use", color: ink.green) } else { Chip(text: "on this Mac") }
+            }
+        }
+        ModelFailureRow(state: model.state)
+    }
+}
+
+/// Voice's More: every speech model, each downloaded, used and removed on its own (pilot-ui-redesign T18; on the front
+/// until then).
+struct SpeechModelsBlock: View {
+    var dictation: PilotDictation = .shared
+
+    static let note = "Each runs on this Mac. Download one to use it; the one in use writes down what you say."
+
+    var body: some View {
+        let models = dictation.models
+        KitBlock(title: AppSection.voiceModels.title, symbol: "cpu", note: Self.note) {
+            ForEach(Array(models.offered.enumerated()), id: \.element.choice) { i, model in
+                SpeechModelRow(model: model, models: models, first: i == 0)
+            }
+        }
+    }
+}
+
+/// Voice's More: what shows while you speak and where, over its preview, and the waveform's colour (pilot-ui-redesign
+/// T18; on the front until then).
+struct DictationShowsBlock: View {
+    @Environment(Engine.self) private var engine: Engine?
+    var dictation: PilotDictation = .shared
+
+    var body: some View {
+        let topBarOn = engine?.topBar.isOn ?? false
+        KitBlock(title: AppSection.voiceShows.title, symbol: "rectangle.bottomthird.inset.filled") {
+            // What shows while you speak, over the rows that set it (simplify-pages T27).
+            DictationPreview(setup: .init(showIn: dictation.showIn, barSide: dictation.barSide, colour: dictation.waveColour,
+                                          topBarShows: topBarOn),
+                             words: dictation.whileSpeaking == .words)
+                .padding(.vertical, 10)
+            PilotDictationRows(pilot: dictation, topBarOn: topBarOn)
         }
     }
 }
@@ -95,8 +155,7 @@ struct DictationPreview: View {
     }
 }
 
-/// Pilot's own dictation: what shows while Sven speaks and where, the waveform's colour, whether the words stay on the
-/// clipboard, and whether a take pauses what is playing.
+/// Pilot's own dictation on More: what shows while Sven speaks and where, and the waveform's colour.
 private struct PilotDictationRows: View {
     @Bindable var pilot: PilotDictation
     /// Pilot's top bar is on: off, Top bar falls back to the pill and the row says so.
@@ -111,29 +170,25 @@ private struct PilotDictationRows: View {
         + "width while it shows. Right: before the status items."
     static let colourInfo = "Plain: white on the pill, the bar's own ink in the top bar. Theme: the theme's signal colour. "
         + "Custom: a colour you pick."
-    static let copyInfo = "On: the words stay on the clipboard after they are typed. Off: your clipboard is left as it was. "
-        + "When the app you spoke to is no longer in front, the words are copied either way, as the only way to get them."
-
-    static let pauseMediaInfo = "Pauses what is playing as you start dictating and plays it again when you stop, only if it was "
-        + "playing. It reaches the app in Control Centre's Now Playing, as the keyboard's play key does; sound from anything else, "
-        + "such as a call, keeps going."
-
     var body: some View {
         BlockRow {
             HStack(spacing: 6) { Text("While you speak"); InfoMark(text: Self.whileSpeakingInfo) }.frame(maxWidth: .infinity, alignment: .leading)
             Segments(selection: $pilot.whileSpeaking, options: PilotDictation.WhileSpeaking.allCases.map { ($0, $0.label) },
                      label: "While you speak")
         }
+        .landingRing(PilotDictation.whileSpeakingKey)
         BlockRow {
             HStack(spacing: 6) { Text("Show it in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
             Segments(selection: $pilot.showIn, options: PilotDictation.ShowIn.allCases.map { ($0, $0.label) }, label: "Show it in")
         }
+        .landingRing(PilotDictation.showInKey)
         if pilot.showIn != .pill {
             BlockRow {
                 HStack(spacing: 6) { Text("Position"); InfoMark(text: Self.positionInfo) }.frame(maxWidth: .infinity, alignment: .leading)
                 Segments(selection: $pilot.barSide, options: [(TopBarSide.left, "Left"), (.centre, "Centre"), (.right, "Right")],
                          label: "Position in the top bar")
             }
+            .landingRing(PilotDictation.barSideKey)
         }
         if pilot.showIn != .pill && !topBarOn {
             BlockRow {
@@ -145,12 +200,31 @@ private struct PilotDictationRows: View {
             HStack(spacing: 6) { Text("Waveform colour"); InfoMark(text: Self.colourInfo) }.frame(maxWidth: .infinity, alignment: .leading)
             ColourChoicePicker(choice: $pilot.waveColour, theme: Look.shared.theme.accent, label: "Waveform colour", plain: "Plain")
         }
+        .landingRing(PilotDictation.waveColourKey)
+    }
+}
+
+/// Dictation's two switches on the front, one row each: whether the words stay on the clipboard, and whether a take pauses
+/// what is playing.
+private struct DictationSwitchRows: View {
+    @Bindable var pilot: PilotDictation
+
+    static let copyInfo = "On: the words stay on the clipboard after they are typed. Off: your clipboard is left as it was. "
+        + "When the app you spoke to is no longer in front, the words are copied either way, as the only way to get them."
+
+    static let pauseMediaInfo = "Pauses what is playing as you start dictating and plays it again when you stop, only if it was "
+        + "playing. It reaches the app in Control Centre's Now Playing, as the keyboard's play key does; sound from anything else, "
+        + "such as a call, keeps going."
+
+    var body: some View {
         BlockRow {
             Toggle("Copy to clipboard", isOn: $pilot.copiesText).toggleStyle(.pilotSwitchRow(info: Self.copyInfo))
         }
+        .landingRing(PilotDictation.copyKey)
         BlockRow {
             Toggle("Pause media while dictating", isOn: $pilot.pausesMedia).toggleStyle(.pilotSwitchRow(info: Self.pauseMediaInfo))
         }
+        .landingRing(PilotDictation.pauseMediaKey)
     }
 }
 
@@ -174,12 +248,14 @@ private struct DictationKeyRows: View {
             }
             .labelsHidden().fixedSize()
         }
+        .landingRing(PilotSettings.dictationKeyKey)
         if settings.dictationKey != .off {
             BlockRow {
                 Text("Dictation key mode").frame(maxWidth: .infinity, alignment: .leading)
                 Segments(selection: $settings.dictationKeyMode, options: DictationKeyMode.allCases.map { ($0, $0.label) },
                          label: "Dictation key mode")
             }
+            .landingRing(PilotSettings.dictationKeyModeKey)
         }
     }
 }
@@ -191,16 +267,18 @@ struct SpeechModelRow: View {
     @Environment(\.ink) private var ink
     let model: SpeechModel
     let models: SpeechModels
+    /// The first row of its block.
+    var first = false
 
     var body: some View {
         let choice = model.choice, old = choice.replaces.map(models.model)
-        BlockRow {
+        BlockRow(first: first) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(choice.name)
                 FinePrint(text: "\(choice.size), \(choice.note)")
                 if let old, models.active === old { FinePrint(text: "Until it is downloaded, dictation uses your \(old.choice.name) files.") }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
             ModelStateControls(state: model.state, name: choice.name, size: choice.size, download: model.download, cancel: model.cancel) {
                 if models.active === model { Chip(text: "in use", color: ink.green) }
                 else { Button("Use") { models.pick = choice }.buttonStyle(.pilot).accessibilityLabel("Use \(choice.name)") }

@@ -2,7 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// The picked widget under the map (Sven, 2026-11-15, Q252 B): its preview, where it shows and its own settings on the
-/// page, each saved as it is set, then Move to Home and Remove. Settings with a picker of their own (the Launcher's
+/// page, each saved as it is set, then Remove. Settings with a picker of their own (the Launcher's
 /// tiles, a note, a password, Markets' symbols, a folder) open Edit widget's sheet from their row.
 struct WidgetsInspector: View {
     @Environment(\.ink) private var ink
@@ -18,9 +18,6 @@ struct WidgetsInspector: View {
                 Text(widget.title).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(1)
                 WidgetsTrust(trust: model.trust[widget.id])
                 Spacer(minLength: 6)
-                if !placement.onHome {
-                    Button("Move to Home") { model.moveHome(placement) }.buttonStyle(.pilot)
-                }
                 Button("Remove") { model.remove(placement) }.buttonStyle(.pilot)
             }
             HStack(alignment: .top, spacing: 14) {
@@ -63,21 +60,19 @@ struct WidgetsSettingsRows: View {
     var body: some View {
         let values = model.store.values(of: widget, placement: placement)
         VStack(alignment: .leading, spacing: 0) {
-            if !placement.onHome {
-                BlockRow(first: true) {
-                    label("Shows on")
-                    Menu(placement.workspace.map { "Workspace \($0)" } ?? "All workspaces") {
-                        Button("All workspaces") { model.show(placement, on: nil) }
-                        Divider()
-                        ForEach(model.workspaces(keeping: placement.workspace), id: \.self) { name in
-                            Button("Workspace \(name)") { model.show(placement, on: name) }
-                        }
+            BlockRow(first: true) {
+                label("Shows on")
+                Menu(placement.workspace.map { "Workspace \($0)" } ?? "All workspaces") {
+                    Button("All workspaces") { model.show(placement, on: nil) }
+                    Divider()
+                    ForEach(model.workspaces(keeping: placement.workspace), id: \.self) { name in
+                        Button("Workspace \(name)") { model.show(placement, on: name) }
                     }
-                    .fixedSize().help("Where it shows: on every empty workspace, or on one only")
                 }
+                .fixedSize().help("Where it shows: on every empty workspace, or on one only")
             }
             if widget.offersLayout {
-                BlockRow(first: placement.onHome) {
+                BlockRow {
                     label("Layout")
                     Picker("Layout", selection: Binding(get: { widget.layout(of: placement) }, set: { save(values, layout: $0) })) {
                         Text("Auto").tag(Widget.SizeClass?.none)
@@ -87,13 +82,10 @@ struct WidgetsSettingsRows: View {
                 }
             }
             ForEach(widget.settings, id: \.name) { field in
-                BlockRow(first: placement.onHome && !widget.offersLayout && field.name == widget.settings.first?.name) {
+                BlockRow {
                     label(field.label)
                     editor(field, values: values)
                 }
-            }
-            if widget.settings.isEmpty && !widget.offersLayout && placement.onHome {
-                BlockRow(first: true) { Text("It has no settings of its own.").font(ink.ui(12)).foregroundStyle(ink.text2) }
             }
         }
     }

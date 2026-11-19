@@ -83,8 +83,8 @@ enum WidgetFolder {
         return item + [(model.title, [("Open as gallery", { GalleryWindow.shared.open(folder) })])]
     }
 
-    /// Open, Open with, Show in Finder, Copy path, Quick Look, and Open as gallery for a folder: a row's menu on Home and
-    /// the desktop's, and the gallery's cards'.
+    /// Open, Open with, Show in Finder, Copy path, Quick Look, and Open as gallery for a folder: a row's menu on the
+    /// desktop, and the gallery's cards'.
     static func actions(_ item: FolderItem) -> [(title: String, run: () -> Void)] {
         let url = item.url
         let gallery: [(title: String, run: () -> Void)] = item.isFolder ? [("Open as gallery", { GalleryWindow.shared.open(url) })] : []

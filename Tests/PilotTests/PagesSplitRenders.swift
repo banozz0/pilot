@@ -44,8 +44,8 @@ struct PagesSplitRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         let look = Look.shared
-        let saved = (look.themeID, look.style, look.windowShape)
-        defer { (look.themeID, look.style, look.windowShape) = saved }
+        let saved = (look.themeID, look.style)
+        defer { (look.themeID, look.style) = saved }
 
         func shoot(_ file: String, _ place: AppPlace, _ size: NSSize) throws {
             window.setContentSize(size)
@@ -61,11 +61,9 @@ struct PagesSplitRenders {
         for width in [1000.0, 760.0] {
             for (name, place) in Self.places { try shoot("\(name)-\(Int(width))", place, NSSize(width: width, height: 660)) }
         }
-        try shoot("rail-instrument-760x520", AppPlace(.home), NSSize(width: 760, height: 520))
-        look.windowShape = .tabs
-        try shoot("tabs-760", AppPlace(.workspaces), NSSize(width: 760, height: 660))
-        try shoot("tabs-1000", AppPlace(.look), NSSize(width: 1000, height: 660))
-        look.windowShape = .rail
+        // The panel's shell (pilot-ui-redesign T3) at its one size.
+        try shoot("panel-instrument-780x560", AppPlace(.home), NSSize(width: 780, height: 560))
+        try shoot("panel-workspaces-780x560", AppPlace(.workspaces), NSSize(width: 780, height: 560))
         look.style = .toybox
         look.themeID = "tokyo-night"
         AppWindowController.applyLook(look, to: window)

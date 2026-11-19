@@ -317,3 +317,20 @@ extension BindEditor {
         text.font(style.toyNunito(700, 12.5)).foregroundStyle(style.color(\.text2)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
     }
 }
+
+// Kept here from ToyHome, which pilot-ui-redesign T6 removed with Home's blocks: the editor and the dropdown still draw it.
+/// A bind as Toybox's keycaps: Hyper's sun cap for a Hyper bind, a cap per modifier, the key's own name; `small`, the
+/// press rows' 24 pt caps (`.press .kc`).
+struct ToyBind: View {
+    let key: Key
+    var small = false
+    /// The bind editor's heading caps.
+    var large = false
+
+    var body: some View {
+        let signs = [(Modifiers.shift, "⇧"), (.ctrl, "⌃"), (.alt, "⌥"), (.cmd, "⌘")].filter { !key.modifiers.isDisjoint(with: $0.0) }.map(\.1)
+        ToyKeys(keys: signs + [KeyNames.name(for: key.keyCode)], hyper: key.hyper, large: large, small: small)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel((key.hyper ? "Hyper " : "") + key.label)
+    }
+}

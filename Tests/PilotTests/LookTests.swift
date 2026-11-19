@@ -47,13 +47,12 @@ struct LookTests {
         #expect(look.layoutError == nil && look.lastError == nil)
     }
 
-    @Test("A Window layout saved as the hub, taken out on 2026-10-11, loads as the rail; Toolbar tabs stays")
-    func hubLoadsAsRail() {
+    @Test("A Window layout an older Pilot saved, retired with the panel (ui-redesign T2), is cleared at launch")
+    func windowLayoutCleared() {
         let defaults = Self.defaults()
-        defaults.set("hub", forKey: "look.windowLayout")
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).windowShape == .rail)
         defaults.set("tabs", forKey: "look.windowLayout")
-        #expect(Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults).windowShape == .tabs)
+        _ = Look(themes: Self.themes, ghostty: FakeGhostty(), defaults: defaults)
+        #expect(defaults.object(forKey: "look.windowLayout") == nil)
     }
 
     static let themes = try! OmarchyThemes.parse(Data(contentsOf: URL(filePath: #filePath).deletingLastPathComponent()

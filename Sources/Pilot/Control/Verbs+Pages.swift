@@ -12,14 +12,24 @@ extension ControlVerbs {
                              usage: "pilot open <page|part|pilot://open link> [--section <\(sections.joined(separator: "|"))>] [--where] | pilot open --find <words>",
                              flags: [.init("section", help: "a System section: \(sections.joined(separator: ", "))"),
                                      .init("where", help: "say where the name or link lands from the tab bar (Tools › Captures), opening nothing", takesValue: false),
-                                     .init("find", help: "the places the window's search lists for these words, best first, opening nothing")],
+                                     .init("find", help: "Pilot's pages these words find, grouped under their tab path, with the parts and the settings (and their values) they found, best first, opening nothing")],
                              schema: { .object(["pages": .array(pages().map(JSONValue.string)), "parts": .array(parts()),
                                                 "sections": .array(sections.map(JSONValue.string))]) },
                              index: { .object(["pages": .array(pages().map(JSONValue.string))]) }) { call throws(ControlError) in
             let args = call.arguments(switches: ["where"])
             // Reads (simplify-pages T7): where a search, a name or a pilot://open link lands, the window left as it is.
+            // A search answers Home's grouped results (pilot-ui-redesign T5): each page under its tab path, what `pilot
+            // open` takes to open it, and the parts and settings found, each setting with its value, read after the match.
             if let words = args.value("find") {
-                return .array(AppPlace.search(words, developer: DeveloperPages.on).map { .string($0.path) })
+                let developer = DeveloperPages.on, schema = SettingsSchema.live
+                return .array(SettingsSearch.grouped(words, settings: schema.sorted, developer: developer).map { group in
+                    .object(["group": .string(group.path(developer: developer)), "open": .string(group.page.rawValue),
+                             "parts": .array(group.parts.map { .object(["title": .string($0.title), "open": .string($0.rawValue)]) }),
+                             "settings": .array(group.settings.map { setting in
+                                 .object(["key": .string(setting.key), "label": .string(setting.label),
+                                          "value": (try? schema.get(setting.key)) ?? .null])
+                             })])
+                })
             }
             let name = try args.word(0, "page")
             if args.flags.contains("where") {

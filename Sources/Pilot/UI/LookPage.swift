@@ -67,7 +67,6 @@ struct LookPage: View {
     /// What each setting does, the ⓘ's words: one or two plain lines.
     enum Info {
         static let style = "How Pilot is drawn: Instrument or Toybox. The theme still picks every colour."
-        static let windowShape = "How this window lays out its areas and pages: a rail with the area's pages beside it, or tabs in the toolbar."
         static let theme = "Click a theme to try it on Pilot; nothing else changes, and it goes when you leave Look. Apply theme keeps it and sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Glass puts this window, the panels and widgets on regular glass (Blur Full), Clear on clear glass (Blur Light), still readable; the bar's dropdowns stay glass. Custom shows once you change one of them on its own."
         static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and the desktop widgets. Off, they are solid. The top bar's dropdowns and drops follow its own Background."
@@ -87,13 +86,12 @@ struct LookPage: View {
     /// its count here.
     static let entries = [
         MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
-        MoreEntry(id: .windowLayout, symbol: "sidebar.left", controls: 1),
     ]
 
     // MARK: The page
 
     /// The front: the preview beside Glass with its Transparency and Blur and the wallpaper's Previous, Next and On its own,
-    /// then Theme, so Glass, Next and Apply theme show at the window's first size, 1000 by 660 (Sven's pick a, 2026-11-11;
+    /// then Theme, so Glass, Next and Apply theme show at the window's first size (1000 by 660 then; Sven's pick a, 2026-11-11;
     /// the prototype had Theme first); under them the cursor and the wallpaper's folders (pages round 4).
     private var column: some View {
         @Bindable var look = look
@@ -162,12 +160,11 @@ struct LookPage: View {
         }
     }
 
-    /// More: the style and this window's layout, each a place a link or the search lands on.
+    /// More: the style, a place a link or the search lands on.
     private var moreTab: some View {
         @Bindable var look = look
         return KitMore(entries: Self.entries) {
             headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
-            headed(.windowLayout, Info.windowShape) { calmLine("Try each: the window redraws at once.") { windowShape } }
             errorLine.padding(.top, 12)
         }
     }
@@ -179,17 +176,6 @@ struct LookPage: View {
             card()
         }
         .moreBlock(place)
-    }
-
-    /// A card of one row: its line where the rows below have their labels, its control at the trailing edge.
-    private func calmLine(_ line: String, @ViewBuilder _ control: () -> some View) -> some View {
-        HStack(spacing: 16) {
-            Text(line).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            control()
-        }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .blockSurface()
     }
 
     /// One of the Glass rows, split from the one above by a hairline.
@@ -221,13 +207,6 @@ struct LookPage: View {
     }
 
     // MARK: Shared parts
-
-    /// Window layout (window directions, Sven 2026-10-11: "can we have all 3 implemented, then I test and see which is
-    /// best?"): the rail or toolbar tabs; the hub went on 2026-10-11.
-    private var windowShape: some View {
-        Segments(selection: Binding(get: { look.windowShape }, set: { look.windowShape = $0 }),
-                 options: WindowShape.allCases.map { ($0, $0.title) }, label: "Window layout")
-    }
 
     /// Transparency from 0 % (solid) to 100 % (round 15; it was Strength, 40 to 100 %, the other way round), shown while
     /// Glass is on.

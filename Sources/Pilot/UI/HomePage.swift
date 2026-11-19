@@ -1,292 +1,94 @@
 import AppKit
-import Clipboard
 import PilotCore
 import SwiftUI
 
-/// Home, on its grid (HomeNowPage; P91, model A), its blocks the person's own (story 167): HomeLayout's shown blocks on
-/// their cells, by default the greeting, Workspaces, Clipboard and Most used down the left and the Hyper keyboard and This
-/// Mac beside them; edit mode, on Home itself (spec home-edit), moves, sizes and hides them and adds an installed
-/// extension's page back from its tray. Instrument and Toybox each hand the page their own board
-/// blocks. Pilot is the whole app, so Home has no Pilot switch; its switch is the Hyper key's (engine.hyperSwitch, Sven 2026-10-07). Every block reads
-/// what it shows itself, so a press or a reading redraws only that block.
+/// Home (pilot-ui-redesign T6, Sven's Q1 on Open question 3): the panel's first page, InstrumentHome in every style. Its
+/// old board of blocks and its edit mode are gone with the spec; Pilot is the whole app, so Home has no Pilot switch of
+/// its own, only the four the Pilot menu has too.
 struct HomePage: View {
-    /// Where a render starts: a key clicked on the board.
-    struct Start {
-        var picked: Int64?
-        /// Edit mode on, on the saved layout.
-        var editing = false
-    }
-
-    @Environment(Engine.self) private var engine
-    @Environment(\.homeSources) private var sources
-    /// Edit mode as the page is told from outside (a test's), while Home's own is off.
-    @Environment(\.homeEdit) private var outerEdit
-    /// A start handed down the window (a test's or a render's), else the one given.
-    @Environment(\.homeStart) private var givenStart
-    @Environment(\.homeEditWatch) private var watch
-    /// Instrument and Toybox draw their own Home (InstrumentHome, card agent-bo-95423181; ToyHome, card agent-bo-95423182).
-    @Environment(\.style) private var style
-    /// The app window shows: This Mac samples and the window list refreshes only then.
-    let onScreen: Bool
-    /// The window's search holds words: its Return finds a page, so no Home button holds Return then.
-    let searching: Bool
-    /// Binds' clashes, as the window counts them: the greeting shows them.
-    let clashes: Int
-    /// Change key: Binds with that action's editor open.
-    let editBind: (String) -> Void
-    /// Opens an extension's page.
-    let openExtension: (String) -> Void
     let go: (AppPlace) -> Void
-    @State private var picked: Int64?
-    /// Edit mode, while it is on: the page draws its draft; Done saves it, Escape, Cancel and leaving Home throw it away.
-    @State private var editing: HomeEditMode?
-    /// Where the page measures itself in edit mode (HomeFrames).
-    @State private var frames = HomeFrames()
-    @State private var pageModels = HomePageModels()
-    /// Edit mode on appear (a render's start).
-    private let start: Start
-    @State private var copy: HomeCopy?
-    /// The Hyper binds' names, kinds and pictures, read again only when the binds or the workspace names change.
-    @State private var binds: HomeBinds?
 
-    init(onScreen: Bool, searching: Bool = false, clashes: Int = 0, start: Start = .init(), editBind: @escaping (String) -> Void = { _ in },
-         openExtension: @escaping (String) -> Void = { _ in }, go: @escaping (AppPlace) -> Void) {
-        self.onScreen = onScreen
-        self.searching = searching
-        self.clashes = clashes
-        self.editBind = editBind
-        self.openExtension = openExtension
-        self.go = go
-        _picked = State(initialValue: start.picked)
-        self.start = start
-    }
-
-    /// What This Mac reads while Home shows.
-    static let readings: Set<MenuBarStats.Stat> = [.cpu, .ram, .disk, .sensors]
-    /// How often the window list is read again while Home shows, so titles stay fresh.
-    static let windowsEvery = Duration.seconds(15)
-
-    /// Clipboard and Most used wait until they hold something: no copy kept, no press counted yet. Edit Home still shows
-    /// them, so either can be placed any time (simplify-pages T3).
-    static func waits(_ id: String, copy: HomeCopy?, pressed: Bool) -> Bool {
-        switch HomeLayout.Block(rawValue: id) {
-        case .clipboard?: copy == nil
-        case .mostUsed?: !pressed
-        default: false
-        }
-    }
-
-    /// The cells Home draws `blocks` at. Toybox's Pilot block, drawn only while something needs you, takes the top of the
-    /// board when it has no cells of its own, the others moving down.
-    static func cells(_ home: HomeLayout, blocks: [String], shown: [String]) -> [String: HomeCell] {
-        let pilot = HomeLayout.Block.pilot.rawValue
-        guard blocks.contains(pilot), !shown.contains(pilot), home.cell(of: pilot) == nil else { return home.cells(blocks) }
-        var layout = home
-        let size = HomeLayout.size(of: pilot)
-        layout.set(pilot, cell: HomeCell(x: 5, y: 0, w: size.w, h: size.h))
-        return layout.cells(blocks, subject: pilot)
-    }
-
-    var body: some View {
-        let problems = HomeProblems.list(accessibilityGranted: engine.gate.isTrusted, secureInput: engine.secureInput.holder,
-                                         tilerRunning: engine.tilerFine,
-                                         lastError: engine.lastError)
-        // In edit mode Done holds Return.
-        let held = editing != nil ? .none : HomeReturn.target(picked: picked != nil, problems: problems, searching: searching)
-        let pages = sources.pages(), widgets = sources.widgets()
-        let home = editing?.session.preview ?? sources.layout().layout
-        let beyond = HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id))
-        let shown = home.shown(extensions: beyond)
-        let blocks = HomeLayout.drawn(shown, style: style.kind, needsYou: !problems.isEmpty)
-            .filter { editing != nil || !Self.waits($0, copy: copy, pressed: engine.pressed) }
-        let parts = HomeParts(problems: problems, held: held, picked: $picked, copy: copy, binds: binds ?? HomeBinds(engine: engine),
-                              blocks: blocks,
-                              pages: pages, pageModel: { [pageModels, sources] in pageModels.model($0, make: sources.page) }, onScreen: onScreen,
-                              editing: $editing, searching: searching,
-                              go: go, editBind: editBind, openExtension: openExtension, sources: sources, restartTiler: { [engine] in engine.startTiler() },
-                              cells: Self.cells(home, blocks: blocks, shown: shown), pin: home.layout(of:),
-                              style: style.kind, clashes: clashes, widgets: widgets)
-        Group {
-            if style.kind == .toybox { ToyHome(parts: parts) } else { InstrumentHome(parts: parts) }
-        }
-        .environment(\.homeEdit, editing != nil ? HomeNowEdit(frames: frames) : outerEdit)
-        .onChange(of: BindsRead(binds: engine.binds.store.binds, presets: engine.presets.contents), initial: true) {
-            binds = HomeBinds(engine: engine)
-        }
-        .onAppear {
-            if let code = givenStart?.picked { picked = code }
-            let start = givenStart ?? start
-            guard start.editing, editing == nil else { return }
-            editing = HomeEditMode(session: parts.newSession())
-        }
-        // Leaving Home throws an edit away (Sven, 2026-10-12: only Done saves).
-        .onDisappear { editing = nil }
-        .onChange(of: editing.map(ObjectIdentifier.init), initial: true) { watch?.mode = editing }
-        // Escape puts Most used back.
-        .onExitCommand { if picked != nil { picked = nil } }
-        // The newest copy on appear and each time the window shows again; This Mac reads only while it shows.
-        .task(id: onScreen) {
-            copy = sources.lastCopied()
-            guard onScreen else { return }
-            await SystemSampler.shared.watch(stats: Self.readings)
-        }
-        .task(id: onScreen) {
-            guard onScreen else { return }
-            while !Task.isCancelled {
-                await engine.observers.tiler.refreshOccupied()
-                try? await Task.sleep(for: Self.windowsEvery, tolerance: Self.windowsEvery / 10)
-            }
-        }
-    }
-}
-
-/// What Home's binds are read from: the Hyper binds and the workspace names their keys show.
-private struct BindsRead: Equatable {
-    let binds: [Key: String]
-    let presets: WorkspacePresetStore.Contents
+    var body: some View { InstrumentHome(go: go) }
 }
 
 // MARK: - What Home reads beyond the engine
 
-/// The newest copy: its words on one line, when, and how many the history keeps.
-struct HomeCopy: Equatable, Sendable {
-    let text: String
-    let at: Date
-    let count: Int
-}
-
-/// What Home reads beyond the engine and the sampler, a seam the renders fill: the clipboard's newest copy and the
-/// installed extensions' pages, each asked as its own page asks.
+/// What Home reads beyond the engine, a seam the renders fill: the clock, the settings, and the settings changed last.
 struct HomeSources: Sendable {
-    /// The time Home's page bar reads, given the clock's: the clock's own in the app; a render pins it so Home agrees
-    /// with the top bar drawn beside it (P89's film).
+    /// The time Home's date line reads, given the clock's: the clock's own in the app; a render pins it.
     var now: @MainActor @Sendable (Date) -> Date = { $0 }
-    var lastCopied: @MainActor @Sendable () -> HomeCopy? = {
-        ClipboardHistory.shared.newest().map { HomeCopy(text: $0.clip.title, at: $0.clip.copiedAt, count: $0.count) }
-    }
-    /// The installed extensions with a page, each a block Edit Home offers.
-    var pages: @MainActor @Sendable () -> [ExtensionPages.Link] = { ExtensionPages.shared.links }
-    /// Where Home's blocks are kept.
-    var layout: @MainActor @Sendable () -> HomeLayoutStore = { .shared }
-    /// What asks an extension's page for its Home block.
-    var page: @MainActor @Sendable (String) -> ExtensionPageModel = { ExtensionPageModel(id: $0) }
-    /// An extension's bar item's text, the figure its icon tab shows first.
-    var barText: @MainActor @Sendable (String) -> String? = { ExtensionBar.shared.text(for: $0) }
-    /// Instrument's Clipboard panel and Toybox's Clipboard block (cards agent-bo-95423181, 95423182): the newest kept copies, newest first; none while the
-    /// history is not running.
-    var recentCopies: @MainActor @Sendable () -> [StoredClip] = { ClipboardHistory.shared.recent() }
-    /// The widgets placed on Home, with the tiles the desk feeds while Home draws them.
-    var widgets: @MainActor @Sendable () -> [HomeWidget] = { WidgetDesk.shared.homeWidgets() }
-    /// A Home widget's tile is drawn in the window on screen, or no longer: its feed starts or stops, its page ended.
-    var drawWidget: @MainActor @Sendable (String, Bool) -> Void = { WidgetDesk.shared.drawnOnHome($0, $1) }
+    /// The settings the search reads and Jump back in shows the values of: the app's live ones; a render's own.
+    var schema: @MainActor @Sendable () -> SettingsSchema = { .live }
+    /// Jump back in (pilot-ui-redesign T6): the settings changed last, newest first, by key.
+    var recent: @MainActor @Sendable () -> [String] = { HomeRecent.shared.keys }
+    /// Keeps the settings a page's visit changed, newest first.
+    var remember: @MainActor @Sendable ([String]) -> Void = { HomeRecent.shared.remember($0) }
 }
 
 extension EnvironmentValues {
     @Entry var homeSources = HomeSources()
-    /// An extension block asks its page: not in an icon tab's hover card, whose tab asks.
-    @Entry var homeBlockAsks = true
-    /// Where Home starts when it shows, handed down the window (a test or a render); nil is the page's own.
-    @Entry var homeStart: HomePage.Start? = nil
 }
 
-// MARK: - Return
+/// Jump back in's record (pilot-ui-redesign T6, Open question 5 answered 2026-11-19): the window reads a page's settings as
+/// it opens and again as it leaves (InstrumentFrame), and keeps the keys whose value changed, newest first, in Pilot's
+/// defaults. A change made with `pilot set` or a key press shows only if it lands while its page is open. Home's own four
+/// switches and secrets are never kept, and Home itself is never read, so opening the window on Home opens no store.
+@Observable @MainActor
+final class HomeRecent {
+    static let shared = HomeRecent(defaults: .pilot())
 
-/// Which of Home's buttons holds Return (gap G4, Sven 2026-10-07): a hint shown on a button always works. The key
-/// inspector's main button while a key is clicked, else the first problem's that has one; none while the window's
-/// search holds words, whose Return finds a page.
-enum HomeReturn: Equatable {
-    case none, key, problem(Int)
+    /// Where the keys are kept.
+    static let key = "home.recentSettings"
+    /// The most kept.
+    static let most = 6
 
-    static func target(picked: Bool, problems: [HomeProblems.Problem], searching: Bool) -> HomeReturn {
-        if searching { return .none }
-        if picked { return .key }
-        return problems.firstIndex(where: \.hasFix).map { .problem($0) } ?? .none
+    private(set) var keys: [String]
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        keys = defaults.stringArray(forKey: Self.key) ?? []
+    }
+
+    func remember(_ changed: [String]) {
+        guard !changed.isEmpty else { return }
+        keys = Array((changed + keys.filter { !changed.contains($0) }).prefix(Self.most))
+        defaults.set(keys, forKey: Self.key)
+    }
+
+    /// `page`'s settings and their values now, the four switches and secrets aside.
+    static func values(of page: AppPage, schema: SettingsSchema) -> [String: JSONValue] {
+        let four = Set(Dropdown.Switch.four.compactMap(\.settingKey))
+        var values: [String: JSONValue] = [:]
+        for setting in schema.sorted where setting.kind != .secret && !four.contains(setting.key) && AppPlace.named(setting.page)?.page == page {
+            values[setting.key] = try? schema.get(setting.key)
+        }
+        return values
+    }
+
+    /// The keys whose value differs between the two reads.
+    static func changed(from before: [String: JSONValue], to after: [String: JSONValue]) -> [String] {
+        before.keys.sorted().filter { after[$0] != nil && after[$0] != before[$0] }
     }
 }
 
-extension HomeProblems.Problem {
-    /// Home has a button for it: Pilot's tiler restarts from Home, the rest open the page that fixes them; Pilot's own
-    /// error has none.
-    var hasFix: Bool { kind == .tiler || place != nil }
-}
+/// One page's visit as Jump back in reads it: the page and its settings' values as it opened.
+struct HomeVisit {
+    let page: AppPage
+    let values: [String: JSONValue]
 
-/// A button that holds Return while Home shows when `holdsReturn`; a style that draws `hint` beside it reads the same
-/// flag, so neither shows without the other.
-struct ReturnButton: View {
-    let title: String
-    var holdsReturn: Bool
-    var style = PilotButtonStyle()
-    let action: @MainActor () -> Void
-
-    var body: some View {
-        Button(action: action) { Text(title) }
-            .buttonStyle(style)
-            .keyboardShortcut(holdsReturn ? .defaultAction : nil)
+    /// Opens `page`'s visit, none on Home; the schema is asked only for a page that is not Home.
+    @MainActor static func opening(_ page: AppPage, schema: () -> SettingsSchema) -> HomeVisit? {
+        page == .home ? nil : HomeVisit(page: page, values: HomeRecent.values(of: page, schema: schema()))
     }
 
-    static let hint = "↵"
-}
-
-// MARK: - The parts every block shares
-
-/// What the page hands its blocks: the problems, which button holds Return, the clicked key, the newest copy, the blocks
-/// to draw and the ways out of Home.
-@MainActor
-struct HomeParts {
-    let problems: [HomeProblems.Problem]
-    let held: HomeReturn
-    let picked: Binding<Int64?>
-    let copy: HomeCopy?
-    let binds: HomeBinds
-    /// The blocks to draw, in order (HomeLayout.drawn).
-    let blocks: [String]
-    /// The installed extensions with a page.
-    let pages: [ExtensionPages.Link]
-    /// An extension block's model, kept by extension id.
-    let pageModel: (String) -> ExtensionPageModel
-    /// The window shows: an extension block asks only then.
-    let onScreen: Bool
-    /// Home's edit mode, nil at rest (HomeParts.editMode).
-    let editing: Binding<HomeEditMode?>
-    /// The window's search holds words: its Return finds a page, so Done does not hold Return then.
-    let searching: Bool
-    let go: (AppPlace) -> Void
-    let editBind: (String) -> Void
-    let openExtension: (String) -> Void
-    let sources: HomeSources
-
-    /// Restarts Pilot's tiler.
-    let restartTiler: @MainActor () -> Void
-    /// Each drawn block's cells on Home's grid (HomeLayout.cells).
-    var cells: [String: HomeCell] = [:]
-    /// The class a block's Layout keeps, nil for Auto.
-    var pin: (String) -> Widget.SizeClass? = { _ in nil }
-    /// The style Home draws in: edit mode packs only the blocks it draws.
-    var style: PilotStyle? = nil
-    /// Binds' clashes, as the window counts them: the greeting says them.
-    var clashes = 0
-    /// The widgets placed on Home (HomeWidgetBlock draws each).
-    var widgets: [HomeWidget] = []
-
-    /// The rows past Pilot's own blocks, as HomeLayout takes them: the extension pages by id, Home's widgets by row.
-    var beyond: [String] { HomeLayout.beyond(pages: pages.map(\.id), widgets: widgets.map(\.id)) }
-
-    /// The Home widget a row draws, if it is one.
-    func widget(_ row: String) -> HomeWidget? { widgets.first { $0.row == row } }
-
-    func fix(_ problem: HomeProblems.Problem) -> (title: String, run: @MainActor () -> Void)? {
-        HomeFix.of(problem, go: go, restartTiler: restartTiler)
-    }
-
-    func holdsReturn(_ i: Int) -> Bool { held == .problem(i) }
-
-    /// A key clicked on Instrument's or Toybox's Home board: Binds' editor on its bind, or Binds for a free key.
-    func openKey(_ code: Int64) {
-        if let action = binds.bound[code]?.first { editBind(action) } else { go(AppPlace(.binds)) }
+    /// The keys the visit changed, read again as it ends.
+    @MainActor func changed(schema: () -> SettingsSchema) -> [String] {
+        HomeRecent.changed(from: values, to: HomeRecent.values(of: page, schema: schema()))
     }
 }
 
-/// A problem's button (`hasFix` says which have one): Pilot's tiler restarts here (card agent-bo-95423025), the rest open
+/// What fixes a problem Home names: Pilot's tiler restarts here (card agent-bo-95423025), the rest open
 /// the page that fixes them.
 @MainActor
 enum HomeFix {
@@ -305,6 +107,15 @@ enum HomeFix {
 /// The line beside the Hyper switch, as Toybox's greeting says it.
 @MainActor
 enum HomeGreeting {
+    /// "Good evening.": Home's greeting by the hour of `date` (shot 7c-home).
+    static func good(at date: Date) -> String {
+        switch Calendar.current.component(.hour, from: date) {
+        case 5..<12: "Good morning."
+        case 12..<18: "Good afternoon."
+        default: "Good evening."
+        }
+    }
+
     /// The line beside the Hyper switch: first what the switch is, so it never reads as another's, then what needs you
     /// (its button follows), else what the layer key and tiling do.
     /// `tiler` names the tiler (TilerService.tilerName).

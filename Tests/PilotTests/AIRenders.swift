@@ -47,8 +47,8 @@ struct AIRenders {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let only = Self.env["PILOT_RENDER_ONLY"]
         let look = Look.shared
-        let saved = (look.themeID, look.style, look.windowShape, look.glass)
-        defer { (look.themeID, look.style, look.windowShape, look.glass) = saved }
+        let saved = (look.themeID, look.style, look.glass)
+        defer { (look.themeID, look.style, look.glass) = saved }
         look.glass = false
 
         let talking = try Self.settings(picked: .claudeCode)
@@ -91,39 +91,39 @@ struct AIRenders {
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
 
-        for shape in WindowShape.allCases {
-            look.windowShape = shape
+        // One shell since the panel (pilot-ui-redesign T3): the tab bar and page list.
+        for shape in ["panel"] {
             for (name, style, theme) in Self.looks {
                 (look.style, look.themeID) = (style, theme)
                 AppWindowController.applyLook(look, to: window)
                 (box.settings, box.chat) = (talking, conversation)
-                try shot("\(shape.rawValue)-\(name)-chat-1440", width: 1440, height: 900)
-                try shot("\(shape.rawValue)-\(name)-chat-760", width: 760, height: 760)
+                try shot("\(shape)-\(name)-chat-1440", width: 1440, height: 900)
+                try shot("\(shape)-\(name)-chat-760", width: 760, height: 760)
                 // AI › Setup: every provider line, the picked one's set-up, the keys and the new-chat time.
-                try shot("\(shape.rawValue)-\(name)-setup-1440", width: 1440, height: 900, place: AppPlace(.aiSetup))
-                if shape == .rail {
-                    try shot("\(shape.rawValue)-\(name)-setup-760", width: 760, height: 760, place: AppPlace(.aiSetup))
+                try shot("\(shape)-\(name)-setup-1440", width: 1440, height: 900, place: AppPlace(.aiSetup))
+                do {
+                    try shot("\(shape)-\(name)-setup-760", width: 760, height: 760, place: AppPlace(.aiSetup))
                     (box.settings, box.chat) = (unready, fresh)
-                    try shot("\(shape.rawValue)-\(name)-empty-unready-1440", width: 1440, height: 900)
-                    try shot("\(shape.rawValue)-\(name)-setup-unready-1440", width: 1440, height: 900, place: AppPlace(.aiSetup))
+                    try shot("\(shape)-\(name)-empty-unready-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-setup-unready-1440", width: 1440, height: 900, place: AppPlace(.aiSetup))
                     (box.settings, box.chat) = (talking, fresh)
-                    try shot("\(shape.rawValue)-\(name)-empty-acts-1440", width: 1440, height: 900)
-                    try shot("\(shape.rawValue)-\(name)-empty-acts-760", width: 760, height: 760)
+                    try shot("\(shape)-\(name)-empty-acts-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-empty-acts-760", width: 760, height: 760)
                     // P29: a / typed in the empty box opens the Skills list over the chat.
                     fresh.draft = "/"
-                    try shot("\(shape.rawValue)-\(name)-skills-open-1440", width: 1440, height: 900)
-                    try shot("\(shape.rawValue)-\(name)-skills-open-760", width: 760, height: 760)
+                    try shot("\(shape)-\(name)-skills-open-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-skills-open-760", width: 760, height: 760)
                     fresh.draft = ""
                     (box.settings, box.chat) = (codex, fresh)
-                    try shot("\(shape.rawValue)-\(name)-empty-codex-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-empty-codex-1440", width: 1440, height: 900)
                     (box.settings, box.chat) = (codexSignIn, fresh)
-                    try shot("\(shape.rawValue)-\(name)-empty-codex-sign-in-1440", width: 1440, height: 900)
-                    try shot("\(shape.rawValue)-\(name)-empty-codex-sign-in-760", width: 760, height: 760)
+                    try shot("\(shape)-\(name)-empty-codex-sign-in-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-empty-codex-sign-in-760", width: 760, height: 760)
                     (box.settings, box.chat) = (apiKey, fresh)
-                    try shot("\(shape.rawValue)-\(name)-empty-api-key-1440", width: 1440, height: 900)
+                    try shot("\(shape)-\(name)-empty-api-key-1440", width: 1440, height: 900)
                     for (state, chat) in [("bound", bound), ("asking", asking), ("plan-1", plan1), ("plan-8", plan8)] {
                         (box.settings, box.chat) = (talking, chat)
-                        try shot("\(shape.rawValue)-\(name)-agent-\(state)-1440", width: 1440, height: 900)
+                        try shot("\(shape)-\(name)-agent-\(state)-1440", width: 1440, height: 900)
                     }
                 }
             }

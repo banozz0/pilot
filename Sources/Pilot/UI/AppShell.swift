@@ -10,27 +10,14 @@ struct AppWindowView: View {
     @Bindable var model: AppWindowModel
     /// The Look the frame draws by; tests pass their own.
     var look: Look = .shared
+    /// More's card in the tab bar (PanelTabBar); a render passes one already open.
+    var more = PanelMore()
     @Environment(Engine.self) private var engine
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        let editing = model.editingWorkspace != nil
         // The window's frame is a surface of its own; each page under it is another (PageView).
-        WindowLayout(model: model, look: look).styled(.window, look: look)
-            // The page under the workspace editor is inert: no clicks, Tab focus or page keys (Esc and Return are the
-            // popup's), hidden from VoiceOver.
-            .disabled(editing)
-            .blur(radius: editing ? 1.5 : 0)
-            .accessibilityHidden(editing)
-            .background { PageKeys(model: model).disabled(editing) }
-            .overlay {
-                if let edited = model.editingWorkspace {
-                    WorkspacePopup(edited: edited) { model.editingWorkspace = nil }.id(edited.id)
-                }
-            }
-            .animation(reduceMotion ? nil : Kit.change, value: model.editingWorkspace?.id)
-            .environment(\.editWorkspace) { model.editingWorkspace = EditedWorkspace(name: $0) }
+        WindowLayout(model: model, more: more).styled(.window, look: look)
+            .background { PageKeys(model: model) }
             .sheet(isPresented: $model.showsConflicts) {
                 ConflictsPage().frame(width: 620, height: 460)
                     .safeAreaInset(edge: .bottom) {
@@ -48,18 +35,17 @@ struct AppWindowView: View {
     }
 }
 
-/// The picked style's frame around the page, in the Window layout picked on Look. Direction 1, the rail: ToyFrame and
-/// InstrumentFrame; direction 2, toolbar tabs: TabsFrame, one frame for both styles.
+/// The picked style's frame around the page: Instrument's is the panel's tab bar and page list (pilot-ui-redesign T3);
+/// Toybox keeps its rail until the feature trim takes the style away.
 private struct WindowLayout: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    var look: Look = .shared
+    let more: PanelMore
 
     var body: some View {
-        switch (look.windowShape, style.kind) {
-        case (.tabs, _): TabsFrame(model: model) { PageView(model: model) }
-        case (_, .toybox): ToyFrame(model: model) { PageView(model: model) }
-        case (_, .instrument): InstrumentFrame(model: model)
+        switch style.kind {
+        case .toybox: ToyFrame(model: model) { PageView(model: model) }
+        case .instrument: InstrumentFrame(model: model, more: more)
         }
     }
 }
@@ -96,15 +82,27 @@ struct PageView: View {
             // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
             // KitMore or KitLanding lands there, then clears it.
             .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
+            // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
+            .environment(\.landingRing, model.ringed)
+            // A ringed setting whose row is on its page's More (pilot-ui-redesign T17): More, so the ring shows.
+            .onChange(of: model.ringed) {
+                guard let key = model.ringed, Self.ringsOnMore[model.page]?.contains(key) == true,
+                      let more = AppSection.more(of: model.page) else { return }
+                model.sections[model.page] = more
+            }
     }
+
+    /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T16, T17, T18; S1 B).
+    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .clipboard: ClipboardSettingsView.moreKeys,
+                                                      .tiling: FocusedWindowMore.moreKeys, .captures: CapturesPage.moreKeys,
+                                                      .voice: VoicePage.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
     @ViewBuilder private var page: some View {
         let section = model.section(of: model.page)
         switch model.page {
         case .home:
-            HomePage(onScreen: model.live, searching: !model.query.trimmingCharacters(in: .whitespaces).isEmpty, clashes: model.conflictCount,
-                     editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openExtension: { model.goExtensionPage($0) }) { model.go($0) }
+            HomePage { model.go($0) }
         case .binds:
             if section == .bindsMore {
                 BindsMorePage { model.editBind = $0; model.go(AppPlace(.binds)) }
@@ -121,11 +119,12 @@ struct PageView: View {
                 MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
             }
         case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
-        case .tiling: TilingSettingsView()
+        // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
+        case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
         // The menu bar lane's page (card agent-bo-95422913).
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).
-        case .dock: DockPage()
+        case .dock: DockPage(more: section == .dockMore)
         case .pilotMenu: PilotMenuPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
@@ -133,9 +132,9 @@ struct PageView: View {
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
-        case .clipboard: ClipboardSettingsView()
+        case .clipboard: ClipboardSettingsView(more: section == .clipMore)
         case .captures:
-            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
+            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
         case .notes: NotesPage(onScreen: model.onScreen)
         case .files:
