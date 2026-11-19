@@ -61,7 +61,6 @@ struct BindPresetTests {
         #expect(b.count == 117)
         #expect(Set(b.values).count == b.count)
         #expect(BindStore(presets: [.pilot: b]).refused.isEmpty)
-        #expect(PilotDefault.mouse.count == 8 && PilotDefault.mouse[Key("Mouse Scroll Up")] == "media.volumeUp")
         #expect(PilotDefault.scratch == ["apps.launcher": Key("space")])
     }
 

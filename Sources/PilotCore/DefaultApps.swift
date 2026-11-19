@@ -48,6 +48,11 @@ public enum AppRole: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The terminal apps Pilot knows, the Terminal key's picker's order: the picker offers them, and a link opening one
+    /// needs the token (LinkToken.opensTerminal).
+    public static let terminalApps = ["com.mitchellh.ghostty", "com.googlecode.iterm2", "dev.warp.Warp-Stable", "net.kovidgoyal.kitty",
+                                      "com.github.wez.wezterm", "org.alacritty", "com.apple.Terminal"]
+
     /// Known alternatives, most preferred first. The first one installed wins over the system default.
     public var alternatives: [String] {
         switch self {

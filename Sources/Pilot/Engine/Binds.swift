@@ -16,10 +16,9 @@ final class Binds {
     /// render run too: its tests run in parallel in one moved home, and one test's preset switch broke another's bind.
     let fileURL = isTestRun ? PilotFolder.support.appending(path: "binds-\(UUID().uuidString).json") : Binds.url
 
-    /// Each base's default keys, every registered action and a new file's mouse buttons, set by the first load.
+    /// Each base's default keys and every registered action, set by the first load.
     private var presets: [BindStore.Base: [String: Key]] = [:]
     private var actions: [String] = []
-    private var mouse: () -> [Key: String] = { [:] }
     private(set) var store = BindStore(defaults: [:])
     /// Why the file was not read; nil after a clean load. While set, nothing is written, so a hand edit is never lost.
     private(set) var lastError: String?
@@ -30,11 +29,10 @@ final class Binds {
     /// the scrolling layout replaced its old layout (spec scrolling-layout, 2026-10-12).
     static let retired = ["windows.toggleAccordion": "windows.toggleScrolling"]
 
-    /// The defaults run until an unreadable file is fixed. `mouse` is what a new file's buttons run, asked only for one.
-    func load(presets: [BindStore.Base: [String: Key]], actions: [String], mouse: @escaping () -> [Key: String] = { [:] }) {
+    /// The defaults run until an unreadable file is fixed.
+    func load(presets: [BindStore.Base: [String: Key]], actions: [String]) {
         self.presets = presets
         self.actions = actions
-        self.mouse = mouse
         load()
     }
 
@@ -49,8 +47,7 @@ final class Binds {
             lastError = "\(fileURL.path) not read: \(error)"
             return log.error("binds: \(self.lastError ?? "", privacy: .public); the defaults run")
         }
-        // A new install starts with Sven's mouse buttons too (Q531); a file keeps its own, none included.
-        if file == nil { for (key, action) in mouse() { store.setMouse(key, to: action) } }
+        // A new install starts with no mouse binds (Sven, Q251); a file keeps its own.
         logRefused()
         log.notice("binds: \(self.store.binds.count) loaded from \(self.fileURL.path, privacy: .public), preset \(self.store.preset.id, privacy: .public)")
         backUp(file)

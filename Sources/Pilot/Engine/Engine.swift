@@ -367,16 +367,8 @@ final class Engine {
         binds.onChange = { [unowned self] in armMouseButtons() }
         let myBinds = MyBinds.preset(registry: registry.defaults)
         AbilitySettings.shared.seed(existingUser: Binds.ranBefore)
-        // A mouse button whose action is not on this Mac (Sven's own Now Playing extension) stays free: a bind there would
-        // take the button and run nothing. An extension's id always builds an action, so its command is looked up too.
-        binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys)) { [unowned self] in
-            // A new install starts with no mouse button bound (Sven's pick, 2026-11-19); Sven's own were Q531's.
-            guard !Install.isNew else { return [:] }
-            let installed = Extension.find(in: Extension.folder).extensions
-            return PilotDefault.mouse.filter { _, id in
-                action(id) != nil && (Extension.command(inAction: id) == nil || Extension.command(inAction: id, in: installed) != nil)
-            }
-        }
+        // A new install starts with no mouse binds at all (Sven, Q251): every button stays the app's own until bound.
+        binds.load(presets: [.pilot: PilotDefault.binds, .myBinds: myBinds, .empty: PilotDefault.scratch], actions: Array(registry.actions.keys))
         // rings.json from before version 4, or none: Mouse 4's hold opens This window, once (Q194); a new install binds no
         // mouse button.
         if !Install.isNew, rings.store.upgraded, rings.store.lastError == nil, binds.lastError == nil { binds.addRingHold() }
@@ -443,11 +435,14 @@ final class Engine {
             if autorepeat && !action.repeats { return }
             record(key, action: action.label)
             if !autorepeat { countPress(id) }
-            if let hold = action.hold {
-                held[key] = { hold(false) }
-                hold(true)
-            } else {
-                action.run()
+            // The press names itself to what it opens (RunCaller): "terminal → … opened via Mouse 3".
+            RunCaller.with(key.label) {
+                if let hold = action.hold {
+                    held[key] = { hold(false) }
+                    hold(true)
+                } else {
+                    action.run()
+                }
             }
         }
         tap.onRelease = { [unowned self] key in held.removeValue(forKey: key)?() }
@@ -855,8 +850,8 @@ final class Engine {
 
     /// pilot://run?action=windows.close[&app=Finder] runs one action by id, bypassing the tap. Picker actions work
     /// unbound: action=apps.open:com.apple.Notes, action=apps.web:https://chatgpt.com or a drive route,
-    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke, a non-web URL, or
-    /// Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock (ControlGate.Ask.cutting) also needs the link token
+    /// action=drive.menu:com.apple.finder:File > New Finder Window (URL-encoded). A command, a keystroke, a non-web URL, a
+    /// terminal (LinkToken.opensTerminal), or Wi-Fi, Bluetooth, shut down, restart, sleep, log out or a lock (ControlGate.Ask.cutting) also needs the link token
     /// (LinkToken), so a link on a web page cannot run one.
     func runAction(_ url: URL) {
         let value = url.queryValue
@@ -864,7 +859,7 @@ final class Engine {
         guard LinkToken.standard.allows(id, token: value("token")) else { return Self.refuseLink("run", id) }
         guard ensureFrontmost(value("app")) else { return }
         log.notice("run: \(LinkToken.redact(id), privacy: .public)")
-        action.run()
+        RunCaller.with("link") { action.run() }
     }
 
     private static func refuseLink(_ verb: String, _ id: String) {

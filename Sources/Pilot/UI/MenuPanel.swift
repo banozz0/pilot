@@ -109,8 +109,9 @@ final class PilotMenu {
     /// the menu inside it (Omarchy's apps menu).
     /// `pressedAt`: Hyper+Space's key-down (HyperTap.pressedAt); an open it brings logs its time to the first frame.
     func toggle(branch: MenuBranch? = nil, pressedAt: TimeInterval? = nil) {
+        let via = RunCaller.name   // the hop below would lose it
         DispatchQueue.main.async {
-            self.toggleNow(branch: branch)
+            RunCaller.with(via) { self.toggleNow(branch: branch) }
             if let pressedAt, let panel = self.panel { self.timeFirstFrame(of: panel, from: pressedAt) }
         }
     }
@@ -118,12 +119,13 @@ final class PilotMenu {
     /// Opens the menu inside `branch`, or keeps it there when it already shows it (a widget's Update and Clean, which a
     /// second press must not close).
     func open(branch: MenuBranch) {
+        let via = RunCaller.name   // the hop below would lose it
         DispatchQueue.main.async {
             if self.panel != nil {
                 guard self.branch != branch else { return }
                 self.close(restoreFocus: false)
             }
-            self.toggleNow(branch: branch)
+            RunCaller.with(via) { self.toggleNow(branch: branch) }
         }
     }
 
@@ -265,7 +267,7 @@ final class PilotMenu {
         model?.recent = MenuModel.recent(entries, picks: frecency ?? Frecency())
         let updates = updatesSeen.flatMap { $0.at.timeIntervalSinceNow > -3600 ? $0.count : nil }
         model?.waiting = MenuModel.waiting(updates: updates, clean: CleanModule.previewer.ready?.total)
-        branchOpened(branch)
+        branchOpened(branch, opening: true)
         provideWindows(engine)
         provideMenuItems(listed: entries)
         provideFinderSelection()
@@ -841,14 +843,15 @@ final class PilotMenu {
 
     /// The providers that fill a branch as it opens: Remove's and Update's (from any of their categories too, where Escape
     /// back from a confirm lands), Clean's rows; Translate warms its model.
-    private func branchOpened(_ branch: MenuBranch?) {
+    /// `opening`: the menu opened straight into `branch` (an action, a button, a widget, a link), not a step inside it.
+    private func branchOpened(_ branch: MenuBranch?, opening: Bool = false) {
         // The tools a scan's kinds follow, looked for once per menu.
         if let model, model.tools == nil, branch?.browsed == .remove || branch?.browsed == .update || MenuLayout.searchesInstall(branch) {
             model.tools = MenuScan.tools()
         }
         if branch?.browsed == .remove { loadRemove() }
         if branch?.browsed == .update { loadUpdate() }
-        if branch == .clean { loadClean() }
+        if branch == .clean { loadClean(caller: opening ? "the menu opened at Clean via \(RunCaller.name)" : "a pick in the menu") }
         if branch == .translate {
             model?.nav.provide(.answer, home: .translate, [])
             Task { await translator.warm() }
@@ -1063,14 +1066,14 @@ final class PilotMenu {
 
     /// Clean's rows: Mole's preview, kept between menus (CleanPreviewer), or Install Mole when it is missing (with
     /// Homebrew when that is missing too).
-    private func loadClean() {
+    private func loadClean(caller: String) {
         let mole = CleanModule.mole != nil
         if !mole || CleanModule.previewer.ready != nil {
             return showClean(CleanModule.previewer.ready, mole: mole, homebrew: mole || Helper.homebrew.path() != nil)
         }
         guard cleanLoad == nil else { return }
         cleanLoad = Task { [weak self] in
-            let preview = await CleanModule.previewer.preview()
+            let preview = await CleanModule.previewer.preview(caller: caller)
             guard !Task.isCancelled, let self else { return }
             cleanLoad = nil
             guard let preview else { return model?.failed(in: .clean, "Mole's preview did not finish. Open Clean again to retry.") ?? () }
@@ -1403,7 +1406,7 @@ final class PilotMenu {
         guard case .action(let id) = entry.target, let model else { return }
         record(entry, from: model.nav)
         mlog.notice("menu: toggle \(LinkToken.redact(id), privacy: .public) with the menu open")
-        Engine.shared?.action(id)?.run()
+        RunCaller.with("menu") { Engine.shared?.action(id)?.run() }
         switchRead?.cancel()
         switchRead = Task { [weak self, weak model] in
             try? await Task.sleep(for: .seconds(1))
@@ -1464,7 +1467,7 @@ final class PilotMenu {
         case (.openApp, _):
             guard let bundle = entry.app else { return }
             close(restoreFocus: false)
-            AppsModule.open(bundle: bundle)
+            RunCaller.with("menu") { _ = AppsModule.open(bundle: bundle) }
         case (.copyID, .action(let id)): copy(id)
         case (.copyTitle, _): copy(entry.title)
         case (.copyEmoji, .emoji(let glyph)):
@@ -1528,7 +1531,7 @@ final class PilotMenu {
         switch entry.target {
         case .app(let bundle):
             close(restoreFocus: false)
-            mlog.notice("menu: open \(bundle, privacy: .public) \(AppsModule.open(bundle: bundle) ? "opened" : "not installed", privacy: .public)")
+            mlog.notice("menu: open \(bundle, privacy: .public) \(RunCaller.with("menu") { AppsModule.open(bundle: bundle) } ? "opened" : "not installed", privacy: .public)")
         case .action("system.speedTest") where model?.layout == .line:
             showSpeedTest()
         // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
@@ -1544,7 +1547,7 @@ final class PilotMenu {
             runWhenFrontmost(previous, id) { ClipboardHistory.shared.toggle(searching: words) }
         case .action(let id):
             close(restoreFocus: true)
-            runWhenFrontmost(previous, id) { Engine.shared?.action(id)?.run() }
+            runWhenFrontmost(previous, id) { RunCaller.with("menu") { Engine.shared?.action(id)?.run() } }
         case .window(let id):
             close(restoreFocus: false)
             focusWindow(id)

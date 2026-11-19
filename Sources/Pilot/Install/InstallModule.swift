@@ -434,7 +434,7 @@ enum VisibleTerminal {
             AppsModule.open(settings, in: "com.apple.Terminal")
             ilog.notice("\(title, privacy: .public) in Terminal")
         }
-        ilog.notice("visible run: \(command, privacy: .public)")
+        ilog.notice("visible run \(title, privacy: .public) via \(RunCaller.name, privacy: .public): \(command, privacy: .public)")
     }
 }
 

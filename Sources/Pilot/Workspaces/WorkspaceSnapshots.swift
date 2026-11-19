@@ -110,7 +110,7 @@ final class WorkspaceSnapshots {
     /// Opens the saved apps that are not running and waits up to 10 s for each to show as many windows as were saved.
     private func reopen(_ snapshot: Snapshot, _ client: any TilerRunning) async -> [String] {
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        let missing = SnapshotRestore.missingApps(snapshot, running: running).filter { AppsModule.open(bundle: $0) }
+        let missing = SnapshotRestore.missingApps(snapshot, running: running).filter { bundle in RunCaller.with("snapshot restore") { AppsModule.open(bundle: bundle) } }
         guard !missing.isEmpty else { return [] }
         let wanted = Dictionary(snapshot.windows.filter { missing.contains($0.bundleId) }.map { ($0.bundleId, 1) }, uniquingKeysWith: +)
         for _ in 0..<40 {

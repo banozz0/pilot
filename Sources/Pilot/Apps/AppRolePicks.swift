@@ -16,8 +16,7 @@ final class AppRolePicks {
     /// Each role's known apps (Agent: commands), offered in the picker when installed; "Other app…" picks any.
     static func candidates(_ role: AppRole) -> [String] {
         switch role {
-        case .terminal: ["com.mitchellh.ghostty", "com.googlecode.iterm2", "dev.warp.Warp-Stable", "net.kovidgoyal.kitty",
-                         "com.github.wez.wezterm", "org.alacritty", "com.apple.Terminal"]
+        case .terminal: AppRole.terminalApps
         case .browser: ["app.zen-browser.zen", "company.thebrowser.Browser", "company.thebrowser.dia", "com.google.Chrome",
                         "com.brave.Browser", "org.mozilla.firefox", "com.microsoft.edgemac", "com.vivaldi.Vivaldi",
                         "com.kagi.kagimacOS", "com.apple.Safari"]

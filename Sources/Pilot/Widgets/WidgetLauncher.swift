@@ -58,12 +58,12 @@ enum WidgetLauncher {
     static func run(_ key: String) {
         switch MenuEntry.Target(key: key) {
         case .app(let bundle)?:
-            launchLog.notice("launcher: open \(bundle, privacy: .public) \(AppsModule.open(bundle: bundle) ? "opened" : "not installed", privacy: .public)")
+            launchLog.notice("launcher: open \(bundle, privacy: .public) \(RunCaller.with("launcher widget") { AppsModule.open(bundle: bundle) } ? "opened" : "not installed", privacy: .public)")
         case .action(let id)?:
             guard let action = Engine.shared?.action(id) else { return HUD.tip("Launcher: Pilot has no action \(id)") }
             launchLog.notice("launcher: runs \(id, privacy: .public)")
-            action.run()
-        case .branch(let branch)?: PilotMenu.shared.open(branch: branch)
+            RunCaller.with("launcher widget") { action.run() }
+        case .branch(let branch)?: RunCaller.with("launcher widget") { PilotMenu.shared.open(branch: branch) }
         default: break
         }
     }
