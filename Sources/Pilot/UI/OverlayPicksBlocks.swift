@@ -47,7 +47,9 @@ struct OverlayPicksBlocks: View {
         head.moreBlock(.overlay)
         SearchBox(prompt: "Search binds", text: $query).padding(.vertical, 8)
         if groups.isEmpty { EmptyState(title: total == 0 ? "No binds on Hyper yet" : "No bind matches", line: total == 0 ? nil : "Try another word.") }
-        ForEach(groups) { group in
+        // Lazy: a switch row for every bind, under the keyboard and below the fold, cost about 160 ms of each switch to
+        // Keys when built at once (bug 8, tester's feedback 2026-11-18); only the rows scrolled to are built.
+        LazyVStack(alignment: .leading, spacing: 0) { ForEach(groups) { group in
             KitBlock(title: Abilities.title(group.module), symbol: AbilitiesList.symbol(group.module)) {
                 ForEach(group.choices) { choice in
                     BlockRow(first: choice.id == group.choices.first?.id) {
@@ -63,7 +65,7 @@ struct OverlayPicksBlocks: View {
                     }
                 }
             }
-        }
+        } }
     }
 
     static func intro(delay: TimeInterval) -> String {

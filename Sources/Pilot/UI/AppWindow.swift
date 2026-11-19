@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import PilotCore
 import PilotTiler
 import SwiftUI
@@ -10,7 +11,11 @@ import SwiftUI
 final class AppWindowModel {
     private let defaults: UserDefaults
     var page: AppPage {
-        didSet { if page != oldValue { defaults.set(page.rawValue, forKey: Self.lastPageKey) } }
+        didSet {
+            guard page != oldValue else { return }
+            defaults.set(page.rawValue, forKey: Self.lastPageKey)
+            Self.timeSwitch(from: oldValue, to: page)
+        }
     }
     /// The part picked on each merged page; a page not in here shows its first.
     var sections: [AppPage: AppSection] = [:]
@@ -58,6 +63,24 @@ final class AppWindowModel {
     /// run only then, so a window left open behind other apps redraws nothing under its glass (Sven, 2026-10-17).
     var live: Bool { onScreen && isKey }
     private static let lastPageKey = "appWindow.page"
+    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
+    private static let signposts = OSSignposter(subsystem: "dev.banozz.pilot", category: .pointsOfInterest)
+
+    /// How long a page switch holds the main thread (bug 8, tester's feedback 2026-11-18: Keys → Windows stutters): from
+    /// the pick to the run loop's next turn, once SwiftUI has built, laid out and drawn the new page. A "page switch"
+    /// interval for Instruments, and one line in the log: `log stream --predicate 'subsystem == "dev.banozz.pilot" AND
+    /// category == "window"'`.
+    private static func timeSwitch(from: AppPage, to: AppPage) {
+        let start = ContinuousClock.now
+        let interval = signposts.beginInterval("page switch", "\(from.rawValue) → \(to.rawValue)")
+        RunLoop.main.perform(inModes: [.common]) {
+            MainActor.assumeIsolated {
+                signposts.endInterval("page switch", interval)
+                let ms = Int((ContinuousClock.now - start) / .milliseconds(1))
+                log.notice("page switch: \(from.rawValue, privacy: .public) → \(to.rawValue, privacy: .public) in \(ms) ms")
+            }
+        }
+    }
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
