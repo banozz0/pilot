@@ -231,10 +231,10 @@ enum Installer {
                   version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(cut(key)) is not an npm package name and version") }
             let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
             guard let resolved = entry["resolved"] as? String, resolved == expected else {
-                throw Refused("\(key) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
+                throw Refused("\(cut(key)) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
             }
             guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
-                throw Refused("\(key) has no sha512 integrity in its lockfile")
+                throw Refused("\(cut(key)) has no sha512 integrity in its lockfile")
             }
             return ["key": key, "name": real, "version": version, "resolved": resolved, "integrity": integrity]
         }

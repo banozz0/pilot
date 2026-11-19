@@ -71,12 +71,13 @@ final class ExtensionTools {
 
     static func named(_ ext: Extension) -> String { "\(ext.id) (\(ext.title)\(ext.version.map { " \($0)" } ?? ""))" }
 
-    /// `named` as a question's replaces line shows an installed copy: its title cut to 80 Unicode scalars, title and
+    /// `named` as a question's replaces line shows an installed copy: its title cut to 80 Unicode scalars, its version to 64, title and
     /// version with every control or hidden scalar written out (ControlGate.Ask.visible), since a folder installed from
     /// GitHub wrote them.
     static func shown(_ ext: Extension) -> String {
         let title = String(String.UnicodeScalarView(ext.title.unicodeScalars.prefix(80)))
-        return "\(ext.id) (\(ControlGate.Ask.visible(title))\(ext.version.map { " \(ControlGate.Ask.visible($0))" } ?? ""))"
+        let version = ext.version.map { String(String.UnicodeScalarView($0.unicodeScalars.prefix(64))) }
+        return "\(ext.id) (\(oneLine(title))\(version.map { " \(oneLine($0))" } ?? ""))"
     }
 
     // A summary's words (ControlGate.Ask.summed), raw, as the prompt escapes them once, each line kept one line. Pilot
@@ -174,7 +175,7 @@ final class ExtensionTools {
             }.joined(separator: ", ") : "")
         let (replaces, headline, fromLine) = replacing(plan.id, plan.version, from: "From GitHub: \(plan.source)")
         let ask = ControlGate.Ask.install(.extension, lines: [
-            "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(ControlGate.Ask.visible(plan.title))",
+            "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(oneLine(plan.title))",
             "into \(extensions.appending(path: plan.id).path)",
             "commands, run as you in Pilot's extension host: \(commands)",
             "preferences: \(preferences)",
@@ -408,12 +409,12 @@ extension ControlVerbs {
     private static func installFromGitHub(_ github: GitHubInstall, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         defer { github.remove() }
         func refused(_ error: any Error, _ what: String) -> ControlError {
-            ControlError(.badValue, "github:\(ControlGate.Ask.visible(github.spec)) not \(what): \(ControlGate.Ask.visible(ExtensionCatalogue.Problem.reason(error)))")
+            ControlError(.badValue, "github:\(oneLine(github.spec)) not \(what): \(oneLine(ExtensionCatalogue.Problem.reason(error)))")
         }
         let plan: GitHubInstall.Plan, fetched: [GitHubInstall.Fetched]
         do { (plan, fetched) = try await github.fetch() } catch { throw refused(error, "fetched, nothing asked") }
         do { _ = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch {
-            throw ControlError(.badValue, ControlGate.Ask.visible(ExtensionCatalogue.Problem.reason(error)) + " Nothing asked.")
+            throw ControlError(.badValue, oneLine(ExtensionCatalogue.Problem.reason(error)) + " Nothing asked.")
         }
         // Built again after Allow, as the local route's is: an extension installed or removed under this id while asking
         // changes the question, and the gate then denies.
@@ -429,13 +430,13 @@ extension ControlVerbs {
             do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
             defer { staged.remove() }
             guard let ext = staged.ext, staged.entry != nil, ext.id == plan.id else {
-                throw ControlError(.badValue, "github:\(ControlGate.Ask.visible(github.spec)) built, but fails the check, so nothing was installed:\n"
-                                   + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \(ControlGate.Ask.visible($0))" }.joined(separator: "\n"))
+                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but fails the check, so nothing was installed:\n"
+                                   + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
             }
             let old: [URL]
             do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }
             guard old.map(\.standardizedFileURL.path) == named.map(\.standardizedFileURL.path) else {
-                throw ControlError(.badValue, "github:\(ControlGate.Ask.visible(github.spec)) built, but what it replaces changed while building "
+                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but what it replaces changed while building "
                                    + "(asked: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
                                    + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
             }
@@ -447,7 +448,7 @@ extension ControlVerbs {
                             "question": .string(whole ? "whole" : "counted"),
                             "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
                             "fetched": .array((fetched + more).map { f in
-                                .object(["host": .string(f.host), "what": .string(ControlGate.Ask.visible(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
+                                .object(["host": .string(f.host), "what": .string(oneLine(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
                             })])
         }
     }
@@ -465,4 +466,10 @@ extension ControlVerbs {
                             "kept": .string(tools.data.appending(path: id).path)])
         }
     }
+}
+
+/// A remote word as one line of T6's output: ControlGate.Ask.visible, its written-out break (⏎ before a real new line) kept as
+/// ⏎ alone, so a word never starts a line of the question, a refusal or the answer.
+private func oneLine(_ text: String) -> String {
+    ControlGate.Ask.visible(text).replacingOccurrences(of: "⏎\n", with: "⏎", options: .literal)
 }
