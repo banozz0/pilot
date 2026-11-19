@@ -3,9 +3,12 @@ import Foundation
 /// Pilot's menu-bar dropdown (card agent-bo-95422912; round 3's dropdown, "Menu bar changes ok", redrawn in design round
 /// 4, artifact 5sh21HWjCjsWYAwWKTibcE, approved by Sven in chat 2026-10-06), compact since spec pilot-1-1 T29 (Q644 A,
 /// row set A of Q683), tall since spec desktop-controls T3 (Sven's pick A, each block its card): Status, with any problem
-/// at the top; the workspaces; six switches; what is running, only while something runs; the rows with their keys; Check
+/// at the top; the workspaces; the quick switches; what is running, only while something runs; the rows with their keys; Check
 /// for updates, Settings and Quit on one line. Holding Option adds the developer rows and the recent presses.
 public enum Dropdown {
+    /// The launcher's action (Hyper+Space): the one bind Key binds off keeps, and the Menu row's (spec pilot-ui-redesign T4).
+    public static let launcherAction = "apps.launcher"
+
     /// A block by the name `pilot set dropdown.*` takes (spec desktop-controls T4). Extensions, sound, connections,
     /// display, media and stats are the tall menu's optional blocks, off until shown; the developer rows and the footer are
     /// fixed.
@@ -104,12 +107,32 @@ public enum Dropdown {
         return held ? "Hyper held" : "Hyper is \(layerKey)"
     }
 
+    /// The quick switches. The first four (`four`) are Home's and the Pilot menu's (spec pilot-ui-redesign T4, S4 B):
+    /// the launcher, the key binds, tiling and the clipboard; each is one saved setting.
     public enum Switch: CaseIterable, Sendable {
-        case hyper, tiling, topBar, keepAwake, clipboard, dictation
+        case launcher, hyper, tiling, topBar, keepAwake, clipboard, dictation
+
+        /// Home's and the Pilot menu's four, in the order drawn (round 2's "Home's four switches are the same set").
+        public static let four: [Switch] = [.launcher, .hyper, .tiling, .clipboard]
+        /// Their group in `pilot schema`.
+        public static let group = "switches"
+
+        /// The setting `pilot get` reads it by; the four's only. Key binds is Pilot's on/off switch (`switch.on`, the
+        /// binds armed), no longer the session-only Hyper key (`hyper.on`).
+        public var settingKey: String? {
+            switch self {
+            case .launcher: "launcher.on"
+            case .hyper: "switch.on"
+            case .tiling: "tiling.on"
+            case .clipboard: "clipboard.recording"
+            case .topBar, .keepAwake, .dictation: nil
+            }
+        }
 
         public var title: String {
             switch self {
-            case .hyper: "Hyper key"
+            case .launcher: "Launcher"
+            case .hyper: "Key binds"
             case .tiling: "Tiling"
             case .topBar: "Top bar"
             case .keepAwake: "Keep awake"
@@ -118,10 +141,10 @@ public enum Dropdown {
             }
         }
 
-        /// Its word under the glyph in the compact menu's row of six (spec pilot-1-1 T29).
+        /// Its word under the glyph in the compact menu's row (spec pilot-1-1 T29).
         public var short: String {
             switch self {
-            case .hyper: "Hyper"
+            case .hyper: "Binds"
             case .keepAwake: "Awake"
             case .dictation: "Dictation"
             default: title
@@ -133,11 +156,12 @@ public enum Dropdown {
             "\(title): \(state(on, layerKeys: layerKeys, tiler: tiler))"
         }
 
-        /// What the switch is doing now, round 3's line. Hyper off names the key macOS has back;
+        /// What the switch is doing now, round 3's line. Key binds off keeps only the launcher's key (Open question 4);
         /// Tiling names the tiler (card agent-bo-95423025).
         public func state(_ on: Bool, layerKeys: [LayerKey], tiler: String) -> String {
             switch self {
-            case .hyper: on ? "binds on" : "\(layerKeys.label) left to macOS"
+            case .launcher: on ? "opens on its key" : "its key does nothing"
+            case .hyper: on ? "binds on" : "only the launcher's key"
             case .tiling: on ? "\(tiler) on" : "\(tiler) paused"
             case .topBar: on ? "macOS bar hidden" : "macOS bar shown"
             case .keepAwake: on ? "kept awake" : "sleeps as usual"
@@ -146,9 +170,10 @@ public enum Dropdown {
             }
         }
 
-        /// Its SF Symbol; Hyper's is its layer key's own sign (⇪, ⌥ or ⌘).
+        /// Its SF Symbol; Key binds' is its layer key's own sign (⇪, ⌥ or ⌘).
         public func symbol(layerKeys: [LayerKey]) -> String {
             switch self {
+            case .launcher: "magnifyingglass"
             case .hyper: layerKeys.primary.systemImage
             case .tiling: "rectangle.split.3x1"
             case .topBar: "menubar.rectangle"
@@ -211,7 +236,7 @@ public enum Dropdown {
         /// The registered action the row runs, whose bind it shows.
         public var actionID: String? {
             switch self {
-            case .menu: "apps.launcher"
+            case .menu: Dropdown.launcherAction
             case .clipboard: "apps.clipboard"
             case .aiChat: "ai.chat"
             case .quickNotes: "notes.toggle"
@@ -270,7 +295,7 @@ public enum Dropdown {
         ("Last: <press>", .developer, "the recent presses, commands under Option"),
         ("Recent presses", .developer, "the recent presses, commands under Option"),
         // Pilot is the whole app, so it has no on/off here; the Hyper key does (Sven, 2026-10-07; card agent-bo-95422986).
-        ("Pilot (the on/off switch)", .quickSwitches, "gone; the Hyper key switch instead"),
+        ("Pilot (the on/off switch)", .quickSwitches, "the Key binds switch"),
         // Other apps are not Pilot's to mention (Sven, C3 2026-10-10): the ticks left; the saved choice still applies.
         ("Also quit Karabiner-Elements", .developer, "gone; the saved choice still applies"),
         ("Also quit Hammerspoon", .developer, "gone; the saved choice still applies"),

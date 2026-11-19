@@ -15,7 +15,7 @@ struct DropdownQuickSwitchesTests {
         func toggle() { toggles += 1; isOn.toggle() }
     }
 
-    @Test("Each switch toggles its own: Tiling, the top bar, Keep awake and the clipboard's recording")
+    @Test("Each switch toggles its own: the launcher, Key binds, Tiling, the top bar, Keep awake and the clipboard's recording")
     func eachItsOwn() async throws {
         // Tiling over a fake tiler: it sends enable off, then enable on; clipboard over a fake watcher.
         var sent: [Bool] = [], recorded: [Bool] = []
@@ -25,9 +25,14 @@ struct DropdownQuickSwitchesTests {
         let keepAwake = KeepAwake(power: power)
         let panels = TopBarControllerTests.FakePanels()
         let topBar = TopBarControllerTests.make(TopBarControllerTests.defaults(), panels: panels)
-        let switches = QuickSwitches(hyper: Fake(true), tiling: tiling, topBar: topBar, keepAwake: keepAwake, clipboard: clipboard,
-                                     dictation: Fake(false))
-        #expect(Dropdown.Switch.allCases.map { switches[$0].isOn } == [true, true, false, false, true, false])
+        let launcher = Fake(true), keyBinds = Fake(true)
+        let switches = QuickSwitches(hyper: keyBinds, tiling: tiling, topBar: topBar, keepAwake: keepAwake, clipboard: clipboard,
+                                     dictation: Fake(false), launcher: launcher)
+        #expect(Dropdown.Switch.allCases.map { switches[$0].isOn } == [true, true, true, false, false, true, false])
+        // The four Home and the Pilot menu show (spec pilot-ui-redesign T4) reach their own.
+        switches[.launcher].toggle()
+        switches[.hyper].toggle()
+        #expect(!launcher.isOn && launcher.toggles == 1 && !keyBinds.isOn && keyBinds.toggles == 1)
         switches[.tiling].toggle()
         #expect(try await SystemSamplerTests.wait { sent == [false] && !tiling.isOn })
         switches[.tiling].toggle()
@@ -35,6 +40,16 @@ struct DropdownQuickSwitchesTests {
         switches[.clipboard].toggle()
         switches[.clipboard].toggle()
         #expect(recorded == [false, true] && clipboard.isOn)
+        // A saved switch keeps its state across launches: the clipboard's Off lasts (Open question 5), as the
+        // launcher's does; a fresh switch on the same defaults reads what the last one left.
+        let defaults = try #require(UserDefaults(suiteName: "DropdownQuickSwitchesTests.\(UUID().uuidString)"))
+        let paused = SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }
+        #expect(!paused.isOn)
+        paused.toggle()
+        paused.toggle()
+        #expect(!SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }.isOn)
+        paused.toggle()
+        #expect(SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }.isOn)
         switches[.keepAwake].toggle()
         #expect(keepAwake.isOn && power.held.count == 1)
         switches[.keepAwake].toggle()

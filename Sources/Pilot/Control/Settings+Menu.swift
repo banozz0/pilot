@@ -5,10 +5,14 @@ extension SettingsSchema {
     /// The menu's settings: Files' hidden files, and Passwords and Folders with its GIPHY key and rating, which sit under their
     /// abilities on Launcher › Abilities (page map, Sven 2026-10-17), so `page: "menu"` still. The never-index folders and
     /// the root's order are lists (collections), not keys.
+    /// `launcher.on` is one of Home's and the Pilot menu's four switches (spec pilot-ui-redesign T4): off, the launcher's
+    /// key opens nothing.
     func registerMenu(files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey,
-                      dropdown: DropdownLayoutStore = .forSettings) {
+                      dropdown: DropdownLayoutStore = .forSettings, launcher: SessionSwitch = .launcher) {
         registerDropdown(dropdown)
         register([
+            .bool("launcher.on", "Launcher on (its key, Hyper+Space, opens the Pilot menu; off, it opens nothing)", page: "home", standard: true,
+                  read: { launcher.isOn }, write: { launcher.set($0) }),
             .bool("files.showHidden", "Files opens with hidden files shown", page: "files", standard: false,
                   read: { files.showHidden }, write: { files.showHidden = $0 }),
             .int("passwords.length", "Password length", page: "menu", range: PasswordSettings.lengths, standard: 20,

@@ -148,7 +148,14 @@ public struct SettingKey: Sendable {
             entry["secret"] = .bool(true)
         }
         if confirms { entry["confirms"] = .bool(true) }
+        if let group { entry["group"] = .string(group) }
         return .object(entry)
+    }
+
+    /// A set it belongs to across pages, its page staying its own: "switches" for the four Home and the Pilot menu show
+    /// (spec pilot-ui-redesign T4); nil for the rest.
+    public var group: String? {
+        Dropdown.Switch.four.contains { $0.settingKey == key } ? Dropdown.Switch.group : nil
     }
 }
 

@@ -57,7 +57,8 @@ struct SettingsSchemaTests {
             hyper = SessionSwitch { [hyperFlips] in hyperFlips.log.append($0) }
             recording = SessionSwitch { [recordingFlips] in recordingFlips.log.append($0) }
             schema.registerPart1(general: (settings, hyper), look: look, clipboard: clipboard, recording: recording, files: files,
-                                 passwords: passwords, folders: folders, giphy: giphy, ai: ai, fonts: PilotFonts(defaults: defaults))
+                                 passwords: passwords, folders: folders, giphy: giphy, ai: ai, fonts: PilotFonts(defaults: defaults),
+                                 launcher: SessionSwitch(saved: "launcher.on", defaults: defaults) { _ in })
             let schema = schema
             verbs.registerSettings(schema) { [unowned self] key, value, _ in
                 asked.append("\(key)=\(value)")

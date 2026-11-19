@@ -9,16 +9,24 @@ protocol QuickSwitchable: AnyObject {
     func toggle()
 }
 
-/// The dropdown's quick switches (card agent-bo-95422912): the Hyper key (card agent-bo-95422986), the tiler's tiling,
-/// the top bar, Keep awake, the clipboard's recording and the dictation key (spec pilot-1-1 T29); injected, so tests run
-/// each over fakes of what it drives.
+/// The dropdown's quick switches (card agent-bo-95422912): the launcher and the key binds (Pilot's on/off switch, spec
+/// pilot-ui-redesign T4), the tiler's tiling, the top bar, Keep awake, the clipboard's recording and the dictation key
+/// (spec pilot-1-1 T29); injected, so tests run each over fakes of what it drives.
 @MainActor
 struct QuickSwitches {
+    /// `hyper` is Key binds, the `.hyper` case's switch.
     let hyper: QuickSwitchable, tiling: QuickSwitchable, topBar: QuickSwitchable, keepAwake: QuickSwitchable, clipboard: QuickSwitchable,
-        dictation: QuickSwitchable
+        dictation: QuickSwitchable, launcher: QuickSwitchable
+
+    init(hyper: QuickSwitchable, tiling: QuickSwitchable, topBar: QuickSwitchable, keepAwake: QuickSwitchable, clipboard: QuickSwitchable,
+         dictation: QuickSwitchable, launcher: QuickSwitchable = SessionSwitch.launcher) {
+        self.hyper = hyper; self.tiling = tiling; self.topBar = topBar; self.keepAwake = keepAwake; self.clipboard = clipboard
+        self.dictation = dictation; self.launcher = launcher
+    }
 
     subscript(_ which: Dropdown.Switch) -> QuickSwitchable {
         switch which {
+        case .launcher: launcher
         case .hyper: hyper
         case .tiling: tiling
         case .topBar: topBar
@@ -52,6 +60,11 @@ final class DictationKeySwitch: QuickSwitchable {
 }
 
 extension KeepAwake: QuickSwitchable {}
+/// Key binds (spec pilot-ui-redesign T4): Pilot's saved on/off switch, `switch.on`. Off keeps only the launcher's key
+/// (Open question 4, Engine.runs).
+extension PilotSwitch: QuickSwitchable {
+    func toggle() { set(!isOn) }
+}
 extension TopBarController: QuickSwitchable {
     func toggle() { set(!isOn) }
 }
@@ -93,28 +106,35 @@ final class TilingSwitch: QuickSwitchable {
     }
 }
 
-/// A quick switch on at every launch, never saved, so it is never forgotten off for good: the clipboard's recording
-/// (card agent-bo-95422912; paused, nothing copied is kept) and the Hyper key (card agent-bo-95422986; off, the layer
-/// key and chord Hyper do what macOS says, plain combos still run). With `onceOn`, a new install's starts off (Sven's
-/// pick, 2026-11-19) until the switch is first turned on, which is saved; a pause after that still lasts one launch.
+/// A quick switch. Without `saved` it is on at every launch, never saved, so it is never forgotten off for good: the
+/// Hyper key (card agent-bo-95422986; off, the layer key and chord Hyper do what macOS says, plain combos still run).
+/// With `saved` it keeps its state across launches under that key, `standard` until first flipped: the clipboard's
+/// recording (card agent-bo-95422912; paused, nothing copied is kept; a new install's starts off, Sven's pick
+/// 2026-11-19; Off lasts, Open question 5 of spec pilot-ui-redesign) and the launcher (`launcher.on`, T4).
 @Observable @MainActor
 final class SessionSwitch: QuickSwitchable {
-    static let clipboard = SessionSwitch(onceOn: "clipboard.recording") { ClipboardHistory.shared.setRecording($0) }
+    static let clipboard = SessionSwitch(saved: "clipboard.recording", standard: Install.startsOn) { ClipboardHistory.shared.setRecording($0) }
+    /// The launcher: off, its key (Hyper+Space) opens nothing and a tip names the switch (Engine's tap.onRun).
+    /// With Key binds off too, the tap stops (Engine.bindSwitchesChanged).
+    static let launcher = SessionSwitch(saved: "launcher.on", standard: true) { on in
+        mlog.notice("launcher \(on ? "on" : "off", privacy: .public)")
+        Engine.shared?.bindSwitchesChanged()
+    }
     private(set) var isOn: Bool
     @ObservationIgnored private let apply: @MainActor (Bool) -> Void
-    @ObservationIgnored private let onceOn: String?
+    @ObservationIgnored private let saved: String?
     @ObservationIgnored private let defaults: UserDefaults
 
-    init(onceOn: String? = nil, defaults: UserDefaults = .pilot(), apply: @escaping @MainActor (Bool) -> Void) {
+    init(saved: String? = nil, standard: Bool = true, defaults: UserDefaults = .pilot(), apply: @escaping @MainActor (Bool) -> Void) {
         self.apply = apply
-        self.onceOn = onceOn
+        self.saved = saved
         self.defaults = defaults
-        isOn = onceOn.map { defaults.object(forKey: $0) as? Bool ?? Install.startsOn } ?? true
+        isOn = saved.map { defaults.object(forKey: $0) as? Bool ?? standard } ?? true
     }
 
     func toggle() {
         isOn.toggle()
-        if isOn, let onceOn { defaults.set(true, forKey: onceOn) }
+        if let saved { defaults.set(isOn, forKey: saved) }
         apply(isOn)
     }
 
@@ -159,10 +179,10 @@ extension Engine {
     /// clipboard and dictation key.
     var dropdown: AnyView { AnyView(PilotDropdown(switches: quickSwitches).environment(self)) }
 
-    /// The six quick switches, the Pilot menu's and the pill's Controls view's.
+    /// The quick switches, the Pilot menu's and the pill's Controls view's.
     var quickSwitches: QuickSwitches {
-        QuickSwitches(hyper: hyperSwitch, tiling: tilingSwitch, topBar: topBar, keepAwake: KeepAwake.shared,
-                      clipboard: SessionSwitch.clipboard, dictation: dictationSwitch)
+        QuickSwitches(hyper: pilotSwitch, tiling: tilingSwitch, topBar: topBar, keepAwake: KeepAwake.shared,
+                      clipboard: SessionSwitch.clipboard, dictation: dictationSwitch, launcher: SessionSwitch.launcher)
     }
 
 }

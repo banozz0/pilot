@@ -109,7 +109,8 @@ extension SettingsSchema {
                     read: { settings.dictationKeyMode }, write: { settings.dictationKeyMode = $0 }),
             .bool("update.selfUpdatingCasks", "Update lists casks that update themselves", page: "install", standard: false,
                   read: { settings.updateSelfUpdatingCasks }, write: { settings.updateSelfUpdatingCasks = $0 }),
-            .bool("switch.on", "Pilot on (its binds armed)", page: "home", standard: true, confirms: true,
+            // Key binds, one of the four switches (spec pilot-ui-redesign T4): off, only the launcher's key still runs.
+            .bool("switch.on", "Key binds on (Pilot's binds armed; off, only the launcher's key runs)", page: "home", standard: true, confirms: true,
                   read: { pilotSwitch.isOn }, write: { pilotSwitch.set($0) }),
         ])
     }

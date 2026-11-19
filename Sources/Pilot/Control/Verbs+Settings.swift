@@ -45,12 +45,12 @@ extension SettingsSchema {
     /// General's needs the engine's settings and Hyper switch, so it is left out until the engine is up.
     func registerPart1(general: (settings: PilotSettings, hyper: SessionSwitch)?, look: Look, clipboard: ClipboardHistory, recording: SessionSwitch,
                        files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey, ai: AISettings,
-                       fonts: PilotFonts = .shared) {
+                       fonts: PilotFonts = .shared, launcher: SessionSwitch = .launcher) {
         if let general { registerGeneral(general.settings, hyper: general.hyper) }
         registerLook(look)
         registerFonts(fonts)
         registerClipboard(clipboard, recording: recording)
-        registerMenu(files: files, passwords: passwords, folders: folders, giphy: giphy)
+        registerMenu(files: files, passwords: passwords, folders: folders, giphy: giphy, launcher: launcher)
         registerAI(ai)
     }
 

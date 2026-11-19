@@ -7,7 +7,7 @@ import Testing
 @MainActor
 @Suite("Hyper switch")
 struct HyperSwitchTests {
-    @Test("Off and on reach the tap, and the dropdown's Hyper switch is that switch")
+    @Test("Off and on reach the tap, and a quick switch slot drives the switch it is handed")
     func togglesTheTap() {
         var applied: [Bool] = []
         let hyper = SessionSwitch { applied.append($0) }

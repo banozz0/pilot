@@ -372,7 +372,7 @@ final class Engine {
         }
         // Pilot owns every Hyper key (card agent-bo-95422751): a key with a bind runs it, whatever the preset. App binds
         // (story 143) stay in binds.json but are not acted on while per-app binds are parked (parked/per-app-binds).
-        tap.isBound = { [unowned self] key in binds.store.action(for: key) != nil }
+        tap.isBound = { [unowned self] key in binds.store.action(for: key).map(runs) ?? false }
         // A new layer key takes effect at once, from whichever page changed it.
         settings.onLayerKeyChange = { [unowned self] in settingsChanged() }
         settings.onKeySwapsChange = { [unowned self] in if tap.isRunning { applyLayerKey() } }
@@ -426,8 +426,14 @@ final class Engine {
             log.debug("Hyper \(down ? "on" : "off", privacy: .public)")
         }
         tap.onRun = { [unowned self] key, autorepeat in
-            guard let id = binds.store.action(for: key), let action = self.action(id) else { return }
+            guard let id = binds.store.action(for: key), runs(id), let action = self.action(id) else { return }
             if autorepeat && !action.repeats { return }
+            // The Launcher switch off (spec pilot-ui-redesign T4): its key opens nothing and a tip names the switch; the
+            // menus other actions open still do.
+            if id == Dropdown.launcherAction, !SessionSwitch.launcher.isOn {
+                if !autorepeat { HUD.tip("The launcher is off: turn on Launcher on Home or in the Pilot menu") }
+                return
+            }
             record(key, action: action.label)
             if !autorepeat { countPress(id) }
             // The press names itself to what it opens (RunCaller): "terminal → … opened via Mouse 3".
@@ -483,7 +489,7 @@ final class Engine {
             log.error("tap disabled by macOS (\(reason, privacy: .public)), re-enabled")
         }
         gate.onGranted = { [unowned self] in start() }
-        pilotSwitch.onBinds = { [unowned self] on in on ? armBinds() : disarmBinds() }
+        pilotSwitch.onBinds = { [unowned self] _ in bindSwitchesChanged() }
         Self.shared = self
     }
 
@@ -576,15 +582,30 @@ final class Engine {
     }
     private var started = false
 
-    /// The tap and the layer key, only while the on/off switch is on.
+    /// The tap and the layer key, only while Key binds (the on/off switch) or the launcher is on.
     private func armBinds() {
         if armKeys() { armPointerTaps() }
+    }
+
+    /// A bind runs while Key binds is on; with it off, only the launcher's does (Open question 4 of spec
+    /// pilot-ui-redesign), and the Launcher switch decides whether it opens (tap.onRun).
+    private func runs(_ id: String) -> Bool { pilotSwitch.isOn || id == Dropdown.launcherAction }
+
+    /// The key tap runs while Key binds or the launcher is on (Open question 4, independent switches).
+    private var wantsTap: Bool { pilotSwitch.isOn || SessionSwitch.launcher.isOn }
+    /// The pointer taps and mouse binds run with Key binds alone.
+    private var pointersArmed: Bool { tap.isRunning && pilotSwitch.isOn }
+
+    /// Key binds or the launcher switched (spec pilot-ui-redesign T4): both off is today's off, Caps Lock itself again.
+    func bindSwitchesChanged() {
+        guard wantsTap else { return disarmBinds() }
+        if tap.isRunning { armPointerTaps() } else { armBinds() }
     }
 
     /// The key tap and the layer key; false when they were left as they are (not started, already on, or switched off).
     private func armKeys() -> Bool {
         guard started, !tap.isRunning else { return false }
-        guard pilotSwitch.isOn else { log.notice("binds not armed: Pilot is switched off"); return false }
+        guard wantsTap else { log.notice("binds not armed: Key binds and the launcher are off"); return false }
         applyLayerKey()
         do { try tap.start(); log.notice("tap installed") } catch { lastError = "Could not install the keyboard tap."; log.error("tap creation failed") }
         return true
@@ -593,19 +614,21 @@ final class Engine {
     /// The mouse tap runs while the binds are armed, on all the time with a drag modifier picked and else only while
     /// Hyper is held (Hyper + right-click on a file, story 199); the swipe's while it is on; Defocus's shake tap, the
     /// Hyper+scroll tap and the selection pill's with the binds.
+    /// Key binds off keeps the key tap for the launcher alone: these stay off then.
     private func armPointerTaps() {
+        let binding = pointersArmed
         mouseTap.dragging = settings.dragModifier != .off
-        if tap.isRunning { mouseTap.start() } else { mouseTap.stop() }
-        hyperScroll.arm(tap.isRunning)
+        if binding { mouseTap.start() } else { mouseTap.stop() }
+        hyperScroll.arm(binding)
         // Hyper+drag moves windows when Hyper is the drag modifier, so the pill's tap stays off then.
-        SelectionTools.shared.arm(tap.isRunning && settings.dragModifier != .hyper, layer: tap)
-        swipe.update(on: tap.isRunning && settings.swipeWorkspaces)
-        DefocusController.shared.arm(tap.isRunning)
+        SelectionTools.shared.arm(binding && settings.dragModifier != .hyper, layer: tap)
+        swipe.update(on: binding && settings.swipeWorkspaces)
+        DefocusController.shared.arm(binding)
         armMouseButtons()
     }
 
     private func armMouseButtons() {
-        mouseButtons.arm(running: tap.isRunning, binds: binds.store.mouseBinds)
+        mouseButtons.arm(running: pointersArmed, binds: binds.store.mouseBinds)
     }
 
     /// The switch's off, and quit: no tap, Caps Lock is Caps Lock again (or whatever Karabiner makes it) and swapped

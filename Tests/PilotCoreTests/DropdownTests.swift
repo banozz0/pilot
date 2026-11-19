@@ -71,10 +71,10 @@ struct DropdownTests {
         #expect(Set(drawn) == Set(Dropdown.Row.allCases) && drawn.count == Dropdown.Row.allCases.count)
     }
 
-    @Test("The Pilot on/off switch left the dropdown (Sven, 2026-10-07): the Hyper key switch leads Quick switches instead")
+    @Test("The Pilot on/off switch is back in the dropdown as Key binds (spec pilot-ui-redesign T4)")
     func noPilotSwitch() throws {
         let pilot = try #require(Dropdown.carried.first { $0.row == "Pilot (the on/off switch)" })
-        #expect(pilot.block == .quickSwitches && pilot.now == "gone; the Hyper key switch instead")
+        #expect(pilot.block == .quickSwitches && pilot.now == "the Key binds switch")
     }
 
     @Test("The Also quit ticks left the dropdowns with Other apps (C3, Sven 2026-10-10); their saved choice still applies")
@@ -83,15 +83,14 @@ struct DropdownTests {
         #expect(ticks.count == 2 && ticks.allSatisfy { $0.now == "gone; the saved choice still applies" })
     }
 
-    @Test("The six switches say what they do now; Hyper's names its layer key and wears that key's sign")
+    @Test("The switches say what they do now; the four are Home's and the Pilot menu's, each by its setting")
     func switches() {
-        #expect(Dropdown.Switch.allCases.map(\.title) == ["Hyper key", "Tiling", "Top bar", "Keep awake", "Clipboard", "Dictation key"])
-        #expect(Dropdown.Switch.allCases.map(\.short) == ["Hyper", "Tiling", "Top bar", "Awake", "Clipboard", "Dictation"])
-        #expect(Dropdown.Switch.allCases.map { $0.state(true, layerKeys: [.capsLock], tiler: "Pilot's tiler") } == ["binds on", "Pilot's tiler on", "macOS bar hidden", "kept awake", "recording", "a tap dictates"])
+        #expect(Dropdown.Switch.allCases.map(\.title) == ["Launcher", "Key binds", "Tiling", "Top bar", "Keep awake", "Clipboard", "Dictation key"])
+        #expect(Dropdown.Switch.allCases.map(\.short) == ["Launcher", "Binds", "Tiling", "Top bar", "Awake", "Clipboard", "Dictation"])
+        #expect(Dropdown.Switch.allCases.map { $0.state(true, layerKeys: [.capsLock], tiler: "Pilot's tiler") } == ["opens on its key", "binds on", "Pilot's tiler on", "macOS bar hidden", "kept awake", "recording", "a tap dictates"])
         #expect(Dropdown.Switch.topBar.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "macOS bar shown" && Dropdown.Switch.keepAwake.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "sleeps as usual")
-        #expect(LayerKey.allCases.map { Dropdown.Switch.hyper.state(false, layerKeys: [$0], tiler: "Pilot's tiler") }
-                == ["Caps Lock left to macOS", "Left Control left to macOS", "Right Control left to macOS", "Left Option left to macOS",
-                    "Right Option left to macOS", "Left Command left to macOS", "Right Command left to macOS"])
+        #expect(Dropdown.Switch.hyper.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "only the launcher's key")
+        #expect(Dropdown.Switch.four.compactMap(\.settingKey) == ["launcher.on", "switch.on", "tiling.on", "clipboard.recording"])
         #expect(LayerKey.allCases.map { Dropdown.Switch.hyper.symbol(layerKeys: [$0]) } == ["capslock", "control", "control", "option", "option", "command", "command"])
         #expect(Dropdown.Switch.tiling.symbol(layerKeys: [.rightOption]) == "rectangle.split.3x1")
         // Pilot's own tiler on (card agent-bo-95423025): Tiling names it.
