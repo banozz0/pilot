@@ -94,7 +94,6 @@ enum CaptureEditor {
             capture.pasteboard.clearContents()
             capture.pasteboard.setString(text, forType: .string)
         }
-        model.startUpscale = { [weak model] in Task { @MainActor in if let model { await upscale(model, file: file, capture: capture) } } }
         let glass = look.material(on: .hud) == .glass
         let view = CaptureEditorView(model: model, save: { [weak model] in finish(.saveCopy); model?.say("Saved a copy") },
                                      copy: { [weak model] in finish(.copy); model?.say("Copied") }, pin: { finish(.pin) }, cancel: { finish(.cancel) },
@@ -217,28 +216,6 @@ enum CaptureEditor {
                          url.map { url in HUD.TipAction(title: "Show") { NSWorkspace.shared.activateFileViewerSelecting([url]) } })
         } else if outcome == .saveCopy, written.url == nil {
             model.say("The copy was not saved")
-        }
-    }
-
-    /// The top bar's Upscale: the capture as marked up (and resized) goes to the upscaler through a file of its own, and the
-    /// result lands beside the capture's file as "<name> 4x.png", or in the captures folder when it was never saved.
-    private static func upscale(_ model: EditorModel, file: URL?, capture: PilotCapture) async {
-        guard !model.upscale.busy, let image = await model.export() else { return }
-        let scale = model.scale, still = Unchecked(image)
-        let input = FileManager.default.temporaryDirectory.appending(path: "pilot-upscale-\(UUID().uuidString).png")
-        let saved = await Task.detached(priority: .userInitiated) { PilotCapture.png(still.value, scale: scale).map { (try? $0.write(to: input)) != nil } ?? false }.value
-        guard saved else { return model.say("The capture could not be written for the upscaler") }
-        let item = UpscaleJob.Item(image: input, folder: file?.deletingLastPathComponent() ?? capture.store.folder(.capture),
-                                   stem: file?.deletingPathExtension().lastPathComponent ?? "Capture")
-        // The editor may close meanwhile: the run goes on and tells its result, which keeps nothing of the editor.
-        model.upscale.start([item]) { written, failure in
-            try? FileManager.default.removeItem(at: input)
-            if let url = written.first {
-                CaptureHistoryStore.shared.note(url, madeFrom: file)
-                capture.tell("Upscaled to \(url.lastPathComponent)", HUD.TipAction(title: "Show") { NSWorkspace.shared.activateFileViewerSelecting([url]) })
-            } else if let failure {
-                capture.tell(failure, nil)
-            }
         }
     }
 

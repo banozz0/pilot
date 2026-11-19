@@ -69,7 +69,6 @@ cp "$BINDIR/PilotText" "$APP/Contents/Helpers/pilot-text"  # the clipboard's ima
 # The pilot command (ADR 0013), linked into ~/.local/bin from General. Helpers, not MacOS: on a case-insensitive disk
 # Contents/MacOS/pilot is Pilot itself.
 cp "$BINDIR/PilotCLI" "$APP/Contents/Helpers/pilot"
-cp "$BINDIR/PilotUpscale" "$APP/Contents/Helpers/pilot-upscale"  # Real-ESRGAN on Core ML in a child (UpscaleJob), gone after each image
 cp "$BINDIR/PilotMCP" "$APP/Contents/Helpers/pilot-mcp"  # Codex's one tool in Ask Pilot: one gated pilot call (AIChat.Agent.codexLock)
 cp "$DICTATEBIN/pilot-dictate" "$APP/Contents/Helpers/pilot-dictate"  # Whisper while dictating (PilotDictation), Kokoro for Read aloud (KokoroSpeaker); the models are downloaded
 cp "$ROOT/.build/pilot-media/pilot-media.dylib" "$APP/Contents/Helpers/"  # Pause media while dictating
@@ -91,10 +90,10 @@ fi
 # nothing reads them at run time. Their debug symbols stay beside the bundle, build/<name>.dSYM made from the very binary
 # (same UUID, about 2 s), so a crash log still symbolicates (atos -o build/Pilot.dSYM/Contents/Resources/DWARF/Pilot).
 if [[ $CONFIG == release ]]; then
-  for name in Pilot PilotWebApp PilotText PilotCLI PilotMCP PilotUpscale; do rm -rf "$ROOT/build/$name.dSYM"; dsymutil "$BINDIR/$name" -o "$ROOT/build/$name.dSYM"; done
+  for name in Pilot PilotWebApp PilotText PilotCLI PilotMCP; do rm -rf "$ROOT/build/$name.dSYM"; dsymutil "$BINDIR/$name" -o "$ROOT/build/$name.dSYM"; done
   rm -rf "$ROOT/build/pilot-dictate.dSYM"; dsymutil "$DICTATEBIN/pilot-dictate" -o "$ROOT/build/pilot-dictate.dSYM"
   strip -u -r -T "$APP/Contents/MacOS/Pilot" "$APP/Contents/Helpers/PilotWebApp" "$APP/Contents/Helpers/pilot-text" "$APP/Contents/Helpers/pilot" \
-    "$APP/Contents/Helpers/pilot-mcp" "$APP/Contents/Helpers/pilot-dictate" "$APP/Contents/Helpers/pilot-upscale"
+    "$APP/Contents/Helpers/pilot-mcp" "$APP/Contents/Helpers/pilot-dictate"
 fi
 cp "$ROOT/Helpers/pilot-files/target/release/pilot-files" "$APP/Contents/Helpers/pilot-files"
 cp "$ROOT/Helpers/pilot-files/vendor/cardinal/LICENSE" "$APP/Contents/Resources/Cardinal-LICENSE.txt"  # MIT keeps its notice
@@ -107,7 +106,7 @@ cp "$DICTATE/FluidAudio-LICENSE.txt" "$APP/Contents/Resources/FluidAudio-LICENSE
 cp "$ROOT/Packaging/WhisperKit-NOTICES.txt" "$ROOT/Packaging/FluidAudio-NOTICES.txt" "$APP/Contents/Resources/"  # their third-party notices, at the pinned tags
 # The models Pilot downloads on a click, never bundled: each one's credit and licence (Parakeet's CC BY 4.0 asks for it).
 cp "$ROOT/Packaging/Whisper-LICENSE.txt" "$ROOT/Packaging/Parakeet-LICENSE.txt" "$ROOT/Packaging/Kokoro-LICENSE.txt" \
-  "$ROOT/Packaging/RealESRGAN-CoreML-LICENSE.txt" "$APP/Contents/Resources/"
+  "$APP/Contents/Resources/"
 cp "$ROOT/Packaging/Info.plist" "$APP/Contents/Info.plist"
 # The app icon (SH22, Sven's pick Q342): an Icon Composer document, compiled to Assets.car (the Liquid Glass renditions,
 # light, dark, tinted and clear) and AppIcon.icns; Info.plist names both AppIcon.
@@ -150,11 +149,6 @@ cp "$ROOT/Packaging/emoji.json" "$APP/Contents/Resources/"  # gemoji's emoji nam
 cp "$ROOT/Packaging/gemoji-LICENSE.txt" "$APP/Contents/Resources/gemoji-LICENSE.txt"  # MIT keeps its notice
 cp "$ROOT/Packaging/CodexBar-LICENSE.txt" "$APP/Contents/Resources/CodexBar-LICENSE.txt"  # MIT keeps its notice (ExtensionGaugeIcon's Claude mark)
 cp "$ROOT/Packaging/Sparkle-LICENSE.txt" "$APP/Contents/Resources/Sparkle-LICENSE.txt"  # MIT, with bsdiff's and sais-lite's notices (updates)
-# The upscaler's built-in model (UpscaleModels), Real-ESRGAN's realesr-general-x4v3 as Core ML fp16, compiled here so the
-# helper loads it at once; Scripts/convert-upscaler.py made the package from the pinned checkpoint.
-mkdir -p "$APP/Contents/Resources/Upscale"
-xcrun coremlcompiler compile "$ROOT/Packaging/Upscale/realesr-general-x4v3.mlpackage" "$APP/Contents/Resources/Upscale" >/dev/null
-cp "$ROOT/Packaging/Real-ESRGAN-LICENSE.txt" "$APP/Contents/Resources/Real-ESRGAN-LICENSE.txt"  # BSD-3 keeps its notice (pilot-upscale's models)
 cp "$ROOT/Packaging/AeroSpace-LICENSE.txt" "$APP/Contents/Resources/AeroSpace-LICENSE.txt"  # MIT keeps its notice (PilotTiler, the lifted engine)
 cp "$ROOT/Packaging/Snapzy-LICENSE.txt" "$APP/Contents/Resources/Snapzy-LICENSE.txt"  # BSD-3 keeps its notice (the capture backdrop's blurs and ratio math)
 # The terminal drop's Ghostty resources: terminfo for TERM=xterm-ghostty and shell integration, no bundled themes
@@ -205,7 +199,6 @@ codesign $SIGN --identifier dev.banozz.pilot.text "$APP/Contents/Helpers/pilot-t
 codesign $SIGN $DICTATE_ENTITLE --identifier dev.banozz.pilot.dictate "$APP/Contents/Helpers/pilot-dictate"
 codesign $SIGN --identifier dev.banozz.pilot.cli "$APP/Contents/Helpers/pilot"
 codesign $SIGN --identifier dev.banozz.pilot.mcp "$APP/Contents/Helpers/pilot-mcp"
-codesign $SIGN --identifier dev.banozz.pilot.upscale "$APP/Contents/Helpers/pilot-upscale"
 codesign $SIGN --identifier dev.banozz.pilot.agent-shell "$APP/Contents/Helpers/pilot-agent-shell"
 codesign $SIGN --identifier dev.banozz.pilot.media "$APP/Contents/Helpers/pilot-media.dylib"
 # Sparkle inside out, in its own documented order: the installer, its progress app, then the framework.

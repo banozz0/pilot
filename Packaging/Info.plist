@@ -87,12 +87,6 @@
     <key>NSPortName</key><string>Pilot</string>
     <key>NSRequiredContext</key><dict/>
     <key>NSSendFileTypes</key><array><string>public.image</string></array>
-  </dict><dict>
-    <key>NSMenuItem</key><dict><key>default</key><string>Upscale with Pilot</string></dict>
-    <key>NSMessage</key><string>upscaleImages</string>
-    <key>NSPortName</key><string>Pilot</string>
-    <key>NSRequiredContext</key><dict/>
-    <key>NSSendFileTypes</key><array><string>public.image</string></array>
   </dict></array>
   <key>NSHumanReadableCopyright</key><string>© 2026 Sven Medina</string>
 </dict></plist>

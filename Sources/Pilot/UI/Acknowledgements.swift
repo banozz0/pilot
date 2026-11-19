@@ -30,7 +30,6 @@ struct Acknowledgement: Identifiable, Hashable {
         .init(name: "WhisperKit", licence: "MIT", what: "Runs Whisper for dictation", files: ["WhisperKit-LICENSE.txt", "WhisperKit-NOTICES.txt"]),
         .init(name: "FluidAudio", licence: "Apache 2.0", what: "Runs Parakeet and the Kokoro voices",
               files: ["FluidAudio-LICENSE.txt", "FluidAudio-NOTICES.txt"]),
-        .init(name: "Real-ESRGAN", licence: "BSD 3-Clause", what: "The upscaler's built-in model", files: ["Real-ESRGAN-LICENSE.txt"]),
         .init(name: "Omarchy", licence: "MIT", what: "The themes' colours", files: ["Omarchy-LICENSE.txt"]),
         .init(name: "gemoji", licence: "MIT", what: "Emoji names and keywords", files: ["gemoji-LICENSE.txt"]),
         .init(name: "Snapzy", licence: "BSD 3-Clause", what: "The capture editor's backdrop, capture history and Combine images", files: ["Snapzy-LICENSE.txt"]),
@@ -42,8 +41,6 @@ struct Acknowledgement: Identifiable, Hashable {
         .init(name: "Parakeet Ultra", licence: "CC BY 4.0", what: "Moondream's speech model on NVIDIA's Parakeet, downloaded on your click",
               files: ["Parakeet-LICENSE.txt"]),
         .init(name: "Kokoro-82M", licence: "Apache 2.0", what: "hexgrad's voices, downloaded on your click", files: ["Kokoro-LICENSE.txt"]),
-        .init(name: "RealESRGAN x4plus", licence: "BSD 3-Clause", what: "The larger upscaler, downloaded on your click",
-              files: ["RealESRGAN-CoreML-LICENSE.txt"]),
         .init(name: "Maccy", licence: "MIT", what: "The reference for clipboard history"),
     ]
 

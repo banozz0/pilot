@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 /// Hyper + right-click on a file (story 199): Pilot's own actions for the files under the pointer, as the menu's picker
 /// opened at the pointer, its rows those FileAction lists for their kind. Each row runs what Pilot already does to a file
-/// (Open With, Quick Look, Convert, Resize and Upscale, folder designs); Read aloud and Ask AI read the file's text off
+/// (Open With, Quick Look, Convert, Resize, folder designs); Read aloud and Ask AI read the file's text off
 /// the main thread first, at most FileAction.textLimit characters; Change icon sets a picture as the file's icon.
 /// Nothing is kept once the picker closes.
 @MainActor
@@ -87,8 +87,7 @@ enum FileActionsMenu {
         case .quickLook: FileActions.preview(first.path)
         case .askAI: askAI(first)
         case .readAloud: readAloud(first)
-        case .resize: ImageTools.offer(.resize, urls)
-        case .upscale: ImageTools.offer(.upscale, urls)
+        case .resize: ImageTools.offer(urls)
         case .convert: ConvertFiles.offer(urls)
         case .readQR: QRCodes.read(file: first)
         case .folderDesign: FolderDesigns.pick(urls.filter(FolderLooks.isFolder))

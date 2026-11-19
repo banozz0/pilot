@@ -33,12 +33,9 @@ let package = Package(
                           linkerSettings: [sparkleRpath]),
         // The clipboard's image text in a child of its own, so Vision's memory leaves with it (story 142); Contents/Helpers/pilot-text.
         .executableTarget(name: "PilotText", dependencies: ["Clipboard"]),
-        // Resize and upscale's pixels (Q246-Q248): resampling, the upscaler's tiles, the result's file; no Core ML here.
+        // Resize's pixels (Q246): resampling and the result's file.
         .target(name: "ImageScale"),
         .testTarget(name: "ImageScaleTests", dependencies: ["ImageScale"]),
-        // Real-ESRGAN on Core ML in a child that exits after each image (Q248), so its model and pixels never stay in Pilot;
-        // Contents/Helpers/pilot-upscale.
-        .executableTarget(name: "PilotUpscale", dependencies: ["ImageScale"]),
         // The pilot command (ADR 0013): talks to the running Pilot's control socket; Foundation and PilotGate only (an agent's
         // answer is cut as its tool's is). Contents/Helpers/pilot, not a target or product named pilot: on a case-insensitive
         // disk that is the app's own Pilot.
@@ -49,7 +46,7 @@ let package = Package(
         .executableTarget(name: "PilotWebApp", dependencies: ["WebApps"]),
         .testTarget(name: "PilotCoreTests", dependencies: ["PilotCore"], resources: [.copy("ScrollFrames")]),
         // The app window on a real NSWindow: Cmd+W, Cmd+Q, the Dock rule, and offscreen renders of every page.
-        .testTarget(name: "PilotTests", dependencies: ["Pilot", "PilotTiler", "HungAppFixture", "PilotText", "PilotCLI", "PilotMCP", "PilotUpscale"]),
+        .testTarget(name: "PilotTests", dependencies: ["Pilot", "PilotTiler", "HungAppFixture", "PilotText", "PilotCLI", "PilotMCP"]),
         // A windowless app that stops answering, for the Accessibility timeout test (card agent-bo-95423031).
         .executableTarget(name: "HungAppFixture", path: "Tests/Fixtures/HungApp"),
         // Install → Web App: stamps a signed copy of the PilotWebApp template per site (story 86).

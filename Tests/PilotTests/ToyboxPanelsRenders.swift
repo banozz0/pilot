@@ -193,8 +193,7 @@ struct ToyboxPanelsRenders {
                 // light and a dark menu bar.
                 typealias Download = ExtrasDownloads.Download
                 ExtrasDownloads.shared.seeded = [Download(title: "Whisper large-v3 turbo", megabytes: 632, state: .downloading(0.42)),
-                                             Download(title: "Read aloud voices", megabytes: 133, state: .ready),
-                                             Download(title: "Upscaler, Max quality", megabytes: 67, state: .downloading(0))]
+                                             Download(title: "Read aloud voices", megabytes: 133, state: .ready)]
                 defer { ExtrasDownloads.shared.seeded = nil }
                 try writeRender(PilotDropdown(switches: switches, option: false).environment(engine).styled(.topBar, look: look)
                     .pilotTheme(look: look).padding(24).background(canvas), to: bar.appendingPathComponent("4-dropdown-downloads.png"), wait: 0.5)

@@ -92,15 +92,6 @@ public enum Resample {
         guard vImageScale_ARGB8888(&from, &to, nil, vImage_Flags(kvImageHighQualityResampling)) == kvImageNoError else { return nil }
         return out.makeImage()
     }
-
-    /// One 8-bit plane scaled to `width` × `height`: an upscaled image's alpha, which the model never sees.
-    static func plane(_ plane: UnsafeMutableBufferPointer<UInt8>, width w: Int, height h: Int, to width: Int, _ height: Int) -> UnsafeMutableBufferPointer<UInt8>? {
-        let out = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height)
-        var from = vImage_Buffer(data: plane.baseAddress, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w)
-        var to = vImage_Buffer(data: out.baseAddress, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: width)
-        guard vImageScale_Planar8(&from, &to, nil, vImage_Flags(kvImageHighQualityResampling)) == kvImageNoError else { out.deallocate(); return nil }
-        return out
-    }
 }
 
 /// The formats a result is written in.

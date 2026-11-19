@@ -171,7 +171,6 @@ MIT ([LICENSE](LICENSE)), built on [AeroSpace](https://github.com/nikitabobko/Ae
 - Speech and voice: [WhisperKit](Packaging/WhisperKit-NOTICES.txt), [Whisper](Packaging/Whisper-LICENSE.txt),
   [FluidAudio](Packaging/FluidAudio-NOTICES.txt), [Parakeet](Packaging/Parakeet-LICENSE.txt),
   [Kokoro](Packaging/Kokoro-LICENSE.txt).
-- Images: [Real-ESRGAN](Packaging/Real-ESRGAN-LICENSE.txt), [RealESRGAN-CoreML](Packaging/RealESRGAN-CoreML-LICENSE.txt).
 - [CodexBar](Packaging/CodexBar-LICENSE.txt), [gemoji](Packaging/gemoji-LICENSE.txt),
   [Omarchy](Packaging/Omarchy-LICENSE.txt), [Snapzy](Packaging/Snapzy-LICENSE.txt), and the fonts in
   [Packaging/Fonts](Packaging/Fonts).

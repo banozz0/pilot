@@ -75,20 +75,20 @@ enum ConvertFiles {
 /// on its pasteboard to the picker, anything else there left out; Fix with Pilot, on selected text anywhere, gives the
 /// text back fixed by Quick AI (QuickFix), and the app puts it over the selection; Ask Pilot AI hands the text to the
 /// selection box and returns at once (no return type: the app would wait, spinning, while Sven reads the answer); Read
-/// Aloud with Pilot hands the text to Read aloud (story 190), the same way; Resize with Pilot and Upscale with Pilot hand
-/// Finder's images to their panel (Q247).
+/// Aloud with Pilot hands the text to Read aloud (story 190), the same way; Resize with Pilot hands Finder's images to its
+/// panel (Q247).
 final class PilotServices: NSObject {
     private let offer: @MainActor ([URL]) -> Void
     private let fix: @MainActor (String) -> String?
     private let ask: @MainActor (String) -> Void
     private let read: @MainActor (String) -> Void
-    private let images: @MainActor (ImageTools.Mode, [URL]) -> Void
+    private let images: @MainActor ([URL]) -> Void
 
     init(offer: @escaping @MainActor ([URL]) -> Void = { ConvertFiles.offer($0) },
          fix: @escaping @MainActor (String) -> String? = { QuickFix.shared.fixForService($0) },
          ask: @escaping @MainActor (String) -> Void = { SelectionBox.shared.open(service: $0) },
          read: @escaping @MainActor (String) -> Void = { ReadAloud.shared.read(service: $0) },
-         images: @escaping @MainActor (ImageTools.Mode, [URL]) -> Void = { ImageTools.offer($0, $1) }) {
+         images: @escaping @MainActor ([URL]) -> Void = { ImageTools.offer($0) }) {
         self.offer = offer
         self.fix = fix
         self.ask = ask
@@ -124,11 +124,7 @@ final class PilotServices: NSObject {
     }
 
     @MainActor @objc func resizeImages(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
-        files(pasteboard, error, missing: "No images").map { images(.resize, $0) }
-    }
-
-    @MainActor @objc func upscaleImages(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
-        files(pasteboard, error, missing: "No images").map { images(.upscale, $0) }
+        files(pasteboard, error, missing: "No images").map(images)
     }
 
     /// The pasteboard's files, anything else there left out, or nil with `missing` as the service's error when it has none.

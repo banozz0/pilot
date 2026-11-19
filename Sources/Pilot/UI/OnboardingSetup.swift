@@ -185,7 +185,7 @@ final class LiveSetupSystem: SetupSystem {
     var hasSpeechModel: Bool { SpeechModels.shared.active != nil }
 
     func startDownloads(dictation: Bool, voices: Bool) {
-        ExtrasDownloads.shared.start(speech: dictation ? OnboardingSetup.speech : nil, voices: voices, upscaler: false)
+        ExtrasDownloads.shared.start(speech: dictation ? OnboardingSetup.speech : nil, voices: voices)
     }
 
     func removeDownload(_ item: SetupItem, pick: String?) {

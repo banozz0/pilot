@@ -232,12 +232,12 @@ struct ExplainerFilmRenders {
         try InstrumentPanelsRenders.render(TipView(text: "Converting \(urls[0].lastPathComponent) to PNG…", action: HUD.TipAction(title: "Cancel") {}), .hud, "f6-tip-converting", in: dir)
         try InstrumentPanelsRenders.render(TipView(text: batch.summary(outcome)), .hud, "f7-tip-done", in: dir)
 
-        // Hyper + right-click on one photo: Pilot's actions for an image, Down to Upscale….
+        // Hyper + right-click on one photo: Pilot's actions for an image, Down to Resize….
         let rows = FileActionsMenu.rows(FileAction.list(for: [.image]))
         var picker = MenuNavigator(list: rows, title: urls[1].lastPathComponent)
         try await LineMenuRenders.render(line(picker), "r1-picker", in: dir, wait: 0.4)
-        if let upscale = picker.rows.firstIndex(where: { $0.title == FileAction.upscale.title }) {
-            for step in 0..<upscale {
+        if let resize = picker.rows.firstIndex(where: { $0.title == FileAction.resize.title }) {
+            for step in 0..<resize {
                 _ = picker.handle(.down)
                 try await LineMenuRenders.render(line(picker), "r2-picker-down\(step + 1)", in: dir, wait: 0.3)
             }

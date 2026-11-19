@@ -11,7 +11,7 @@ public enum CrashReports {
     /// How the folder is named to the AI and in the bug form: never the home folder's path.
     public static let shownFolder = "~/Library/Logs/DiagnosticReports"
     /// Pilot's process and its helpers' (Scripts/build-app.sh), and every web app's (WebAppSpec.executable).
-    public static let processes = ["Pilot", "pilot", "pilot-text", "pilot-upscale", "pilot-dictate", "pilot-files", "pilot-mcp", "PilotWebApp"]
+    public static let processes = ["Pilot", "pilot", "pilot-text", "pilot-dictate", "pilot-files", "pilot-mcp", "PilotWebApp"]
     /// A report older than this is not named: the bug it shows is likely fixed or already reported.
     public static let recent: TimeInterval = 7 * 24 * 3600
 
