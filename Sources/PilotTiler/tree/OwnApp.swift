@@ -127,15 +127,40 @@ final class OwnApp: MacApp {
         Thread.isMainThread ? MainActor.assumeIsolated { OwnApp.window(windowId)?.engineRect } : nil
     }
 
-    /// Pilot's own windows jump: AppKit's own animation would post moves the engine reads as the user's.
+    /// Pilot's own windows jump: AppKit's own animation would post moves the engine reads as the user's. Inside a layout
+    /// pass the write waits for the pass's end (OwnApp.lastInPass), so every other window's write is out first.
     override func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?, glidingFrom: Rect? = nil,
                              duration: Duration = GlideSet.duration, span: ClosedRange<CGFloat>? = nil, screen: GlideScreen? = nil,
                              fromCorner: Bool = false, then: CGPoint? = nil) {
-        onMain { OwnApp.window(windowId)?.setEngineFrame(topLeft, size) }
+        onMain {
+            if OwnApp.passes > 0 { OwnApp.held[windowId] = (topLeft, size) }
+            else { OwnApp.window(windowId)?.setEngineFrame(topLeft, size) }
+        }
     }
 
     override func setAxFrameForTermination(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
-        setAxFrame(windowId, topLeft, size)
+        onMain { OwnApp.window(windowId)?.setEngineFrame(topLeft, size) }
+    }
+
+    /// Layout passes under way, and the frames of Pilot's own windows they asked for meanwhile.
+    @MainActor private static var passes = 0
+    @MainActor private static var held: [UInt32: (CGPoint?, CGSize?)] = [:]
+
+    /// Runs a layout pass with Pilot's own windows written last (perf-round, Sven on combined-5: a swap sometimes lagged).
+    /// Their write is AppKit's setFrame on the main thread, which lays the window's SwiftUI page out at its new size before
+    /// it returns (tens of ms on a big page); in tree order it came first when Pilot's window is the left tile, and every
+    /// other window's glide waited for it.
+    @MainActor static func lastInPass<T>(_ body: () async throws -> T) async rethrows -> T {
+        passes += 1
+        defer {
+            passes -= 1
+            if passes == 0, !held.isEmpty {
+                let frames = held
+                held = [:]
+                for (id, frame) in frames { window(id)?.setEngineFrame(frame.0, frame.1) }
+            }
+        }
+        return try await body()
     }
 
     override func closeAndUnregisterAxWindow(_ windowId: UInt32) {

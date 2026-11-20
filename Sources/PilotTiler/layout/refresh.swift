@@ -206,14 +206,17 @@ private func layoutWorkspaces() async throws {
 
     // to reduce flicker, first unhide visible workspaces, then hide invisible ones
     let desktop = workspaceShowingDesktop() // Pilot (Show desktop): its windows wait in the corner, never sliding
-    for monitor in monitors {
-        let workspace = monitor.activeWorkspace
-        if workspace === desktop {
-            try await hideInCorner(workspace, monitorToOptimalHideCorner[monitor.rect.topLeftCorner] ?? .bottomRightCorner)
-            continue
+    // Pilot (perf-round): Pilot's own windows take their frames once every display's windows have theirs
+    try await OwnApp.lastInPass {
+        for monitor in monitors {
+            let workspace = monitor.activeWorkspace
+            if workspace === desktop {
+                try await hideInCorner(workspace, monitorToOptimalHideCorner[monitor.rect.topLeftCorner] ?? .bottomRightCorner)
+                continue
+            }
+            try workspace.allLeafWindowsRecursive.forEach { try ($0 as? MacWindow)?.unhideFromCorner() }
+            try await workspace.layoutWorkspace(slide: slides[workspace])
         }
-        try workspace.allLeafWindowsRecursive.forEach { try ($0 as? MacWindow)?.unhideFromCorner() }
-        try await workspace.layoutWorkspace(slide: slides[workspace])
     }
     for workspace in Workspace.all where !workspace.isVisible {
         let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner

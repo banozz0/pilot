@@ -16,7 +16,9 @@ extension Workspace {
         // window on the upper monitor to take full width. rect.height - 1 resolves this problem
         // But I also faced this problem in monitors horizontal configuration. ¯\_(ツ)_/¯
         let context = LayoutContext(self, layout: layout, unhidingColumns: unhidingColumns, slide: slide)
-        try await layoutRecursive(rect.topLeftCorner, width: rect.width, height: rect.height - 1, virtual: rect, context)
+        try await OwnApp.lastInPass {
+            try await layoutRecursive(rect.topLeftCorner, width: rect.width, height: rect.height - 1, virtual: rect, context)
+        }
     }
 }
 
