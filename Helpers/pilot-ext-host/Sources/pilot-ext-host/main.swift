@@ -16,7 +16,10 @@ import JavaScriptCore
 // Node's does (Native.swift).
 
 /// Writes one line to stdout or stderr, unbuffered.
-func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
+func put(_ line: String, to handle: FileHandle) {
+    if handle.fileDescriptor == 1 { MainActor.assumeIsolated { Measure.wrote(line) } }
+    handle.write(Data((line + "\n").utf8))
+}
 
 @MainActor final class Host {
     static let drain: TimeInterval = 0.15, closeDeadline: TimeInterval = 0.4
@@ -135,6 +138,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
     private func finish() {
         stopChildren()
+        Measure.exit()
         exit(0)
     }
 
@@ -153,7 +157,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
 struct HostError: Error { let text: String; init(_ text: String) { self.text = text } }
 
-let arguments = Array(CommandLine.arguments.dropFirst())
+var arguments = Array(CommandLine.arguments.dropFirst())
+Measure.take(&arguments)  // --measure (T7): the harness's record of every call, none acting on the Mac
 // The GitHub install route's two steps (Install.swift) run no JSContext and keep none of a run's deadlines.
 if let mode = arguments.first, Installer.modes.contains(mode) { Installer.run(arguments) }
 guard arguments.count == 3, arguments[0] == "--prelude" else {
@@ -165,10 +170,11 @@ do {
     host = try Host(prelude: URL(filePath: arguments[1]), bundle: URL(filePath: arguments[2]))
 } catch {
     put(Host.errorLine((error as? HostError)?.text ?? error.localizedDescription), to: .standardOutput)
+    Measure.exit()
     exit(0)
 }
 Thread.detachNewThread {
-    while let line = readLine() { DispatchQueue.main.async { MainActor.assumeIsolated { host.received(line) } } }
+    while let line = readLine() { DispatchQueue.main.async { MainActor.assumeIsolated { Measure.read(line); host.received(line) } } }
     DispatchQueue.main.async { MainActor.assumeIsolated { host.inputEnded() } }
 }
 dispatchMain()
