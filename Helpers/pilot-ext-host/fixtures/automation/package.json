@@ -36,13 +36,19 @@
     {
       "name": "bypass",
       "title": "Bypass",
-      "description": "At mount, every way review 1 found to name Music past the check, each through the shim.",
+      "description": "At mount, T9's regression corpus: every bypass reviews 1 to 3 found, and runAppleScript's shapes, through the shim.",
       "mode": "view"
     },
     {
       "name": "cancel",
       "title": "Cancel",
       "description": "At mount, a call to Mail killed while asked, and a run-time target waiting on it.",
+      "mode": "view"
+    },
+    {
+      "name": "utils",
+      "title": "Utils",
+      "description": "At mount, two calls in runAppleScript's own shape, through the shim.",
       "mode": "view"
     },
     {

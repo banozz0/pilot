@@ -1,13 +1,9 @@
 // AppleScript consent (ADR 0017, T9; Sven's open question 4, 2026-11-19: yes, asked once per extension per app). Every
-// child the extension starts is looked at here first. It runs AppleScript when its file is `osascript` (any case,
-// wherever it lives) or when its file or any argument names osascript (a shell line, `env osascript`, a login shell).
-// Its script is read for the apps it controls: `tell application "Notes"`, `app "Notes"` (AppleScript ignores case),
-// `application id "com.apple.Notes"` and JXA's `Application("Notes")`, each resolved through the app's own Info.plist to
-// one bundle id (Apps.swift), so a name and its bundle id are one app. Anything Pilot cannot read for certain counts as
-// one app of its own, `*`: an app word no literal target accounts for, a target built at run time, a compiled or
-// unreadable script, `run script`, raw «codes», JXA's eval or ObjC bridge, or a line that is not plain osascript with a
-// `$`, a backtick or no literal target at all. A `*` Allow never applies while the extension has a refusal kept.
-// System Events is asked like any other: the child runs under Pilot's own grant, so macOS would not ask again for it.
+// child the extension starts is looked at here first. Only a call Pilot reads in full is asked about the apps it names,
+// each resolved through the app's own Info.plist to one bundle id (Apps.swift), so a name and its bundle id are one app;
+// every other call that names osascript is the unread app, `*`, which never stands while a refusal is kept. System
+// Events is asked like any other: the child runs under Pilot's own grant, so macOS would not ask again for it.
+// Which calls are read, and how, is the one rule under "Reading a call" below.
 //
 // Each app not answered yet is asked once per extension. In a view, the view gives way to two rows, Don't Allow and
 // Allow, pressed as callbacks (T2); each question's handler ids carry its serial and app, so a press meant for one
@@ -19,7 +15,7 @@
 //
 // This is a courtesy, not a sandbox: an extension runs with the user's rights (ADR 0017), so code in the same context can
 // call the native bridge itself, run a script that never names osascript (`sh script.sh`, a copied binary), forge the
-// answer file or an answer context.
+// answer file or a no-view answer's context. Its nonce lives in automation-alert.json, beside the answers.
 import { store } from "./gaps.js";
 
 const native = globalThis.__native;
@@ -27,8 +23,8 @@ let saved = store(""), title = "This extension", view = true, command = "", cont
 /** Apps waiting for an answer, in asking order (`{ app, serial, sync }`), and the calls waiting on them. */
 const queue = [], waiters = new Set();
 let serials = 0, alerted = false, typed = "";
-/** Where a no-view alert's one-time nonce waits in automation.json; never an app's key. */
-const pendingKey = "pending-alert";
+/** Where a no-view alert's one-time nonce waits: a file of its own beside automation.json, never among the answers. */
+let pendingAlert = store("");
 let changed = () => {};
 
 /** Text from a script or a manifest as a question shows it: no control or hidden characters, one line, `most` long. */
@@ -40,7 +36,9 @@ function clean(text, most) {
 /** This run's extension, command and answers; a run started by an alert's button keeps the answer it carries. */
 export function consentFor(message, mode) {
   const data = typeof message.paths?.data === "string" ? message.paths.data.replace(/\/+$/, "") : "";
-  saved = store(data.includes("/") ? `${data.slice(0, data.lastIndexOf("/"))}/automation.json` : "");
+  const folder = data.includes("/") ? data.slice(0, data.lastIndexOf("/")) : "";
+  saved = store(folder ? `${folder}/automation.json` : "");
+  pendingAlert = store(folder ? `${folder}/automation-alert.json` : "");
   view = mode !== "no-view";
   command = String(message.command ?? "");
   try {
@@ -51,11 +49,10 @@ export function consentFor(message, mode) {
   const given = message.context && typeof message.context === "object" ? message.context : null;
   const answered = given?.pilotConsent;
   if (answered) {
-    const pending = saved.read()[pendingKey];
-    const { [pendingKey]: _, ...rest } = saved.read();
-    if (pending && typeof answered.nonce === "string" && answered.nonce === pending.nonce && answered.key === pending.key
+    const pending = pendingAlert.read();
+    if (typeof pending.nonce === "string" && answered.nonce === pending.nonce && answered.key === pending.key && pending.command === command
         && typeof answered.allowed === "boolean") {
-      saved.write(rest);
+      pendingAlert.write({});
       keep({ key: pending.key, label: clean(answered.app ?? pending.key, 60) }, answered.allowed);
     } else console.error("a consent answer without this extension's pending nonce: not kept");
     const { pilotConsent: __, ...others } = given;
@@ -70,7 +67,16 @@ export function onConsentChange(fn) { changed = fn; }
 /** The view's search as typed: the question's rows carry it, so Pilot's own filter never hides them. */
 export function consentSearch(text) { typed = String(text ?? ""); }
 
-// MARK: Reading a script's targets
+// MARK: Reading a call
+//
+// One rule (review 3): a call gets a named app only when Pilot reads all of it. That is a child whose file really is
+// /usr/bin/osascript (resolved as posix_spawnp resolves it, Apps.swift), started with no shell, wrapper or env; whose
+// options are -e lines, -l AppleScript or JavaScript from its own argument, -s flags and `-` (stdin), never a script
+// file; whose script (the -e lines, or its stdin as runAppleScript hands it over) has no nested script (do shell script,
+// run script, raw «codes», JXA's doShellScript, eval and the like); and in which every app word is followed, on its line,
+// by a quoted name with no quote, backslash or newline inside and nothing joined after it. Anything else is the unread
+// app, `*`, which is refused while any refusal stands. A call reads as controlling nothing only in that exact shape with
+// no app word at all. A call read in full is started by the real path it was read at.
 
 const unread = { key: "*", label: "an app its script names in a way Pilot cannot read" };
 
@@ -84,96 +90,71 @@ function app(raw, byID) {
   return { key: byID ? `id:${name.toLowerCase()}` : name.toLowerCase(), label: clean(name, 60) };
 }
 
-const inside = (at, list) => list.some(([a, b]) => at >= a && at < b);
+/** A quoted name a strict target takes: one line, no quote of either kind, no backslash. */
+const name = String.raw`([^"'\\\r\n]+)`;
 
-/** The apps `script` controls: AppleScript, or JXA when `js`; `shell` when it is a command line around osascript. */
-export function targets(script, { js = false, shell = false } = {}) {
+/** The apps a fully read script controls, or the unread app. AppleScript's app words are `app` and `application` in any
+ *  case; JXA's is `Application`, whose `currentApplication()` controls nothing. */
+export function strict(script, js) {
   const found = new Map();
   const add = (a) => { if (!found.has(a.key)) found.set(a.key, a); };
-  // A target is literal only when nothing is joined to it: `application "Mu" & "sic"` is built at run time.
-  const q = String.raw`\\?"([^"\\]*)\\?"`;
-  const literal = [
-    [new RegExp(String.raw`\b(?:application|app)\s+id\s+${q}(?!\s*&)`, "gi"), (m) => app(m[1], true)],
-    [new RegExp(String.raw`\b(?:application|app)\s+${q}(?!\s*&)`, "gi"), (m) => app(m[1], false)],
-    [/\bApplication\s*\(\s*\\?(["'])((?:(?!\1)[^\\])*)\\?\1\s*\)/gi, (m) => app(m[2], /^[a-z0-9-]+(\.[a-z0-9-]+){2,}$/i.test(m[2]))],
-  ];
-  const used = [];
-  for (const [pattern, made] of literal) {
-    for (const m of script.matchAll(pattern)) {
-      if (inside(m.index, used)) continue;
-      used.push([m.index, m.index + m[0].length]);
-      add(made(m));
+  if (js) {
+    if (/osascript|\$|`|\[(?!\s*\d+\s*\])|\b(?:doShellScript|eval|Function|constructor|ObjC|Library|require|Reflect|Proxy|globalThis|this|import)\b/.test(script)) return [unread];
+    for (const m of script.matchAll(/\bApplication\b/g)) {
+      const rest = script.slice(m.index + m[0].length);
+      if (/^\.currentApplication\(\)/.test(rest)) continue;
+      const t = rest.match(new RegExp(String.raw`^\(\s*(?:"${name}"|'${name}')\s*\)`));
+      if (!t) return [unread];
+      const n = t[1] ?? t[2];
+      add(app(n, /^[a-z0-9-]+(\.[a-z0-9-]+){2,}$/i.test(n)));
+    }
+  } else {
+    if (/osascript|«|»|\b(?:run|load|store)[ \t]+script\b|\bdo[ \t]+shell[ \t]+script\b/i.test(script)) return [unread];
+    for (const m of script.matchAll(/\b(?:application|app)\b/gi)) {
+      const t = script.slice(m.index + m[0].length).match(new RegExp(String.raw`^[ \t]+(id[ \t]+)?"${name}"(?![ \t]*&)`, "i"));
+      if (!t) return [unread];
+      add(app(t[2], Boolean(t[1])));
     }
   }
-  // Every app word a literal target did not account for is a target Pilot cannot read, in a string or a comment too: a
-  // comment's apostrophe would open a false string, so none is skipped. Only `current application` and JXA's own are.
-  const words = js ? /\bApplication\b/g : /\b(?:application|app)\b/gi;
-  for (const m of script.matchAll(words)) {
-    if (inside(m.index, used)) continue;
-    if (!js && /current\s+$/i.test(script.slice(Math.max(0, m.index - 12), m.index))) continue;
-    if (/^\s*\.\s*currentApplication\b/.test(script.slice(m.index + m[0].length))) continue;
-    add(unread);
-  }
-  const opaque = js ? /\beval\b|\bFunction\s*\(|\bObjC\b|\$\s*[.(]/ : /«|\b(?:run|load)\s+script\b|\bosascript\b/i;
-  if (opaque.test(shell ? script.replace(/\bosascript\b/gi, "") : script)) add(unread);
-  if (shell && (/[$`]/.test(script) || !found.size)) add(unread);
   return [...found.values()];
 }
 
-/** What a child about to start needs: null when it runs no AppleScript; else its `apps`, or `stdin` (with `js`) when its
- *  script comes on its stdin. */
-export function scan(file, args, options = {}) {
-  const name = String(file).split("/").pop().toLowerCase();
-  if (name !== "osascript") {
-    const line = [String(file), ...args.map(String)].join(" ");
-    if (!/\bosascript\b/i.test(line)) return null;
-    // A program handed osascript as its own argument (`env osascript …`): that osascript's arguments, read as one.
-    const at = args.findIndex((a) => String(a).split("/").pop().toLowerCase() === "osascript");
-    if (at >= 0 && !shells.has(name)) return scan(String(args[at]), args.slice(at + 1).map(String), options);
-    return { apps: shellLine(args.map(String).find((a) => /\bosascript\b/i.test(a)) ?? line) };
-  }
+/** osascript's own arguments read: its script lines and language, or `stdin`; null for any other shape (a script file,
+ *  -i, an option it does not know, a language other than AppleScript or JavaScript). */
+function argv(args) {
   const lines = [];
-  let scriptFile = null, js = false;
+  let js = false;
   for (let i = 0; i < args.length; i++) {
-    const a = String(args[i]);
-    if (a === "-e") lines.push(String(args[++i] ?? ""));
-    else if (a === "-l") js = /^javascript$/i.test(String(args[++i] ?? ""));
-    else if (a === "-s") i++;
-    else if (a.startsWith("-") && a !== "-") continue;
-    else { scriptFile = a; break; }
+    const t = args[i];
+    if (t === "-e") { if (i + 1 >= args.length) return null; lines.push(args[++i]); continue; }
+    if (t === "-l") { const lang = args[++i]; if (!/^(applescript|javascript)$/i.test(lang ?? "")) return null; js = /^javascript$/i.test(lang); continue; }
+    if (t === "-s") { if (!/^[hseo]+$/.test(args[++i] ?? "")) return null; continue; }
+    if (/^-s[hseo]+$/.test(t)) continue;
+    // `-`: the script comes on stdin, and the rest are its arguments; after -e lines, anything else is an argument too.
+    if (t === "-" || lines.length) break;
+    return null;
   }
-  if (lines.length) return { apps: targets(lines.join("\n"), { js }) };
-  if (scriptFile === null || scriptFile === "-") return { stdin: true, js };
-  const at = scriptFile.startsWith("/") ? scriptFile : `${options.cwd || native.cwd()}/${scriptFile}`;
-  const text = native.fsRead(at);
-  // A compiled script ("FasdUAS") or one that does not read: its targets are unknown.
-  if (typeof text !== "string" || text.startsWith("FasdUAS") || text.includes("\u0000")) return { apps: [unread] };
-  return { apps: targets(text, { js: js || /\.js$/i.test(scriptFile) }) };
+  return lines.length ? { script: lines.join("\n"), js } : { stdin: true, js };
 }
 
-const shells = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"]);
-
-/** The apps a shell line around osascript controls. It counts as read only when it is one osascript call, by a plain or
- *  quoted path, whose script is all -e lines in quotes, with no $ or backtick; anything else (a second osascript, a
- *  script file, a pipe, a redirect, a chain) adds the unread app. */
-function shellLine(line) {
-  const word = String.raw`(?:'[^']*'|"(?:[^"\\$\`]|\\.)*")`;
-  const only = new RegExp(String.raw`^\s*(?:'[^']*osascript'|"[^"]*osascript"|\S*osascript)((?:\s+-[ls]\s+\S+|\s+-e\s+${word})+)\s*$`, "i");
-  const m = line.match(only);
-  if (!m || /[$\`]/.test(line) || (line.match(/osascript/gi) ?? []).length !== 1) {
-    const apps = targets(line, { shell: true });
-    return apps.some((a) => a.key === unread.key) ? apps : [...apps, unread];
+/** What a child about to start needs: null when it runs no AppleScript; else its `apps`, or `stdin` (with `js`) when its
+ *  script comes on its stdin; `exec`, the real path to start, for a call read in full. */
+export function scan(file, args, options = {}) {
+  const list = args.map(String);
+  const real = native.realExecutable(String(file), String(options.cwd ?? ""));
+  const at = typeof real === "string" ? real : "";
+  if (!native.trustedOsascripts().includes(at)) {
+    // A wrapper, a shell line, a copy under another name, xargs: anything that names osascript is the unread app.
+    return [String(file), at, ...list].some((t) => /osascript/i.test(t)) ? { apps: [unread] } : null;
   }
-  const js = /-l\s+['"]?javascript/i.test(m[1]);
-  const scripts = [...m[1].matchAll(new RegExp(String.raw`-e\s+(${word})`, "g"))].map((x) => {
-    const q = x[1];
-    return q.startsWith("'") ? q.slice(1, -1) : q.slice(1, -1).replace(/\\(.)/g, "$1");
-  });
-  return targets(scripts.join("\n"), { js });
+  const read = argv(list);
+  if (!read) return { apps: [unread], exec: at };
+  if (read.stdin) return { stdin: true, js: read.js, exec: at };
+  return { apps: strict(read.script, read.js), exec: at };
 }
 
-/** A script handed on stdin, read once it ends. */
-export const stdinApps = (script, js) => targets(String(script), { js });
+/** A script handed on stdin, read once it ends, under the same rule. */
+export const stdinApps = (script, js) => strict(String(script), js);
 
 // MARK: Answers
 
@@ -185,7 +166,7 @@ function standing(apps) {
   let refused = apps.find((a) => answers[a.key]?.allowed === false);
   const wide = apps.some((a) => a.key === unread.key);
   if (!refused && wide) {
-    const kept = Object.entries(answers).find(([k, v]) => k !== pendingKey && v?.allowed === false);
+    const kept = Object.entries(answers).find(([, v]) => v?.allowed === false);
     if (kept) refused = { key: kept[0], label: clean(kept[1].app ?? kept[0], 60), widened: true };
   }
   const open = apps.filter((a) => typeof answers[a.key]?.allowed !== "boolean");
@@ -249,7 +230,7 @@ function alert() {
   // The answer comes back in a new run's context, so it is bound to a one-time nonce kept here as the alert goes out:
   // a context that does not carry it (a launchCommand's, a forged one) is not an answer.
   const nonce = native.random(16);
-  saved.write({ ...saved.read(), [pendingKey]: { key: a.key, nonce, command } });
+  pendingAlert.write({ key: a.key, nonce, command });
   const button = (label, allowed) => ({ type: "run", title: label, command, context: { ...(context ?? {}), pilotConsent: { key: a.key, app: a.label, allowed, nonce } } });
   native.write(JSON.stringify({ type: "action", action: {
     type: "alert", text: `${title} wants to control ${a.label}.`, note: "macOS will then ask too.",

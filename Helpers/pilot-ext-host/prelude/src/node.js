@@ -301,7 +301,8 @@ function held(id, file, args, made, script) {
     if (done) return;
     done = true;
     if (error) return child.emit("error", error);
-    const pid = native.spawn(id, file, args, made);
+    // A call read in full starts at the real path it was read at, so it is the program that was read.
+    const pid = native.spawn(id, script.exec ?? file, args, made);
     if (typeof pid !== "number") return child.emit("error", Object.assign(new Error(`spawn ${file} ${pid?.error ?? "failed"}`), { code: pid?.error, syscall: `spawn ${file}`, path: file }));
     child.pid = pid;
     live = true;
@@ -380,7 +381,7 @@ function spawnSync(file, args = [], options = {}) {
   const script = scan(String(file), args.map(String), made);
   const refused = script && consentNow(script.stdin ? stdinApps(options.input == null ? "" : String(options.input), script.js) : script.apps);
   if (refused) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: refused };
-  const r = native.spawnSync(String(file), args.map(String), made, options.input == null ? "" : String(options.input));
+  const r = native.spawnSync(script?.exec ?? String(file), args.map(String), made, options.input == null ? "" : String(options.input));
   if (r.error) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: Object.assign(new Error(r.message), { code: r.error }) };
   return { pid: r.pid, status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, output: [null, r.stdout, r.stderr] };
 }
