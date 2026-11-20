@@ -1,10 +1,11 @@
+import CoreGraphics
 import Foundation
 
 /// The capture box (pilot-ui-redesign S5 B, T23): with Captures › Capture box on, each of the six capture binds opens
 /// the capture overlay as the box, in its own mode, and fixed letters switch the mode inside it (Q257), whatever keys the
 /// user's binds are on. Two choices make a mode: how much of the screen (`How`) and what the capture makes (`What`), with
-/// a timer beside them. Return captures, Esc closes. This is the box's state alone; the overlay keeps it and T24's
-/// view draws it.
+/// a timer beside them. Return captures, Esc closes. A dragged area stays held with handles to adjust until Return
+/// (shots 5c-*). This is the box's state and the held area's geometry alone; the overlay keeps them and T24's view draws them.
 public struct CaptureBox: Equatable, Sendable {
     /// How much of the screen: an area dragged, a window clicked, the whole display, or an area Pilot scrolls and stitches.
     public enum How: String, CaseIterable, Sendable { case area, window, full, scroll }
@@ -75,4 +76,57 @@ public struct CaptureBox: Equatable, Sendable {
 
     /// The mode `action` opens the box in; nil for an action that is not one of the six.
     public static func opening(_ action: String) -> CaptureBox? { binds.first { $0.action == action }?.opens }
+
+    // MARK: The held area
+
+    /// What a press on a held area takes hold of (shots 5c-area, 5c-scroll): one of its eight handles, or the area itself
+    /// to move it. In a flipped view, as the overlay's points are: top is the smaller y.
+    public enum Grip: CaseIterable, Equatable, Sendable {
+        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left, move
+
+        /// Where this handle sits on `rect`; nil for Move.
+        public func point(on rect: CGRect) -> CGPoint? {
+            switch self {
+            case .topLeft: CGPoint(x: rect.minX, y: rect.minY)
+            case .top: CGPoint(x: rect.midX, y: rect.minY)
+            case .topRight: CGPoint(x: rect.maxX, y: rect.minY)
+            case .right: CGPoint(x: rect.maxX, y: rect.midY)
+            case .bottomRight: CGPoint(x: rect.maxX, y: rect.maxY)
+            case .bottom: CGPoint(x: rect.midX, y: rect.maxY)
+            case .bottomLeft: CGPoint(x: rect.minX, y: rect.maxY)
+            case .left: CGPoint(x: rect.minX, y: rect.midY)
+            case .move: nil
+            }
+        }
+
+        /// The eight handles, Move left out.
+        public static let handles = allCases.filter { $0 != .move }
+    }
+
+    /// The handle within `reach` of `point`, else Move inside `rect`, else nil: a press outside starts a new area.
+    public static func grip(at point: CGPoint, of rect: CGRect, reach: CGFloat = 8) -> Grip? {
+        if let handle = Grip.handles.first(where: { $0.point(on: rect).map { abs($0.x - point.x) <= reach && abs($0.y - point.y) <= reach } ?? false }) {
+            return handle
+        }
+        return rect.contains(point) ? .move : nil
+    }
+
+    /// `rect` with `grip` dragged from `start` to `point`, in whole points inside `bounds`: Move slides it whole, kept on
+    /// the display; a handle moves its edges, an edge dragged past the opposite one turning the area over.
+    public static func adjusted(_ rect: CGRect, _ grip: Grip, from start: CGPoint, to point: CGPoint, within bounds: CGRect) -> CGRect {
+        let dx = point.x - start.x, dy = point.y - start.y
+        if grip == .move {
+            let x = min(max(rect.minX + dx, bounds.minX), bounds.maxX - rect.width)
+            let y = min(max(rect.minY + dy, bounds.minY), bounds.maxY - rect.height)
+            return CGRect(x: x, y: y, width: rect.width, height: rect.height).integral
+        }
+        var left = rect.minX, right = rect.maxX, top = rect.minY, bottom = rect.maxY
+        if [.topLeft, .left, .bottomLeft].contains(grip) { left += dx }
+        if [.topRight, .right, .bottomRight].contains(grip) { right += dx }
+        if [.topLeft, .top, .topRight].contains(grip) { top += dy }
+        if [.bottomLeft, .bottom, .bottomRight].contains(grip) { bottom += dy }
+        let x0 = min(max(min(left, right), bounds.minX), bounds.maxX), x1 = min(max(max(left, right), bounds.minX), bounds.maxX)
+        let y0 = min(max(min(top, bottom), bounds.minY), bounds.maxY), y1 = min(max(max(top, bottom), bounds.minY), bounds.maxY)
+        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).integral
+    }
 }

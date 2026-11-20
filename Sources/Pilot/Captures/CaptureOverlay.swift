@@ -71,6 +71,8 @@ final class CaptureOverlay {
             }
             view.entered = { [weak self] in self?.focus($0) }
             view.pressed = { [weak self] in self?.press($0) }
+            view.holding = { [weak self] in self?.hold($0) }
+            view.takeHeld = { [weak self] in self?.takeHeld() ?? false }
             let panel = KeyPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .screenSaver
             panel.isOpaque = true
@@ -108,6 +110,18 @@ final class CaptureOverlay {
         box.press(letter)
         self.box = box
         for view in views { view.show(box) }
+    }
+
+    /// The box holds one area at a time: a drag on one display lets go of another's.
+    private func hold(_ view: CaptureOverlayView) {
+        for other in views where other !== view { other.drop() }
+    }
+
+    /// Return in the box takes the held area, on whichever display it is; false when none is held.
+    private func takeHeld() -> Bool {
+        guard let view = views.first(where: { $0.held != nil }), let rect = view.held else { return false }
+        close(.area(view.grab, rect))
+        return true
     }
 
     /// The panel under the pointer takes the keys, so Space and Tab act on the display Sven is looking at.
@@ -249,6 +263,8 @@ final class CaptureOverlayView: NSView {
         guard moved else { return }
         if selection.mode != box.mode { _ = selection.key(.space) }
         if full, selection.smart { _ = selection.key(.smart) }
+        // Window and Full take no area: a held one is let go. Area and Scroll keep it.
+        if !holds { drop() }
         elements = []
         window?.invalidateCursorRects(for: self)
         if window?.isKeyWindow == true { cursor.set() }
@@ -256,6 +272,26 @@ final class CaptureOverlayView: NSView {
 
     /// A letter pressed in the capture box; the overlay changes the mode on every display.
     var pressed: ((CaptureBox.Letter) -> Void)?
+
+    /// The box's area once a drag is let go (shots 5c-area, 5c-scroll): its handles adjust it, the letters and the timer
+    /// act on it, and Return takes it. Without the box a drag captures at once, as before.
+    private(set) var held: CGRect?
+    /// The handle or the held area being dragged, with where the drag began and the area then.
+    private var gripping: (grip: CaptureBox.Grip, start: CGPoint, from: CGRect)?
+    /// The overlay lets go of any other display's held area.
+    var holding: ((CaptureOverlayView) -> Void)?
+    /// The overlay's Return on a held area; false when none is held.
+    var takeHeld: (() -> Bool)?
+
+    /// A drag in the box's area modes is held rather than taken: Area, Scroll, Record and Text, not Window or Full.
+    private var holds: Bool { box != nil && selection.mode == .area && !full && purpose != .colour }
+
+    /// Lets go of the held area.
+    func drop() {
+        held = nil
+        gripping = nil
+        needsDisplay = true
+    }
 
     private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
@@ -274,10 +310,19 @@ final class CaptureOverlayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard purpose != .colour, !full else { return }
-        update { $0.press(at: point(event)) }
+        let p = point(event)
+        if let held, let grip = CaptureBox.grip(at: p, of: held) {
+            gripping = (grip, p, held)
+            return
+        }
+        // A press off the held area starts a new one.
+        if held != nil { drop() }
+        update { $0.press(at: p) }
     }
     override func mouseDragged(with event: NSEvent) {
-        update { $0.move(to: point(event)) }
+        let p = point(event)
+        if let gripping { held = CaptureBox.adjusted(gripping.from, gripping.grip, from: gripping.start, to: p, within: bounds) }
+        update { $0.move(to: p) }
     }
     override func mouseUp(with event: NSEvent) {
         let p = point(event)
@@ -287,6 +332,18 @@ final class CaptureOverlayView: NSView {
             return report(event.modifierFlags.contains(.shift) ? .rgb(selection.pointer) : .colour(selection.pointer), self)
         }
         if full { return report(.area(selection.bounds), self) }
+        if gripping != nil { gripping = nil; return update { $0.move(to: p) } }
+        if holds {
+            let dragged = selection.isDragging
+            let released = selection.release(at: p)
+            let outcome = dragged ? snapped(released) : released
+            needsDisplay = true
+            // An area is held for its handles and Return; a click on a window still takes the window.
+            guard case .area(let rect) = outcome else { return report(outcome, self) }
+            held = rect
+            holding?(self)
+            return
+        }
         finish { $0.release(at: p) }
     }
 
@@ -315,6 +372,7 @@ final class CaptureOverlayView: NSView {
         default: event.charactersIgnoringModifiers?.lowercased() == "a" ? .smart : nil
         }
         guard let key else { return }
+        if key == .enter, box != nil, takeHeld?() == true { return }
         if key == .smart { elements = [] }
         let mode = selection.mode
         finish { $0.key(key, shift: event.modifierFlags.contains(.shift)) }
@@ -426,10 +484,11 @@ final class CaptureOverlayView: NSView {
         still.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
         let hole: CGRect? = switch selection.mode {
         case .area where full: bounds.insetBy(dx: 1.5, dy: 1.5)
-        case .area: selection.area ?? selection.element
+        case .area: held ?? selection.area ?? selection.element
         case .window: selection.hovered?.frame
         }
-        let ringed = selection.mode == .window || selection.area == nil
+        let area = held ?? selection.area
+        let ringed = selection.mode == .window || area == nil
         // Dim all but the selection: an even-odd path with the hole cut out.
         let dim = NSBezierPath(rect: bounds)
         if let hole { dim.append(NSBezierPath(rect: hole)); dim.windingRule = .evenOdd }
@@ -441,13 +500,26 @@ final class CaptureOverlayView: NSView {
             let ring = NSBezierPath(rect: hole.insetBy(dx: -0.5, dy: -0.5))
             ring.lineWidth = ringed ? 3 : 1
             ring.stroke()
-            if selection.mode == .area, let area = selection.area { label("\(Int(area.width * grab.scale)) × \(Int(area.height * grab.scale))", below: area) }
+            if selection.mode == .area, let area { label("\(Int(area.width * grab.scale)) × \(Int(area.height * grab.scale))", below: area) }
+            if let held { handles(held) }
         }
         if pointing {
             if !selection.isDragging { crosshair() }
             loupe()
         }
         hint(hintText)
+    }
+
+    /// The held area's eight handles, plain squares in the accent: a stand-in for T24's.
+    private func handles(_ rect: CGRect) {
+        for point in CaptureBox.Grip.handles.compactMap({ $0.point(on: rect) }) {
+            let square = NSBezierPath(rect: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8))
+            NSColor.white.setFill()
+            square.fill()
+            accent.setStroke()
+            square.lineWidth = 1
+            square.stroke()
+        }
     }
 
     private func crosshair() {
