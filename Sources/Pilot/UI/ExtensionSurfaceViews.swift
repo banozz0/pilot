@@ -645,7 +645,7 @@ final class ExtensionPages {
 
     /// Every installed extension, as the folder lists them.
     nonisolated static func entries(_ extensions: [Extension]) -> [Link] {
-        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil, raycast: $0.isRaycast) }
+        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil || $0.isRaycast, raycast: $0.isRaycast) }
     }
 
     /// The sidebar's rows (T25): the Raycast extensions; Pilot's own are set aside, their pages still opened from the bar

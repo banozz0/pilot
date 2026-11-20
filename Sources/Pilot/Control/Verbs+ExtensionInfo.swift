@@ -86,6 +86,7 @@ extension ControlVerbs {
     /// the blocks the page would show.
     static func pageExtension(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let ext = try await tools.require(try args.word(1, "id"))
+        if ext.page == nil, ext.isRaycast { return try await livePage(ext, args, tools, peer: peer) }
         guard let page = ext.page else { throw ControlError(.badValue, "\(ext.id) declares no page; pilot ext show \(ext.id) says what it has") }
         return try await tools.readBack(ext, page.command, ["for its page"], peer: peer) { () throws(ControlError) in
             switch await ExtensionRun.surface(page, inputs: try await tools.inputs(ext, page.command)) {
@@ -97,6 +98,100 @@ extension ControlVerbs {
             case .bar: throw ControlError(.badValue, "\(ext.title) \(ExtensionRun.unreadable)")
             }
         }
+    }
+
+    /// `ext page <raycast id> [--command <name>] [--query <text>] [--press <row> [--action <label>] [--then <row>]] [--reopen]` (T30): the
+    /// Raycast extension's page as it runs live, through the page's own model (ExtensionLivePageModel): its rows once
+    /// they settle; `--query` typed into its search; `--press` selects that row and presses Return, or with `--action`
+    /// opens Cmd+K and presses that action, after its own Allow; `--reopen` leaves the page and shows it again (its host
+    /// stopped and started afresh). The page then goes away, its host with it.
+    @MainActor static func livePage(_ ext: Extension, _ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        guard let model = ExtensionLivePageModel(ext, storage: tools.storage) else {
+            let others = ExtensionLivePageModel.elsewhere(of: ext).map(\.actionID)
+            return .object(["page": .string(ext.id), "live": .bool(false), "offers": .string("Open in Hyper+Space"),
+                            "commands": .array(others.map(JSONValue.string))])
+        }
+        if let name = args.value("command") {
+            guard let picked = ExtensionLivePageModel.commands(of: ext).first(where: { $0.name == name }) else {
+                throw ControlError(.badValue, "\(ext.title) has no view \(name) a page runs; pilot ext show \(ext.id) lists its commands")
+            }
+            await model.choose(picked)
+        }
+        let press = args.value("press"), action = args.value("action")
+        let reading = press.map { ["to press \(ControlGate.Ask.visible($0)) on it; the press asks again"] } ?? []
+        return try await tools.readBack(ext, model.command, reading, peer: peer) { () throws(ControlError) in
+            defer { model.stop() }
+            await model.start()
+            if let problem = model.problem { throw ControlError(.badValue, problem) }
+            var answer: [String: JSONValue] = ["page": .string(ext.id), "live": .bool(true), "command": .string(model.command.actionID),
+                                               "shown": await Self.settledPage(model)]
+            if let query = args.value("query") {
+                model.query = query
+                answer["typed"] = await Self.settledPage(model, after: true)
+            }
+            if let press {
+                guard let index = model.nav.rows.firstIndex(where: { $0.title == press }) else {
+                    throw ControlError(.badValue, "no row \(press) on \(ext.title)'s page; its rows are under shown")
+                }
+                let ask = ControlGate.Ask("Press on \(ControlGate.Ask.visible(ext.title))",
+                                          "presses \(ControlGate.Ask.visible(press))\(action.map { " › \(ControlGate.Ask.visible($0))" } ?? "")\(args.value("then").map { ", then \(ControlGate.Ask.visible($0))" } ?? "") on its page, running its actions")
+                answer["pressed"] = try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+                    model.nav.point(at: index)
+                    if let action {
+                        _ = model.handle(.commandK)
+                        guard let at = model.nav.actions?.visible.firstIndex(where: { $0.title == action }) else {
+                            let offered = model.nav.actions?.visible.map(\.title).joined(separator: ", ") ?? "none"
+                            throw ControlError(.badValue, "\(press) offers no action \(action); Cmd+K lists: \(offered)")
+                        }
+                        model.clickAction(at)
+                    } else {
+                        _ = model.handle(.return)
+                    }
+                    log.notice("ext page: \(ext.id, privacy: .public) pressed on its live page, from the pilot command")
+                    return await Self.settledPage(model, after: true)
+                }
+                // A second Return in the view the first left (an alert's Confirm), under the same Allow.
+                if let then = args.value("then") {
+                    guard let at = model.nav.rows.firstIndex(where: { $0.title == then }) else {
+                        throw ControlError(.badValue, "no row \(then) after the press; its rows are under pressed")
+                    }
+                    model.nav.point(at: at)
+                    _ = model.handle(.return)
+                    answer["then"] = await Self.settledPage(model, after: true)
+                }
+            }
+            if args.has("reopen") {
+                model.stop()
+                await model.start()
+                answer["reopened"] = await Self.settledPage(model)
+            }
+            return .object(answer)
+        }
+    }
+
+    /// The live page once it settles: its host's newest view drawn and nothing new for 400 ms (`after`: a change was just
+    /// made, so it waits for one more draw first), up to 8 s.
+    @MainActor private static func settledPage(_ model: ExtensionLivePageModel, after: Bool = false) async -> JSONValue {
+        func loading() -> Bool { model.nav.rows.first?.title.hasSuffix(" is loading…") == true }
+        let until = ContinuousClock.now + .seconds(8)
+        var last = model.nav.rows, quiet = ContinuousClock.now, changed = !after
+        while ContinuousClock.now < until {
+            try? await Task.sleep(for: .milliseconds(50))
+            if model.nav.rows != last || model.nav.emptyView != nil && last.isEmpty { last = model.nav.rows; quiet = .now; changed = true }
+            if changed, !loading(), !last.isEmpty || model.nav.emptyView != nil, ContinuousClock.now - quiet >= .milliseconds(400) { break }
+        }
+        var o: [String: JSONValue] = ["query": .string(model.nav.query), "depth": .number(Double(model.depth)),
+                                      "rows": .array(model.nav.rows.map { row in
+                                          var r: [String: JSONValue] = ["title": .string(row.title)]
+                                          r["subtitle"] = row.subtitle.map(JSONValue.string)
+                                          r["section"] = row.section.map(JSONValue.string)
+                                          r["actions"] = row.ownActions.map { .array($0.map(JSONValue.string)) }
+                                          return .object(r)
+                                      })]
+        if let title = model.nav.title { o["title"] = .string(title) }
+        if let empty = model.nav.emptyView { o["empty"] = Self.empty(empty) }
+        if let detail = model.nav.shownDetail { o["detail"] = .string(String(detail.markdown.prefix(200))) }
+        return .object(o)
     }
 
     static func late(_ timeout: Duration) -> String { "did not answer in \(String(format: "%g", timeout.inSeconds)) s" }

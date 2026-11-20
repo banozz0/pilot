@@ -182,6 +182,7 @@ final class PilotMenu {
         self.source = source
         source.show = { [weak model] in model?.nav.replaceList($0) }
         (source as? ExtensionListSession)?.showEmpty = { [weak model] in model?.nav.emptyView = $0 }
+        (source as? ExtensionListSession)?.showSearch = { [weak model] in model?.nav.query = $0 }
         model.onQuery = { source.search($0) }
         if search { source.search(model.nav.query) }
     }
@@ -199,6 +200,7 @@ final class PilotMenu {
             guard let model, let current = source else { return next.close() }
             current.show = { _ in }
             (current as? ExtensionListSession)?.showEmpty = { _ in }
+            (current as? ExtensionListSession)?.showSearch = { _ in }
             var nav = MenuNavigator(list: [], title: title, live: true)
             nav.query = next.opening
             model.push(nav, over: current)
@@ -1198,6 +1200,7 @@ final class PilotMenu {
             if keep, keepViews(views) {
                 source.show = { _ in }
                 (source as? ExtensionListSession)?.showEmpty = { _ in }
+                (source as? ExtensionListSession)?.showSearch = { _ in }
                 model.onQuery = nil
             } else {
                 views.reversed().forEach { $0.source.close() }

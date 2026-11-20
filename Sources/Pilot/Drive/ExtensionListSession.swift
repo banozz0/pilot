@@ -23,6 +23,8 @@ final class ExtensionListSession: MenuSource {
     var show: ([MenuEntry]) -> Void = { _ in }
     /// The list's empty view while it has no rows (T26), nil otherwise; set before `show`.
     var showEmpty: (Extension.Empty?) -> Void = { _ in }
+    /// A Raycast List set its own search text (T30: Todo List empties it once a todo is added): the search shows it.
+    var showSearch: (String) -> Void = { _ in }
     private let run: (Extension.Command, String) async -> ListOutcome
     /// Ends the transport as the view closes: a session's process; nothing for one-shot runs, each stopped as cancelled.
     private let end: () -> Void
@@ -36,6 +38,9 @@ final class ExtensionListSession: MenuSource {
     private var drawing = false
     /// The search last asked, which a refresh asks again.
     private var query = ""
+    /// The texts sent to a Raycast host since the last press: its List's searchText equal to one is that text's echo,
+    /// which may come after a newer one; any other is the extension's own (T30).
+    private var sent: Set<String> = []
     /// A pushed view's push, which its first ask presses (T8).
     private var pushing: String?
     /// How many views deep this one is in its host's stack: the command's own view is 1.
@@ -89,9 +94,10 @@ final class ExtensionListSession: MenuSource {
         session?.watch { [weak self] in Task { @MainActor in self?.drawQueued() } }
     }
 
-    /// The search changed (the empty one as the list opens, asked at once).
+    /// The search changed (the empty one as the list opens, asked at once): asked again when the program filters, or when
+    /// a Raycast List hears its search (T30, its onSearchTextChange), else Pilot ranks the rows it has.
     func search(_ query: String) {
-        guard command.filter == .program || !asked else { return }
+        guard command.filter == .program || !asked || session?.newest?.search.hears == true else { return }
         ask(query, now: !asked)
     }
 
@@ -99,7 +105,9 @@ final class ExtensionListSession: MenuSource {
     /// row of `row`'s item, by its id, while it is still in the same section.
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target? {
         let held = row.flatMap { ExtensionList.item(at: $0, in: items) }
-        ask(query, now: true)
+        // A Raycast host draws what a press changed itself; asked again, it would get back the text the press may have
+        // emptied (T30).
+        if session == nil { ask(query, now: true) }
         await settled()
         guard let id = held?.id, let index = items.firstIndex(where: { $0.id == id && $0.section == held?.section }) else { return nil }
         return .action("\(command.actionID)#\(index)")
@@ -108,6 +116,7 @@ final class ExtensionListSession: MenuSource {
     private func ask(_ query: String, now: Bool) {
         asked = true
         self.query = query
+        if session != nil { sent.insert(query) }
         task?.cancel()
         // A pushed view's first ask is its push; the answers it brings are drawn here, not in the view under it.
         let push = pushing
@@ -129,18 +138,25 @@ final class ExtensionListSession: MenuSource {
         Task { @MainActor [weak self] in
             guard let self else { return }
             drawing = false
-            if let view = session?.newest { display(view.outcome, loading: view.loading) }
+            guard let view = session?.newest else { return }
+            if let text = view.search.text, text != query, !sent.contains(text) {
+                query = text
+                sent.insert(text)
+                showSearch(text)
+            }
+            display(view.outcome, loading: view.loading, ownOrder: !view.search.filters)
         }
     }
 
-    /// Shows what the program answered, under the loading row while it still loads.
-    private func display(_ outcome: ListOutcome, loading: Bool = false) {
+    /// Shows what the program answered, under the loading row while it still loads; `ownOrder`: a Raycast List filters
+    /// its rows itself, so Pilot keeps them as they come.
+    private func display(_ outcome: ListOutcome, loading: Bool = false, ownOrder: Bool = false) {
         var rows: [MenuEntry]
         var dropped = 0
         switch outcome {
         case .items(let items):
             self.items = items
-            rows = ExtensionList.entries(items, of: command)
+            rows = ExtensionList.entries(items, of: command, ownOrder: ownOrder)
             dropped = items.reduce(0) { $0 + $1.dropped }
         case .detail(let detail):
             items = ExtensionList.items(detail, of: command)
@@ -157,7 +173,7 @@ final class ExtensionListSession: MenuSource {
             // Its actions ride one row the panel keeps behind the empty look (MenuParts), so Return and Cmd+K press them
             // as a row's (T28).
             items = empty.item.map { [$0] } ?? []
-            rows = ExtensionList.entries(items, of: command)
+            rows = ExtensionList.entries(items, of: command, ownOrder: ownOrder)
         case .error(let reason):
             items = []
             rows = [ExtensionList.error(reason, of: command, in: ext.title)]
@@ -203,6 +219,7 @@ final class ExtensionListSession: MenuSource {
         guard case .invoke(let handler) = action.kind else { return ExtensionActions.pick(action, in: ext, inputs: inputs) }
         guard let session else { return .stay }
         if handler.hasSuffix(Self.push) { return .push(action.label, ExtensionListSession(pushing: handler, over: self, in: session)) }
+        sent = []
         return .keep(clear: false, back: false) { Task { _ = await session.invoke(handler) } }
     }
 }

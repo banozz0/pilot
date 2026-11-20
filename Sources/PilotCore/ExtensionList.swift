@@ -471,7 +471,10 @@ extension ExtensionRun {
         "did not answer in \(String(format: "%g", timeout.inSeconds)) s"
     }
 
-    private struct Answer: Decodable { let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool?, empty: Extension.Empty? }
+    private struct Answer: Decodable {
+        let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool?, empty: Extension.Empty?
+        let hearsSearch: Bool?, filtering: Bool?, searchText: String?
+    }
 
     /// The list, the detail or the reason in what a view's program printed: the first error, else the last answer.
     static func answer(_ output: String) -> ListOutcome {
@@ -493,14 +496,16 @@ extension ExtensionRun {
     /// format, or nothing to act on (a blank line or a message of a type Pilot does not know).
     enum Reply: Equatable { case answer(ListOutcome, Meta = Meta()), plain, skip }
 
-    /// A Raycast host's own fields beside its answer (ADR 0017, T2): the request it answers and whether its List still loads.
-    struct Meta: Equatable { var ack: Int?, loading = false }
+    /// A Raycast host's own fields beside its answer (ADR 0017, T2): the request it answers and whether its List still loads;
+    /// its List's search (T30).
+    struct Meta: Equatable { var ack: Int?, loading = false, search = ListSearch() }
 
     static func reply(_ line: some StringProtocol) -> Reply {
         guard !line.allSatisfy(\.isWhitespace) else { return .skip }
         let data = Data(line.utf8), decoder = JSONDecoder()
         guard let answer = try? decoder.decode(Answer.self, from: data) else { return .plain }
-        let meta = Meta(ack: answer.ack, loading: answer.isLoading == true)
+        let meta = Meta(ack: answer.ack, loading: answer.isLoading == true,
+                        search: ListSearch(hears: answer.hearsSearch == true, filters: answer.filtering ?? true, text: answer.searchText))
         switch answer.type {
         case "error": return .answer(.error("says: \(answer.text ?? "it failed")"), meta)
         case "list":
@@ -513,12 +518,21 @@ extension ExtensionRun {
     }
 }
 
+/// A Raycast List's search (T30), as its host says beside each answer: whether it hears each search text (its
+/// onSearchTextChange), whether Pilot ranks its rows by it (Raycast's `filtering`), and its controlled searchText.
+public struct ListSearch: Equatable, Sendable {
+    public var hears = false, filters = true
+    public var text: String?
+    public init(hears: Bool = false, filters: Bool = true, text: String? = nil) { self.hears = hears; self.filters = filters; self.text = text }
+}
+
 /// An extension's list in the menu (card agent-bo-95423243): its items as picker rows, each found by the index in its
 /// id, and the one error row.
 public enum ExtensionList {
-    /// The items as rows: the program's order kept as answers when it filters, rows Pilot ranks when Pilot does.
-    public static func entries(_ items: [Extension.Item], of command: Extension.Command) -> [MenuEntry] {
-        let ownOrder = command.filter == .program
+    /// The items as rows: the program's order kept as answers when it filters (a command's `filter`, or a Raycast List's
+    /// own, `ownOrder`), rows Pilot ranks when Pilot does.
+    public static func entries(_ items: [Extension.Item], of command: Extension.Command, ownOrder: Bool = false) -> [MenuEntry] {
+        let ownOrder = ownOrder || command.filter == .program
         return items.enumerated().map { index, item in
             var row = MenuEntry(title: item.title, target: .action("\(command.actionID)#\(index)"), detail: item.accessory?.text,
                                 keywords: item.keywords, isAnswer: ownOrder, subtitle: item.subtitle, icon: icon(of: item, in: command))

@@ -275,16 +275,28 @@ function answer(container, handlers, query, message) {
   }
   const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
   if (root.props.isLoading === true) list.isLoading = true;
+  // Who filters as Sven types (T30): Raycast does unless the List takes onSearchTextChange, or `filtering` says otherwise.
+  // A List that hears its search gets each later text (search below); one that filters itself keeps its own order; a
+  // controlled searchText is the search bar's text (Todo List empties it once a todo is added).
+  const hears = typeof root.props.onSearchTextChange === "function";
+  if (hears) list.hearsSearch = true;
+  if (!(root.props.filtering === undefined ? !hears : !!root.props.filtering)) list.filtering = false;
+  if (typeof root.props.searchText === "string") list.searchText = root.props.searchText;
   // Raycast shows a List.EmptyView only while the list has no rows (T26): its title, description and icon, and its
   // ActionPanel's actions (T28: Speedtest's failure view offers Restart).
-  const none = list.items.length === 0 && emptyView(root.children);
+  // With no empty view of its own, or one with no actions, the List's own `actions` are offered (T30: Raycast shows them
+  // while the list has no rows), under Raycast's own "No Results" when it has no empty view.
+  const none = list.items.length === 0 && (emptyView(root.children) ?? true);
   if (none) {
-    const empty = { title: words(none.props.title) ?? "" };
-    const description = words(none.props.description);
+    const view = none === true ? null : none;
+    const empty = { title: view ? words(view.props.title) ?? "" : "" };
+    const description = view && words(view.props.description);
     if (description) empty.description = description;
-    Object.assign(empty, picture(none.props.icon));
-    const offered = actions(none.children, handlers);
+    if (view) Object.assign(empty, picture(view.props.icon));
+    let offered = view ? actions(view.children, handlers) : [];
+    if (!offered.length) offered = actions(root.children.filter((node) => node.type === "ActionPanel"), handlers);
     if (offered.length) empty.actions = offered;
+    if (!view && offered.length) empty.title = "No Results";
     if (empty.title || empty.description) list.empty = empty;
   }
   return list;

@@ -147,6 +147,35 @@ struct ExtensionCatalogueRenders {
                         Extension.Item(title: "Sunday", subtitle: "A symbol, no picture", actions: [], symbol: "cloud.sun")]
         let pictured = MenuNavigator(list: ExtensionList.entries(forecast, of: raycast.commands[0]), title: "Weather", live: true)
         try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: pictured)), "menu-t28-pictures", in: out)
+        // T30: Kill Process's page runs its view live, its search over its rows, then with Cmd+K's actions open.
+        final class Rows: MenuSource {
+            var show: ([MenuEntry]) -> Void = { _ in }
+            let rows: [MenuEntry]
+            init(_ rows: [MenuEntry]) { self.rows = rows }
+            func search(_ query: String) { show(rows) }
+            func pick(_ row: MenuEntry, action: Int) -> MenuPick { .stay }
+            func close() {}
+        }
+        let processes = [("Safari", "2.4% CPU · 812 MB"), ("pilott30dummy", "0.0% CPU · 1 MB"), ("WindowServer", "9.1% CPU · 310 MB")].map {
+            Extension.Item(title: $0.0, subtitle: $0.1, actions: [.init(kind: .invoke(handler: "1.onAction"), title: "Kill"),
+                                                                  .init(kind: .invoke(handler: "2.onAction"), title: "Force Kill"),
+                                                                  .init(kind: .invoke(handler: "3.onAction"), title: "Reload")])
+        }
+        let livePage = ExtensionPageModel(id: "kill-process", folder: t25.appending(path: "Extensions"),
+                                      storage: ExtensionStorage(data: t25.appending(path: "data"), cache: t25.appending(path: "cache"),
+                                                                keychain: ExtensionsModuleTests.FakeKeychain()))
+        await livePage.refresh()
+        let live = try #require(livePage.livePage)
+        live.session = { (_: Extension, command: Extension.Command, _: ExtensionRun.Inputs) in Rows(ExtensionList.entries(processes, of: command)) }
+        for name in ["page-t30-live", "page-t30-actions"] {
+            // Each shot's page leaving stops the command, as a page Sven leaves does; it starts again for the next.
+            await live.start()
+            if name == "page-t30-actions" { _ = live.handle(.down); _ = live.handle(.commandK) }
+            let view = Ground { ExtensionSurfacePage(id: "kill-process", onScreen: true, model: livePage) { _ in }.frame(width: 900, height: 520) }
+                .styled(.page(.extensions), look: look).pilotTheme(look: look)
+            try writeRender(view, to: out.appendingPathComponent("\(name).png"), wait: 0.8)
+        }
+        live.stop()
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

@@ -54,7 +54,8 @@ function metadata(owner) {
   return tree;
 }
 
-export const List = host("List");
+// Its `actions` are mounted after its rows (T30): Raycast offers them while it has no rows (Todo List's Create Todo).
+export const List = withParts("List");
 List.Item = withParts("List.Item");
 // An item's side detail (`detail` with isShowingDetail) is built but not drawn yet.
 List.Item.Detail = host("List.Item.Detail");
