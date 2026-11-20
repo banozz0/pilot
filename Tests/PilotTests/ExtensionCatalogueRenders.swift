@@ -176,6 +176,41 @@ struct ExtensionCatalogueRenders {
             try writeRender(view, to: out.appendingPathComponent("\(name).png"), wait: 0.8)
         }
         live.stop()
+
+        // T29: nothing read before the rows show. The page's All after its rows asked (`want`, what each row's onAppear
+        // calls; an offscreen render runs no onAppear), its reads landed; Hyper+Space's Raycast Store the same from its
+        // rows' shown(); the folders without a package.json keep their name and the plug. Then the sidebar's rows with an
+        // installed extension's own icon.
+        let (fresh, freshDir) = try Self.storeModel()
+        defer { try? FileManager.default.removeItem(at: freshDir) }
+        await fresh.open()
+        var landed = 0
+        for folder in fresh.listing?.folders ?? [] { fresh.want(folder.name) { landed += 1 } }
+        for _ in 0..<40 where landed < 5 { try await Task.sleep(for: .milliseconds(50)) }
+        let t29 = Ground { ExtensionsPageView(onScreen: false, settings: settings, storeModel: fresh, filter: .all).frame(width: 1000, height: 640) }
+            .styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(t29, to: out.appendingPathComponent("instrument-t29-all.png"), wait: 0.8)
+        let reads = { (dir: URL) in ((try? String(contentsOf: dir.appending(path: "github/reads.log"), encoding: .utf8)) ?? "").split(separator: "\n") }
+        print("T29 PAGE: \(reads(freshDir).count) reads: " + reads(freshDir).map { $0.split(separator: "/").suffix(2).joined(separator: "/") }.joined(separator: ", "))
+        print("T29 PAGE ROWS: " + (fresh.listing?.folders ?? []).map { "\(fresh.title($0.name)) [\(fresh.iconFile($0.name) == nil ? "plug" : "icon")]" }.joined(separator: " | "))
+        let (menuStore, menuDir) = try Self.storeModel()
+        defer { try? FileManager.default.removeItem(at: menuDir) }
+        await menuStore.open()
+        let picker = RaycastStoreMenu(model: menuStore)
+        var refilled: [MenuEntry]?
+        picker.showKeeping = { refilled = $0 }
+        for row in picker.rows() { picker.shown(row) }
+        for _ in 0..<40 where refilled?.contains(where: { $0.title == "Kill Process" }) != true { try await Task.sleep(for: .milliseconds(50)) }
+        var t29Menu = MenuNavigator(list: [], title: RaycastStoreMenu.title, live: true)
+        t29Menu.replaceList(try #require(refilled))
+        print("T29 PICKER: \(reads(menuDir).count) reads; " + t29Menu.rows.map { "\($0.title)\($0.subtitle.map { " · \($0)" } ?? "") [\($0.icon?.file == nil ? "plug" : "icon")]" }.joined(separator: " | "))
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: t29Menu)), "menu-t29-store", in: out)
+        let links = ExtensionPages.entries([raycast]) + [ExtensionPages.Link(id: "plain", title: "No icon file", icon: nil, raycast: true)]
+        let sidebar = Ground {
+            VStack(alignment: .leading, spacing: 0) { ForEach(links) { InstrumentExtensionRow(link: $0, on: $0.id == "kill-process", open: {}) } }
+                .frame(width: 240).padding(.vertical, 8)
+        }.styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(sidebar, to: out.appendingPathComponent("instrument-t29-sidebar.png"), wait: 0.3)
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

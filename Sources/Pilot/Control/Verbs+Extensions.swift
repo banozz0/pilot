@@ -212,7 +212,7 @@ extension ControlVerbs {
         ("page", "ext page <id> [--command <name>] [--query <text>] [--press <row> [--action <label>] [--then <row>]] [--reopen]", "Asks its page command once after Allow and answers its blocks, as its page shows them; a Raycast extension's page runs its view live (its rows, typed into, a row pressed after its own Allow, left and shown again); nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] [--query <text>] | ext act <id> --handler <id> [--command <name>] [--then <row>|escape] | ext act <id> [<action>] [--type <field>=<text>] [--submit [<json values>]]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's action (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, opened searched for --query, with its host kept open: a callback runs and it answers the rows before and after; a typed action (open, copy, paste) is answered, not performed, as Pilot performs it on a press in the menu; --then presses again in the view the first press left, escape going back a view. On a Raycast Form, --type types a text field's text one change per character as keystrokes come, and --submit sets the fields its JSON object names, by id, then presses the form's SubmitForm (or the action named); it answers the form before, each line typing drew, the form filled and the view after, submitted false while a field shows an error."),
         ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
-        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with no question and its same result line. root is Hyper+Space's root search for <typed> as the menu lists it (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, never GitHub."),
+        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed> | ext store shown [<n>]", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with no question and its same result line. root is Hyper+Space's root search for <typed> as the menu lists it once typing pauses (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, each one's package.json and icon read as the menu reads them. shown puts the first <n> rows (20, at most 24) on screen as the Extensions page and Hyper+Space's Raycast Store do, waits for their package.json and icon reads (T29), and answers each row's title, description and icon, Hyper+Space's picker row for it, and every installed Raycast extension's icon in the sidebar, its page header and its Hyper+Space rows."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -311,6 +311,8 @@ extension ControlVerbs {
                 .object(["id": .string(ext.id), "commands": .array(ext.listed.map { .string($0.actionID) })])
             } ?? .bool(false)
             return .object(o)
+        case "shown":
+            return await storeShown(Int(words.dropFirst().first ?? "") ?? 20, listing, model, tools)
         case "install":
             guard words.count == 2 else { throw ControlError(.badValue, "ext store install takes one folder") }
             guard case .object(var answer) = try await model.install(words[1], tools: tools, peer: peer, from: "the pilot command's ext store") else {
@@ -335,7 +337,8 @@ extension ControlVerbs {
 
     /// `ext store root <typed>` (raycast-extensions T25): Hyper+Space's root search as the menu builds it, its rows from
     /// PilotMenu.entries (each Raycast command read as Extension) and the store's from the listing kept on disk, as
-    /// provideStore gives them, ranked by the menu's own navigator. Reads only: no GitHub, nothing run.
+    /// provideStore gives them, ranked by the menu's own navigator, the store rows read first as the menu reads them once
+    /// typing pauses (T29). Reads only: GitHub's raw files for those rows, nothing run.
     private static func storeRoot(_ typed: String, _ model: RaycastStoreModel, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
         guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { throw ControlError(.badValue, "ext store root takes what is typed") }
         let found = await tools.found().extensions
@@ -343,6 +346,15 @@ extension ControlVerbs {
         let entries = Engine.shared.map { PilotMenu.entries($0, scripts: ScriptCommand.find(), extensions: found) } ?? []
         var nav = MenuNavigator(entries: entries)
         nav.query = typed
+        // As the menu does once typing pauses (T29): the store rows still named by their folder read, then given again.
+        let unread = model.rootRows(typed).compactMap { row -> String? in
+            if case .storeFolder(let name) = row.target, model.infos[name] == nil { name } else { nil }
+        }
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            var left = 0
+            for name in unread where model.want(name, then: { left -= 1; if left == 0 { done.resume() } }) { left += 1 }
+            if left == 0 { done.resume() }
+        }
         nav.provide(.store, model.rootRows(typed))
         let headings = MenuGroups.headings(nav.rows, searching: true)
         let rows: [JSONValue] = nav.rows.prefix(20).enumerated().map { i, row in
@@ -356,6 +368,44 @@ extension ControlVerbs {
         var o: [String: JSONValue] = ["typed": .string(typed), "rows": .array(rows), "listed": .number(Double(nav.rows.count))]
         o["listing"] = model.listing.map { .string("kept on disk, \($0.folders.count) folders, read \($0.fetched.ISO8601Format())") } ?? .string("none kept")
         return .object(o)
+    }
+
+    /// `ext store shown [<n>]` (raycast-extensions T29): the first `n` rows on screen, through the call each surface's rows
+    /// make as they show (RaycastStoreModel.want), waited for; then what each surface draws for them and for the installed
+    /// Raycast extensions, from the code those views use. Reads only: GitHub's raw files, nothing run.
+    private static func storeShown(_ n: Int, _ listing: RaycastStore.Listing, _ model: RaycastStoreModel, _ tools: ExtensionTools) async -> JSONValue {
+        // At most the rows the store keeps waiting at once, so every one asked is answered.
+        let first = Array(listing.folders.prefix(max(1, min(n, RaycastStoreModel.mostWanted)))), started = Date.now
+        var asked = 0
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            var left = 0
+            for folder in first where model.want(folder.name, then: { left -= 1; if left == 0 { done.resume() } }) { left += 1 }
+            asked = left
+            if left == 0 { done.resume() }
+        }
+        let menu = RaycastStoreMenu(model: model)
+        let rows: [JSONValue] = first.map { folder in
+            let picker = menu.row(folder)
+            var o: [String: JSONValue] = ["folder": .string(folder.name), "title": .string(model.title(folder.name)),
+                                          "description": .string(model.infos[folder.name]?.description ?? ""),
+                                          "picker": .string(picker.title + (picker.subtitle.map { " · \($0)" } ?? ""))]
+            o["icon"] = model.iconFile(folder.name).map(JSONValue.string) ?? .string("plug (none)")
+            o["pickerIcon"] = picker.icon?.file.map(JSONValue.string) ?? .string("plug (none)")
+            o["failed"] = model.infoFailures[folder.name].map(JSONValue.string)
+            return .object(o)
+        }
+        let found = await tools.found().extensions.filter(\.isRaycast)
+        let links = Dictionary(ExtensionPages.entries(found).map { ($0.id, $0) }) { a, _ in a }
+        let installed: [JSONValue] = found.map { ext in
+            var o: [String: JSONValue] = ["id": .string(ext.id), "title": .string(ext.title)]
+            o["sidebar"] = links[ext.id]?.picture.map(JSONValue.string) ?? .string(links[ext.id]?.icon ?? "🧩")
+            o["header"] = ext.picture.map(JSONValue.string) ?? .string("puzzle (none)")
+            o["menu"] = .array(ext.listed.map { .string("\($0.title): \($0.picture ?? "symbol (none)")") })
+            return .object(o)
+        }
+        return .object(["shown": .number(Double(first.count)), "read": .number(Double(asked)),
+                        "seconds": .number((Date.now.timeIntervalSince(started) * 100).rounded() / 100),
+                        "rows": .array(rows), "installed": .array(installed)])
     }
 
     /// What pilot-ext-host's gap recorder wrote for one extension, ExtensionData/<id>/gaps.json (ADR 0017, T3).

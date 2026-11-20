@@ -296,7 +296,7 @@ struct ExtensionSurfacePage: View {
     /// Settings.
     private var header: some View {
         HStack(spacing: 12) {
-            EmojiTile(emoji: model.ext?.icon, size: 32)
+            EmojiTile(emoji: model.ext?.icon, size: 32, file: model.ext?.picture)
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.ext?.title ?? model.id).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(1)
                     .accessibilityAddTraits(.isHeader)

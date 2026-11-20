@@ -3,9 +3,10 @@ import Foundation
 /// Raycast's store as Pilot reads it (raycast-extensions T24; Sven, 2026-11-20, Q279 "github"): the folders under
 /// github.com/raycast/extensions/extensions, never Raycast's own service. The list is one unauthenticated GitHub tree
 /// listing of that folder, not recursive, refused when GitHub says it is truncated, and kept on disk a day. A folder's
-/// `package.json` (its title, description, author and icon) is fetched from raw.githubusercontent.com only when that
-/// folder is picked, and kept beside the list under the folder's git tree hash, so a folder changed upstream is read
-/// again and an unchanged one never is. Nothing about the user is sent: no token, no cookie, no query. An install goes
+/// `package.json` (its title, description, author and icon) and its icon are fetched from raw.githubusercontent.com when
+/// its row comes on screen or it is picked (T29), never the whole store at once, and kept beside the list under the
+/// folder's git tree hash, so a folder changed upstream is read again and an unchanged one never is. raw is a plain file
+/// host, outside the API's 60 calls an hour without an account, which the listing alone spends from. Nothing about the user is sent: no token, no cookie, no query. An install goes
 /// through ADR 0017's GitHub route (T6), `github:raycast/extensions/extensions/<folder>`.
 ///
 /// Every remote word is held here before anything shows it: a folder name to letters, digits, `.`, `_` and `-` (a name
@@ -66,7 +67,7 @@ public enum RaycastStore {
     public enum Problem: Error, Equatable, Sendable {
         /// GitHub cut the listing short, so it is not the whole store.
         case truncated
-        /// GitHub's hourly limit for unauthenticated calls (60) is spent.
+        /// GitHub's limit for calls without an account is spent: the API's 60 an hour, or raw's own (a 429).
         case rateLimited
         case unreachable(String)
         case unreadable(String)
@@ -74,7 +75,7 @@ public enum RaycastStore {
         public var reason: String {
             switch self {
             case .truncated: "GitHub's listing of raycast/extensions came back truncated, so it was not used"
-            case .rateLimited: "GitHub's hourly limit of 60 listings without an account is spent; try again within the hour"
+            case .rateLimited: "GitHub's limit for calls without an account is spent; try again within the hour"
             case .unreachable(let why): "GitHub could not be reached: \(why)"
             case .unreadable(let why): "GitHub's answer could not be read: \(why)"
             }
@@ -155,8 +156,8 @@ public enum RaycastStore {
 
     /// Hyper+Space's root search's store rows (raycast-extensions T25), from the listing already held, never GitHub: at
     /// most `most` folders `installed` does not take whose name, or title once read, holds what was typed, those that
-    /// start with it first, then A to Z. Each is its title once read (its folder's name until then), "Raycast Store"
-    /// beside it, its icon once fetched; Return opens the store on it. `compacted` holds each folder's name already
+    /// start with it first, then A to Z. Each is its title and description once read (its folder's name and "Raycast
+    /// Store" until then), its icon once fetched; Return opens the store on it. `compacted` holds each folder's name already
     /// compared form, made once per listing, so a keystroke folds only what was typed and the titles read.
     public static func rootRows(_ query: String, listing: Listing?, infos: [String: Info], icons: [String: String],
                                 compacted: [String: String] = [:], installed: (String) -> Bool, most: Int = 3) -> [MenuEntry] {
@@ -170,9 +171,9 @@ public enum RaycastStore {
         return found.sorted { ($0.0 ? 0 : 1, $0.1) < ($1.0 ? 0 : 1, $1.1) }.prefix(most).map { _, name in
             var icon = MenuIcon.glyph("puzzlepiece.extension", .accent)
             icon.file = icons[name]
-            let title = infos[name]?.title ?? name
+            let title = infos[name]?.title ?? name, line = infos[name]?.description ?? ""
             return MenuEntry(title: title, target: .storeFolder(name), detail: "Return opens it in Raycast's store",
-                             keywords: "\(name) \(compact(name)) \(compact(title))", subtitle: "Raycast Store", icon: icon)
+                             keywords: "\(name) \(compact(name)) \(compact(title))", subtitle: line.isEmpty ? "Raycast Store" : line, icon: icon)
         }
     }
 
@@ -277,7 +278,7 @@ public enum RaycastStore {
         let data: Data, response: URLResponse
         do { (data, response) = try await session.data(for: request) } catch { throw .unreachable(error.localizedDescription) }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if [403, 429].contains(status), (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" { throw .rateLimited }
+        if status == 429 || status == 403 && (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" { throw .rateLimited }
         guard status == 200 else { throw .unreachable("\(url.host() ?? "") answered \(status) for \(url.path())") }
         guard data.count <= limit else { throw .unreadable("\(url.path()) is \(data.count) bytes, past \(limit)") }
         return data

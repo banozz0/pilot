@@ -612,6 +612,8 @@ final class ExtensionPages {
 
     struct Link: Equatable, Identifiable {
         let id: String, title: String, icon: String?
+        /// A Raycast extension's own icon file in its `assets/` (T29), drawn in the sidebar in place of the emoji.
+        var picture: String?
         /// It has something to show as a page: its page, else its bar item's popover. One with neither opens its card on
         /// Installed.
         var opens = true
@@ -645,7 +647,7 @@ final class ExtensionPages {
 
     /// Every installed extension, as the folder lists them.
     nonisolated static func entries(_ extensions: [Extension]) -> [Link] {
-        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil || $0.isRaycast, raycast: $0.isRaycast) }
+        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, picture: $0.picture, opens: $0.shownSurface != nil || $0.isRaycast, raycast: $0.isRaycast) }
     }
 
     /// The sidebar's rows (T25): the Raycast extensions; Pilot's own are set aside, their pages still opened from the bar
@@ -761,7 +763,11 @@ struct InstrumentExtensionRow: View {
         let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
         Button(action: open) {
             HStack(spacing: 10) {
-                Text(link.icon ?? "🧩").font(.system(size: 11 * style.scale)).frame(width: 16)
+                if let image = link.picture.flatMap(EmojiTile.image) {
+                    Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).frame(width: 16, height: 16)
+                } else {
+                    Text(link.icon ?? "🧩").font(.system(size: 11 * style.scale)).frame(width: 16)
+                }
                 Text(link.title).styleText(\.body).foregroundStyle(style.color(on ? \.text : \.text2)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
             }

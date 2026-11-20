@@ -2,9 +2,10 @@ import AppKit
 import PilotCore
 
 /// Hyper+Space's Raycast Store (raycast-extensions T24): a live picker over Raycast's store (RaycastStoreModel), a row per
-/// folder that Pilot ranks as Sven types, named by its folder until its package.json is read. Return on a row not read
-/// yet reads it in place (title, description, author, icon) and keeps it picked; on a read one it installs, T6's install
-/// with its same question; on an installed one it opens that extension's commands. Cmd+K: Install or Open commands, Open
+/// folder that Pilot ranks as Sven types, named by its folder until its package.json is read, which happens as its row
+/// comes on screen (T29). Return on a row not read yet reads it in place (title, description, author, icon) and keeps it
+/// picked; on a read one it installs, T6's install with its same question; on an installed one it opens that extension's
+/// commands. Cmd+K: Install or Open commands, Open
 /// on GitHub, Refresh. The listing is read only as the picker opens, kept a day.
 @MainActor
 final class RaycastStoreMenu: MenuSource {
@@ -12,6 +13,7 @@ final class RaycastStoreMenu: MenuSource {
     static let reading = "Reading Raycast's store from GitHub…"
 
     var show: ([MenuEntry]) -> Void = { _ in }
+    var showKeeping: (([MenuEntry]) -> Void)?
     private let model: RaycastStoreModel
     private let hud: (String) -> Void
     private let open: (URL) -> Void
@@ -41,7 +43,33 @@ final class RaycastStoreMenu: MenuSource {
         }
     }
 
-    func close() { task?.cancel() }
+    func close() {
+        task?.cancel()
+        refill?.cancel()
+        for folder in wanted { model.unwant(folder) }
+    }
+
+    /// The folders this picker asked to read, and the one refill waiting for the reads that land meanwhile.
+    private var wanted: Set<String> = []
+    private var refill: Task<Void, Never>?
+
+    /// A row on screen (T29): its package.json and icon read, then the rows shown again once, the row Sven is on kept.
+    func shown(_ row: MenuEntry) {
+        guard case .action(let id) = row.target, let hash = id.lastIndex(of: "#") else { return }
+        let folder = String(id[id.index(after: hash)...])
+        guard model.infos[folder] == nil else { return }
+        let asked = model.want(folder) { [weak self] in
+            guard let self, refill == nil else { return }
+            // Every read that lands in the same change is in the one refill.
+            refill = Task { [weak self] in
+                await Task.yield()
+                guard let self, !Task.isCancelled else { return }
+                refill = nil
+                showKeeping?(rows())
+            }
+        }
+        if asked { wanted.insert(folder) }
+    }
 
     /// The rows again, the row Sven was on kept: after a read in place, or a Refresh.
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target? {
@@ -134,7 +162,9 @@ final class RaycastStoreCommands: MenuSource {
 
     func search(_ query: String) {
         show(ext.listed.map { command in
-            var row = MenuEntry(title: command.title, target: .action(command.actionID), subtitle: ext.title, icon: .command(emoji: command.icon))
+            var icon = MenuIcon.command(emoji: command.icon)
+            icon.file = command.picture ?? ext.picture
+            var row = MenuEntry(title: command.title, target: .action(command.actionID), subtitle: ext.title, icon: icon)
             row.ownActions = ["Run"]
             return row
         })
