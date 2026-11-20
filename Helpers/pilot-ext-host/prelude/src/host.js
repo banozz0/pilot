@@ -15,12 +15,14 @@
 // back; `navigation.pop.<n>` goes back to the n-th layer (Pilot's menu sends its own view's depth, so a push or pop a
 // callback made never leaves the two stacks apart). At the root both answer the view unchanged.
 // The Form (T10) is form.js's: a form answer of fields, each edit an invoke carrying its value, SubmitForm its submit.
+// An alert (T11) is alert.js's: while `confirmAlert` waits it is the answer, its two rows the only handlers.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 import { Navigation, effects } from "./raycast.js";
 import { symbols } from "./icons.js";
 import { formAnswer, formPress } from "./form.js";
+import { alertAnswer, alertPress, setRedraw } from "./alert.js";
 
 const native = globalThis.__native;
 
@@ -243,8 +245,10 @@ function view(nodes) {
 }
 
 /** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
- *  loading row. */
-function answer(container, handlers) {
+ *  loading row. An alert up (T11) is the answer instead, its rows carrying the search `query`. */
+function answer(container, handlers, query) {
+  const alert = alertAnswer(handlers, query);
+  if (alert) return alert;
   const root = top(container);
   if (!root) return null;
   if (root.type === "Form") return formAnswer(root, handlers, actions);
@@ -275,11 +279,11 @@ export function fail(error, ack) {
 
 /** Renders the command `component` for the run `message`, writing each changed answer. */
 export function render(component, message) {
-  let last = null, queued = false, handlers = new Map(), ack = null;
+  let last = null, queued = false, handlers = new Map(), ack = null, query = String(message.query ?? "");
   /** Writes the answer when it changed, or, when a request waits, with its `ack` even unchanged. */
   function flush() {
     const table = new Map();
-    const now = answer(container, table) ?? (ack != null ? { type: "list", items: [] } : null);
+    const now = answer(container, table, query) ?? (ack != null ? { type: "list", items: [] } : null);
     handlers = table;
     if (!now) return;
     const line = JSON.stringify(now);
@@ -290,6 +294,8 @@ export function render(component, message) {
     ack = null;
   }
   changed.add(flush);
+  // A turn later, so a press's own commit (an alert action's onAction) answers it first, carrying its ack.
+  setRedraw(() => setTimeout(flush, 0));
   const container = {
     children: [],
     committed() {
@@ -345,6 +351,7 @@ export function render(component, message) {
   return {
     /** A later search: the List's own onSearchTextChange, when it takes one. */
     search(text, seq) {
+      query = String(text ?? "");
       request(seq, () => {
         const list = top(container);
         const handler = list?.props?.onSearchTextChange;
@@ -358,7 +365,8 @@ export function render(component, message) {
     invoke(id, seq, value) {
       request(seq, () => {
         const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
-        const callback = back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
+        const alerting = alertPress(word);
+        const callback = alerting !== undefined ? alerting : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
           : formPress(word, node, value, top(container))
             ?? (node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
               : node?.props?.[word.split(".").pop()]);
@@ -373,6 +381,6 @@ export function render(component, message) {
         }
       });
     },
-    close() { changed.delete(flush); reconciler.updateContainer(null, root, null, null); },
+    close() { changed.delete(flush); setRedraw(noop); reconciler.updateContainer(null, root, null, null); },
   };
 }

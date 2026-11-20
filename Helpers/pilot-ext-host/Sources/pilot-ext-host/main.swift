@@ -13,7 +13,11 @@ import JavaScriptCore
 // effects), and by a deadline at the latest, inside Pilot's own: 1.7 s from the start of a run that ended its input at
 // once (Pilot's 2 s list limit), 29.5 s for a no-view run (Pilot's 30 s), 0.4 s from a close (Pilot stops it at 0.5 s).
 // At its exit it stops the children it started that are still running, except a detached one, which outlives it as
-// Node's does (Native.swift).
+// Node's does (Native.swift). An open view's run may ask Pilot (T11): an `ask` line (`id`, `what`: `ai` with its `prompt`,
+// or `selection`) that Pilot answers on stdin with an `answer` line carrying the same `id` and its `text` or `error`;
+// the run is held until it comes, its run deadline too (Pilot's own timeout still stops it). Once stdin ended, nothing
+// can answer, so an ask then fails at once. A one-shot run whose run message says `"answers": true` keeps its stdin open
+// for answers: it ends as if its input had ended at once, while its asks are still answered.
 
 /// Writes one line to stdout or stderr, unbuffered.
 func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
@@ -30,6 +34,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     private var started = false, inputOpen = true, closing = false
     /// Work that keeps a run alive past its input's end: fetches in flight and children not unref'd (Native.swift).
     var pending = 0
+    /// Asks waiting for Pilot's answer (T11), counted in `pending` too: while any waits, the run deadline waits.
+    private var asking = 0
     var children: [Int: Child] = [:]
     private let born = Date()
 
@@ -62,6 +68,13 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         native.setObject(log, forKeyedSubscript: "log" as NSString)
         native.setObject(setTimer, forKeyedSubscript: "setTimer" as NSString)
         native.setObject(clearTimer, forKeyedSubscript: "clearTimer" as NSString)
+        // An ask waiting for Pilot's answer holds the run as a fetch does (T11): +1 as it goes out, -1 as it is answered.
+        let hold: @convention(block) (Int) -> Void = { [unowned self] delta in
+            asking += delta
+            pending += delta
+            settle()
+        }
+        native.setObject(hold, forKeyedSubscript: "hold" as NSString)
         installSystem(into: native)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
@@ -76,6 +89,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
             started = true
             let parsed = context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line])!
             call("__pilotStart", [factory, parsed])
+            if message["answers"] as? Bool == true { runsOnce() }
         case "query": call("__pilotQuery", [message["text"] as? String ?? "", Host.seq(message)])
         case "invoke":
             // A form's press carries a value (T10), parsed in the context as the run message is, so a date or a list
@@ -83,6 +97,9 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
             let value = message["value"] == nil ? JSValue(undefinedIn: context)!
                 : context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line]).objectForKeyedSubscript("value")!
             call("__pilotInvoke", [message["handler"] as? String ?? "", Host.seq(message), value])
+        case "answer":
+            // An answer to the run's own ask (T11), parsed in the context as the run message is.
+            call("__pilotAnswer", [context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line])!])
         case "close":
             closing = true
             call("__pilotClose", [])
@@ -93,11 +110,23 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     }
 
     func inputEnded() {
+        let wasOpen = inputOpen
         inputOpen = false
         guard started else { return finish() }
-        deadline(max(0.05, runDeadline - Date().timeIntervalSince(born)))
+        // Asks still waiting can no longer be answered (T11): they fail, and later ones fail at once.
+        call("__pilotInputEnded", [])
+        if wasOpen { runDeadlineFromStart() }
         settle()
     }
+
+    /// A one-shot run Pilot answers asks in (T11): it ends as one whose input ended at once, its stdin kept for answers.
+    private func runsOnce() {
+        inputOpen = false
+        runDeadlineFromStart()
+        settle()
+    }
+
+    private func runDeadlineFromStart() { deadline(max(0.05, runDeadline - Date().timeIntervalSince(born)), held: true) }
 
     /// A request's number, or null when it has none.
     static func seq(_ message: [String: Any]) -> Any { (message["seq"] as? Int).map { $0 as Any } ?? NSNull() }
@@ -134,8 +163,15 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         }
     }
 
-    private func deadline(_ seconds: TimeInterval) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in MainActor.assumeIsolated { self?.finish() } }
+    /// Exits after `seconds`; `held`, a run deadline, waits on while an ask is unanswered (T11), a close's never.
+    private func deadline(_ seconds: TimeInterval, held: Bool = false) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if held, self.asking > 0 { return self.deadline(0.25, held: true) }
+                self.finish()
+            }
+        }
     }
 
     private func finish() {

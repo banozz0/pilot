@@ -7,10 +7,13 @@
 // as an ADR 0010 line (a no-view command's `hud` and `action`, a view's `toast` and `action`), so Pilot performs it and
 // `pilot ext run` answers it unperformed. T8 adds the view stack: `Action.Push` and `useNavigation()`, whose push and
 // pop host.js performs on the run's layers. T10 adds the Form and its items, which form.js turns into fields, and
-// Action.SubmitForm. Every other Raycast export is a stub that records its use (gaps.js).
+// Action.SubmitForm. T11 adds `AI.ask` and `getSelectedText`, which ask Pilot (asks.js), and `confirmAlert`, which asks
+// in the panel (alert.js). Every other Raycast export is a stub that records its use (gaps.js).
 import { createContext, createElement, useContext } from "react";
 import { guard, missing, record, store, stubs } from "./gaps.js";
 import { childProcess, path } from "./node.js";
+import { askAI, selectedText } from "./asks.js";
+import { confirmAlert } from "./alert.js";
 
 const native = globalThis.__native;
 
@@ -189,14 +192,22 @@ export function makeAPI(message, mode) {
     #tell(key, value) { for (const fn of this.#subscribers) fn(key, value); }
   }
 
+  // MARK: AI, through the provider on Pilot's AI page (T11)
+
+  const AI = stubs("AI", [], {
+    ask: askAI, Model: names(),
+    Creativity: Object.freeze({ None: "none", Low: "low", Medium: "medium", High: "high", Maximum: "maximum" }),
+  });
+
   // MARK: The environment
 
   const environment = Object.freeze({
     commandName: message.command, commandMode: mode, extensionName: message.extension, launchType: "userInitiated",
     supportPath: data, assetsPath: `${native.cwd()}/assets`, raycastVersion: "", isDevelopment: false, textSize: "medium",
     appearance: "dark", theme: "dark", ownerOrAuthorName: "",
-    /** Pilot answers false for each API it lacks (AI, browser and window management): ask before using one. */
-    canAccess: () => false,
+    /** Pilot has AI (T11), through its AI page's provider, and answers false for the APIs it lacks (browser and window
+     *  management): Raycast's docs say to ask before using one. */
+    canAccess: (api) => api === AI,
   });
 
   const api = {
@@ -212,13 +223,12 @@ export function makeAPI(message, mode) {
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
     Form,
     Grid: missing("Grid"), MenuBarExtra: missing("MenuBarExtra"),
-    AI: stubs("AI", ["ask"], { Model: names() }),
+    AI, getSelectedText: selectedText, confirmAlert: (options) => confirmAlert(options, noView),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
-  for (const name of ["confirmAlert", "trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedText",
-    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
+  for (const name of ["trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
     "captureException"]) api[name] = missing(name);
   return guard("", api);
 }
