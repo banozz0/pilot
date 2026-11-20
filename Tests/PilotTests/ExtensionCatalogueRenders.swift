@@ -121,13 +121,14 @@ struct ExtensionCatalogueRenders {
                 .frame(width: 1000, height: 640) }.styled(.page(.extensions), look: look).pilotTheme(look: look)
             try writeRender(view, to: out.appendingPathComponent("\(name).png"), wait: 0.6)
         }
-        let withRaycast = PilotMenu.entries(Engine(), scripts: [], extensions: [raycast])
-        for word in ["process", "killprocess"] {
+        // Both installed: Kill Process (Raycast) and Pilot's own Pomodoro, which still answers in Hyper+Space ("pomodoro").
+        let withRaycast = PilotMenu.entries(Engine(), scripts: [], extensions: Extension.find(in: t25.appending(path: "Extensions")).extensions)
+        for word in ["process", "killprocess", "pomodoro"] {
             var root = MenuNavigator(entries: withRaycast)
             root.query = word
             root.provide(.store, store.rootRows(word))
             print("T25 ROOT \(word): " + root.rows.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.shownTitle) [\($0.element.kindWord ?? "-")\($0.element.subtitle.map { " · \($0)" } ?? "")]" }.joined(separator: " | "))
-            if word == "process" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-process", in: out) }
+            if word != "pomodoro" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-\(word)", in: out) }
         }
     }
 

@@ -75,7 +75,7 @@ struct ExtensionsPageView: View {
 
     private var listing: ExtensionsPage.Listing {
         let folders = storeModel.load == .loaded ? storeModel.listing?.folders ?? [] : []
-        let store = filter == .all ? storeModel.folders(matching: query).map(storeEntry) : []
+        let store = filter == .all ? storeModel.folders(matching: query).filter { storeModel.installedExtension($0.name) == nil }.map(storeEntry) : []
         return ExtensionsPage.listing(settings.rows, catalogue: catalogue.load == .loaded ? catalogue.index?.entries : nil, filter: filter, query: query,
                                       store: store, storeCount: folders.count { storeModel.installedExtension($0.name) == nil })
     }
@@ -128,6 +128,8 @@ struct ExtensionsPageView: View {
             guard focus != nil else { return }
             Task { await settings.load(); land() }
         }
+        // An install from the store's rows (T25): the folder read again, so it moves to Installed.
+        .onChange(of: Set(storeModel.installed.keys)) { Task { await settings.load() } }
         .task(id: lit) {
             guard lit != nil, (try? await Task.sleep(for: Self.litFor)) != nil else { return }
             withAnimation(Kit.change) { lit = nil }
@@ -380,10 +382,8 @@ struct ExtensionsPageView: View {
             InstalledDetail(row: row, settings: settings, offered: catalogue.index?.entry(row.id).flatMap { entry.mark == .update ? $0 : nil },
                             wide: wide, editBind: editBind, openPage: openPage).id(row.id)
         } else if let entry, entry.kind == .store, let folder = storeModel.listing?.folder(entry.id) {
-            StoreDetail(folder: folder, model: storeModel) { id in
-                (filter, query) = (.all, "")
-                picked = id
-            }.id(folder.name)
+            // Open commands lands on its installed row, the folder read again first.
+            StoreDetail(folder: folder, model: storeModel) { id in focus = id }.id(folder.name)
         } else if let entry, let offered = catalogue.index?.entry(entry.id) {
             CatalogueDetail(entry: offered, settings: settings).id(offered.id)
         } else if settings.loaded, settings.rows.isEmpty {

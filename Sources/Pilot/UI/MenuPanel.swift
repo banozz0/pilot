@@ -244,16 +244,18 @@ final class PilotMenu {
         for broken in found.broken { mlog.error("menu: extension folder \(broken.folder, privacy: .public) skipped: \(broken.problem.reason, privacy: .public)") }
         extensions = found.extensions
         let entries = Self.entries(engine, scripts: scripts, extensions: extensions)
-        // Raycast's store as the root search finds it (T25): the listing kept on disk, read once, never GitHub.
-        let store = RaycastStoreModel.shared, installed = extensions
-        Task { [weak self] in
-            await store.openKept(installed: installed)
-            if let query = self?.model?.nav.query, !query.isEmpty { self?.provideStore(query) }
-        }
         var nav = MenuNavigator(entries: entries, branch: branch, frecency: frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
+        // Raycast's store as the root search finds it (T25): the listing kept on disk, read once, never GitHub.
+        let store = RaycastStoreModel.shared, installed = extensions, opened = model
+        Task { [weak self] in
+            await store.openKept(installed: installed)
+            // Only into the menu it was read for, never a picker opened since.
+            guard let self, let opened, self.model === opened, !opened.nav.isLive, !opened.nav.query.isEmpty else { return }
+            self.provideStore(opened.nav.query)
+        }
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
