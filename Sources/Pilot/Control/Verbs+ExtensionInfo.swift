@@ -133,29 +133,44 @@ extension ControlVerbs {
                 guard let index = model.nav.rows.firstIndex(where: { $0.title == press }) else {
                     throw ControlError(.badValue, "no row \(press) on \(ext.title)'s page; its rows are under shown")
                 }
+                // The action a press would run: Return's, or the Cmd+K one named. Raycast's typed ones (open, copy,
+                // paste) are Pilot's to perform on a press on screen, so they are answered, never performed, as ext act's.
+                let row = model.nav.rows[index]
+                let at = action.map { label in row.ownActions?.firstIndex(of: label) } ?? 0
+                guard let at, let pressed = model.action(at, for: row) else {
+                    throw ControlError(.badValue, "\(press) offers no action \(action ?? "for Return"); it offers: \(row.ownActions?.joined(separator: ", ") ?? "none")")
+                }
+                guard pressed.handler != nil else {
+                    answer["pressed"] = .object(["row": .string(press), "action": Self.action(pressed),
+                                                 "note": .string("answered, not performed: Pilot performs it on a press on screen")])
+                    return .object(answer)
+                }
+                let then = args.value("then")
                 let ask = ControlGate.Ask("Press on \(ControlGate.Ask.visible(ext.title))",
-                                          "presses \(ControlGate.Ask.visible(press))\(action.map { " › \(ControlGate.Ask.visible($0))" } ?? "")\(args.value("then").map { ", then \(ControlGate.Ask.visible($0))" } ?? "") on its page, running its actions")
-                answer["pressed"] = try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+                                          "presses \(ControlGate.Ask.visible(press))\(action.map { " › \(ControlGate.Ask.visible($0))" } ?? "")\(then.map { ", then \(ControlGate.Ask.visible($0))" } ?? "") on its page, running its callbacks in pilot-ext-host")
+                try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
                     model.nav.point(at: index)
-                    if let action {
+                    if action != nil {
+                        // Through Cmd+K's list, as a press on screen goes.
                         _ = model.handle(.commandK)
-                        guard let at = model.nav.actions?.visible.firstIndex(where: { $0.title == action }) else {
-                            let offered = model.nav.actions?.visible.map(\.title).joined(separator: ", ") ?? "none"
-                            throw ControlError(.badValue, "\(press) offers no action \(action); Cmd+K lists: \(offered)")
+                        guard let shown = model.nav.actions?.visible.firstIndex(where: { $0.title == action }) else {
+                            throw ControlError(.badValue, "Cmd+K on \(press) lists no \(action ?? "")")
                         }
-                        model.clickAction(at)
+                        model.clickAction(shown)
                     } else {
                         _ = model.handle(.return)
                     }
                     log.notice("ext page: \(ext.id, privacy: .public) pressed on its live page, from the pilot command")
-                    return await Self.settledPage(model, after: true)
-                }
-                // A second Return in the view the first left (an alert's Confirm), under the same Allow.
-                if let then = args.value("then") {
-                    guard let at = model.nav.rows.firstIndex(where: { $0.title == then }) else {
+                    answer["pressed"] = await Self.settledPage(model, after: true)
+                    // A second Return in the view the first left (an alert's Confirm), under the same Allow; a callback only.
+                    guard let then else { return }
+                    guard let next = model.nav.rows.firstIndex(where: { $0.title == then }) else {
                         throw ControlError(.badValue, "no row \(then) after the press; its rows are under pressed")
                     }
-                    model.nav.point(at: at)
+                    guard model.action(0, for: model.nav.rows[next])?.handler != nil else {
+                        throw ControlError(.badRequest, "--then presses a callback; \(then)'s Return is one Pilot performs on screen")
+                    }
+                    model.nav.point(at: next)
                     _ = model.handle(.return)
                     answer["then"] = await Self.settledPage(model, after: true)
                 }

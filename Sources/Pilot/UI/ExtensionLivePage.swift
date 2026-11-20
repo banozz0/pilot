@@ -107,6 +107,9 @@ final class ExtensionLivePageModel {
         follow(nav.handle(key))
     }
 
+    /// The action `index` of `row` (0 is Return's), as a pick would press it.
+    func action(_ index: Int, for row: MenuEntry) -> Extension.Item.Action? { (source as? ExtensionListSession)?.action(index, for: row) }
+
     /// A click on row `index` is Return on it; on Cmd+K's action `index`, that action.
     func click(_ index: Int) { _ = follow(nav.click(at: index)) }
     func clickAction(_ index: Int) { _ = follow(nav.clickAction(at: index)) }
