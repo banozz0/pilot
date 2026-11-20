@@ -114,7 +114,7 @@ struct SettingsSchemaPart2Tests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let rig = Rig()
         // The pill's four settings wait for it to ship (PillFeature).
-        #expect(rig.schema.keys.count == 44)
+        #expect(rig.schema.keys.count == 45)
         for setting in rig.schema.sorted {
             let sample = try #require(Self.sample(setting, folder: folder), "no non-default sample for \(setting.key)")
             #expect(try await rig.value(setting.key) != sample.value, "\(setting.key) already holds its sample")
@@ -220,7 +220,7 @@ struct SettingsSchemaPart2Tests {
     /// spec's inventory §1 was never written down). A `*` stands for a provider or role.
     static let inventory: Set = [
         "layerKey", "quickTapEscape", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay",
-        "windows.dragModifier", "windows.swipeWorkspaces", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
+        "windows.dragModifier", "windows.swipeWorkspaces", "tiling.focusFollowsMouse", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
         "translate.home", "translate.other",
         "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
         "look.windowBorderColour", "look.defocusStrength", "look.defocusDim", "look.defocusShake", "look.defocusShakeSwings",

@@ -27,4 +27,15 @@ enum AXFront {
         AXUIElementSetMessagingTimeout(element, AXTimeout.seconds)
         return element
     }
+
+    /// The front app's focused window, asked the same way; nil while Pilot is in front.
+    nonisolated static func focusedWindow() -> AXUIElement? {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier, pid != getpid() else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, AXTimeout.seconds)
+        var window: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &window) == .success,
+              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        return (window as! AXUIElement)
+    }
 }

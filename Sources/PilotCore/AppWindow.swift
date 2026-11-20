@@ -735,7 +735,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .clipTags: ["tags", "tag", "tag colour", "clear history"]
         case .floatApps: ["always float", "float apps", "float", "floating"]
         case .floatTitles: ["window title", "float titles", "title"]
-        case .motion: ["drag", "drag windows", "move windows", "resize", "glide", "animate", "animate windows"]
+        case .motion: ["drag", "drag windows", "move windows", "resize", "glide", "animate", "animate windows", "focus follows mouse", "hover", "follow mouse"]
         // The front's words: the two presets and the shake's switch (pilot-ui-redesign T16); the exact rows' words moved
         // with them to Tiling's More.
         case .focusedWindow: ["focused window", "border", "dim other windows", "soft", "strong", "shake", "shake the mouse"]

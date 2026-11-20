@@ -53,6 +53,9 @@ struct TilingBody: View {
     /// What Tiling's switch does, its ⓘ's words.
     static let tilingInfo = "On, Pilot's tiler lays out every window: layouts, workspaces and the window binds. Off, no window is tiled, moved or resized."
 
+    /// What Focus follows mouse does, its ⓘ's words.
+    static let focusFollowsMouseInfo = "Rest the pointer on a window and it takes focus, as a click would, and the border moves to it. Not while a button is held or a menu is open, nor over the menu bar, a bar, the Dock or the desktop."
+
     /// The one switch for the whole tiler (Sven, 2026-11-18): off for a new install.
     private var tilingSwitch: some View {
         @Bindable var settings = settings
@@ -89,6 +92,9 @@ struct TilingBody: View {
             }
             let label = HStack(spacing: 6) { Text(MouseDragSection.label); InfoMark(text: MouseDragSection.dragTip) }
             BlockRow(first: true) { LabelledControls { label } controls: { choices } }
+            BlockRow {
+                Toggle("Focus follows mouse", isOn: $settings.focusFollowsMouse).toggleStyle(.pilotSwitchRow(info: Self.focusFollowsMouseInfo))
+            }
             BlockRow {
                 Toggle("Animate windows", isOn: block.binding(\.glide))
                     .toggleStyle(.pilotSwitchRow(info: "Tiled windows slide to their new place in under a fifth of a second. Reduce Motion and Low Power Mode always jump."))

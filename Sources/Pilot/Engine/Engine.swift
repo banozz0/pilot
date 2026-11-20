@@ -41,6 +41,8 @@ final class PilotSettings {
         defaults.set(more, forKey: Self.morePagesKey)
         morePages = more
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
+        // On for every install, new or from before it (Sven, 2026-11-20).
+        focusFollowsMouse = defaults.object(forKey: Self.focusFollowsMouseKey) as? Bool ?? true
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? Install.startsOn
         translatePair = TranslatePair(defaults: defaults)
         // Notes written in Application Support before Pilot's own folder moved to Documents (task N1) stay where they are.
@@ -184,6 +186,16 @@ final class PilotSettings {
     }
     /// The engine starts or stops the gesture tap here.
     @ObservationIgnored var onSwipeWorkspacesChange: () -> Void = {}
+    /// Tiling's Focus follows mouse (FocusFollowsMouseController): the window the pointer rests on takes focus.
+    var focusFollowsMouse: Bool {
+        didSet {
+            defaults.set(focusFollowsMouse, forKey: Self.focusFollowsMouseKey)
+            onFocusFollowsMouseChange()
+        }
+    }
+    static let focusFollowsMouseKey = "tiling.focusFollowsMouse"
+    /// The engine starts or stops its mouse tap here.
+    @ObservationIgnored var onFocusFollowsMouseChange: () -> Void = {}
 
     /// Windows › Tiling's Tiling switch: on, Pilot's tiler lays windows out (layouts, workspaces, every tiler move); off, it
     /// never starts and no window is tiled, moved or resized by it. Off for a new install, on for one from before it.
@@ -284,6 +296,7 @@ final class Engine {
     private let mouseTap: MouseDragTap
     /// Swipe between workspaces (card agent-bo-95422973), armed with the binds while it is on.
     private let swipe = SwipeWorkspaces()
+    @ObservationIgnored private lazy var focusFollowsMouse = FocusFollowsMouseController(tiler: observers.tiler) { [observers] in observers.focusedWindowID }
     /// Hyper+scroll steps through workspaces (Omarchy ideas T2), armed with the binds, on only while Hyper is down.
     private let hyperScroll: HyperScroll
     /// A mouse's extra buttons as binds (Q184): Binds › Mouse's Learn, and the taps a mouse bind needs.
@@ -382,10 +395,12 @@ final class Engine {
         settings.onOverlayDelayChange = { [unowned self] in tap.update(quickTapWindow: HoldOverlay.quickTapWindow(delay: settings.overlayDelay)) }
         settings.onOverlayDelayChange()
         settings.onSwipeWorkspacesChange = { [unowned self] in armPointerTaps() }
+        settings.onFocusFollowsMouseChange = { [unowned self] in armFocusFollowsMouse() }
         // Tiling's switch, from its page, the dropdown or `pilot set tiling.on`: on starts the tiler, off stops it and puts
         // every parked window back on screen.
         settings.onTilingChange = { [unowned self] in
             tilingSwitch.follow(settings.tiling)
+            armFocusFollowsMouse()
             wslog.notice("tiling \(self.settings.tiling ? "on" : "off", privacy: .public)")
             guard !settings.tiling else { return startTiler() }
             observers.tiler.stopEngine()
@@ -548,6 +563,7 @@ final class Engine {
         TilerGaps.show = { [gapHandles] in gapHandles.update($0) }
         observers.start()
         startTiler()
+        armFocusFollowsMouse()
         // The desktop's widgets (ADR 0016): nothing is armed while none is placed.
         WidgetDesk.shared.askTrust = { id in
             // Read first: the page may be open on an older read that does not know this widget.
@@ -622,6 +638,11 @@ final class Engine {
         swipe.update(on: binding && settings.swipeWorkspaces)
         DefocusController.shared.arm(binding)
         armMouseButtons()
+    }
+
+    /// Focus follows mouse's tap runs with its switch while Tiling is on, binds or not: the tiler focuses.
+    private func armFocusFollowsMouse() {
+        focusFollowsMouse.arm(started && settings.tiling && settings.focusFollowsMouse)
     }
 
     private func armMouseButtons() {

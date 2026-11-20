@@ -17,10 +17,14 @@ let wslog = Logger(subsystem: "dev.banozz.pilot", category: "workspaces")
     /// It lays out the Mac's own windows (Pilot's tiler), so it waits for Accessibility and a crash's stranded windows come
     /// back before it starts; a sandbox's stand-in moves a file's windows only.
     var movesRealWindows: Bool { get }
+    /// Focus follows mouse's focus, in the tiler's light session (InProcessTiler.focusFollowingMouse).
+    func focusFollowingMouse(_ windowId: Int) async throws -> Bool
 }
 
 extension TilerEngineRunning {
     var movesRealWindows: Bool { true }
+    /// A stand-in focuses nothing.
+    func focusFollowingMouse(_ windowId: Int) async throws -> Bool { false }
 }
 
 extension InProcessTiler: TilerEngineRunning {}
