@@ -298,6 +298,8 @@ struct SketchCanvas: View {
         .accessibilityValue(board.sketch.strokes.count == 1 ? "1 stroke" : "\(board.sketch.strokes.count) strokes")
     }
 
+    /// Each tool, ink, Undo and Done takes the keyboard as any button does (Tab to it, Space presses it, with the Mac's
+    /// keyboard navigation on): the notes keys pass Tab, Space and Return on while a sketch is open (spec-end review 1).
     private var tools: some View {
         HStack(spacing: 2) {
             ForEach(SketchTool.allCases) { tool in
@@ -316,7 +318,7 @@ struct SketchCanvas: View {
                 Text("Done").styleText(\.body).fontWeight(.semibold).foregroundStyle(style.color(\.accent))
                     .padding(.horizontal, 10).frame(height: 30).contentShape(.rect)
             }
-            .buttonStyle(.plain).focusable(false)
+            .buttonStyle(.plain)
             .help("Keep the sketch in the note")
         }
         .padding(4)
@@ -337,7 +339,7 @@ struct SketchCanvas: View {
                 .instrumentRaised(on, radius: 7)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain).focusable(false)
+        .buttonStyle(.plain)
         .help(label).accessibilityLabel(label)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
@@ -361,7 +363,7 @@ struct SketchCanvas: View {
             .frame(width: 32, height: 30)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain).focusable(false)
+        .buttonStyle(.plain)
         .accessibilityLabel(Self.name(hex))
         .accessibilityAddTraits(on ? .isSelected : [])
         .help(Self.name(hex))
