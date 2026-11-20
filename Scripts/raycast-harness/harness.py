@@ -630,9 +630,10 @@ def phase_summary(ns):
         good = sum(1 for runs in shown.values() if any(x["content"] for x in runs))
         left = sum(x["hostsLeft"] for runs in shown.values() for x in runs)
         a = act_results.get(folder)
-        press = "" if not a else ("issued %s" % (", ".join(a.get("kinds") or []) or a.get("expected")) if a.get("issued")
-                                  else "pushed a view, no outside call" if a.get("pushed") else "NOT issued (%s)" % a.get("expected"))
-        if a:
+        press = "" if not a else "no row to press" if a.get("pressed") is False else (
+            "issued %s" % (", ".join(a.get("kinds") or []) or a.get("expected")) if a.get("issued")
+            else "pushed a view, no outside call" if a.get("pushed") else "NOT issued (%s)" % a.get("expected"))
+        if a and a.get("pressed") is not False:
             press += " (runs %s, presses %s)" % (a.get("runs", 1), a.get("presses", 1))
         consents = [c for c in (r.get("consent") or {}, (a or {}).get("consent") or {}) if c.get("asked")]
         asked = "no" if not consents else "yes, Allow pressed" + ("; its save refused by --measure, seeded" if any(c.get("allowSeeded") for c in consents) else "")

@@ -127,6 +127,18 @@ export const effects = {
 };
 
 /** The API for the run `message` of a command run in `mode` (view or no-view), its extension's folder the host's cwd. */
+/** OAuth.PKCEClient, made but never signed in (OAuth is a later phase, ADR 0017): an extension may build one at load
+ *  (T15: GitHub's @raycast/utils OAuthService.github), and one that is handed a token never calls it. Pilot keeps no
+ *  OAuth tokens, so getTokens answers none; every other method records the gap and rejects, so a sign-in fails there. */
+class PKCEClient {
+  constructor(options = {}) { this.redirectMethod = options.redirectMethod; this.providerName = options.providerName; }
+  getTokens() { return Promise.resolve(undefined); }
+}
+for (const name of ["authorizationRequest", "authorize", "setTokens", "removeTokens"]) {
+  PKCEClient.prototype[name] = function () { return Promise.reject(missingError(`OAuth.PKCEClient.${name}`)); };
+}
+const missingError = (api) => { try { missing(api)(); } catch (error) { return error; } };
+
 export function makeAPI(message, mode) {
   const preferences = Object.freeze({ ...(message.preferences ?? {}) });
   const data = message.paths?.data ?? "", cache = message.paths?.cache ?? "";
@@ -237,7 +249,7 @@ export function makeAPI(message, mode) {
     Form,
     Grid: Object.assign(missing("Grid"), { Inset: names(), Fit: names(), ItemSize: names() }), MenuBarExtra,
     AI, getSelectedText: selectedText, confirmAlert: (options) => confirmAlert(options, noView),
-    OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
+    OAuth: guard("OAuth", { PKCEClient, RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
