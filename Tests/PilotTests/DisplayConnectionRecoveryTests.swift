@@ -26,12 +26,22 @@ struct DisplayConnectionRecoveryTests {
         }
     }
 
-    final class PhysicalState: @unchecked Sendable { var screens: [ConnectionScreen]; init(_ screens: [ConnectionScreen]) { self.screens = screens } }
+    final class PhysicalState: @unchecked Sendable {
+        var screens: [ConnectionScreen]
+        /// Reads after an ON before macOS places the returning display itself, beside the main display (WindowServer's
+        /// "Applying default configuration", 0.3-0.6 s after setEnabled:1 on 2026-11-20). nil: macOS never moves it.
+        var placementAfterReads: Int?
+        /// macOS's own arrangement for the reconnect, fixed at the ON: it overrides whatever was configured in between.
+        var pendingPlacement: (arrangement: [ConnectionScreen], reads: Int)?
+        init(_ screens: [ConnectionScreen]) { self.screens = screens }
+    }
 
     final class Hardware: DisplayConnectionsBackend, @unchecked Sendable {
         let state: PhysicalState
         var screens: [ConnectionScreen] { get { state.screens } set { state.screens = newValue } }
         var calls: [String] = []
+        /// The CGConfigureDisplayOrigin calls each restore would make, "<id>@(x, y)".
+        var configured: [[String]] = []
         var ignoreChanges = false
         var failEnable = false
         var failIdentities = Set<String>()
@@ -39,8 +49,22 @@ struct DisplayConnectionRecoveryTests {
         var stale: [ConnectionScreen] = []
         init(_ state: PhysicalState) { self.state = state }
         func read(remembered: [ConnectionScreen]) async throws -> [ConnectionScreen] {
+            if let pending = state.pendingPlacement {
+                if pending.reads <= 1 {
+                    state.pendingPlacement = nil
+                    for placed in pending.arrangement {
+                        guard let i = screens.firstIndex(where: { $0.identity == placed.identity }) else { continue }
+                        screens[i] = Self.with(screens[i], main: placed.main, origin: placed.frame.origin)
+                    }
+                } else { state.pendingPlacement = (pending.arrangement, pending.reads - 1) }
+            }
             if delayedReads > 0 { delayedReads -= 1; return stale }
             return screens
+        }
+        /// The survivor keeps the main display at the origin; the returning display goes beside it.
+        private func besideMain(_ identity: String) -> [ConnectionScreen] {
+            guard let main = screens.first(where: { $0.main && $0.state == .on && $0.identity != identity }) else { return screens }
+            return screens.map { $0.identity == identity ? Self.with($0, main: false, origin: CGPoint(x: main.frame.maxX, y: 0)) : $0 }
         }
         func setEnabled(_ enabled: Bool, screen: ConnectionScreen) async throws {
             calls.append("\(enabled):\(screen.identity)")
@@ -49,38 +73,67 @@ struct DisplayConnectionRecoveryTests {
             guard let i = screens.firstIndex(where: { $0.identity == screen.identity }) else { throw ConnectionFailure.refused("missing") }
             stale = screens
             screens[i].state = enabled ? .on : .off
+            if enabled, let reads = state.placementAfterReads { state.pendingPlacement = (besideMain(screen.identity), reads) }
+            // macOS moves the survivor to the origin when the main display leaves (16:43:05.214 on 2026-11-20).
             if !enabled, let main = screens.firstIndex(where: { $0.main }), main == i,
                let survivor = screens.indices.first(where: { screens[$0].state == .on }) {
                 screens[main] = Self.with(screens[main], main: false)
-                screens[survivor] = Self.with(screens[survivor], main: true)
+                screens[survivor] = Self.with(screens[survivor], main: true, origin: .zero)
             }
         }
         func restoreLayout(_ layout: [ConnectionScreen]) async throws {
             calls.append("restore")
+            var origins: [String] = []
             for saved in layout where saved.state == .on {
                 guard let i = screens.firstIndex(where: { $0.binding == saved.binding && $0.state == .on }) else { continue }
+                origins.append("\(screens[i].id)@(\(Int(saved.frame.minX)), \(Int(saved.frame.minY)))")
                 screens[i] = saved
             }
+            configured.append(origins)
         }
-        static func with(_ s: ConnectionScreen, main: Bool) -> ConnectionScreen {
-            ConnectionScreen(id: s.id, name: s.name, identity: s.identity, state: s.state, main: main, builtIn: s.builtIn, asleep: s.asleep, frame: s.frame, mode: s.mode, rotation: s.rotation, verified: s.verified, location: s.location, supported: s.supported)
+        static func with(_ s: ConnectionScreen, main: Bool, origin: CGPoint? = nil) -> ConnectionScreen {
+            ConnectionScreen(id: s.id, name: s.name, identity: s.identity, state: s.state, main: main, builtIn: s.builtIn, asleep: s.asleep, frame: CGRect(origin: origin ?? s.frame.origin, size: s.frame.size), mode: s.mode, rotation: s.rotation, verified: s.verified, location: s.location, supported: s.supported)
         }
     }
 
-    @Test("fresh adapter recovers an OFF screen and restores original primary layout")
-    func freshRecoveryRestoresLayout() async {
-        let state = PhysicalState([Self.screen(1, "A", main: true), Self.screen(2, "B")])
+    /// Sven's desk on 2026-11-20: the CU34G4Z ultrawide main at the origin, the 24G1WG4 at (3440, 180).
+    static let desk = [
+        ConnectionScreen(id: 3, name: "CU34G4Z", identity: "CU34G4Z", state: .on, main: true, builtIn: false, asleep: false,
+                         frame: CGRect(x: 0, y: 0, width: 3440, height: 1440), mode: DisplayMode(id: 3, width: 3440, height: 1440, pixelWidth: 3440, refresh: 100),
+                         rotation: 0, location: "IOService:/CU34G4Z", supported: true),
+        ConnectionScreen(id: 1, name: "24G1WG4", identity: "24G1WG4", state: .on, main: false, builtIn: false, asleep: false,
+                         frame: CGRect(x: 3440, y: 180, width: 1920, height: 1080), mode: mode, rotation: 0,
+                         location: "IOService:/24G1WG4", supported: true),
+    ]
+    static func arrangement(_ screens: [ConnectionScreen]) -> [String] {
+        screens.filter { $0.state == .on }.map { "\($0.name) (\(Int($0.frame.minX)), \(Int($0.frame.minY)))\($0.main ? " main" : "")" }
+    }
+
+    @Test("Test connection, OFF then ON and Restore All put back every origin and the main display after macOS places the returning display itself", arguments: [1, 3, 12])
+    func roundTripsRestoreArrangement(placementAfterReads: Int) async throws {
+        let state = PhysicalState(Self.desk)
+        state.placementAfterReads = placementAfterReads
+        let before = Self.arrangement(state.screens)
+        let restored = ["3@(0, 0)", "1@(3440, 180)"]
         let store = Store(), first = Hardware(state), fresh = Hardware(state)
         let model = DisplayConnections(backend: first, store: store, makeBackend: { fresh }, settle: {})
-        await model.refresh(); await model.validateConnection(id: 1); await model.setConnected(false, id: 1)
-        #expect(first.screens.first { $0.identity == "A" }?.state == .off)
-        #expect(first.screens.first { $0.identity == "B" }?.main == true)
+        await model.refresh(); await model.validateConnection(id: 3)
+        try #require(model.problem == nil)
+        #expect(Self.arrangement(state.screens) == before)
+        #expect(!first.configured.isEmpty && first.configured.allSatisfy { $0 == restored })
+        await model.setConnected(false, id: 3)
+        try #require(model.problem == nil)
+        #expect(Self.arrangement(state.screens) == ["24G1WG4 (0, 0) main"])
         let reopenedHardware = Hardware(state)
         let reopened = DisplayConnections(backend: reopenedHardware, store: store, makeBackend: { Hardware(state) }, settle: {})
-        await reopened.refresh(); await reopened.setConnected(true, id: 1)
-        #expect(reopenedHardware.screens.first { $0.identity == "A" }?.main == true)
-        #expect(reopenedHardware.screens.first { $0.identity == "B" }?.state == .on)
-        #expect(reopenedHardware.calls.contains("true:A"))
+        await reopened.refresh(); await reopened.setConnected(true, id: 3)
+        try #require(reopened.problem == nil)
+        #expect(Self.arrangement(state.screens) == before)
+        #expect(reopenedHardware.calls.contains("true:CU34G4Z"))
+        await reopened.setConnected(false, id: 3); await reopened.restoreAll()
+        #expect(reopened.problem == nil)
+        #expect(Self.arrangement(state.screens) == before)
+        #expect(!reopenedHardware.configured.isEmpty && reopenedHardware.configured.allSatisfy { $0 == restored })
     }
 
     @Test("Originally inactive remembered rows do not prevent active-layout recovery", arguments: [ConnectionState.off, .unavailable, .unknown])

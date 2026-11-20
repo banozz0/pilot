@@ -255,8 +255,7 @@ final class DisplayConnections {
                 try await makeBackend().setEnabled(true, screen: disconnected)
                 let reconnected = try await observed(disconnected, state: .on)
                 guard !reconnected.asleep else { throw ConnectionFailure.refused("macOS reconnected \(screen.name) asleep") }
-                try await backend.restoreLayout(calibrationLayout)
-                try await verifyLayout(calibrationLayout, excluding: [])
+                try await restoreArrangement(calibrationLayout, verifying: calibrationLayout, after: "Test connection")
                 checkpoint.verifiedIdentities[screen.identity] = Self.osBuild
                 checkpoint.managedOffIdentities.remove(screen.identity)
                 if temporaryBaseline { checkpoint.recoveryLayout = [] }
@@ -314,8 +313,8 @@ final class DisplayConnections {
                     let recovery = checkpoint
                     let remaining = checkpoint.managedOffIdentities.subtracting([screen.identity])
                     if remaining.isEmpty {
-                        try await backend.restoreLayout(checkpoint.recoveryLayout.isEmpty ? [screen] : checkpoint.recoveryLayout)
-                        try await verifyLayout(checkpoint.recoveryLayout, excluding: [])
+                        try await restoreArrangement(checkpoint.recoveryLayout.isEmpty ? [screen] : checkpoint.recoveryLayout,
+                                                     verifying: checkpoint.recoveryLayout, after: "turning \(screen.name) on")
                         checkpoint.recoveryLayout = []
                     }
                     checkpoint.managedOffIdentities = remaining
@@ -354,8 +353,7 @@ final class DisplayConnections {
                     } catch { failures.append("\(screen.name): \(error.localizedDescription)") }
                 }
                 guard failures.isEmpty else { throw ConnectionFailure.refused(failures.joined(separator: "; ")) }
-                try await backend.restoreLayout(checkpoint.recoveryLayout)
-                try await verifyLayout(checkpoint.recoveryLayout, excluding: [])
+                try await restoreArrangement(checkpoint.recoveryLayout, verifying: checkpoint.recoveryLayout, after: "Restore All")
                 let recovery = checkpoint
                 checkpoint.managedOffIdentities.removeAll()
                 checkpoint.recoveryLayout = []
@@ -433,25 +431,89 @@ final class DisplayConnections {
         checkpoint.remembered = screens
     }
 
-    private func verifyLayout(_ expected: [ConnectionScreen], excluding: Set<String>) async throws {
-        guard !expected.isEmpty else { return }
+    /// Reads with no change before a restore, and matching reads a restore must hold for: about 1 s and 1.5 s at the
+    /// production 250 ms settle. WindowServer's own passes for a returning display landed 0.3 and 0.84 s after its ON.
+    private static let quietReads = 4, holdReads = 6, restoreAttempts = 3
+
+    /// macOS places a returning display itself ("Applying default configuration" about 0.3 s after setEnabled:1) and that
+    /// pass overrides a restore made before it. Restoring at once and trusting one matching read left the 24G1WG4 main
+    /// on 2026-11-20 while the round trip reported success. So: wait until every saved display is back and the
+    /// arrangement stops changing, restore every origin and mode together, and require the result to hold, restoring
+    /// again if macOS moves it.
+    private func restoreArrangement(_ layout: [ConnectionScreen], verifying expected: [ConnectionScreen],
+                                    excluding: Set<String> = [], after context: String) async throws {
         let required = expected.filter { $0.state == .on && !excluding.contains($0.identity) }
-        guard !required.isEmpty else { return }
+        guard !required.isEmpty else {
+            try await backend.restoreLayout(layout)
+            slog.info("display connection: arrangement after \(context, privacy: .public) applied with nothing saved to check")
+            return
+        }
+        let settled = try await awaitQuietArrangement(required)
+        var moved: [String] = []
+        for attempt in 1...Self.restoreAttempts {
+            try await backend.restoreLayout(layout)
+            guard let drift = try await arrangementDrift(required) else {
+                var line = "arrangement restored after \(context): \(Self.describe(required)) (restore \(attempt)"
+                if !settled { line += ", displays still changing before it" }
+                if !moved.isEmpty { line += "; macOS had moved it to \(moved.joined(separator: " then "))" }
+                slog.info("display connection: \(line, privacy: .public))")
+                return
+            }
+            moved.append(drift)
+            let line = "after \(context) restore \(attempt) macOS left \(drift), not \(Self.describe(required))"
+            slog.notice("display connection: \(line, privacy: .public)")
+        }
+        throw ConnectionFailure.refused("macOS did not keep the saved display layout (\(Self.describe(required))); it left \(moved.last ?? "nothing")")
+    }
+
+    /// True once every saved display reads on and the whole arrangement is unchanged for `quietReads` reads; false if
+    /// it never settled, and the restore goes ahead regardless.
+    private func awaitQuietArrangement(_ required: [ConnectionScreen]) async throws -> Bool {
+        var last: [String] = [], unchanged = 0
         for attempt in 0..<20 {
             let inventory = try await backend.read(remembered: checkpoint.remembered)
-            let restored = required.allSatisfy { saved in
-                guard let actual = inventory.first(where: { $0.identity == saved.identity && $0.location == saved.location }),
-                      actual.state == .on, actual.main == saved.main, actual.rotation == saved.rotation,
-                      actual.mode.size == saved.mode.size, actual.mode.pixelWidth == saved.mode.pixelWidth,
-                      abs(actual.mode.refresh - saved.mode.refresh) < 0.5,
-                      abs(actual.frame.origin.x - saved.frame.origin.x) < 1,
-                      abs(actual.frame.origin.y - saved.frame.origin.y) < 1 else { return false }
-                return inventory.filter { $0.identity == saved.identity }.count == 1
-            }
-            if restored { return }
+            let back = required.allSatisfy { saved in inventory.contains { $0.identity == saved.identity && $0.location == saved.location && $0.state == .on } }
+            let now = Self.signature(inventory)
+            unchanged = back && now == last ? unchanged + 1 : 0
+            last = now
+            if unchanged >= Self.quietReads { return true }
             if attempt < 19 { await settle() }
         }
-        throw ConnectionFailure.refused("macOS did not restore the saved display layout")
+        return false
+    }
+
+    /// nil once the saved arrangement reads back `holdReads` times in a row; otherwise what macOS left instead.
+    private func arrangementDrift(_ required: [ConnectionScreen]) async throws -> String? {
+        var held = 0, actual = ""
+        for attempt in 0..<20 {
+            let inventory = try await backend.read(remembered: checkpoint.remembered)
+            actual = Self.describe(inventory.filter { $0.state == .on })
+            if required.allSatisfy({ Self.matches($0, in: inventory) }) {
+                held += 1
+                if held >= Self.holdReads { return nil }
+            } else if held > 0 { return actual }
+            if attempt < 19 { await settle() }
+        }
+        return actual
+    }
+
+    private static func matches(_ saved: ConnectionScreen, in inventory: [ConnectionScreen]) -> Bool {
+        guard let actual = inventory.first(where: { $0.identity == saved.identity && $0.location == saved.location }),
+              actual.state == .on, actual.main == saved.main, actual.rotation == saved.rotation,
+              actual.mode.size == saved.mode.size, actual.mode.pixelWidth == saved.mode.pixelWidth,
+              abs(actual.mode.refresh - saved.mode.refresh) < 0.5,
+              abs(actual.frame.origin.x - saved.frame.origin.x) < 1,
+              abs(actual.frame.origin.y - saved.frame.origin.y) < 1 else { return false }
+        return inventory.filter { $0.identity == saved.identity }.count == 1
+    }
+
+    private static func signature(_ inventory: [ConnectionScreen]) -> [String] {
+        inventory.map { "\($0.identity) \($0.state.rawValue) \($0.frame) \($0.main) \($0.mode.size)" }.sorted()
+    }
+
+    /// "CU34G4Z (0, 0) main, 24G1WG4 (3440, 180)": the log's arrangement.
+    private static func describe(_ screens: [ConnectionScreen]) -> String {
+        screens.map { "\($0.name) (\(Int($0.frame.minX)), \(Int($0.frame.minY)))\($0.main ? " main" : "")" }.joined(separator: ", ")
     }
 
     private func read() async throws {
@@ -494,8 +556,7 @@ final class DisplayConnections {
             try await backend.setEnabled(true, screen: screen)
             _ = try await observed(screen, state: .on)
             let layout = layout ?? (checkpoint.recoveryLayout.isEmpty ? [screen] : checkpoint.recoveryLayout)
-            try await backend.restoreLayout(layout)
-            try await verifyLayout(layout, excluding: checkpoint.managedOffIdentities)
+            try await restoreArrangement(layout, verifying: layout, excluding: checkpoint.managedOffIdentities, after: "rollback")
             try await read()
             return nil
         } catch { return error.localizedDescription }
