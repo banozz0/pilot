@@ -9,10 +9,13 @@ private var activeRefreshTask: Task<(), any Error>? = nil
 @MainActor var completeRefreshesScheduled = 0
 #endif
 
+/// `laidOut`: the session that asks has just laid every workspace out, so this one lays them out again only when its
+/// refresh changed what layout reads (LayoutShape).
 @MainActor
 func scheduleCancellableCompleteRefreshSession(
     _ event: RefreshSessionEvent,
     optimisticallyPreLayoutWorkspaces: Bool = false,
+    laidOut: Bool = false,
 ) {
     #if DEBUG
     completeRefreshesScheduled += 1
@@ -24,6 +27,7 @@ func scheduleCancellableCompleteRefreshSession(
             event,
             assumeCancellable: true,
             optimisticallyPreLayoutWorkspaces: optimisticallyPreLayoutWorkspaces,
+            laidOut: laidOut,
         )
     }
 }
@@ -34,12 +38,14 @@ func runHeavyCompleteRefreshSession(
     assumeCancellable: Bool,
     layoutWorkspaces shouldLayoutWorkspaces: Bool = true,
     optimisticallyPreLayoutWorkspaces: Bool = false,
+    laidOut: Bool = false,
 ) async {
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
     defer { signposter.endInterval(#function, state) }
     if !isTilerEnabled { return }
     let res = await Result {
         try await withFaultBoundary { try await $refreshSessionEvent.withValue(event) {
+            let shape = laidOut ? LayoutShape() : nil
             gcMonitors() // Pilot: before the focused window registers, on a workspace still shown (live bug 2026-10-15)
             let nativeFocused = try await getNativeFocusedWindow(.cancellable)
             try updateFocusCache(nativeFocused)
@@ -51,10 +57,33 @@ func runHeavyCompleteRefreshSession(
             gcMonitors()
 
             try await normalizeLayoutReason()
-            if shouldLayoutWorkspaces { try await layoutWorkspaces() }
+            if shouldLayoutWorkspaces && (shape == nil || shape != LayoutShape()) { try await layoutWorkspaces() }
         } }
     }
     endRefreshSession(res, assumeCancellable: assumeCancellable)
+}
+
+/// Pilot (perf-round; Sven on combined-5: a swap sometimes lagged): what a complete refresh can change that layout reads,
+/// so the refresh a command, a drop or a swap asks for after laying everything out lays it out again only when the
+/// refresh found something new. Before, every one of them laid every window out twice: each window's frame written
+/// again (a size, a move and a size through AX, Pilot's own window relaid by AppKit), its glide's job re-queued.
+@MainActor
+struct LayoutShape: Equatable {
+    /// Each window the engine knows, with the node it hangs from and the workspace it is on.
+    let windows: [UInt32: [ObjectIdentifier]]
+    let focused: UInt32?
+    /// Each display's frame and the workspace it shows.
+    let displays: [String]
+    let enabled: Bool
+
+    init() {
+        windows = Dictionary(uniqueKeysWithValues: MacWindow.allWindows.map { window in
+            (window.windowId, [window.parent.map(ObjectIdentifier.init), window.nodeWorkspace.map(ObjectIdentifier.init)].compactMap { $0 })
+        })
+        focused = focus.windowOrNil?.windowId
+        displays = monitorInfos.map { "\($0.rect) \($0.visibleRect) \($0.activeWorkspace.name)" }
+        enabled = isTilerEnabled
+    }
 }
 
 @MainActor
@@ -100,7 +129,7 @@ func runLightSession<T>(
         }
         switch event {
             case .focusFollowsMouse, .dragPreview, .gapResize: break // Pilot: a live swap's preview or a held gap changed only the tree
-            default: scheduleCancellableCompleteRefreshSession(event)
+            default: scheduleCancellableCompleteRefreshSession(event, laidOut: true) // Pilot (perf-round): laid out above
         }
         return result
     } }
