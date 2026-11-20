@@ -124,7 +124,7 @@ public struct BarInputs: Sendable {
 public enum BarRecording: Equatable, Sendable {
     case starting, counting(Int), recording(Double), paused(Double)
 
-    /// "Recording in 3", "Recording · 2:14", "Recording paused · 2:14": the bar's tooltip and the dropdown's Now say it so.
+    /// "Recording in 3", "Recording · 2:14", "Recording paused · 2:14": the bar's tooltip and the pill's Activity view say it so.
     public var words: String {
         switch self {
         case .starting: "Recording is starting"

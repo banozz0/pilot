@@ -125,7 +125,7 @@ final class PillDrop {
         }
     }
 
-    /// The Pilot menu's six switches as the Controls view's tiles.
+    /// The quick switches as the Controls view's tiles.
     static func controls(_ engine: Engine) -> [PillValues.Control] {
         let switches = engine.quickSwitches, layerKeys = engine.settings.layerKeys, tiler = engine.observers.tiler.tilerName
         return Dropdown.Switch.allCases.map { which in
