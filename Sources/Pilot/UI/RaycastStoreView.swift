@@ -12,17 +12,14 @@ struct RaycastStoreView: View {
     let model: RaycastStoreModel
     let onScreen: Bool
     /// An installed one's card on the Extensions page, which lists its commands.
-    var showInstalled: (String) -> Void = { _ in }
+    let showInstalled: (String) -> Void
     @State private var query = ""
     @State private var picked: String?
 
-    init(model: RaycastStoreModel = .shared, onScreen: Bool = true, pick: String? = nil, query: String = "",
-         showInstalled: @escaping (String) -> Void = { _ in }) {
+    init(model: RaycastStoreModel = .shared, onScreen: Bool = true, showInstalled: @escaping (String) -> Void = { _ in }) {
         self.model = model
         self.onScreen = onScreen
         self.showInstalled = showInstalled
-        _picked = State(initialValue: pick)
-        _query = State(initialValue: query)
     }
 
     var body: some View {
@@ -88,7 +85,7 @@ struct RaycastStoreView: View {
         let installed = model.installedExtension(folder.name) != nil, info = model.infos[folder.name]
         return Button { picked = folder.name } label: {
             KitRow(selected: on) {
-                StoreTile(file: model.iconFile(folder.name), size: 28)
+                EmojiTile(emoji: nil, size: 28, file: model.iconFile(folder.name))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(model.title(folder.name)).font(ink.ui(13, .semibold)).lineLimit(1)
                     if let line = info?.description, !line.isEmpty { Text(line).font(ink.ui(11.5)).foregroundStyle(ink.rowQuiet(on)).lineLimit(1) }
@@ -119,7 +116,7 @@ private struct StoreDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 14) {
-                    StoreTile(file: model.iconFile(folder.name), size: 44)
+                    EmojiTile(emoji: nil, size: 44, file: model.iconFile(folder.name))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(model.title(folder.name)).font(ink.ui(18, .semibold)).foregroundStyle(ink.text).lineLimit(1).accessibilityAddTraits(.isHeader)
                         Text([info?.author.map { "by \($0)" }, installed == nil ? "raycast/extensions" : "installed"].compactMap { $0 }.joined(separator: " · "))
@@ -152,24 +149,5 @@ private struct StoreDetail: View {
             .padding(20)
         }
         .task(id: folder) { await model.info(folder.name) }
-    }
-}
-
-/// A store extension's icon on a key-cap tile, the puzzle piece until it is fetched.
-private struct StoreTile: View {
-    @Environment(\.ink) private var ink
-    let file: String?
-    let size: CGFloat
-
-    var body: some View {
-        Group {
-            if let file, let image = NSImage(contentsOfFile: file) {
-                Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).frame(width: size * 0.72, height: size * 0.72)
-            } else {
-                Image(systemName: "puzzlepiece.extension").font(.system(size: size * 0.46, weight: .medium)).foregroundStyle(ink.muted)
-            }
-        }
-        .frame(width: size, height: size)
-        .instrumentTile(size)
     }
 }

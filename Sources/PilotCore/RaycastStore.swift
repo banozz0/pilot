@@ -105,8 +105,7 @@ public enum RaycastStore {
     }
 
     private struct Manifest: Decodable {
-        struct Command: Decodable { let name: String? }
-        let name: String?, title: String?, description: String?, icon: String?, commands: [Command]?
+        let name: String?, title: String?, description: String?, icon: String?, commands: [JSONValue]?
         let author: JSONValue?
     }
 
@@ -119,7 +118,7 @@ public enum RaycastStore {
         case .object(let o): if case .string(let s)? = o["name"] { s } else { nil }
         default: nil
         }
-        let name = m.name.flatMap { $0.wholeMatch(of: /[a-z0-9][a-z0-9-]*/) == nil ? nil : $0 }
+        let name = m.name.flatMap { Extension.isName($0) ? $0 : nil }
         let icon = m.icon.flatMap { $0.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9._@-]*\.(png|jpg|jpeg)/.ignoresCase()) == nil || $0.contains("..") ? nil : $0 }
         return Info(sha: folder.sha, name: name, title: shown(m.title, 80) ?? folder.name, description: shown(m.description, 300) ?? "",
                     author: shown(author, 64), icon: icon, commands: m.commands?.count ?? 0)
@@ -186,48 +185,54 @@ public enum RaycastStore {
             }
         }
 
-        var listingFile: URL { cache.appending(path: "listing.json") }
-        func infoFile(_ folder: String) -> URL { cache.appending(path: "info/\(folder).json") }
-        public func iconFile(_ folder: String, _ info: Info) -> URL? {
+        var listingFile: JSONFile<Listing?> { JSONFile(url: cache.appending(path: "listing.json")) }
+        var infoFolder: URL { cache.appending(path: "info", directoryHint: .isDirectory) }
+        func infoFile(_ folder: String) -> JSONFile<Info?> { JSONFile(url: infoFolder.appending(path: "\(folder).json")) }
+        func iconFile(_ folder: String, _ info: Info) -> URL? {
             info.icon.map { cache.appending(path: "icons/\(folder)-\(info.sha.prefix(12)).\(($0 as NSString).pathExtension.lowercased())") }
         }
 
+        /// A folder's info as the store keeps it: what its package.json said, and its icon's path once fetched.
+        public typealias Read = (info: Info, icon: String?)
+
         /// The kept listing, fresh or not; nil when none is kept or it does not read.
-        public func kept() -> Listing? {
-            (try? Data(contentsOf: listingFile)).flatMap { try? Self.decoder.decode(Listing.self, from: $0) }
+        public func kept() -> Listing? { (try? listingFile.load(or: nil)) ?? nil }
+
+        /// Every kept info whose folder `listing` still has at the same tree hash: the info folder listed once, then only the
+        /// files in it read.
+        public func keptInfos(_ listing: Listing) -> [String: Read] {
+            let sha = Dictionary(listing.folders.map { ($0.name, $0.sha) }) { a, _ in a }
+            let names = ((try? FileManager.default.contentsOfDirectory(atPath: infoFolder.path)) ?? []).filter { $0.hasSuffix(".json") }
+            return Dictionary(names.compactMap { file -> (String, Read)? in
+                let name = String(file.dropLast(5))
+                guard let want = sha[name], let info = (try? infoFile(name).load(or: nil)) ?? nil, info.sha == want else { return nil }
+                return (name, (info, iconPath(name, info)))
+            }) { a, _ in a }
         }
 
         /// The listing read from GitHub now and kept.
         public func read(at date: Date = .now) async throws(Problem) -> Listing {
             let listing = try RaycastStore.listing(try await fetch(listingURL, listingLimit), at: date)
-            write(try? Self.encoder.encode(listing), to: listingFile)
+            try? listingFile.save(listing)
             return listing
-        }
-
-        /// The folder's kept info when it was read at its tree hash now; nil otherwise.
-        public func keptInfo(_ folder: Folder) -> Info? {
-            (try? Data(contentsOf: infoFile(folder.name))).flatMap { try? JSONDecoder().decode(Info.self, from: $0) }.flatMap { $0.sha == folder.sha ? $0 : nil }
         }
 
         /// The folder's package.json read and kept, then its icon fetched once into the cache; an icon that will not
         /// come is left out, never a failure.
-        public func readInfo(_ folder: Folder) async throws(Problem) -> Info {
+        public func readInfo(_ folder: Folder) async throws(Problem) -> Read {
             let info = try RaycastStore.info(try await fetch(manifestURL(folder.name), manifestLimit), folder: folder)
-            write(try? JSONEncoder().encode(info), to: infoFile(folder.name))
-            if let icon = info.icon, let file = iconFile(folder.name, info), !FileManager.default.fileExists(atPath: file.path) {
-                write(try? await fetch(iconURL(folder.name, icon), iconLimit), to: file)
+            try? infoFile(folder.name).save(info)
+            if let icon = info.icon, let file = iconFile(folder.name, info), !FileManager.default.fileExists(atPath: file.path),
+               let data = try? await fetch(iconURL(folder.name, icon), iconLimit) {
+                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: file, options: .atomic)
             }
-            return info
+            return (info, iconPath(folder.name, info))
         }
 
-        private func write(_ data: Data?, to file: URL) {
-            guard let data else { return }
-            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: file, options: .atomic)
+        private func iconPath(_ folder: String, _ info: Info) -> String? {
+            iconFile(folder, info).flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0.path : nil }
         }
-
-        static let encoder: JSONEncoder = { let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601; return e }()
-        static let decoder: JSONDecoder = { let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d }()
     }
 
     /// A session with nothing of the user's: no cookies, no cache, no credentials.

@@ -35,8 +35,6 @@ final class RaycastStoreMenu: MenuSource {
         }
     }
 
-    func settled() async { await task?.value }
-
     func close() { task?.cancel() }
 
     /// The rows again, the row Sven was on kept: after a read in place, or a Refresh.
@@ -65,11 +63,12 @@ final class RaycastStoreMenu: MenuSource {
     func row(_ folder: RaycastStore.Folder) -> MenuEntry {
         let info = model.infos[folder.name], installed = model.installedExtension(folder.name) != nil
         let line = installed ? "Installed" : info.map { [$0.description, $0.author.map { "by \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
+            .flatMap { $0.isEmpty ? nil : $0 }
         var icon = MenuIcon.glyph("puzzlepiece.extension", installed ? .good : .accent)
         icon.picture = model.iconFile(folder.name)
         var row = MenuEntry(title: model.title(folder.name), target: .action("\(Self.actionID)#\(folder.name)"),
-                            keywords: info == nil ? nil : folder.name, subtitle: line.flatMap { $0.isEmpty ? nil : $0 }, icon: icon)
-        row.ownActions = Self.actions(read: info != nil, installed: installed).map(\.label)
+                            keywords: info == nil ? nil : folder.name, subtitle: line, icon: icon)
+        row.ownActions = actions(folder.name).map(\.label)
         return row
     }
 
@@ -88,16 +87,16 @@ final class RaycastStoreMenu: MenuSource {
     }
 
     /// Return's first: an installed one's commands, a read one's Install, an unread one's details.
-    static func actions(read: Bool, installed: Bool) -> [Act] {
-        if installed { return [.commands, .github, .refresh] }
-        return read ? [.install, .github, .refresh] : [.details, .install, .github, .refresh]
+    func actions(_ folder: String) -> [Act] {
+        if model.installedExtension(folder) != nil { return [.commands, .github, .refresh] }
+        return model.infos[folder] != nil ? [.install, .github, .refresh] : [.details, .install, .github, .refresh]
     }
 
     func pick(_ row: MenuEntry, action index: Int) -> MenuPick {
         guard case .action(let id) = row.target, let hash = id.lastIndex(of: "#") else { return .stay }
         let folder = String(id[id.index(after: hash)...])
         guard model.listing?.folder(folder) != nil else { return .stay }
-        let acts = Self.actions(read: model.infos[folder] != nil, installed: model.installedExtension(folder) != nil)
+        let acts = actions(folder)
         guard acts.indices.contains(index) else { return .stay }
         let (model, hud, open) = (model, hud, open)
         switch acts[index] {

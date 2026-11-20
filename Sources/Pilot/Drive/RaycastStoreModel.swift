@@ -26,8 +26,9 @@ final class RaycastStoreModel {
     private(set) var cached = false
     /// Why a read failed while an older listing is shown in its place.
     private(set) var stale: String?
-    /// Each folder's package.json, once picked.
+    /// Each folder's package.json, once picked, and its icon file once fetched.
     private(set) var infos: [String: RaycastStore.Info] = [:]
+    private(set) var icons: [String: String] = [:]
     /// Why a folder's package.json could not be read.
     private(set) var infoFailures: [String: String] = [:]
     /// The installed extensions, by id.
@@ -37,7 +38,7 @@ final class RaycastStoreModel {
     private(set) var failures: [String: String] = [:]
 
     @ObservationIgnored let source: RaycastStore.Source
-    @ObservationIgnored var extensions: URL
+    @ObservationIgnored let extensions: URL
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var reading: Task<Void, Never>?
     @ObservationIgnored private var infoReads: [String: Task<RaycastStore.Info?, Never>] = [:]
@@ -50,7 +51,10 @@ final class RaycastStoreModel {
     /// again either way. A read already running is waited for, never started twice.
     func open() async {
         await readInstalled()
-        if listing == nil, let kept = source.kept() { show(kept, cached: true) }
+        let source = source
+        if listing == nil, let (kept, reads) = await Task.detached(operation: { source.kept().map { ($0, source.keptInfos($0)) } }).value {
+            show(kept, cached: true, reads)
+        }
         if let listing, now().timeIntervalSince(listing.fetched) < RaycastStore.fresh { return }
         await read()
     }
@@ -61,13 +65,17 @@ final class RaycastStoreModel {
         await read()
     }
 
-    private func show(_ listing: RaycastStore.Listing, cached: Bool) {
+    /// `listing` shown, with the infos kept for it that are not already read.
+    private func show(_ listing: RaycastStore.Listing, cached: Bool, _ reads: [String: RaycastStore.Source.Read]) {
         self.listing = listing
         self.cached = cached
-        for folder in listing.folders where infos[folder.name] == nil {
-            if let info = source.keptInfo(folder) { infos[folder.name] = info }
-        }
+        for (name, read) in reads where infos[name]?.sha != read.info.sha { keep(name, read) }
         load = .loaded
+    }
+
+    private func keep(_ name: String, _ read: RaycastStore.Source.Read) {
+        infos[name] = read.info
+        icons[name] = read.icon
     }
 
     private func read() async {
@@ -76,9 +84,9 @@ final class RaycastStoreModel {
         let (source, now) = (source, now())
         let task = Task { @MainActor in
             do {
-                let fresh = try await Task.detached { try await source.read(at: now) }.value
+                let (fresh, reads) = try await Task.detached { let l = try await source.read(at: now); return (l, source.keptInfos(l)) }.value
                 stale = nil
-                show(fresh, cached: false)
+                show(fresh, cached: false, reads)
                 dlog.notice("raycast store: listed \(fresh.folders.count) folders")
             } catch {
                 let why = (error as? RaycastStore.Problem)?.reason ?? error.localizedDescription
@@ -108,10 +116,7 @@ final class RaycastStoreModel {
     func title(_ folder: String) -> String { infos[folder]?.title ?? folder }
 
     /// The folder's icon file once fetched.
-    func iconFile(_ folder: String) -> String? {
-        guard let info = infos[folder], let file = source.iconFile(folder, info), FileManager.default.fileExists(atPath: file.path) else { return nil }
-        return file.path
-    }
+    func iconFile(_ folder: String) -> String? { icons[folder] }
 
     /// The folder's package.json: kept at its tree hash, else read now; one read per folder at a time. Nil when the
     /// folder is not listed or the read failed (why in `infoFailures`).
@@ -123,10 +128,10 @@ final class RaycastStoreModel {
         let source = source
         let task = Task { @MainActor () -> RaycastStore.Info? in
             do {
-                let info = try await Task.detached { try await source.readInfo(folder) }.value
-                infos[name] = info
+                let read = try await Task.detached { try await source.readInfo(folder) }.value
+                keep(name, read)
                 infoFailures[name] = nil
-                return info
+                return read.info
             } catch {
                 infoFailures[name] = (error as? RaycastStore.Problem)?.reason ?? error.localizedDescription
                 return nil
@@ -149,15 +154,11 @@ final class RaycastStoreModel {
         busy.insert(folder)
         failures[folder] = nil
         defer { busy.remove(folder) }
-        do {
-            let answer = try await ControlVerbs.installFromGitHub(github, tools, peer: peer, from: from)
-            await readInstalled()
-            return answer
-        } catch {
-            failures[folder] = error.message
-            await readInstalled()
-            throw error
-        }
+        let result: Result<JSONValue, ControlError>
+        do { result = .success(try await ControlVerbs.installFromGitHub(github, tools, peer: peer, from: from)) } catch { result = .failure(error) }
+        if case .failure(let error) = result { failures[folder] = error.message }
+        await readInstalled()
+        return try result.get()
     }
 
     /// Install from a press (the menu or the page): Allow asked on screen, then one HUD line.

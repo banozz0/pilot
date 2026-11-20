@@ -311,8 +311,10 @@ extension ControlVerbs {
     /// `ext store [<query>] [--refresh] | info <folder> | install <folder>` (raycast-extensions T24): the store the menu's
     /// Raycast Store and the Extensions page show, through their one model. A list answers at most 100 rows, the rest counted.
     private static func store(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
-        let model = RaycastStoreModel.shared
-        model.extensions = tools.extensions
+        // The shared model, which the menu and the page read, unless the caller's Extensions folder is another (a test's).
+        let shared = RaycastStoreModel.shared
+        let model = tools.extensions.standardizedFileURL == shared.extensions.standardizedFileURL ? shared
+            : RaycastStoreModel(source: shared.source, extensions: tools.extensions)
         let words = Array(args.positional.dropFirst())
         if args.has("refresh") { await model.refresh() } else { await model.open() }
         if case .failed(let why) = model.load { throw ControlError(.badValue, "Raycast's store not listed: \(why)") }

@@ -645,19 +645,34 @@ extension ExtensionsPage.Permission.Kind {
     }
 }
 
-/// An extension's emoji on a key-cap tile, the puzzle piece when it has none: the list's rows and the detail's header.
+/// An extension's emoji on a key-cap tile, or a picture file (a Raycast store icon), the puzzle piece when it has
+/// neither: the list's rows and the detail's header.
 struct EmojiTile: View {
     @Environment(\.ink) private var ink
     let emoji: String?
     let size: CGFloat
+    var file: String?
+
+    /// Each picture read once.
+    @MainActor private static let pictures = NSCache<NSString, NSImage>()
 
     var body: some View {
         glyph.instrumentTile(size)
     }
 
+    private var picture: NSImage? {
+        guard let file else { return nil }
+        if let kept = Self.pictures.object(forKey: file as NSString) { return kept }
+        guard let image = NSImage(contentsOfFile: file) else { return nil }
+        Self.pictures.setObject(image, forKey: file as NSString)
+        return image
+    }
+
     private var glyph: some View {
         Group {
-            if let emoji { Text(emoji).font(.system(size: size * 0.6)) }
+            if let picture {
+                Image(nsImage: picture).resizable().interpolation(.high).aspectRatio(contentMode: .fit).frame(width: size * 0.72, height: size * 0.72)
+            } else if let emoji { Text(emoji).font(.system(size: size * 0.6)) }
             else { Image(systemName: "puzzlepiece.extension").font(.system(size: size * 0.46, weight: .medium)).foregroundStyle(ink.muted) }
         }
         .frame(width: size, height: size)
