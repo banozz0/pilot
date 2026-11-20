@@ -21,6 +21,8 @@ final class ExtensionListSession: MenuSource {
 
     let ext: Extension, command: Extension.Command
     var show: ([MenuEntry]) -> Void = { _ in }
+    /// The list's empty view while it has no rows (T26), nil otherwise; set before `show`.
+    var showEmpty: (Extension.Empty?) -> Void = { _ in }
     private let run: (Extension.Command, String) async -> ListOutcome
     /// Ends the transport as the view closes: a session's process; nothing for one-shot runs, each stopped as cancelled.
     private let end: () -> Void
@@ -151,11 +153,15 @@ final class ExtensionListSession: MenuSource {
             if let session, !ExtensionFormPanel.owns(session) { ExtensionFormPanel.show(session, ext: ext, command: command) }
             rows = [MenuEntry(title: "\(ext.title) opened its form in a window of its own", target: .action("\(command.actionID)#form"), isAnswer: true,
                               icon: .command(emoji: command.icon))]
+        case .empty:
+            items = []
+            rows = []
         case .error(let reason):
             items = []
             rows = [ExtensionList.error(reason, of: command, in: ext.title)]
             dlog.error("extension: \(self.command.actionID, privacy: .public) list: \(reason, privacy: .private)")
         }
+        if case .empty(let empty) = outcome { showEmpty(empty) } else { showEmpty(nil) }
         dlog.notice("extension: \(self.command.actionID, privacy: .public) listed \(self.items.count) rows")
         if dropped > 0 { dlog.error("extension: \(self.command.actionID, privacy: .public) dropped \(dropped) actions of a type Pilot does not know") }
         if loading {

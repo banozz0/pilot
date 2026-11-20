@@ -106,6 +106,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         native.setObject(barReady, forKeyedSubscript: "barReady" as NSString)
         installSystem(into: native)
         SQLiteBridge.install(into: native)  // node:sqlite, read-only (T7)
+        Bytes.install(into: native)  // file descriptors, zlib and byte hashes (T26)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
 

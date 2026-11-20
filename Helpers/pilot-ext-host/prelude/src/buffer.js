@@ -1,4 +1,4 @@
-// Node's Buffer, `string_decoder`, the `process` module and a `stream` that only loads, for the prelude (ADR 0017, T7), written from nodejs.org's
+// Node's Buffer, `string_decoder`, the `process` module and the modules that only load, for the prelude (ADR 0017, T7), written from nodejs.org's
 // API docs: a Buffer is a Uint8Array with Node's encodings (utf8, base64 and base64url, hex, latin1, ascii, utf16le) and
 // its common statics and methods, enough for the top 20's `node:buffer` and `node:process` imports. Child output
 // still arrives as text (node.js), so most extensions only build and print Buffers. Anything else of Node's buffer
@@ -121,7 +121,7 @@ function fillOf(pattern, size) {
 }
 
 /** `string_decoder`: text from Buffers that may end mid-character, the rest kept for the next write. */
-class StringDecoder {
+export class StringDecoder {
   #encoding;
   #rest = new Uint8Array(0);
   constructor(encoding = "utf8") { this.#encoding = encodingOf(encoding); }
@@ -154,26 +154,19 @@ function whole(bytes) {
 }
 
 /** The modules below that only load (stubs whose members record their use and throw): an install that needs one says so (T25). */
-export const loadOnly = ["stream", "stream/promises", "v8", "http", "https", "zlib", "net"];
+export const loadOnly = ["v8", "http", "https", "net"];
 
 /** The modules this file adds to `require`, by name, `node:` or not. */
 export const modules = {
   buffer: { Buffer, constants: { MAX_LENGTH: 2 ** 32 - 1 }, kMaxLength: 2 ** 32 - 1 },
   string_decoder: { StringDecoder },
   get process() { return globalThis.process; },
-  // Only loaded, not yet Node's streams: @raycast/utils' exec helpers import it whole; each member records its use and throws.
-  // getDefaultHighWaterMark is real: execa reads it at load (Node 22's 65536 bytes, 16 objects; T15).
-  stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"],
-    { getDefaultHighWaterMark: (objectMode) => (objectMode ? 16 : 65536) }),
-  // The same for its promise forms (Speedtest, Video Downloader import them at load; T15).
-  "stream/promises": stubs("stream/promises", ["pipeline", "finished"]),
   // Only loaded: execa checks an IPC message with v8.serialize, which no extension's own call reaches here.
   v8: stubs("v8", ["serialize", "deserialize"]),
   // Only loaded: axios's Node adapter and follow-redirects require them at load; a request through them records and throws
   // (fetch is the host's HTTP; T15: Google Translate's speech package loads axios).
   http: stubs("http", ["request", "get", "Agent", "createServer"]),
   https: stubs("https", ["request", "get", "Agent"]),
-  zlib: stubs("zlib", ["createGunzip", "createInflate", "createBrotliDecompress", "gunzipSync", "inflateSync"], { constants: {} }),
   // Only loaded, as http is: sockets are not Pilot's; isIP and its two forms are real, as URL code calls them at load.
   net: stubs("net", ["connect", "createConnection", "createServer", "Socket", "Server"], {
     isIPv4: (t) => ipv4(String(t)), isIPv6: (t) => ipv6(String(t)), isIP: (t) => (ipv4(String(t)) ? 4 : ipv6(String(t)) ? 6 : 0),

@@ -41,10 +41,7 @@ extension Host {
         add("fsStat", { (path: String, follow: Bool) -> Any in
             var info = stat()
             guard (follow ? stat(path, &info) : lstat(path, &info)) == 0 else { return Host.failure(errno: errno, path) }
-            let type = info.st_mode & S_IFMT
-            func ms(_ t: timespec) -> Double { Double(t.tv_sec) * 1000 + Double(t.tv_nsec) / 1_000_000 }
-            return ["size": Double(info.st_size), "mode": Int(info.st_mode), "mtimeMs": ms(info.st_mtimespec), "birthtimeMs": ms(info.st_birthtimespec),
-                    "isFile": type == S_IFREG, "isDirectory": type == S_IFDIR, "isSymbolicLink": type == S_IFLNK]
+            return Host.stats(info)
         } as @convention(block) (String, Bool) -> Any)
         add("fsList", { (path: String) -> Any in
             do { return try FileManager.default.contentsOfDirectory(atPath: path).sorted() } catch { return Host.failure(error, path) }
@@ -146,7 +143,7 @@ extension Host {
     /// A failure as the prelude reads it: Node's code (ENOENT and the rest) and its message.
     static func failure(errno code: Int32, _ path: String) -> [String: Any] {
         let names: [Int32: String] = [ENOENT: "ENOENT", EACCES: "EACCES", EEXIST: "EEXIST", ENOTDIR: "ENOTDIR", EISDIR: "EISDIR",
-                                      ENOTEMPTY: "ENOTEMPTY", EPERM: "EPERM", EXDEV: "EXDEV", EINVAL: "EINVAL", ELOOP: "ELOOP"]
+                                      ENOTEMPTY: "ENOTEMPTY", EPERM: "EPERM", EXDEV: "EXDEV", EINVAL: "EINVAL", ELOOP: "ELOOP", EBADF: "EBADF"]
         let name = names[code] ?? "EIO"
         return ["error": name, "message": "\(name): \(String(cString: strerror(code))), '\(path)'"]
     }
@@ -201,7 +198,7 @@ extension Host {
 
     // MARK: fetch
 
-    /// One request, answered to `__pilotFetched(id, …)` with its status, headers and body as text, or an error; it keeps
+    /// One request, answered to `__pilotFetched(id, …)` with its status, headers and body as text and as bytes, or an error; it keeps
     /// the run alive until then. An ephemeral session: no cookie or cache is written to disk.
     func fetch(_ id: Int, _ request: [String: Any]) {
         guard let text = request["url"] as? String, let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
@@ -223,6 +220,8 @@ extension Host {
                 answer["url"] = http.url?.absoluteString ?? text
                 answer["headers"] = http.allHeaderFields.map { [String(describing: $0.key).lowercased(), String(describing: $0.value)] }
                 answer["body"] = String(decoding: data ?? Data(), as: UTF8.self)
+                // The bytes too (T26), made a Uint8Array on the main queue: a binary body (an archive) is not text.
+                answer["bytes"] = data ?? Data()
             } else {
                 answer["error"] = "no HTTP answer"
             }
@@ -230,7 +229,9 @@ extension Host {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.pending -= 1
-                    self.call("__pilotFetched", [id, handed.value])
+                    var answer = handed.value as? [String: Any] ?? [:]
+                    if let bytes = answer["bytes"] as? Data { answer["bytes"] = Bytes.array(bytes, in: self.context) }
+                    self.call("__pilotFetched", [id, answer])
                     self.settle()
                 }
             }

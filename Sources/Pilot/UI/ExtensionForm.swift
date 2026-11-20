@@ -133,7 +133,7 @@ struct ExtensionFormView: View {
             ExtensionDetailView(detail: detail) { model.press($0) }
         case .error(let why)?:
             FinePrint(text: "\(model.title) \(why)", color: ink.red).padding(18)
-        case .items?, nil:
+        case .items?, .empty?, nil:
             FinePrint(text: "Nothing to fill in here: the extension moved on to a list.").padding(18)
         }
         Spacer(minLength: 0)

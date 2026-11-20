@@ -7,10 +7,10 @@ import JavaScriptCore
 // runs the host twice, never with an extension's code in a JSContext:
 //   pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools>
 //     one recursive tree listing of that folder (api.github.com), then each file it needs from raw.githubusercontent.com,
-//     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot asks about:
+//     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot builds from (no question, T26):
 //     the manifest's commands and preferences, the packages its lockfile pins (its dependencies, and the dev-only ones its
 //     code imports), and whether esbuild is in <tools> yet.
-//   pilot-ext-host --build <workspace> <tools> [<pilot-ext-prelude.js>], the asked plan on stdin
+//   pilot-ext-host --build <workspace> <tools> [<pilot-ext-prelude.js>], the fetched plan on stdin
 //     esbuild 0.28.2 (once, checked by its pinned sha512, kept in <tools>), each package's tarball from the npm registry
 //     checked by the lockfile's sha512 and unpacked here (no npm, so no install script ever runs), then esbuild per
 //     command into <workspace>/built: package.json, assets/ and dist/<command>.js, which Pilot then checks and installs.
@@ -32,7 +32,7 @@ enum Installer {
     /// The sha256 of that tarball's `package/bin/esbuild`, as unpacked on 2026-11-19 (raycast-extensions T6 log, section 5): a
     /// copy in Tools is reused only while it still hashes to this, and a fresh one is kept only when it does.
     static let esbuildSHA256 = "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384"
-    /// The longest `github:` argument and the longest title the question carries.
+    /// The longest `github:` argument and the longest title the answer carries.
     static let longestSpec = 200, longestTitle = 80
 
     /// What the host supplies itself, so a package's own copy is never fetched or bundled: two Reacts break hooks.
@@ -42,7 +42,7 @@ enum Installer {
     /// and an optional @scope/ of the same. Pilot holds the plan to the same pattern again (GitHubInstall.npm in
     /// Sources/PilotCore/ExtensionInstaller.swift; this package links no PilotCore): change both together.
     nonisolated(unsafe) static let npmName = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
-    /// A preference's name as the question shows it: a letter, then letters, digits, _ and -.
+    /// A preference's name as Pilot shows it: a letter, then letters, digits, _ and -.
     nonisolated(unsafe) static let preferenceName = #/[A-Za-z][A-Za-z0-9_-]*/#
 
     // Limits: the source folder, read from the listing before any file is fetched, and the packages.
@@ -210,11 +210,11 @@ enum Installer {
               let id = manifest["name"] as? String, let commands = manifest["commands"] as? [[String: Any]] else {
             throw Refused("its package.json is not a Raycast manifest")
         }
-        // Every remote word the question shows is held to a rule here, and again in GitHubInstall.fetch: the id and command
+        // Every remote word Pilot shows is held to a rule here, and again in GitHubInstall.fetch: the id and command
         // names to Pilot's id rule (Extension.isName; a command Extension.isCommandName), the modes to Raycast's three, preference names to an identifier, each
         // package's key, real name and version to npm's (below), the version through ExtensionCatalogue.Version when shown.
         // The title is the one free text, cut to 80 Unicode scalars, last on its line and escaped by Pilot when it builds the
-        // question (ControlGate.Ask.visible), as is every refusal text below that quotes a remote word (cut, at most 120
+        // result line (ControlGate.Ask.visible), as is every refusal text below that quotes a remote word (cut, at most 120
         // scalars). The tree is the listing's own 40 hex digits (fetch).
         // A command keeps Raycast's capitals (Extension.isCommandName): letters, digits and hyphens.
         let name = #/[a-z0-9][a-z0-9-]*/#, commandName = #/[A-Za-z0-9][A-Za-z0-9-]*/#
@@ -245,7 +245,7 @@ enum Installer {
         ]
         if let version = manifest["version"] as? String { plan["version"] = version }
         // The dependencies, and each package the code imports that the lockfile pins at the root as dev-only (T15: GitHub's
-        // generated code imports graphql-tag, which only its codegen pins), so the question names and counts it.
+        // generated code imports graphql-tag, which only its codegen pins), so the plan names and counts it.
         let dependencies = Set((manifest["dependencies"] as? [String: Any] ?? [:]).keys)
         let packages = lock(source)
         let devOnly = imports.subtracting(dependencies).filter { name in
@@ -341,7 +341,7 @@ enum Installer {
         }
         let source = workspace.appending(path: "source"), fm = FileManager.default
         let manifestData = try Data(contentsOf: source.appending(path: "package.json"))
-        guard hex(Array(SHA256.hash(data: manifestData))) == manifest else { throw Refused("its package.json changed after the question") }
+        guard hex(Array(SHA256.hash(data: manifestData))) == manifest else { throw Refused("its package.json changed after the plan") }
         let esbuild = try await esbuildTool(tools)
         var unpacked = 0
         for package in packages {
@@ -416,7 +416,7 @@ enum Installer {
     }
 
     /// Of `required`, the ones the prelude lacks or only loads, A to Z. A prelude that cannot be read has none, so every
-    /// one is named: the question then says too much, never too little.
+    /// one is named: the result line then says too much, never too little.
     static func needs(_ required: Set<String>, prelude: URL?) -> [String] {
         let (provided, loadOnly) = prelude.flatMap(preludeModules) ?? ([], [])
         return required.filter { !provided.contains($0) || loadOnly.contains($0) }.sorted()

@@ -11,6 +11,7 @@ import Testing
 /// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
 /// when it could not be. Then Raycast's store (raycast-extensions T24): the page's Raycast Store, Hyper+Space's Raycast
 /// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed. Then
+/// T26: a Raycast list's List.EmptyView in the menu's empty look (menu-t26-empty).
 /// T25: the page's All (an installed Raycast extension with its icon, then the store; Pilot's own set aside), its search
 /// over both, Pilot's own (old), and the root search typed "process", the Raycast command read as Extension beside the
 /// store's hit, their first rows printed.
@@ -130,6 +131,11 @@ struct ExtensionCatalogueRenders {
             print("T25 ROOT \(word): " + root.rows.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.shownTitle) [\($0.element.kindWord ?? "-")\($0.element.subtitle.map { " · \($0)" } ?? "")]" }.joined(separator: " | "))
             if word != "pomodoro" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-\(word)", in: out) }
         }
+        // T26: a Raycast list with no rows shows its List.EmptyView (Speedtest's failure view: Icon.LevelMeter, the error).
+        var emptied = MenuNavigator(list: [], title: "Speedtest", live: true)
+        emptied.emptyView = Extension.Empty(title: "Could not install speedtest cli", description: "Check your connection, then press Restart.",
+                                            symbol: "gauge.with.dots.needle.67percent")
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: emptied)), "menu-t26-empty", in: out)
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

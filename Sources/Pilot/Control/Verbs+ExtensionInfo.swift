@@ -72,6 +72,7 @@ extension ControlVerbs {
                     else { await ExtensionRun.list(command, query: query ?? "", inputs: inputs) }
                 switch ran {
                 case .items(let items): answer["items"] = .array(items.map(Self.item))
+                case .empty(let empty): (answer["items"], answer["empty"]) = (.array([]), Self.empty(empty))
                 case .detail(let detail): answer["detail"] = Self.detail(detail)
                 case .form(let form): answer["form"] = Self.form(form)
                 case .error(let why): throw tools.failed(command, why, in: ext)
@@ -119,6 +120,15 @@ extension ControlVerbs {
         case .invoke(let handler): o["handler"] = .string(handler)
         }
         return .object(o)
+    }
+
+    /// A Raycast list's empty view (T26), as `ext run` and `ext act` show it beside no rows.
+    static func empty(_ empty: Extension.Empty) -> JSONValue {
+        var out: [String: JSONValue] = ["title": .string(empty.title)]
+        out["description"] = empty.description.map(JSONValue.string)
+        out["symbol"] = empty.symbol.map(JSONValue.string)
+        out["icon"] = empty.icon.map(JSONValue.string)
+        return .object(out)
     }
 
     static func item(_ item: Extension.Item) -> JSONValue {
