@@ -271,7 +271,27 @@ function answer(container, handlers, query, message) {
   }
   const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
   if (root.props.isLoading === true) list.isLoading = true;
+  // Raycast shows a List.EmptyView only while the list has no rows (T26): its title, description and icon.
+  const none = list.items.length === 0 && emptyView(root.children);
+  if (none) {
+    const empty = { title: words(none.props.title) ?? "" };
+    const description = words(none.props.description);
+    if (description) empty.description = description;
+    Object.assign(empty, picture(none.props.icon));
+    if (empty.title || empty.description) list.empty = empty;
+  }
   return list;
+}
+
+/** The list's own List.EmptyView, depth first, never one inside a row. */
+function emptyView(nodes) {
+  for (const node of nodes) {
+    if (node.type === "List.EmptyView") return node;
+    if (node.type === "List.Item") continue;
+    const inner = node.children && emptyView(node.children);
+    if (inner) return inner;
+  }
+  return null;
 }
 
 /** The consent question as its two rows, Don't Allow first, each pressed by a handler of this question alone; they carry

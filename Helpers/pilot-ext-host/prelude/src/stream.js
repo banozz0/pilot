@@ -6,6 +6,7 @@
 // too (process.nextTick, a microtask), so a stream's events come in Node's order.
 import { EventEmitter } from "./events.js";
 import { Buffer, StringDecoder } from "./buffer.js";
+import { guard } from "./gaps.js";
 
 const tick = (fn, ...args) => queueMicrotask(() => fn(...args));
 const hwm = (options, objectMode) => options?.highWaterMark ?? (objectMode ? 16 : 65536);
@@ -698,4 +699,7 @@ Stream.getDefaultHighWaterMark = (objectMode) => (objectMode ? 16 : 65536);
 Stream.setDefaultHighWaterMark = () => {};
 
 /** The modules this file adds to `require`. */
-export const modules = { stream: Stream, "stream/promises": promises };
+// stream/web: the web stream classes the prelude has (web.js's ReadableStream); the rest record their use.
+const web = guard("stream/web", { ReadableStream: globalThis.ReadableStream });
+
+export const modules = { stream: Stream, "stream/promises": promises, "stream/web": web };

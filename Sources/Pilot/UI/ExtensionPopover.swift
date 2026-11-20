@@ -114,6 +114,8 @@ final class ExtensionPopoverModel {
         guard let ext, stack.count == 1 else { return }
         switch outcome {
         case .items(let items): (stack[0].blocks, stack[0].problem, stack[0].updated) = ([.list(title: nil, items: items)], nil, now())
+        // A list's empty view (T26): its title over no rows.
+        case .empty(let empty): (stack[0].blocks, stack[0].problem, stack[0].updated) = ([.list(title: empty.title, items: [])], nil, now())
         case .error(let why): stack[0].problem = "\(ext.title) \(why)"
         case .detail, .form: stack[0].problem = "\(ext.title) \(ExtensionRun.unreadable)"
         }

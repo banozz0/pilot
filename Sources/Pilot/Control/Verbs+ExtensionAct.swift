@@ -165,6 +165,7 @@ extension ControlVerbs {
             let json = try Self.outcome(outcome, command, ext, tools)
             switch outcome {
             case .items(let items): return (items, json)
+            case .empty: return ([], json)
             case .detail(let detail): return (ExtensionList.items(detail, of: command), json)
             case .form(let form): return ([Extension.Item(title: command.title, actions: form.actions)], json)
             case .error: return ([], json)
@@ -324,6 +325,7 @@ extension ControlVerbs {
     private static func outcome(_ outcome: ListOutcome, _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools) throws(ControlError) -> [String: JSONValue] {
         switch outcome {
         case .items(let items): return ["items": .array(items.map(Self.item))]
+        case .empty(let empty): return ["items": .array([]), "empty": Self.empty(empty)]
         case .detail(let detail): return ["detail": Self.detail(detail)]
         case .form(let form): return ["form": Self.form(form)]
         case .error(let why): throw tools.failed(command, why, in: ext)
@@ -434,6 +436,7 @@ extension ControlVerbs {
             var out: [String: JSONValue] = ["showed": .string(command.actionID)]
             switch await ExtensionRun.list(command, query: "", context: context, inputs: inputs) {
             case .items(let items): out["items"] = .array(items.map(Self.item))
+            case .empty(let empty): (out["items"], out["empty"]) = (.array([]), Self.empty(empty))
             case .detail(let detail): out["detail"] = Self.detail(detail)
             case .form(let form): out["form"] = Self.form(form)
             case .error(let why): throw tools.failed(command, why, in: ext)
