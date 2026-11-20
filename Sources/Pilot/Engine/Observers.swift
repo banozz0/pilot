@@ -55,6 +55,8 @@ final class EngineObservers {
     @ObservationIgnored let follower: FrameFollower
     /// The focused window while the mouse holds it: its window server bounds every display frame.
     @ObservationIgnored let drag: DragFollower
+    /// The drag follower holds one of Pilot's own windows: its release reads no AppKit frame (ownWindowNote).
+    @ObservationIgnored private var ownDrag = false
 
     /// What the focused app's AX observer re-reads the focused window on. Minimise fires no focus change while the app
     /// keeps focus, so it is listened for itself (card agent-bo-95422995).
@@ -68,7 +70,7 @@ final class EngineObservers {
     static let ownWindowRefreshNotifications = [NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
                                                 NSWindow.willCloseNotification]
     /// A window the border marks (BorderedWindow) takes the keys while another app stays in front: read whatever is active.
-    static let borderedWindowNotifications = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+    static let borderedWindowNotifications = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.willMoveNotification,
                                               NSWindow.didMoveNotification, NSWindow.didResizeNotification, borderedWindowRaised]
 
     typealias FocusedWindowRead = (title: String?, window: WindowBorder.Window, element: AXUIElement?)
@@ -114,11 +116,12 @@ final class EngineObservers {
             tokens.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 let window = note.object as? NSWindow
                 let resigned = note.name == NSWindow.didResignKeyNotification
-                guard MainActor.assumeIsolated({
-                    window is BorderedWindow || (NSApp.isActive && window != nil
+                MainActor.assumeIsolated {
+                    guard window is BorderedWindow || (NSApp.isActive && window != nil
                         && (resigned || window === NSApp.keyWindow || window === NSApp.keyWindow?.sheetParent || window === NSApp.keyWindow?.parent))
-                }) else { return }
-                Task { @MainActor in self?.refreshFocusedWindow() }
+                    else { return }
+                    self?.ownWindowNote(name, window)
+                }
             })
         }
         // A Space switch that keeps the front app sends no activation: its focused window is read again, so the border
@@ -226,19 +229,38 @@ final class EngineObservers {
         if read.element != nil, let id = read.window.windowID { follower.settle(id) }
     }
 
+    /// One of borderedWindowNotifications from Pilot's window `window`, one the border may mark. The mouse dragging the
+    /// focused one, the window server moves it and AppKit hears of it a few times a drag (Pilot's log: 1 to 8 moves in
+    /// drags of 0.3 to 1 s, against 37 to 116 display frames), so the border followed those few and trailed the window
+    /// (Sven, 2026-11-20): the drag follower reads the window server every frame instead, as for another app's window.
+    /// A live resize is AppKit's own, its frame current, and keeps the AppKit read.
+    private func ownWindowNote(_ name: Notification.Name, _ window: NSWindow?) {
+        if name == NSWindow.willMoveNotification || name == NSWindow.didMoveNotification, let window, !window.inLiveResize,
+           let id = CGWindowID(exactly: window.windowNumber), id == focusedWindowID, drag.moved(id) {
+            ownDrag = true
+            return follower.cancelSettle()
+        }
+        Task { @MainActor in self.refreshFocusedWindow() }
+    }
+
     /// A window of the focused app moved or resized: the focused one's frame is read alone, any other re-reads the
     /// focused window whole, as the last read may be stale; a frame later at most (FrameFollower).
     /// While the mouse holds it, the drag follower reads it every display frame instead (DragFollower).
     func windowMoved(_ element: AXUIElement) {
-        if drag.moved(focusedWindowID) { return follower.cancelSettle() }
+        if drag.moved(focusedWindowID) {
+            ownDrag = false
+            return follower.cancelSettle()
+        }
         follower.moved(focusedElement.map { CFEqual($0, element) } == true ? .frame(element) : .full)
         if let focusedWindowID { follower.settle(focusedWindowID) }
     }
 
     /// The release: one AX read puts the border on the window where the app says it landed, the settle reads where
     /// the window server draws it.
+    /// Pilot's own window keeps the follower's last frame: AppKit may not have heard the last move yet, and its own
+    /// didMove reads it once it has.
     private func settle() {
-        follower.moved(focusedElement.map { .frame($0) } ?? .full)
+        if ownDrag { ownDrag = false } else { follower.moved(focusedElement.map { .frame($0) } ?? .full) }
         if let focusedWindowID { follower.settle(focusedWindowID) }
     }
 
