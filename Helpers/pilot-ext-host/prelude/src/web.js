@@ -171,6 +171,9 @@ globalThis.Headers = class Headers {
   append(k, v) { const key = String(k).toLowerCase(), old = this.#map.get(key); this.#map.set(key, old == null ? String(v) : `${old}, ${v}`); }
   set(k, v) { this.#map.set(String(k).toLowerCase(), String(v)); }
   get(k) { return this.#map.get(String(k).toLowerCase()) ?? null; }
+  // Each Set-Cookie on its own (fetch's spec), split from the joined value at a comma before the next `name=`, so an
+  // `Expires=Sat, 21 Nov …` date stays whole (Stock Tracker reads Yahoo's cookie this way, T27).
+  getSetCookie() { return this.#map.get("set-cookie")?.split(/,\s*(?=[^;,=\s]+=)/) ?? []; }
   has(k) { return this.#map.has(String(k).toLowerCase()); }
   delete(k) { this.#map.delete(String(k).toLowerCase()); }
   forEach(fn, self) { for (const [k, v] of this.#map) fn.call(self, v, k, this); }
