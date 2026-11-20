@@ -6,18 +6,21 @@ against a sandbox, the phase gates' proof. Written fresh: none of the spike's co
     harness.py run     --pilot P --socket S --work W --host H [--only a,b]  every view command, empty search then "a"
     harness.py act     --pilot P --socket S --work W --host H --measure M --victim PID [--only a,b]  each gate one's press
     harness.py summary --work W --measure M                          coverage, first answers and host footprints
+    harness.py redact --log L --work W                               a log rewritten to counts and shapes (T7 review 1)
 
 P is PilotCLI, S the sandbox's socket (Tests/PilotTests/SandboxHost.swift, PILOT_SANDBOX_ALLOW=1), W a work folder, H the
 real pilot-ext-host the sandbox's wrapper starts (its path finds this sandbox's hosts with `pgrep -f`, never another
 slot's), M the host's --measure log (Helpers/pilot-ext-host, Measure.swift) and PID a `sleep` the caller started under a
 name of its own, the only process Kill Process may kill. A sandbox serves 10 minutes, so `run` and `act` install the
 folders `install` kept as local folders when the sandbox lacks them: GitHub is asked once per extension (60 calls an
-hour unauthenticated). Every command is printed with its whole stdout, then its exit and time; nothing is read from or
+hour unauthenticated). Every command is printed with its stdout as counts and shapes (shaped(): no title, text or URL path of the Mac's own),
+then its exit and time; nothing is read from or
 written to the Mac's own Pilot. Python 3 stdlib only.
 """
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import statistics
@@ -59,9 +62,125 @@ def say(text=""):
     print(text, flush=True)
 
 
+# MARK: What the log may hold: counts and shapes, never the Mac's own data (T7 review 1). Rows are counted, with the first
+# row's fields and action labels; a title, subtitle or any text is its length; a URL keeps its scheme only (its host too
+# when it is one the harness itself reaches); a row named on a command line is its length. Only the harness's own names
+# pass whole: its sleep and its searches.
+SAFE = {"", "a", "pilot", "t7victim"}
+HOSTS = {"www.google.com", "github.com", "api.github.com", "raw.githubusercontent.com", "registry.npmjs.org"}
+TEXT_KEYS = {"title", "subtitle", "accessory", "keywords", "section", "text", "markdown", "message", "pressed", "row", "id",
+             "tooltip", "placeholder", "value", "detail", "then", "query"}
+PLACE_KEYS = {"url", "target", "path", "folder"}
+URL = re.compile(r"([a-z][a-z0-9+.-]*://)([^/\s\"'?#<>]*)([^\s\"'<>]*)")
+FIELD = re.compile(r'("(?:%s)"\s*:\s*)"((?:[^"\\]|\\.)*)"' % "|".join(sorted(TEXT_KEYS | PLACE_KEYS)))
+
+
+def masked(text):
+    """A text as its length, unless it is one of the harness's own names."""
+    return text if text in SAFE else "<%d chars>" % len(text)
+
+
+def unlinked(text):
+    """Every URL in `text` cut to its scheme, and its host when it is the harness's own."""
+    def cut(m):
+        host = m.group(2) if m.group(2) in HOSTS else "<host %d chars>" % len(m.group(2))
+        return m.group(1) + host + ("/<cut>" if m.group(3) else "")
+    return URL.sub(cut, text)
+
+
+def kind(action):
+    """An action's kind by its shape: a callback, an open, a copy or paste, as `ext run` prints them."""
+    if action.get("type"):
+        return action["type"]
+    return "invoke" if action.get("handler") else "open" if (action.get("url") or action.get("target")) else "copy" if "text" in action else "?"
+
+
+def worded(args):
+    """A child's arguments: its first word (a subcommand), flags, numbers and the harness's names whole, every other word
+    its length; a shell line word by word."""
+    def word(i, w):
+        return w if i == 0 or w.startswith("-") or w.isdigit() or w in SAFE else masked(w)
+    return [" ".join(word(j, x) for j, x in enumerate(a.split(" "))) if " " in a else word(i, a) for i, a in enumerate(args)]
+
+
+def place(text):
+    return unlinked(text) if URL.search(text) else masked(text)
+
+
+def shaped(value, key=None):
+    """A JSON answer or measure record with nothing of the Mac's own in it (see above)."""
+    if isinstance(value, dict):
+        if isinstance(value.get("items"), list) and key != "row":
+            rest = {k: shaped(v, k) for k, v in value.items() if k != "items"}
+            items = [i for i in value["items"] if isinstance(i, dict)]
+            rest["items"] = {"rows": len(items), "firstRow": shaped(items[0], "row") if items else None}
+            return rest
+        if key == "row":
+            return {"title": masked(str(value.get("title", ""))), "fields": sorted(value),
+                    "actions": ["%s (%s)" % (a.get("title", "?"), kind(a))
+                                for a in value.get("actions", []) if isinstance(a, dict)]}
+        return {k: shaped(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        if key == "args" and all(isinstance(v, str) for v in value):
+            return worded(value)
+        return [shaped(v, key) for v in value]
+    if isinstance(value, str):
+        if key == "line":
+            try:
+                return json.dumps(shaped(json.loads(value)), sort_keys=True, ensure_ascii=False)
+            except ValueError:
+                return unlinked(FIELD.sub(lambda m: m.group(1) + json.dumps(masked(m.group(2))), value))
+        if key in TEXT_KEYS:
+            return masked(value)
+        if key in PLACE_KEYS:
+            return place(value)
+        return unlinked(value)
+    return value
+
+
+def shown(text):
+    """Command output as the log may hold it: JSON shaped, other lines with their fields and URLs masked."""
+    try:
+        return json.dumps(shaped(json.loads(text)), indent=2, sort_keys=True, ensure_ascii=False)
+    except ValueError:
+        pass
+    out, listing = [], False
+    for line in text.split("\n"):
+        # `ext act`'s "it offers:" (or "say one by its whole name:") lists rows, one per line, as row or row/action.
+        if listing and line and not line.startswith(("#", "$")):
+            row, _, action = line.partition("/")
+            out.append(masked(row) + ("/" + action if action else ""))
+            continue
+        listing = line.endswith(("it offers:", "whole name:"))
+        at = line.find("{")
+        if at >= 0:
+            try:
+                out.append(line[:at] + json.dumps(shaped(json.loads(line[at:])), sort_keys=True, ensure_ascii=False))
+                continue
+            except ValueError:
+                pass
+        out.append(unlinked(FIELD.sub(lambda m: m.group(1) + json.dumps(masked(m.group(2))), line)))
+    return "\n".join(out)
+
+
+def command_line(argv):
+    """A command as the log shows it: the row `ext act` presses and its --then, --query and --input values masked."""
+    shownArgs, after = list(argv), None
+    for i, word in enumerate(argv):
+        if after:
+            shownArgs[i], after = masked(word), None
+        elif word in ("--then", "--query", "--input", "--answer"):
+            after = True
+    if "act" in argv:
+        at = argv.index("act") + 2
+        if at < len(argv) and not argv[at].startswith("--"):
+            shownArgs[at] = masked(argv[at])
+    return "$ " + shlex.join(shownArgs)
+
+
 def run(argv, env=None, timeout=120):
-    """Runs one command, printing it and its whole stdout (stderr after it, marked), and answers (exit, stdout, seconds)."""
-    say("$ " + shlex.join(argv))
+    """Runs one command, printing it and its stdout and stderr as the log may hold them, and answers (exit, stdout, seconds)."""
+    say(command_line(argv))
     started = time.monotonic()
     try:
         done = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=timeout)
@@ -70,9 +189,9 @@ def run(argv, env=None, timeout=120):
         code, out, err = "timeout", (late.stdout or b"").decode() if isinstance(late.stdout, bytes) else (late.stdout or ""), ""
     took = time.monotonic() - started
     if out:
-        say(out.rstrip("\n"))
+        say(shown(out.rstrip("\n")))
     if err:
-        say("# stderr:\n" + err.rstrip("\n"))
+        say("# stderr:\n" + shown(err.rstrip("\n")))
     say("# exit %s, %.2f s" % (code, took))
     return code, out, took
 
@@ -284,13 +403,13 @@ def phase_act(ns):
         calls = [r for r in records if r.get("kind") in ("exec", "open", "applescript", "copy", "paste")]
         say("# the measure log's calls after the press:")
         for call in calls:
-            say(json.dumps(call, sort_keys=True))
+            say(json.dumps(shaped(call), sort_keys=True, ensure_ascii=False))
         kind, piece = spec["expect"]
         hit = [c for c in calls if c.get("kind") == kind and piece in json.dumps(c)]
         # A typed action (Action.Open and the rest) is Pilot's to perform: `ext act` answers it, and the host never sees it.
         if isinstance(pressed, dict) and pressed.get("note", "").startswith("answered") and piece in json.dumps(pressed.get("action")):
             hit.append({"kind": kind, "answeredByPilot": pressed.get("action")})
-            say("# the press answered a typed action, Pilot's to perform: %s" % json.dumps(pressed.get("action"), sort_keys=True))
+            say("# the press answered a typed action, Pilot's to perform: %s" % json.dumps(shaped(pressed.get("action")), sort_keys=True))
         result.update({"actExit": code, "calls": calls, "expected": "%s %s" % (kind, piece), "issued": bool(hit), "hostsLeft": len(left)})
         if folder == "kill-process":
             alive = subprocess.run(["/bin/kill", "-0", str(ns.victim)], capture_output=True).returncode == 0
@@ -351,9 +470,47 @@ def phase_summary(ns):
                                                                          percentile(values, 90), unit, max(values), unit))
 
 
+def phase_redact(ns):
+    """Rewrites the log `--log` as the harness now writes one: each command line, each JSON block (an answer printed
+    across lines from a `{` or `[` alone on its line to its closing one alone) and every other line, through the rules above."""
+    out_path = ns.log + ".redacting"
+    blocks = lines = 0
+    with open(ns.log, encoding="utf-8", errors="replace") as src, open(out_path, "w", encoding="utf-8") as out:
+        block, listing = None, False
+        for raw in src:
+            line = raw.rstrip("\n")
+            lines += 1
+            if block is not None:
+                block.append(line)
+                if line in ("}", "]"):
+                    out.write(shown("\n".join(block)) + "\n")
+                    block, blocks = None, blocks + 1
+                continue
+            if line in ("{", "["):
+                block = [line]
+                continue
+            if listing and line and not line.startswith(("#", "$")):
+                row, _, action = line.partition("/")
+                out.write(masked(row) + ("/" + action if action else "") + "\n")
+                continue
+            listing = line.endswith(("it offers:", "whole name:"))
+            if line.startswith("$ "):
+                try:
+                    out.write(command_line(shlex.split(line[2:])) + "\n")
+                    continue
+                except ValueError:
+                    pass
+            out.write(shown(line) + "\n")
+        if block is not None:
+            out.write(shown("\n".join(block)) + "\n")
+    os.replace(out_path, ns.log)
+    say("# redacted %s: %d lines read, %d JSON blocks shaped" % (ns.log, lines, blocks))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("phase", choices=["install", "run", "act", "summary"])
+    parser.add_argument("phase", choices=["install", "run", "act", "summary", "redact"])
+    parser.add_argument("--log")
     parser.add_argument("--pilot")
     parser.add_argument("--socket")
     parser.add_argument("--work", required=True)
@@ -363,7 +520,7 @@ def main():
     parser.add_argument("--only")
     ns = parser.parse_args()
     ns.extensions = None
-    {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary}[ns.phase](ns)
+    {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary, "redact": phase_redact}[ns.phase](ns)
 
 
 if __name__ == "__main__":
