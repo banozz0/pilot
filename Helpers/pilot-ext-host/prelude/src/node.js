@@ -1,10 +1,12 @@
 // The Node subset Raycast extensions reach for (ADR 0017, T3), written from Node's documentation: `fs` (sync, callback
 // and promise forms, text only: a read answers a string), `path` (POSIX), `os`, `crypto`'s hashes, `child_process`
-// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host),
+// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host; one that
+// runs AppleScript starts only once its apps are allowed, T9's automation.js),
 // `events`, `util` and `url`. Every module is guarded: a member Node has and this lacks records its use (gaps.js), and
 // a module this lacks records `require("<name>")`.
 import { guard, lack } from "./gaps.js";
 import { hexBytes } from "./web.js";
+import { consent, consentNow, scan } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -273,6 +275,8 @@ function spawn(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const id = ++lastChild, made = spawnOptions(options);
+  const script = scan(String(file), args.map(String), made);
+  if (script) return held(id, String(file), args.map(String), made, script);
   const pid = native.spawn(id, String(file), args.map(String), made);
   const child = new ChildProcess(id, typeof pid === "number" ? pid : undefined, made.stdio === "pipe");
   if (typeof pid !== "number") {
@@ -280,6 +284,53 @@ function spawn(file, args = [], options = {}) {
     return child;
   }
   running.set(id, child);
+  return child;
+}
+
+/** A child that runs AppleScript (automation.js): made at once, so its listeners attach, and started only once every app
+ *  its script controls is allowed; a script on its stdin is read when its stdin ends. Until then its stdin is kept, and
+ *  a kill cancels it. A refusal is its `error`, as a spawn that fails. */
+function held(id, file, args, made, script) {
+  const child = new ChildProcess(id, undefined, made.stdio === "pipe");
+  let input = "", ended = false, live = false, done = false, cancel = () => {};
+  const go = (error) => {
+    if (done) return;
+    done = true;
+    if (error) return child.emit("error", error);
+    const pid = native.spawn(id, file, args, made);
+    if (typeof pid !== "number") return child.emit("error", Object.assign(new Error(`spawn ${file} ${pid?.error ?? "failed"}`), { code: pid?.error, syscall: `spawn ${file}`, path: file }));
+    child.pid = pid;
+    live = true;
+    running.set(id, child);
+    if (input) native.childWrite(id, input);
+    if (ended) native.childEnd(id);
+  };
+  const decide = (apps) => { cancel = consent(apps, go); };
+  if (child.stdin) {
+    child.stdin = {
+      write: (t) => { if (live) native.childWrite(id, String(t)); else input += String(t); return true; },
+      end: (t) => {
+        if (t != null) child.stdin.write(t);
+        if (live) return native.childEnd(id);
+        if (ended) return;
+        ended = true;
+        if (script.stdin) decide(scan("osascript", ["-e", input]).apps);
+      },
+    };
+  }
+  // A script on a stdin that never comes (stdio ignored) runs nothing, so it needs no answer.
+  if (!script.stdin) decide(script.apps);
+  else if (!child.stdin) decide([]);
+  const kill = child.kill.bind(child);
+  child.kill = (signal = "SIGTERM") => {
+    if (live) return kill(signal);
+    if (done) return false;
+    done = true;
+    cancel();
+    child.killed = true;
+    queueMicrotask(() => { child.signalCode = String(signal); child.emit("exit", null, child.signalCode); child.emit("close", null, child.signalCode); });
+    return true;
+  };
   return child;
 }
 
@@ -322,6 +373,9 @@ function spawnSync(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const made = spawnOptions(options);
+  const script = scan(String(file), args.map(String), made);
+  const refused = script && consentNow(script.stdin ? scan("osascript", ["-e", options.input == null ? "" : String(options.input)]).apps : script.apps);
+  if (refused) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: refused };
   const r = native.spawnSync(String(file), args.map(String), made, options.input == null ? "" : String(options.input));
   if (r.error) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: Object.assign(new Error(r.message), { code: r.error }) };
   return { pid: r.pid, status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, output: [null, r.stdout, r.stderr] };

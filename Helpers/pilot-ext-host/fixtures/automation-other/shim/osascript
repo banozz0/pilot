@@ -1,0 +1,22 @@
+#!/bin/sh
+# A stand-in for /usr/bin/osascript in T9's fixtures: it never sends an Apple Event. Each call is written to calls.log
+# beside it in one append, its arguments bracketed, and its stdin when the script comes there (no -e and no script file).
+dir=${0%/*}
+fromStdin=yes
+skip=
+for a in "$@"; do
+  if [ -n "$skip" ]; then skip=; continue; fi
+  case $a in
+    -e) fromStdin=no; skip=1 ;;
+    -l|-s) skip=1 ;;
+    -*) ;;
+    *) fromStdin=no ;;
+  esac
+done
+line='call:'
+for a in "$@"; do line="$line [$a]"; done
+if [ "$fromStdin" = yes ]; then line="$line
+stdin: $(cat)"; fi
+# One append per call, so calls running at once never interleave.
+printf '%s\n' "$line" >> "$dir/calls.log"
+echo "shim osascript ran"

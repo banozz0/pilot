@@ -11,6 +11,7 @@ import { makeAPI } from "./raycast.js";
 import { fail, render } from "./host.js";
 import { modules as node } from "./node.js";
 import { gapsAt, record } from "./gaps.js";
+import { consentClosed, consentFor } from "./automation.js";
 
 const native = globalThis.__native;
 let view = null;
@@ -37,6 +38,7 @@ globalThis.__pilotStart = (factory, message) => {
     gapsAt(message.paths, message.command);
     const mode = modeOf(message.command);
     if (mode === "no-view") native.noView();
+    consentFor(message, mode);
     const module = { exports: {} };
     factory(module, module.exports, requirer(makeAPI(message, mode)));
     const command = module.exports?.default ?? module.exports;
@@ -58,6 +60,7 @@ globalThis.__pilotQuery = (text, seq) => { view ? view.search(text, seq) : fail(
 globalThis.__pilotInvoke = (handler, seq) => { view ? view.invoke(handler, seq) : fail(new Error("no view is open"), seq); };
 
 globalThis.__pilotClose = () => {
+  consentClosed();
   try { view?.close(); } catch (error) { console.error(error); }
   view = null;
 };

@@ -29,7 +29,8 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
   (pilot-1.1 T54); Try it's Allow the rest (GrantWalk) asks them one at a time on its press, each read only once its step comes (T58). Screen Recording's state is read only at a capture press, while Show exact menu bar items is on, while
   Window pictures is Stills (the default) or Live, at Allow the rest's Screen Recording ask and while that step waits after it, or for `pilot status --part onboarding` (ADR 0012); no capture API
   runs before a press but Stills' and Live's. Password fields are blind to the tap: show it, never work around it.
-- System Events is the one automation target; run AppleScript in a child `osascript`, never `NSAppleScript` on the main thread (it stalls the tap).
+- Pilot's own code has one automation target, System Events; run AppleScript in a child `osascript`, never `NSAppleScript` on the main thread (it stalls the tap).
+  An extension's AppleScript may control other apps: `pilot-ext-host` asks once per extension per app, System Events included, before its `osascript` starts (ADR 0017, `Helpers/pilot-ext-host/prelude/src/automation.js`).
 - Tiling is Pilot's tiler alone; `~/.aerospace.toml` is an import, never written. Clipboard: no ClipBook or Vicinae code; Maccy (MIT) is the reference.
 - Prove a bind or setting without hands with the `pilot` command first (`pilot help`, `get`, `list`, `actions`; ADR 0013); `pilot://` links
   stay for presses (press, open, alert, …), documented on `application(_:open:)` in `Sources/Pilot/PilotApp.swift`; pages are `AppPage`. Presses,
