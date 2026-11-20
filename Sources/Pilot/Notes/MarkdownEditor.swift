@@ -243,9 +243,8 @@ struct MarkdownStyle: Equatable {
     var codeLine: CGFloat
 
     /// Instrument's (card agent-bo-95423181): Geist on a 1.6 line, the page title's face for `#` and the panel title's
-    /// for `##` and bold, Geist Mono for code on the raised fill; the signal colour for the caret alone (the live
-    /// thing), a link in the text colour on a faint underline, a ticked box in the second text colour as a switch that is
-    /// not Hyper's.
+    /// for `##` and bold, Geist Mono for code on the raised fill; the signal colour for the caret (the live thing) and a
+    /// ticked box (picked, round 2 shot 6c), a link in the text colour on a faint underline.
     @MainActor init(style: StyleTokens, measure: CGFloat = NotesMeasure.panel) {
         self.measure = measure
         // Instrument sets every role in a bundled face.
@@ -269,7 +268,7 @@ struct MarkdownStyle: Equatable {
         (box, boxRadius, boxGap, tick) = (16, style.radii.chip, 10, 9)
         text = color(\.text); muted = color(\.text3); accent = color(\.accent); onAccent = color(\.panel)
         codeFill = color(\.raised); selection = color(\.accentSoft)
-        (link, ticked, unticked) = (text, color(\.text2), color(\.text3))
+        (link, ticked, unticked) = (text, accent, color(\.text3))
         (quote, quoteBar, rule) = (color(\.text2), color(\.text3), color(\.line2))
         codeLine = (code.pointSize * 1.6).rounded()
         if style.kind == .toybox { toybox(style) }
@@ -297,6 +296,8 @@ struct MarkdownStyle: Equatable {
 
     /// How much bigger the note's words are than the style's body (Sven 2026-10-15).
     static let step: CGFloat = 2
+    /// The slant an italic takes in a face with no italic of its own.
+    static let slant: CGFloat = 0.2
 
     /// A style's colour role as an sRGB NSColor.
     @MainActor private static func color(_ role: KeyPath<StyleColors, Paint>, _ style: StyleTokens) -> NSColor { resolved(style.color(role)) }
@@ -600,6 +601,11 @@ final class NotesTextView: NSTextView {
         }
         each(MarkdownMarks.italic) { m in
             restyleFonts(m.range) { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
+            // A face with no italic (Geist ships none) slants instead, so `_small_` still reads as italic.
+            storage.enumerateAttribute(.font, in: m.range) { value, r, _ in
+                guard let font = value as? NSFont, !font.fontDescriptor.symbolicTraits.contains(.italic) else { return }
+                storage.addAttribute(.obliqueness, value: MarkdownStyle.slant, range: r)
+            }
             mark(NSRange(location: m.range.location, length: 1))
             mark(NSRange(location: NSMaxRange(m.range) - 1, length: 1))
         }
@@ -804,6 +810,16 @@ final class NotesTextView: NSTextView {
     /// The picture a link names, read once at most 1200 px a side; nil without a folder or when the file does not read.
     private func picture(_ link: String) -> NSImage? {
         guard let folder, !unreadable.contains(link), let url = NoteAttachments.url(link, in: folder) else { return nil }
+        // A sketch (UI redesign T28, T29): its paths drawn in the text colour, cached by file and ink, so a theme change
+        // draws it anew in the new ink rather than the first look's.
+        if Sketch.isSVG(link) {
+            let ink = Self.hex(style.text), key = Self.sketchKey(url, ink: ink)
+            if let known = Self.pictures.object(forKey: key) { return known }
+            guard let image = Sketch.picture(at: url, ink: style.text) else { unreadable.insert(link); return nil }
+            Self.sketchInks.insert(ink)
+            Self.pictures.setObject(image, forKey: key)
+            return image
+        }
         if let known = Self.pictures.object(forKey: url as NSURL) { return known }
         guard let image = NoteAttachments.picture(at: url) else { unreadable.insert(link); return nil }
         // Pixels at the screen's scale, so a Retina screenshot shows at the size it was taken.
@@ -811,6 +827,31 @@ final class NotesTextView: NSTextView {
         let picture = NSImage(cgImage: image, size: NSSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale))
         Self.pictures.setObject(picture, forKey: url as NSURL)
         return picture
+    }
+
+    /// The inks sketches were drawn in, so a sketch saved over can be let go in every one of them.
+    private static var sketchInks: Set<String> = []
+
+    /// A sketch's cache key: its file and the ink it was drawn in.
+    private static func sketchKey(_ url: URL, ink: String) -> NSURL {
+        NSURL(string: "#ink-\(ink)", relativeTo: url)?.absoluteURL as NSURL? ?? url as NSURL
+    }
+
+    /// `rrggbb` of a colour, for a cache key.
+    private static func hex(_ colour: NSColor) -> String {
+        let c = colour.usingColorSpace(.sRGB) ?? colour
+        return String(format: "%02x%02x%02x", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+    }
+
+    /// A sketch saved over its own file (the canvas's Done on a sketch reopened, UI redesign T29): its drawing let go from
+    /// the shared cache in every ink and tried again here, then drawn anew; the note's words did not change, so nothing
+    /// else would redraw it.
+    func forgetSketch(_ link: String) {
+        guard let folder, let url = NoteAttachments.url(link, in: folder) else { return }
+        for ink in Self.sketchInks { Self.pictures.removeObject(forKey: Self.sketchKey(url, ink: ink)) }
+        unreadable.remove(link)
+        restyle()
+        needsDisplay = true
     }
 
     /// A picture's size on the page: its own, made smaller to fit the line's width and at most 280 pt tall.
@@ -1027,19 +1068,13 @@ final class NotesTextView: NSTextView {
         }
         style.quote.setFill()
         for dot in bullets() where dot.intersects(dirtyRect) { NSBezierPath(ovalIn: dot).fill() }
+        // A checklist's box is round (round 2 shot 6c): a filled circle ticked, a ring not.
         for box in checkboxes() where box.rect.intersects(dirtyRect) {
             if box.ticked {
                 style.ticked.setFill()
-                NSBezierPath(roundedRect: box.rect, xRadius: style.boxRadius, yRadius: style.boxRadius).fill()
-                let config = NSImage.SymbolConfiguration(pointSize: style.tick, weight: .bold).applying(.init(paletteColors: [style.onAccent]))
-                if let tick = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
-                    let size = tick.size
-                    tick.draw(in: NSRect(x: box.rect.midX - size.width / 2, y: box.rect.midY - size.height / 2, width: size.width, height: size.height),
-                              from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-                }
+                NSBezierPath(ovalIn: box.rect).fill()
             } else {
-                let radius = max(style.boxRadius - 0.75, 0)
-                let path = NSBezierPath(roundedRect: box.rect.insetBy(dx: 0.75, dy: 0.75), xRadius: radius, yRadius: radius)
+                let path = NSBezierPath(ovalIn: box.rect.insetBy(dx: 0.75, dy: 0.75))
                 path.lineWidth = 1.5
                 style.unticked.setStroke(); path.stroke()
             }

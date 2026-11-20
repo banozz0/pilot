@@ -167,6 +167,99 @@ struct NotesPanelRenders {
         }
     }
 
+    /// Round 2's route (shots 6c-draw and 6c-done) in a 560 × 220 sketch: a house, a dotted way to a train, on to a plane,
+    /// in the note's own ink, and the train's track in the amber marker.
+    static let route: [Sketch.Stroke] = {
+        func pen(_ points: [(Double, Double)], width: Double = Sketch.penWidth + 0.5) -> Sketch.Stroke {
+            Sketch.Stroke(width: width, points: points.map { Sketch.Point($0.0, $0.1) })
+        }
+        func dots(from: Double, to: Double, y: (Double) -> Double) -> [Sketch.Stroke] {
+            stride(from: from, through: to, by: 13).map { x in pen([(x, y(x))], width: 3.5) }
+        }
+        let house = [pen([(44, 172), (44, 112), (80, 80), (116, 112), (116, 172), (44, 172)]), pen([(68, 172), (68, 146), (90, 146), (90, 172)])]
+        let way = dots(from: 132, to: 326, y: { 140 - 26 * sin(($0 - 132) / 34) })
+        let train = [pen([(352, 104), (420, 104), (430, 114), (430, 150), (420, 160), (352, 160), (342, 150), (342, 114), (352, 104)]),
+                     pen([(354, 122), (418, 122)]), pen([(358, 166), (346, 182)]), pen([(414, 166), (426, 182)])]
+        let track = Sketch.Stroke(tool: .marker, ink: SketchBoard.inks[0], width: Sketch.markerWidth, points: [Sketch.Point(334, 196), Sketch.Point(438, 194)])
+        let onward = dots(from: 444, to: 486, y: { 130 - ($0 - 444) * 1.1 })
+        let plane = [pen([(482, 64), (536, 40), (516, 92), (506, 72), (482, 64)]), pen([(506, 72), (536, 40)])]
+        return house + way + [track] + train + onward + plane
+    }()
+
+    /// UI redesign T29 (shots 6c-draw and 6c-done): the canvas opened from Insert › Sketch on the empty line under Route,
+    /// the route drawn, the pen picked; then a note with a saved sketch drawn inline in the theme's ink, Edit sketch over
+    /// it, and the round checklist boxes with `_small_` slanted. Tokyo Night then Porcelain, the same SVG in both, so a
+    /// sketch's ink follows the theme rather than the first look's. Written as `T29-<theme>-<state>.png`.
+    @Test("The notes panel renders the sketch canvas", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderSketch() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("notes-panel")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let saved = (look.style, look.themeID, look.glass)
+        look.glass = false
+        let board = SketchBoard.shared
+        defer { board.done(); (look.style, look.themeID, look.glass) = saved }
+
+        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-notes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(folder: folder)
+        _ = try store.load()
+        let link = try Sketch(width: 560, height: 220, strokes: Self.route).save(in: folder, now: .now)
+        let head = "# Trip plan\nLeave **Friday 07:30**, train to the airport.\n\n## Route\n"
+        // A note to draw in per theme, so the first pass's saved link never reaches the second's.
+        for n in 0..<2 { try Data(head.utf8).write(to: folder.appending(path: "trip-plan-10001\(n).md")) }
+        try Data((head + link + "\n\n## Pack\n- [x] Passport\n- [ ] Charger and the _small_ adapter\n").utf8)
+            .write(to: folder.appending(path: "trip-plan-done-100011.md"))
+        let notes = try store.load()
+        let done = try #require(notes.first { $0.id == "trip-plan-done-100011.md" })
+
+        look.style = .instrument
+        for (n, theme) in ["tokyo-night", "porcelain"].enumerated() {
+            look.themeID = theme
+            let drawn = try #require(notes.first { $0.id == "trip-plan-10001\(n).md" })
+            for state in ["draw", "done"] {
+                let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
+                model.reload()
+                model.open(state == "draw" ? drawn.id : done.id)
+                let view = NotesPanelView(model: model, sketchHover: state == "done")
+                let panel = HUD.makePanel(view.frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height), surface: .notes)
+                defer { panel.close() }
+                let content = try #require(panel.contentView)
+                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                // The editor given the keyboard, its caret at the note's end (the draw note's: the empty line under Route).
+                let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
+                panel.makeFirstResponder(editor)
+                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                if state == "draw" {
+                    NotesInsert.sketch.perform(model.editor)
+                    try #require(board.isOpen, "Insert › Sketch did not open the canvas")
+                    board.sketch.strokes = Self.route
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                } else {
+                    // Scrolled to the checklist under the sketch: the panel is shorter than round 2's frame.
+                    editor.scrollRangeToVisible(NSRange(location: (editor.string as NSString).length, length: 0))
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                }
+                content.layoutSubtreeIfNeeded()
+                let rep = try #require(snapshot(content, scale: 2))
+                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("T29-\(theme)-\(state).png"))
+                if state == "draw" {
+                    // Done: the sketch saved in attachments/, linked on the line under Route, and read back stroke for stroke.
+                    board.done()
+                    let saved = try #require(model.text.components(separatedBy: "\n").first { $0.hasPrefix("![Sketch](attachments/sketch-") })
+                    try #require(model.text.hasPrefix(head + saved + "\n"), "the link is not on the line under Route")
+                    let path = String(saved.dropFirst("![Sketch](".count).dropLast())
+                    try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count)
+                }
+            }
+        }
+    }
+
     /// Nine notes over Scratch, Pinned, Today, Yesterday and two older days (Earlier), each file dated as it was last edited.
     static func seed(_ folder: URL) throws -> NoteStore {
         let store = NoteStore(folder: folder)
