@@ -158,8 +158,7 @@ final class PilotCapture {
                     return
                 }
                 let windows = (try? await grabber.windows()) ?? []
-                show(grabs, windows: windows, mode: box?.mode ?? (request == .window ? .window : .area), purpose: box?.purpose ?? Self.purpose(request),
-                     box: box)
+                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request), box: box)
                 Self.log.notice("capture \(request.rawValue, privacy: .public): grab \(Self.ms(grabbed), privacy: .public) ms, shown \(Self.ms(ContinuousClock.now - start), privacy: .public) ms")
             } catch {
                 guard attempt == mine else { return }
@@ -188,6 +187,16 @@ final class PilotCapture {
             counting = nil
             run(.area)
         }
+    }
+
+    /// The box's timer: "Capturing in n…" in a tip each second for `seconds`; false when the task was cancelled meanwhile.
+    private func countDown(_ seconds: Int) async -> Bool {
+        for n in stride(from: seconds, to: 0, by: -1) {
+            tell("Capturing in \(n)…", nil)
+            try? await Task.sleep(for: delayStep)
+            if Task.isCancelled { return false }
+        }
+        return true
     }
 
     /// Screen Recording granted, else Pilot's own line on why with Allow (the first time) or where to allow it (after).
@@ -253,10 +262,11 @@ final class PilotCapture {
             // The box's letters may have changed what the pick is for: the mode it ends in decides.
             let box = self.overlay?.box, purpose = self.overlay?.purpose ?? purpose
             self.overlay = nil
-            if let box, box.timer > 0, purpose != .record, outcome.picked {
-                return self.after(box.timer, outcome, purpose: purpose, windows: windows)
-            }
-            self.take(outcome, purpose: purpose, windows: windows, countdown: box?.timer)
+            guard let box, box.timer > 0 else { return self.take(outcome, purpose: purpose, windows: windows) }
+            // A recording's timer is its count down; any other capture waits it out, then takes the screen.
+            if purpose == .record { return self.take(outcome, purpose: purpose, windows: windows, countdown: box.timer) }
+            if outcome.picked { return self.after(box.timer, outcome, purpose: purpose, windows: windows) }
+            self.take(outcome, purpose: purpose, windows: windows)
         }
         self.overlay = overlay
         overlay.show()
@@ -286,22 +296,19 @@ final class PilotCapture {
     /// The box's timer: a count in a tip, then the screen grabbed again, so the capture is the screen after the wait, in
     /// the area or window picked on the frozen one. Any capture key cancels the count.
     private func after(_ seconds: Int, _ outcome: CaptureOverlay.Result, purpose: CaptureOverlay.Purpose, windows: [CaptureSelection.Window]) {
-        timing = Task { @MainActor [delayStep] in
-            for n in stride(from: seconds, to: 0, by: -1) {
-                tell("Capturing in \(n)…", nil)
-                try? await Task.sleep(for: delayStep)
-                if Task.isCancelled { return }
-            }
+        // An area keeps only its display and rectangle through the wait, so the frozen still is let go now.
+        var area: (display: CGDirectDisplayID, rect: CGRect)?
+        if case .area(let frozen, let rect) = outcome { area = (frozen.id, rect) }
+        let window = area == nil ? outcome : nil
+        timing = Task { @MainActor in
+            guard await countDown(seconds) else { return }
             timing = nil
             HUD.dismissTip()
-            var picked = outcome
-            if case .area(let frozen, let rect) = outcome {
-                guard let grabs = try? await grabber.displays(), let grab = grabs.first(where: { $0.id == frozen.id }) ?? grabs.first else {
-                    return tell("The screen did not answer. Press again.", nil)
-                }
-                picked = .area(grab, rect)
+            if let window { return take(window, purpose: purpose, windows: windows) }
+            guard let area, let grabs = try? await grabber.displays(), !grabs.isEmpty else {
+                return tell("The screen did not answer. Press again.", nil)
             }
-            take(picked, purpose: purpose, windows: windows)
+            take(.area(grabs.first { $0.id == area.display } ?? Self.underPointer(grabs), area.rect), purpose: purpose, windows: windows)
         }
     }
 
