@@ -146,6 +146,36 @@ public enum RaycastStore {
     public typealias Fetch = @Sendable (URL, Int) async throws(Problem) -> Data
 
     /// Where the store keeps its reads, and how it fetches: GitHub itself, or a sandbox's folder.
+    /// What typed words and a folder are compared on: letters and digits alone, case and accents folded, so "killprocess"
+    /// and "kill process" both find kill-process.
+    public static func compact(_ text: String) -> String {
+        String(text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).lowercased().unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init))
+    }
+
+    /// Hyper+Space's root search's store rows (raycast-extensions T25), from the listing already held, never GitHub: at
+    /// most `most` folders `installed` does not take whose name, or title once read, holds what was typed, those that
+    /// start with it first, then A to Z. Each is its title once read (its folder's name until then), "Raycast Store"
+    /// beside it, its icon once fetched; Return opens the store on it. `compacted` holds each folder's name already
+    /// compared form, made once per listing, so a keystroke folds only what was typed and the titles read.
+    public static func rootRows(_ query: String, listing: Listing?, infos: [String: Info], icons: [String: String],
+                                compacted: [String: String] = [:], installed: (String) -> Bool, most: Int = 3) -> [MenuEntry] {
+        let typed = compact(query)
+        guard typed.count >= 2, let listing else { return [] }
+        let found = listing.folders.compactMap { folder -> (Bool, String)? in
+            let name = compacted[folder.name] ?? compact(folder.name), title = infos[folder.name].map { compact($0.title) } ?? ""
+            guard name.contains(typed) || title.contains(typed), !installed(folder.name) else { return nil }
+            return (name.hasPrefix(typed) || title.hasPrefix(typed), folder.name)
+        }
+        return found.sorted { ($0.0 ? 0 : 1, $0.1) < ($1.0 ? 0 : 1, $1.1) }.prefix(most).map { _, name in
+            var icon = MenuIcon.glyph("puzzlepiece.extension", .accent)
+            icon.file = icons[name]
+            let title = infos[name]?.title ?? name
+            return MenuEntry(title: title, target: .storeFolder(name), detail: "Return opens it in Raycast's store",
+                             keywords: "\(name) \(compact(name)) \(compact(title))", subtitle: "Raycast Store", icon: icon)
+        }
+    }
+
     public struct Source: Sendable {
         public let cache: URL
         public let fetch: Fetch

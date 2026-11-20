@@ -25,8 +25,19 @@ extension MenuIcon {
         if let installed = bundle.flatMap(AppsModule.icon(bundle:)) { return installed }
         if let bundled, let image = CatalogueIcons.image(bundled) { return image }
         if let picture, let image = FolderDesigns.rowIcon(picture) { return image }
+        if let file, let image = Self.fileIcon(file) { return image }
         return remote.flatMap(RemoteIcons.shared.image)
     }
+
+    /// An icon file as a row's icon (T25), read once a path, kept small.
+    @MainActor private static func fileIcon(_ path: String) -> NSImage? {
+        if let kept = fileIcons[path] { return kept }
+        guard let image = NSImage(contentsOf: URL(filePath: path)), image.size.width > 0 else { return nil }
+        fileIcons[path] = AppsModule.small(image)
+        return fileIcons[path]
+    }
+
+    @MainActor private static var fileIcons: [String: NSImage] = [:]
 
     /// An emoji as a square image, drawn at whatever size the row gives it.
     private static func image(_ emoji: String) -> NSImage {

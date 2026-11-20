@@ -12,6 +12,7 @@ extension MenuGroups.Group {
         case .actions: "Actions"
         case .menuItems: "Menu items"
         case .commands: "Commands"
+        case .extensions: "Extensions"
         case .install: "Install"
         case .emoji: "Emoji"
         case .goTo: goTo ? "Go to" : "Browse"

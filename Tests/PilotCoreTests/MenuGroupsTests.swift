@@ -42,7 +42,7 @@ struct MenuGroupsTests {
         // Ranked alone: Notes, Notion, Nota, Note — TextEdit, New note (the actions split by the window); the file waits
         // for the Files view (card agent-bo-95422968). Ask AI, Search the web and Search files follow the best match's
         // group (Sven Q174, Q182).
-        #expect(nav.rows.map(\.title) == ["Notes", "Ask AI", "Search the web", "Search files for \"no\"", "Notion", "Nota", "New note",
+        #expect(nav.rows.map(\.title) == ["Notes", "Ask AI", "Search the web", "Search extensions for \"no\"", "Search files for \"no\"", "Notion", "Nota", "New note",
                                           "Note — TextEdit"])
     }
 

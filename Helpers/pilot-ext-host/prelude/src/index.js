@@ -15,15 +15,19 @@ import { makeAPI } from "./raycast.js";
 import { fail, render } from "./host.js";
 import { modules as node } from "./node.js";
 import { gapsAt, record } from "./gaps.js";
-import { modules as more } from "./buffer.js";
+import { loadOnly, modules as more } from "./buffer.js";
 import { sqlite } from "./sqlite.js";
 import { consentClosed, consentFor } from "./automation.js";
+import { modules as asserts } from "./assert.js";
 
 const native = globalThis.__native;
 let view = null;
 
+/** The Node modules `require` finds, by name without `node:`. */
+const nodeModules = () => ({ ...node, ...more, ...asserts, sqlite });
+
 function requirer(api) {
-  const modules = { ...node, ...more, sqlite, react: React, "react/jsx-runtime": JSX, "react/jsx-dev-runtime": JSX, "@raycast/api": api };
+  const modules = { ...nodeModules(), react: React, "react/jsx-runtime": JSX, "react/jsx-dev-runtime": JSX, "@raycast/api": api };
   return (name) => {
     const plain = String(name).replace(/^node:/, "");
     const found = modules[plain];
@@ -49,6 +53,10 @@ function argumentsOf(entry, message) {
   if (names.length && !message.arguments && typeof message.input === "string") out[names[0]] = message.input;
   return out;
 }
+
+/** Which Node modules this prelude has, for the installer's question (T25): `provided` are real, `loadOnly` only load
+ *  (each member records its use and throws), so an extension that needs one is told it may not work. */
+globalThis.__pilotModules = () => ({ provided: Object.keys(nodeModules()), loadOnly: [...loadOnly] });
 
 globalThis.__pilotStart = (factory, message) => {
   try {

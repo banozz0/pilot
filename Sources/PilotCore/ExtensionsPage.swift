@@ -48,9 +48,10 @@ public enum ExtensionsPage {
 
     // MARK: The one list
 
-    /// One row of the one Extensions list (Q601): an installed extension, or a catalogue entry not installed.
+    /// One row of the one Extensions list (Q601): an installed extension, a catalogue entry not installed, or a Raycast
+    /// store folder not installed (T25).
     public struct Entry: Equatable, Sendable, Identifiable {
-        public enum Kind: Equatable, Sendable { case installed, catalogue }
+        public enum Kind: Equatable, Sendable { case installed, catalogue, store }
         /// What the row's right says: ✓, Update or Get.
         public enum Mark: Equatable, Sendable { case installed, update, get }
         public let id: String, title: String, icon: String?
@@ -58,54 +59,69 @@ public enum ExtensionsPage {
         public let line: String
         public let version: String?
         public let kind: Kind, mark: Mark
+        /// A Raycast extension's or store folder's icon file (T25); nil for an emoji's.
+        public let picture: String?
 
-        public init(id: String, title: String, icon: String?, line: String, version: String?, kind: Kind, mark: Mark) {
+        public init(id: String, title: String, icon: String?, line: String, version: String?, kind: Kind, mark: Mark, picture: String? = nil) {
             self.id = id; self.title = title; self.icon = icon; self.line = line; self.version = version; self.kind = kind; self.mark = mark
+            self.picture = picture
         }
     }
 
-    /// The list's filters: every row, the installed ones, the installed ones the catalogue has newer.
+    /// The list's filters (T25): every Raycast extension (installed, then Raycast's store), the installed ones, and
+    /// Pilot's own extension.json extensions with Pilot's catalogue, set aside behind one chip until T23 deletes them.
     public enum Filter: String, CaseIterable, Sendable {
-        case all, installed, updates
-        public var title: String { switch self { case .all: "All"; case .installed: "Installed"; case .updates: "Updates" } }
+        case all, installed, old
+        public var title: String { switch self { case .all: "All"; case .installed: "Installed"; case .old: "Pilot's own (old)" } }
     }
 
     /// What the list shows under a filter and a search, and the counts its filters and search wear, which neither moves.
     public struct Listing: Equatable, Sendable {
-        public let installed: [Entry], catalogue: [Entry]
-        /// Every extension the list knows: installed, and the catalogue's others (the catalogue's size, past what is installed).
-        public let total: Int, installedCount: Int
-        /// The installed ones the catalogue has newer, by id, whatever the filter and search show: Update all's.
+        /// The installed rows shown (Raycast ones, or Pilot's own under `old`), Pilot's catalogue's (only under `old`)
+        /// and Raycast's store's not installed (only under `all`).
+        public let installed: [Entry], catalogue: [Entry], store: [Entry]
+        /// Installed Raycast extensions, and those plus the store's others (All's count).
+        public let installedCount: Int, total: Int
+        /// Pilot's own installed, Pilot's catalogue's others, and both (the old chip's count).
+        public let ownCount: Int, catalogueCount: Int
+        /// Pilot's own installed that its catalogue has newer, by id, whatever the search shows: Update all's.
         public let updatable: [String]
         public var updates: Int { updatable.count }
+        public var oldTotal: Int { ownCount + catalogueCount }
 
         public func count(_ filter: Filter) -> Int {
-            switch filter { case .all: total; case .installed: installedCount; case .updates: updates }
+            switch filter { case .all: total; case .installed: installedCount; case .old: oldTotal }
         }
     }
 
-    /// Installed first, A to Z as the folder reads, then the catalogue's entries not installed as the catalogue sorts
-    /// them (nil before it is read); `filter` and `query` narrow both, the counts stay whole.
-    public static func listing(_ rows: [Row], catalogue: [ExtensionCatalogue.Entry]?, filter: Filter = .all, query: String = "") -> Listing {
-        let installed = Dictionary(rows.map { ($0.id, ExtensionCatalogue.Installed(id: $0.id, version: $0.version, folder: $0.ext.folder)) }) { a, _ in a }
+    /// Installed first, A to Z as the folder reads: Raycast's, or Pilot's own under `old`; then under `old` Pilot's
+    /// catalogue's entries not installed as it sorts them (nil before it is read), under `all` `store`, Raycast's store's
+    /// folders not installed, already narrowed by the search (RaycastStore.matches), of `storeCount` in all. `query`
+    /// narrows the rest; the counts stay whole.
+    public static func listing(_ rows: [Row], catalogue: [ExtensionCatalogue.Entry]?, filter: Filter = .all, query: String = "",
+                               store: [Entry] = [], storeCount: Int = 0) -> Listing {
+        let raycast = rows.filter(\.ext.isRaycast), own = rows.filter { !$0.ext.isRaycast }
+        let installed = Dictionary(own.map { ($0.id, ExtensionCatalogue.Installed(id: $0.id, version: $0.version, folder: $0.ext.folder)) }) { a, _ in a }
         let offered = Dictionary((catalogue ?? []).map { ($0.id, $0) }) { a, _ in a }
         func entry(_ row: Row) -> Entry {
-            let update = offered[row.id].map { ExtensionCatalogue.standing(of: $0, installed: installed) == .update } ?? false
+            let update = !row.ext.isRaycast && (offered[row.id].map { ExtensionCatalogue.standing(of: $0, installed: installed) == .update } ?? false)
             return Entry(id: row.id, title: row.ext.title, icon: row.ext.icon, line: row.ext.description, version: row.version,
-                         kind: .installed, mark: update ? .update : .installed)
+                         kind: .installed, mark: update ? .update : .installed, picture: row.ext.picture)
         }
-        let mine = rows.map(entry)
-        let others = (catalogue ?? []).filter { installed[$0.id] == nil }
+        let ids = Set(rows.map(\.id))
+        let others = (catalogue ?? []).filter { !ids.contains($0.id) }
         let q = query.trimmingCharacters(in: .whitespaces)
-        let shownRows = q.isEmpty ? mine : FuzzyRanker.Filter(q).filter(rows) { row in
+        let shown = filter == .old ? own : raycast
+        let shownRows = q.isEmpty ? shown.map(entry) : FuzzyRanker.Filter(q).filter(shown) { row in
             [row.ext.title, row.id, row.ext.description] + row.ext.examples + row.ext.listed.map(\.title)
         }.map(entry)
-        let shownOthers = ExtensionCatalogue.search(others, q).map {
+        let shownOthers = filter == .old ? ExtensionCatalogue.search(others, q).map {
             Entry(id: $0.id, title: $0.title, icon: $0.icon, line: $0.description, version: $0.version, kind: .catalogue, mark: .get)
-        }
-        return Listing(installed: filter == .updates ? shownRows.filter { $0.mark == .update } : shownRows,
-                       catalogue: filter == .all ? shownOthers : [],
-                       total: mine.count + others.count, installedCount: mine.count, updatable: mine.filter { $0.mark == .update }.map(\.id))
+        } : []
+        let storeShown = filter == .all ? store.filter { !ids.contains($0.id) } : []
+        return Listing(installed: shownRows, catalogue: shownOthers, store: storeShown,
+                       installedCount: raycast.count, total: raycast.count + storeCount, ownCount: own.count, catalogueCount: others.count,
+                       updatable: own.map(entry).filter { $0.mark == .update }.map(\.id))
     }
 
     public struct Field: Equatable, Sendable, Identifiable {

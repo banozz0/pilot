@@ -62,7 +62,7 @@ struct MenuKindCountsTests {
     func offersNeverCount() {
         var nav = navigator()
         nav.query = "raycast"
-        #expect(nav.rows.count == 4 && nav.rows.allSatisfy { $0.isOffer }, "Ask AI, Search the web, Search to install and Search files")
+        #expect(nav.rows.count == 5 && nav.rows.allSatisfy { $0.isOffer }, "Ask AI, Search the web, Search extensions, Search to install and Search files")
         #expect(counts(nav) == [0, 0, nil, 0, 0])
     }
 

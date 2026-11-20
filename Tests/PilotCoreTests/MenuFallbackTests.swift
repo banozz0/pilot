@@ -25,8 +25,9 @@ struct MenuFallbackTests {
         let ask = at(nav, .ask("no")), web = at(nav, .searchWeb("no"))
         #expect(ask == 1 && web == 2, "\(nav.rows.map(\.title))")
         #expect(!nav.rows[0].isOffer && MenuNavigator.bestMatchEnd(nav.rows.filter { !$0.isOffer }) == 1)
-        #expect(nav.rows[3].target == .searchFiles, "Search files joins them (Q182)")
-        #expect(!nav.rows.dropFirst(4).contains { $0.isOffer })
+        #expect(nav.rows[3].target == .searchStore("no"), "Search extensions joins them (raycast-extensions T25)")
+        #expect(nav.rows[4].target == .searchFiles, "Search files joins them (Q182)")
+        #expect(!nav.rows.dropFirst(5).contains { $0.isOffer })
         // Offers, so no kind counts them and the line's count leaves them out.
         #expect(nav.rows[ask!].isOffer && nav.rows[web!].isOffer)
         #expect(nav.count(of: .action) == 3 && nav.count(of: .app) == 2)
@@ -100,8 +101,8 @@ struct MenuFallbackTests {
         nav.query = "no"
         let headings = MenuGroups.headings(nav.rows, searching: true)
         #expect(headings[1] == .askOrSearch)
-        #expect(headings[2] == nil && headings[3] == nil, "Search files heads with them")
-        #expect(headings[4] != nil, "the hits after them head as their own group")
+        #expect(headings[2] == nil && headings[3] == nil && headings[4] == nil, "Search extensions and Search files head with them")
+        #expect(headings[5] != nil, "the hits after them head as their own group")
         // No heading repeats (Q174).
         let titles = headings.values.map { "\($0)" }
         #expect(Set(titles).count == titles.count, "\(headings)")

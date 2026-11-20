@@ -26,6 +26,8 @@ public enum RaycastManifest {
             let interval: JSONValue?
             /// Lenient: only whether it lists any argument is read here; the host reads the rest.
             let arguments: JSONValue?
+            /// Its own icon, an `assets/` file name (T25); lenient.
+            let icon: JSONValue?
             var takesArguments: Bool { if case .array(let list)? = arguments { !list.isEmpty } else { false } }
         }
         /// A Raycast preference (developers.raycast.com, Manifest): its type one of Raycast's seven.
@@ -34,8 +36,20 @@ public enum RaycastManifest {
             let `default`: JSONValue?, data: [Extension.Preference.Option]?
         }
         let name: String, title: String, commands: [Command], preferences: [Preference]?
-        /// Lenient, as in extension.json: a wrong type reads as none.
-        let description: JSONValue?, version: JSONValue?
+        /// Lenient, as in extension.json: a wrong type reads as none. `icon` is an `assets/` file name (T25).
+        let description: JSONValue?, version: JSONValue?, icon: JSONValue?
+    }
+
+    /// An icon the manifest names, `assets/<name>` (Raycast's build copies assets there), as a path: a bare png or jpg
+    /// name of a regular file whose real path stays inside the folder (T25); nil for any other, or a light/dark pair.
+    static func iconFile(_ icon: JSONValue?, in folder: URL) -> String? {
+        guard case .string(let name)? = icon, name.count <= 128, !name.hasPrefix("."), !name.contains("/"),
+              ["png", "jpg", "jpeg"].contains((name as NSString).pathExtension.lowercased()) else { return nil }
+        let root = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        let url = folder.appending(path: "assets/\(name)").standardizedFileURL.resolvingSymlinksInPath()
+        var isFolder: ObjCBool = false
+        guard url.path.hasPrefix(root + "/"), FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue else { return nil }
+        return url.path
     }
 
     /// Raycast's preference types as Pilot's (ADR 0017): `textfield` is text, `appPicker` an app, `directory` a folder;
@@ -95,6 +109,7 @@ extension Extension {
         catch { throw Problem.unreadable("\(RaycastManifest.name) is not a Raycast manifest") }
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
         var names = Set<String>()
+        let picture = RaycastManifest.iconFile(manifest.icon, in: folder)
         commands = try manifest.commands.map { c in
             guard Self.isCommandName(c.name) else { throw Problem.badCommandName(c.name) }
             // Case-folded: `Index` and `index` are one bundle file on the Mac's disk.
@@ -109,7 +124,8 @@ extension Extension {
             let menuBar = c.mode == "menu-bar"
             return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
                            session: false, program: bundle, hidden: menuBar,
-                           keyword: c.takesArguments && !menuBar ? Self.keyword(.string(c.name)) : nil, runtime: .raycast)
+                           keyword: c.takesArguments && !menuBar ? Self.keyword(.string(c.name)) : nil, runtime: .raycast,
+                           picture: RaycastManifest.iconFile(c.icon, in: folder) ?? picture)
         }
         bars = zip(manifest.commands, commands).filter { $0.0.mode == "menu-bar" }.map { c, command in
             Surface(kind: .bar, command: command, every: Surface.raycastPace(c.interval))
@@ -118,6 +134,7 @@ extension Extension {
         id = manifest.name
         title = manifest.title
         icon = nil
+        self.picture = picture
         permissions = Permissions()
         preferences = try RaycastManifest.preferences(manifest)
         self.folder = folder

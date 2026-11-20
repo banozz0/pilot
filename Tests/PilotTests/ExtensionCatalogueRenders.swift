@@ -10,7 +10,10 @@ import Testing
 /// (its install failed, so its detail says why), Pomodoro installed at 0.9.0 (an update), Ports installed at its version.
 /// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
 /// when it could not be. Then Raycast's store (raycast-extensions T24): the page's Raycast Store, Hyper+Space's Raycast
-/// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed.
+/// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed. Then
+/// T25: the page's All (an installed Raycast extension with its icon, then the store; Pilot's own set aside), its search
+/// over both, Pilot's own (old), and the root search typed "process", the Raycast command read as Extension beside the
+/// store's hit, their first rows printed.
 /// Temporary folders and a fixture source only; opt-in like the other renders:
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter ExtensionCatalogueRenders`
 extension SharedLook {
@@ -52,12 +55,13 @@ struct ExtensionCatalogueRenders {
         defer { read.cancel() }
         try await Task.sleep(for: .milliseconds(50))
 
+        // Pilot's own and its catalogue sit behind Pilot's own (old) since T25.
         func shot(_ name: String, _ model: ExtensionCatalogueModel, style: PilotStyle, theme: String, pick: String? = nil,
                   size: CGSize = CGSize(width: 1000, height: 640)) async throws {
             look.themeID = theme
             look.style = style
             let settings = await Self.settings(model)
-            let page = Ground { ExtensionsPageView(onScreen: false, settings: settings, pick: pick).frame(width: size.width, height: size.height) }
+            let page = Ground { ExtensionsPageView(onScreen: false, settings: settings, pick: pick, filter: .old).frame(width: size.width, height: size.height) }
                 .styled(.page(.extensions), look: look).pilotTheme(look: look)
             try writeRender(page, to: out.appendingPathComponent("\(name).png"), wait: 0.6)
         }
@@ -98,13 +102,54 @@ struct ExtensionCatalogueRenders {
                   + " … Raycast Store at \((root.rows.firstIndex { $0.target == .action(RaycastStoreMenu.actionID) } ?? -2) + 1) of \(root.rows.count)")
             if word == "raycast" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-raycast", in: out) }
         }
+
+        // T25: Kill Process installed from the store (Raycast-format, its icon in assets/) beside Pilot's own Pomodoro.
+        let t25 = storeDir.appending(path: "t25")
+        let raycast = try Self.raycastFixture(in: t25.appending(path: "Extensions"))
+        try ExtensionCatalogueModelTests.write(#"""
+            {"id": "pomodoro", "title": "Pomodoro", "version": "0.9.0", "commands": [{"name": "focus", "title": "Focus", "mode": "no-view", "run": "run"}]}
+            """#, as: "pomodoro", in: t25.appending(path: "Extensions"))
+        await store.openKept(installed: [raycast])
+        let mine = ExtensionsSettings(folder: t25.appending(path: "Extensions"),
+                                      storage: ExtensionStorage(data: t25.appending(path: "data"), cache: t25.appending(path: "cache"),
+                                                                keychain: ExtensionsModuleTests.FakeKeychain()),
+                                      label: { _ in nil }, catalogue: loaded)
+        await mine.load()
+        for (name, filter, query, pick) in [("instrument-t25-all", ExtensionsPage.Filter.all, "", "kill-process"),
+                                            ("instrument-t25-search", .all, "o", "obsidian"), ("instrument-t25-old", .old, "", "pomodoro")] {
+            let view = Ground { ExtensionsPageView(onScreen: false, settings: mine, pick: pick, storeModel: store, filter: filter, query: query)
+                .frame(width: 1000, height: 640) }.styled(.page(.extensions), look: look).pilotTheme(look: look)
+            try writeRender(view, to: out.appendingPathComponent("\(name).png"), wait: 0.6)
+        }
+        // Both installed: Kill Process (Raycast) and Pilot's own Pomodoro, which still answers in Hyper+Space ("pomodoro").
+        let withRaycast = PilotMenu.entries(Engine(), scripts: [], extensions: Extension.find(in: t25.appending(path: "Extensions")).extensions)
+        for word in ["process", "killprocess", "pomodoro"] {
+            var root = MenuNavigator(entries: withRaycast)
+            root.query = word
+            root.provide(.store, store.rootRows(word))
+            print("T25 ROOT \(word): " + root.rows.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.shownTitle) [\($0.element.kindWord ?? "-")\($0.element.subtitle.map { " · \($0)" } ?? "")]" }.joined(separator: " | "))
+            if word != "pomodoro" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-\(word)", in: out) }
+        }
     }
 
-    /// A store model on a fixture listing of four folders, two with a package.json, in a temporary folder of its own.
+    /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.
+    static func raycastFixture(in extensions: URL) throws -> Extension {
+        let folder = extensions.appending(path: "kill-process")
+        try FileManager.default.createDirectory(at: folder.appending(path: "assets"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder.appending(path: "dist"), withIntermediateDirectories: true)
+        try Data(#"{"name":"kill-process","title":"Kill Process","description":"Terminate processes sorted by CPU or memory usage","icon":"icon.png","commands":[{"name":"index","title":"Kill Process","mode":"view"}]}"#.utf8)
+            .write(to: folder.appending(path: "package.json"))
+        try Data("module.exports = {};".utf8).write(to: folder.appending(path: "dist/index.js"))
+        let icon = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/webapp-icons/x.png")
+        try FileManager.default.copyItem(at: icon, to: folder.appending(path: "assets/icon.png"))
+        return try Extension(folder: folder)
+    }
+
+    /// A store model on a fixture listing of five folders, two with a package.json, in a temporary folder of its own.
     static func storeModel() throws -> (RaycastStoreModel, URL) {
         let dir = FileManager.default.temporaryDirectory.appending(path: "raycast-store-render-\(UUID().uuidString)")
         let fixture = dir.appending(path: "github")
-        let folders = ["brew", "google-chrome", "kill-process", "obsidian"]
+        let folders = ["brew", "google-chrome", "kill-process", "obsidian", "process-manager"]
         let tree = folders.enumerated().map { #"{"path":"\#($1)","type":"tree","sha":"\#(String(repeating: "\($0 + 1)", count: 40))"}"# }
         try FileManager.default.createDirectory(at: fixture.appending(path: "kill-process/assets"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: fixture.appending(path: "brew"), withIntermediateDirectories: true)

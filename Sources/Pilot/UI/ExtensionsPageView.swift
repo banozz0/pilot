@@ -3,7 +3,9 @@ import PilotCore
 import SwiftUI
 
 /// The Extensions page (card agent-bo-95423247, story 141; pilot-1-1 T7, Q600 and Q601): one list, the installed
-/// extensions A to Z, then the catalogue's others as it sorts them, filtered by All, Installed or Updates and a search;
+/// Raycast extensions A to Z, then Raycast's store's others (raycast-extensions T25), filtered by All, Installed or
+/// Pilot's own (old) and a search; Pilot's own extension.json extensions and Pilot's catalogue sit behind that last chip
+/// until T23 deletes them, still running from Hyper+Space and the bar;
 /// the picked row's detail beside it. A row the catalogue has newer wears an Update button that updates it in place, and
 /// Update all heads the list while any does. An installed one's detail is its version and where it shows, Open page and ⋯
 /// (Update, Uninstall), then its Settings (the form its page shows too, Q637), its Keys and what it touches; a catalogue
@@ -50,11 +52,14 @@ struct ExtensionsPageView: View {
     /// From this page width the detail puts Keys and It touches beside Settings; narrower, they stack under it.
     static func halves(width: CGFloat) -> Bool { width >= 860 }
 
-    /// `pick` the row picked first (a render's); the first row otherwise.
+    /// `pick` the row picked first (a render's); the first row otherwise. `filter` and `query` a render's first.
     init(onScreen: Bool = true, focus: Binding<String?> = .constant(nil), toCatalogue: Bool = false, landedCatalogue: @escaping () -> Void = {},
          settings: ExtensionsSettings? = nil, pick: String? = nil, editBind: @escaping (String) -> Void = { _ in },
-         openPage: @escaping (String) -> Void = { _ in }, store: Bool = false, storeModel: RaycastStoreModel = .shared) {
+         openPage: @escaping (String) -> Void = { _ in }, store: Bool = false, storeModel: RaycastStoreModel = .shared,
+         filter: ExtensionsPage.Filter = .all, query: String = "") {
         self.onScreen = onScreen
+        _filter = State(initialValue: filter)
+        _query = State(initialValue: query)
         _store = State(initialValue: store)
         self.storeModel = storeModel
         _focus = focus
@@ -69,12 +74,22 @@ struct ExtensionsPageView: View {
     private var catalogue: ExtensionCatalogueModel { settings.catalogue }
 
     private var listing: ExtensionsPage.Listing {
-        ExtensionsPage.listing(settings.rows, catalogue: catalogue.load == .loaded ? catalogue.index?.entries : nil, filter: filter, query: query)
+        let folders = storeModel.load == .loaded ? storeModel.listing?.folders ?? [] : []
+        let store = filter == .all ? storeModel.folders(matching: query).filter { storeModel.installedExtension($0.name) == nil }.map(storeEntry) : []
+        return ExtensionsPage.listing(settings.rows, catalogue: catalogue.load == .loaded ? catalogue.index?.entries : nil, filter: filter, query: query,
+                                      store: store, storeCount: folders.count { storeModel.installedExtension($0.name) == nil })
+    }
+
+    /// A store folder as a row of the list: its title and description once read, its folder's name until then.
+    private func storeEntry(_ folder: RaycastStore.Folder) -> ExtensionsPage.Entry {
+        let info = storeModel.infos[folder.name]
+        return ExtensionsPage.Entry(id: folder.name, title: storeModel.title(folder.name), icon: nil, line: info?.description ?? "",
+                                    version: nil, kind: .store, mark: .get, picture: storeModel.iconFile(folder.name))
     }
 
     var body: some View {
         let listing = listing
-        let rows = listing.installed + listing.catalogue
+        let rows = listing.installed + listing.catalogue + listing.store
         let current = rows.first { $0.id == picked } ?? rows.first
         VStack(spacing: 0) {
             toolbar(listing)
@@ -105,6 +120,7 @@ struct ExtensionsPageView: View {
             guard onScreen else { return }
             await settings.load()
             land()
+            await storeModel.open()
             await catalogue.open()
             land()
         }
@@ -112,6 +128,8 @@ struct ExtensionsPageView: View {
             guard focus != nil else { return }
             Task { await settings.load(); land() }
         }
+        // An install from the store's rows (T25): the folder read again, so it moves to Installed.
+        .onChange(of: Set(storeModel.installed.keys)) { Task { await settings.load() } }
         .task(id: lit) {
             guard lit != nil, (try? await Task.sleep(for: Self.litFor)) != nil else { return }
             withAnimation(Kit.change) { lit = nil }
@@ -126,7 +144,9 @@ struct ExtensionsPageView: View {
         guard known || !(onScreen && [.idle, .loading].contains(catalogue.load)) else { return }
         focus = nil
         guard known else { return }
-        (filter, query) = (.all, "")
+        // Pilot's own and its catalogue's are set aside behind their chip (T25).
+        let raycast = settings.rows.first { $0.id == id }?.ext.isRaycast ?? false
+        (filter, query) = (raycast ? .all : .old, "")
         picked = id
         lit = id
     }
@@ -134,7 +154,8 @@ struct ExtensionsPageView: View {
     /// `tab=catalogue`: once the catalogue is read, its first row is picked and scrolled to.
     private func landCatalogue(_ proxy: ScrollViewProxy) {
         guard toCatalogue, focus == nil, catalogue.load != .loading, catalogue.load != .idle else { return }
-        (filter, query) = (.all, "")
+        // Pilot's catalogue is Pilot's own, set aside behind its chip (T25).
+        (filter, query) = (.old, "")
         if let first = listing.catalogue.first { picked = first.id }
         withAnimation(Kit.change) { proxy.scrollTo(Self.catalogueAnchor, anchor: .top) }
         landedCatalogue()
@@ -144,7 +165,7 @@ struct ExtensionsPageView: View {
 
     // MARK: The toolbar
 
-    /// All, Installed and Updates with their counts, Raycast Store, the search over the list, and the Extensions folder;
+    /// All, Installed and Pilot's own (old) with their counts, Raycast Store, the search over the list, and the Extensions folder;
     /// while the store shows, only Raycast Store (lit, a press goes back) and the folder.
     private func toolbar(_ listing: ExtensionsPage.Listing) -> some View {
         HStack(spacing: 8) {
@@ -163,7 +184,7 @@ struct ExtensionsPageView: View {
                     .accessibilityAddTraits(store ? .isSelected : [])
             }
             Spacer(minLength: 12)
-            if !store { SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.total, "extension"))", text: $query).frame(maxWidth: 220) }
+            if !store { SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.count(filter), "extension"))", text: $query).frame(maxWidth: 220) }
             Button { ScriptsModule.openFolder(Extension.folder) } label: { Label("Folder", systemImage: "folder") }
                 .buttonStyle(.pilot)
                 .help("Opens \(Self.folderPath)")
@@ -179,18 +200,19 @@ struct ExtensionsPageView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    PartHeading(text: "Installed · \(listing.installedCount)")
+                    PartHeading(text: filter == .old ? "Pilot's own · \(listing.ownCount)" : "Installed · \(listing.installedCount)")
                     Spacer(minLength: 6)
-                    if listing.updates > 0, catalogue.load == .loaded { updateAll(listing) }
+                    if filter == .old, listing.updates > 0, catalogue.load == .loaded { updateAll(listing) }
                 }
                 .padding(.horizontal, 10)
-                if settings.loaded, settings.rows.isEmpty {
-                    Text("None yet. Get one below, or put one in the Extensions folder.").font(ink.ui(12)).foregroundStyle(ink.muted)
+                if settings.loaded, (filter == .old ? listing.ownCount : listing.installedCount) == 0 {
+                    Text(filter == .old ? "None installed." : "None yet. Get one from Raycast's store below.").font(ink.ui(12)).foregroundStyle(ink.muted)
                         .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 10).padding(.vertical, 6)
                 }
                 ForEach(listing.installed) { entry in row(entry, current: current) }
-                if filter == .all { catalogueRows(listing, current: current) }
-                if !settings.broken.isEmpty, filter == .all, query.isEmpty { broken }
+                if filter == .old { catalogueRows(listing, current: current) }
+                if filter == .all { storeRows(listing, current: current) }
+                if !settings.broken.isEmpty, filter != .installed, query.isEmpty { broken }
             }
             .padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 14)
         }
@@ -213,7 +235,7 @@ struct ExtensionsPageView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
         case .loaded:
-            eyebrow("Catalogue · \(listing.total - listing.installedCount)").id(Self.catalogueAnchor)
+            eyebrow("Catalogue · \(listing.catalogueCount)").id(Self.catalogueAnchor)
             ForEach(listing.catalogue) { entry in row(entry, current: current) }
             if listing.catalogue.isEmpty {
                 Text(query.isEmpty ? "You have every extension it lists." : "Nothing in the catalogue matches.")
@@ -221,6 +243,31 @@ struct ExtensionsPageView: View {
             }
             FinePrint(text: "Read from \(ExtensionCatalogue.home) only while this page shows.")
                 .padding(.horizontal, 10).padding(.top, 10)
+        }
+    }
+
+    /// Raycast's store's folders not installed (T25), under the installed ones: what the search finds there too, three
+    /// quiet rows while it is read, or why it is out of reach.
+    @ViewBuilder private func storeRows(_ listing: ExtensionsPage.Listing, current: String?) -> some View {
+        switch storeModel.load {
+        case .idle, .loading:
+            eyebrow("Raycast Store", trailing: "Reading…")
+            ForEach(0..<3, id: \.self) { _ in skeleton }
+        case .failed(let why):
+            eyebrow("Raycast Store")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Raycast's store is out of reach.").font(ink.ui(13, .medium)).foregroundStyle(ink.text)
+                FinePrint(text: why)
+                Button("Try again") { Task { await storeModel.refresh() } }.buttonStyle(.pilot)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+        case .loaded:
+            eyebrow("Raycast Store · \(listing.total - listing.installedCount)")
+            ForEach(listing.store) { entry in row(entry, current: current) }
+            if listing.store.isEmpty {
+                Text("Nothing in Raycast's store matches.").font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
+            }
+            FinePrint(text: RaycastStoreView.fine(storeModel)).padding(.horizontal, 10).padding(.top, 10)
         }
     }
 
@@ -248,7 +295,7 @@ struct ExtensionsPageView: View {
         let on = entry.id == current
         return Button { picked = entry.id } label: {
             KitRow(selected: on) {
-                EmojiTile(emoji: entry.icon, size: 28)
+                EmojiTile(emoji: entry.icon, size: 28, file: entry.picture)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title).font(ink.ui(13, .semibold))
                     if !entry.line.isEmpty { Text(entry.line).font(ink.ui(11.5)).foregroundStyle(ink.rowQuiet(on)) }
@@ -334,6 +381,9 @@ struct ExtensionsPageView: View {
         if let entry, entry.kind == .installed, let row = settings.rows.first(where: { $0.id == entry.id }) {
             InstalledDetail(row: row, settings: settings, offered: catalogue.index?.entry(row.id).flatMap { entry.mark == .update ? $0 : nil },
                             wide: wide, editBind: editBind, openPage: openPage).id(row.id)
+        } else if let entry, entry.kind == .store, let folder = storeModel.listing?.folder(entry.id) {
+            // Open commands lands on its installed row, the folder read again first.
+            StoreDetail(folder: folder, model: storeModel) { id in focus = id }.id(folder.name)
         } else if let entry, let offered = catalogue.index?.entry(entry.id) {
             CatalogueDetail(entry: offered, settings: settings).id(offered.id)
         } else if settings.loaded, settings.rows.isEmpty {
@@ -385,7 +435,7 @@ private struct InstalledDetail: View {
         let busy = settings.catalogue.busy[row.id]
         let line = [row.version, "installed", ExtensionsPage.whereItShows(row.surfaces)].compactMap { $0 }.joined(separator: " · ")
         return HStack(spacing: 14) {
-            EmojiTile(emoji: row.ext.icon, size: 44)
+            EmojiTile(emoji: row.ext.icon, size: 44, file: row.ext.picture)
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.ext.title).font(ink.ui(18, .semibold)).foregroundStyle(ink.text).lineLimit(1).accessibilityAddTraits(.isHeader)
                 Text(busy ?? line).font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(2)

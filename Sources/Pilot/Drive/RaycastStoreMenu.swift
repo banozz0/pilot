@@ -17,10 +17,14 @@ final class RaycastStoreMenu: MenuSource {
     private let open: (URL) -> Void
     private var task: Task<Void, Never>?
     private var asked = false
+    /// What the search holds as it opens (T25): the words of a root search's Search extensions row, or a folder's name.
+    let opening: String
+    /// The folder a root search's store row opened it on: read in place as the store opens, so Return installs it.
+    private let focus: String?
 
-    init(model: RaycastStoreModel = .shared, hud: @escaping (String) -> Void = { HUD.tip($0) },
+    init(model: RaycastStoreModel = .shared, opening: String = "", focus: String? = nil, hud: @escaping (String) -> Void = { HUD.tip($0) },
          open: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
-        self.model = model; self.hud = hud; self.open = open
+        self.model = model; self.opening = opening; self.focus = focus; self.hud = hud; self.open = open
     }
 
     /// The first search reads the listing; later ones are Pilot's to rank, every folder listed once.
@@ -28,9 +32,11 @@ final class RaycastStoreMenu: MenuSource {
         guard !asked else { return }
         asked = true
         show([Self.status(Self.reading)])
-        task = Task { [weak self, model] in
+        task = Task { [weak self, model, focus] in
             await model.open()
             guard !Task.isCancelled else { return }
+            self?.show(self?.rows() ?? [])
+            guard let focus, await model.info(focus) != nil, !Task.isCancelled else { return }
             self?.show(self?.rows() ?? [])
         }
     }
@@ -65,7 +71,7 @@ final class RaycastStoreMenu: MenuSource {
         let line = installed ? "Installed" : info.map { [$0.description, $0.author.map { "by \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
             .flatMap { $0.isEmpty ? nil : $0 }
         var icon = MenuIcon.glyph("puzzlepiece.extension", installed ? .good : .accent)
-        icon.picture = model.iconFile(folder.name)
+        icon.file = model.iconFile(folder.name)
         var row = MenuEntry(title: model.title(folder.name), target: .action("\(Self.actionID)#\(folder.name)"),
                             keywords: info == nil ? nil : folder.name, subtitle: line, icon: icon)
         row.ownActions = actions(folder.name).map(\.label)

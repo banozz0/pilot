@@ -59,6 +59,31 @@ final class RaycastStoreModel {
         await read()
     }
 
+    /// Hyper+Space's root search (T25): `extensions`, already read by the menu, as the installed ones, and the listing
+    /// kept on disk once, never GitHub, so typing at the root asks no one.
+    func openKept(installed extensions: [Extension]) async {
+        installed = Dictionary(extensions.map { ($0.id, $0) }) { a, _ in a }
+        guard listing == nil else { return }
+        let source = source
+        if let (kept, reads) = await Task.detached(operation: { source.kept().map { ($0, source.keptInfos($0)) } }).value, listing == nil {
+            show(kept, cached: true, reads)
+        }
+    }
+
+    /// The root search's store rows for `query` (RaycastStore.rootRows), from what is held now.
+    func rootRows(_ query: String) -> [MenuEntry] {
+        if compactedFor != listing?.fetched, let listing {
+            compacted = Dictionary(listing.folders.map { ($0.name, RaycastStore.compact($0.name)) }) { a, _ in a }
+            compactedFor = listing.fetched
+        }
+        return RaycastStore.rootRows(query, listing: listing, infos: infos, icons: icons, compacted: compacted,
+                                     installed: { self.installedExtension($0) != nil })
+    }
+
+    /// Each listed folder's name as the root search compares it, for the listing read at `compactedFor`.
+    @ObservationIgnored private var compacted: [String: String] = [:]
+    @ObservationIgnored private var compactedFor: Date?
+
     /// Refresh: the listing read from GitHub whatever is kept.
     func refresh() async {
         await readInstalled()
