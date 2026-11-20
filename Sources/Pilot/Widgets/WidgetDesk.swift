@@ -95,11 +95,7 @@ final class WidgetDesk: ScreenPausing {
         guard !started else { return }
         started = true
         self.tiler = tiler
-        // Placements saved before display identities keep their display's now, while its UUID still names it.
-        if let read = store.readPlacements() {
-            let live = LiveDisplay.connected()
-            if read.contains(where: { var p = $0; return p.fillIdentity(from: live) }) { try? store.save(read) }
-        }
+        if let read = store.readPlacements() { _ = recordDisplays(read) }
         // Placements from before Snap to grid, or a file edited by hand, go on the grid once at the start.
         if WidgetSnap.shared.on { snapAll() } else { reload() }
     }
@@ -112,9 +108,22 @@ final class WidgetDesk: ScreenPausing {
         placements = read ?? placements
         for id in Set(models.keys).subtracting(placements.map(\.id)) { close(id) }
         guard started else { return }
+        if let read { placements = recordDisplays(read) }
         // A placement saved on Home has no panel.
         for id in Set(panels.keys).subtracting(placements.filter { !$0.onHome }.map(\.id)) { close(id) }
         if placements.allSatisfy(\.onHome) { disarm() } else { arm(); refresh() }
+    }
+
+    /// `read` with each placement's display identity recorded once its UUID names a connected display, and placements
+    /// on a lost UUID with no identity moved to the one display they fit (Array.fillIdentities), saved only when one
+    /// changed, so the save's own reload writes nothing again; `read` as it was when nothing changed or the save failed.
+    private func recordDisplays(_ read: [Widget.Placement]) -> [Widget.Placement] {
+        var filled = read
+        guard filled.fillIdentities(from: LiveDisplay.connected()) else { return read }
+        do { return try store.save(filled) } catch {
+            widgetLog.error("widgets: display identities not saved: \(error.localizedDescription, privacy: .public)")
+            return read
+        }
     }
 
     private func arm() {
@@ -130,7 +139,12 @@ final class WidgetDesk: ScreenPausing {
             }
         }
         screenChanges = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                // A display back with its UUID, or a lost placement's display now plain: recorded before the widgets move.
+                if let read = self.store.readPlacements() { self.placements = self.recordDisplays(read) }
+                self.refresh()
+            }
         }
         watchTheme()
         watchVeil()

@@ -62,13 +62,15 @@ extension WidgetDesk {
     }
 
     /// The desktop placements on their screens' grids, each screen's packed together so none overlap while there is
-    /// room, the ones already on it kept where they are (Widget.Grid.pack); Home's, and a screen not connected now's,
-    /// as they were.
+    /// room, the ones already on it kept where they are (Widget.Grid.pack); Home's, a screen not connected now's, and
+    /// one on the main screen only by the fallback (its display unknown: the main one's grid saved into it would hold it
+    /// there once its display is found), as they were.
     static func snapped(_ all: [Widget.Placement]) -> [Widget.Placement] {
         var out = all
-        let desk = all.indices.filter { !all[$0].onHome && screen(of: all[$0])?.displayUUID != nil }
-        for indices in Dictionary(grouping: desk, by: { screen(of: all[$0])?.displayUUID ?? "" }).values {
-            guard let display = screen(of: all[indices[0]]) else { continue }
+        let live = LiveDisplay.screens
+        let desk = all.indices.filter { !all[$0].onHome && !all[$0].onFallback(in: live) && screen(of: all[$0], in: live)?.displayUUID != nil }
+        for indices in Dictionary(grouping: desk, by: { screen(of: all[$0], in: live)?.displayUUID ?? "" }).values {
+            guard let display = screen(of: all[indices[0]], in: live) else { continue }
             let full = flip(display.frame), grid = grid(on: display)
             for (i, cell) in zip(indices, grid.pack(indices.map { all[$0].frame(on: full) })) { out[i].land(on: grid.rect(cell), screen: full) }
         }
