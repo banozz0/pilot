@@ -74,6 +74,8 @@ public struct ExtensionInstaller: Sendable {
     /// The folders an install of `id` replaces: the installed extension with that id, wherever it is, and a folder named
     /// `id` that reads as it. Throws when a folder named `id` holds another extension or none.
     func replaced(_ id: String) throws -> [URL] {
+        // A Raycast install that took one of Pilot's own ids before T28 moves to its own first, so it is never replaced.
+        RaycastManifest.migrate(in: extensions, data: extensions.deletingLastPathComponent().appending(path: "ExtensionData"))
         let found = Extension.find(in: extensions)
         var folders = found.extensions.filter { $0.id == id }.map { $0.folder.resolvingSymlinksInPath() }
         let named = extensions.appending(path: id).resolvingSymlinksInPath()

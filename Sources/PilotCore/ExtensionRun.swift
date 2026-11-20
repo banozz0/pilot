@@ -47,7 +47,9 @@ public enum ExtensionRun {
     /// `answers`: a Raycast host's one-shot run whose stdin Pilot keeps open to answer its asks (T11, `hosted`).
     static func message(_ command: Extension.Command, query: String? = nil, context: JSONValue? = nil,
                         surface: Extension.Surface.Kind? = nil, input: String? = nil, inputs: Inputs, answers: Bool = false) -> Data {
-        var fields: [String: JSONValue] = ["type": .string("run"), "extension": .string(command.id.extension), "command": .string(command.name),
+        // A Raycast command hears its own extension's name (environment.extensionName), not the id Pilot keys it by (T28).
+        let name = command.runtime == .raycast ? RaycastManifest.name(command.id.extension) : command.id.extension
+        var fields: [String: JSONValue] = ["type": .string("run"), "extension": .string(name), "command": .string(command.name),
                                            "preferences": .object(inputs.preferences),
                                            "paths": .object(["data": .string(inputs.data.path), "cache": .string(inputs.cache.path)])]
         fields["query"] = query.map(JSONValue.string)

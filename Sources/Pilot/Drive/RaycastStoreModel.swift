@@ -135,8 +135,9 @@ final class RaycastStoreModel {
         (listing?.folders ?? []).filter { RaycastStore.matches($0, infos[$0.name], query: query) }
     }
 
-    /// The installed extension a folder stands for: by its package.json's name once read, else by the folder's name.
-    func installedExtension(_ folder: String) -> Extension? { installed[infos[folder]?.name ?? folder] }
+    /// The installed extension a folder stands for: by its package.json's name once read, else by the folder's name, keyed
+    /// as Pilot keys a Raycast extension (raycast-<name> for one of Pilot's own names, T28), so Pilot's own never counts.
+    func installedExtension(_ folder: String) -> Extension? { installed[RaycastManifest.id(infos[folder]?.name ?? folder)] }
 
     func title(_ folder: String) -> String { infos[folder]?.title ?? folder }
 

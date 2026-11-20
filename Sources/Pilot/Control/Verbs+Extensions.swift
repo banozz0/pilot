@@ -470,8 +470,10 @@ extension ControlVerbs {
         let plan: GitHubInstall.Plan, fetched: [GitHubInstall.Fetched]
         do { (plan, fetched) = try await github.fetch() } catch { throw refused(error, "fetched, nothing installed") }
         // What it replaces, read before the build and again after it; the build takes a while, so a difference installs nothing.
+        // Keyed as Pilot keys it: one of Pilot's own names is raycast-<name> (T28), so Pilot's own is never what it replaces.
+        let id = RaycastManifest.id(plan.id)
         let named: [URL]
-        do { named = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch {
+        do { named = try ExtensionCheck.replaced(id, in: tools.extensions) } catch {
             throw ControlError(.badValue, oneLine(ExtensionCatalogue.Problem.reason(error)) + " Nothing installed.")
         }
         let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
@@ -479,9 +481,9 @@ extension ControlVerbs {
         let staged: ExtensionCheck.Staged
         do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
         defer { staged.remove() }
-        guard let ext = staged.ext, staged.entry != nil, ext.id == plan.id else {
+        guard let ext = staged.ext, staged.entry != nil, ext.id == id else {
             throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but fails the check, so nothing was installed:\n"
-                               + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
+                               + (staged.problems.isEmpty ? ["it is not extension \(id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
         }
         let old: [URL]
         do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }

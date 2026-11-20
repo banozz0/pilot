@@ -13,6 +13,43 @@ import Foundation
 public enum RaycastManifest {
     public static let name = "package.json"
 
+    /// Pilot's own extensions' ids (`catalogue/extensions`; T23 retires them with that format). A Raycast extension named
+    /// one of these is keyed `raycast-<name>` (T28): it installs beside Pilot's own, in a folder of that name, never
+    /// replacing it, and Pilot's built-in dock widgets, which read their own extension's bar by id, keep reading Pilot's.
+    /// Keyed by the name alone, never by what is installed, so an extension's id never changes under it.
+    public static let pilotOwn: Set<String> = ["ai-usage", "claude-sessions", "dev-utils", "easy-cd", "ghostex", "git", "github", "markets",
+                                               "now-playing", "obsidian-search", "pomodoro", "ports", "ssh-hosts", "summarise", "tailscale",
+                                               "todo", "video-downloader", "weather"]
+    public static let namespace = "raycast-"
+
+    /// The id Pilot keys a Raycast extension named `name` by: `raycast-<name>` for one of Pilot's own names, else its name.
+    public static func id(_ name: String) -> String { pilotOwn.contains(name) ? namespace + name : name }
+
+    /// The Raycast name of the extension Pilot keys `id` (`environment.extensionName`, the store's folder): `id` less the
+    /// namespace `id(_:)` adds.
+    public static func name(_ id: String) -> String {
+        id.hasPrefix(namespace) && pilotOwn.contains(String(id.dropFirst(namespace.count))) ? String(id.dropFirst(namespace.count)) : id
+    }
+
+    /// Moves a Raycast install that took one of Pilot's own ids before T28 to its own (`id(_:)`): its folder, named the
+    /// old id, renamed to the new one, and its settings and data (`ExtensionData/<old>`) copied to the new id's, which
+    /// Pilot's own extension of that id keeps using. Skipped when the new folder already exists; a Keychain password stays
+    /// under the old id, so a password preference is asked again. Each move is one line of what it did.
+    @discardableResult
+    public static func migrate(in extensions: URL, data: URL) -> [String] {
+        let fm = FileManager.default
+        var moved: [String] = []
+        for old in pilotOwn.sorted() {
+            let folder = extensions.appending(path: old), target = extensions.appending(path: id(old))
+            guard holds(folder), !fm.fileExists(atPath: target.path), (try? Extension(folder: folder))?.id == id(old) else { continue }
+            do { try fm.moveItem(at: folder, to: target) } catch { moved.append("\(old): not moved (\(error.localizedDescription))"); continue }
+            let kept = data.appending(path: old), copy = data.appending(path: id(old))
+            let copied = fm.fileExists(atPath: kept.path) && !fm.fileExists(atPath: copy.path) && (try? fm.copyItem(at: kept, to: copy)) != nil
+            moved.append("\(old) -> \(id(old))\(copied ? ", its settings and data copied" : "")")
+        }
+        return moved
+    }
+
     /// Whether `folder` is Raycast-format: a `package.json` and no `extension.json`, which always wins while both formats run.
     public static func holds(_ folder: URL) -> Bool {
         let fm = FileManager.default
@@ -124,6 +161,7 @@ extension Extension {
         do { manifest = try JSONDecoder().decode(RaycastManifest.Manifest.self, from: data) }
         catch { throw Problem.unreadable("\(RaycastManifest.name) is not a Raycast manifest") }
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
+        let id = RaycastManifest.id(manifest.name)
         var names = Set<String>()
         let picture = RaycastManifest.iconFile(manifest.icon, in: folder)
         commands = try manifest.commands.map { c in
@@ -138,7 +176,7 @@ extension Extension {
             }
             guard let bundle = RaycastManifest.bundle(c.name, in: folder) else { throw Problem.missingProgram(command: c.name, run: "\(c.name).js") }
             let menuBar = c.mode == "menu-bar"
-            return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
+            return Command(id: CommandID(extension: id, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
                            session: false, program: bundle, hidden: menuBar,
                            keyword: c.takesArguments && !menuBar ? c.name.lowercased() : nil, runtime: .raycast,
                            picture: RaycastManifest.iconFile(c.icon, in: folder) ?? picture)
@@ -147,7 +185,7 @@ extension Extension {
             Surface(kind: .bar, command: command, every: Surface.raycastPace(c.interval))
         }
         guard !commands.isEmpty else { throw Problem.noCommands }
-        id = manifest.name
+        self.id = id
         title = manifest.title
         icon = nil
         self.picture = picture
