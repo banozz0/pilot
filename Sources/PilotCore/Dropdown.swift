@@ -26,8 +26,9 @@ public enum Dropdown {
     }
 
     /// The tall menu's arrangement (spec desktop-controls T4, Launcher › Your menu's pattern): the order of the blocks
-    /// that move, which are hidden and which are pinned above the scroll. Status always shows, so a problem always leads;
-    /// the developer rows and the footer stay where they are.
+    /// that move, which are hidden and which are pinned above the scroll, and which quick switches the Switches block
+    /// shows. Status hidden still leads while a problem waits (`shown(problems:)`); the developer rows and the footer stay
+    /// where they are.
     public struct Layout: Codable, Equatable, Sendable {
         public var order: [Block]
         public var hidden: Set<Block>
@@ -35,25 +36,40 @@ public enum Dropdown {
         /// The extensions' ids whose bar items the Extensions card lists, in order (Sven, 2026-11-11, Q74 A, Q75: its own
         /// list, not the pill's).
         public var extensions: [String]
+        /// The quick switches the Switches block shows, drawn in `Switch.allCases` order (spec pilot-ui-redesign T20).
+        public var switches: Set<Switch>
 
         /// The blocks that can move, in their first order.
         public static let arrangeable: [Block] = [.status, .workspaces, .quickSwitches, .extensions, .now, .sound, .connections, .display,
                                                   .media, .stats, .rows]
         /// Off until shown (Sven's "yes", 2026-11-08; Extensions, 2026-11-11).
         public static let optional: Set<Block> = [.extensions, .sound, .connections, .display, .media, .stats]
+        /// The tall menu, an install from before's arrangement while it has none saved: every block but the optional ones,
+        /// all seven switches.
         public static let standard = Layout(order: arrangeable, hidden: optional, pinned: [])
+        /// The one Pilot menu, a new install's arrangement (spec pilot-ui-redesign T20, S4 B, shot 4b; Open question 6,
+        /// Sven 2026-11-19): the four switches, then the workspaces, then the footer's Open Pilot and Quit. Every other
+        /// block and the other three switches are hidden, there to turn back on from Desktop › Pilot menu. Status is
+        /// first but hidden, so it shows only while a problem waits.
+        public static let pilotMenu: Layout = {
+            let lead: [Block] = [.status, .quickSwitches, .workspaces]
+            return Layout(order: lead + arrangeable.filter { !lead.contains($0) },
+                          hidden: Set(arrangeable).subtracting([.quickSwitches, .workspaces]), pinned: [], switches: Set(Switch.four))
+        }()
 
-        public init(order: [Block], hidden: Set<Block>, pinned: Set<Block>, extensions: [String] = []) {
-            self.order = order; self.hidden = hidden; self.pinned = pinned; self.extensions = extensions
+        public init(order: [Block], hidden: Set<Block>, pinned: Set<Block>, extensions: [String] = [], switches: Set<Switch> = Set(Switch.allCases)) {
+            self.order = order; self.hidden = hidden; self.pinned = pinned; self.extensions = extensions; self.switches = switches
         }
 
-        /// A layout saved before the Extensions card has no `extensions`: it reads as none.
+        /// A layout saved before the Extensions card has no `extensions`: it reads as none. One saved before T20 has no
+        /// `switches`: it reads as all seven, as that menu showed them.
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             order = try c.decode([Block].self, forKey: .order)
             hidden = try c.decode(Set<Block>.self, forKey: .hidden)
             pinned = try c.decode(Set<Block>.self, forKey: .pinned)
             extensions = (try? c.decodeIfPresent([String].self, forKey: .extensions)) ?? []
+            switches = (try? c.decodeIfPresent(Set<Switch>.self, forKey: .switches)) ?? Set(Switch.allCases)
         }
 
         /// The extensions asked on the menu's account while it is open: its own, only while the Extensions card shows.
@@ -61,6 +77,13 @@ public enum Dropdown {
 
         /// The blocks that show, in order.
         public var shown: [Block] { order.filter { !hidden.contains($0) } }
+
+        /// The blocks the menu draws: `shown`, with a hidden Status back in its place while any problem waits, so a
+        /// problem always leads the menu it is hidden from.
+        public func shown(problems: Bool) -> [Block] { order.filter { !hidden.contains($0) || (problems && $0 == .status) } }
+
+        /// The switches the Switches block draws, in their order.
+        public var shownSwitches: [Switch] { Switch.allCases.filter(switches.contains) }
 
         /// `given` first, then the rest in their first order; refuses a fixed block or one named twice.
         public static func order(_ given: [Block]) throws(ControlError) -> [Block] {
@@ -71,9 +94,8 @@ public enum Dropdown {
             return given + arrangeable.filter { !given.contains($0) }
         }
 
-        /// Refuses hiding Status, which carries every problem, or a fixed block.
+        /// Refuses hiding a fixed block. Status may hide since T20: a problem still brings it back (`shown(problems:)`).
         public static func hide(_ given: Set<Block>) throws(ControlError) -> Set<Block> {
-            if given.contains(.status) { throw ControlError(.badValue, "status can't be hidden: a problem must always lead the menu") }
             if let fixed = given.first(where: { !arrangeable.contains($0) }) { throw ControlError(.badValue, "\(fixed.rawValue) can't be hidden") }
             return given
         }
@@ -99,18 +121,22 @@ public enum Dropdown {
         return isOn ? "Pilot is on" : "Pilot is off"
     }
 
-    /// The line under it: what Hyper is now. Switched off (card agent-bo-95422986) it says so first: fixing a problem
-    /// would not bring it back.
-    public static func hyperLine(hyperOn: Bool, trusted: Bool, secureInput: Bool, held: Bool, layerKey: String, problems: Int) -> String {
-        if !hyperOn { return "Hyper is off" }
+    /// The line under it: what Hyper is now. `hyperOn` is the Key binds switch (`switch.on`), `launcherOn` the Launcher's
+    /// (`launcher.on`). Both off (card agent-bo-95422986) it says so first: fixing a problem would not bring it back. Key
+    /// binds off with the launcher on, Hyper+Space still works (spec pilot-ui-redesign T4's Open question 4, T20).
+    public static func hyperLine(hyperOn: Bool, launcherOn: Bool = true, trusted: Bool, secureInput: Bool, held: Bool, layerKey: String,
+                                 problems: Int) -> String {
+        if !hyperOn, !launcherOn { return "Hyper is off" }
         if !trusted || secureInput { return "Hyper is off until \(problems == 1 ? "it is" : "they are") fixed" }
+        if !hyperOn { return "Key binds are off: only Hyper+Space works" }
         return held ? "Hyper held" : "Hyper is \(layerKey)"
     }
 
     /// The quick switches. The first four (`four`) are Home's and the Pilot menu's (spec pilot-ui-redesign T4, S4 B):
     /// the launcher, the key binds, tiling and the clipboard; each is one saved setting.
-    public enum Switch: CaseIterable, Sendable {
-        case launcher, hyper, tiling, topBar, keepAwake, clipboard, dictation
+    /// Each one's raw value is its name in `pilot set dropdown.switches` and in a saved layout.
+    public enum Switch: String, CaseIterable, Codable, Sendable {
+        case launcher, hyper = "keybinds", tiling, topBar = "topbar", keepAwake = "keepawake", clipboard, dictation
 
         /// Home's and the Pilot menu's four, in the order drawn (round 2's "Home's four switches are the same set").
         public static let four: [Switch] = [.launcher, .hyper, .tiling, .clipboard]

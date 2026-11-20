@@ -36,16 +36,17 @@ extension SettingsSchema {
     /// The tall Pilot menu's arrangement (spec desktop-controls T4), as Menu bar › Pilot menu edits it, Instrument only:
     /// `dropdown.order` names the blocks to lead, the rest following in their first order; `dropdown.hidden` and
     /// `dropdown.pinned` are sets; `dropdown.extensions` the extensions the Extensions card lists. Blocks: status,
-    /// workspaces, switches, extensions, running, sound, connections, display, media, stats, commands. Status can't be
-    /// hidden; extensions, sound, connections, display, media and stats are hidden until shown.
+    /// workspaces, switches, extensions, running, sound, connections, display, media, stats, commands. Extensions, sound, connections, display, media and stats are hidden until shown. A new install starts from
+    /// the one Pilot menu (spec pilot-ui-redesign T20: switches and workspaces shown, status back only for a problem), an
+    /// install from before from the tall menu.
     func registerDropdown(_ store: DropdownLayoutStore) {
-        let all = Dropdown.Layout.arrangeable
+        let all = Dropdown.Layout.arrangeable, first = Install.isNew ? Dropdown.Layout.pilotMenu : .standard
         func listed(_ blocks: [Dropdown.Block]) -> String { blocks.isEmpty ? "none" : Dropdown.Layout.names(blocks) }
         register([
-            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "pilotMenu", standard: listed(all),
+            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "pilotMenu", standard: listed(first.order),
                   read: { listed(store.layout.order) }, write: { typed throws(ControlError) in try store.setOrder(Self.blocks(typed, key: "dropdown.order")) }),
-            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status always shows)", page: "pilotMenu",
-                  standard: listed(all.filter(Dropdown.Layout.optional.contains)), read: { listed(all.filter(store.layout.hidden.contains)) },
+            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status hidden still shows a problem)", page: "pilotMenu",
+                  standard: listed(all.filter(first.hidden.contains)), read: { listed(all.filter(store.layout.hidden.contains)) },
                   write: { typed throws(ControlError) in try store.setHidden(Set(Self.blocks(typed, key: "dropdown.hidden"))) }),
             .text("dropdown.pinned", "Pilot menu's blocks pinned above its scroll, comma-separated or none", page: "pilotMenu", standard: "none",
                   read: { listed(all.filter(store.layout.pinned.contains)) },

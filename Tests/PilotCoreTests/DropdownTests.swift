@@ -34,10 +34,12 @@ struct DropdownTests {
         #expect(Dropdown.hyperLine(hyperOn: true, trusted: false, secureInput: false, held: false, layerKey: "⇪ Caps Lock", problems: 2) == "Hyper is off until they are fixed")
     }
 
-    @Test("Hyper switched off says so, ahead of a problem, since fixing that would not bring it back (card agent-bo-95422986)")
+    @Test("Key binds and the launcher both off say Hyper is off, ahead of a problem (card agent-bo-95422986); Key binds off alone keeps Hyper+Space (T20)")
     func hyperSwitchedOff() {
-        #expect(Dropdown.hyperLine(hyperOn: false, trusted: true, secureInput: false, held: false, layerKey: "Caps Lock", problems: 0) == "Hyper is off")
-        #expect(Dropdown.hyperLine(hyperOn: false, trusted: false, secureInput: true, held: false, layerKey: "Caps Lock", problems: 2) == "Hyper is off")
+        #expect(Dropdown.hyperLine(hyperOn: false, launcherOn: false, trusted: true, secureInput: false, held: false, layerKey: "Caps Lock", problems: 0) == "Hyper is off")
+        #expect(Dropdown.hyperLine(hyperOn: false, launcherOn: false, trusted: false, secureInput: true, held: false, layerKey: "Caps Lock", problems: 2) == "Hyper is off")
+        #expect(Dropdown.hyperLine(hyperOn: false, trusted: true, secureInput: false, held: false, layerKey: "Caps Lock", problems: 0) == "Key binds are off: only Hyper+Space works")
+        #expect(Dropdown.hyperLine(hyperOn: false, trusted: false, secureInput: true, held: false, layerKey: "Caps Lock", problems: 2) == "Hyper is off until they are fixed")
     }
 
     @Test("Every row of the old dropdown has a place in a block, Option's rows included, and Feedback and Support are on Settings' About")
