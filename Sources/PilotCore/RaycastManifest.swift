@@ -85,7 +85,7 @@ extension Extension {
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
         var names = Set<String>()
         commands = try manifest.commands.compactMap { c in
-            guard Self.isCommandName(c.name, raycast: true) else { throw Problem.badCommandName(c.name) }
+            guard Self.isCommandName(c.name) else { throw Problem.badCommandName(c.name) }
             guard names.insert(c.name).inserted else { throw Problem.duplicateCommand(c.name) }
             let mode: Mode
             switch c.mode {

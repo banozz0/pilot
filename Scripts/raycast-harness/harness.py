@@ -18,6 +18,7 @@ written to the Mac's own Pilot. Python 3 stdlib only.
 import argparse
 import json
 import os
+import shlex
 import shutil
 import statistics
 import subprocess
@@ -60,7 +61,7 @@ def say(text=""):
 
 def run(argv, env=None, timeout=120):
     """Runs one command, printing it and its whole stdout (stderr after it, marked), and answers (exit, stdout, seconds)."""
-    say("$ " + " ".join(quote(a) for a in argv))
+    say("$ " + shlex.join(argv))
     started = time.monotonic()
     try:
         done = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=timeout)
@@ -74,10 +75,6 @@ def run(argv, env=None, timeout=120):
         say("# stderr:\n" + err.rstrip("\n"))
     say("# exit %s, %.2f s" % (code, took))
     return code, out, took
-
-
-def quote(word):
-    return word if word and all(c.isalnum() or c in "-_./:=,@+" for c in word) else "'" + word.replace("'", "'\"'\"'") + "'"
 
 
 def pilot(args, ns, timeout=120):
@@ -123,11 +120,11 @@ def ensure(ns, folder):
         return None
     ext = json.load(open(os.path.join(kept, "package.json")))["name"]
     if ext in ns.have:
-        if not getattr(ns, "extensions", None):
+        if not ns.extensions:
             _, card, _ = pilot(["ext", "show", ext], ns)
             ns.extensions = os.path.dirname(card["folder"]) if isinstance(card, dict) and card.get("folder") else None
         return ext
-    if not getattr(ns, "extensions", None):
+    if not ns.extensions:
         code, answer, _ = pilot(["ext", "install", os.path.join(ns.work, "installed", "kill-process")], ns)
         if code != 0 or not isinstance(answer, dict) or not answer.get("folder"):
             return None
@@ -212,14 +209,17 @@ def error_of(answer):
 
 
 def measured(ns, since):
-    """The measure log's records from line `since` on."""
+    """The measure log's records from byte `since` on."""
+    if not os.path.exists(ns.measure):
+        return []
     with open(ns.measure) as log:
-        lines = log.readlines()
-    return [json.loads(l) for l in lines[since:] if l.strip()], len(lines)
+        log.seek(since)
+        return [json.loads(l) for l in log if l.strip()]
 
 
 def lines_in(ns):
-    return sum(1 for _ in open(ns.measure)) if os.path.exists(ns.measure) else 0
+    """Where the measure log ends now, for measured() to read on from."""
+    return os.path.getsize(ns.measure) if os.path.exists(ns.measure) else 0
 
 
 def phase_act(ns):
@@ -238,9 +238,10 @@ def phase_act(ns):
             continue
         for name, value in spec.get("prefs", {}).items():
             pilot(["add", "ext-prefs", "--pref", "%s.%s" % (ext, name), "--value", value], ns)
-        if spec.get("storage") and getattr(ns, "extensions", None):
+        if spec.get("storage") and ns.extensions:
             data = os.path.join(os.path.dirname(ns.extensions), "ExtensionData", ext, "data")
             os.makedirs(data, exist_ok=True)
+            # The prelude's LocalStorage file (raycast.js, `.raycast-local-storage.json` in the data folder): renamed there, renamed here.
             with open(os.path.join(data, ".raycast-local-storage.json"), "w") as out:
                 json.dump(spec["storage"], out)
             say("# seeded %s's LocalStorage in the sandbox: %s" % (ext, json.dumps(spec["storage"])))
@@ -248,9 +249,11 @@ def phase_act(ns):
         action = "ext.%s.%s" % (ext, spec["command"])
         _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
         hosts_left(ns)
+        runs = 1
         for again in (2, 3):
             if content(answer):
                 break
+            runs = again
             # A slow first load (Brew's `brew` calls) ends a one-shot run while loading; a later one reads the cache it kept.
             say("# no content yet; run %d, as another open would, reads the extension's own cache" % again)
             _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
@@ -258,7 +261,7 @@ def phase_act(ns):
         items = (answer or {}).get("items", []) if isinstance(answer, dict) else []
         first = items[0].get("title", "") if items and isinstance(items[0], dict) else ""
         row = spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
-        result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row}
+        result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row, "runs": runs}
         if not row:
             result["pressed"] = False
             results[folder] = result
@@ -266,14 +269,16 @@ def phase_act(ns):
         since = lines_in(ns)
         press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
         code, pressed, _ = pilot(press, ns, timeout=60)
+        result["presses"] = 1
         if code != 0:
+            result["presses"] = 2
             # A slow synchronous call at load (Chrome's `brew --prefix`) can hold a view's first answer past 2 s: once more.
             say("# the press failed; once more")
             since = lines_in(ns)
             code, pressed, _ = pilot(press, ns, timeout=60)
         left = hosts_left(ns)
         time.sleep(0.5)
-        records, _ = measured(ns, since)
+        records = measured(ns, since)
         calls = [r for r in records if r.get("kind") in ("exec", "open", "applescript", "copy", "paste")]
         say("# the measure log's calls after the press:")
         for call in calls:
@@ -330,13 +335,12 @@ def phase_summary(ns):
         left = sum(x["hostsLeft"] for runs in shown.values() for x in runs)
         a = act_results.get(folder)
         press = "" if not a else ("issued %s" % a.get("expected") if a.get("issued") else "NOT issued (%s)" % a.get("expected"))
+        if a:
+            press += " (runs %s, presses %s)" % (a.get("runs", 1), a.get("presses", 1))
         say("%s | %d | %d | %d | %s" % (title, len(shown), good, left, press))
-    exits = []
     with open(ns.measure) as log:
-        for line in log:
-            record = json.loads(line)
-            if record.get("kind") == "exit" and record.get("mode") == "run":
-                exits.append(record)
+        # Keys are sorted and unspaced (Measure.swift), so the view lines are skipped before they are parsed.
+        exits = [r for r in (json.loads(l) for l in log if '"kind":"exit"' in l) if r.get("mode") == "run"]
     first = [r["firstLineMs"] for r in exits if r.get("firstLineMs") is not None]
     peak = [r["peakFootprintMB"] for r in exits if r.get("peakFootprintMB") is not None]
     for name, values, unit in (("first answer (host's first stdout line, from its start)", first, "ms"), ("host peak footprint", peak, "MB")):
@@ -356,6 +360,7 @@ def main():
     parser.add_argument("--victim", type=int)
     parser.add_argument("--only")
     ns = parser.parse_args()
+    ns.extensions = None
     {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary}[ns.phase](ns)
 
 

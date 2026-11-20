@@ -210,7 +210,9 @@ export function makeAPI(message, mode) {
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
   for (const name of ["confirmAlert", "trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedText",
-    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
-    "captureException"]) api[name] = name === "captureException" ? missing(name) : rejecting(name);
+    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences"]) {
+    api[name] = rejecting(name);
+  }
+  api.captureException = missing("captureException");
   return guard("", api);
 }

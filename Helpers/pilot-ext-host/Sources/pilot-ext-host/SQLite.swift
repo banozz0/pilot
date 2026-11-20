@@ -52,14 +52,14 @@ import SQLite3
             default: sqlite3_bind_null(statement, at)
             }
         }
+        let names = (0..<sqlite3_column_count(statement)).map { String(cString: sqlite3_column_name(statement, $0)) }
         var rows: [[String: Any]] = []
         while rows.count < mostRows {
             let step = sqlite3_step(statement)
             if step == SQLITE_DONE { break }
             guard step == SQLITE_ROW else { return failure(String(cString: sqlite3_errmsg(db))) }
             var row: [String: Any] = [:]
-            for column in 0..<sqlite3_column_count(statement) {
-                let name = String(cString: sqlite3_column_name(statement, column))
+            for (column, name) in zip(Int32(0)..., names) {
                 switch sqlite3_column_type(statement, column) {
                 case SQLITE_INTEGER: row[name] = sqlite3_column_int64(statement, column)
                 case SQLITE_FLOAT: row[name] = sqlite3_column_double(statement, column)

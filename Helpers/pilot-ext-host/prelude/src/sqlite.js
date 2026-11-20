@@ -2,15 +2,10 @@
 // the host's SQLite bridge (SQLite.swift), which opens every database read-only and loads no extension, so `run` and
 // `exec` of a write fail as SQLite answers them. Enough for @raycast/utils' useSQL (`prepare(query).all()`).
 import { Buffer } from "./buffer.js";
+import { check } from "./node.js";
 
 const native = globalThis.__native;
-
-function answered(result) {
-  if (result && typeof result === "object" && !Array.isArray(result) && result.error) {
-    throw Object.assign(new Error(result.message), { code: result.error });
-  }
-  return result;
-}
+const answered = (result) => check(result, "sqlite");
 
 const rowOf = (row) => {
   for (const key of Object.keys(row)) if (row[key] && typeof row[key] === "object" && "$blob" in row[key]) row[key] = Buffer.from(row[key].$blob, "base64");

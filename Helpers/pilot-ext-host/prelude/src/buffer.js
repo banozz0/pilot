@@ -4,7 +4,7 @@
 // still arrives as text (node.js), so most extensions only build and print Buffers. Anything else of Node's buffer
 // (the read and write number methods, `transcode`, `Blob`) is not here.
 import { stubs } from "./gaps.js";
-import { sqlite } from "./sqlite.js";
+import { hexBytes } from "./web.js";
 
 const encoder = new TextEncoder(), decoder = new TextDecoder();
 
@@ -26,7 +26,7 @@ function bytesOf(text, encoding) {
       const plain = s.replace(/-/g, "+").replace(/_/g, "/").replace(/[^A-Za-z0-9+/]/g, "");
       return Uint8Array.from(atob(plain + "===".slice((plain.length + 3) % 4)), (c) => c.charCodeAt(0));
     }
-    case "hex": return Uint8Array.from(s.match(/[0-9a-fA-F]{2}/g) ?? [], (h) => parseInt(h, 16));
+    case "hex": return hexBytes(s.match(/[0-9a-fA-F]{2}/g)?.join("") ?? "");
     case "utf16le": {
       const out = new Uint8Array(s.length * 2);
       for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); out[2 * i] = c & 255; out[2 * i + 1] = c >> 8; }
@@ -159,6 +159,5 @@ export const modules = {
   string_decoder: { StringDecoder },
   get process() { return globalThis.process; },
   // Only loaded, not yet Node's streams: @raycast/utils' exec helpers import it whole; each member records its use and throws.
-  sqlite,
   stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"]),
 };

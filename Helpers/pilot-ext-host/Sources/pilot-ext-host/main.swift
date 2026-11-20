@@ -16,10 +16,12 @@ import JavaScriptCore
 // Node's does (Native.swift).
 
 /// Writes one line to stdout or stderr, unbuffered.
-func put(_ line: String, to handle: FileHandle) {
-    // A run's lines come on the main queue; the installer's (a detached task) are not measured.
-    if handle.fileDescriptor == 1, Measure.measuresLines { MainActor.assumeIsolated { Measure.wrote(line) } }
-    handle.write(Data((line + "\n").utf8))
+func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
+
+/// A run's line to Pilot, recorded first under --measure (T7); the installer writes through put() and is never measured.
+@MainActor func answer(_ line: String) {
+    Measure.wrote(line)
+    put(line, to: .standardOutput)
 }
 
 @MainActor final class Host {
@@ -58,7 +60,7 @@ func put(_ line: String, to handle: FileHandle) {
 
     private func installNative() {
         let native = JSValue(newObjectIn: context)!
-        let write: @convention(block) (String) -> Void = { line in put(line, to: .standardOutput) }
+        let write: @convention(block) (String) -> Void = { line in answer(line) }
         let log: @convention(block) (String, String) -> Void = { level, text in put("[\(level)] \(text)", to: .standardError) }
         let setTimer: @convention(block) (Int, Double) -> Void = { [unowned self] id, ms in self.arm(id, after: ms) }
         let clearTimer: @convention(block) (Int) -> Void = { [unowned self] id in self.timers.removeValue(forKey: id)?.cancel() }
@@ -148,7 +150,7 @@ func put(_ line: String, to handle: FileHandle) {
     private func uncaught(_ exception: JSValue?) {
         let text = exception?.toString() ?? "an error"
         put("[uncaught] \(text) \(exception?.objectForKeyedSubscript("stack")?.toString() ?? "")", to: .standardError)
-        put(Host.errorLine(text), to: .standardOutput)
+        answer(Host.errorLine(text))
     }
 
     static func errorLine(_ text: String) -> String {
@@ -171,7 +173,7 @@ let host: Host
 do {
     host = try Host(prelude: URL(filePath: arguments[1]), bundle: URL(filePath: arguments[2]))
 } catch {
-    put(Host.errorLine((error as? HostError)?.text ?? error.localizedDescription), to: .standardOutput)
+    answer(Host.errorLine((error as? HostError)?.text ?? error.localizedDescription))
     Measure.exit()
     exit(0)
 }

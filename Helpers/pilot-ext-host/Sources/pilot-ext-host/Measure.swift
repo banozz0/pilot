@@ -21,8 +21,6 @@ import Foundation
     private static let born = Date()
 
     static var on: Bool { log >= 0 }
-    /// Whether stdout lines are recorded: a measured run's, written on the main queue; never the installer's.
-    nonisolated(unsafe) static var measuresLines = false
 
     /// Takes `--measure <log>` and each `--measure-pid <pid>` off the front of `arguments`.
     static func take(_ arguments: inout [String]) {
@@ -31,7 +29,7 @@ import Foundation
             arguments.removeFirst(2)
         }
         guard on else { return }
-        if let first = arguments.first, Installer.modes.contains(first) { mode = "install" } else { measuresLines = true }
+        if let first = arguments.first, Installer.modes.contains(first) { mode = "install" }
         folders = [ProcessInfo.processInfo.environment["TMPDIR"], NSTemporaryDirectory(), "/private/tmp/", "/tmp/"].compactMap { $0 }
         record(["kind": "start", "mode": mode, "killable": killable.sorted().map(Int.init)])
     }
@@ -52,7 +50,8 @@ import Foundation
     static func read(_ line: String) {
         guard on else { return }
         record(["kind": "in", "line": line])
-        if let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        // Only the run message carries the paths; the text is checked before any line is parsed.
+        if line.contains("\"run\""), let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            message["type"] as? String == "run", let paths = message["paths"] as? [String: String] {
             folders += paths.values.filter { !$0.isEmpty }.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         }
@@ -63,7 +62,7 @@ import Foundation
         guard on else { return }
         if firstLine == nil { firstLine = Date().timeIntervalSince(born) * 1000 }
         record(["kind": "out", "line": line])
-        guard let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard line.hasPrefix("{\"type\":\"action\""), let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               message["type"] as? String == "action", let action = message["action"] as? [String: Any], let type = action["type"] as? String else { return }
         switch type {
         case "open": record(["kind": "open", "url": action["url"] ?? "", "ran": false, "why": "an action line: Pilot performs it, the harness never"])
@@ -149,13 +148,7 @@ import Foundation
     /// A child about to start: recorded; when refused, a stand-in that takes its stdin and ends with exit 1 on the next
     /// turn, its pid answered as 0 (nil lets it start).
     static func refuses(_ id: Int, _ file: String, _ args: [String], host: Host) -> Any? {
-        guard on else { return nil }
-        let why = refusal(file, args)
-        let kind = (file as NSString).lastPathComponent == "osascript" ? "applescript" : "exec"
-        guard let why else {
-            record(["kind": kind, "file": file, "args": args, "ran": true])
-            return nil
-        }
+        guard on, let (kind, why) = judged(file, args, sync: false) else { return nil }
         swallowed[id] = ""
         host.pending += 1
         DispatchQueue.main.async {
@@ -173,14 +166,19 @@ import Foundation
 
     /// spawnSync's: nil lets it start; else it is recorded and this is its answer, exit 1.
     static func refusesSync(_ file: String, _ args: [String], input: String) -> Any? {
-        guard on else { return nil }
-        let kind = (file as NSString).lastPathComponent == "osascript" ? "applescript" : "exec"
-        guard let why = refusal(file, args) else {
-            record(["kind": kind, "file": file, "args": args, "ran": true, "sync": true])
-            return nil
-        }
+        guard on, let (kind, why) = judged(file, args, sync: true) else { return nil }
         record(["kind": kind, "file": file, "args": args, "stdin": input, "ran": false, "why": why, "sync": true])
         return ["status": 1, "signal": NSNull(), "stdout": "", "stderr": "pilot-ext-host --measure: not run on this Mac (\(why))\n", "pid": 0]
+    }
+
+    /// A child's kind and why it is refused; a child that may run is recorded here, as run, and answers nil.
+    private static func judged(_ file: String, _ args: [String], sync: Bool) -> (kind: String, why: String)? {
+        let kind = (file as NSString).lastPathComponent == "osascript" ? "applescript" : "exec"
+        guard let why = refusal(file, args) else {
+            record(["kind": kind, "file": file, "args": args, "ran": true].merging(sync ? ["sync": true] : [:]) { $1 })
+            return nil
+        }
+        return (kind, why)
     }
 
     /// Text written to a refused child's stdin is kept for its record: true when `id` is one.

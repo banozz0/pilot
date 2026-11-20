@@ -177,11 +177,15 @@ extension ControlVerbs {
         var before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
         // A view may settle before it fills in (Kill Process commits an empty list until `ps` answers): the press waits,
         // up to 2 s, for a newer view that offers what it names.
+        func offers(_ items: [Extension.Item]) -> Bool {
+            if let handler { return items.contains { $0.actions.contains { $0.handler == handler } } }
+            return (try? find(word, in: items)) != nil
+        }
         let until = ContinuousClock.now + .seconds(2)
-        while ContinuousClock.now < until, !(handler.map { id in before.items.contains { $0.actions.contains { $0.handler == id } } }
-                                            ?? ((try? find(word, in: before.items)) != nil)) {
+        var seen = session.newest
+        while ContinuousClock.now < until, !offers(before.items) {
             try? await Task.sleep(for: .milliseconds(50))
-            if let newest = session.newest?.outcome { before = try shown(newest) }
+            if let newest = session.newest, newest != seen { seen = newest; before = try shown(newest.outcome) }
         }
         let target = if let handler { pressing(handler, path: "handler \(handler)") } else { try find(word, in: before.items) }
         guard let id = target.action.handler else {
