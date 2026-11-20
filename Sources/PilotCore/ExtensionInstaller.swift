@@ -28,16 +28,18 @@ public struct ExtensionInstaller: Sendable {
 
     /// Installs `entry`, or updates the copy installed, and returns it as read from its new folder. `progress` hears
     /// each file fetched (done, of all). Throws a Problem, and leaves the Extensions folder as it was, when a file does
-    /// not arrive or match, what arrived is not that extension, or a folder named its id holds something else.
+    /// not arrive or match, what arrived is not that extension, or a folder named its id holds something else. `fileLimit`
+    /// is the most a file may weigh: the catalogue's, or a staged Raycast-format folder's (ExtensionCheck.install).
     @discardableResult
-    public func install(_ entry: ExtensionCatalogue.Entry, progress: @Sendable (Int, Int) -> Void = { _, _ in }) async throws -> Extension {
+    public func install(_ entry: ExtensionCatalogue.Entry, fileLimit: Int = ExtensionCatalogue.fileLimit,
+                        progress: @Sendable (Int, Int) -> Void = { _, _ in }) async throws -> Extension {
         _ = try replaced(entry.id)
         let fm = FileManager.default
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         let temp = staging.appending(path: ".extension-\(entry.id)-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: temp) }
         try fm.createDirectory(at: temp, withIntermediateDirectories: true)
-        try await source.download(entry.files, from: "extensions/\(entry.id)", limit: ExtensionCatalogue.fileLimit, into: temp,
+        try await source.download(entry.files, from: "extensions/\(entry.id)", limit: fileLimit, into: temp,
                                   mode: { $0.executable ? 0o755 : 0o644 }, progress: progress)
         let arrived: Extension
         do { arrived = try Extension(folder: temp) }

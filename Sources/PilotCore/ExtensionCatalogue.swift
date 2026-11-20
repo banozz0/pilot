@@ -17,6 +17,10 @@ public enum ExtensionCatalogue {
     public static let schema = 2
     /// The most the index, one file and one extension may weigh, and the most files an extension may hold.
     public static let indexLimit = 1_000_000, fileLimit = 2_000_000, extensionLimit = 10_000_000, mostFiles = 200
+    /// A Raycast-format extension's, as built on this Mac: each command bundles its own packages, so one file and the
+    /// folder weigh more (Sven, 2026-11-20, Q286 "raise": GitHub's 26 commands built to 47,291,497 B, its largest
+    /// 2,096,995 B; raycast-extensions T15).
+    public static let raycastFileLimit = 5_000_000, raycastExtensionLimit = 48_000_000
     /// A theme pack's, as catalogue/scripts/check.py's THEME_LIMITS: one file, the pack, and its files.
     public static let themeFileLimit = 8 * 1024 * 1024, themeLimit = 40 * 1024 * 1024, themeMostFiles = 300
     /// How long an index read is kept in memory before the next look reads it again.

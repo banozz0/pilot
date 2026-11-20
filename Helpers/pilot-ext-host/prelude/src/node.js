@@ -1,10 +1,12 @@
 // The Node subset Raycast extensions reach for (ADR 0017, T3), written from Node's documentation: `fs` (sync, callback
 // and promise forms, text only: a read answers a string), `path` (POSIX), `os`, `crypto`'s hashes, `child_process`
-// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host),
+// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host; an
+// osascript child starts only once the extension may run AppleScript, T9's automation.js),
 // `events`, `util` and `url`. Every module is guarded: a member Node has and this lacks records its use (gaps.js), and
 // a module this lacks records `require("<name>")`.
 import { guard, lack } from "./gaps.js";
 import { hexBytes } from "./web.js";
+import { consent, consentNow, runsAppleScript } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -164,6 +166,10 @@ const os = guard("os", {
   cpus: () => Array.from({ length: 4 }, () => ({ model: "", speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } })),
   userInfo: () => ({ username: env().USER ?? "", homedir: env().HOME ?? "", shell: env().SHELL ?? "/bin/zsh", uid: -1, gid: -1 }),
   endianness: () => "LE", availableParallelism: () => 4,
+  // macOS's signal numbers (<sys/signal.h>), as Node's os.constants.signals has them (T15: execa's human-signals reads them at load).
+  constants: { signals: Object.freeze(Object.fromEntries(["HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO", "XCPU", "XFSZ", "VTALRM", "PROF",
+    "WINCH", "INFO", "USR1", "USR2"].map((name, i) => [`SIG${name}`, i + 1]).concat([["SIGIOT", 6]]))) },
 });
 
 // MARK: crypto
@@ -218,6 +224,8 @@ class EventEmitter {
   getMaxListeners() { return 10; }
 }
 EventEmitter.EventEmitter = EventEmitter;
+// events.setMaxListeners(n, ...targets): listeners are never capped here, so it does nothing (T15: execa calls it).
+EventEmitter.setMaxListeners = () => {};
 EventEmitter.once = (emitter, name) => new Promise((resolve) => emitter.once(name, (...a) => resolve(a)));
 
 // MARK: child_process
@@ -241,7 +249,11 @@ class ChildProcess extends EventEmitter {
     this.killed = false;
     this.stdout = piped ? new Readable() : null;
     this.stderr = piped ? new Readable() : null;
-    this.stdin = piped ? { write: (t) => { native.childWrite(id, String(t)); return true; }, end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); } } : null;
+    // An emitter, as Node's Writable is, so `stdin.on("error", …)` (runAppleScript sets one) attaches.
+    this.stdin = piped ? Object.assign(new EventEmitter(), {
+      write: (t) => { native.childWrite(id, String(t)); return true; },
+      end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); },
+    }) : null;
   }
   kill(signal = "SIGTERM") {
     const numbers = { SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 };
@@ -275,6 +287,7 @@ function spawn(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const id = ++lastChild, made = spawnOptions(options);
+  if (runsAppleScript(String(file), args)) return held(id, String(file), args.map(String), made);
   const pid = native.spawn(id, String(file), args.map(String), made);
   const child = new ChildProcess(id, typeof pid === "number" ? pid : undefined, made.stdio === "pipe");
   if (typeof pid !== "number") {
@@ -282,6 +295,46 @@ function spawn(file, args = [], options = {}) {
     return child;
   }
   running.set(id, child);
+  return child;
+}
+
+/** An osascript child (automation.js): made at once, so its listeners attach, and started only once the extension may
+ *  run AppleScript. Until then its stdin is kept, and a kill cancels it. A refusal is its `error`, as a spawn that fails. */
+function held(id, file, args, made) {
+  const child = new ChildProcess(id, undefined, made.stdio === "pipe");
+  let input = "", ended = false, live = false, done = false;
+  const cancel = consent((error) => {
+    if (done) return;
+    done = true;
+    if (error) return child.emit("error", error);
+    const pid = native.spawn(id, file, args, made);
+    if (typeof pid !== "number") return child.emit("error", Object.assign(new Error(`spawn ${file} ${pid?.error ?? "failed"}`), { code: pid?.error, syscall: `spawn ${file}`, path: file }));
+    child.pid = pid;
+    live = true;
+    running.set(id, child);
+    if (input) native.childWrite(id, input);
+    if (ended) native.childEnd(id);
+  });
+  if (child.stdin) {
+    child.stdin = Object.assign(new EventEmitter(), {
+      write: (t) => { if (live) native.childWrite(id, String(t)); else input += String(t); return true; },
+      end: (t) => {
+        if (t != null) child.stdin.write(t);
+        if (live) native.childEnd(id);
+        else ended = true;
+      },
+    });
+  }
+  const kill = child.kill.bind(child);
+  child.kill = (signal = "SIGTERM") => {
+    if (live) return kill(signal);
+    if (done) return false;
+    done = true;
+    cancel();
+    child.killed = true;
+    queueMicrotask(() => { child.signalCode = String(signal); child.emit("exit", null, child.signalCode); child.emit("close", null, child.signalCode); });
+    return true;
+  };
   return child;
 }
 
@@ -324,6 +377,8 @@ function spawnSync(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const made = spawnOptions(options);
+  const refused = runsAppleScript(String(file), args) ? consentNow() : null;
+  if (refused) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: refused };
   const r = native.spawnSync(String(file), args.map(String), made, options.input == null ? "" : String(options.input));
   if (r.error) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: Object.assign(new Error(r.message), { code: r.error }) };
   return { pid: r.pid, status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, output: [null, r.stdout, r.stderr] };
@@ -351,6 +406,15 @@ function promisify(fn) {
 }
 promisify.custom = custom;
 
+/** util.callbackify: an async function as a last-argument callback one; a falsy rejection becomes an Error with `reason`. */
+function callbackify(fn) {
+  return function (...args) {
+    const done = args.pop();
+    fn.apply(this, args).then((value) => queueMicrotask(() => done(null, value)), (reason) => queueMicrotask(() =>
+      done(reason || Object.assign(new Error("Promise was rejected with a falsy value"), { reason }))));
+  };
+}
+
 function format(first, ...rest) {
   if (typeof first !== "string") return [first, ...rest].map(inspect).join(" ");
   let i = 0;
@@ -369,7 +433,9 @@ function inspect(v) {
 }
 
 const util = guard("util", {
-  promisify, format, inspect, deprecate: (fn) => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); Object.setPrototypeOf(a, b); },
+  promisify, callbackify, format, inspect, deprecate: (fn) => fn,
+  // Node's debuglog logs only for a section NODE_DEBUG names; Pilot sets none, so it is a quiet function (T15).
+  debuglog: () => Object.assign(() => {}, { enabled: false }), inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); Object.setPrototypeOf(a, b); },
   TextEncoder: globalThis.TextEncoder, TextDecoder: globalThis.TextDecoder, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
   types: { isPromise: (p) => p instanceof Promise, isDate: (d) => d instanceof Date, isRegExp: (r) => r instanceof RegExp },
 });
@@ -385,9 +451,42 @@ const url = guard("url", {
   pathToFileURL: (p) => new URL(`file://${encodeURI(path.resolve(String(p)))}`),
 });
 
+// MARK: tty and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
+
+// No terminal is ever attached to a host's descriptors, so every isatty is false; the stream classes are only named.
+const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {}, WriteStream: class WriteStream {} });
+
+const timersPromises = guard("timers/promises", {
+  setTimeout: (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms)),
+  setImmediate: (value) => new Promise((resolve) => setImmediate(() => resolve(value))),
+});
+
+// MARK: querystring (T15: Google Translate builds its request with it), as nodejs.org documents it: `+` reads as a space,
+// a key given twice parses to an array, and stringify repeats a key per array item and writes other values as "".
+
+const qsValue = (v) => (typeof v === "string" || typeof v === "number" || typeof v === "bigint" || typeof v === "boolean" ? String(v) : "");
+function qsUnescape(text) { try { return decodeURIComponent(text); } catch { return text; } }
+function qsParse(text, sep = "&", eq = "=") {
+  const out = Object.create(null);
+  for (const pair of String(text ?? "").split(sep)) {
+    if (!pair) continue;
+    const at = pair.indexOf(eq);
+    const [key, value] = (at < 0 ? [pair, ""] : [pair.slice(0, at), pair.slice(at + eq.length)]).map((t) => qsUnescape(t.replace(/\+/g, " ")));
+    out[key] = key in out ? [].concat(out[key], value) : value;
+  }
+  return out;
+}
+function qsStringify(object, sep = "&", eq = "=") {
+  if (!object || typeof object !== "object") return "";
+  return Object.keys(object).flatMap((key) => [].concat(object[key]).map((v) => `${encodeURIComponent(key)}${eq}${encodeURIComponent(qsValue(v))}`)).join(sep);
+}
+const querystring = guard("querystring", {
+  parse: qsParse, decode: qsParse, stringify: qsStringify, encode: qsStringify, escape: encodeURIComponent, unescape: qsUnescape,
+});
+
 /** The modules `require` finds, by name, `node:` or not. */
 export { path, childProcess, check };
 export const modules = {
   fs, "fs/promises": fsPromises, path, "path/posix": path, os, crypto, child_process: childProcess,
-  events: EventEmitter, util, url,
+  events: EventEmitter, util, url, tty, "timers/promises": timersPromises, querystring,
 };

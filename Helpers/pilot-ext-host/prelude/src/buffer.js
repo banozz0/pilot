@@ -3,7 +3,7 @@
 // its common statics and methods, enough for the top 20's `node:buffer` and `node:process` imports. Child output
 // still arrives as text (node.js), so most extensions only build and print Buffers. Anything else of Node's buffer
 // (the read and write number methods, `transcode`, `Blob`) is not here.
-import { stubs } from "./gaps.js";
+import { missing, stubs } from "./gaps.js";
 import { hexBytes } from "./web.js";
 
 const encoder = new TextEncoder(), decoder = new TextDecoder();
@@ -159,5 +159,45 @@ export const modules = {
   string_decoder: { StringDecoder },
   get process() { return globalThis.process; },
   // Only loaded, not yet Node's streams: @raycast/utils' exec helpers import it whole; each member records its use and throws.
-  stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"]),
+  // getDefaultHighWaterMark is real: execa reads it at load (Node 22's 65536 bytes, 16 objects; T15).
+  stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"],
+    { getDefaultHighWaterMark: (objectMode) => (objectMode ? 16 : 65536) }),
+  // The same for its promise forms (Speedtest, Video Downloader import them at load; T15).
+  "stream/promises": stubs("stream/promises", ["pipeline", "finished"]),
+  // Only loaded: execa checks an IPC message with v8.serialize, which no extension's own call reaches here.
+  v8: stubs("v8", ["serialize", "deserialize"]),
+  // Only loaded: axios's Node adapter and follow-redirects require them at load; a request through them records and throws
+  // (fetch is the host's HTTP; T15: Google Translate's speech package loads axios).
+  http: stubs("http", ["request", "get", "Agent", "createServer"]),
+  https: stubs("https", ["request", "get", "Agent"]),
+  zlib: stubs("zlib", ["createGunzip", "createInflate", "createBrotliDecompress", "gunzipSync", "inflateSync"], { constants: {} }),
+  // Only loaded, as http is: sockets are not Pilot's; isIP and its two forms are real, as URL code calls them at load.
+  net: stubs("net", ["connect", "createConnection", "createServer", "Socket", "Server"], {
+    isIPv4: (t) => ipv4(String(t)), isIPv6: (t) => ipv6(String(t)), isIP: (t) => (ipv4(String(t)) ? 4 : ipv6(String(t)) ? 6 : 0),
+  }),
+  // Node's deprecated punycode, for ASCII only: an ASCII name is its own Punycode form, so toASCII and toUnicode give it
+  // back; anything else records the gap and throws (T15: GitHub's node-fetch maps every URL host through it).
+  punycode: stubs("punycode", ["encode", "decode"], {
+    toASCII: (name) => ascii(name, "toASCII"), toUnicode: (name) => ascii(name, "toUnicode"), version: "2.1.0",
+  }),
 };
+
+const ipv4 = (t) => /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(t);
+/** An IPv6 address: hex groups with at most one `::`, and an IPv4 tail allowed; a zone (`%en0`) is dropped first. */
+function ipv6(t) {
+  const [address] = t.split("%");
+  if (!/^[0-9A-Fa-f:.]+$/.test(address) || (address.match(/::/g) ?? []).length > 1) return false;
+  const tail = address.includes(".") ? address.slice(address.lastIndexOf(":") + 1) : null;
+  if (tail !== null && !ipv4(tail)) return false;
+  const groups = (tail === null ? address : address.slice(0, address.lastIndexOf(":") + 1) + "0:0").split(":");
+  const parts = address.includes("::") ? groups.filter((g, i) => g !== "" || i === 0 || i === groups.length - 1) : groups;
+  if (!parts.every((g) => g === "" || /^[0-9A-Fa-f]{1,4}$/.test(g))) return false;
+  const count = parts.filter((g) => g !== "").length;
+  return address.includes("::") ? count < 8 : count === 8 && !parts.includes("");
+}
+
+function ascii(name, api) {
+  const text = String(name);
+  if (/^[\x00-\x7f]*$/.test(text)) return text;
+  return missing(`punycode.${api} of a non-ASCII name`)();
+}

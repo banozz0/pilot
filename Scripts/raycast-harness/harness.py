@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The top-20 rerun (spec raycast-extensions, T7): Raycast's 20 most-installed extensions through the `pilot` command
+"""The top-20 reruns (spec raycast-extensions, T7 and T15): Raycast's 20 most-installed extensions through the `pilot` command
 against a sandbox, the phase gates' proof. Written fresh: none of the spike's code.
 
     harness.py install --pilot P --socket S --work W [--only a,b]   GitHub install of each, its installed folder kept in W
     harness.py run     --pilot P --socket S --work W --host H [--only a,b]  every view command, empty search then "a"
-    harness.py act     --pilot P --socket S --work W --host H --measure M --victim PID [--only a,b]  each gate one's press
+    harness.py act     --pilot P --socket S --work W --host H --measure M --victim PID [--only a,b]  each primary press
     harness.py summary --work W --measure M                          coverage, first answers and host footprints
     harness.py redact --log L --work W                               a log rewritten to counts and shapes (T7 review 1)
     harness.py probe --work W --host H --prelude JS --measure M --victim PID   --measure's refusals, one try per way out
@@ -57,6 +57,17 @@ GATE = {
     # Its recent projects read VS Code's own database, which needs VS Code in /Applications; installed extensions do not.
     "visual-studio-code-recent-projects": {"command": "extensions", "query": "", "row": None, "expect": ("open", "vscode")},
     "google-search": {"command": "index", "query": "pilot", "row": None, "expect": ("open", "google.com/search")},
+    # T15: its view is a Form. A public video's URL is typed into it (each change an onChange, as keystrokes come), which asks
+    # yt-dlp for the video's formats, then Download Video is pressed; --measure records and refuses every yt-dlp call, so the
+    # formats never load, its submit returns before downloading, and nothing downloads.
+    "video-downloader": {"command": "index", "query": "", "row": None, "type": "url=https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+                         "expect": ("exec", "yt-dlp")},
+    # T15: its list view, searched; the first row with a name of its own, its first action, whatever it calls (its Form
+    # views have no rows). Its two target languages are both English by default; the first is set to Spanish, so a row
+    # of its own comes.
+    "google-translate": {"command": "translate", "query": "good morning", "row": None, "expect": None, "prefs": {"lang1": "es"}},
+    # T15: its notes list, as round one pressed it (its first view with content is a Form, add-text).
+    "apple-notes": {"command": "index", "query": "", "row": None, "expect": None},
 }
 
 
@@ -69,7 +80,7 @@ def say(text=""):
 # the system's folders, the harness's own hosts and names, and the placeholders this writes (so redact can run again)
 # pass too. Every other value, a child's stdin included, is its length. Rows are counted, with the first row's field
 # names and action kinds; a URL keeps its scheme (and only the harness's own hosts).
-SAFE = {"", "a", "pilot", "t7victim"}
+SAFE = {"", "a", "pilot", "t7victim", "Allow"}
 HOSTS = {"www.google.com", "github.com", "api.github.com", "raw.githubusercontent.com", "registry.npmjs.org"}
 STRUCTURAL = {"kind", "ran", "why", "ms", "pid", "mode", "exit", "firstLineMs", "peakFootprintMB", "type", "handler", "sync",
               "method", "killable", "bytes", "rows", "status", "isLoading", "loading", "ack", "seq", "question", "esbuild"}
@@ -182,13 +193,13 @@ def shown(text):
 
 
 def secrets(argv):
-    """The places in `argv` the log masks: the row `ext act` presses and the --then, --query, --input and --answer values."""
+    """The places in `argv` the log masks: the row `ext act` presses and the --then, --query, --input, --answer, --submit and --type values."""
     places, after = [], False
     for i, word in enumerate(argv):
         if after:
             places.append(i)
             after = False
-        elif word in ("--then", "--query", "--input", "--answer"):
+        elif word in ("--then", "--query", "--input", "--answer", "--submit", "--type"):
             after = True
     if "act" in argv:
         at = argv.index("act") + 2
@@ -340,15 +351,67 @@ def views(ns, ext):
     return [c for c in commands if isinstance(c, dict) and c.get("mode") not in ("no-view", "menu-bar", "bar")], commands
 
 
-def content(answer):
-    """Whether an `ext run` answer shows content: a row that is not a loading or empty placeholder, or a detail."""
+# T9's question (Q274, one per extension): the two rows a view gives way to while an osascript call waits on it.
+CONSENT = re.compile(r"consent-\d+-(allow|deny)\.onAction")
+
+
+def is_consent(item):
+    return isinstance(item, dict) and any(isinstance(a, dict) and CONSENT.fullmatch(a.get("handler") or "") for a in item.get("actions", []))
+
+
+def asks(answer):
+    """Whether an `ext run` or `ext act` answer holds T9's AppleScript question, in its view or the views a press saw."""
     if not isinstance(answer, dict):
         return False
-    items = [i for i in answer.get("items", []) if isinstance(i, dict)]
+    views = [answer] + [answer[k] for k in ("before", "between") if isinstance(answer.get(k), dict)]
+    return any(is_consent(i) for v in views for i in v.get("items", []) or [])
+
+
+def automation_file(ns, ext):
+    """Where T9 keeps an extension's answer in this sandbox (automation.js: ExtensionData/<id>/automation.json)."""
+    return os.path.join(os.path.dirname(ns.extensions), "ExtensionData", ext, "automation.json") if ns.extensions else None
+
+
+def answer_allow(ns, ext, press, record):
+    """T9's question came: Allow pressed through `ext act` (`press` is the argv up to the press, Allow last), as Sven would
+    answer it in the sandbox. --measure refuses the answer's save (automation.json is outside the run's folders, T15), so the
+    measure log is read for that refusal; when the file is still missing, the answer Allow keeps is seeded in its place,
+    as T7 seeds Chrome's LocalStorage. The osascript call it lets go is still refused by --measure: nothing runs."""
+    if record.get("asked"):
+        return
+    record["asked"] = True
+    say("# T9's question: %s asks to run AppleScript; Allow pressed, as answered in the sandbox" % ext)
+    since = lines_in(ns)
+    code, answer, _ = pilot(press, ns, timeout=60)
+    refusals = [r for r in measured(ns, since) if r.get("kind") == "write" and str(r.get("path", "")).endswith("/automation.json")]
+    for r in refusals:
+        say(json.dumps(shaped(r), sort_keys=True, ensure_ascii=False))
+    record["allowExit"] = code
+    record["allowSaveRefused"] = bool(refusals)
+    path = automation_file(ns, ext)
+    if path and not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as out:
+            json.dump({"osascript": {"allowed": True, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}, out)
+        record["allowSeeded"] = True
+        say("# Allow's answer not saved (--measure refuses it); seeded in the sandbox: {\"osascript\": {\"allowed\": true}}")
+    hosts_left(ns)
+
+
+def content(answer):
+    """Whether an `ext run` answer shows content: a row that is not a loading or empty placeholder, or a detail. T9's
+    question rows are not content."""
+    if not isinstance(answer, dict):
+        return False
+    items = [i for i in answer.get("items", []) if isinstance(i, dict) and not is_consent(i)]
     if any(i.get("actions") or i.get("subtitle") or i.get("accessory") for i in items) or len(items) > 1:
         return True
     detail = answer.get("detail")
-    return isinstance(detail, dict) and bool(detail.get("markdown") or detail.get("metadata"))
+    if isinstance(detail, dict) and (detail.get("markdown") or detail.get("metadata")):
+        return True
+    # A Form (T10; ext run's `form`) with a field to fill, beyond its description lines and separators (T15: Video Downloader).
+    fields = (answer.get("form") or {}).get("fields") or []
+    return any(isinstance(f, dict) and f.get("kind") not in ("description", "separator") for f in fields)
 
 
 def phase_run(ns):
@@ -363,15 +426,21 @@ def phase_run(ns):
         for name, value in GATE.get(folder, {}).get("prefs", {}).items():
             pilot(["add", "ext-prefs", "--pref", "%s.%s" % (ext, name), "--value", value], ns)
         shown, commands = views(ns, ext)
-        rows = {}
+        rows, consent = {}, {}
         for command in shown:
             action = command.get("action") or "ext.%s.%s" % (ext, command.get("name"))
             for query in ("", "a"):
                 code, answer, took = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
                 left = hosts_left(ns)
+                if asks(answer) and not consent.get("asked"):
+                    consent["command"] = action
+                    answer_allow(ns, ext, ["ext", "act", ext, "Allow", "--command", action.split(".", 2)[2], "--query", query], consent)
+                    say("# the same view again, answered")
+                    code, answer, took = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
+                    left = hosts_left(ns)
                 rows.setdefault(action, []).append({"query": query, "exit": code, "seconds": round(took, 2), "content": content(answer),
-                                                    "error": error_of(answer), "hostsLeft": len(left)})
-        results[folder] = {"installed": True, "id": ext, "commands": len(commands), "views": rows,
+                                                    "asks": asks(answer), "error": error_of(answer), "hostsLeft": len(left)})
+        results[folder] = {"installed": True, "id": ext, "commands": len(commands), "views": rows, "consent": consent,
                            "skipped": [c.get("name") for c in commands if isinstance(c, dict) and c.get("mode") in ("no-view", "menu-bar", "bar")]}
     save(ns, "run", results)
 
@@ -405,8 +474,9 @@ def phase_act(ns):
     victim = os.path.basename(subprocess.run(["/bin/ps", "-o", "comm=", "-p", str(ns.victim)], capture_output=True, text=True).stdout.strip())
     say("# the harness's sleep: pid %s, named %s" % (ns.victim, victim or "?"))
     results = {}
+    ran = json.load(open(os.path.join(ns.work, "run.json"))) if os.path.exists(os.path.join(ns.work, "run.json")) else {}
     for folder, title in chosen(ns):
-        spec = GATE.get(folder)
+        spec = GATE.get(folder) or generic(ran.get(folder))
         if not spec:
             continue
         say("\n## act %s (%s)" % (title, folder))
@@ -427,6 +497,12 @@ def phase_act(ns):
         action = "ext.%s.%s" % (ext, spec["command"])
         _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
         hosts_left(ns)
+        consent = {}
+        if asks(answer):
+            consent["command"] = action
+            answer_allow(ns, ext, ["ext", "act", ext, "Allow", "--command", spec["command"]] + (["--query", query] if query else []), consent)
+            _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
+            hosts_left(ns)
         runs = 1
         for again in (2, 3):
             if content(answer):
@@ -438,14 +514,18 @@ def phase_act(ns):
             hosts_left(ns)
         items = (answer or {}).get("items", []) if isinstance(answer, dict) else []
         first = items[0].get("title", "") if items and isinstance(items[0], dict) else ""
-        row = spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
-        result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row, "runs": runs}
-        if not row:
+        typing = spec.get("type")
+        row = None if typing else spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
+        result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row, "runs": runs, "consent": consent}
+        if typing:
+            press = ["ext", "act", ext, "--command", spec["command"], "--type", typing, "--submit"]
+        elif row:
+            press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
+        else:
             result["pressed"] = False
             results[folder] = result
             continue
         since = lines_in(ns)
-        press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
         code, pressed, _ = pilot(press, ns, timeout=60)
         result["presses"] = 1
         if code != 0:
@@ -458,6 +538,13 @@ def phase_act(ns):
             hosts_left(ns)
             since = lines_in(ns)
             code, pressed, _ = pilot(press, ns, timeout=60)
+        if asks(pressed) and not consent.get("asked"):
+            # The press started osascript, and T9's question took the view: answered Allow, then the press again.
+            consent["command"] = action
+            answer_allow(ns, ext, press + ["--then", "Allow"], consent)
+            since = lines_in(ns)
+            code, pressed, _ = pilot(press, ns, timeout=60)
+            result["presses"] += 1
         left = hosts_left(ns)
         time.sleep(0.5)
         records = measured(ns, since)
@@ -465,15 +552,26 @@ def phase_act(ns):
         say("# the measure log's calls after the press:")
         for call in calls:
             say(json.dumps(shaped(call), sort_keys=True, ensure_ascii=False))
-        kind, piece = spec["expect"]
-        hit = [c for c in calls if c.get("kind") == kind and piece in json.dumps(c)]
+        kind, piece = spec["expect"] or (None, "")
+        hit = [c for c in calls if (kind is None or c.get("kind") == kind) and piece in json.dumps(c)]
+        typed = isinstance(pressed, dict) and pressed.get("note", "").startswith("answered")
         # A typed action (Action.Open and the rest) is Pilot's to perform: `ext act` answers it, and the host never sees it.
-        if isinstance(pressed, dict) and pressed.get("note", "").startswith("answered") and piece in json.dumps(pressed.get("action")):
-            hit.append({"kind": kind, "answeredByPilot": pressed.get("action")})
+        if typed and piece in json.dumps(pressed.get("action")):
+            hit.append({"kind": kind or "typed", "answeredByPilot": pressed.get("action")})
             say("# the press answered a typed action, Pilot's to perform: %s" % json.dumps(shaped(pressed.get("action")), sort_keys=True))
-        # The verdict in the harness's own words: the call's kind and the text it was expected to hold, both the harness's.
-        say("# verdict: %s %s containing %s" % ("issued:" if hit else "NOT issued:", kind, json.dumps(piece)))
-        result.update({"actExit": code, "calls": calls, "expected": "%s %s" % (kind, piece), "issued": bool(hit), "hostsLeft": len(left)})
+        handler = str(((pressed or {}).get("action") or {}).get("handler", "")) if isinstance(pressed, dict) else ""
+        pushed = handler.endswith(".push")
+        if kind is None:
+            # T15: no expected call named, so the verdict is what the press did: an outside call, a typed action, or a push.
+            what = sorted({c.get("kind") for c in hit if c.get("kind")})
+            say("# verdict: %s" % ("issued: " + ", ".join(what) if hit else "pushed a view, no outside call" if pushed else "NOT issued: no call"))
+            expected = "any call"
+        else:
+            # The verdict in the harness's own words: the call's kind and the text it was expected to hold, both the harness's.
+            say("# verdict: %s %s containing %s" % ("issued:" if hit else "NOT issued:", kind, json.dumps(piece)))
+            expected = "%s %s" % (kind, piece)
+        result.update({"actExit": code, "calls": calls, "expected": expected, "issued": bool(hit), "pushed": pushed,
+                       "kinds": sorted({c.get("kind") for c in hit if c.get("kind")}), "hostsLeft": len(left)})
         if folder == "kill-process":
             alive = subprocess.run(["/bin/kill", "-0", str(ns.victim)], capture_output=True).returncode == 0
             say("# kill -0 %s: %s" % (ns.victim, "still running" if alive else "gone"))
@@ -482,10 +580,24 @@ def phase_act(ns):
     save(ns, "act", results)
 
 
+def generic(ran):
+    """T15's press for an extension outside the gate six: its first view with content in the run phase, empty search
+    first, and that view's first pressable row; any outside call counts (`expect` None)."""
+    if not ran or not ran.get("installed"):
+        return None
+    for query in ("", "a"):
+        for action, runs in (ran.get("views") or {}).items():
+            if any(r.get("content") and r.get("query") == query for r in runs):
+                return {"command": action.split(".", 2)[2], "query": query, "row": None, "expect": None}
+    return None
+
+
 def first_pressable(items):
-    """The first row with an action, by its title, as `ext act` takes it: its first action is the primary one."""
+    """The first row with an action, by its title, as `ext act` takes it: its first action is the primary one. A title
+    another row shares is skipped, since `ext act` cannot tell those rows apart (T15: Google Translate)."""
+    titles = [i.get("title") for i in items if isinstance(i, dict)]
     for item in items:
-        if isinstance(item, dict) and item.get("actions"):
+        if isinstance(item, dict) and item.get("actions") and not is_consent(item) and titles.count(item.get("title")) == 1:
             return item.get("title")
     return None
 
@@ -508,7 +620,7 @@ def phase_summary(ns):
     run_results = json.load(open(os.path.join(ns.work, "run.json")))
     act_path = os.path.join(ns.work, "act.json")
     act_results = json.load(open(act_path)) if os.path.exists(act_path) else {}
-    say("extension | views run | views with content | hosts left | gate press")
+    say("extension | views run | views with content | hosts left | primary press | asked AppleScript")
     for folder, title in FROZEN:
         r = run_results.get(folder)
         if not r or not r.get("installed"):
@@ -518,10 +630,14 @@ def phase_summary(ns):
         good = sum(1 for runs in shown.values() if any(x["content"] for x in runs))
         left = sum(x["hostsLeft"] for runs in shown.values() for x in runs)
         a = act_results.get(folder)
-        press = "" if not a else ("issued %s" % a.get("expected") if a.get("issued") else "NOT issued (%s)" % a.get("expected"))
-        if a:
+        press = "" if not a else "no row to press" if a.get("pressed") is False else (
+            "issued %s" % (", ".join(a.get("kinds") or []) or a.get("expected")) if a.get("issued")
+            else "pushed a view, no outside call" if a.get("pushed") else "NOT issued (%s)" % a.get("expected"))
+        if a and a.get("pressed") is not False:
             press += " (runs %s, presses %s)" % (a.get("runs", 1), a.get("presses", 1))
-        say("%s | %d | %d | %d | %s" % (title, len(shown), good, left, press))
+        consents = [c for c in (r.get("consent") or {}, (a or {}).get("consent") or {}) if c.get("asked")]
+        asked = "no" if not consents else "yes, Allow pressed" + ("; its save refused by --measure, seeded" if any(c.get("allowSeeded") for c in consents) else "")
+        say("%s | %d | %d | %d | %s | %s" % (title, len(shown), good, left, press, asked))
     with open(ns.measure) as log:
         # Keys are sorted and unspaced (Measure.swift), so the view lines are skipped before they are parsed.
         exits = [r for r in (json.loads(l) for l in log if '"kind":"exit"' in l) if r.get("mode") == "run"]

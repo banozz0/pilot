@@ -7,7 +7,8 @@ import Foundation
 //   pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools>
 //     one recursive tree listing of that folder (api.github.com), then each file it needs from raw.githubusercontent.com,
 //     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot asks about:
-//     the manifest's commands and preferences, the packages its lockfile pins, and whether esbuild is in <tools> yet.
+//     the manifest's commands and preferences, the packages its lockfile pins (its dependencies, and the dev-only ones its
+//     code imports), and whether esbuild is in <tools> yet.
 //   pilot-ext-host --build <workspace> <tools>, the asked plan on stdin
 //     esbuild 0.28.2 (once, checked by its pinned sha512, kept in <tools>), each package's tarball from the npm registry
 //     checked by the lockfile's sha512 and unpacked here (no npm, so no install script ever runs), then esbuild per
@@ -95,37 +96,27 @@ enum Installer {
         fetched(listing, "tree \(owner)/\(repo)/\(path)", data.count, "\(entries.count) entries, not truncated")
         // Only what a build reads: the manifest, the lockfile, its tsconfig, src/ and assets/. Links and submodules never.
         // Of the tsconfig only `baseUrl` and `paths` reach esbuild, each inside the folder (tsconfigRaw), never `extends`.
-        let wanted = entries.compactMap { e -> (path: String, sha: String, size: Int)? in
+        let blobs = entries.compactMap { e -> Blob? in
             guard e["type"] as? String == "blob", let p = e["path"] as? String, let sha = e["sha"] as? String,
                   ["100644", "100755"].contains(e["mode"] as? String ?? "") else { return nil }
-            let top = ["package.json", "package-lock.json", "tsconfig.json"].contains(p)
-            guard top || p.hasPrefix("src/") || p.hasPrefix("assets/") else { return nil }
             return (p, sha, e["size"] as? Int ?? 0)
         }
+        var wanted = blobs.filter { ["package.json", "package-lock.json", "tsconfig.json"].contains($0.path) || $0.path.hasPrefix("src/") || $0.path.hasPrefix("assets/") }
         guard wanted.contains(where: { $0.path == "package.json" }) else { throw Refused("\(path) has no package.json") }
-        guard wanted.count <= mostFiles else { throw Refused("\(path) has \(wanted.count) files to fetch, more than \(mostFiles)") }
-        if let big = wanted.first(where: { $0.size > fileLimit }) { throw Refused("\(cut(big.path)) is \(big.size) bytes, past \(fileLimit)") }
-        let total = wanted.reduce(0) { $0 + $1.size }
-        guard total <= folderLimit else { throw Refused("\(path) is \(total) bytes to fetch, past \(folderLimit)") }
         let source = workspace.appending(path: "source")
-        for file in wanted {
-            guard safe(file.path) else { throw Refused("\(cut(file.path)) leaves its folder") }
-            let encoded = (path + "/" + file.path).split(separator: "/").map {
-                $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? String($0)
-            }.joined(separator: "/")
-            let url = URL(string: "https://raw.githubusercontent.com/\(owner)/\(repo)/HEAD/\(encoded)")!
-            let body = try await get(url, limit: fileLimit)
-            // A git blob's id is sha1("blob <size>\0" + bytes): the file is the one the listing named, whatever HEAD is now.
-            let blob = Data("blob \(body.count)\0".utf8) + body
-            guard hex(Array(Insecure.SHA1.hash(data: blob))) == file.sha else {
-                throw Refused("\(cut(file.path)) from GitHub does not match its listing's blob \(file.sha.prefix(12)); nothing was installed")
-            }
-            fetched(url, file.path, body.count, "git blob \(file.sha.prefix(12))")
-            let to = source.appending(path: file.path)
-            try FileManager.default.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try body.write(to: to)
+        // Then each top-level folder of the extension's own that a relative import in what was fetched names (T15: Google
+        // Translate's `../vendor/…`, or `../vendor` itself), held to the same limits; an import that climbs above the
+        // folder is refused. Names are compared case-folded, as APFS reads them, so `../Src/…` is never fetched over src/.
+        var batch = wanted, have = Set(wanted.map(\.path)), total = 0
+        while !batch.isEmpty {
+            total = try checkLimits(wanted, path)
+            for file in batch { try await fetchBlob(file, owner: owner, repo: repo, path: path, into: source) }
+            let folders = try importedFolders(batch.map(\.path), in: source).filter { !["src", "assets", "node_modules"].contains($0.lowercased()) }
+            batch = blobs.filter { blob in !have.contains(blob.path) && folders.contains(where: { blob.path.hasPrefix($0 + "/") }) }
+            wanted += batch
+            have.formUnion(batch.map(\.path))
         }
-        var plan = try plan(source)
+        var plan = try plan(source, imports: importedPackages(wanted.map(\.path), in: source))
         plan["type"] = "plan"
         plan["tree"] = treeSHA
         plan["source"] = "github:\(owner)/\(repo)/\(path)"
@@ -137,9 +128,78 @@ enum Installer {
         say(plan)
     }
 
+    typealias Blob = (path: String, sha: String, size: Int)
+
+    /// The source folder's limits, read from the listing before a file of `wanted` is fetched; answers its bytes.
+    static func checkLimits(_ wanted: [Blob], _ path: String) throws -> Int {
+        guard wanted.count <= mostFiles else { throw Refused("\(path) has \(wanted.count) files to fetch, more than \(mostFiles)") }
+        if let big = wanted.first(where: { $0.size > fileLimit }) { throw Refused("\(cut(big.path)) is \(big.size) bytes, past \(fileLimit)") }
+        let total = wanted.reduce(0) { $0 + $1.size }
+        guard total <= folderLimit else { throw Refused("\(path) is \(total) bytes to fetch, past \(folderLimit)") }
+        return total
+    }
+
+    /// The top-level folders that the relative imports (`from "./…"`, `import("../…")`, `require("../…")`) in `files`
+    /// reach, each resolved from its file's own folder. One that climbs above the extension's folder is refused.
+    static func importedFolders(_ files: [String], in source: URL) throws -> Set<String> {
+        let code = #/(?:\bfrom|\bimport|\brequire)\s*\(?\s*["'](\.{1,2}/[^"'\n]{1,300})["']/#
+        var folders = Set<String>()
+        for file in files where codeSuffixes.contains(where: file.hasSuffix) {
+            guard let text = try? String(contentsOf: source.appending(path: file), encoding: .utf8) else { continue }
+            for match in text.matches(of: code) {
+                var parts = file.split(separator: "/").dropLast().map(String.init)
+                for part in match.1.split(separator: "/").map(String.init) {
+                    if part == ".." {
+                        guard !parts.isEmpty else { throw Refused("\(cut(file)) imports \(cut(String(match.1))), outside the extension's folder") }
+                        parts.removeLast()
+                    } else if part != "." { parts.append(part) }
+                }
+                // Its top-level name: a folder when the listing has files under it (`../vendor`, `../vendor/x`), else nothing.
+                if let top = parts.first { folders.insert(top) }
+            }
+        }
+        return folders
+    }
+
+    /// The packages the bare imports (`from "x"`, `import("@s/x/y")`, `require("x")`) in `files` name, by package name.
+    static func importedPackages(_ files: [String], in source: URL) -> Set<String> {
+        let code = #/(?:\bfrom|\bimport|\brequire)\s*\(?\s*["']([^"'./\s][^"'\s]{0,300})["']/#
+        var names = Set<String>()
+        for file in files where codeSuffixes.contains(where: file.hasSuffix) {
+            guard let text = try? String(contentsOf: source.appending(path: file), encoding: .utf8) else { continue }
+            for match in text.matches(of: code) where !match.1.contains(":") {
+                let parts = match.1.split(separator: "/").map(String.init)
+                let name = match.1.hasPrefix("@") ? parts.prefix(2).joined(separator: "/") : parts[0]
+                if name.wholeMatch(of: npmName) != nil { names.insert(name) }
+            }
+        }
+        return names
+    }
+
+    static let codeSuffixes = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]
+
+    /// One file of the listing from raw.githubusercontent.com, checked against its git blob hash, into `source`.
+    static func fetchBlob(_ file: Blob, owner: String, repo: String, path: String, into source: URL) async throws {
+        guard safe(file.path) else { throw Refused("\(cut(file.path)) leaves its folder") }
+        let encoded = (path + "/" + file.path).split(separator: "/").map {
+            $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? String($0)
+        }.joined(separator: "/")
+        let url = URL(string: "https://raw.githubusercontent.com/\(owner)/\(repo)/HEAD/\(encoded)")!
+        let body = try await get(url, limit: fileLimit)
+        // A git blob's id is sha1("blob <size>\0" + bytes): the file is the one the listing named, whatever HEAD is now.
+        let blob = Data("blob \(body.count)\0".utf8) + body
+        guard hex(Array(Insecure.SHA1.hash(data: blob))) == file.sha else {
+            throw Refused("\(cut(file.path)) from GitHub does not match its listing's blob \(file.sha.prefix(12)); nothing was installed")
+        }
+        fetched(url, file.path, body.count, "git blob \(file.sha.prefix(12))")
+        let to = source.appending(path: file.path)
+        try FileManager.default.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try body.write(to: to)
+    }
+
     /// The manifest's words and the packages its lockfile pins that the build needs: everything reachable from the root's
     /// dependencies, at the lockfile's own places, the host's externals and their trees left out.
-    static func plan(_ source: URL) throws -> [String: Any] {
+    static func plan(_ source: URL, imports: Set<String> = []) throws -> [String: Any] {
         let manifestData = try Data(contentsOf: source.appending(path: "package.json"))
         guard let manifest = try? JSONSerialization.jsonObject(with: manifestData) as? [String: Any],
               let id = manifest["name"] as? String, let commands = manifest["commands"] as? [[String: Any]] else {
@@ -179,28 +239,48 @@ enum Installer {
             "preferences": preferences,
         ]
         if let version = manifest["version"] as? String { plan["version"] = version }
-        let roots = Set((manifest["dependencies"] as? [String: Any] ?? [:]).keys).subtracting(externals)
+        // The dependencies, and each package the code imports that the lockfile pins at the root as dev-only (T15: GitHub's
+        // generated code imports graphql-tag, which only its codegen pins), so the question names and counts it.
+        let dependencies = Set((manifest["dependencies"] as? [String: Any] ?? [:]).keys)
+        let packages = lock(source)
+        let devOnly = imports.subtracting(dependencies).filter { name in
+            let entry = packages?["node_modules/" + name]
+            return entry?["dev"] as? Bool == true || entry?["devOptional"] as? Bool == true
+        }
+        let roots = dependencies.union(devOnly).subtracting(externals)
         guard !roots.isEmpty else { plan["packages"] = [[String: Any]](); return plan }
+        guard let packages else { throw Refused("it has dependencies but no package-lock.json of version 2 or 3") }
+        plan["packages"] = try walk(roots, packages).map { try described($0, packages) }
+        return plan
+    }
+
+    /// The lockfile's packages, by their places, when it is one of version 2 or 3.
+    static func lock(_ source: URL) -> [String: [String: Any]]? {
         guard let lockData = try? Data(contentsOf: source.appending(path: "package-lock.json")),
               let lock = try? JSONSerialization.jsonObject(with: lockData) as? [String: Any],
-              let packages = lock["packages"] as? [String: [String: Any]], (lock["lockfileVersion"] as? Int ?? 0) >= 2 else {
-            throw Refused("it has dependencies but no package-lock.json of version 2 or 3")
+              let packages = lock["packages"] as? [String: [String: Any]], (lock["lockfileVersion"] as? Int ?? 0) >= 2 else { return nil }
+        return packages
+    }
+
+    /// Node's lookup: <from>/node_modules/<name>, then each folder up to the root's node_modules.
+    static func resolve(_ name: String, from key: String, _ packages: [String: [String: Any]]) -> String? {
+        var at = key
+        while true {
+            let candidate = (at.isEmpty ? "" : at + "/") + "node_modules/" + name
+            if packages[candidate] != nil { return candidate }
+            guard !at.isEmpty else { return nil }
+            if let range = at.range(of: "/node_modules/", options: .backwards) { at = String(at[..<range.lowerBound]) } else { at = "" }
         }
-        // Node's lookup: <from>/node_modules/<name>, then each folder up to the root's node_modules.
-        func resolve(_ name: String, from key: String) -> String? {
-            var at = key
-            while true {
-                let candidate = (at.isEmpty ? "" : at + "/") + "node_modules/" + name
-                if packages[candidate] != nil { return candidate }
-                guard !at.isEmpty else { return nil }
-                if let range = at.range(of: "/node_modules/", options: .backwards) { at = String(at[..<range.lowerBound]) } else { at = "" }
-            }
-        }
-        var needed: [String] = [], seen = Set<String>(), queue: [(name: String, from: String, optional: Bool)] = roots.sorted().map { ($0, "", false) }
+    }
+
+    /// The lockfile places of everything reachable from `roots` (names the root requires), the host's externals and
+    /// their trees left out, and the places in `skip` (already unpacked) not walked again.
+    static func walk(_ roots: Set<String>, _ packages: [String: [String: Any]], skip: Set<String> = []) throws -> [String] {
+        var needed: [String] = [], seen = skip, queue: [(name: String, from: String, optional: Bool)] = roots.sorted().map { ($0, "", false) }
         while !queue.isEmpty {
             let (name, from, optional) = queue.removeFirst()
             guard !externals.contains(name) else { continue }
-            guard let key = resolve(name, from: from) else {
+            guard let key = resolve(name, from: from, packages) else {
                 if optional { continue }
                 throw Refused("its package-lock.json lacks \(cut(name)), which \(from.isEmpty ? "it" : cut(from)) needs")
             }
@@ -220,29 +300,31 @@ enum Installer {
             for dep in (entry["optionalDependencies"] as? [String: Any] ?? [:]).keys.sorted() { queue.append((dep, key, true)) }
             for dep in (entry["peerDependencies"] as? [String: Any] ?? [:]).keys.sorted() { queue.append((dep, key, peersOptional.contains(dep))) }
         }
-        guard needed.count <= mostPackages else { throw Refused("it needs \(needed.count) packages, more than \(mostPackages)") }
-        plan["packages"] = try needed.map { key -> [String: Any] in
-            let entry = packages[key] ?? [:]
-            guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(cut(key)) leaves its folder") }
-            // Each name on the key's path is the folder Node requires it by, an alias when the lockfile says so (npm:
-            // string-width-cjs is string-width); the real name, the entry's own `name` else the key's last name, is the one
-            // the registry serves it under: <name>/-/<name less its scope>-<version>.tgz. Both are held to npm's names,
-            // legacy ones included (JSONStream), and the version to semver's characters.
-            let names = key.dropFirst("node_modules/".count).components(separatedBy: "/node_modules/")
-            let version = entry["version"] as? String ?? ""
-            let real = entry["name"] as? String ?? names.last ?? ""
-            guard (names + [real]).allSatisfy({ $0.wholeMatch(of: npmName) != nil && $0.count <= 214 }),
-                  version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(cut(key)) is not an npm package name and version") }
-            let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
-            guard let resolved = entry["resolved"] as? String, resolved == expected else {
-                throw Refused("\(cut(key)) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
-            }
-            guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
-                throw Refused("\(cut(key)) has no sha512 integrity in its lockfile")
-            }
-            return ["key": key, "name": real, "version": version, "resolved": resolved, "integrity": integrity]
+        guard needed.count + skip.count <= mostPackages else { throw Refused("it needs \(needed.count + skip.count) packages, more than \(mostPackages)") }
+        return needed
+    }
+
+    /// One package of the plan: its place, real name, version, the registry URL it must come from and its sha512.
+    static func described(_ key: String, _ packages: [String: [String: Any]]) throws -> [String: String] {
+        let entry = packages[key] ?? [:]
+        guard safe(key), key.hasPrefix("node_modules/") else { throw Refused("\(cut(key)) leaves its folder") }
+        // Each name on the key's path is the folder Node requires it by, an alias when the lockfile says so (npm:
+        // string-width-cjs is string-width); the real name, the entry's own `name` else the key's last name, is the one
+        // the registry serves it under: <name>/-/<name less its scope>-<version>.tgz. Both are held to npm's names,
+        // legacy ones included (JSONStream), and the version to semver's characters.
+        let names = key.dropFirst("node_modules/".count).components(separatedBy: "/node_modules/")
+        let version = entry["version"] as? String ?? ""
+        let real = entry["name"] as? String ?? names.last ?? ""
+        guard (names + [real]).allSatisfy({ $0.wholeMatch(of: npmName) != nil && $0.count <= 214 }),
+              version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(cut(key)) is not an npm package name and version") }
+        let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
+        guard let resolved = entry["resolved"] as? String, resolved == expected else {
+            throw Refused("\(cut(key)) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
         }
-        return plan
+        guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
+            throw Refused("\(cut(key)) has no sha512 integrity in its lockfile")
+        }
+        return ["key": key, "name": real, "version": version, "resolved": resolved, "integrity": integrity]
     }
 
     // MARK: Build
