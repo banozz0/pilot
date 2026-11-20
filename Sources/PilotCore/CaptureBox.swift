@@ -74,6 +74,24 @@ public struct CaptureBox: Equatable, Sendable {
         ("captures.screenRecording", CaptureBox(how: .area, what: .record)),
     ]
 
+    // MARK: The bar's parts
+
+    /// What a click on the bar lands on (Sven, 2026-11-20: "select which type from the toolbar and then press return"):
+    /// one of How's or What's choices, the timer, the action button, or Esc's Close.
+    public enum Part: Hashable, Sendable { case how(How), what(What), timer, action, close }
+
+    /// The letter a click on `part` presses, so a click picks as its letter does; nil for a choice already picked (a
+    /// click picks, it never turns one off) and for the action and Close, which act as Return and Esc. Photo has no
+    /// letter: a click on it presses the letter of the Record or Text it goes back from.
+    public func letter(for part: Part) -> Letter? {
+        switch part {
+        case .how(let picked): picked == how ? nil : picked.letter
+        case .what(let picked): picked == what ? nil : picked.letter ?? what.letter
+        case .timer: .timer
+        case .action, .close: nil
+        }
+    }
+
     // MARK: The bar's place
 
     /// Where the box's bar of `size` goes in `bounds` (Sven, 2026-11-20): centred just under `area` and kept on the
@@ -142,5 +160,28 @@ public struct CaptureBox: Equatable, Sendable {
         let x0 = min(max(min(left, right), bounds.minX), bounds.maxX), x1 = min(max(max(left, right), bounds.minX), bounds.maxX)
         let y0 = min(max(min(top, bottom), bounds.minY), bounds.maxY), y1 = min(max(max(top, bottom), bounds.minY), bounds.maxY)
         return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).integral
+    }
+}
+
+extension CaptureBox.How {
+    /// The letter that picks it.
+    public var letter: CaptureBox.Letter {
+        switch self {
+        case .area: .area
+        case .window: .window
+        case .full: .full
+        case .scroll: .scroll
+        }
+    }
+}
+
+extension CaptureBox.What {
+    /// The letter that picks it; Photo has none: R or O again goes back to it.
+    public var letter: CaptureBox.Letter? {
+        switch self {
+        case .photo: nil
+        case .record: .record
+        case .text: .text
+        }
     }
 }

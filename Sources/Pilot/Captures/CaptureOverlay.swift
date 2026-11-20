@@ -210,8 +210,12 @@ final class CaptureOverlayView: NSView {
     private let report: (CaptureSelection.Outcome, CaptureOverlayView) -> Void
     /// The box's bar, handles and readouts in the picked theme (T24, CaptureBoxView.swift).
     private lazy var chrome = CaptureBoxChrome(tokens: Look.shared.chromeTokens(.hud), scale: grab.scale)
-    /// The bar's picture for the mode it was drawn in, drawn again only when the mode changes.
-    private var bar: (box: CaptureBox, image: NSImage)?
+    /// The bar's picture for the mode it was drawn in, with its parts' frames, drawn again only when the mode changes.
+    private var bar: (box: CaptureBox, image: NSImage, parts: [CaptureBox.Part: CGRect])?
+    /// A press that began on the bar, and the part under it: its release there clicks that part, and nothing under
+    /// the bar is picked or dragged meanwhile.
+    private var barPress: BarPress?
+    private struct BarPress { let part: CaptureBox.Part? }
     /// The pointer last set over a held area's handle or body, so a move sets it only when it changes.
     private var gripCursor: NSCursor?
 
@@ -304,17 +308,19 @@ final class CaptureOverlayView: NSView {
 
     /// Over a held area's handle a resize arrow, over the area a hand, elsewhere the overlay's own pointer.
     private func pointHeld(at p: CGPoint) {
-        guard box != nil else { return }
+        guard let box else { return }
         let grip = gripping?.grip ?? held.flatMap { CaptureBox.grip(at: p, of: $0) }
-        let shape = CaptureBoxChrome.cursor(for: grip, dragging: gripping != nil) ?? cursor
+        let onBar = gripping == nil && barFrame(box)?.contains(p) == true
+        let shape = onBar ? .arrow : CaptureBoxChrome.cursor(for: grip, dragging: gripping != nil) ?? cursor
         guard shape !== gripCursor else { return }
         gripCursor = shape
         if window?.isKeyWindow == true { shape.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard purpose != .colour, !full else { return }
         let p = point(event)
+        if let box, barFrame(box)?.contains(p) == true { return barPress = BarPress(part: barPart(at: p)) }
+        guard purpose != .colour, !full else { return }
         if let held, let grip = CaptureBox.grip(at: p, of: held) {
             gripping = (grip, p, held)
             return
@@ -332,6 +338,7 @@ final class CaptureOverlayView: NSView {
     }
     #endif
     override func mouseDragged(with event: NSEvent) {
+        guard barPress == nil else { return }
         let p = point(event)
         if let gripping { held = CaptureBox.adjusted(gripping.from, gripping.grip, from: gripping.start, to: p, within: bounds) }
         update { $0.move(to: p) }
@@ -339,6 +346,11 @@ final class CaptureOverlayView: NSView {
     }
     override func mouseUp(with event: NSEvent) {
         let p = point(event)
+        if let press = barPress {
+            barPress = nil
+            if let part = press.part, barPart(at: p) == part { click(part) }
+            return
+        }
         // Pick a colour: a click copies the pixel's hex, Shift-click its rgb().
         if purpose == .colour {
             update { $0.move(to: p) }
@@ -560,8 +572,34 @@ final class CaptureOverlayView: NSView {
 
     /// The bar's picture for `box`, made once per mode.
     private func barImage(_ box: CaptureBox) -> NSImage? {
-        if bar?.box != box { bar = chrome.bar(box).map { (box, $0) } }
+        if bar?.box != box { bar = chrome.bar(box).map { (box, $0.image, $0.parts) } }
         return bar?.image
+    }
+
+    /// The bar's part under `p`, in the view's points; nil off the bar or between its parts.
+    func barPart(at p: CGPoint) -> CaptureBox.Part? {
+        guard let box, let frame = barFrame(box), frame.contains(p), let parts = bar?.parts else { return nil }
+        return parts.first { $0.value.offsetBy(dx: frame.minX, dy: frame.minY).contains(p) }?.key
+    }
+
+    /// Where each of the bar's parts is now, in the view's points; for tests.
+    var barParts: [CaptureBox.Part: CGRect] {
+        guard let box, let frame = barFrame(box), let parts = bar?.parts else { return [:] }
+        return parts.mapValues { $0.offsetBy(dx: frame.minX, dy: frame.minY) }
+    }
+
+    /// A click on the bar (Sven, 2026-11-20): a choice or the timer as its letter, the action button as Return, Close
+    /// as Esc.
+    private func click(_ part: CaptureBox.Part) {
+        switch part {
+        case .action:
+            if takeHeld?() == true { return }
+            finish { $0.key(.enter) }
+        case .close:
+            finish { $0.key(.escape) }
+        default:
+            if let letter = box?.letter(for: part) { pressed?(letter) }
+        }
     }
 
     /// Where the bar goes (Sven, 2026-11-20): under the held or dragged area, so it follows a drag and a resize; at the

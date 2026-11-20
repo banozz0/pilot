@@ -7,35 +7,51 @@ import SwiftUI
 // sheet, the user's capture binds beside the box's own letters. Instrument only, ring and fill, no shadow (DESIGN.md).
 
 /// The bar: how much of the screen (Area, Window, Full, Scroll), what the capture makes (Photo, Record, Text), the
-/// timer, the action button that names what Return does, and Esc. The overlay draws it as a picture, so it takes no
-/// clicks and no keys: the letters work through the overlay's own keys (T23).
+/// timer, the action button that names what Return does, and Esc. The overlay draws it as a picture and takes its
+/// clicks itself: each part's frame is written to `parts` as the picture is drawn, and a click on one picks as its
+/// letter does (Sven, 2026-11-20); the letters work through the overlay's own keys (T23).
 struct CaptureBoxBar: View {
     @Environment(\.style) private var style
     let box: CaptureBox
+    /// Where each part was laid out, in the bar's points from its top left; nil when nothing listens.
+    var parts: CaptureBarParts?
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
         HStack(spacing: 8) {
-            group(CaptureBox.How.allCases.map { Choice(title: $0.title, symbol: $0.symbol, letter: $0.letter, on: box.how == $0) })
-            group(CaptureBox.What.allCases.map { Choice(title: $0.title, symbol: $0.symbol, letter: $0.letter, on: box.what == $0) })
-            timer
-            action
+            group(CaptureBox.How.allCases.map { Choice(title: $0.title, symbol: $0.symbol, letter: $0.letter, on: box.how == $0, part: .how($0)) })
+            group(CaptureBox.What.allCases.map { Choice(title: $0.title, symbol: $0.symbol, letter: $0.letter, on: box.what == $0, part: .what($0)) })
+            timer.background { mark(.timer) }
+            action.background { mark(.action) }
             HStack(spacing: 6) {
                 InstrumentKey(text: "Esc")
                 Text("Close").styleText(\.caption).foregroundStyle(style.color(\.text3))
             }
+            .background { mark(.close) }
             .padding(.trailing, 4)
         }
         .padding(8)
         .background(style.color(\.canvas), in: shape)
         .overlay { shape.strokeBorder(style.color(\.line2)) }
         .fixedSize()
+        .coordinateSpace(.named(Self.space))
+    }
+
+    private static let space = "captureBoxBar"
+
+    /// Writes `part`'s frame as it is laid out, so the overlay can tell which part a click is on.
+    private func mark(_ part: CaptureBox.Part) -> some View {
+        GeometryReader { proxy in
+            let _ = parts?.lay(part, proxy.frame(in: .named(Self.space)))
+            Color.clear
+        }
     }
 
     private struct Choice: Identifiable {
         let title: String, symbol: String
         let letter: CaptureBox.Letter?
         let on: Bool
+        let part: CaptureBox.Part
         var id: String { title }
     }
 
@@ -51,6 +67,7 @@ struct CaptureBoxBar: View {
                 }
                 .padding(.horizontal, 9).frame(height: style.points(30))
                 .instrumentRaised(choice.on, fill: \.panel, radius: style.radii.control - 2)
+                .background { mark(choice.part) }
             }
         }
         .padding(2)
@@ -83,6 +100,14 @@ struct CaptureBoxBar: View {
         .padding(.horizontal, 14).frame(height: style.points(34))
         .background(style.color(\.accent), in: shape)
     }
+}
+
+/// The bar's parts as laid out while its picture is drawn: one frame each, in the bar's points from its top left.
+@MainActor
+final class CaptureBarParts {
+    private(set) var frames: [CaptureBox.Part: CGRect] = [:]
+
+    func lay(_ part: CaptureBox.Part, _ frame: CGRect) { frames[part] = frame }
 }
 
 /// The key sheet (shot 5c-keys): on the left each capture bind with the user's own key from the bind store, "no key"
@@ -204,15 +229,6 @@ extension CaptureBox.How {
         case .scroll: "arrow.down.doc"
         }
     }
-
-    var letter: CaptureBox.Letter {
-        switch self {
-        case .area: .area
-        case .window: .window
-        case .full: .full
-        case .scroll: .scroll
-        }
-    }
 }
 
 extension CaptureBox.What {
@@ -229,15 +245,6 @@ extension CaptureBox.What {
         case .photo: "camera"
         case .record: "video"
         case .text: "text.viewfinder"
-        }
-    }
-
-    /// Photo has no letter: R or O again goes back to it.
-    var letter: CaptureBox.Letter? {
-        switch self {
-        case .photo: nil
-        case .record: .record
-        case .text: .text
         }
     }
 }
@@ -261,12 +268,13 @@ struct CaptureBoxChrome {
         self.scale = scale
     }
 
-    /// The bar for `box`, drawn once; nil if SwiftUI could not draw it.
-    func bar(_ box: CaptureBox) -> NSImage? {
-        let renderer = ImageRenderer(content: CaptureBoxBar(box: box).style(tokens))
+    /// The bar for `box`, drawn once, with where each of its parts went; nil if SwiftUI could not draw it.
+    func bar(_ box: CaptureBox) -> (image: NSImage, parts: [CaptureBox.Part: CGRect])? {
+        let parts = CaptureBarParts()
+        let renderer = ImageRenderer(content: CaptureBoxBar(box: box, parts: parts).style(tokens))
         renderer.scale = scale
         guard let image = renderer.cgImage else { return nil }
-        return NSImage(cgImage: image, size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale))
+        return (NSImage(cgImage: image, size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)), parts.frames)
     }
 
     /// The held area's eight handles (shot 5c-area): white squares on a ring of the signal colour.

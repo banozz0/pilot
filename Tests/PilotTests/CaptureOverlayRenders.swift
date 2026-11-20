@@ -146,6 +146,55 @@ struct CaptureOverlayRenders {
         }
     }
 
+    @Test("A click on each of the box's bar parts picks as its letter does; the action button takes, Close closes (Sven, 2026-11-20)")
+    func barClicks() throws {
+        testApp()
+        let grab = DisplayGrab(id: 1, frame: CGRect(origin: .zero, size: Self.size), scale: 2, image: Self.still())
+        var result: CaptureOverlay.Result?
+        let overlay = CaptureOverlay(grabs: [grab], windows: Self.windows, mode: .area, box: CaptureBox(), visible: false) { result = $0 }
+        overlay.show()
+        let view = try #require(overlay.displays.first)
+        func click(_ part: CaptureBox.Part) throws {
+            let frame = try #require(view.barParts[part], "no \(part) on the bar")
+            let at = view.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = try #require(NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: 0,
+                                                             windowNumber: view.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+                if type == .leftMouseDown { view.mouseDown(with: event) } else { view.mouseUp(with: event) }
+            }
+        }
+        #expect(view.barParts.count == 10, "4 How, 3 What, the timer, the action and Close")
+        for how in [CaptureBox.How.window, .full, .scroll, .area] {
+            try click(.how(how))
+            #expect(overlay.box?.how == how)
+        }
+        for what in [CaptureBox.What.record, .text, .photo] {
+            try click(.what(what))
+            #expect(overlay.box?.what == what)
+        }
+        try click(.what(.photo))
+        #expect(overlay.box?.what == .photo, "a click picks; it never turns a choice off")
+        try click(.timer)
+        #expect(overlay.box?.timer == 3)
+        try click(.how(.full))
+        try click(.action)
+        guard case .area(_, let rect) = result else { Issue.record("the action button took \(String(describing: result))"); return }
+        #expect(rect == CGRect(origin: .zero, size: Self.size))
+
+        result = nil
+        let closing = CaptureOverlay(grabs: [grab], windows: Self.windows, mode: .area, box: CaptureBox(), visible: false) { result = $0 }
+        closing.show()
+        let other = try #require(closing.displays.first)
+        let close = try #require(other.barParts[.close])
+        let at = other.convert(CGPoint(x: close.midX, y: close.midY), to: nil)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: 0,
+                                                         windowNumber: other.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            if type == .leftMouseDown { other.mouseDown(with: event) } else { other.mouseUp(with: event) }
+        }
+        guard case .cancelled = result else { Issue.record("Close gave \(String(describing: result))"); return }
+    }
+
     @Test("Smart on, a loose drag inside the front window snaps to its lines of text; smart off, it stays as dragged")
     func snap() {
         let grab = DisplayGrab(id: 1, frame: CGRect(origin: .zero, size: Self.size), scale: 2, image: Self.still())
