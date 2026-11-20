@@ -3,7 +3,8 @@ import Observation
 import PilotCore
 import Darwin
 
-/// The only theme mutation route. Synchronous commit/recovery on MainActor cannot interleave across an Allow suspension.
+/// The only theme mutation route. Commit and recovery run on the MainActor; `busy` keeps a second mutation out across every
+/// wait (the Allow, macOS's mode, Ghostex, a commit's file writes off the main thread).
 @Observable @MainActor
 final class ThemeCoordinator {
     fileprivate static var live: ThemeCoordinator?
@@ -69,6 +70,7 @@ final class ThemeCoordinator {
             cursorIsSystem: { CursorSets.shared.set == .macOS },
             ghostexColours: isTestRun ? nil : GhostexColours.effects(), appsHome: isTestRun ? nil : NSHomeDirectory())
         owner.wallpaperFolder = { WallpaperSettings.shared.themeOverride }
+        owner.showPressed = { pack in if let pack { Look.shared.tryOn(id: pack.id, pack: pack) } else { Look.shared.endTrial() } }
         owner.forgetFavourite = { WallpaperSettings.shared.forgetThemeFavourite($0) }
         owner.shipped = Shipped(wallpapers: ShippedWallpapers(root: support.appending(path: "wallpapers").path, source: CatalogueSource.live), index: {
             let model = ExtensionCatalogueModel.shared
@@ -188,6 +190,12 @@ final class ThemeCoordinator {
         let index: @MainActor () async throws -> ExtensionCatalogue.Index
     }
     var shipped: Shipped?
+    /// A press's pack shown in Pilot's own window at once, nil to take it off (perf-round, Sven on combined-5: applying a
+    /// theme could be smoother; Pilot recoloured only after every app's config was written, 0.6 s into a debug press).
+    /// Look tries it on in the app; nothing in tests and fixtures.
+    var showPressed: @MainActor (ThemePack?) -> Void = { _ in }
+    /// How long a press waits for its window to draw the theme before the plan's checks and writes: a frame.
+    static let pressedFrame = Duration.milliseconds(17)
     /// Use my wallpaper folder for every theme: the folder an apply sets in place of the pack's pictures, nil while it is
     /// off (WallpaperSettings.themeOverride); nil in tests and fixtures.
     var wallpaperFolder: @MainActor () -> String? = { nil }
@@ -1849,9 +1857,18 @@ final class ThemeCoordinator {
     /// one pressing; the result names what changed, and Restore undoes it. The pilot CLI, a link and an agent go through
     /// plan, then apply, which always asks.
     func press(_ id: String?) async throws(ControlError) -> JSONValue {
+        // Pilot's own window first, from the pack's manifest alone, before the plan reads anything.
+        let shown = id.flatMap { try? store.pack($0) }
+        if let shown {
+            showPressed(shown)
+            try? await Task.sleep(for: Self.pressedFrame)
+        }
         let planned: ThemePlan
-        do { planned = try await plan(id) } catch { throw ControlError(.badValue, String(describing: error)) }
-        return try await apply(planned.id, peer: nil, pressed: true)
+        do { planned = try await plan(id) } catch {
+            if shown != nil { showPressed(nil) }
+            throw ControlError(.badValue, String(describing: error))
+        }
+        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil)
     }
     /// The sandbox's stand-in for Look's button: the same press, only on a fixture host.
     func fixturePress(_ id: String?) async throws(ControlError) -> JSONValue {
@@ -1859,7 +1876,12 @@ final class ThemeCoordinator {
         return try await press(id)
     }
 
-    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false) async throws(ControlError) -> JSONValue {
+    /// `shown`: a press already shows the pack in Pilot's own window.
+    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false) async throws(ControlError) -> JSONValue {
+        // The theme a press shows in Pilot's own window comes off as the apply ends, however it ends: an applied pack
+        // looks the same, a refused or failed one goes.
+        var tried = shown
+        defer { if tried { showPressed(nil) } }
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
         guard let (plan, revision, ownership, appearance) = plans.removeValue(forKey: planID) else {
             // The agent passed a pack's id here more than once (skills-test): say which id this takes.
@@ -1869,6 +1891,13 @@ final class ThemeCoordinator {
             throw ControlError(.badValue, "unknown or spent plan (a plan applies once): plan again with pilot theme plan apply <theme> --summary, or plan restore --summary")
         }
         busy = true; defer { busy = false; removeMadeFolders() }  // Also after a throw: an empty folder from a failed Apply goes.
+        // Pilot's own window takes the theme at the press, before any check or write: one frame for it to draw, then the
+        // rest follows.
+        if pressed, !tried, let pack = plan.selection {
+            showPressed(pack)
+            tried = true
+            try? await Task.sleep(for: Self.pressedFrame)
+        }
         do { try await fresh(plan, contextRevision: revision, appearance: appearance) }
         catch { throw ControlError(.badValue, String(describing: error)) }
         // The plan's identity is the spent key above, not anything shown here.
@@ -1944,8 +1973,15 @@ final class ThemeCoordinator {
         return .object(result)
     }
 
-    /// The effects that wait on another app (macOS's mode, Ghostex) are awaited off the main thread; every check and the
-    /// ledger write after them run back on it.
+    /// A commit's file write off the main thread, which runs the key tap (perf-round, Sven on combined-5: applying a theme
+    /// stalled): each is staged, synced and renamed there, in the commit's order, and checks its target again just before
+    /// the rename as it always has. `busy` keeps every other mutation out meanwhile.
+    private nonisolated static func offMain<T: Sendable>(_ write: @Sendable @escaping () throws -> T) async throws -> T {
+        try await Task.detached(priority: .userInitiated) { try write() }.value
+    }
+
+    /// The effects that wait on another app (macOS's mode, Ghostex) and the file writes are awaited off the main thread;
+    /// every check, the wallpaper and Pilot's own look run on it.
     private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?) async throws -> JSONValue {
         var (oldFile, old) = try ledger()
         if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
@@ -1983,15 +2019,16 @@ final class ThemeCoordinator {
         let nextBytes = try ThemeDigest.encoded(next)
         let journal = ThemeJournal(schema: 1, beforeLedger: oldFile.bytes, afterLedger: nextBytes, mutations: plan.mutations, wallpapers: plan.wallpapers.isEmpty ? nil : plan.wallpapers, appearance: appearance, ghostexSettings: plan.ghostex.isEmpty ? nil : plan.ghostex, keptWallpapers: plan.keptWallpapers.isEmpty ? nil : plan.keptWallpapers,
                                    keptLook: plan.keptLook.isEmpty ? nil : plan.keptLook)
-        let pending = try state("pending")
+        let pending = try state("pending"), journalBytes = try ThemeDigest.encoded(journal)
         try fault("journal")
-        _ = try ThemeFiles.write(ThemeDigest.encoded(journal), over: pending)
+        _ = try await Self.offMain { try ThemeFiles.write(journalBytes, over: pending) }
         var recovered: JSONValue?
         var warning: String?
         do {
             for (i, change) in uniqueResources(plan.mutations).enumerated() {
                 try fault("write:\(i)")
-                _ = try replace(change.replacement, over: change.target)
+                let (bytes, target, leaf) = (change.replacement, change.target, linked(change.target.root, change.target.path))
+                _ = try await Self.offMain { try ThemeFiles.write(bytes, over: target, linkedLeaf: leaf) }
                 try fault("after-write:\(i)")
             }
             for (index, change) in plan.wallpapers.enumerated() {
@@ -2025,10 +2062,12 @@ final class ThemeCoordinator {
                 guard plan.ghostex.allSatisfy({ state?[$0.key] == $0.after }) else { throw ThemeFailure("Ghostex colours not verified") }
             }
             try fault("ledger")
-            _ = try ThemeFiles.write(nextBytes, over: oldFile)
+            let ledgerFile = oldFile
+            _ = try await Self.offMain { try ThemeFiles.write(nextBytes, over: ledgerFile) }
             try fault("after-ledger")
             try fault("cleanup")
-            _ = try ThemeFiles.write(nil, over: state("pending"))
+            let written = try state("pending")
+            _ = try await Self.offMain { try ThemeFiles.write(nil, over: written) }
             try fault("after-cleanup")
         } catch {
             let reason = String(describing: error)

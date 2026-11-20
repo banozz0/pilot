@@ -101,15 +101,17 @@ final class AppWindowModel {
 
     /// Shows `place`: its page, and its part (conflicts open as a sheet over Binds).
     func go(_ place: AppPlace) {
-        extensionPage = nil
-        installQuery = nil
-        repoPick = nil
-        wallpaperFocus = nil
-        blockFocus = nil
+        // Each only when it holds something: an Observable property set to what it holds still redraws every view that
+        // reads it, the frame's and every kept page's, on every switch (perf-round).
+        if extensionPage != nil { extensionPage = nil }
+        if installQuery != nil { installQuery = nil }
+        if repoPick != nil { repoPick = nil }
+        if wallpaperFocus != nil { wallpaperFocus = nil }
+        if blockFocus != nil { blockFocus = nil }
         ringEnd?.cancel()
-        ringed = nil
-        searchOpen = false
-        page = place.page
+        if ringed != nil { ringed = nil }
+        if searchOpen { searchOpen = false }
+        if page != place.page { page = place.page }
         if let section = place.section {
             if section.opensAsSheet {
                 showsConflicts = true

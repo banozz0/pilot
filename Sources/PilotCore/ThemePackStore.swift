@@ -48,6 +48,11 @@ public struct ThemePackStore: Sendable {
         return (images.map(\.path), Set(images.filter { ImageShapes.read($0) == .portrait }.map(\.path)))
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
+    /// Each wallpaper a load has decoded whole, by the SHA-256 of its bytes, and whether it is tall (perf-round, Sven on
+    /// combined-5: applying a theme stalled). A press loads its pack about four times (its plan, the shipped copy, both
+    /// freshness checks), and each load decoded every picture in full on the main thread's wait; the same bytes decode the
+    /// same, so a picture is decoded once. Cleared past 512 pictures.
+    private static let proved = Mutex<[String: Bool]>([:])
 
     /// `id`'s manifest, read where its roots put it: the id, collision, reserved-id and containment checks load and
     /// browse share.
@@ -66,6 +71,9 @@ public struct ThemePackStore: Sendable {
         guard pack.id == id else { throw ThemeFailure("pack folder and identity differ") }
         return (pack, manifest, source, folder, factory)
     }
+
+    /// `id`'s pack from its manifest alone, no picture read: what a press shows in Pilot's own window at once.
+    public func pack(_ id: String) throws -> ThemePack { try opened(id).pack }
 
     public func load(_ id: String) throws -> Loaded {
         let (pack, manifest, source, folder, factory) = try opened(id)
@@ -98,16 +106,25 @@ public struct ThemePackStore: Sendable {
                             guard file == url || full.hasPrefix(base + "/") else { throw ThemeFailure("escaping wallpaper folder entry") }
                             let relative = id + "/" + asset + (file == url ? "" : "/" + String(full.dropFirst(base.count + 1)))
                             let observed = try ThemeFiles.read(root: source, path: relative)
-                            guard let data = observed.bytes, observed.resolved.hasPrefix(folder + "/"),
-                                  let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                                  CGImageSourceGetStatus(imageSource) == .statusComplete,
-                                  let image = CGImageSourceCreateImageAtIndex(imageSource, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-                                  image.width > 0, image.height > 0 else { throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)") }
+                            guard let data = observed.bytes, observed.resolved.hasPrefix(folder + "/") else {
+                                throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)")
+                            }
+                            // Whole and tall or not, decoded once per picture's bytes (Self.proved).
+                            let digest = ThemeDigest.of(data)
+                            let portrait: Bool
+                            if let known = Self.proved.withLock({ $0[digest] }) { portrait = known } else {
+                                guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                                      CGImageSourceGetStatus(imageSource) == .statusComplete,
+                                      let image = CGImageSourceCreateImageAtIndex(imageSource, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
+                                      image.width > 0, image.height > 0 else { throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)") }
+                                let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any]
+                                portrait = ImageShapes.shape(width: image.width, height: image.height,
+                                                             orientation: properties?[kCGImagePropertyOrientation] as? Int ?? 1) == .portrait
+                                Self.proved.withLock { if $0.count >= 512 { $0.removeAll() }; $0[digest] = portrait }
+                            }
                             inputs.append(observed)
                             if !paths.contains(observed.resolved) { paths.append(observed.resolved) }
-                            let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any]
-                            if ImageShapes.shape(width: image.width, height: image.height,
-                                orientation: properties?[kCGImagePropertyOrientation] as? Int ?? 1) == .portrait { portraits.insert(observed.resolved) }
+                            if portrait { portraits.insert(observed.resolved) }
                         }
                     }
                     // The pack's own picture: inside the folder, links resolved, and a whole image, as a wallpaper must be.

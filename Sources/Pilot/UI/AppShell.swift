@@ -68,22 +68,69 @@ private struct PageKeys: View {
     }
 }
 
-/// The page itself, each on the window's cards (card agent-bo-95422728), a merged page on the part picked.
+/// The page itself, each on the window's cards (card agent-bo-95422728), a merged page on the part picked. Each part
+/// visited stays built while the window is open (KeptPages), so a return visit shows it again instead of building it.
 struct PageView: View {
     @Bindable var model: AppWindowModel
+    @Environment(Engine.self) private var engine
+    @Environment(\.searchHits) private var hits
+    // What the window's own host sets above the page (renders set the last three), carried into each kept page's host.
+    @Environment(\.homeSources) private var homeSources
+    @Environment(\.aiPageSources) private var aiPageSources
+    @Environment(\.lookPreviewStill) private var lookPreviewStill
 
     var body: some View {
-        page.styled(.page(model.page))
+        let key = Self.key(model)
+        KeptPages(key: key) {
+            PagePart(model: model, page: model.page, section: model.section(of: model.page), extensionPage: model.extensionPage)
+                .environment(model).environment(\.searchHits, hits)
+                .styled(.window).pilotWindowStyles().pilotTheme()
+                .environment(engine).environment(\.homeSources, homeSources).environment(\.aiPageSources, aiPageSources)
+                .environment(\.lookPreviewStill, lookPreviewStill)
+        }
+    }
+
+    /// Which view the page shows now, as PagePart's switch picks it: a part that is a view of its own is kept apart, a
+    /// part a page draws itself (a More tab, a landing) is that page's.
+    static func key(_ model: AppWindowModel) -> String {
+        let page = model.page, section = model.section(of: page)
+        return switch page {
+        case .binds: section == .bindsMore ? "binds.more" : section == .mouse ? "binds.mouse" : "binds"
+        case .menu: section == .rings ? "menu.rings" : "menu"
+        case .tiling: section == .tilingMore ? "tiling.more" : "tiling"
+        case .look: section == .themeCatalogue ? "look.catalogue" : "look"
+        case .captures: section == .captureHistory ? "captures.history" : "captures"
+        case .files: section == .folders ? "files.folders" : "files"
+        case .install: section == .webApps ? "install.webApps" : section == .installMore ? "install.more" : "install"
+        case .configs: section == .agents ? "configs.agents" : "configs"
+        case .ai: section == .aiSetup ? "ai.setup" : "ai"
+        case .extensions: model.extensionPage.map { "extension." + $0 } ?? "extensions"
+        default: page.rawValue
+        }
+    }
+}
+
+/// The part of the page shown now, in its own host (KeptPages). The page, its part and the extension come in as the host
+/// is shown, so a kept host left out of the window never turns into the page shown since.
+private struct PagePart: View {
+    @Bindable var model: AppWindowModel
+    let page: AppPage
+    let section: AppSection?
+    let extensionPage: String?
+
+    var body: some View {
+        content.styled(.page(page))
             // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
             // KitMore or KitLanding lands there, then clears it.
-            .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
+            // Only the page shown takes them: the host being left may still update once as the switch lands.
+            .environment(\.blockLanding, model.blockFocus.flatMap { model.page == page ? $0 : nil }.map { place in BlockLanding(place: place) { model.blockFocus = nil } })
             // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
-            .environment(\.landingRing, model.ringed)
+            .environment(\.landingRing, model.ringed.flatMap { model.page == page ? $0 : nil })
             // A ringed setting whose row is on its page's More (pilot-ui-redesign T17): More, so the ring shows.
             .onChange(of: model.ringed) {
-                guard let key = model.ringed, Self.ringsOnMore[model.page]?.contains(key) == true,
-                      let more = AppSection.more(of: model.page) else { return }
-                model.sections[model.page] = more
+                guard let key = model.ringed, model.page == page, Self.ringsOnMore[page]?.contains(key) == true,
+                      let more = AppSection.more(of: page) else { return }
+                model.sections[page] = more
             }
     }
 
@@ -93,9 +140,8 @@ struct PageView: View {
                                                       .voice: VoicePage.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
-    @ViewBuilder private var page: some View {
-        let section = model.section(of: model.page)
-        switch model.page {
+    @ViewBuilder private var content: some View {
+        switch page {
         case .home:
             HomePage { model.go($0) }
         case .binds:
@@ -152,7 +198,7 @@ struct PageView: View {
             }
         case .voice: VoicePage(more: section == .voiceMore)
         case .extensions:
-            if let id = model.extensionPage {
+            if let id = extensionPage {
                 ExtensionSurfacePage(id: id, onScreen: model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)
             } else {
                 // One list (Q601): a link to the catalogue picks its first row once it is read.
@@ -160,6 +206,63 @@ struct PageView: View {
                                    landedCatalogue: { model.sections[.extensions] = nil },
                                    editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openPage: { model.goExtensionPage($0) })
             }
+        }
+    }
+}
+
+/// The window's pages kept built (perf-round; Sven on combined-5, build 2962: switching pages still lagged, SwiftUI
+/// building and laying out the page being 80 to 90 % of a switch, page-perf): each part visited is a host of its own,
+/// kept while the window is open, and a return visit only puts it back. A part not shown is out of the window, so no
+/// key, click, focus, Hyper press or accessibility read reaches it, and its views have disappeared (onDisappear, its
+/// .task cancelled, timelines stopped) until it shows again. Past `PageDeck.cap` the part shown longest ago goes.
+struct KeptPages<Content: View>: NSViewRepresentable {
+    let key: String
+    @ViewBuilder var content: () -> Content
+
+    func makeNSView(context: Context) -> PageDeck { PageDeck() }
+    func updateNSView(_ deck: PageDeck, context: Context) {
+        deck.show(key, AnyView(content().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).ignoresSafeArea()))
+    }
+}
+
+/// KeptPages' view: the shown part's host as its one subview, the others held out of the window.
+final class PageDeck: NSView {
+    /// How many parts stay built: about 6 to 8 MB each while the window is open (perf-round: 149 MB with one, 169 with
+    /// four, 193 with eight, 344 with every page), all of them gone with the window's tree when it closes.
+    static let cap = 4
+    private var hosts: [String: NSHostingView<AnyView>] = [:]
+    /// The parts by when they showed, the one showing last.
+    private(set) var order: [String] = []
+    var shown: String? { order.last }
+
+    override var isFlipped: Bool { true }
+
+    /// Only the shown part follows the window's size; a kept one keeps the size it was shown at until it shows again.
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        if let shown, let host = hosts[shown], host.frame != bounds { host.frame = bounds }
+    }
+
+    func show(_ key: String, _ root: AnyView) {
+        let host: NSHostingView<AnyView>
+        if let kept = hosts[key] {
+            kept.rootView = root
+            host = kept
+        } else {
+            host = NSHostingView(rootView: root)
+            // Sized by this view, never by its content: no constraints, no intrinsic size to work out.
+            host.sizingOptions = []
+            hosts[key] = host
+        }
+        guard shown != key || host.superview !== self else { return }
+        if let shown, let old = hosts[shown], old !== host { old.removeFromSuperview() }
+        order.removeAll { $0 == key }
+        order.append(key)
+        if host.frame != bounds { host.frame = bounds }
+        addSubview(host)
+        while order.count > Self.cap {
+            // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
+            let gone = hosts.removeValue(forKey: order.removeFirst())
+            gone?.rootView = AnyView(EmptyView())
         }
     }
 }
