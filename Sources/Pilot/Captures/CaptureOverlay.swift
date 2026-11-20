@@ -8,6 +8,8 @@ import SwiftUI
 /// a click or Space then a click takes a window, Tab copies the pixel's colour, Return
 /// takes the whole display, and Escape closes. It also closes the moment another app takes the keys (Cmd+Tab) or a
 /// display comes, goes or changes, so it can never hold them or cover the wrong screen. Nothing is posted to another app: arrows move the pointer over the overlay itself.
+/// Opened by a capture bind with Captures › Capture box on, it is the capture box (pilot-ui-redesign T23, S5 B): its
+/// letters switch the mode on every display through the panels' own keys, no event tap (Q257).
 @MainActor
 final class CaptureOverlay {
     enum Result {
@@ -32,17 +34,21 @@ final class CaptureOverlay {
     /// take a clicked window's frame as their area.
     enum Purpose: Equatable { case capture, record, scroll, ocr, subject, colour }
 
-    private let purpose: Purpose
+    /// What the pick is for now: the capture box's letters change it.
+    private(set) var purpose: Purpose
+    /// The capture box's mode, nil for a press that captures at once; T24's view draws it.
+    private(set) var box: CaptureBox?
     private var done: ((Result) -> Void)?
     private var observers: [NSObjectProtocol] = []
 
     init(grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: Purpose = .capture,
-         visible: Bool = true, done: @escaping (Result) -> Void) {
+         box: CaptureBox? = nil, visible: Bool = true, done: @escaping (Result) -> Void) {
         self.grabs = grabs
         self.windows = windows
         self.mode = mode
         self.visible = visible
         self.purpose = purpose
+        self.box = box
         self.done = done
     }
 
@@ -59,10 +65,11 @@ final class CaptureOverlay {
             let local = CGPoint(x: pointer.x - frame.minX, y: frame.maxY - pointer.y)
             let selection = CaptureSelection(size: grab.frame.size, windows: CaptureSelection.windows(windows, on: grab.frame),
                                              mode: mode, pointer: local)
-            let view = CaptureOverlayView(grab: grab, selection: selection, accent: Self.accent(), purpose: purpose) { [weak self] outcome, view in
+            let view = CaptureOverlayView(grab: grab, selection: selection, accent: Self.accent(), purpose: purpose, box: box) { [weak self] outcome, view in
                 self?.handle(outcome, from: view)
             }
             view.entered = { [weak self] in self?.focus($0) }
+            view.pressed = { [weak self] in self?.press($0) }
             let panel = KeyPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .screenSaver
             panel.isOpaque = true
@@ -92,6 +99,15 @@ final class CaptureOverlay {
                 MainActor.assumeIsolated { self?.close() }
             },
         ]
+    }
+
+    /// A letter pressed in the capture box: the box's mode changes on every display.
+    func press(_ letter: CaptureBox.Letter) {
+        guard var box else { return }
+        box.press(letter)
+        self.box = box
+        purpose = box.purpose
+        for view in views { view.show(box) }
     }
 
     /// The panel under the pointer takes the keys, so Space and Tab act on the display Sven is looking at.
@@ -146,22 +162,57 @@ final class CaptureOverlay {
     static func accent() -> NSColor { NSColor(Color(Look.shared.chromeTokens(.hud).colors.accent)) }
 }
 
+extension CaptureBox {
+    /// What the overlay's pick is for in this mode: Scroll a scrolling capture, Record a recording, Text a read.
+    var purpose: CaptureOverlay.Purpose {
+        how == .scroll ? .scroll : what == .record ? .record : what == .text ? .ocr : .capture
+    }
+
+    /// Window picks a window; Area, Full and Scroll pick on the area selection, Full taking the whole display.
+    var mode: CaptureSelection.Mode { how == .window ? .window : .area }
+
+    /// The box's keys in one line, its choices in brackets: a stand-in for the mode bar T24 draws.
+    var hint: String {
+        func item(_ title: String, _ key: String?, _ on: Bool) -> String {
+            let words = [title, key].compactMap(\.self).joined(separator: " ")
+            return on ? "[\(words)]" : words
+        }
+        let hows = [item("Area", "A", how == .area), item("Window", "W", how == .window), item("Full", "F", how == .full), item("Scroll", "S", how == .scroll)]
+        let whats = [item("Photo", nil, what == .photo), item("Record", "R", what == .record), item("Text", "O", what == .text)]
+        let timed = "Timer \(timer == 0 ? "off" : "\(timer) s") T"
+        return (hows + ["·"] + whats + ["·", timed, "·", "Return  \(action)", "Esc"]).joined(separator: "  ")
+    }
+}
+
+extension CaptureOverlay.Result {
+    /// An area or a window picked, which the box's timer waits on; a colour or a close is taken at once.
+    var picked: Bool {
+        switch self {
+        case .area, .window: true
+        case .cancelled, .colour: false
+        }
+    }
+}
+
 /// One display's overlay: the frozen still, dimmed outside the selection, the selection or the hovered window ringed in
 /// the accent, a crosshair and the loupe. Flipped, so its points are CaptureSelection's.
 final class CaptureOverlayView: NSView {
     let grab: DisplayGrab
     private(set) var selection: CaptureSelection
     private let accent: NSColor
-    private let purpose: CaptureOverlay.Purpose
+    private var purpose: CaptureOverlay.Purpose
+    /// The capture box's mode on this display; nil when the press captures at once.
+    private(set) var box: CaptureBox?
     private let still: NSImage
     private let report: (CaptureSelection.Outcome, CaptureOverlayView) -> Void
 
-    init(grab: DisplayGrab, selection: CaptureSelection, accent: NSColor, purpose: CaptureOverlay.Purpose = .capture,
+    init(grab: DisplayGrab, selection: CaptureSelection, accent: NSColor, purpose: CaptureOverlay.Purpose = .capture, box: CaptureBox? = nil,
          report: @escaping (CaptureSelection.Outcome, CaptureOverlayView) -> Void) {
         self.grab = grab
         self.selection = selection
         self.accent = accent
         self.purpose = purpose
+        self.box = box
         self.report = report
         still = NSImage(cgImage: grab.image, size: grab.frame.size)
         super.init(frame: CGRect(origin: .zero, size: grab.frame.size))
@@ -177,11 +228,30 @@ final class CaptureOverlayView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
 
-    /// A window is picked with the plain arrow, an area or a colour with the crosshair (Sven, 2026-11-12).
-    var cursor: NSCursor { selection.mode == .window && purpose != .colour ? .arrow : .crosshair }
+    /// A window is picked with the plain arrow, an area or a colour with the crosshair (Sven, 2026-11-12); the box's
+    /// Full screen, which needs no pick, with the arrow too.
+    var cursor: NSCursor { (selection.mode == .window || full) && purpose != .colour ? .arrow : .crosshair }
 
-    /// The loupe and the crosshair are for picking a point: an area or a colour, never a window.
-    private var pointing: Bool { selection.mode == .area || purpose == .colour }
+    /// The loupe and the crosshair are for picking a point: an area or a colour, never a window or Full.
+    private var pointing: Bool { (selection.mode == .area && !full) || purpose == .colour }
+
+    /// The box is on Full: a click or Return takes the whole display, and nothing is dragged.
+    private var full: Bool { box?.how == .full }
+
+    /// The box's mode, changed by a letter on any display: what the pick is for, area or window, redrawn.
+    func show(_ box: CaptureBox) {
+        self.box = box
+        purpose = box.purpose
+        if selection.mode != box.mode { _ = selection.key(.space) }
+        if full, selection.smart { _ = selection.key(.smart) }
+        elements = []
+        window?.invalidateCursorRects(for: self)
+        if window?.isKeyWindow == true { cursor.set() }
+        needsDisplay = true
+    }
+
+    /// A letter pressed in the capture box; the overlay changes the mode on every display.
+    var pressed: ((CaptureBox.Letter) -> Void)?
 
     private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
@@ -199,7 +269,7 @@ final class CaptureOverlayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard purpose != .colour else { return }
+        guard purpose != .colour, !full else { return }
         update { $0.press(at: point(event)) }
     }
     override func mouseDragged(with event: NSEvent) {
@@ -212,10 +282,22 @@ final class CaptureOverlayView: NSView {
             update { $0.move(to: p) }
             return report(event.modifierFlags.contains(.shift) ? .rgb(selection.pointer) : .colour(selection.pointer), self)
         }
+        if full { return report(.area(selection.bounds), self) }
         finish { $0.release(at: p) }
     }
 
     override func keyDown(with event: NSEvent) {
+        // The box's letters (Q257) and Space between Area and Window; A in Area stays smart selection, A's key before the box.
+        if let box, event.modifierFlags.isDisjoint(with: [.command, .control, .option]) {
+            if let letter = CaptureBox.Letter(typed: event.charactersIgnoringModifiers), !(letter == .area && box.how == .area) {
+                pressed?(letter)
+                return
+            }
+            if event.keyCode == 49 {
+                pressed?(box.how == .window ? .area : .window)
+                return
+            }
+        }
         let key: CaptureSelection.Key? = switch Int64(event.keyCode) {
         case KeyCode.escape: .escape
         case 49: .space
@@ -339,6 +421,7 @@ final class CaptureOverlayView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         still.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
         let hole: CGRect? = switch selection.mode {
+        case .area where full: bounds.insetBy(dx: 1.5, dy: 1.5)
         case .area: selection.area ?? selection.element
         case .window: selection.hovered?.frame
         }
@@ -448,7 +531,8 @@ final class CaptureOverlayView: NSView {
 
     /// What the keys do, for the purpose and the mode.
     private var hintText: String {
-        switch (purpose, selection.mode) {
+        if let box { return box.hint }
+        return switch (purpose, selection.mode) {
         case (.colour, _): "Pick a colour: click copies its hex, Shift-click its rgb   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Esc"
         case (_, .area) where selection.smart: "Smart: drag loosely, it snaps to the content   Click a UI element   Scroll  bigger or smaller   A  off   Esc"
         case (.capture, .area): "Drag an area   A  smart   Click or Space  window   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Return  whole screen   Esc"

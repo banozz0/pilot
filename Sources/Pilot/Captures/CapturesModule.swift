@@ -5,7 +5,7 @@ import PilotCore
 let clog = Logger(subsystem: "dev.banozz.pilot", category: "captures")
 
 /// Captures through Pilot's own capture (PilotCapture, spec `capture.html`); screen recording (Hyper+Shift+A) is Pilot's
-/// own recorder (story 192).
+/// own recorder (story 192). The six capture binds open the capture box (`CaptureBox`) unless Captures › Capture box is off.
 @MainActor
 enum CapturesModule {
     static func register(into registry: inout ActionRegistry) {
@@ -44,9 +44,11 @@ enum CapturesModule {
         add(&registry, "menu", "Capture menu", Key("c", .ctrl)) { PilotMenu.shared.toggle(branch: .capture) }
     }
 
-    /// A PilotCapture request, run after the tap's callback: a capture reads the screen and writes files.
+    /// A PilotCapture request, run after the tap's callback: a capture reads the screen and writes files. The six binds
+    /// the capture box knows open it in their mode while Captures › Capture box is on (pilot-ui-redesign T23).
     private static func capture(_ registry: inout ActionRegistry, _ id: String, _ label: String, _ key: Key?, _ request: PilotCapture.Request) {
-        add(&registry, id, label, key) { DispatchQueue.main.async { PilotCapture.shared.run(request) } }
+        let box = CaptureBox.opening("captures.\(id)")
+        add(&registry, id, label, key) { DispatchQueue.main.async { PilotCapture.shared.run(request, box: box) } }
     }
 
     private static func add(_ registry: inout ActionRegistry, _ id: String, _ label: String, _ key: Key?,

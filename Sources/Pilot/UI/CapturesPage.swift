@@ -29,6 +29,7 @@ struct CapturesPage: View {
 
     /// What each row does, the ⓘ's words.
     enum Info {
+        static let box = "Every capture key opens it in its own mode. Off: keys capture at once."
         static let menu = "Where Capture's own item sits: the macOS menu bar, the top bar or both. A click lists every capture with its key; while recording it shows the time, with Stop and Pause."
         static let hideIcons = "Leaves the desktop icons out of captures and recordings. The desktop itself stays as it is."
         static let afterCapture = "What a capture or a recording does once saved: shows a thumbnail, opens its editor (a recording's is the video editor), or only copies it."
@@ -78,11 +79,13 @@ struct CapturesPage: View {
         window.sections[.captures] = .recording
     }
 
-    /// Capture's front: After capture and the three daily keys, then the folder.
+    /// Capture's front: the Capture box switch (pilot-ui-redesign T23), After capture and the three daily keys, then the folder.
     @ViewBuilder private var captureTab: some View {
         CapturePreview(after: store.settings.afterCapture, place: store.settings.thumbnailPlace)
         KitBlock(title: "Capture", symbol: "camera.viewfinder", note: Self.note) {
-            BlockRow(first: true) {
+            BlockRow(first: true) { Toggle("Capture box", isOn: $store.box).toggleStyle(.pilotSwitchRow(info: Info.box)) }
+                .landingRing("capture.box")
+            BlockRow {
                 label("After capture", Info.afterCapture)
                 Segments(selection: $store.settings.afterCapture, options: [(.thumbnail, "Thumbnail"), (.editor, "Open editor"), (.copy, "Copy only")],
                          label: "After capture")

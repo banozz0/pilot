@@ -14,12 +14,18 @@ final class CaptureSettingsStore {
     static let shared = CaptureSettingsStore()
 
     var settings: CaptureSettings { didSet { save() } }
+    /// Captures › Capture box (pilot-ui-redesign T23, Open 7): each capture bind opens the box in its own mode; off, the
+    /// binds capture at once. On until turned off, for new and existing installs alike. Its own key, outside `settings`,
+    /// so a stored `settings` from before still decodes.
+    var box: Bool { didSet { defaults.set(box, forKey: Self.boxKey) } }
     @ObservationIgnored private let defaults: UserDefaults
     private static let key = "capture.settings"
+    private static let boxKey = "capture.box"
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         settings = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(CaptureSettings.self, from: $0) } ?? .default
+        box = defaults.object(forKey: Self.boxKey) as? Bool ?? true
     }
 
     func folder(_ kind: CaptureKind) -> URL { settings.folder(kind) }
@@ -97,11 +103,22 @@ final class PilotCapture {
 
     /// A capture key pressed. A second press while the overlay shows closes it, so a key never leaves it up; the record
     /// key while a recording runs or counts down stops it. `taken` runs once a full screen's still is grabbed (the
-    /// keyboard lock's Screenshot, whose screen hides the thumbnail).
-    func run(_ request: Request, taken: (@MainActor () -> Void)? = nil) {
+    /// keyboard lock's Screenshot, whose screen hides the thumbnail). `box` is the mode a capture bind opens the capture
+    /// box in (pilot-ui-redesign T23); with Captures › Capture box off, or none given, the press captures at once.
+    func run(_ request: Request, box: CaptureBox? = nil, taken: (@MainActor () -> Void)? = nil) {
         if let overlay { return overlay.close() }
+        if let timing {
+            timing.cancel()
+            self.timing = nil
+            return tell("Capture cancelled.", nil)
+        }
         if request == .record, recorder.isActive { return recorder.stop() }
         if request == .scroll || request == .scrollUp, let scrolling { return scrolling.end() }
+        var box = store.box ? box : nil
+        // A recording counts down as Recording › Count down first says, until the box's T changes it.
+        if box?.what == .record { box?.timer = store.settings.countdown }
+        // The box's Scroll goes down and its Text copies, whichever mode it ends in.
+        if box != nil { scrollingUp = false; readingCodes = false }
         if request == .scroll || request == .scrollUp { scrollingUp = request == .scrollUp }
         if request == .ocr || request == .qr { readingCodes = request == .qr }
         if request == .delayed { return delayed() }
@@ -133,7 +150,7 @@ final class PilotCapture {
                     Self.log.notice("capture repeatArea: grab \(Self.ms(grabbed), privacy: .public) ms")
                     return finish(.area(grab, last.rect.intersection(CGRect(origin: .zero, size: grab.frame.size))))
                 }
-                if request == .fullScreen {
+                if request == .fullScreen, box == nil {
                     let grab = Self.underPointer(grabs)
                     Self.log.notice("capture fullScreen: grab \(Self.ms(grabbed), privacy: .public) ms")
                     deliver(grab.image, grab.scale)
@@ -141,7 +158,8 @@ final class PilotCapture {
                     return
                 }
                 let windows = (try? await grabber.windows()) ?? []
-                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request))
+                show(grabs, windows: windows, mode: box?.mode ?? (request == .window ? .window : .area), purpose: box?.purpose ?? Self.purpose(request),
+                     box: box)
                 Self.log.notice("capture \(request.rawValue, privacy: .public): grab \(Self.ms(grabbed), privacy: .public) ms, shown \(Self.ms(ContinuousClock.now - start), privacy: .public) ms")
             } catch {
                 guard attempt == mine else { return }
@@ -228,26 +246,63 @@ final class PilotCapture {
         }
     }
 
-    private func show(_ grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: CaptureOverlay.Purpose) {
-        let overlay = CaptureOverlay(grabs: grabs, windows: windows, mode: mode, purpose: purpose, visible: overlaysVisible) { [weak self] outcome in
+    private func show(_ grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: CaptureOverlay.Purpose,
+                      box: CaptureBox? = nil) {
+        let overlay = CaptureOverlay(grabs: grabs, windows: windows, mode: mode, purpose: purpose, box: box, visible: overlaysVisible) { [weak self] outcome in
             guard let self else { return }
-            if let take = self.areaTaker(purpose) {
-                self.overlay = nil
-                if case .area(let grab, let rect) = outcome { take(grab, rect) }
-            } else if purpose == .record {
-                self.overlay = nil
-                if let source = RecordingSource.picked(outcome) {
-                    self.recorder.start(source, settings: self.store.settings, folder: self.store.folder(.recording))
-                } else if case .area = outcome {
-                    self.tell("Nothing to record: the area had no width or no height.", nil)
-                }
-            } else {
-                // The windows go with an area's screen, so its crop snaps to their edges (C3).
-                self.finish(outcome, windows: windows)
+            // The box's letters may have changed what the pick is for: the mode it ends in decides.
+            let box = self.overlay?.box, purpose = self.overlay?.purpose ?? purpose
+            self.overlay = nil
+            if let box, box.timer > 0, purpose != .record, outcome.picked {
+                return self.after(box.timer, outcome, purpose: purpose, windows: windows)
             }
+            self.take(outcome, purpose: purpose, windows: windows, countdown: box?.timer)
         }
         self.overlay = overlay
         overlay.show()
+    }
+
+    /// What a pick ends in, for what it was for. `countdown` is the box's timer, which a recording counts down first.
+    private func take(_ outcome: CaptureOverlay.Result, purpose: CaptureOverlay.Purpose, windows: [CaptureSelection.Window], countdown: Int? = nil) {
+        if let take = areaTaker(purpose) {
+            if case .area(let grab, let rect) = outcome { take(grab, rect) }
+        } else if purpose == .record {
+            if let source = RecordingSource.picked(outcome) {
+                var settings = store.settings
+                if let countdown { settings.countdown = countdown }
+                recorder.start(source, settings: settings, folder: store.folder(.recording))
+            } else if case .area = outcome {
+                tell("Nothing to record: the area had no width or no height.", nil)
+            }
+        } else {
+            // The windows go with an area's screen, so its crop snaps to their edges (C3).
+            finish(outcome, windows: windows)
+        }
+    }
+
+    /// The capture box's timer (Q257) counting down before a capture.
+    private(set) var timing: Task<Void, Never>?
+
+    /// The box's timer: a count in a tip, then the screen grabbed again, so the capture is the screen after the wait, in
+    /// the area or window picked on the frozen one. Any capture key cancels the count.
+    private func after(_ seconds: Int, _ outcome: CaptureOverlay.Result, purpose: CaptureOverlay.Purpose, windows: [CaptureSelection.Window]) {
+        timing = Task { @MainActor [delayStep] in
+            for n in stride(from: seconds, to: 0, by: -1) {
+                tell("Capturing in \(n)…", nil)
+                try? await Task.sleep(for: delayStep)
+                if Task.isCancelled { return }
+            }
+            timing = nil
+            HUD.dismissTip()
+            var picked = outcome
+            if case .area(let frozen, let rect) = outcome {
+                guard let grabs = try? await grabber.displays(), let grab = grabs.first(where: { $0.id == frozen.id }) ?? grabs.first else {
+                    return tell("The screen did not answer. Press again.", nil)
+                }
+                picked = .area(grab, rect)
+            }
+            take(picked, purpose: purpose, windows: windows)
+        }
     }
 
     /// What takes the area a text, scrolling or subject pick ends with; nil for the purposes that take more than an area.
