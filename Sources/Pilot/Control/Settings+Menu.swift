@@ -35,13 +35,15 @@ extension SettingsSchema {
 
     /// The tall Pilot menu's arrangement (spec desktop-controls T4), as Menu bar › Pilot menu edits it, Instrument only:
     /// `dropdown.order` names the blocks to lead, the rest following in their first order; `dropdown.hidden` and
-    /// `dropdown.pinned` are sets; `dropdown.extensions` the extensions the Extensions card lists. Blocks: status,
-    /// workspaces, switches, extensions, running, sound, connections, display, media, stats, commands. Extensions, sound, connections, display, media and stats are hidden until shown. A new install starts from
-    /// the one Pilot menu (spec pilot-ui-redesign T20: switches and workspaces shown, status back only for a problem), an
-    /// install from before from the tall menu.
+    /// `dropdown.pinned` are sets; `dropdown.extensions` the extensions the Extensions card lists; `dropdown.switches` the
+    /// quick switches the Switches block shows. Blocks: status, workspaces, switches, extensions, running, sound,
+    /// connections, display, media, stats, commands. A new install starts from the one Pilot menu (spec pilot-ui-redesign
+    /// T20: switches and workspaces shown, the four switches, status back only for a problem), an install from before
+    /// from the tall menu, whose optional blocks are hidden until shown.
     func registerDropdown(_ store: DropdownLayoutStore) {
-        let all = Dropdown.Layout.arrangeable, first = Install.isNew ? Dropdown.Layout.pilotMenu : .standard
+        let all = Dropdown.Layout.arrangeable, first = DropdownLayoutStore.first
         func listed(_ blocks: [Dropdown.Block]) -> String { blocks.isEmpty ? "none" : Dropdown.Layout.names(blocks) }
+        func switches(_ shown: [Dropdown.Switch]) -> String { shown.isEmpty ? "none" : shown.map(\.rawValue).joined(separator: ",") }
         register([
             .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "pilotMenu", standard: listed(first.order),
                   read: { listed(store.layout.order) }, write: { typed throws(ControlError) in try store.setOrder(Self.blocks(typed, key: "dropdown.order")) }),
@@ -55,6 +57,11 @@ extension SettingsSchema {
                   page: "pilotMenu", standard: "none",
                   read: { store.layout.extensions.isEmpty ? "none" : store.layout.extensions.joined(separator: ",") },
                   write: { typed throws(ControlError) in try store.setExtensions(Self.words(typed, lowercased: false)) }),
+            .text("dropdown.switches", "Pilot menu's quick switches, comma-separated or none (launcher, keybinds, tiling, topbar, keepawake, clipboard, dictation)",
+                  page: "pilotMenu", standard: switches(first.shownSwitches), read: { switches(store.layout.shownSwitches) },
+                  write: { typed throws(ControlError) in
+                      store.setSwitches(Set(try Self.named(typed, key: "dropdown.switches", noun: "name", from: Dropdown.Switch.allCases)))
+                  }),
         ])
     }
 

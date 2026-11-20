@@ -4,7 +4,9 @@ import PilotCore
 
 /// The tall Pilot menu's saved arrangement (spec desktop-controls T4): block order, hidden and pinned, Instrument only;
 /// Toybox keeps today's Dropdown. Its own store, as WallpaperSettings is, so `pilot set dropdown.*` works without an
-/// engine. A saved value that no longer decodes (a block renamed or gone) falls back to the standard arrangement.
+/// engine. Nothing saved, or a saved value that no longer decodes (a block renamed or gone), is the first arrangement: the
+/// one Pilot menu for a new install, the tall menu for one from before (spec pilot-ui-redesign T20, Open question 6: a
+/// saved layout is kept as it is).
 @Observable @MainActor
 final class DropdownLayoutStore {
     static let shared = DropdownLayoutStore()
@@ -24,16 +26,26 @@ final class DropdownLayoutStore {
             (try? Dropdown.Layout.order(saved.order)).map { order in
                 let added = Set(order).subtracting(saved.order)
                 return Dropdown.Layout(order: order, hidden: saved.hidden.union(added.intersection(Dropdown.Layout.optional)), pinned: saved.pinned,
-                                       extensions: saved.extensions)
+                                       extensions: saved.extensions, switches: saved.switches)
             }
-        } ?? .standard
+        } ?? Self.first
     }
+
+    /// The arrangement with nothing saved, and Reset's.
+    static var first: Dropdown.Layout { Install.isNew ? .pilotMenu : .standard }
 
     /// `pilot set dropdown.order`: the named blocks first, the rest after in their first order.
     func setOrder(_ blocks: [Dropdown.Block]) throws(ControlError) { layout.order = try Dropdown.Layout.order(blocks) }
     func setHidden(_ blocks: Set<Dropdown.Block>) throws(ControlError) { layout.hidden = try Dropdown.Layout.hide(blocks) }
     func setPinned(_ blocks: Set<Dropdown.Block>) throws(ControlError) { layout.pinned = try Dropdown.Layout.pin(blocks) }
     func setExtensions(_ ids: [String]) throws(ControlError) { layout.extensions = try Pill.Layout.extensions(ids) }
+    /// `pilot set dropdown.switches`: the quick switches the Switches block shows.
+    func setSwitches(_ switches: Set<Dropdown.Switch>) { layout.switches = switches }
+
+    /// The edit list's switch for one quick switch in the Switches block.
+    func show(switch which: Dropdown.Switch, _ on: Bool) {
+        if on { layout.switches.insert(which) } else { layout.switches.remove(which) }
+    }
 
     /// The edit list's switch for one extension in the Extensions card.
     func hold(extension id: String, _ on: Bool) {
@@ -43,8 +55,8 @@ final class DropdownLayoutStore {
     /// The edit list's moves: a block to a place, shown or hidden, pinned or not.
     func move(_ block: Dropdown.Block, to index: Int) { layout.move(block, to: index) }
 
+    /// Status too: hidden, it still leads while a problem waits (`Dropdown.Layout.shown(problems:)`).
     func show(_ block: Dropdown.Block, _ on: Bool) {
-        guard block != .status else { return }
         if on { layout.hidden.remove(block) } else { layout.hidden.insert(block) }
     }
 
@@ -52,7 +64,7 @@ final class DropdownLayoutStore {
         if on { layout.pinned.insert(block) } else { layout.pinned.remove(block) }
     }
 
-    func reset() { layout = .standard }
+    func reset() { layout = Self.first }
 
     private func save() {
         if let data = try? JSONEncoder().encode(layout) { defaults.set(data, forKey: Self.key) }

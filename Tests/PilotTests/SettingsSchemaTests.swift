@@ -89,7 +89,7 @@ struct SettingsSchemaTests {
         "ai.baseURL.ollama": "http://localhost:1234", "ai.baseURL.openAICompatible": "https://example.test/v1",
         "dropdown.order": "commands,status,workspaces,switches,extensions,running,sound,connections,display,media,stats",
         "dropdown.extensions": "weather,todo",
-        "dropdown.hidden": "none", "dropdown.pinned": "status,commands",
+        "dropdown.hidden": "none", "dropdown.pinned": "status,commands", "dropdown.switches": "launcher,tiling",
         "pill.views": "controls,music,extensions,activity", "pill.hidden": "activity", "pill.extensions": "weather,todo",
         "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19", "fonts.ui": "Helvetica", "fonts.mono": "Menlo",
     ]

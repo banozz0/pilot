@@ -3,9 +3,9 @@ import SwiftUI
 
 /// Menu bar › Pilot menu (spec desktop-controls T4), Launcher › Your menu's pattern (MenuRootBlock): the tall menu's
 /// blocks in order, each with up and down arrows, a drag onto another row to move it there, a pin that keeps it above the
-/// scroll, and a switch that shows it; Reset brings the first arrangement back. Status always shows, so it has no switch.
-/// The optional blocks (sound, Wi-Fi and Bluetooth, brightness, now playing, the stats) start hidden. Instrument only:
-/// Toybox keeps today's menu.
+/// scroll, and a switch that shows it; Reset brings the first arrangement back. Status hidden still leads while a problem
+/// waits. Under the blocks, a switch for each quick switch the Switches block can show (spec pilot-ui-redesign T20, Open
+/// question 6: what a new install hides is turned back on here). Instrument only: Toybox keeps today's menu.
 /// The Pilot menu page (Sven, 2026-11-12, Q182: "the menubar page is now too crowded"): the menu under Pilot's icon,
 /// its blocks and its Extensions card, beside Menu bar in Desktop.
 struct PilotMenuPage: View {
@@ -26,7 +26,7 @@ struct DropdownEditor: View {
     var body: some View {
         let order = store.layout.order
         KitBlock(title: "Pilot menu", symbol: "menubar.rectangle", note: Self.note) {
-            if store.layout != .standard {
+            if store.layout != DropdownLayoutStore.first {
                 Button("Reset to default") { withAnimation(Kit.change) { store.reset() } }.buttonStyle(.pilot)
             }
         } content: {
@@ -38,6 +38,9 @@ struct DropdownEditor: View {
                         withAnimation(Kit.change) { store.move(moved, to: i) }
                         return true
                     }
+            }
+            BlockRow(first: false) {
+                SwitchPicks(shown: store.layout.switches) { which, on in store.show(switch: which, on) }
             }
             BlockRow(first: false) {
                 ExtensionPicks(title: "In the Extensions card", held: store.layout.extensions, bar: extensionBar) { id, on in
@@ -64,12 +67,24 @@ struct DropdownEditor: View {
                 .disabled(i == 0).kitDimmed(i > 0)
             IconButton(symbol: "chevron.down", label: "Move \(block.title) down", size: 22, glyph: 11) { withAnimation(Kit.change) { store.move(block, to: i + 1) } }
                 .disabled(i == count - 1).kitDimmed(i < count - 1)
-            if block == .status {
-                // Status carries every problem, so it always shows: the switch's place is kept empty.
-                Color.clear.frame(width: 38, height: 1).help("Status always shows: a problem must lead the menu")
-            } else {
-                Toggle("Show \(block.title)", isOn: Binding(get: { shown }, set: { on in withAnimation(Kit.change) { store.show(block, on) } }))
-                    .labelsHidden().toggleStyle(.pilotSwitch)
+            Toggle("Show \(block.title)", isOn: Binding(get: { shown }, set: { on in withAnimation(Kit.change) { store.show(block, on) } }))
+                .labelsHidden().toggleStyle(.pilotSwitch)
+        }
+    }
+}
+
+/// The quick switches the Pilot menu's Switches block can show, each a switch row (spec pilot-ui-redesign T20).
+struct SwitchPicks: View {
+    @Environment(\.ink) private var ink
+    let shown: Set<Dropdown.Switch>
+    let set: (Dropdown.Switch, Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("In the Switches block").font(ink.ui(12.5, .medium)).foregroundStyle(ink.text2)
+            ForEach(Dropdown.Switch.allCases, id: \.self) { which in
+                Toggle(which.title, isOn: Binding(get: { shown.contains(which) }, set: { on in withAnimation(Kit.change) { set(which, on) } }))
+                    .toggleStyle(.pilotSwitchRow)
             }
         }
     }

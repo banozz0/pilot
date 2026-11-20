@@ -90,6 +90,8 @@ struct DropdownPanelValues {
 
     var pilotOn = true
     var hyperOn = true
+    /// The Launcher switch: with Key binds off, Hyper+Space still works while it is on (spec pilot-ui-redesign T20).
+    var launcherOn = true
     /// Accessibility granted, a password field holding secure input, Hyper held now: Dropdown.hyperLine's inputs.
     var trusted = true
     var secureInput = false
@@ -311,7 +313,7 @@ struct DropdownPanelFace: View {
                         InstrumentKey(text: values.layerSign, hyper: true)
                         Text(values.layerName)
                     } else {
-                        Text(Dropdown.hyperLine(hyperOn: values.hyperOn, trusted: values.trusted, secureInput: values.secureInput,
+                        Text(Dropdown.hyperLine(hyperOn: values.hyperOn, launcherOn: values.launcherOn, trusted: values.trusted, secureInput: values.secureInput,
                                                 held: values.held, layerKey: values.layerName, problems: values.problems.count))
                     }
                 }
