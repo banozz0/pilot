@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import PilotTilerPrivateApi
 
 /// The focused window's moves and resizes, at most one read per display frame (Sven's report 2026-10-17: the border
 /// lagged a dragged window and a fast drag lagged the whole screen). A drag sends AX a move per mouse event, and each
@@ -23,20 +22,60 @@ final class FrameFollower {
     private var pending: Read?
     private var busy = false
     private var lastStart = -TimeInterval.infinity
-    /// A window's frame read (nil: the read failed), and a whole re-read; both on the main thread.
+    /// The window server's frame for window `id` while it draws it, off the main thread, handed back on it; tests run it in place.
+    private let bounds: DragFollower.Reader
+    /// After the focused window was read (a move, a whole read), its frame is read again from the window server this
+    /// long after the last such read, then this much later again (tester bug 9, 2026-11-19): AX has an app's frame at
+    /// once, the window server only once the app commits it, and it alone knows a window drawn off its AX frame
+    /// (Photo Booth, 2026-11-16). One call to the window server each, none into the app.
+    static let settleDelays: [TimeInterval] = [0.1, 0.5]
+    private let settleGaps: [TimeInterval]
+    /// The window the settle reads are for, the gaps before each read left, and when the next is due; one timer at a
+    /// time, its deadline pushed out by each read until the reads stop.
+    private var settling: (id: CGWindowID, gaps: ArraySlice<TimeInterval>, due: TimeInterval)?
+    private var settleArmed = false
+    /// A window's frame read (nil: the read failed), a whole re-read, and a settle read; all on the main thread.
     var landed: (AXUIElement, CGRect?) -> Void = { _, _ in }
     var full: () -> Void = {}
+    var settled: (CGWindowID, CGRect?) -> Void = { _, _ in }
 
     init(reader: @escaping Reader = FrameFollower.readOffMain, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          after: @escaping @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = FrameFollower.mainAfter,
-         frame: TimeInterval = FrameFollower.displayFrame()) {
-        self.reader = reader; self.now = now; self.after = after; self.frame = frame
+         frame: TimeInterval = FrameFollower.displayFrame(), bounds: @escaping DragFollower.Reader = FrameFollower.drawnOffMain,
+         settleDelays: [TimeInterval] = FrameFollower.settleDelays) {
+        self.reader = reader; self.now = now; self.after = after; self.frame = frame; self.bounds = bounds
+        settleGaps = zip(settleDelays, [0] + settleDelays).map { $0 - $1 }
     }
 
     /// A move or resize: `.full` outranks a frame read until it runs.
     func moved(_ read: Read) {
         if case .full = pending {} else { pending = read }
         if !busy { next() }
+    }
+
+    /// Window `id`, the focused one, was just read: settle reads follow once the reads stop.
+    func settle(_ id: CGWindowID) {
+        guard let first = settleGaps.first else { return }
+        settling = (id, settleGaps.dropFirst(), now() + first)
+        armSettle()
+    }
+
+    /// The mouse holds the window: DragFollower reads the window server every frame, and the release settles anew.
+    func cancelSettle() { settling = nil }
+
+    private func armSettle() {
+        guard let due = settling?.due, !settleArmed else { return }
+        settleArmed = true
+        after(max(due - now(), 0)) { [weak self] in self?.settleDue() }
+    }
+
+    private func settleDue() {
+        settleArmed = false
+        guard let s = settling else { return }
+        guard now() >= s.due else { return armSettle() } // a later read pushed it out
+        settling = s.gaps.first.map { (s.id, s.gaps.dropFirst(), now() + $0) }
+        bounds(s.id) { [weak self] frame in self?.settled(s.id, frame) }
+        armSettle()
     }
 
     /// The pending read, now or a frame after the last one began; idle once nothing is pending.
@@ -83,10 +122,16 @@ final class FrameFollower {
     static func readOffMain(_ element: AXUIElement, _ done: @escaping @MainActor (CGRect?) -> Void) {
         nonisolated(unsafe) let element = element
         axQueue.async {
-            // Where the window server draws it, when it does: an app's AX frame can be the one it was asked for (Photo Booth)
-            var id = CGWindowID()
-            let drawn = _AXUIElementGetWindow(element, &id) == .success && id != kCGNullWindowID ? DragFollower.drawnBounds(of: id) : nil
-            let frame = drawn ?? frame(of: element)
+            // The app's own frame, which it has the moment it posts the move; the window server's comes in the settle reads
+            let frame = frame(of: element)
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(frame) } }
+        }
+    }
+
+    /// Window `id`'s frame while the window server draws it (nil: not on screen), off the main thread.
+    static func drawnOffMain(_ id: CGWindowID, _ done: @escaping @MainActor (CGRect?) -> Void) {
+        axQueue.async {
+            let frame = DragFollower.drawnBounds(of: id)
             DispatchQueue.main.async { MainActor.assumeIsolated { done(frame) } }
         }
     }

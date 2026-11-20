@@ -126,6 +126,47 @@ struct WindowBorderControllerTests {
         #expect(surface.shown == nil)
     }
 
+    /// Tester bug 9 (Sven on build 2778, 2026-11-19): the border sat at Pilot's settings window's opening frame, centred,
+    /// after the tiler had moved the window to its tile. The window server takes a moved window's new frame only when
+    /// AppKit commits it, a run loop turn later; the read the move sets off ran first, and the server's old frame won
+    /// over AppKit's own. A real, near see-through panel (alpha 0 would read as not drawn), never key, moved and resized
+    /// and read at once as the move's notification does: Pilot's own read of it (as of its key window), through the
+    /// focused-window read the border takes. Shows a window: `PILOT_FOCUS=1 swift test --filter WindowBorderControllerTests`.
+    @Test("Live: Pilot's own window moved or resized: the read right after it is the window's new frame", .pilotFocus)
+    func ownWindowReadsItsNewFrame() {
+        testApp()
+        let panel = NSPanel(contentRect: NSRect(x: 40, y: 40, width: 160, height: 120), styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.alphaValue = 0.05
+        panel.ignoresMouseEvents = true
+        panel.hasShadow = false
+        defer { panel.orderOut(nil) }
+        panel.orderFrontRegardless()
+        PanelTestSupport.pump()
+        let observers = EngineObservers()
+        observers.seed(focusedApp: .current)
+        observers.readFocusedWindow = { pid in EngineObservers.drawnFocusedWindow(pid) { _ in EngineObservers.ownWindow(panel, marked: false) } }
+        for i in 1...3 {
+            let target = NSRect(x: 40 + 30 * i, y: 40 + 10 * i, width: 160 + 40 * i, height: 120 + 20 * i)
+            panel.setFrame(target, display: true)
+            observers.refreshFocusedWindow()
+            #expect(observers.focusedWindowFrame == WindowGeometry.flip(target, primaryHeight: Screens.primaryHeight), "move \(i)")
+            PanelTestSupport.pump(0.05)
+        }
+        // A window just ordered front, read at once as another app's (pid 1, past the own-window rule): not drawn yet,
+        // so no border; drawn a moment later, when the settle reads ring it
+        let fresh = NSPanel(contentRect: NSRect(x: 300, y: 40, width: 160, height: 120), styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        fresh.alphaValue = 0.05
+        fresh.ignoresMouseEvents = true
+        defer { fresh.orderOut(nil) }
+        fresh.orderFrontRegardless()
+        let opened = EngineObservers.drawnFocusedWindow(1) { _ in EngineObservers.ownWindow(fresh, marked: false) }
+        #expect(opened?.window.drawn == false)
+        PanelTestSupport.pump(0.2)
+        #expect(DragFollower.drawnBounds(of: CGWindowID(fresh.windowNumber)) != nil, "drawn by the first settle read's time")
+    }
+
     @Test("Once started it redraws by itself when Look's width, switch or theme changes")
     func followsLook() async {
         let look = Self.look()

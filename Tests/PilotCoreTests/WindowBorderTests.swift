@@ -60,4 +60,21 @@ struct WindowBorderTests {
         #expect(WindowBorder.clamped(5) == 5)
         #expect(WindowBorder.clamped(20) == 8)
     }
+
+    /// Live bug 2026-11-16 (Photo Booth off its tile) and tester bug 9 (2026-11-19: a window left on another Space).
+    @Test("As drawn: the server's frame wins, else the app's front drawn window; with neither, not drawn and not ringed")
+    func asDrawn() {
+        let read = WindowBorder.Window(frame: CGRect(x: 0, y: 30, width: 960, height: 1050), subrole: "AXStandardWindow",
+                                       fullScreen: false, minimised: false, windowID: 7)
+        let drawn = CGRect(x: 100, y: 200, width: 600, height: 400), front = (id: CGWindowID(9), frame: CGRect(x: 960, y: 30, width: 960, height: 1050))
+        #expect(WindowBorder.asDrawn(read, drawn: drawn, front: front).frame == drawn)
+        let viaFront = WindowBorder.asDrawn(read, drawn: nil, front: front)
+        #expect(viaFront.frame == front.frame && viaFront.windowID == 9 && viaFront.drawn)
+        let undrawn = WindowBorder.asDrawn(read, drawn: nil, front: nil)
+        #expect(!undrawn.drawn && undrawn.frame == read.frame)
+        #expect(frame(undrawn) == nil && frame(read) != nil)
+        var numberless = read
+        numberless.windowID = nil
+        #expect(WindowBorder.asDrawn(numberless, drawn: nil, front: nil) == numberless)
+    }
 }
