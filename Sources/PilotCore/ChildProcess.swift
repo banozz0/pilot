@@ -159,6 +159,11 @@ public enum ChildProcess {
             let process = child.process
             let (out, err) = child.prepare(cli, arguments, environment: environment, directory: directory, input: input)
             _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+            // Its end is heard from the termination handler, not waitUntilExit: launched on the caller's thread and waited
+            // for on the reader's, waitUntilExit sometimes slept on for a child already gone and reaped, isRunning false, and
+            // ended never came (about 1 session in 60 under load, childproc-hang 2026-11-20). A semaphore keeps an early signal.
+            let exited = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in exited.signal() }
             try child.launch()
             // Drained beside stdout, so a chatty stderr never fills its pipe and stalls the child; only its end is kept.
             let stderr = Mutex(Data()), drained = DispatchGroup()
@@ -172,7 +177,7 @@ public enum ChildProcess {
                 let buffer = LineBuffer()
                 while case let chunk = out.fileHandleForReading.availableData, !chunk.isEmpty { buffer.append(chunk).forEach(lines) }
                 buffer.flush().map(lines)
-                process.waitUntilExit()
+                exited.wait()
                 // Its stderr ends with it, but the drain may not have run yet on a loaded Mac, so it is waited for; only a
                 // process it started and left running holds stderr open past this, delaying the reason by these seconds.
                 _ = drained.wait(timeout: .now() + 5)

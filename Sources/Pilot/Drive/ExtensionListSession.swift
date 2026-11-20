@@ -5,7 +5,9 @@ import PilotCore
 /// as the search changes and shows them in the menu's live picker, a detail as its one row. With Pilot's filter the
 /// program runs once and the menu ranks its rows; with the program's own, a change asks again once typing pauses, so
 /// the newest search's answer is the one shown: a one-shot program runs again, the run before cancelled (its process
-/// tree stopped); a session's one process is sent the search (ExtensionSession) and stopped as the view closes.
+/// tree stopped); a session's one process is sent the search (ExtensionSession) and stopped as the view closes. A
+/// Raycast-format command (ADR 0017) is always a session, its host kept while the view is open: every answer it sends is
+/// drawn, the newest last, a List still loading under Pilot's loading row, and a row's callback is pressed in it (T2).
 @MainActor
 final class ExtensionListSession: MenuSource {
     /// How long typing must pause before the program is asked again: a run per keystroke would mostly be killed unread.
@@ -18,8 +20,12 @@ final class ExtensionListSession: MenuSource {
     private let end: () -> Void
     private let pause: () async -> Void
     private(set) var items: [Extension.Item] = []
+    /// A Raycast-format command's host, while the view is open.
+    private let session: ExtensionSession?
     private var task: Task<Void, Never>?
     private var asked = false
+    /// A draw of the host's newest answer is on its way; a burst of commits waits for that one.
+    private var drawing = false
     /// The search last asked, which a refresh asks again.
     private var query = ""
 
@@ -33,17 +39,21 @@ final class ExtensionListSession: MenuSource {
          run: ((Extension.Command, String) async -> ListOutcome)? = nil, end: (() -> Void)? = nil,
          pause: @escaping () async -> Void = { try? await Task.sleep(for: ExtensionListSession.pause) }) {
         self.ext = ext; self.command = command; self.inputs = inputs; self.context = context; self.pause = pause
+        var raycast: ExtensionSession?
         if let run {
             self.run = run
             self.end = end ?? {}
-        } else if command.session {
-            let session = ExtensionSession(command, context: context, inputs: inputs)
+        } else if command.session || command.runtime == .raycast {
+            let session = ExtensionSession(command, context: context, inputs: inputs, folder: ext.folder)
+            if command.runtime == .raycast { raycast = session }
             self.run = { await session.ask($1) }
             self.end = session.close
         } else {
             self.run = { await ExtensionRun.list($0, query: $1, context: context, inputs: inputs) }
             self.end = {}
         }
+        session = raycast
+        raycast?.watch { [weak self] in Task { @MainActor in self?.drawQueued() } }
     }
 
     /// The search changed (the empty one as the list opens, asked at once).
@@ -71,28 +81,49 @@ final class ExtensionListSession: MenuSource {
             guard !Task.isCancelled else { return }
             let outcome = await run(command, query)
             guard !Task.isCancelled, let self else { return }
-            let rows: [MenuEntry]
-            var dropped = 0
-            switch outcome {
-            case .items(let items):
-                self.items = items
-                rows = ExtensionList.entries(items, of: command)
-                dropped = items.reduce(0) { $0 + $1.dropped }
-            case .detail(let detail):
-                items = [Extension.Item(title: command.title, actions: detail.actions)]
-                var row = ExtensionList.detail(detail, of: command)
-                if ext.shownSurface != nil { row.extensionPage = ext.id }
-                rows = [row]
-                dropped = detail.dropped
-            case .error(let reason):
-                items = []
-                rows = [ExtensionList.error(reason, of: command, in: ext.title)]
-                dlog.error("extension: \(command.actionID, privacy: .public) list: \(reason, privacy: .private)")
-            }
-            dlog.notice("extension: \(command.actionID, privacy: .public) listed \(self.items.count) rows")
-            if dropped > 0 { dlog.error("extension: \(command.actionID, privacy: .public) dropped \(dropped) actions of a type Pilot does not know") }
-            show(rows)
+            // A Raycast host's answers are drawn as they come (drawQueued); only a stop's reason, which is no line, is drawn here.
+            if session == nil { display(outcome) } else if case .error = outcome { display(outcome) }
         }
+    }
+
+    /// Draws a Raycast host's newest answer once per burst: by the time this runs, later commits are in `newest` too.
+    private func drawQueued() {
+        guard !drawing else { return }
+        drawing = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            drawing = false
+            if let view = session?.newest { display(view.outcome, loading: view.loading) }
+        }
+    }
+
+    /// Shows what the program answered, under the loading row while it still loads.
+    private func display(_ outcome: ListOutcome, loading: Bool = false) {
+        var rows: [MenuEntry]
+        var dropped = 0
+        switch outcome {
+        case .items(let items):
+            self.items = items
+            rows = ExtensionList.entries(items, of: command)
+            dropped = items.reduce(0) { $0 + $1.dropped }
+        case .detail(let detail):
+            items = ExtensionList.items(detail, of: command)
+            var row = ExtensionList.detail(detail, of: command)
+            if ext.shownSurface != nil { row.extensionPage = ext.id }
+            rows = [row]
+            dropped = detail.dropped
+        case .error(let reason):
+            items = []
+            rows = [ExtensionList.error(reason, of: command, in: ext.title)]
+            dlog.error("extension: \(self.command.actionID, privacy: .public) list: \(reason, privacy: .private)")
+        }
+        dlog.notice("extension: \(self.command.actionID, privacy: .public) listed \(self.items.count) rows")
+        if dropped > 0 { dlog.error("extension: \(self.command.actionID, privacy: .public) dropped \(dropped) actions of a type Pilot does not know") }
+        if loading {
+            rows.insert(MenuEntry(title: "\(ext.title) is loading…", target: .action("\(command.actionID)#loading"), isAnswer: true,
+                                  icon: .command(emoji: command.icon)), at: 0)
+        }
+        show(rows)
     }
 
     /// The run in flight has answered or been cancelled.
@@ -109,5 +140,11 @@ final class ExtensionListSession: MenuSource {
         ExtensionList.item(at: row, in: items).flatMap { $0.actions.indices.contains(index) ? $0.actions[index] : nil }
     }
 
-    func pick(_ row: MenuEntry, action index: Int) -> MenuPick { action(index, for: row).map { ExtensionActions.pick($0, in: ext, inputs: inputs) } ?? .stay }
+    /// A callback is pressed in the open view's host, the panel kept open: its answer is drawn as it comes.
+    func pick(_ row: MenuEntry, action index: Int) -> MenuPick {
+        guard let action = action(index, for: row) else { return .stay }
+        guard case .invoke(let handler) = action.kind else { return ExtensionActions.pick(action, in: ext, inputs: inputs) }
+        guard let session else { return .stay }
+        return .keep(clear: false, back: false) { Task { _ = await session.invoke(handler) } }
+    }
 }

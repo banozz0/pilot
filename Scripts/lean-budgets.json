@@ -9,5 +9,6 @@
   "launchFilesSeconds": 5,
   "widgetsWebIdleMB": 60,
   "widgetsWebIdleCPUPercent": 1.5,
+  "extHostOpenMB": 60,
   "ratchetMarginPercent": 17
 }

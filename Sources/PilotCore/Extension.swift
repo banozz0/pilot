@@ -9,6 +9,9 @@ public struct Extension: Equatable, Sendable {
     /// detail, markdown with facts beside it (detail, card agent-bo-95423245).
     public enum Mode: String, Equatable, Sendable { case noView = "no-view", list, detail }
 
+    /// A program speaking JSON lines (ADR 0010), or a Raycast-format bundle the extension host runs (ADR 0017).
+    public enum Runtime: Equatable, Sendable { case process, raycast }
+
     public struct Command: Equatable, Sendable {
         public let id: CommandID, title: String, icon: String?, mode: Mode
         /// Who narrows a list command's rows; Pilot for a no-view one, which has none.
@@ -24,6 +27,8 @@ public struct Extension: Equatable, Sendable {
         /// A no-view command's word at the root (`"keyword": "todo"`, 2026-10-10): "todo buy milk" answers with a row
         /// whose Return runs it, the rest of the search its `input`. It reaches a hidden command too; nil when it has none.
         public let keyword: String?
+        /// What runs it: its own program, or pilot-ext-host for a Raycast-format command, whose program is its bundle (ADR 0017).
+        public internal(set) var runtime: Runtime = .process
 
         public var name: String { id.command }
         public var actionID: String { id.actionID }
@@ -183,6 +188,7 @@ public struct Extension: Equatable, Sendable {
 
     /// The extension `folder` holds; throws its Problem when it is not one.
     public init(folder: URL) throws {
+        if RaycastManifest.holds(folder) { self = try Extension(raycast: folder); return }
         let data: Data
         do { data = try Data(contentsOf: folder.appending(path: Self.manifestName)) } catch { throw Problem.noManifest }
         let manifest: Manifest

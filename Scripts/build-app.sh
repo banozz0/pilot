@@ -56,6 +56,12 @@ cargo build --release --quiet --manifest-path "$ROOT/Helpers/pilot-files/Cargo.t
 DICTATE=$ROOT/Helpers/pilot-dictate
 swift build -c release ${=SWIFTFLAGS:-} -Xswiftc -Osize -Xlinker -no_exported_symbols --package-path "$DICTATE" --product pilot-dictate
 DICTATEBIN=$(swift build -c release --package-path "$DICTATE" --show-bin-path)
+# The extension host (ADR 0017): JavaScriptCore in a package of its own, so the main binary never links it. Its prelude
+# (React, react-reconciler and Pilot's shim) is built at dev time by Helpers/pilot-ext-host/prelude/build.sh and committed,
+# so this build needs no Node; it is a script, so it goes in Resources, never Helpers.
+EXTHOST=$ROOT/Helpers/pilot-ext-host
+swift build -c release ${=SWIFTFLAGS:-} -Xswiftc -Osize -Xlinker -no_exported_symbols --package-path "$EXTHOST" --product pilot-ext-host
+EXTHOSTBIN=$(swift build -c release --package-path "$EXTHOST" --show-bin-path)
 # Dictation's Pause media (MediaPause): a library /usr/bin/perl loads to pause and play what is playing; macOS 15.4 and
 # later tell only Apple's own programs that (Helpers/pilot-media/pilot-media.m).
 mkdir -p "$ROOT/.build/pilot-media"
@@ -70,6 +76,7 @@ cp "$BINDIR/PilotText" "$APP/Contents/Helpers/pilot-text"  # the clipboard's ima
 # Contents/MacOS/pilot is Pilot itself.
 cp "$BINDIR/PilotCLI" "$APP/Contents/Helpers/pilot"
 cp "$BINDIR/PilotMCP" "$APP/Contents/Helpers/pilot-mcp"  # Codex's one tool in Ask Pilot: one gated pilot call (AIChat.Agent.codexLock)
+cp "$EXTHOSTBIN/pilot-ext-host" "$APP/Contents/Helpers/pilot-ext-host"  # Raycast-format extensions, one run each (ExtensionRun.launch)
 cp "$DICTATEBIN/pilot-dictate" "$APP/Contents/Helpers/pilot-dictate"  # Whisper while dictating (PilotDictation), Kokoro for Read aloud (KokoroSpeaker); the models are downloaded
 cp "$ROOT/.build/pilot-media/pilot-media.dylib" "$APP/Contents/Helpers/"  # Pause media while dictating
 cp "$ROOT/Helpers/pilot-media/pilot-media.pl" "$APP/Contents/Resources/"  # a script in Helpers is unsigned code: codesign refuses the bundle
@@ -92,8 +99,9 @@ fi
 if [[ $CONFIG == release ]]; then
   for name in Pilot PilotWebApp PilotText PilotCLI PilotMCP; do rm -rf "$ROOT/build/$name.dSYM"; dsymutil "$BINDIR/$name" -o "$ROOT/build/$name.dSYM"; done
   rm -rf "$ROOT/build/pilot-dictate.dSYM"; dsymutil "$DICTATEBIN/pilot-dictate" -o "$ROOT/build/pilot-dictate.dSYM"
+  rm -rf "$ROOT/build/pilot-ext-host.dSYM"; dsymutil "$EXTHOSTBIN/pilot-ext-host" -o "$ROOT/build/pilot-ext-host.dSYM"
   strip -u -r -T "$APP/Contents/MacOS/Pilot" "$APP/Contents/Helpers/PilotWebApp" "$APP/Contents/Helpers/pilot-text" "$APP/Contents/Helpers/pilot" \
-    "$APP/Contents/Helpers/pilot-mcp" "$APP/Contents/Helpers/pilot-dictate"
+    "$APP/Contents/Helpers/pilot-mcp" "$APP/Contents/Helpers/pilot-dictate" "$APP/Contents/Helpers/pilot-ext-host"
 fi
 cp "$ROOT/Helpers/pilot-files/target/release/pilot-files" "$APP/Contents/Helpers/pilot-files"
 cp "$ROOT/Helpers/pilot-files/vendor/cardinal/LICENSE" "$APP/Contents/Resources/Cardinal-LICENSE.txt"  # MIT keeps its notice
@@ -102,6 +110,8 @@ cp "$ROOT/Helpers/pilot-files/vendor/cardinal/NOTICE" "$APP/Contents/Resources/C
 # About, Acknowledgements); a crate with no text found fails the build.
 python3 -I "$ROOT/Scripts/rust-licenses.py" "$ROOT/Helpers/pilot-files/Cargo.toml" >"$APP/Contents/Resources/Rust-crates-LICENSES.txt"
 cp "$DICTATE/WhisperKit-LICENSE.txt" "$APP/Contents/Resources/WhisperKit-LICENSE.txt"  # MIT keeps its notice (pilot-dictate)
+cp "$EXTHOST/pilot-ext-prelude.js" "$APP/Contents/Resources/pilot-ext-prelude.js"  # the extension host's prelude (ADR 0017)
+cp "$EXTHOST/React-LICENSE.txt" "$APP/Contents/Resources/React-LICENSE.txt"  # MIT keeps its notice: React, react-reconciler and scheduler in the prelude
 cp "$DICTATE/FluidAudio-LICENSE.txt" "$APP/Contents/Resources/FluidAudio-LICENSE.txt"  # Apache 2.0 keeps its licence (pilot-dictate, Parakeet)
 cp "$ROOT/Packaging/WhisperKit-NOTICES.txt" "$ROOT/Packaging/FluidAudio-NOTICES.txt" "$APP/Contents/Resources/"  # their third-party notices, at the pinned tags
 # The models Pilot downloads on a click, never bundled: each one's credit and licence (Parakeet's CC BY 4.0 asks for it).
@@ -180,8 +190,8 @@ echo -n 'APPL????' > "$APP/Contents/PkgInfo"
 #     personal-information.location    Wi-Fi network names in Setup (CoreWLANSystem's CLLocationManager)
 #   pilot-dictate (Packaging/pilot-dictate.entitlements)
 #     device.audio-input                it opens the microphone itself (AVAudioEngine's input) while dictating
-# None asked for: JIT and unsigned memory (WebKit's JIT runs in its own WebContent processes; no JavaScriptCore in
-# process), library validation off (every dlopen is a system framework or the pack, signed by this same team), DYLD
+# None asked for: JIT and unsigned memory (WebKit's JIT runs in its own WebContent processes; pilot-ext-host's
+# JavaScriptCore is signed with no JIT entitlement, ADR 0017), library validation off (every dlopen is a system framework or the pack, signed by this same team), DYLD
 # variables (none read; MallocSpaceEfficient is libmalloc's, which reads it under the hardened runtime too). Sparkle's
 # Autoupdate and Updater.app, the Python extensions' /usr/bin/python3 children and the web-app template need nothing: a
 # stamped web app is signed again without the runtime (WebAppStamper).
@@ -198,6 +208,7 @@ codesign $SIGN --identifier dev.banozz.pilot.text "$APP/Contents/Helpers/pilot-t
 codesign $SIGN $DICTATE_ENTITLE --identifier dev.banozz.pilot.dictate "$APP/Contents/Helpers/pilot-dictate"
 codesign $SIGN --identifier dev.banozz.pilot.cli "$APP/Contents/Helpers/pilot"
 codesign $SIGN --identifier dev.banozz.pilot.mcp "$APP/Contents/Helpers/pilot-mcp"
+codesign $SIGN --identifier dev.banozz.pilot.ext-host "$APP/Contents/Helpers/pilot-ext-host"
 codesign $SIGN --identifier dev.banozz.pilot.agent-shell "$APP/Contents/Helpers/pilot-agent-shell"
 codesign $SIGN --identifier dev.banozz.pilot.media "$APP/Contents/Helpers/pilot-media.dylib"
 # Sparkle inside out, in its own documented order: the installer, its progress app, then the framework.

@@ -11,7 +11,8 @@ extension Extension {
         public struct Action: Equatable, Sendable {
             /// Open a URL or a path; copy or paste text; push another command's view or run a no-view one, handing on a
             /// context; show a HUD line, with an alert sound; run a registered Pilot action; start, hold or stop Pilot's one
-            /// timer; show Pilot's alert, which stays until a button is pressed; ask Pilot's AI (ExtensionAI).
+            /// timer; show Pilot's alert, which stays until a button is pressed; ask Pilot's AI (ExtensionAI); press a
+            /// Raycast-format command's callback by its handler id, in the host its open view keeps (ADR 0017, T2).
             public enum Kind: Equatable, Sendable {
                 case open(String), copy(String), paste(String), push(command: String, context: JSONValue?)
                 case run(command: String, context: JSONValue?), hud(String, sound: String? = nil), pilot(String)
@@ -19,6 +20,8 @@ extension Extension {
                 indirect case timer(TimerSpec), alert(AlertSpec)
                 /// The AI page's provider on `text` under `task`, its answer handed to `then`, a run, as its `input`.
                 indirect case ai(task: String, text: String, then: Action)
+                /// Only an open view's session can press it: it reaches the extension's JavaScript still running there.
+                case invoke(handler: String)
             }
 
             public let kind: Kind, title: String?
@@ -103,6 +106,9 @@ extension Extension {
             public static func open(_ target: String) -> Action { Action(kind: .open(target)) }
             public static func copy(_ text: String) -> Action { Action(kind: .copy(text)) }
 
+            /// An invoke's handler id; nil for any other kind.
+            public var handler: String? { if case .invoke(let handler) = kind { handler } else { nil } }
+
             /// Its own title, else its type's.
             public var label: String {
                 if let title { return title }
@@ -117,6 +123,7 @@ extension Extension {
                 case .timer(let timer): timer.stops ? "Stop timer" : "Start timer"
                 case .alert: "Show alert"
                 case .ai: "Ask AI"
+                case .invoke: "Press"
                 }
             }
 
@@ -138,6 +145,7 @@ extension Extension {
                                          actions: Array((line.actions ?? []).compactMap(Action.init).prefix(AlertSpec.most))))
                 }
                 case "ai": ExtensionAI.kind(task: line.prompt, text: line.text, then: line.then.flatMap(Action.init))
+                case "invoke": line.handler.map { Kind.invoke(handler: $0) }
                 default: nil
                 }
                 guard let kind else { return nil }
@@ -167,6 +175,8 @@ extension Extension {
                 let key: String?, stay: Bool?, clear: Bool?
                 /// An `ai` action's task and the run its answer goes to.
                 let prompt: String?, then: Line?
+                /// An `invoke` action's handler id (ADR 0017).
+                let handler: String?
             }
         }
 
@@ -190,6 +200,11 @@ extension Extension {
             }
         }
 
+        /// `name` when it is shaped as an SF Symbol's (lowercase words and digits joined by dots, at most 64 characters).
+        static func symbolName(_ name: String) -> String? {
+            name.count <= 64 && name.wholeMatch(of: /[a-z0-9]+(\.[a-z0-9]+)*/) != nil ? name : nil
+        }
+
         /// The most inline buttons a row shows.
         public static let mostInline = 3
 
@@ -198,6 +213,9 @@ extension Extension {
         /// up to `largestImage` bytes; a popover row draws it, Hyper+Space shows the emoji.
         public let image: Data?
         public static let largestImage = 64 * 1024
+        /// An SF Symbol its row wears in place of the command's emoji: a Raycast-format row's `Icon` name, which the host
+        /// maps (ADR 0017, T5); only a name shaped as a symbol's is kept.
+        public let symbol: String?
         public let actions: [Action]
         /// Surfaces v2: its badges and its inline buttons (actions drawn as small icon buttons on the row), three each at most.
         public let badges: [Badge], inline: [Action]
@@ -209,14 +227,14 @@ extension Extension {
 
         public init(id: String? = nil, title: String, subtitle: String? = nil, icon: String? = nil, keywords: String? = nil,
                     actions: [Action], badges: [Badge] = [], inline: [Action] = [], image: Data? = nil, section: String? = nil,
-                    accessory: Badge? = nil) {
+                    accessory: Badge? = nil, symbol: String? = nil) {
             self.id = id; self.title = title; self.subtitle = subtitle; self.icon = icon; self.keywords = keywords; self.actions = actions
-            self.image = image; self.section = section; self.accessory = accessory
+            self.image = image; self.section = section; self.accessory = accessory; self.symbol = symbol.flatMap(Self.symbolName)
             self.badges = Array(badges.prefix(Badge.most)); self.inline = Array(inline.prefix(Self.mostInline))
             dropped = 0
         }
 
-        private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory }
+        private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory, symbol }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -227,6 +245,7 @@ extension Extension {
             keywords = try c.decodeIfPresent(String.self, forKey: .keywords)
             // Read leniently: a picture that is not base64, or too large, is no picture.
             image = (try? c.decode(String.self, forKey: .image)).flatMap { Data(base64Encoded: $0) }.flatMap { $0.count <= Self.largestImage ? $0 : nil }
+            symbol = (try? c.decode(String.self, forKey: .symbol)).flatMap(Self.symbolName)
             (actions, dropped) = try Action.decode(c, .actions)
             // Read leniently: a broken badge or button is skipped, never the row.
             badges = Array(((try? c.decode([Lenient<Badge>].self, forKey: .badges)) ?? []).compactMap(\.value).prefix(Badge.most))
@@ -361,15 +380,15 @@ extension ExtensionRun {
         "did not answer in \(String(format: "%g", timeout.inSeconds)) s"
     }
 
-    private struct Answer: Decodable { let type: String, text: String?, items: [Extension.Item]? }
+    private struct Answer: Decodable { let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool? }
 
     /// The list, the detail or the reason in what a view's program printed: the first error, else the last answer.
     static func answer(_ output: String) -> ListOutcome {
         var last: ListOutcome?
         for line in output.split(whereSeparator: \.isNewline) {
             switch reply(line) {
-            case .answer(.error(let reason)): return .error(reason)
-            case .answer(let answer): last = answer
+            case .answer(.error(let reason), _): return .error(reason)
+            case .answer(let answer, _): last = answer
             case .plain: return .error(unreadable)
             case .skip: continue
             }
@@ -381,16 +400,20 @@ extension ExtensionRun {
 
     /// What one printed line is: an answer (a list, a detail or an error message), a plain line outside the message
     /// format, or nothing to act on (a blank line or a message of a type Pilot does not know).
-    enum Reply: Equatable { case answer(ListOutcome), plain, skip }
+    enum Reply: Equatable { case answer(ListOutcome, Meta = Meta()), plain, skip }
+
+    /// A Raycast host's own fields beside its answer (ADR 0017, T2): the request it answers and whether its List still loads.
+    struct Meta: Equatable { var ack: Int?, loading = false }
 
     static func reply(_ line: some StringProtocol) -> Reply {
         guard !line.allSatisfy(\.isWhitespace) else { return .skip }
         let data = Data(line.utf8), decoder = JSONDecoder()
         guard let answer = try? decoder.decode(Answer.self, from: data) else { return .plain }
+        let meta = Meta(ack: answer.ack, loading: answer.isLoading == true)
         switch answer.type {
-        case "error": return .answer(.error("says: \(answer.text ?? "it failed")"))
-        case "list": return .answer(.items(answer.items ?? []))
-        case "detail": return .answer((try? decoder.decode(Extension.Detail.self, from: data)).map(ListOutcome.detail) ?? .error(unreadable))
+        case "error": return .answer(.error("says: \(answer.text ?? "it failed")"), meta)
+        case "list": return .answer(.items(answer.items ?? []), meta)
+        case "detail": return .answer((try? decoder.decode(Extension.Detail.self, from: data)).map(ListOutcome.detail) ?? .error(unreadable), meta)
         default: return .skip
         }
     }
@@ -404,12 +427,18 @@ public enum ExtensionList {
         let ownOrder = command.filter == .program
         return items.enumerated().map { index, item in
             var row = MenuEntry(title: item.title, target: .action("\(command.actionID)#\(index)"), detail: item.accessory?.text,
-                                keywords: item.keywords, isAnswer: ownOrder, subtitle: item.subtitle, icon: .command(emoji: item.icon ?? command.icon))
+                                keywords: item.keywords, isAnswer: ownOrder, subtitle: item.subtitle, icon: icon(of: item, in: command))
             row.ownActions = item.actions.map(\.label)
             if item.actions.contains(where: { $0.key != nil }) { row.ownKeys = item.actions.map(\.key) }
             row.section = item.section
             return row
         }
+    }
+
+    /// A row's icon: its own emoji, else its own symbol (T5), else the command's emoji over a terminal.
+    static func icon(of item: Extension.Item, in command: Extension.Command) -> MenuIcon {
+        if item.icon == nil, let symbol = item.symbol { return .glyph(symbol, .neutral) }
+        return .command(emoji: item.icon ?? command.icon)
     }
 
     /// A detail as the view's one row, never ranked: the panel draws its detail in place of the list, and Return and
@@ -422,6 +451,11 @@ public enum ExtensionList {
     }
 
     /// The row that says why there are no items, under the extension's title.
+    /// A detail's actions as the one item its view's row acts on, by the menu and `ext act` alike.
+    public static func items(_ detail: Extension.Detail, of command: Extension.Command) -> [Extension.Item] {
+        [Extension.Item(title: command.title, actions: detail.actions)]
+    }
+
     public static func error(_ reason: String, of command: Extension.Command, in title: String) -> MenuEntry {
         MenuEntry(title: "\(title) \(reason)", target: .action("\(command.actionID)#error"), isAnswer: true, icon: .command(emoji: command.icon))
     }

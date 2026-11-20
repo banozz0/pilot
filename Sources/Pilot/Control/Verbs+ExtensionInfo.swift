@@ -112,6 +112,7 @@ extension ControlVerbs {
         case .timer(let timer): o["text"] = .string(timer.title)
         case .alert(let alert): o["text"] = .string(alert.text)
         case .ai(let task, _, _): o["text"] = .string(task)
+        case .invoke(let handler): o["handler"] = .string(handler)
         }
         return .object(o)
     }
@@ -121,6 +122,9 @@ extension ControlVerbs {
         o["id"] = item.id.map(JSONValue.string)
         o["subtitle"] = item.subtitle.map(JSONValue.string)
         o["icon"] = item.icon.map(JSONValue.string)
+        // T5 (coordinator's yes, 2026-11-19): the row's SF Symbol, and its picture as its size and hash, never its bytes.
+        o["symbol"] = item.symbol.map(JSONValue.string)
+        o["image"] = item.image.map { .string("\($0.count) B, sha256 \(ExtensionCatalogue.sha256($0).prefix(12))") }
         if !item.badges.isEmpty { o["badges"] = .array(item.badges.map { .string($0.text) }) }
         o["section"] = item.section.map(JSONValue.string)
         o["accessory"] = item.accessory.map { .string($0.text) }
@@ -187,6 +191,7 @@ extension ExtensionTools {
                   _ body: @MainActor () async throws(ControlError) -> JSONValue) async throws(ControlError) -> JSONValue {
         // Asked before the question and again after Allow, so a password set while it was up still withholds.
         func noPassword() async throws(ControlError) {
+            guard !readsBackPasswords else { return }
             let set = await shown(ext).passwordsSet
             guard set.isEmpty else {
                 throw ControlError(.denied, "\(ext.id) has a password preference set (\(set.sorted().joined(separator: ", "))), so what it prints is not read back: it may hold the password. pilot run <action> runs it; its page shows on screen (pilot ext open \(ext.id))")
@@ -213,7 +218,8 @@ extension ExtensionTools {
     /// A run that failed: the extension's own error message as it said it, but a failed exit (whose reason is the program's
     /// stderr, which can hold anything) as a fixed line, the reason in the log only, as Hyper+Space does.
     func failed(_ command: Extension.Command, _ why: String, in ext: Extension? = nil) -> ControlError {
-        if let ext, why.hasPrefix("says:") || why == ExtensionRun.unreadable || why.hasPrefix("sent no") || why.hasPrefix("did not answer") {
+        if let ext, why.hasPrefix("says:") || why == ExtensionRun.unreadable || why.hasPrefix("sent no") || why.hasPrefix("did not answer")
+            || why.hasPrefix("used more than") {
             return ControlError(why.hasPrefix("did not answer") ? .timeout : .badValue, "\(ext.title) \(why)")
         }
         log.error("ext: \(command.actionID, privacy: .public) failed: \(why, privacy: .private)")

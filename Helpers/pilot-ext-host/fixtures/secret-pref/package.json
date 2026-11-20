@@ -1,0 +1,28 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "secret-pref",
+  "title": "Secret preference",
+  "description": "A fixture for pilot-ext-host's preference mapping (T3): a password preference, which Pilot keeps in the Keychain.",
+  "author": "banozz",
+  "license": "MIT",
+  "categories": [
+    "Developer Tools"
+  ],
+  "preferences": [
+    {
+      "name": "token",
+      "type": "password",
+      "title": "Token",
+      "description": "A password preference.",
+      "required": false
+    }
+  ],
+  "commands": [
+    {
+      "name": "index",
+      "title": "Has a token",
+      "description": "Says whether a token reached getPreferenceValues(), never the token.",
+      "mode": "view"
+    }
+  ]
+}

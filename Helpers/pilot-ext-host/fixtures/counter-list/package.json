@@ -1,0 +1,17 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "counter-list",
+  "title": "Counter list",
+  "description": "A fixture for pilot-ext-host's callbacks: a List whose row's Action counts its presses.",
+  "author": "banozz",
+  "license": "MIT",
+  "categories": ["Developer Tools"],
+  "commands": [
+    {
+      "name": "index",
+      "title": "Count presses",
+      "description": "Counts each press of Increment; Reset sets it back to 0.",
+      "mode": "view"
+    }
+  ]
+}

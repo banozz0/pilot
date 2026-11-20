@@ -14,7 +14,7 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
   The one exception: the designer may add env-gated offscreen `<X>Renders` tests (Sven, 2026-10-17, Q67).
   Prove behaviour end to end through the `pilot` command against a sandbox, output quoted. Acting verbs (`run`, keys, system, wallpaper,
   install, `files`, `model`, `permit`, `ai ask`, `theme apply`, `wifi`/`bluetooth` switching, `workspace move|rule`) act on the Mac they run on, and `set` asks Allow on screen.
-- Once before landing, after the full `swift test`: `Scripts/lean-check.py` (size; `idle` reads Pilot and may only lower a budget (the ratchet), `launch`/`all` relaunch Pilot).
+- Once before landing, after the full `swift test`: `Scripts/lean-check.py` (size; `idle` reads Pilot and may only lower a budget (the ratchet), `launch`/`all` relaunch Pilot; `ext` reads running extension hosts against `extHostOpenMB`).
 - `Scripts/build-app.sh` (release, signed, checks the size budget; a release needs `SPARKLE_ED_KEY` or `PILOT_DEV=1`, which `run.sh` sets; `CONFIG=debug` for debug) once per change, before land, never per edit; `Scripts/run.sh`
   builds, relaunches and streams the log. Rust file helper: `cargo test --manifest-path Helpers/pilot-files/Cargo.toml`.
 

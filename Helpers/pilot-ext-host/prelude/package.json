@@ -1,0 +1,9 @@
+{
+  "name": "pilot-ext-prelude",
+  "private": true,
+  "license": "MIT",
+  "description": "Builds pilot-ext-prelude.js: React, react-reconciler and Pilot's clean-room shim, bundled once at dev time.",
+  "scripts": { "build": "./build.sh" },
+  "dependencies": { "react": "19.3.1", "react-reconciler": "0.34.0" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}
