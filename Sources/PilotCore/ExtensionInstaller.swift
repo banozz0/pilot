@@ -150,7 +150,7 @@ public struct GitHubInstall: Sendable {
         let plan = try JSONDecoder().decode(Plan.self, from: last)
         guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
               plan.commands.allSatisfy({ Extension.isCommandName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
-            throw Refused(errorDescription: "its package.json names it outside Pilot's id rule (a-z, 0-9 and hyphens) or a command outside letters, digits and hyphens")
+            throw Refused(errorDescription: "its package.json names it outside Pilot's id rule (a-z, 0-9 and hyphens) or a command outside letters, digits, hyphens and underscores")
         }
         guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
             throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")

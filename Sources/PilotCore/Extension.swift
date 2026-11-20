@@ -410,9 +410,10 @@ public struct Extension: Equatable, Sendable {
     static func isName(_ s: String) -> Bool { s.wholeMatch(of: /[a-z0-9][a-z0-9-]*/) != nil }
 
     /// A Raycast-format command's name (ADR 0017): Raycast's own spelling, capitals kept (`searchNoteCommand`), still only
-    /// letters, digits and hyphens, so the id splits one way and a question shows no space or punctuation (T6's review 1);
-    /// an extension.json command keeps `isName`. Install.swift's `plan()` holds a fetched manifest to the same rule.
-    static func isCommandName(_ s: String) -> Bool { s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9-]*/) != nil }
+    /// letters, digits, hyphens and underscores (Todo List's `menu_bar`, T28), so the id splits one way and a question shows
+    /// no space or punctuation (T6's review 1); an extension.json command keeps `isName`. Install.swift's `plan()` holds a
+    /// fetched manifest to the same rule.
+    static func isCommandName(_ s: String) -> Bool { s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9_-]*/) != nil }
 
     /// `icon` when it is one emoji, the only icon Pilot draws for now.
     private static func emoji(_ icon: String?) -> String? { icon.flatMap { ScriptCommand.isEmoji($0) ? $0 : nil } }

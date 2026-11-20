@@ -216,14 +216,14 @@ enum Installer {
         // The title is the one free text, cut to 80 Unicode scalars, last on its line and escaped by Pilot when it builds the
         // result line (ControlGate.Ask.visible), as is every refusal text below that quotes a remote word (cut, at most 120
         // scalars). The tree is the listing's own 40 hex digits (fetch).
-        // A command keeps Raycast's capitals (Extension.isCommandName): letters, digits and hyphens.
-        let name = #/[a-z0-9][a-z0-9-]*/#, commandName = #/[A-Za-z0-9][A-Za-z0-9-]*/#
+        // A command keeps Raycast's capitals (Extension.isCommandName): letters, digits, hyphens and underscores.
+        let name = #/[a-z0-9][a-z0-9-]*/#, commandName = #/[A-Za-z0-9][A-Za-z0-9_-]*/#
         guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(cut(id, 64))\", not an id of a-z, 0-9 and hyphens") }
         // Names are compared case-folded: `Index` and `index` would both build dist/index.js on the Mac's own disk.
         var folded = Set<String>()
         for command in commands {
             let c = command["name"] as? String ?? ""
-            guard c.wholeMatch(of: commandName) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(cut(c, 64))\", not letters, digits and hyphens") }
+            guard c.wholeMatch(of: commandName) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(cut(c, 64))\", not letters, digits, hyphens and underscores") }
             guard folded.insert(c.lowercased()).inserted else { throw Refused("two commands in its package.json are both named \"\(cut(c, 64))\", case aside") }
             guard ["view", "no-view", "menu-bar"].contains(command["mode"] as? String ?? "view") else { throw Refused("command \(c) has a mode Raycast does not have") }
         }

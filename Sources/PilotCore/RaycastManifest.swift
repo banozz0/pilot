@@ -124,7 +124,7 @@ extension Extension {
             let menuBar = c.mode == "menu-bar"
             return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
                            session: false, program: bundle, hidden: menuBar,
-                           keyword: c.takesArguments && !menuBar ? Self.keyword(.string(c.name)) : nil, runtime: .raycast,
+                           keyword: c.takesArguments && !menuBar ? c.name.lowercased() : nil, runtime: .raycast,
                            picture: RaycastManifest.iconFile(c.icon, in: folder) ?? picture)
         }
         bars = zip(manifest.commands, commands).filter { $0.0.mode == "menu-bar" }.map { c, command in
