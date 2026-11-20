@@ -57,10 +57,11 @@ struct MenuBarPage: View {
                 if let problem = topBar.problem { FinePrint(text: problem, color: ink.red) }
                 onlyInTopBar(store, topBarOn: topBar.isOn)
             }
-            HStack(alignment: .bottom) {
+            // A block row's layout: in a narrow page the buttons and the picker go under the words, never past the edge.
+            BlockRowLayout(spacing: 12) {
                 Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
                     .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 resets(store)
                 placements
             }
