@@ -67,8 +67,17 @@ public enum RaycastManifest {
             guard let type = kinds[p.type] else { throw Extension.Problem.unknownPreferenceType(preference: p.name, type: p.type) }
             let title = [p.title, p.label].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? p.name
             return try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
-                                                                      default: macOS(p.default), description: p.description, data: p.data))
+                                                                      default: dropdownDefault(macOS(p.default), p), description: p.description, data: p.data))
         }
+    }
+
+    /// A dropdown's default that is none of its options' values (Timers' `Submarine`, T28) as its first option's, the one
+    /// a dropdown shows when nothing matches; any other default as it is. Raycast's docs say only that a dropdown's
+    /// default is "the value of an object in the data array"; an extension.json dropdown keeps the refusal (badDefault).
+    static func dropdownDefault(_ given: JSONValue?, _ p: Manifest.Preference) -> JSONValue? {
+        guard p.type == "dropdown", let given, let first = p.data?.first,
+              !(p.data ?? []).contains(where: { JSONValue.string($0.value) == given }) else { return given }
+        return .string(first.value)
     }
 
     /// A default given per platform (`{"macOS": "com.apple.Terminal", "Windows": "Terminal"}`, Raycast's cross-platform
