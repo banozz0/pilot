@@ -20,7 +20,7 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
 
 ## Shape and rules
 - A HID-level CGEventTap makes the layer key (Caps Lock via F18, or one side of Control, Option or Command) Hyper and runs every bind in-process (ADR 0001).
-  Binds: `~/Library/Application Support/Pilot/binds.json`, schema 1 (`BindStore.version`); Cockpit reads it. `Helpers/pilot-files` is the file
+  Binds: `~/Library/Application Support/Pilot/binds.json`, schema version 3 (`BindStore.version`; older files still load); Cockpit reads it. `Helpers/pilot-files` is the file
   index (Cardinal's MIT engine, vendored, licence kept); `pilot-text` reads clipboard image text (Vision) in a child. Register each action in its module: id, label, default key, tier.
 - A tap that switches itself off (the selection pill's, `QuickAI/SelectionTools.swift`) re-enables only on `.tapDisabledByTimeout`: its own `tapEnable(false)` delivers `.tapDisabledByUserInput`, and re-disabling there spins the main thread (build 59, 55% CPU).
   After a build that arms a new tap, sample idle CPU with that setting on: `/usr/bin/top -l 4 -s 3 -pid <pid> -stats pid,cpu`.
