@@ -184,6 +184,8 @@ def phase_run(ns):
         if not ext:
             results[folder] = {"installed": False}
             continue
+        for name, value in GATE.get(folder, {}).get("prefs", {}).items():
+            pilot(["add", "ext-prefs", "--pref", "%s.%s" % (ext, name), "--value", value], ns)
         shown, commands = views(ns, ext)
         rows = {}
         for command in shown:
