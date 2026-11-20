@@ -193,6 +193,18 @@ struct WorkspacePresetTests {
         #expect(tiler.evals.last == LayoutPreset.rows.commands(workspace: "2", windows: [10]))
     }
 
+    @Test("A switch lays the workspace out as its layout row, cycled since the save, not as the preset saved it (test-22 bug 2)")
+    func switchKeepsCycledLayout() async throws {
+        let tiler = FakeTiler(windows: [Self.window(10, "Finder", workspace: "2"), Self.window(20, "Ghostty", workspace: "2")], focused: "2")
+        let saved = WorkspacePreset(name: "Work", apps: [Self.app("Finder")], layout: .centred)
+        _ = try await Self.apply(saved.laidOut(as: WorkspaceLayout(preset: .mainStack, auto: true)), tiler, FakeOpener(tiler, lands: "2"))
+        #expect(tiler.evals.last == LayoutPreset.mainStack.commands(workspace: "2", windows: [10, 20]))
+        // A row with no ready layout (own sizes, or never set) leaves the preset's own.
+        #expect(saved.laidOut(as: .unset).layout == .centred)
+        // The editor opens on the cycled layout too, so its next autosave does not write the saved one back.
+        #expect(WorkspacePresetDraft(saved, workspace: "2", row: WorkspaceLayout(preset: .mainStack, auto: true)).layout == .mainStack)
+    }
+
     @Test("Other tiles on the workspace follow the preset's apps; a floating preset window is tiled, another floating window stays")
     func othersAndFloating() async throws {
         let tiler = FakeTiler(windows: [Self.window(20, "Ghostty", workspace: "2"), Self.window(10, "Finder", workspace: "2", layout: "floating"),

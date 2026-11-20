@@ -48,10 +48,12 @@ struct OverlayPicksBlocks: View {
         SearchBox(prompt: "Search binds", text: $query).padding(.vertical, 8)
         if groups.isEmpty { EmptyState(title: total == 0 ? "No binds on Hyper yet" : "No bind matches", line: total == 0 ? nil : "Try another word.") }
         // Lazy: a switch row for every bind, under the keyboard and below the fold, cost about 160 ms of each switch to
-        // Keys when built at once (bug 8, tester's feedback 2026-11-18); only the rows scrolled to are built.
+        // Keys when built at once (bug 8, tester's feedback 2026-11-18); only the rows scrolled to are built. Each group's
+        // rows are lazy too: a tall window shows the first groups under the keyboard, and a group built whole (every
+        // Windows bind) still cost about 240 ms of each switch in a 1676 x 1268 window (test-22 bug 3).
         LazyVStack(alignment: .leading, spacing: 0) { ForEach(groups) { group in
             KitBlock(title: Abilities.title(group.module), symbol: AbilitiesList.symbol(group.module)) {
-                ForEach(group.choices) { choice in
+                LazyVStack(alignment: .leading, spacing: 0) { ForEach(group.choices) { choice in
                     BlockRow(first: choice.id == group.choices.first?.id) {
                         Toggle(isOn: Binding(get: { choice.shown }, set: { settings.showInOverlay(choice.id, $0, shown: shown) })) {
                             HStack(spacing: 10) {
@@ -63,7 +65,7 @@ struct OverlayPicksBlocks: View {
                         .toggleStyle(.pilotSwitchRow(info: Abilities.what(choice.id, label: choice.label)))
                         .accessibilityLabel("Show \(choice.label), \(choice.key), in the overlay")
                     }
-                }
+                } }
             }
         } }
     }

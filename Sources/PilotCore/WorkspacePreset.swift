@@ -37,6 +37,16 @@ public struct WorkspacePreset: Codable, Equatable, Sendable {
 
     public init(name: String, apps: [App], layout: LayoutPreset?) { self.name = name; self.apps = apps; self.layout = layout }
 
+    /// This preset as a switch to `workspace` applies it: laid out as the workspace's layout row says when the row has a
+    /// ready layout. The row is what the bar's glyph and Cycle layout change and what an auto rebuild keeps; the preset's
+    /// own stays as saved, so building it on every switch undid a cycle and the next window flipped it back (test-22 bug 2).
+    public func laidOut(as row: WorkspaceLayout) -> WorkspacePreset {
+        guard let preset = row.preset else { return self }
+        var laid = self
+        laid.layout = preset
+        return laid
+    }
+
     /// The name a workspace's preset is saved under while it has none of its own: "Workspace 3".
     public static func unnamed(_ workspace: String) -> String { "Workspace \(workspace)" }
 
@@ -131,7 +141,9 @@ public struct WorkspacePresetDraft: Equatable, Sendable {
 
     /// A saved preset as it was, or a new one named after the workspace, empty, at own sizes; Keep this layout starts
     /// from the workspace's layout row.
-    public init(_ preset: WorkspacePreset?, workspace: String, row: WorkspaceLayout? = nil) {
+    public init(_ saved: WorkspacePreset?, workspace: String, row: WorkspaceLayout? = nil) {
+        // The layout the workspace has now (WorkspacePreset.laidOut): an editor autosave after a bar cycle keeps it.
+        let preset = row.map { saved?.laidOut(as: $0) } ?? saved
         name = preset?.name ?? "Workspace \(workspace)"
         apps = preset?.apps ?? []
         layout = preset?.layout

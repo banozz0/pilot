@@ -337,6 +337,7 @@ final class Engine {
         layouts = WorkspaceLayouts(observers: observers)
         presets = WorkspacePresets(observers: observers)
         presets.onSave = { [layouts] workspace, preset, auto in layouts.set(workspace, layouts.layout(workspace).saving(preset, auto: auto)) }
+        presets.layoutRow = { [layouts] in layouts.layout($0) }
         // Deleting a workspace closes its number (Sven's Q233): what is tied to a number follows it.
         workspaceList.follow(presets: presets, layouts: layouts, wallpaper: .shared)
         workspaceList.closeGaps()
