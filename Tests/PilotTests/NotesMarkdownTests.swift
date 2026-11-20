@@ -156,5 +156,33 @@ struct NotesMarkdownTests {
         window.makeFirstResponder(nil)
         #expect(hidden(editor, "| Item"))
         #expect(editor.string == Self.reference)
+
+        // Bold, italic, strike and code inside every line kind are drawn with their marks hidden, as in a plain
+        // paragraph (Sven, 2026-11-20), the caret on another line.
+        let kinds = ["Plain", "- Dash", "* Star", "+ Plus", "1. Num", "- [ ] Box", "> Quote", "# Title", "## Head", "### Sub"]
+        let marks = [("**", "b"), ("_", "i"), ("~~", "s"), ("`", "c")]
+        let lines = kinds.enumerated().map { n, kind in kind + " " + marks.map { "\($0.0)w\(n)\($0.1)\($0.0)" }.joined(separator: " ") }
+        editor.string = lines.joined(separator: "\n") + "\nlast\n"
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length - 1, length: 0))
+        #expect(window.makeFirstResponder(editor))
+        editor.restyle()
+        for n in kinds.indices {
+            for (mark, kind) in marks {
+                #expect(hidden(editor, "\(mark)w\(n)\(kind)") && !hidden(editor, "w\(n)\(kind)"), "\(kinds[n]): \(mark) shows")
+            }
+        }
+        let struck = (editor.string as NSString).range(of: "w0s")
+        #expect(editor.textStorage?.attribute(.strikethroughStyle, at: struck.location, effectiveRange: nil) != nil)
+        // A format leaves its words picked and its line drawn: the bold's marks stay hidden on the new list line until
+        // the caret moves, which shows them as on any line.
+        editor.string = "**asdasda**\nnext\n"
+        editor.setSelectedRange(NSRange(location: 2, length: 7))
+        editor.restyle()
+        #expect(!hidden(editor, "**asdasda"))
+        editor.format(.bullets)
+        #expect(editor.string == "- **asdasda**\nnext\n" && editor.selectedRange() == NSRange(location: 4, length: 7))
+        #expect(hidden(editor, "**asdasda") && editor.bullets().count == 1)
+        editor.setSelectedRange(NSRange(location: 6, length: 0))
+        #expect(!hidden(editor, "**asdasda"))
     }
 }

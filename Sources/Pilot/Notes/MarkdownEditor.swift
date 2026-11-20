@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 /// The notes panel's editor (card agent-bo-95423042): plain text drawn as its Markdown reads (Q114, Sven 2026-10-15,
-/// Obsidian's live preview): the marks (`#`, `**`, `_`, backticks, `>`, fences, table pipes, link brackets) are hidden
+/// Obsidian's live preview): the marks (`#`, `**`, `_`, `~~`, backticks, `>`, fences, table pipes, link brackets) are hidden
 /// and drawn as what they make, and show again on the line the caret is on. Headings sized, `-` a dot, `- [ ]` a
 /// checkbox a click toggles (done dim and struck through), a quote a callout with a bar, fenced code a panel, a table a
 /// grid, and a line that only links a picture drawn with the picture under it (notes round 2). The text stays the
@@ -322,6 +322,8 @@ enum MarkdownMarks {
     static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
     /// `_words_` or `*words*`; an underscore's may sit right inside or outside bold's `**` (`**_both_**`, `_**both**_`).
     static let italic = try! NSRegularExpression(pattern: #"(?<!\w)_(?=[^\s_]).+?(?<=[^\s_])_(?!\w)|(?<![\*\w])\*(?=[^\s\*_]).+?(?<=[^\s\*_])\*(?![\*\w])"#)
+    /// `~~words~~`, GitHub's strikethrough.
+    static let strike = try! NSRegularExpression(pattern: #"~~(?=\S)(.+?)(?<=\S)~~"#)
     static let code = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
     static let link = try! NSRegularExpression(pattern: #"\[([^\]\n]+)\]\(([^)\s]+)\)"#)
     static let bareURL = try! NSRegularExpression(pattern: #"(?<![\(\[])https?://[^\s)\]]+"#)
@@ -416,9 +418,16 @@ final class NotesTextView: NSTextView {
     /// True while a click or a drag is held: the marks wait for the release, so text never moves under the pointer.
     private var tracking = false
 
+    /// True from a format (the format bar, its key, Cmd+K) until the caret or the selection next moves: the lines it
+    /// changed read drawn, their marks hidden, though its words stay picked (Sven, 2026-11-20: a line made a bulleted
+    /// list showed its bold's `**`, as the picked line's marks showed).
+    private var settled = false
+    /// True inside `format`, whose own selection change keeps `settled`.
+    private var formatting = false
+
     /// The lines the caret or the selection is on, while this editor is typed into; nil shows every line as it reads.
     func revealedLines() -> NSRange? {
-        guard isEditable, hasFocus, let storage = textStorage else { return nil }
+        guard isEditable, hasFocus, !settled, let storage = textStorage else { return nil }
         return (storage.string as NSString).paragraphRange(for: selectedRange())
     }
 
@@ -434,6 +443,7 @@ final class NotesTextView: NSTextView {
 
     /// The caret onto another line shows that line's marks and hides the last one's, once a drag has settled.
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        if !formatting { settled = false }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         if !stillSelecting { restyleIfMoved() }
         reportSelection()
@@ -577,6 +587,11 @@ final class NotesTextView: NSTextView {
             restyleFonts(m.range, style.emboldened)
             mark(m.range(at: 1))
             mark(NSRange(location: NSMaxRange(m.range) - m.range(at: 1).length, length: m.range(at: 1).length))
+        }
+        each(MarkdownMarks.strike) { m in
+            storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
+            mark(NSRange(location: m.range.location, length: 2))
+            mark(NSRange(location: NSMaxRange(m.range) - 2, length: 2))
         }
         each(MarkdownMarks.italic) { m in
             restyleFonts(m.range) { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
@@ -1085,11 +1100,14 @@ final class NotesTextView: NSTextView {
     }
 
     /// A format at the selection (the format bar, Cmd+K or its key), as an edit Undo takes back; the editor keeps the
-    /// keyboard.
+    /// keyboard, and the lines read drawn until the caret moves (`settled`).
     func format(_ format: MarkdownFormat) {
         guard isEditable else { return }
         let edit = format.edit(string, selection: selectedRange())
         guard shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+        formatting = true
+        settled = true
+        defer { formatting = false }
         textStorage?.replaceCharacters(in: edit.range, with: NSAttributedString(string: edit.replacement, attributes: style.plain))
         didChangeText()
         setSelectedRange(edit.selection)
