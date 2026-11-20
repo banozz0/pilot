@@ -18,7 +18,7 @@ struct NotesMarkdownTests {
 
         ## Today's focus
         - Ship the notes markdown preview
-        - Review search ranking with the team
+        - Review [search ranking](https://example.com/ranking) with the team
 
         ## Priorities
         1. Polish the editor chrome
@@ -163,51 +163,110 @@ struct NotesMarkdownTests {
         #expect(MarkdownBlocks.tables(editor.string as NSString).first?.rows.count == 5)
     }
 
-    @Test("The line the caret is on shows its raw marks while the note is typed in; every other line stays drawn")
-    func caretLineShowsMarks() throws {
+    @Test("Marks never show, the caret's line included; the caret rests outside them, typing and deleting at a span's edge keep the Markdown whole")
+    func marksNeverShow() throws {
         let editor = editor(Self.reference)
         let window = NSWindow(contentRect: editor.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         defer { window.close() }
         window.contentView = editor
-        let attendees = (editor.string as NSString).range(of: "Attendees")
-        editor.setSelectedRange(NSRange(location: attendees.location, length: 0))
-        #expect(window.makeFirstResponder(editor))
-        #expect(!hidden(editor, "**Attendees") && hidden(editor, "**Tip"))
-        // Into the table: the whole table shows as typed, pipes and all.
-        editor.setSelectedRange(NSRange(location: (editor.string as NSString).range(of: "Shortcut map").location, length: 0))
-        #expect(!hidden(editor, "| Item") && !hidden(editor, "| --- |") && hidden(editor, "**Attendees"))
-        // The keyboard elsewhere (the list has it): every line drawn again.
-        window.makeFirstResponder(nil)
-        #expect(hidden(editor, "| Item"))
+        #expect(window.makeFirstResponder(editor) && window.firstResponder === editor)
+        let ref = editor.string as NSString
+        // The caret inside a bold word, in a list line and in a table cell (Sven, 2026-11-20, Q285): nothing shows.
+        for words in ["Attendees", "notes markdown", "Shortcut map"] {
+            editor.setSelectedRange(NSRange(location: ref.range(of: words).location + 3, length: 0))
+            editor.restyle()
+            #expect(hidden(editor, "**Attendees") && hidden(editor, "**Tip") && hidden(editor, "| Item") && hidden(editor, "| --- |"), "\(words)")
+        }
         #expect(editor.string == Self.reference)
 
-        // Bold, italic, strike and code inside every line kind are drawn with their marks hidden, as in a plain
-        // paragraph (Sven, 2026-11-20), the caret on another line.
+        // Bold, italic, strike and code inside every line kind are drawn with their marks hidden (Sven, 2026-11-20).
         let kinds = ["Plain", "- Dash", "* Star", "+ Plus", "1. Num", "- [ ] Box", "> Quote", "# Title", "## Head", "### Sub"]
         let marks = [("**", "b"), ("_", "i"), ("~~", "s"), ("`", "c")]
         let lines = kinds.enumerated().map { n, kind in kind + " " + marks.map { "\($0.0)w\(n)\($0.1)\($0.0)" }.joined(separator: " ") }
-        editor.string = lines.joined(separator: "\n") + "\nlast\n"
-        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length - 1, length: 0))
-        #expect(window.makeFirstResponder(editor))
-        editor.restyle()
+        func set(_ text: String, _ caret: Int) {
+            editor.string = text
+            editor.restyle()
+            editor.setSelectedRange(NSRange(location: caret, length: 0))
+        }
+        set(lines.joined(separator: "\n") + "\nlast\n", 0)
         for n in kinds.indices {
+            editor.setSelectedRange(NSRange(location: (editor.string as NSString).range(of: "w\(n)b").location + 1, length: 0))
             for (mark, kind) in marks {
                 #expect(hidden(editor, "\(mark)w\(n)\(kind)") && !hidden(editor, "w\(n)\(kind)"), "\(kinds[n]): \(mark) shows")
             }
         }
-        let struck = (editor.string as NSString).range(of: "w0s")
-        #expect(editor.textStorage?.attribute(.strikethroughStyle, at: struck.location, effectiveRange: nil) != nil)
-        // A format leaves its words picked and its line drawn: the bold's marks stay hidden on the new list line until
-        // the caret moves, which shows them as on any line.
-        editor.string = "**asdasda**\nnext\n"
+        #expect(editor.textStorage?.attribute(.strikethroughStyle, at: (editor.string as NSString).range(of: "w0s").location, effectiveRange: nil) != nil)
+        // A format leaves its line drawn, and so does every caret after it.
+        set("**asdasda**\nnext\n", 0)
         editor.setSelectedRange(NSRange(location: 2, length: 7))
-        editor.restyle()
-        #expect(!hidden(editor, "**asdasda"))
         editor.format(.bullets)
-        #expect(editor.string == "- **asdasda**\nnext\n" && editor.selectedRange() == NSRange(location: 4, length: 7))
-        #expect(hidden(editor, "**asdasda") && editor.bullets().count == 1)
+        editor.restyle()
+        #expect(editor.string == "- **asdasda**\nnext\n" && hidden(editor, "**asdasda") && editor.bullets().count == 1)
         editor.setSelectedRange(NSRange(location: 6, length: 0))
-        #expect(!hidden(editor, "**asdasda"))
+        #expect(hidden(editor, "**asdasda"))
+
+        // The caret: never inside a mark. In a span's marks it rests before them, so at a bold word's end typing stays
+        // bold and at its start it is plain; a space at the end goes past the closing mark.
+        set("a **bold** c", 3)
+        #expect(editor.selectedRange().location == 2)
+        editor.setSelectedRange(NSRange(location: 10, length: 0))
+        #expect(editor.selectedRange().location == 8)
+        editor.insertText("er", replacementRange: NSRange(location: NSNotFound, length: 0))
+        editor.restyle()
+        #expect(editor.string == "a **bolder** c" && editor.selectedRange().location == 10)
+        editor.insertText(" x", replacementRange: NSRange(location: NSNotFound, length: 0))
+        editor.restyle()
+        #expect(editor.string == "a **bolder** x c")
+        // → from a bold word's end passes its closing mark and the character after it.
+        set("a **b**cd", 0)
+        editor.setSelectedRange(NSRange(location: 5, length: 0))
+        editor.moveRight(nil)
+        #expect(editor.selectedRange().location == 8, "\(editor.selectedRange())")
+        // ⌘B at a span's end ends the style for what is typed next; with nothing picked elsewhere it waits for typing.
+        set("a **b** c", 5)
+        editor.format(.bold)
+        #expect(editor.string == "a **b** c" && editor.selectedRange().location == 7)
+        editor.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.string == "a **b**x c")
+        set("a c", 2)
+        editor.format(.bold)
+        #expect(editor.string == "a c" && editor.pending == [.bold])
+        editor.insertText("z", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.string == "a **z**c" && editor.selectedRange().location == 5)
+        // Deleting a span's last letter takes its marks too; Delete before a span skips its hidden mark.
+        set("a **b** c", 5)
+        editor.deleteBackward(nil)
+        #expect(editor.string == "a  c" && editor.selectedRange().location == 2, "\(editor.string) \(editor.selectedRange())")
+        set("a **b** c", 2)
+        editor.deleteForward(nil)
+        #expect(editor.string == "a  c")
+
+        // A list line: the caret starts its words; Backspace there takes the list off; ← goes to the line above.
+        set("top\n- item", 4)
+        #expect(editor.selectedRange().location == 6)
+        editor.moveLeft(nil)
+        #expect(editor.selectedRange().location == 3)
+        set("top\n- item", 6)
+        editor.deleteBackward(nil)
+        #expect(editor.string == "top\nitem")
+        set("# Head\nx", 0)
+        #expect(editor.selectedRange().location == 2)
+        editor.deleteBackward(nil)
+        #expect(editor.string == "Head\nx")
+
+        // A link shows its words; its address is set or taken off in the link field, never typed in the note.
+        set("see [docs](https://a.b) now", 6)
+        #expect(hidden(editor, "[docs") && hidden(editor, "](https") && !hidden(editor, "docs]"))
+        editor.setLink("https://c.d")
+        #expect(editor.string == "see [docs](https://c.d) now")
+        editor.restyle()
+        editor.setSelectedRange(NSRange(location: 6, length: 0))
+        editor.setLink(nil)
+        #expect(editor.string == "see docs now")
+        set("see docs now", 0)
+        editor.setSelectedRange(NSRange(location: 4, length: 4))
+        editor.setLink("https://e.f")
+        #expect(editor.string == "see [docs](https://e.f) now")
     }
 }

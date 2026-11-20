@@ -68,6 +68,8 @@ final class NotesModel {
     private(set) var actions: NoteActions?
     /// The format bar's Aa styles open (NotesStylesMenu); Escape closes them first.
     var styling = false
+    /// The format bar's link field open (NotesLinkField, Cmd+K's Edit link); Escape closes it first.
+    var linking = false
     /// A failed read or write, shown in the panel.
     private(set) var problem: String?
 
@@ -175,7 +177,7 @@ final class NotesModel {
         // A press that just closed them (on the head's Actions) leaves them closed.
         case .actions: actions == nil && !NotesPopoverWatch.closingPress ? openActions() : (actions = nil)
         case .closeActions: actions = nil
-        case .closeStyles: styling = false
+        case .closePopover: styling = false; linking = false
         case .stepActions(let by): stepActions(by)
         case .runAction: runAction()
         case .filterActions(let typed): filterActions(typed)
@@ -238,6 +240,10 @@ final class NotesModel {
             if id != current { open(id) }
             askTrash()
         case .format(let format): editor.apply(format)
+        case .editLink:
+            // On the link the caret is in, its words picked so the field opens over them.
+            editor.view?.pickLink()
+            linking = true
         }
     }
 
@@ -741,17 +747,17 @@ final class NotesPanel {
 /// the key's characters, modifiers aside (NSEvent's charactersIgnoringModifiers).
 enum NotesKey: Equatable {
     case hide, list, keep, confirmTrash, open, step(Int), new, pin, askTrash, actions, closeActions, stepActions(Int), runAction
-    /// Escape while the format bar's Aa styles are open: they close, before anything else Escape does.
-    case closeStyles
+    /// Escape while the format bar's Aa styles or link field are open: they close, before anything else Escape does.
+    case closePopover
     /// A character for Cmd+K's search, or nil: Backspace takes one off.
     case filterActions(String?)
     case held
 
     init?(code: UInt16, flags modifiers: NSEvent.ModifierFlags, key raw: String?, list: Bool, confirming: Bool, actions: Bool = false,
-          styling: Bool = false, empty: Bool = false) {
+          popover: Bool = false, empty: Bool = false) {
         let flags = modifiers.intersection([.command, .shift, .option, .control])
         let key = raw?.lowercased()
-        if styling, code == 53 { self = .closeStyles; return }
+        if popover, code == 53 { self = .closePopover; return }
         if actions {
             switch (code, flags, key) {
             case (53, _, _), (_, [.command], "k"): self = .closeActions
@@ -794,14 +800,14 @@ extension NotesKey {
                                    responder: NSResponder?) -> NotesKey? {
         if responder is NotesTextView, model.listFocused { model.leaveList() }
         return NotesKey(code: code, flags: flags, key: key, list: model.listFocused, confirming: model.confirmingTrash,
-                        actions: model.actions != nil, styling: model.styling, empty: code == 51 && model.isEmptyNote)
+                        actions: model.actions != nil, popover: model.styling || model.linking, empty: code == 51 && model.isEmptyNote)
     }
 }
 
 /// One of Cmd+K's actions on a note (Sven 2026-10-15), in the menu's groups: the note itself, its words, the formats with
 /// their keys (direction B, 2026-10-18), a new one, the Trash last in the problem colour.
 enum NoteAction: Equatable {
-    case pin, unpin, rename, duplicate, copy, reveal, format(MarkdownFormat), new, trash
+    case pin, unpin, rename, duplicate, copy, reveal, format(MarkdownFormat), editLink, new, trash
 
     var title: String {
         switch self {
@@ -814,6 +820,7 @@ enum NoteAction: Equatable {
         case .new: "New note"
         case .trash: "Move to Trash"
         case .format(let format): format.title
+        case .editLink: "Edit link…"
         }
     }
 
@@ -838,6 +845,7 @@ enum NoteAction: Equatable {
         case .new: "square.and.pencil"
         case .trash: "trash"
         case .format(let format): format.symbol
+        case .editLink: MarkdownFormat.link.symbol
         }
     }
 
@@ -845,7 +853,7 @@ enum NoteAction: Equatable {
         switch self {
         case .pin, .unpin, .rename, .duplicate: 0
         case .copy, .reveal: 1
-        case .format: 2
+        case .format, .editLink: 2
         case .new: 3
         case .trash: 4
         }
@@ -856,7 +864,8 @@ enum NoteAction: Equatable {
     /// A note's actions, the formats only for the note being `writing` in: Scratch, never pinned, empty and kept, has only
     /// its words, Finder, the formats and New note.
     static func choices(for note: Note, writing: Bool = true) -> [NoteAction] {
-        let formats = writing ? MarkdownFormat.keyed.map(NoteAction.format) : []
+        // The link's address never shows in the note (Q285): Edit link opens the format bar's field on it.
+        let formats = writing ? MarkdownFormat.keyed.map(NoteAction.format) + [.editLink] : []
         if note.isScratch { return [.copy, .reveal] + formats + [.new] }
         return [note.pinned ? .unpin : .pin, .rename, .duplicate, .copy, .reveal] + formats + [.new, .trash]
     }

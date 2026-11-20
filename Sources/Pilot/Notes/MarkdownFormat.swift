@@ -61,6 +61,22 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     /// The key as its row shows it: ⌘B, ⌘⇧H.
     var key: String? { shortcut.map { "⌘" + ($0.shift ? "⇧" : "") + $0.character.uppercased() } }
 
+    /// An inline format's two marks and the span the editor draws with them; nil for the line formats and the link.
+    var marks: (open: String, close: String, span: NSRegularExpression)? {
+        switch self {
+        case .bold: ("**", "**", MarkdownMarks.bold)
+        case .italic: ("_", "_", MarkdownMarks.italic)
+        case .underline: ("<u>", "</u>", MarkdownMarks.underline)
+        case .strike: ("~~", "~~", MarkdownMarks.strike)
+        case .code: ("`", "`", MarkdownMarks.code)
+        default: nil
+        }
+    }
+
+    /// Every inline span's marks the editor draws, longer before shorter: one left with nothing between is dropped
+    /// (NotesTextView.dropEmptyPair).
+    static let spans: [(open: String, close: String)] = [("<u>", "</u>"), ("**", "**"), ("__", "__"), ("~~", "~~"), ("_", "_"), ("*", "*"), ("`", "`")]
+
     /// The formats with a key, the styles first: Cmd+K's Format group.
     static let keyed = allCases.filter { $0.shortcut != nil }
 
@@ -103,14 +119,10 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     /// This format applied to `selection` in `text`.
     func edit(_ text: String, selection: NSRange) -> Edit {
         let s = text as NSString
+        if self == .code, let unfenced = Self.unfence(s, selection) { return unfenced }
+        if self == .code, s.substring(with: Self.words(s, selection)).contains("\n") { return Self.fence(s, selection) }
+        if let marks { return Self.inline(s, selection, marks.open, marks.close, marks.span) }
         switch self {
-        case .bold: return Self.inline(s, selection, "**", "**", MarkdownMarks.bold)
-        case .italic: return Self.inline(s, selection, "_", "_", MarkdownMarks.italic)
-        case .underline: return Self.inline(s, selection, "<u>", "</u>", MarkdownMarks.underline)
-        case .strike: return Self.inline(s, selection, "~~", "~~", MarkdownMarks.strike)
-        case .code:
-            if let unfenced = Self.unfence(s, selection) { return unfenced }
-            return s.substring(with: Self.words(s, selection)).contains("\n") ? Self.fence(s, selection) : Self.inline(s, selection, "`", "`", MarkdownMarks.code)
         case .link: return Self.link(s, selection)
         // The paragraph styles and the checklist: a line's kind.
         default: return style(s, selection)
@@ -403,6 +415,36 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         return picked.isEmpty
             ? Edit(range: sel, replacement: replacement, selection: NSRange(location: sel.location + 1, length: w))
             : Edit(range: sel, replacement: replacement, selection: NSRange(location: sel.location + w + 3, length: 8))
+    }
+
+    /// The link the selection is in (its words, or the caret inside it), a picture's aside: the whole `[words](address)`,
+    /// its words and its address.
+    static func link(in text: String, selection sel: NSRange) -> (whole: NSRange, words: String, address: String)? {
+        let s = text as NSString
+        guard sel.location <= s.length else { return nil }
+        guard let found = links(s, sel).first(where: { !$0.picture && holds($0.whole, sel) }) else { return nil }
+        return (found.whole, s.substring(with: found.match.range(at: 1)), s.substring(with: found.match.range(at: 2)))
+    }
+
+    /// The link field's edit (the format bar's link, Cmd+K's Edit link): `address` set on the link the selection is in,
+    /// or the picked words (else the address itself) made a link to it; nil takes the link off, its words kept. The
+    /// address never shows in the note (Sven, 2026-11-20, Q285), so it is only ever typed in the field.
+    static func linking(_ text: String, selection sel: NSRange, address: String?) -> Edit {
+        let s = text as NSString
+        let address = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let found = link(in: text, selection: sel) {
+            let words = found.words, w = (words as NSString).length
+            guard let address, !address.isEmpty else {
+                return Edit(range: found.whole, replacement: words, selection: NSRange(location: found.whole.location, length: w))
+            }
+            return Edit(range: found.whole, replacement: "[\(words)](\(address))", selection: NSRange(location: found.whole.location + 1, length: w))
+        }
+        guard let address, !address.isEmpty else { return unchanged(sel) }
+        var picked = words(s, sel)
+        let first = s.substring(with: picked).prefix { $0 != "\n" }
+        picked.length = (String(first) as NSString).length
+        let label = picked.length == 0 ? address : String(first)
+        return Edit(range: picked, replacement: "[\(label)](\(address))", selection: NSRange(location: picked.location + 1, length: (label as NSString).length))
     }
 
     /// A note's title words: its first line with words, past a heading's `#` marks; empty at the start for a note with

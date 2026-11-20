@@ -16,6 +16,8 @@ struct NotesFormatBar: View {
     var selection: CGRect = .zero
     /// The Aa menu, open under the bar (NotesEditor draws it).
     @Binding var styling: Bool
+    /// The link field, open under the bar (NotesEditor draws it).
+    @Binding var linking: Bool
     /// The button under the pointer: a format, or nil with `aaHovered` for Aa.
     @State var hovered: MarkdownFormat?
     @State var aaHovered = false
@@ -59,7 +61,11 @@ struct NotesFormatBar: View {
     }
 
     private func button(_ format: MarkdownFormat, lit: Bool) -> some View {
-        Button { handle.apply(format) } label: {
+        // The link opens the field for its address, which never shows in the note (Q285).
+        Button {
+            guard format == .link else { return handle.apply(format) }
+            if !NotesPopoverWatch.closingPress { styling = false; linking.toggle() }
+        } label: {
             chip(Image(systemName: format.symbol).font(.system(size: 12, weight: format == .bold ? .semibold : .medium)), width: 28,
                  lit: lit, hovered: hovered == format)
         }
@@ -110,6 +116,52 @@ struct NotesFormatBar: View {
         if around(MarkdownMarks.code) { out.insert(.code) }
         if around(MarkdownMarks.link) { out.insert(.link) }
         return out
+    }
+}
+
+/// The link's address (Sven, 2026-11-20, Q285: a link shows its words, never its address): the format bar's link and
+/// Cmd+K's Edit link open it under the selection, the address typed or changed, Return sets it on the link (or makes the
+/// picked words one), Remove link takes it off, its words kept. It takes the keyboard; Escape and a press outside close
+/// it with nothing changed.
+struct NotesLinkField: View {
+    @Environment(\.style) private var style
+    let existing: Bool
+    let apply: (String?) -> Void
+    let close: () -> Void
+    @State private var address: String
+    @FocusState private var focused: Bool
+
+    static let width: CGFloat = 320
+    static let height: CGFloat = 40
+
+    init(address: String, existing: Bool, apply: @escaping (String?) -> Void, close: @escaping () -> Void) {
+        self.existing = existing
+        self.apply = apply
+        self.close = close
+        _address = State(initialValue: address)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "link").font(.system(size: 12, weight: .medium)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+            TextField("https://", text: $address)
+                .textFieldStyle(.plain).styleText(\.body).foregroundStyle(style.color(\.text))
+                .focused($focused)
+                .onSubmit { apply(address) }
+                .onExitCommand { close() }
+                .accessibilityLabel("Link address")
+            if existing {
+                Button("Remove link") { apply(nil) }
+                    .buttonStyle(.plain).focusable(false).styleText(\.caption).foregroundStyle(style.color(\.text2))
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(width: Self.width, height: Self.height)
+        .background(style.color(\.panel), in: .rect(cornerRadius: 9, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(style.color(\.line2)) }
+        .background(NotesPopoverWatch(close: close))
+        .onAppear { focused = true }
+        .accessibilityElement(children: .contain).accessibilityLabel("Link")
     }
 }
 

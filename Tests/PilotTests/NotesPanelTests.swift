@@ -359,14 +359,14 @@ struct NotesPanelTests {
         model.perform(.actions)
         #expect(model.actions?.choices.map(\.title) == ["Pin", "Rename", "Duplicate", "Copy as Markdown", "Reveal in Finder",
                                                        "Title", "Heading", "Subheading", "Body", "Bulleted List", "Dashed List", "Numbered List",
-                                                       "Bold", "Italic", "Underline", "Code", "Checklist", "New note", "Move to Trash"])
+                                                       "Bold", "Italic", "Underline", "Code", "Checklist", "Edit link…", "New note", "Move to Trash"])
         #expect(model.actions?.choices.compactMap(\.key) == ["⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘N", "⌘⌫"])
         #expect(key(125) == .stepActions(1) && key(36) == .runAction && key(53) == .closeActions && key(1, .command, "s") == .held)
         // Typing searches: "bol" leaves Bold; Backspace takes a letter off.
         model.perform(try #require(key(11, [], "b"))); model.perform(try #require(key(31, [], "o"))); model.perform(try #require(key(37, [], "l")))
         #expect(model.actions?.visible == [.format(.bold)] && model.actions?.index == 0)
         model.perform(try #require(key(51))); model.perform(try #require(key(51))); model.perform(try #require(key(51)))
-        #expect(model.actions?.query == "" && model.actions?.visible.count == 19)
+        #expect(model.actions?.query == "" && model.actions?.visible.count == 20)
         model.perform(.stepActions(3))
         model.perform(.runAction)
         #expect(model.actions == nil && board.string(forType: .string) == "# Plan\nship it" && tips == ["Copied “Plan” as Markdown"])
@@ -385,7 +385,7 @@ struct NotesPanelTests {
         #expect(MarkdownFormat.titleRange("") == NSRange(location: 0, length: 0))
         model.open(NoteStore.scratch)
         model.perform(.actions)
-        #expect(model.actions?.choices == [.copy, .reveal] + MarkdownFormat.keyed.map(NoteAction.format) + [.new])
+        #expect(model.actions?.choices == [.copy, .reveal] + MarkdownFormat.keyed.map(NoteAction.format) + [.editLink, .new])
         // From the list, on a highlighted row, the formats stay out: no editor is being written in.
         model.perform(.closeActions)
         model.perform(.list)

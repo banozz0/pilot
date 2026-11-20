@@ -160,7 +160,7 @@ struct NotesNote: View {
             ZStack(alignment: .topLeading) {
                 // Kept under the preview and the question, so the caret, the scroll and Undo are where they were after.
                 NotesEditor(text: $model.text, style: markdown, editable: !confirming, focused: !model.listFocused && !confirming,
-                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil, styling: $model.styling) {
+                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil, styling: $model.styling, linking: $model.linking) {
                     // A click in the note, or the window handing it the keyboard, takes it from the list.
                     if model.listFocused { model.leaveList() }
                 }
@@ -201,8 +201,12 @@ struct NotesEditor: View {
     var bar = true
     /// Aa's styles open (the model's, so Escape closes them and a render opens them).
     @Binding var styling: Bool
+    /// The link field open (the model's): it stays where it opened while it has the keyboard and the bar goes.
+    @Binding var linking: Bool
     var onFocus: (() -> Void)?
     @State private var selection: CGRect?
+    /// Where the link field opened: the selection, else the caret's line.
+    @State private var linkAt: CGRect?
     /// The bar's own hold on this editor.
     @State private var own = NotesEditorHandle()
 
@@ -216,7 +220,7 @@ struct NotesEditor: View {
                         let x = min(max(selection.minX - 8, 4), max(g.size.width - size.width - 4, 4))
                         let above = selection.minY - size.height - 6
                         let y = above >= 2 ? above : selection.maxY + 6
-                        NotesFormatBar(handle: own, text: text, selection: selection, styling: $styling)
+                        NotesFormatBar(handle: own, text: text, selection: selection, styling: $styling, linking: $linking)
                             .offset(x: x, y: y)
                         if styling {
                             let under = y + size.height + 4, height = NotesStylesMenu.height
@@ -228,8 +232,25 @@ struct NotesEditor: View {
                     }
                 }
             }
-            // The styles go with the selection.
+            .overlay(alignment: .topLeading) {
+                if linking, editable, let at = linkAt {
+                    GeometryReader { g in
+                        let found = own.held.flatMap { MarkdownFormat.link(in: $0.string, selection: $0.selectedRange()) }
+                        NotesLinkField(address: found?.address ?? "", existing: found != nil, apply: { address in
+                            linking = false
+                            own.link(address)
+                        }, close: {
+                            linking = false
+                            if let view = own.held { view.window?.makeFirstResponder(view) }
+                        })
+                        .offset(x: min(max(at.minX - 8, 4), max(g.size.width - NotesLinkField.width - 4, 4)),
+                                y: at.maxY + 6 + NotesLinkField.height <= g.size.height ? at.maxY + 6 : max(at.minY - NotesLinkField.height - 6, 2))
+                    }
+                }
+            }
+            // The styles go with the selection; the link field opens where the selection, else the caret, is.
             .onChange(of: selection == nil) { if selection == nil { styling = false } }
+            .onChange(of: linking, initial: true) { if linking { linkAt = selection ?? own.held?.caretRect() } }
     }
 }
 

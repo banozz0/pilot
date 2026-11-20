@@ -257,7 +257,7 @@ struct NotesPanelRenders {
         try Data(Self.styled.utf8).write(to: folder.appending(path: "title-with-bold-100013.md"))
 
         look.style = .instrument
-        for (theme, state) in [("tokyo-night", "menu"), ("porcelain", "menu"), ("tokyo-night", "note")] {
+        for (theme, state) in [("tokyo-night", "menu"), ("porcelain", "menu"), ("tokyo-night", "note"), ("tokyo-night", "link")] {
             look.themeID = theme
             let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
             model.reload()
@@ -269,10 +269,11 @@ struct NotesPanelRenders {
             let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
             panel.makeFirstResponder(editor)
             let s = editor.string as NSString
-            if state == "menu" {
+            if state == "menu" || state == "link" {
                 editor.setSelectedRange(s.range(of: "Bullet again"))
                 RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                model.styling = true
+                // Aa's styles, or the link field the bar's link opens (Q285: a link's address never shows in the note).
+                if state == "menu" { model.styling = true } else { model.linking = true }
             } else {
                 editor.setSelectedRange(NSRange(location: s.length, length: 0))
                 // Every inline mark in the list, checklist and quote lines hidden, its words not.
@@ -293,7 +294,7 @@ struct NotesPanelRenders {
                 // The ticked style is the line's; Escape closes the menu.
                 try #require(MarkdownFormat.style(of: editor.string, selection: editor.selectedRange()) == .bullets)
                 let escape = try #require(NotesKey.pressed(53, [], "\u{1b}", model: model, responder: editor))
-                try #require(escape == .closeStyles)
+                try #require(escape == .closePopover)
                 model.perform(escape)
                 try #require(!model.styling, "Escape left the styles open")
             }
