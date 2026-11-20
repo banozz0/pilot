@@ -6,7 +6,8 @@
 // Cache in ADR 0010's folders, `open`, `showInFinder` and the environment. Anything that acts on the Mac goes to Pilot
 // as an ADR 0010 line (a no-view command's `hud` and `action`, a view's `toast` and `action`), so Pilot performs it and
 // `pilot ext run` answers it unperformed. T8 adds the view stack: `Action.Push` and `useNavigation()`, whose push and
-// pop host.js performs on the run's layers. Every other Raycast export is a stub that records its use (gaps.js).
+// pop host.js performs on the run's layers. T10 adds the Form and its items, which form.js turns into fields, and
+// Action.SubmitForm. Every other Raycast export is a stub that records its use (gaps.js).
 import { createContext, createElement, useContext } from "react";
 import { guard, missing, record, store, stubs } from "./gaps.js";
 import { childProcess, path } from "./node.js";
@@ -62,10 +63,25 @@ export const Action = host("Action");
 for (const name of ["OpenInBrowser", "CopyToClipboard", "Paste", "Open", "OpenWith", "ShowInFinder"]) Action[name] = host(`Action.${name}`);
 // A push is pressed by its handler id as an Action's onAction is; host.js mounts its `target` over the view (T8).
 Action.Push = host("Action.Push");
-for (const name of ["SubmitForm", "CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
+// SubmitForm is pressed by its handler id; form.js hands onSubmit the form's values (T10).
+Action.SubmitForm = host("Action.SubmitForm");
+for (const name of ["CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
   Action[name] = lacking(`Action.${name}`);
 }
 Action.Style = Object.freeze({ Regular: "regular", Destructive: "destructive" });
+
+export const Form = withParts("Form");
+for (const name of ["TextField", "PasswordField", "TextArea", "Checkbox", "DatePicker", "Dropdown", "FilePicker", "Separator", "Description"]) {
+  Form[name] = host(`Form.${name}`);
+}
+Form.Dropdown.Item = host("Form.Dropdown.Item");
+Form.Dropdown.Section = host("Form.Dropdown.Section");
+Form.DatePicker.Type = Object.freeze({ Date: "date", DateTime: "dateTime" });
+/** Whether `date` is a whole day, as a Date-only pick gives it: local midnight. */
+Form.DatePicker.isFullDay = (date) => date instanceof Date && date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
+Form.TagPicker = lacking("Form.TagPicker");
+Form.TagPicker.Item = () => null;
+Form.LinkAccessory = lacking("Form.LinkAccessory");
 
 /** The run's view stack (host.js provides it to every layer): `push(view, onPop)` mounts a view over the current one,
  *  `pop()` goes back to the one under it, its state kept. */
@@ -194,7 +210,8 @@ export function makeAPI(message, mode) {
     Alert: stubs("Alert", [], { ActionStyle: Object.freeze({ Default: "default", Cancel: "cancel", Destructive: "destructive" }) }),
     // Views and namespaces that come in later tasks, or not at all: each records its use.
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
-    Grid: missing("Grid"), Form: missing("Form"), MenuBarExtra: missing("MenuBarExtra"),
+    Form,
+    Grid: missing("Grid"), MenuBarExtra: missing("MenuBarExtra"),
     AI: stubs("AI", ["ask"], { Model: names() }),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),

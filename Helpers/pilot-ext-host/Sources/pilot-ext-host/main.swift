@@ -5,7 +5,7 @@ import JavaScriptCore
 // process, never reused (Tinycast reused one and broke React's scheduler). Pilot starts it as
 //   pilot-ext-host --prelude <pilot-ext-prelude.js> <command.js>
 // and speaks its private wire, ADR 0010's lines: a run message on stdin, then query, invoke (a press of a callback by its
-// handler id, T2) and close messages; each commit that changes the view is a list, detail or error line on stdout, so
+// handler id, T2, with a form field's or a submit's `value`, T10) and close messages; each commit that changes the view is a list, detail or error line on stdout, so
 // data that arrives after the first render fills the view in. A query or invoke with a `seq` is answered by the next
 // line, which carries it back as `ack`. A no-view command (T3) prints hud and action lines instead, as ADR 0010's
 // programs do. Stdout carries nothing else: the extension's console goes to stderr. Once stdin ends or a close comes,
@@ -77,7 +77,12 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
             let parsed = context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line])!
             call("__pilotStart", [factory, parsed])
         case "query": call("__pilotQuery", [message["text"] as? String ?? "", Host.seq(message)])
-        case "invoke": call("__pilotInvoke", [message["handler"] as? String ?? "", Host.seq(message)])
+        case "invoke":
+            // A form's press carries a value (T10), parsed in the context as the run message is, so a date or a list
+            // of paths arrives as JavaScript's own.
+            let value = message["value"] == nil ? JSValue(undefinedIn: context)!
+                : context.objectForKeyedSubscript("JSON").invokeMethod("parse", withArguments: [line]).objectForKeyedSubscript("value")!
+            call("__pilotInvoke", [message["handler"] as? String ?? "", Host.seq(message), value])
         case "close":
             closing = true
             call("__pilotClose", [])

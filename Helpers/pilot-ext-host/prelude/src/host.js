@@ -14,11 +14,13 @@
 // `.push`, which Pilot's menu opens as a view of its own. The reserved handler `navigation.pop` is Escape, one layer
 // back; `navigation.pop.<n>` goes back to the n-th layer (Pilot's menu sends its own view's depth, so a push or pop a
 // callback made never leaves the two stacks apart). At the root both answer the view unchanged.
+// The Form (T10) is form.js's: a form answer of fields, each edit an invoke carrying its value, SubmitForm its submit.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 import { Navigation, effects } from "./raycast.js";
 import { symbols } from "./icons.js";
+import { formAnswer, formPress } from "./form.js";
 
 const native = globalThis.__native;
 
@@ -121,6 +123,10 @@ function actions(nodes, handlers, out = []) {
       const handler = `${node.serial}.push`;
       handlers.set(handler, node);
       out.push({ type: "invoke", handler, title: words(node.props.title) || "Open" });
+    } else if (node.type === "Action.SubmitForm") {
+      const handler = `${node.serial}.submit`;
+      handlers.set(handler, node);
+      out.push({ type: "invoke", handler, title: words(node.props.title) || "Submit" });
     } else if (typed[node.type]) {
       const [action, title] = typed[node.type](node.props);
       if (action) out.push({ ...action, title: words(node.props.title) ?? title });
@@ -220,16 +226,16 @@ function rows(nodes, section, handlers, out) {
   return out;
 }
 
-/** The top layer's view: the first List or Detail in the newest layer, depth first. */
+/** The top layer's view: the first List, Detail or Form in the newest layer, depth first. */
 function top(container) {
   const layer = container.children[container.children.length - 1];
   return layer ? view(layer.children) : null;
 }
 
-/** The first List or Detail in the tree, depth first. */
+/** The first List, Detail or Form in the tree, depth first. */
 function view(nodes) {
   for (const node of nodes) {
-    if (node.type === "List" || node.type === "Detail") return node;
+    if (node.type === "List" || node.type === "Detail" || node.type === "Form") return node;
     const inner = node.children && view(node.children);
     if (inner) return inner;
   }
@@ -241,6 +247,7 @@ function view(nodes) {
 function answer(container, handlers) {
   const root = top(container);
   if (!root) return null;
+  if (root.type === "Form") return formAnswer(root, handlers, actions);
   if (root.type === "Detail") {
     const detail = { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
     const metadata = facts(root.children);
@@ -346,13 +353,15 @@ export function render(component, message) {
     },
     /** A press: the callback `id` names in the newest answer, called with the element's props as they are now, at a
      *  discrete event's priority so its update renders at once, as a click's does. A push mounts its target over the
-     *  view and calls its onPush; `navigation.pop[.<n>]` goes back. A stale id answers the current view. */
-    invoke(id, seq) {
+     *  view and calls its onPush; `navigation.pop[.<n>]` goes back. A form's press carries `value` (form.js). A stale
+     *  id answers the current view. */
+    invoke(id, seq, value) {
       request(seq, () => {
         const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
         const callback = back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
-          : node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
-          : node?.props?.[word.split(".").pop()];
+          : formPress(word, node, value, top(container))
+            ?? (node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
+              : node?.props?.[word.split(".").pop()]);
         if (typeof callback !== "function") return console.error(`no handler ${id} in the current view: answering it unchanged`);
         const before = priority;
         priority = DiscreteEventPriority;
