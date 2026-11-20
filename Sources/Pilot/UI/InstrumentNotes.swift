@@ -65,29 +65,6 @@ extension NotesHeadButton {
     }
 }
 
-extension NotesFormatBar {
-    var instrument: some View {
-        HStack(spacing: 2) {
-            ForEach(MarkdownFormat.allCases) { format in
-                Button { handle.apply(format) } label: {
-                    Image(systemName: format.symbol).font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(style.color(hovered == format ? \.text : \.text2))
-                        .frame(width: 26, height: 24)
-                        .instrumentRaised(hovered == format, radius: style.radii.chip)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain).focusable(false)
-                .onHover { hovered = $0 ? format : hovered == format ? nil : hovered }
-                .help(help(format)).accessibilityLabel(format.title)
-                if format == .code { InstrumentRule(vertical: true, length: 14).padding(.horizontal, 3) }
-            }
-        }
-        .padding(3)
-        .background(style.color(\.panel), in: .rect(cornerRadius: 8))
-        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(style.color(\.line2)) }
-    }
-}
-
 extension NotesTrashQuestion {
     /// Attention's tick before the eyebrow, the note's title, what goes (its keys under it, NotesTrashQuestion).
     var instrument: some View {
