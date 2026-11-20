@@ -159,5 +159,16 @@ export const modules = {
   string_decoder: { StringDecoder },
   get process() { return globalThis.process; },
   // Only loaded, not yet Node's streams: @raycast/utils' exec helpers import it whole; each member records its use and throws.
-  stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"]),
+  // getDefaultHighWaterMark is real: execa reads it at load (Node 22's 65536 bytes, 16 objects; T15).
+  stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"],
+    { getDefaultHighWaterMark: (objectMode) => (objectMode ? 16 : 65536) }),
+  // The same for its promise forms (Speedtest, Video Downloader import them at load; T15).
+  "stream/promises": stubs("stream/promises", ["pipeline", "finished"]),
+  // Only loaded: execa checks an IPC message with v8.serialize, which no extension's own call reaches here.
+  v8: stubs("v8", ["serialize", "deserialize"]),
+  // Only loaded: axios's Node adapter and follow-redirects require them at load; a request through them records and throws
+  // (fetch is the host's HTTP; T15: Google Translate's speech package loads axios).
+  http: stubs("http", ["request", "get", "Agent", "createServer"]),
+  https: stubs("https", ["request", "get", "Agent"]),
+  zlib: stubs("zlib", ["createGunzip", "createInflate", "createBrotliDecompress", "gunzipSync", "inflateSync"], { constants: {} }),
 };

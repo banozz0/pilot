@@ -166,6 +166,10 @@ const os = guard("os", {
   cpus: () => Array.from({ length: 4 }, () => ({ model: "", speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } })),
   userInfo: () => ({ username: env().USER ?? "", homedir: env().HOME ?? "", shell: env().SHELL ?? "/bin/zsh", uid: -1, gid: -1 }),
   endianness: () => "LE", availableParallelism: () => 4,
+  // macOS's signal numbers (<sys/signal.h>), as Node's os.constants.signals has them (T15: execa's human-signals reads them at load).
+  constants: { signals: Object.freeze(Object.fromEntries(["HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO", "XCPU", "XFSZ", "VTALRM", "PROF",
+    "WINCH", "INFO", "USR1", "USR2"].map((name, i) => [`SIG${name}`, i + 1]).concat([["SIGIOT", 6]]))) },
 });
 
 // MARK: crypto
@@ -220,6 +224,8 @@ class EventEmitter {
   getMaxListeners() { return 10; }
 }
 EventEmitter.EventEmitter = EventEmitter;
+// events.setMaxListeners(n, ...targets): listeners are never capped here, so it does nothing (T15: execa calls it).
+EventEmitter.setMaxListeners = () => {};
 EventEmitter.once = (emitter, name) => new Promise((resolve) => emitter.once(name, (...a) => resolve(a)));
 
 // MARK: child_process
@@ -400,6 +406,15 @@ function promisify(fn) {
 }
 promisify.custom = custom;
 
+/** util.callbackify: an async function as a last-argument callback one; a falsy rejection becomes an Error with `reason`. */
+function callbackify(fn) {
+  return function (...args) {
+    const done = args.pop();
+    fn.apply(this, args).then((value) => queueMicrotask(() => done(null, value)), (reason) => queueMicrotask(() =>
+      done(reason || Object.assign(new Error("Promise was rejected with a falsy value"), { reason }))));
+  };
+}
+
 function format(first, ...rest) {
   if (typeof first !== "string") return [first, ...rest].map(inspect).join(" ");
   let i = 0;
@@ -418,7 +433,9 @@ function inspect(v) {
 }
 
 const util = guard("util", {
-  promisify, format, inspect, deprecate: (fn) => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); Object.setPrototypeOf(a, b); },
+  promisify, callbackify, format, inspect, deprecate: (fn) => fn,
+  // Node's debuglog logs only for a section NODE_DEBUG names; Pilot sets none, so it is a quiet function (T15).
+  debuglog: () => Object.assign(() => {}, { enabled: false }), inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); Object.setPrototypeOf(a, b); },
   TextEncoder: globalThis.TextEncoder, TextDecoder: globalThis.TextDecoder, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
   types: { isPromise: (p) => p instanceof Promise, isDate: (d) => d instanceof Date, isRegExp: (r) => r instanceof RegExp },
 });
@@ -434,9 +451,42 @@ const url = guard("url", {
   pathToFileURL: (p) => new URL(`file://${encodeURI(path.resolve(String(p)))}`),
 });
 
+// MARK: tty and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
+
+// No terminal is ever attached to a host's descriptors, so every isatty is false; the stream classes are only named.
+const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {}, WriteStream: class WriteStream {} });
+
+const timersPromises = guard("timers/promises", {
+  setTimeout: (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms)),
+  setImmediate: (value) => new Promise((resolve) => setImmediate(() => resolve(value))),
+});
+
+// MARK: querystring (T15: Google Translate builds its request with it), as nodejs.org documents it: `+` reads as a space,
+// a key given twice parses to an array, and stringify repeats a key per array item and writes other values as "".
+
+const qsValue = (v) => (typeof v === "string" || typeof v === "number" || typeof v === "bigint" || typeof v === "boolean" ? String(v) : "");
+function qsUnescape(text) { try { return decodeURIComponent(text); } catch { return text; } }
+function qsParse(text, sep = "&", eq = "=") {
+  const out = Object.create(null);
+  for (const pair of String(text ?? "").split(sep)) {
+    if (!pair) continue;
+    const at = pair.indexOf(eq);
+    const [key, value] = (at < 0 ? [pair, ""] : [pair.slice(0, at), pair.slice(at + eq.length)]).map((t) => qsUnescape(t.replace(/\+/g, " ")));
+    out[key] = key in out ? [].concat(out[key], value) : value;
+  }
+  return out;
+}
+function qsStringify(object, sep = "&", eq = "=") {
+  if (!object || typeof object !== "object") return "";
+  return Object.keys(object).flatMap((key) => [].concat(object[key]).map((v) => `${encodeURIComponent(key)}${eq}${encodeURIComponent(qsValue(v))}`)).join(sep);
+}
+const querystring = guard("querystring", {
+  parse: qsParse, decode: qsParse, stringify: qsStringify, encode: qsStringify, escape: encodeURIComponent, unescape: qsUnescape,
+});
+
 /** The modules `require` finds, by name, `node:` or not. */
 export { path, childProcess, check };
 export const modules = {
   fs, "fs/promises": fsPromises, path, "path/posix": path, os, crypto, child_process: childProcess,
-  events: EventEmitter, util, url,
+  events: EventEmitter, util, url, tty, "timers/promises": timersPromises, querystring,
 };

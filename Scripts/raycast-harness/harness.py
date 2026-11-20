@@ -57,6 +57,17 @@ GATE = {
     # Its recent projects read VS Code's own database, which needs VS Code in /Applications; installed extensions do not.
     "visual-studio-code-recent-projects": {"command": "extensions", "query": "", "row": None, "expect": ("open", "vscode")},
     "google-search": {"command": "index", "query": "pilot", "row": None, "expect": ("open", "google.com/search")},
+    # T15: its view is a Form. A public video's URL is typed into it (each change an onChange, as keystrokes come), which asks
+    # yt-dlp for the video's formats, then Download Video is pressed; --measure records and refuses every yt-dlp call, so the
+    # formats never load, its submit returns before downloading, and nothing downloads.
+    "video-downloader": {"command": "index", "query": "", "row": None, "type": "url=https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+                         "expect": ("exec", "yt-dlp")},
+    # T15: its list view, searched; the first row with a name of its own, its first action, whatever it calls (its Form
+    # views have no rows). Its two target languages are both English by default; the first is set to Spanish, so a row
+    # of its own comes.
+    "google-translate": {"command": "translate", "query": "good morning", "row": None, "expect": None, "prefs": {"lang1": "es"}},
+    # T15: its notes list, as round one pressed it (its first view with content is a Form, add-text).
+    "apple-notes": {"command": "index", "query": "", "row": None, "expect": None},
 }
 
 
@@ -182,13 +193,13 @@ def shown(text):
 
 
 def secrets(argv):
-    """The places in `argv` the log masks: the row `ext act` presses and the --then, --query, --input and --answer values."""
+    """The places in `argv` the log masks: the row `ext act` presses and the --then, --query, --input, --answer, --submit and --type values."""
     places, after = [], False
     for i, word in enumerate(argv):
         if after:
             places.append(i)
             after = False
-        elif word in ("--then", "--query", "--input", "--answer"):
+        elif word in ("--then", "--query", "--input", "--answer", "--submit", "--type"):
             after = True
     if "act" in argv:
         at = argv.index("act") + 2
@@ -396,7 +407,11 @@ def content(answer):
     if any(i.get("actions") or i.get("subtitle") or i.get("accessory") for i in items) or len(items) > 1:
         return True
     detail = answer.get("detail")
-    return isinstance(detail, dict) and bool(detail.get("markdown") or detail.get("metadata"))
+    if isinstance(detail, dict) and (detail.get("markdown") or detail.get("metadata")):
+        return True
+    # A Form (T10; ext run's `form`) with a field to fill, beyond its description lines and separators (T15: Video Downloader).
+    fields = (answer.get("form") or {}).get("fields") or []
+    return any(isinstance(f, dict) and f.get("kind") not in ("description", "separator") for f in fields)
 
 
 def phase_run(ns):
@@ -499,14 +514,18 @@ def phase_act(ns):
             hosts_left(ns)
         items = (answer or {}).get("items", []) if isinstance(answer, dict) else []
         first = items[0].get("title", "") if items and isinstance(items[0], dict) else ""
-        row = spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
+        typing = spec.get("type")
+        row = None if typing else spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
         result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row, "runs": runs, "consent": consent}
-        if not row:
+        if typing:
+            press = ["ext", "act", ext, "--command", spec["command"], "--type", typing, "--submit"]
+        elif row:
+            press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
+        else:
             result["pressed"] = False
             results[folder] = result
             continue
         since = lines_in(ns)
-        press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
         code, pressed, _ = pilot(press, ns, timeout=60)
         result["presses"] = 1
         if code != 0:
@@ -574,9 +593,11 @@ def generic(ran):
 
 
 def first_pressable(items):
-    """The first row with an action, by its title, as `ext act` takes it: its first action is the primary one."""
+    """The first row with an action, by its title, as `ext act` takes it: its first action is the primary one. A title
+    another row shares is skipped, since `ext act` cannot tell those rows apart (T15: Google Translate)."""
+    titles = [i.get("title") for i in items if isinstance(i, dict)]
     for item in items:
-        if isinstance(item, dict) and item.get("actions") and not is_consent(item):
+        if isinstance(item, dict) and item.get("actions") and not is_consent(item) and titles.count(item.get("title")) == 1:
             return item.get("title")
     return None
 

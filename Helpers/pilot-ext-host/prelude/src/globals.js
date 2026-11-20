@@ -60,8 +60,19 @@ globalThis.performance = { now: () => Date.now() - started };
 globalThis.global = globalThis;
 // The child's own environment, which Pilot keeps small (HOME, USER, TMPDIR, PATH, LANG and the extension's id).
 const env = { ...native.env(), NODE_ENV: "production" };
-globalThis.process = stubs("process", ["exit", "on", "once", "kill", "chdir", "memoryUsage", "hrtime", "uptime", "stdout", "stderr", "stdin"], {
-  env, platform: "darwin", arch: "arm64", argv: [], pid: 0, version: "v22.14.0", versions: { node: "22.14.0" }, release: { name: "node" },
+// No Node ships with Pilot, so execPath is empty (execa reads it as its default nodePath, used only for node scripts) and
+// execArgv holds no flags.
+// Node's hrtime from performance.now(), so to the millisecond here: [seconds, nanoseconds] since an arbitrary start, less
+// `previous` when given, and hrtime.bigint() as nanoseconds (T15: execa times each child with it).
+function hrtime(previous) {
+  const ns = Math.round(performance.now() * 1e6), [s, n] = [Math.floor(ns / 1e9), ns % 1e9];
+  if (!Array.isArray(previous)) return [s, n];
+  const d = (s - previous[0]) * 1e9 + (n - previous[1]);
+  return [Math.floor(d / 1e9), d % 1e9];
+}
+hrtime.bigint = () => BigInt(Math.round(performance.now() * 1e6));
+globalThis.process = stubs("process", ["exit", "on", "once", "kill", "chdir", "memoryUsage", "uptime", "stdout", "stderr", "stdin"], {
+  env, hrtime, platform: "darwin", arch: "arm64", argv: [], execArgv: [], execPath: "", pid: 0, version: "v22.14.0", versions: { node: "22.14.0" }, release: { name: "node" },
   cwd: () => native.cwd(), nextTick: (fn, ...a) => queueMicrotask(() => fn(...a)), emitWarning: (w) => console.warn(String(w)),
 });
 // Node's Buffer (buffer.js, T7); the browser's Blob and friends are not here yet: each is a stub that records its use.

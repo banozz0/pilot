@@ -16,8 +16,8 @@ import Foundation
 //   sysctl, date and hostname, a kill of only the pids the caller named, and for brew only the exact argv shapes Brew's
 //   views issue. Anything else (AppleScript included) is recorded and refused: the child ends at once with exit 1.
 // - A file write goes only into the run's data and cache folders and a temporary folder made for this run alone (which
-//   TMPDIR names and which goes at the exit), or to ExtensionData/<id>/gaps.json itself and its folder (the gap
-//   recorder's); a path is judged by its parent's realpath and its last name, and a last name that is a link is
+//   TMPDIR names and which goes at the exit), or to ExtensionData/<id>/gaps.json, automation.json and
+//   automation-alert.json themselves and their folder (the gap recorder's and T9's AppleScript answer); a path is judged by its parent's realpath and its last name, and a last name that is a link is
 //   refused. Anything else fails with EPERM.
 // - A fetch is recorded by its method and host. A GET or HEAD still goes out to the network (only reads are allowed,
 //   not none); any other method fails.
@@ -89,9 +89,10 @@ import Foundation
         if line.contains("\"run\""), let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            message["type"] as? String == "run", let paths = message["paths"] as? [String: String] {
             folders += paths.values.filter { !$0.isEmpty }.compactMap(realpath).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
-            // The gap recorder's file beside the data folder (gaps.js: ExtensionData/<id>/gaps.json) and its folder, exactly.
+            // The files beside the data folder and their folder, exactly: the gap recorder's (gaps.js: ExtensionData/<id>/gaps.json)
+            // and T9's AppleScript answer and no-view nonce (automation.js), so an Allow in a measured run is kept (T15).
             if let data = paths["data"], !data.isEmpty, let around = realpath((data as NSString).deletingLastPathComponent) {
-                exact.formUnion([around, around + "/gaps.json"])
+                exact.formUnion([around] + ["gaps.json", "automation.json", "automation-alert.json"].map { around + "/" + $0 })
             }
         }
     }
