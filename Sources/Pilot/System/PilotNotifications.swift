@@ -16,7 +16,8 @@ final class NotificationSettings {
 
     /// Where they show (Sven, 2026-11-12): floating, the bell and cards on the desktop as they first shipped, or Pilot's top
     /// bar, a bell item there and each card dropping under it; or Pilot's dock (Sven, 2026-11-17), a bell at its right
-    /// end and each card rising over it. The top bar or the dock while it is off falls back to floating.
+    /// end and each card rising over it. The dock while Pilot's is off is the top bar (Sven, 2026-11-20, Q284); the top bar
+    /// while off falls back to floating (`placement`).
     enum ShowIn: String, CaseIterable, Sendable {
         case floating, topBar, dock
         var label: String {
@@ -44,7 +45,8 @@ final class NotificationSettings {
     var showIn: ShowIn {
         didSet {
             defaults.set(showIn.rawValue, forKey: Self.showInKey)
-            if showIn == .topBar { BarItemsStore.shared.settings.set(.notifications, on: true) }
+            // Dock too: while Pilot's dock is off it shows in the top bar, whose bell item draws only while it does.
+            if showIn != .floating { BarItemsStore.shared.settings.set(.notifications, on: true) }
         }
     }
     var layer: Layer { didSet { defaults.set(layer.rawValue, forKey: Self.layerKey) } }
@@ -56,18 +58,30 @@ final class NotificationSettings {
         hideMacBanners = defaults.bool(forKey: Self.hideKey)
         showIn = defaults.string(forKey: Self.showInKey).flatMap(ShowIn.init) ?? .floating
         layer = defaults.string(forKey: Self.layerKey).flatMap(Layer.init) ?? .above
-    }
-
-    /// Where they show now: the top bar only while Pilot's is on, the dock only while Pilot's is on, else floating. The one
-    /// rule the panels, the bar's and the dock's bells, the page and `pilot status` read. Dock never turns the dock on: that
-    /// switch hides the macOS Dock.
-    var placement: ShowIn {
-        switch showIn {
-        case .topBar where topBarOn(): .topBar
-        case .dock where dockOn(): .dock
-        default: .floating
+        // A Dock saved before Q284 never put the bar's bell item on, so with Pilot's dock off it would show in the top bar
+        // with no bell: once, it goes on as picking Dock now does; switched off after, it stays off.
+        if showIn == .dock, !defaults.bool(forKey: Self.dockBellKey) {
+            defaults.set(true, forKey: Self.dockBellKey)
+            BarItemsStore.shared.settings.set(.notifications, on: true)
         }
     }
+    static let dockBellKey = "notifications.dockBellOn"
+
+    /// Where they show now: the dock only while Pilot's is on; Dock while it is off, as Top bar (Sven, 2026-11-20, Q284:
+    /// "Hide Dock, use Top bar"); the top bar only while Pilot's is on, else floating. The one rule the panels, the bar's
+    /// and the dock's bells, the page and `pilot status` read; `showIn` keeps what was picked, so Dock comes back with the
+    /// dock. Dock never turns the dock on: that switch hides the macOS Dock.
+    var placement: ShowIn {
+        switch showIn {
+        case .dock where dockOn(): .dock
+        case .topBar, .dock: topBarOn() ? .topBar : .floating
+        case .floating: .floating
+        }
+    }
+    /// Show in's choices on the page: Dock only while Pilot's dock is on (Q284).
+    var choices: [ShowIn] { dockOn() ? ShowIn.allCases : [.floating, .topBar] }
+    /// The choice the page marks: a saved Dock while the dock is off reads as Top bar, as it behaves.
+    var shownChoice: ShowIn { showIn == .dock && !dockOn() ? .topBar : showIn }
     /// Whether Pilot's top bar is on: the engine's; a render stands one in.
     @ObservationIgnored var topBarOn: @MainActor () -> Bool = { Engine.shared?.topBar.isOn ?? false }
     /// Whether Pilot's dock is on: the engine's; a render stands one in.

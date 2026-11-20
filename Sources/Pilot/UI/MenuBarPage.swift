@@ -57,10 +57,11 @@ struct MenuBarPage: View {
                 if let problem = topBar.problem { FinePrint(text: problem, color: ink.red) }
                 onlyInTopBar(store, topBarOn: topBar.isOn)
             }
-            HStack(alignment: .bottom) {
+            // A block row's layout: in a narrow page the buttons and the picker go under the words, never past the edge.
+            BlockRowLayout(spacing: 12) {
                 Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
                     .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 resets(store)
                 placements
             }
@@ -672,8 +673,8 @@ struct MenuBarPage: View {
     /// Other apps' notifications as Pilot's cards (spec notifications.html), beside the bell's item and the clock (on the
     /// Pilot page until the settings tidy, Sven 2026-11-14): off by default, nothing runs until it's on.
     static let showInInfo = "Floating: a bell you can drag, with each card beside it. Top bar: a bell item in Pilot's top bar "
-        + "with the count of new ones; each card drops under it and a click lists what arrived. Dock: the same bell at the end of Pilot's "
-        + "dock; each card rises over it."
+        + "with the count of new ones; each card drops under it and a click lists what arrived. Dock, while Pilot's dock is on: the same "
+        + "bell at the end of Pilot's dock; each card rises over it."
     static let layerInfo = "Above apps: the bell and its list stay over every window. Below apps: they rest on the desktop under every "
         + "window, as widgets do. A new card still pops up above apps while it shows."
 
@@ -688,12 +689,13 @@ struct MenuBarPage: View {
             if settings.enabled {
                 BlockRow {
                     HStack(spacing: 6) { Text("Show in"); InfoMark(text: Self.showInInfo) }.frame(maxWidth: .infinity, alignment: .leading)
-                    Segments(selection: $settings.showIn, options: NotificationSettings.ShowIn.allCases.map { ($0, $0.label) }, label: "Show in")
+                    // Dock only while Pilot's dock is on; a saved Dock reads and acts as Top bar meanwhile (Q284).
+                    Segments(selection: Binding(get: { settings.shownChoice }, set: { settings.showIn = $0 }),
+                             options: settings.choices.map { ($0, $0.label) }, label: "Show in")
                 }
                 if settings.showIn != .floating && placement == .floating {
                     BlockRow {
-                        FinePrint(text: settings.showIn == .topBar ? "Pilot's top bar is off, so notifications show floating. Turn the top bar on above."
-                                  : "Pilot's dock is off, so notifications show floating. Turn the dock on in Dock.")
+                        FinePrint(text: "Pilot's top bar is off, so notifications show floating. Turn the top bar on above.")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }

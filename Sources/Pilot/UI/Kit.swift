@@ -294,9 +294,144 @@ struct BlockRow<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 10) { content }
+        BlockRowLayout { content }
             .frame(maxWidth: .infinity, minHeight: style.points(40), alignment: .leading)
             .overlay(alignment: .top) { if !first { InstrumentRule() } }
+    }
+}
+
+/// A block row's parts side by side, as an HStack, while every label that wraps keeps `least` points or its one-line width;
+/// narrower, each part that gives way (a label, a field) takes a line of its own with its ⓘ, and the parts that keep their
+/// size (a segmented picker, a switch, a button) go on the line under it at the trailing edge, wrapping when even that
+/// line is short. A plain HStack hands the label what the fixed parts leave, and its words break inside ("Sh / ow / in"
+/// beside Notifications' Show in picker in a 780 pt window).
+struct BlockRowLayout: Layout {
+    var spacing: CGFloat = 10
+    /// Room for a label's longest word: a truncating one-line detail (Widgets' rows) keeps its row.
+    var least: CGFloat = 120
+    private let lineSpacing: CGFloat = 6, inset: CGFloat = 6
+
+    /// Each part measured once a pass, at its own height: offered nothing, its ideal and all the width there is.
+    struct Parts {
+        var small: [CGSize] = [], ideal: [CGSize] = [], large: [CGFloat] = []
+        /// Narrower when offered nothing: a label that wraps, a title that truncates.
+        func givesWay(_ k: Int) -> Bool { small[k].width < ideal[k].width - 0.5 }
+        /// Taller as it narrows: a label that wraps, as against one that truncates.
+        func wraps(_ k: Int) -> Bool { givesWay(k) && small[k].height > ideal[k].height + 0.5 }
+        /// A Spacer: hardly any width of its own, all it is offered. Stacked, it takes none.
+        func spacer(_ k: Int) -> Bool { ideal[k].width <= 10 && large[k] > 10 }
+    }
+
+    func makeCache(subviews: Subviews) -> Parts {
+        // Heights unproposed: a Spacer in a Layout grows both ways, and would make the row take a tile's spare height.
+        Parts(small: subviews.map { $0.sizeThatFits(ProposedViewSize(width: 0, height: nil)) },
+              ideal: subviews.map { $0.sizeThatFits(.unspecified) },
+              large: subviews.map { min(1e6, $0.sizeThatFits(ProposedViewSize(width: .infinity, height: nil)).width) })
+    }
+
+    func updateCache(_ cache: inout Parts, subviews: Subviews) { cache = makeCache(subviews: subviews) }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Parts) -> CGSize {
+        guard let width = proposal.width, width.isFinite, !fits(width, cache) else {
+            let sizes = row(proposal.width, subviews, cache)
+            return CGSize(width: sizes.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(0, sizes.count - 1)), height: sizes.map(\.height).max() ?? 0)
+        }
+        return CGSize(width: width, height: lines(width, subviews, cache).height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Parts) {
+        guard !fits(bounds.width, cache) else {
+            var x = bounds.minX
+            for (i, size) in row(bounds.width, subviews, cache).enumerated() {
+                subviews[i].place(at: CGPoint(x: x, y: bounds.midY - size.height / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            return
+        }
+        for (i, frame) in lines(bounds.width, subviews, cache).frames.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    /// Whether the parts fit side by side in `width`: one part always does. A label that wraps needs `least` or its
+    /// one-line width; one that truncates, only what it shrinks to; the rest their whole width.
+    private func fits(_ width: CGFloat, _ parts: Parts) -> Bool {
+        guard parts.ideal.count > 1 else { return true }
+        let need = parts.ideal.indices.reduce(CGFloat(0)) { sum, k in
+            sum + (parts.wraps(k) ? min(parts.ideal[k].width, least) : parts.givesWay(k) ? parts.small[k].width : parts.ideal[k].width)
+        }
+        return width - spacing * CGFloat(parts.ideal.count - 1) >= need
+    }
+
+    /// The parts side by side, shared as an HStack shares its width: higher layout priorities first, holding back what the
+    /// lower ones need at least; within one, the part that gives least first, each offered an even share of what is left,
+    /// at its own height.
+    private func row(_ width: CGFloat?, _ subviews: Subviews, _ parts: Parts) -> [CGSize] {
+        guard let total = width, total.isFinite else { return parts.ideal }
+        var sizes = [CGSize](repeating: .zero, count: subviews.count)
+        var left = total - spacing * CGFloat(max(0, subviews.count - 1))
+        for priority in Set(subviews.map(\.priority)).sorted(by: >) {
+            let group = subviews.indices.filter { subviews[$0].priority == priority }
+                .sorted { parts.large[$0] - parts.small[$0].width < parts.large[$1] - parts.small[$1].width }
+            var room = left - subviews.indices.filter { subviews[$0].priority < priority }.reduce(0) { $0 + parts.small[$1].width }
+            for (n, i) in group.enumerated() {
+                sizes[i] = subviews[i].sizeThatFits(ProposedViewSize(width: max(0, room / CGFloat(group.count - n)), height: nil))
+                room -= sizes[i].width
+            }
+            left -= group.reduce(0) { $0 + sizes[$1].width }
+        }
+        return sizes
+    }
+
+    /// The parts stacked: each that gives way on a line of the whole width, with the fixed parts right after it (its ⓘ)
+    /// when they fit; the other fixed ones on lines of their own at the trailing edge; a Spacer nowhere.
+    private func lines(_ width: CGFloat, _ subviews: Subviews, _ parts: Parts) -> (frames: [CGRect], height: CGFloat) {
+        var frames = [CGRect](repeating: .zero, count: subviews.count)
+        var y = inset, run: [Int] = []
+        func flush() {
+            var start = 0
+            while start < run.count {
+                var end = start, used: CGFloat = 0
+                while end < run.count, end == start || used + spacing + parts.ideal[run[end]].width <= width {
+                    used += (end == start ? 0 : spacing) + parts.ideal[run[end]].width
+                    end += 1
+                }
+                let height = run[start..<end].map { parts.ideal[$0].height }.max() ?? 0
+                var x = max(0, width - used)
+                for k in run[start..<end] {
+                    let size = parts.ideal[k]
+                    frames[k] = CGRect(x: x, y: y + (height - size.height) / 2, width: size.width, height: size.height)
+                    x += size.width + spacing
+                }
+                y += height + lineSpacing
+                start = end
+            }
+            run = []
+        }
+        var i = 0
+        while i < subviews.count {
+            guard !parts.spacer(i) else { i += 1; continue }
+            guard parts.givesWay(i) else { run.append(i); i += 1; continue }
+            flush()
+            // The fixed parts right after a label, up to a Spacer, stay beside it while it keeps its room.
+            var end = i + 1, beside: CGFloat = 0
+            while end < subviews.count, !parts.givesWay(end), !parts.spacer(end) { beside += spacing + parts.ideal[end].width; end += 1 }
+            if width - beside < min(parts.ideal[i].width, least) { (end, beside) = (i + 1, 0) }
+            let size = subviews[i].sizeThatFits(ProposedViewSize(width: width - beside, height: nil))
+            frames[i] = CGRect(origin: CGPoint(x: 0, y: y), size: size)
+            var x = size.width, height = size.height
+            for k in i + 1..<end {
+                // On the label's first line.
+                let line = min(size.height, parts.ideal[i].height), part = parts.ideal[k]
+                frames[k] = CGRect(x: x + spacing, y: y + max(0, (line - part.height) / 2), width: part.width, height: part.height)
+                x += spacing + part.width
+                height = max(height, frames[k].maxY - y)
+            }
+            y += height + lineSpacing
+            i = end
+        }
+        flush()
+        return (frames, y - lineSpacing + inset)
     }
 }
 
