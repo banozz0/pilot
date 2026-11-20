@@ -94,7 +94,7 @@ struct AppWindowFrameTests {
         #expect(model.page == .binds)
     }
 
-    @Test("The panel's tab bar names every tab, and an area opened from More names the More tab (pilot-ui-redesign T3)")
+    @Test("The panel's tab bar at its narrowest names every tab, and an area opened from More names the More tab (pilot-ui-redesign T3)")
     func panelTabBar() throws {
         testApp()
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
@@ -102,6 +102,8 @@ struct AppWindowFrameTests {
         let look = Look(themes: LookTests.themes, ghostty: LookTests.FakeGhostty(), defaults: LookTests.defaults())
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model, look: look).environment(Engine()).environment(\.homeSources, .inert)))
         defer { window.close() }
+        // The tabs follow the width (ADR 0018, 2026-11-20): at 780 pt some areas are More's.
+        window.setContentSize(AppWindowController.minSize)
         // SwiftUI builds its accessibility tree only for an assistive client; this says one is here.
         let assistive = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
         NSApp.accessibilitySetValue(true, forAttribute: assistive)
@@ -111,8 +113,7 @@ struct AppWindowFrameTests {
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             return FillPagesTests.labels(in: try #require(window.contentView))
         }
-        let split = AppArea.tabs(developer: false)
-        let tabs = try labels()
+        let tabs = try labels(), split = AppArea.tabs(count: PanelTabs.count, developer: false)
         #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains("More"), "\(tabs)")
         model.go(AppPlace(.general))
         #expect(try labels().contains("More, Pilot open"))

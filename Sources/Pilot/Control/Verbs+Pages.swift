@@ -23,7 +23,7 @@ extension ControlVerbs {
             if let words = args.value("find") {
                 let developer = DeveloperPages.on, schema = SettingsSchema.live
                 return .array(SettingsSearch.grouped(words, settings: schema.sorted, developer: developer).map { group in
-                    .object(["group": .string(group.path(developer: developer)), "open": .string(group.page.rawValue),
+                    .object(["group": .string(group.path(count: PanelTabs.count, developer: developer)), "open": .string(group.page.rawValue),
                              "parts": .array(group.parts.map { .object(["title": .string($0.title), "open": .string($0.rawValue)]) }),
                              "settings": .array(group.settings.map { setting in
                                  .object(["key": .string(setting.key), "label": .string(setting.label),
@@ -38,7 +38,7 @@ extension ControlVerbs {
                 guard DeveloperPages.on || !place.page.isDeveloper else {
                     throw ControlError(.unknownPage, "\(place.path) is a developer page and the Developer switch is off: pilot set general.developer on")
                 }
-                return .string(place.tabPath(developer: DeveloperPages.on))
+                return .string(place.tabPath(count: PanelTabs.count, developer: DeveloperPages.on))
             }
             guard let place = AppPlace.named(name) else {
                 throw ControlError(.unknownPage, "no page \(name); pages: \(pages().joined(separator: ", ")); pilot schema lists the parts")

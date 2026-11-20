@@ -318,9 +318,27 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
                                              .mac, .apps, .extensions, .pilot, .developer]
 
-    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render,
-    /// WindowRailRenders, 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652).
+    /// How many of `tabOrder` the panel shows as tabs before its bar is measured, and where no window is (`pilot open
+    /// --where`): what fits the narrowest window, 780 pt, with every name on one line (T3's render, WindowRailRenders,
+    /// 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652). The bar itself
+    /// follows the window's width (`tabsThatFit`; ADR 0018, 2026-11-20).
     public static let tabCount = 8
+
+    /// How many tabs fit `room` points, names whole (ADR 0018, Sven 2026-11-20: a bigger window shows more tabs): every one
+    /// when all fit, with no More; else the most that fit beside More, sized for the widest name it can take (the area
+    /// opened from it names it), so opening one never moves a tab. `widths` are the shown tabs' in `tabOrder`, `more[i]`
+    /// More's when it would hold areas `i...`; at least one tab.
+    public static func tabsThatFit(widths: [Double], more: [Double], spacing: Double, room: Double) -> Int {
+        let all = widths.reduce(0, +) + spacing * Double(max(widths.count - 1, 0))
+        guard all > room else { return widths.count }
+        var used = 0.0, count = 0
+        for (i, width) in widths.enumerated() where i + 1 < widths.count {
+            used += width + spacing
+            guard used + more[i + 1] <= room else { break }
+            count = i + 1
+        }
+        return max(count, 1)
+    }
 
     /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
     /// Developer only while `developer` is on.

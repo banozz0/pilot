@@ -1,16 +1,21 @@
 import PilotCore
 import SwiftUI
 
-/// The panel's tab bar (pilot-ui-redesign T3, round 2's shot 7c): the traffic lights' inset, then the first
-/// `AppArea.tabCount` areas of `AppArea.tabOrder` as named tabs, an icon over each name, and More last; the Hyper key's cap at
-/// the right. A name never drops or shrinks (S3 A's rule): the count is what fits 780 pt with every name on one line, the
-/// More tab carrying its widest name (WindowRailRenders measures it). The open tab is raised with a hairline and no accent,
-/// so the ring and the switches stay the one accent signal. An area opened from More names the More tab, so the bar always
-/// says where you are.
+/// The panel's tab bar (pilot-ui-redesign T3, round 2's shot 7c): the traffic lights' inset, then `tabOrder`'s areas as
+/// named tabs, an icon over each name, and More last; the Hyper key's cap at the right. A name never drops or shrinks
+/// (S3 A's rule): the count follows the window's width (ADR 0018, Sven 2026-11-20), every area that fits a tab in the
+/// fixed order, the rest in More, and no More once all fit; More is sized for the widest name it can take. Each tab is
+/// measured in place, off screen, so the count is the drawn names' own. The open tab is raised with a hairline and no
+/// accent, so the ring and the switches stay the one accent signal. An area opened from More names the More tab, so the
+/// bar always says where you are.
 struct PanelTabBar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let more: PanelMore
+    /// The bar's width and each label's, as drawn: a tab's by its area, More's by the name it carries.
+    @State private var width: CGFloat = 0
+    @State private var tabWidths: [AppArea: CGFloat] = [:]
+    @State private var moreWidths: [String: CGFloat] = [:]
 
     static let height: CGFloat = 64
     /// The traffic lights' inset at the left, as drawn.
@@ -19,7 +24,8 @@ struct PanelTabBar: View {
     static func room(_ width: CGFloat) -> CGFloat { width - lights - 28 - 12 - 14 }
 
     var body: some View {
-        let split = AppArea.tabs(developer: DeveloperPages.on), open = model.page.area
+        let shown = AppArea.tabs(count: .max, developer: DeveloperPages.on).tabs
+        let split = AppArea.tabs(count: count(shown), developer: DeveloperPages.on), open = model.page.area
         HStack(spacing: 0) {
             Color.clear.frame(width: Self.lights, height: 1)
             Spacer(minLength: 0)
@@ -31,9 +37,48 @@ struct PanelTabBar: View {
         }
         .padding(.trailing, 14)
         .frame(height: Self.height)
+        // The window's width, not the strip's: a strip too wide for it would overflow and read as room.
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .background { measures(shown) }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onChange(of: split.tabs.count, initial: true) { _, count in
+            PanelTabs.count = count; more.tabs = count
+            if split.more.isEmpty { more.open = false }
+        }
         .background(style.color(\.sidebar))
         .overlay(alignment: .bottom) { InstrumentRule() }
     }
+
+    /// The tabs that fit the bar now; `AppArea.tabCount` until every label is measured.
+    private func count(_ shown: [AppArea]) -> Int {
+        let widths = shown.compactMap { tabWidths[$0] }, titles = ["More"] + shown.map(\.title)
+        guard width > 0, widths.count == shown.count, titles.allSatisfy({ moreWidths[$0] != nil }) else { return AppArea.tabCount }
+        // More holding areas i... is as wide as the widest name among them, or "More".
+        let more = shown.indices.map { i in shown[i...].map { moreWidths[$0.title] ?? 0 }.max().map { max($0, moreWidths["More"] ?? 0) } ?? 0 }
+        return AppArea.tabsThatFit(widths: widths.map(Double.init), more: more.map(Double.init), spacing: PanelTabStrip.spacing,
+                                   room: Double(Self.room(width)))
+    }
+
+    /// Every tab and every More name the bar could draw, each alone, hidden: what `count` reads.
+    private func measures(_ shown: [AppArea]) -> some View {
+        ZStack {
+            ForEach(shown, id: \.self) { area in
+                PanelTabStrip(tabs: [area], open: area, moreTitle: "", moreOn: false, moreShown: false)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabWidths[area] = $0 }
+            }
+            ForEach(["More"] + shown.map(\.title), id: \.self) { title in
+                PanelTabStrip(tabs: [], open: .home, moreTitle: title, moreOn: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { moreWidths[title] = $0 }
+            }
+        }
+        .hidden().accessibilityHidden(true)
+    }
+}
+
+/// How many tabs the panel's bar shows now, for the readers away from it: the search's tab paths and `pilot open
+/// --where`. `AppArea.tabCount` until a bar is measured.
+@MainActor enum PanelTabs {
+    static var count = AppArea.tabCount
 }
 
 /// The tabs themselves, apart from the bar so a render can measure their width at any count.
@@ -48,8 +93,11 @@ struct PanelTabStrip: View {
     var pick: (AppArea) -> Void = { _ in }
     var toggleMore: () -> Void = {}
 
+    /// The gap between two tabs, and before More.
+    static let spacing = 2.0
+
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Self.spacing) {
             ForEach(tabs, id: \.self) { area in
                 Button { pick(area) } label: { label(symbol: area.symbol, on: area == open) { Text(area.title) } }
                     .buttonStyle(.kitPress)
@@ -94,6 +142,8 @@ struct PanelTabStrip: View {
 /// Whether More's card is open: the panel's own state, which a render can open.
 @Observable final class PanelMore {
     var open = false
+    /// How many tabs the bar shows now (PanelTabs.count), so the card lists the rest.
+    var tabs = AppArea.tabCount
     init(open: Bool = false) { self.open = open }
 }
 
@@ -106,7 +156,7 @@ struct PanelMoreMenu: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        let areas = AppArea.tabs(developer: DeveloperPages.on).more
+        let areas = AppArea.tabs(count: more.tabs, developer: DeveloperPages.on).more
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(areas, id: \.self) { row($0) }
