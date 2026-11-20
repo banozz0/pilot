@@ -12,7 +12,7 @@ extension Host {
         native.setObject(identify, forKeyedSubscript: "appIdentity" as NSString)
     }
 
-    /// Where an app named by name alone is looked for, as AppleScript finds the usual ones.
+    /// Where an app named by name alone is looked for when LaunchServices does not know it.
     static let appFolders = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
                              "/System/Library/CoreServices", NSHomeDirectory() + "/Applications"]
 
@@ -24,8 +24,12 @@ extension Host {
         } else if text.hasPrefix("/") {
             url = URL(filePath: text)
         } else {
-            let file = text.lowercased().hasSuffix(".app") ? text : text + ".app"
-            url = appFolders.lazy.map { URL(filePath: $0).appending(path: file) }.first { FileManager.default.fileExists(atPath: $0.path) }
+            // LaunchServices first, as AppleScript itself finds an app by name; then the usual folders.
+            let bare = text.lowercased().hasSuffix(".app") ? String(text.dropLast(4)) : text
+            var found: Unmanaged<CFURL>?
+            let file = bare + ".app"
+            url = LSFindApplicationForInfo(kLSUnknownCreator, nil, file as CFString, nil, &found) == noErr ? found?.takeRetainedValue() as URL?
+                : appFolders.lazy.map { URL(filePath: $0).appending(path: file) }.first { FileManager.default.fileExists(atPath: $0.path) }
         }
         guard let url, let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return nil }
         let shown = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String

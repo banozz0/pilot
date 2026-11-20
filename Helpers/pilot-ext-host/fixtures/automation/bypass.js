@@ -1,5 +1,5 @@
 "use strict";
-// Every way T9's review 1 named Music past the first check, each run through the shim (never the real osascript): AppleScript
+// Every way T9's reviews 1 and 2 named Music past the check, each run through the shim (never the real osascript): AppleScript
 // in another case, JXA with a space before its parenthesis, a login shell's -lc line, env, a shell line whose script comes in
 // a variable, and a target built at run time. Each must ask, or be refused while Music is refused.
 const { spawn, execFile, exec } = require("child_process");
@@ -43,6 +43,10 @@ module.exports = {
       ["env", (done) => execFile("/usr/bin/env", [shim, "-e", 'tell app "Music" to playpause'], done)],
       ["Variable", (done) => exec(`'${shim}' -e "$S"`, { env: { ...process.env, S: 'tell app "Music" to playpause' } }, done)],
       ["Built at run time", (done) => execFile(shim, ["-e", 'set x to "Music"', "-e", "tell application x to playpause"], done)],
+      // Review 2: a JXA comment's apostrophe that would open a false string over Application(name), and a shell line with
+      // two osascript calls, the first a script file.
+      ["Comment apostrophe", (done) => execFile(shim, ["-l", "JavaScript", "-e", "// Don't steal focus\nconst name = \"Music\"; Application(name).playpause(); const q = 'x';"], done)],
+      ["Two scripts", (done) => exec(`'${shim}' scripts/music.applescript && '${shim}' -e 'tell app "Finder" to activate'`, { cwd: process.cwd() }, done)],
     ],
   }),
 };

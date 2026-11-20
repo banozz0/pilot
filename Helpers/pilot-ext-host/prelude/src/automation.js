@@ -27,6 +27,8 @@ let saved = store(""), title = "This extension", view = true, command = "", cont
 /** Apps waiting for an answer, in asking order (`{ app, serial, sync }`), and the calls waiting on them. */
 const queue = [], waiters = new Set();
 let serials = 0, alerted = false, typed = "";
+/** Where a no-view alert's one-time nonce waits in automation.json; never an app's key. */
+const pendingKey = "pending-alert";
 let changed = () => {};
 
 /** Text from a script or a manifest as a question shows it: no control or hidden characters, one line, `most` long. */
@@ -48,10 +50,16 @@ export function consentFor(message, mode) {
   if (title === "This extension" && message.extension) title = clean(message.extension, 60);
   const given = message.context && typeof message.context === "object" ? message.context : null;
   const answered = given?.pilotConsent;
-  if (answered && typeof answered.key === "string" && typeof answered.allowed === "boolean") {
-    keep({ key: answered.key, label: clean(answered.app ?? answered.key, 60) }, answered.allowed);
-    const { pilotConsent: _, ...rest } = given;
-    message.context = Object.keys(rest).length ? rest : undefined;
+  if (answered) {
+    const pending = saved.read()[pendingKey];
+    const { [pendingKey]: _, ...rest } = saved.read();
+    if (pending && typeof answered.nonce === "string" && answered.nonce === pending.nonce && answered.key === pending.key
+        && typeof answered.allowed === "boolean") {
+      saved.write(rest);
+      keep({ key: pending.key, label: clean(answered.app ?? pending.key, 60) }, answered.allowed);
+    } else console.error("a consent answer without this extension's pending nonce: not kept");
+    const { pilotConsent: __, ...others } = given;
+    message.context = Object.keys(others).length ? others : undefined;
   }
   context = message.context;
 }
@@ -76,8 +84,6 @@ function app(raw, byID) {
   return { key: byID ? `id:${name.toLowerCase()}` : name.toLowerCase(), label: clean(name, 60) };
 }
 
-/** Character spans `pattern` matches in `text`. */
-const spans = (text, pattern) => [...text.matchAll(pattern)].map((m) => [m.index, m.index + m[0].length]);
 const inside = (at, list) => list.some(([a, b]) => at >= a && at < b);
 
 /** The apps `script` controls: AppleScript, or JXA when `js`; `shell` when it is a command line around osascript. */
@@ -99,12 +105,11 @@ export function targets(script, { js = false, shell = false } = {}) {
       add(made(m));
     }
   }
-  // Every app word a literal target did not account for is a target Pilot cannot read: outside strings (a shell line's
-  // quotes hold the script itself, so there nothing counts as a string), never `current application` or JXA's own.
-  const strings = shell ? [] : spans(script, js ? /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g : /"(?:[^"\\]|\\.)*"/g);
+  // Every app word a literal target did not account for is a target Pilot cannot read, in a string or a comment too: a
+  // comment's apostrophe would open a false string, so none is skipped. Only `current application` and JXA's own are.
   const words = js ? /\bApplication\b/g : /\b(?:application|app)\b/gi;
   for (const m of script.matchAll(words)) {
-    if (inside(m.index, used) || inside(m.index, strings)) continue;
+    if (inside(m.index, used)) continue;
     if (!js && /current\s+$/i.test(script.slice(Math.max(0, m.index - 12), m.index))) continue;
     if (/^\s*\.\s*currentApplication\b/.test(script.slice(m.index + m[0].length))) continue;
     add(unread);
@@ -122,7 +127,10 @@ export function scan(file, args, options = {}) {
   if (name !== "osascript") {
     const line = [String(file), ...args.map(String)].join(" ");
     if (!/\bosascript\b/i.test(line)) return null;
-    return { apps: targets(args.map(String).join(" "), { shell: true }) };
+    // A program handed osascript as its own argument (`env osascript …`): that osascript's arguments, read as one.
+    const at = args.findIndex((a) => String(a).split("/").pop().toLowerCase() === "osascript");
+    if (at >= 0 && !shells.has(name)) return scan(String(args[at]), args.slice(at + 1).map(String), options);
+    return { apps: shellLine(args.map(String).find((a) => /\bosascript\b/i.test(a)) ?? line) };
   }
   const lines = [];
   let scriptFile = null, js = false;
@@ -143,6 +151,27 @@ export function scan(file, args, options = {}) {
   return { apps: targets(text, { js: js || /\.js$/i.test(scriptFile) }) };
 }
 
+const shells = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"]);
+
+/** The apps a shell line around osascript controls. It counts as read only when it is one osascript call, by a plain or
+ *  quoted path, whose script is all -e lines in quotes, with no $ or backtick; anything else (a second osascript, a
+ *  script file, a pipe, a redirect, a chain) adds the unread app. */
+function shellLine(line) {
+  const word = String.raw`(?:'[^']*'|"(?:[^"\\$\`]|\\.)*")`;
+  const only = new RegExp(String.raw`^\s*(?:'[^']*osascript'|"[^"]*osascript"|\S*osascript)((?:\s+-[ls]\s+\S+|\s+-e\s+${word})+)\s*$`, "i");
+  const m = line.match(only);
+  if (!m || /[$\`]/.test(line) || (line.match(/osascript/gi) ?? []).length !== 1) {
+    const apps = targets(line, { shell: true });
+    return apps.some((a) => a.key === unread.key) ? apps : [...apps, unread];
+  }
+  const js = /-l\s+['"]?javascript/i.test(m[1]);
+  const scripts = [...m[1].matchAll(new RegExp(String.raw`-e\s+(${word})`, "g"))].map((x) => {
+    const q = x[1];
+    return q.startsWith("'") ? q.slice(1, -1) : q.slice(1, -1).replace(/\\(.)/g, "$1");
+  });
+  return targets(scripts.join("\n"), { js });
+}
+
 /** A script handed on stdin, read once it ends. */
 export const stdinApps = (script, js) => targets(String(script), { js });
 
@@ -156,7 +185,7 @@ function standing(apps) {
   let refused = apps.find((a) => answers[a.key]?.allowed === false);
   const wide = apps.some((a) => a.key === unread.key);
   if (!refused && wide) {
-    const kept = Object.entries(answers).find(([, v]) => v?.allowed === false);
+    const kept = Object.entries(answers).find(([k, v]) => k !== pendingKey && v?.allowed === false);
     if (kept) refused = { key: kept[0], label: clean(kept[1].app ?? kept[0], 60), widened: true };
   }
   const open = apps.filter((a) => typeof answers[a.key]?.allowed !== "boolean");
@@ -181,7 +210,14 @@ export function consent(apps, go) {
   const waiter = { apps, go: settle };
   waiters.add(waiter);
   if (now.open.length) ask(now.open, false);
-  return () => { waiters.delete(waiter); prune(); };
+  // A call killed while asked (runAppleScript's own timeout kills it after 10 s) keeps its question on screen, so its
+  // answer is still kept for the next run; every other call is looked at again and the view redrawn.
+  return () => {
+    waiters.delete(waiter);
+    for (const q of queue) if (waiter.apps.some((a) => a.key === q.app.key)) q.sync = true;
+    settleAll();
+    changed();
+  };
 }
 
 /** A call that cannot wait (spawnSync, execSync): null when every app is allowed, else the error it fails with; an app
@@ -210,12 +246,20 @@ function alert() {
   if (alerted || !queue.length) return;
   alerted = true;
   const { app: a } = queue[0];
-  const button = (label, allowed) => ({ type: "run", title: label, command, context: { ...(context ?? {}), pilotConsent: { key: a.key, app: a.label, allowed } } });
+  // The answer comes back in a new run's context, so it is bound to a one-time nonce kept here as the alert goes out:
+  // a context that does not carry it (a launchCommand's, a forged one) is not an answer.
+  const nonce = native.random(16);
+  saved.write({ ...saved.read(), [pendingKey]: { key: a.key, nonce, command } });
+  const button = (label, allowed) => ({ type: "run", title: label, command, context: { ...(context ?? {}), pilotConsent: { key: a.key, app: a.label, allowed, nonce } } });
   native.write(JSON.stringify({ type: "action", action: {
     type: "alert", text: `${title} wants to control ${a.label}.`, note: "macOS will then ask too.",
     actions: [button("Don't Allow", false), button("Allow", true)],
   } }));
 }
+
+/** Whether this run sent a no-view consent alert: its failure is then the held call's, logged, never an error line,
+ *  which would stand in for the alert (ExtensionRun keeps the first error line and drops the actions). */
+export const consentAlerted = () => alerted;
 
 /** The question being asked in the view, or null. */
 export function question() {
@@ -238,17 +282,22 @@ export function answer(serial, allowed) {
   if (!head || head.serial !== serial) return console.error(`consent answer for question ${serial} is stale: answering the view unchanged`);
   keep(head.app, allowed);
   queue.shift();
-  for (const waiter of [...waiters]) {
-    const now = standing(waiter.apps);
-    if (now.refused) { waiters.delete(waiter); waiter.go(refusedError(now.refused)); } else if (!now.open.length && !now.wait) { waiters.delete(waiter); waiter.go(null); }
-  }
-  prune();
-  // Dropping apps may end the last open question a `*` call waits on.
-  for (const waiter of [...waiters]) {
-    const now = standing(waiter.apps);
-    if (!now.refused && !now.open.length && !now.wait) { waiters.delete(waiter); waiter.go(null); }
-  }
+  settleAll();
   changed();
+}
+
+/** Each waiting call its answers now settle goes on or fails; apps no call still needs leave the queue, which may end
+ *  the last open question a `*` call waits on, so they are looked at once more. */
+function settleAll() {
+  const pass = () => {
+    for (const waiter of [...waiters]) {
+      const now = standing(waiter.apps);
+      if (now.refused) { waiters.delete(waiter); waiter.go(refusedError(now.refused)); } else if (!now.open.length && !now.wait) { waiters.delete(waiter); waiter.go(null); }
+    }
+  };
+  pass();
+  prune();
+  pass();
 }
 
 /** Drops asked apps that no waiting call and no sync call still needs. */

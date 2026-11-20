@@ -241,7 +241,11 @@ class ChildProcess extends EventEmitter {
     this.killed = false;
     this.stdout = piped ? new Readable() : null;
     this.stderr = piped ? new Readable() : null;
-    this.stdin = piped ? { write: (t) => { native.childWrite(id, String(t)); return true; }, end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); } } : null;
+    // An emitter, as Node's Writable is, so `stdin.on("error", …)` (runAppleScript sets one) attaches.
+    this.stdin = piped ? Object.assign(new EventEmitter(), {
+      write: (t) => { native.childWrite(id, String(t)); return true; },
+      end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); },
+    }) : null;
   }
   kill(signal = "SIGTERM") {
     const numbers = { SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 };
@@ -307,7 +311,7 @@ function held(id, file, args, made, script) {
   };
   const decide = (apps) => { cancel = consent(apps, go); };
   if (child.stdin) {
-    child.stdin = {
+    child.stdin = Object.assign(new EventEmitter(), {
       write: (t) => { if (live) native.childWrite(id, String(t)); else input += String(t); return true; },
       end: (t) => {
         if (t != null) child.stdin.write(t);
@@ -316,7 +320,7 @@ function held(id, file, args, made, script) {
         ended = true;
         if (script.stdin) decide(stdinApps(input, script.js));
       },
-    };
+    });
   }
   // A script on a stdin that never comes (stdio ignored) runs nothing, so it needs no answer.
   if (!script.stdin) decide(script.apps);

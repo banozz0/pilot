@@ -16,7 +16,7 @@ import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 import { effects } from "./raycast.js";
 import { symbols } from "./icons.js";
-import { answer as answerConsent, consentSearch, onConsentChange, question as consentQuestion } from "./automation.js";
+import { answer as answerConsent, consentAlerted, consentSearch, onConsentChange, question as consentQuestion } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -267,6 +267,8 @@ function send(message) {
 export function fail(error, ack) {
   const text = error instanceof Error ? error.message : String(error);
   console.error(error instanceof Error && error.stack ? `${text}\n${error.stack}` : text);
+  // A no-view run that sent the consent alert ends on it: an error line would stand in for the alert (T9).
+  if (consentAlerted()) return;
   send({ type: "error", text: text.slice(0, 300), ack: typeof ack === "number" ? ack : undefined });
 }
 

@@ -40,9 +40,21 @@
       "mode": "view"
     },
     {
+      "name": "cancel",
+      "title": "Cancel",
+      "description": "At mount, a call to Mail killed while asked, and a run-time target waiting on it.",
+      "mode": "view"
+    },
+    {
       "name": "quiet",
       "title": "Quiet",
       "description": "A no-view command naming TextEdit.",
+      "mode": "no-view"
+    },
+    {
+      "name": "quietsync",
+      "title": "Quiet sync",
+      "description": "A no-view command naming Preview through execFileSync.",
       "mode": "no-view"
     }
   ]
