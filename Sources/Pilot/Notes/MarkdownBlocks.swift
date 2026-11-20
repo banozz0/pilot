@@ -1,4 +1,5 @@
 import AppKit
+import PilotCore
 
 /// The notes editor's blocks that span lines (Q114, Sven 2026-10-15): fenced code and tables, found in the text as typed.
 /// Pure, so the live preview's passes and the tests read the same blocks.
@@ -99,6 +100,49 @@ enum MarkdownBlocks {
             cells.append(NSRange(location: start, length: end - start))
         }
         return cells
+    }
+}
+
+/// A sketch drawn in a note (pilot-ui-redesign T28): its strokes as paths, never an image buffer per stroke, so the
+/// editor's picture and the canvas (T29) draw the same lines. ImageIO reads no SVG, so a sketch's link draws through here.
+extension MarkdownBlocks {
+    /// One stroke as a path in the sketch's own points, origin top left (a flipped context): round ends and joins, as
+    /// the SVG says.
+    static func path(_ stroke: Sketch.Stroke) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.lineWidth = stroke.width
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        guard let first = stroke.points.first else { return path }
+        path.move(to: NSPoint(x: first.x, y: first.y))
+        // A dot: a line to itself, which the round cap draws as one.
+        for p in stroke.points.count == 1 ? stroke.points : Array(stroke.points.dropFirst()) { path.line(to: NSPoint(x: p.x, y: p.y)) }
+        return path
+    }
+
+    /// Strokes every line in a flipped context of the sketch's size, a stroke with no ink in `ink`.
+    static func draw(_ sketch: Sketch, ink: NSColor) {
+        for stroke in sketch.strokes {
+            let colour = stroke.ink.flatMap(Self.colour) ?? ink
+            (stroke.tool == .marker ? colour.withAlphaComponent(colour.alphaComponent * Sketch.markerOpacity) : colour).setStroke()
+            path(stroke).stroke()
+        }
+    }
+
+    /// The sketch a link names as a picture at its own size, drawn when shown: `textColor` is read then, so the ink
+    /// follows the note's light or dark look; nil when the file is not a sketch Pilot wrote.
+    static func sketchPicture(at url: URL, ink: NSColor = .textColor) -> NSImage? {
+        guard Sketch.isSVG(url.lastPathComponent), let sketch = try? Sketch.load(from: url) else { return nil }
+        return NSImage(size: NSSize(width: sketch.width, height: sketch.height), flipped: true) { _ in
+            draw(sketch, ink: ink)
+            return true
+        }
+    }
+
+    /// `#rrggbb` as a colour.
+    static func colour(_ hex: String) -> NSColor? {
+        guard hex.count == 7, hex.hasPrefix("#"), let v = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+        return NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
     }
 }
 

@@ -215,8 +215,8 @@ struct CollectionsNotesTests {
         let entry = Self.object(try rig.verbs.schema(verb: "note"))
         let part = Self.object(entry["schema"])
         #expect(part["rowKey"] == .string("id"))
-        #expect(Self.array(part["subcommands"]).count == 8)
-        #expect(Self.array(entry["flags"]).map { Self.object($0)["name"] } == [.string("text")])
+        #expect(Self.array(part["subcommands"]).count == 9)
+        #expect(Self.array(entry["flags"]).map { Self.object($0)["name"] } == [.string("text"), .string("sketch")])
         #expect(try rig.verbs.verb("note").detail?("unpin")?.contains("Scratch is never pinned") == true)
     }
 

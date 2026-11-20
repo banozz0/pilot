@@ -60,8 +60,11 @@ final class ControlNotes {
         full["words"] = .number(Double(NotesText.words(note.text)))
         full["attachments"] = .array(NoteAttachments.references(in: note.text).map { name in
             let url = folder.appending(path: NoteAttachments.folder).appending(path: name)
-            return .object(["name": .string(name), "path": .string(url.path(percentEncoded: false)),
-                            "exists": .bool(FileManager.default.fileExists(atPath: url.path))])
+            var row: [String: JSONValue] = ["name": .string(name), "path": .string(url.path(percentEncoded: false)),
+                                            "exists": .bool(FileManager.default.fileExists(atPath: url.path))]
+            // A sketch read back as the canvas reopens it, so its strokes are what an edit starts from.
+            if Sketch.isSVG(name), let sketch = try? Sketch.load(from: url) { row["strokes"] = .number(Double(sketch.strokes.count)) }
+            return .object(row)
         })
         return full
     }
@@ -86,10 +89,24 @@ final class ControlNotes {
         let link = try io("\(file.lastPathComponent) was not copied") {
             try NoteAttachments.save(data, named: file.lastPathComponent, ext: file.pathExtension, in: model.store.folder, now: .now)
         }
+        return try linked(note, link)
+    }
+
+    /// Puts a link on a line of its own at the note's end; answers the note read back and the link.
+    func linked(_ note: Note, _ link: String) throws(ControlError) -> [String: JSONValue] {
         let before = note.text.isEmpty || note.text.hasSuffix("\n") ? "" : "\n"
-        var answer = try saved(try io("\(note.id) was not saved") { try model.write(note.id, text: note.text + before + link + "\n") })
+        var answer = try saved(try io("\(note.id) was not saved") { try model().write(note.id, text: note.text + before + link + "\n") })
         answer["link"] = .string(link)
         return answer
+    }
+
+    /// Saves a sketch into attachments/ and links it on a line of its own at the note's end, as the canvas's Done does
+    /// on a new sketch; answers the note read back and the link. Written from the words given, nothing read from outside
+    /// the notes folder, so no Allow, as `write`.
+    func sketch(_ note: Note, _ json: String) throws(ControlError) -> [String: JSONValue] {
+        let sketch = try io("the sketch does not read") { try JSONDecoder().decode(Sketch.self, from: Data(json.utf8)).validated() }
+        let link = try io("the sketch was not saved") { try sketch.save(in: model().store.folder, now: .now) }
+        return try linked(note, link)
     }
 }
 
@@ -97,7 +114,7 @@ extension ControlVerbs {
     /// `pilot note …` over one note, then the `notes` collection: the Notes page, the quick notes panel and the menu's
     /// "note …".
     func registerNotes(_ app: ControlNotes) {
-        let words = ["search", "show", "write", "append", "pin", "unpin", "attach", "open"]
+        let words = ["search", "show", "write", "append", "pin", "unpin", "attach", "sketch", "open"]
         let index = JSONValue.array(words.map(JSONValue.string))
         let detail: [String: String] = [
             "search": "pilot note search <words>: the Notes page's search: titles that match, best first, then notes with every word in their text.",
@@ -106,11 +123,13 @@ extension ControlVerbs {
             "append": "pilot note append <text>: saves the line as a new note (through Scratch, which stays empty), as the menu's \"note …\" does, without the tip; answers that note.",
             "pin": "pilot note pin|unpin <id>: pins or unpins a note, as the page's Pin; Scratch is never pinned.",
             "attach": "pilot note attach <id> <picture>: copies a picture file into the notes folder's attachments/ and links it on a line at the note's end, after Allow.",
+            "sketch": "pilot note sketch <id> --sketch <json>: saves a sketch as attachments/sketch-<stamp>.svg and links it as ![Sketch](…) on a line at the note's end, as the canvas's Done does. The JSON: {\"width\": 600, \"height\": 240, \"strokes\": [{\"tool\": \"pen\" or \"marker\", \"ink\": \"#rrggbb\" (none: the text colour), \"width\": 2, \"points\": [[x, y], …]}]}.",
             "open": "pilot note open <id>: shows the quick notes panel on that note, as the menu's note rows do.",
         ]
         register(ControlVerb("note", help: "Searches, reads, writes, pins and attaches pictures to quick notes; opens the panel on one.",
-                             usage: "pilot note [search <words> | show <id> | write <id> --text <text> | append <text> | pin <id> | unpin <id> | attach <id> <picture> | open <id>]",
-                             flags: [.init("text", help: "write only: the note's whole new text")],
+                             usage: "pilot note [search <words> | show <id> | write <id> --text <text> | append <text> | pin <id> | unpin <id> | attach <id> <picture> | sketch <id> --sketch <json> | open <id>]",
+                             flags: [.init("text", help: "write only: the note's whole new text"),
+                                     .init("sketch", help: "sketch only: the sketch as JSON: width, height, strokes")],
                              schema: {
                                  .object(["subcommands": index, "rowKey": .string("id"), "rows": .object([
                                      "id": .string("the note's file name in the notes folder; it changes when a new first line renames a note Pilot named"),
@@ -119,14 +138,14 @@ extension ControlVerbs {
                                      "edited": .string("ISO 8601"), "group": .string("list only: its group on the page: Scratch, Pinned, Today, Yesterday or Earlier"),
                                      "path": .string("the note's file"),
                                      "text": .string("show and the edits: the note's text"), "words": .string("show and the edits: words as the page counts them"),
-                                     "attachments": .string("show and the edits: the pictures in attachments/ it links: name, path, exists"),
+                                     "attachments": .string("show and the edits: the pictures in attachments/ it links: name, path, exists, and strokes for a sketch Pilot reads back"),
                                  ])])
                              },
                              index: { .object(["subcommands": index]) },
                              detail: { word in detail[word == "unpin" ? "pin" : word] }) { call throws(ControlError) in
             let args = call.arguments()
             let word = args.positional.first ?? "search"
-            if word != "write", let refusal = ControlVerb.unknownFlag(args.flags, known: [], in: "pilot note \(word)") { throw refusal }
+            if word != "write", let refusal = ControlVerb.unknownFlag(args.flags, known: word == "sketch" ? ["sketch"] : [], in: "pilot note \(word)") { throw refusal }
             @MainActor func target() throws(ControlError) -> Note { try app.note(try args.word(1, "note id (pilot list notes lists them)")) }
             let model = app.model()
             switch word {
@@ -163,6 +182,8 @@ extension ControlVerbs {
                 return try await app.gate.allow(app.attachAsk(id, file), peer: call.peer) { () throws(ControlError) in
                     .object(try app.attach(try app.note(id), file))
                 }
+            case "sketch":
+                return .object(try app.sketch(try target(), try args.required("sketch")))
             case "open":
                 let note = try target()
                 app.show(note.id)
