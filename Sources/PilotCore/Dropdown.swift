@@ -84,7 +84,7 @@ public enum Dropdown {
             case .tiling: on ? "\(tiler) on" : "\(tiler) paused"
             case .topBar: on ? "macOS bar hidden" : "macOS bar shown"
             case .keepAwake: on ? "kept awake" : "sleeps as usual"
-            case .clipboard: on ? "recording" : "paused"
+            case .clipboard: on ? "keeps what you copy" : "its key does nothing"
             case .dictation: on ? "a tap dictates" : "no dictation key"
             }
         }

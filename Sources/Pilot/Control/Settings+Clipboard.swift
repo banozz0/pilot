@@ -4,7 +4,7 @@ import PilotCore
 
 extension SettingsSchema {
     /// Settings › Clipboard's scalars, applied through the history as the page applies them, so a lowered limit prunes at
-    /// once; and the dropdown's recording switch, which holds for this session only. The never-record apps are a list,
+    /// once; and the Clipboard switch, which lasts across launches. The never-record apps are a list,
     /// not a key.
     func registerClipboard(_ history: ClipboardHistory, recording: SessionSwitch) {
         func change(_ edit: @escaping (inout ClipboardSettings) -> Void) {
@@ -33,7 +33,7 @@ extension SettingsSchema {
                   read: { history.settings.expireSecrets }, write: { on in change { $0.expireSecrets = on } }),
             .int("clipboard.secretMinutes", "Expire them after (minutes)", page: "clipboard", range: ClipboardSettings.secretMinuteRange,
                  standard: standard.secretMinutes, read: { history.settings.secretMinutes }, write: { n in change { $0.secretMinutes = n } }),
-            .bool("clipboard.recording", "Clipboard keeps what is copied (off for a new install until turned on; off stays off across launches)", page: "clipboard",
+            .bool("clipboard.recording", "Clipboard on: keeps what is copied and its key opens the history; off, neither, the history kept (off for a new install until turned on; off stays off across launches)", page: "clipboard",
                   standard: Install.startsOn,
                   read: { recording.isOn }, write: { recording.set($0) }),
         ])

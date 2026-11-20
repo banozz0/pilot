@@ -27,14 +27,24 @@ final class ClipboardHistory: ScreenPausing {
     @ObservationIgnored private var menuBack: MenuNavigator.Spot?
     /// Pilot's terminal drop had the keyboard as the panel opened: Return pastes straight into its shell.
     @ObservationIgnored private var dropHadKeyboard = false
-    /// The dropdown's Clipboard switch (SessionSwitch.clipboard, card agent-bo-95422912): paused, nothing copied is kept;
-    /// resumed, recording starts from what is on the pasteboard then, never what was copied meanwhile.
-    /// Paused, the secrets already due leave the disk now, not when recording resumes; the rest stay hidden once due (P65).
+    /// A sandbox run's stand-in for the screen (SandboxHost, PILOT_SANDBOX_CLIPPANEL): the panel is never made and a tip
+    /// only prepared, so `pilot run` still reads it back; each opening is a line there instead.
+    @ObservationIgnored var offscreen: (@MainActor (String) -> Void)?
+    /// The Clipboard switch (SessionSwitch.clipboard, on Home and in the Pilot menu): off, nothing copied is kept and
+    /// nothing opens the panel, an open one closing; the history kept stays. On, recording starts from what is on the
+    /// pasteboard then, never what was copied meanwhile. Off, the secrets already due leave the disk now, not when it
+    /// comes back on; the rest stay hidden once due (P65).
     func setRecording(_ on: Bool) {
         on ? watcher?.start() : watcher?.stop()
-        if !on { do { try store?.prune() } catch { cliplog.error("clipboard prune: \(String(describing: error), privacy: .public)") } }
-        cliplog.notice("clipboard recording \(on ? "on" : "paused", privacy: .public)")
+        if !on {
+            close()
+            do { try store?.prune() } catch { cliplog.error("clipboard prune: \(String(describing: error), privacy: .public)") }
+        }
+        cliplog.notice("clipboard \(on ? "on" : "off", privacy: .public)")
     }
+
+    /// The tip an opener raises while the Clipboard switch is off, as the launcher's names its switch.
+    static let offTip = "Clipboard is off: turn on Clipboard on Home or in the Pilot menu"
 
     /// Locked or asleep (card agent-bo-95422839): the watcher stops polling; unlocked, it keeps what was copied meanwhile.
     func pause() { watcher?.pause() }
@@ -142,7 +152,8 @@ final class ClipboardHistory: ScreenPausing {
     static let actionID = "apps.clipboard"
 
     /// Runs after the tap callback returns: building the rows reads the store, too slow for the tap. `words` open it
-    /// searching them ("cb invoice", T42).
+    /// searching them ("cb invoice", T42). Every opener comes here (its binds, the launcher's row and alias, `pilot run`,
+    /// rings, pilot:// links), so the Clipboard switch is read here: off, nothing opens and a tip names it.
     func toggle(searching words: String? = nil) {
         let back = PilotMenu.origin
         DispatchQueue.main.async { self.toggleNow(back: back, searching: words) }
@@ -150,11 +161,18 @@ final class ClipboardHistory: ScreenPausing {
 
     private func toggleNow(back: MenuNavigator.Spot?, searching words: String?) {
         if panel != nil { close(); return }
+        guard SessionSwitch.clipboard.isOn else {
+            cliplog.notice("clipboard panel: not opened, the clipboard is off")
+            if let offscreen { _ = HUD.prepareTip(Self.offTip, seconds: 3, action: nil); offscreen("refused: \(Self.offTip)") }
+            else { HUD.tip(Self.offTip) }
+            return
+        }
         menuBack = back
         dropHadKeyboard = TerminalDrop.shared.hasKeyboard
         guard let store else { HUD.tip("Clipboard history is not running."); return }
         let model = PanelModel(store: store, order: settings.order)
         if let words { model.query = words }
+        if let offscreen { offscreen("shown, \(model.rows.count) rows"); return }
         self.model = model
         model.run = { [weak self, weak model] in if let self, let model { self.perform($0, model) } }
         let p = Self.makePanel(model, returnCopies: settings.returnAction == .copy)

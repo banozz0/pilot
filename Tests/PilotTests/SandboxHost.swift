@@ -200,6 +200,15 @@ struct SandboxHost {
             fflush(stdout)
         }
         defer { clipWatcher?.stop(); clipBoard?.releaseGlobally() }
+        // PILOT_SANDBOX_CLIPPANEL=<file>: the clipboard panel's openers (its binds, the launcher's row, `pilot run
+        // apps.clipboard`) draw nothing; each opening is a line in that file, "shown, <n> rows" or the tip that refused it.
+        if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_CLIPPANEL"].map({ URL(filePath: $0) }) {
+            ClipboardHistory.shared.offscreen = { line in
+                print("CLIPPANEL \(line)"); fflush(stdout)
+                let old = (try? Data(contentsOf: file)) ?? Data()
+                try? (old + Data((line + "\n").utf8)).write(to: file)
+            }
+        }
         // PILOT_SANDBOX_PASTE=<folder>, with PILOT_SANDBOX_CLIPS (and PILOT_SANDBOX_ALLOW=1): `pilot clip paste --app <app>`
         // writes the run's own pasteboard, brings nothing to the front and posts no key. Each Cmd+V instead reads that
         // pasteboard as Ghostty reads one (its file URLs' paths, space-separated, else its text) and appends a line to

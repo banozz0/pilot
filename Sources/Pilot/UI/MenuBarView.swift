@@ -108,8 +108,8 @@ final class TilingSwitch: QuickSwitchable {
 
 /// A quick switch. Without `saved` it is on at every launch, never saved, so it is never forgotten off for good: the
 /// Hyper key (card agent-bo-95422986; off, the layer key and chord Hyper do what macOS says, plain combos still run).
-/// With `saved` it keeps its state across launches under that key, `standard` until first flipped: the clipboard's
-/// recording (card agent-bo-95422912; paused, nothing copied is kept; a new install's starts off, Sven's pick
+/// With `saved` it keeps its state across launches under that key, `standard` until first flipped: the Clipboard
+/// (card agent-bo-95422912; off, nothing copied is kept and nothing opens the history, 2026-11-20; a new install's starts off, Sven's pick
 /// 2026-11-19; Off lasts, Open question 5 of spec pilot-ui-redesign) and the launcher (`launcher.on`, T4).
 @Observable @MainActor
 final class SessionSwitch: QuickSwitchable {
