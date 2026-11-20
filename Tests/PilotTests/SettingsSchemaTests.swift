@@ -301,7 +301,7 @@ struct SettingsSchemaTests {
               case .array(let look)? = await rig.ask("settings", "--page", "look").result else { Issue.record("no list"); return }
         guard case .object(let first) = look[0] else { Issue.record("not an object"); return }
         #expect(first["page"] == .string("look") && first["type"] != nil && first["label"] != nil && first["default"] != nil)
-        #expect(all.count == rig.schema.keys.count && look.count == 16)
+        #expect(all.count == rig.schema.keys.count && look.count == 15)
         let nowhere = await rig.ask("settings", "--page", "nowhere")
         #expect(nowhere.error?.code == .unknownPage && nowhere.error?.message.contains("look") == true)
         guard case .object(let schema) = rig.verbs.schema, case .array(let verbs)? = schema["verbs"] else { Issue.record("no schema"); return }

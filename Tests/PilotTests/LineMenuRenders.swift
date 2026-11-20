@@ -59,10 +59,10 @@ struct LineMenuRenders {
         #expect(activity.nav.rows.map(\.section) == ["Apps", "Apps", "Apps", "Background", "Background", "Background"])
         #expect(activity.nav.rows.first?.title == "Google Chrome" && activity.headings.count == 2)
         // T42: "generate password" finds Password generator, a typo away; Generate a password, with no default key since
-        // the trim (Q263), is listed only once added on Abilities. cb's row alone
+        // the trim (Q263), is listed only once added on Abilities, as built() adds it (UI T11). cb's row alone
         // searching the words, chat's question alone, kill's words searching Activity.
         let bw = try #require(states["L31-bw-generate-password"]).nav.rows.map(\.title)
-        #expect(!bw.contains("Generate a password") && bw.contains("Password generator"), "\(bw)")
+        #expect(bw.contains("Generate a password") && bw.contains("Password generator"), "\(bw)")
         let cb = try #require(states["L33-cb-invoice"]).nav.rows
         #expect(cb.count == 1 && cb[0].target == .action("apps.clipboard") && cb[0].subtitle == "“invoice”", "\(cb.map(\.title))")
         #expect(try #require(states["L34-chat-whats-up"]).nav.rows.map(\.target) == [.ask("what's up")])
