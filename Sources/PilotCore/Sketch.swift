@@ -43,6 +43,9 @@ public struct Sketch: Equatable, Sendable, Codable {
         public init(tool: Tool = .pen, ink: String? = nil, width: Double = Sketch.penWidth, points: [Point]) {
             self.tool = tool; self.ink = ink; self.width = width; self.points = points
         }
+
+        /// The points as drawn, in the SVG and on screen: a single point is a line to itself, so its round cap draws a dot.
+        public var drawn: [Point] { points.count == 1 ? points + points : points }
     }
 
     /// The canvas's size in points: the note's width when drawn, and the SVG's viewBox.
@@ -71,7 +74,7 @@ public struct Sketch: Equatable, Sendable, Codable {
             guard stroke.width.isFinite, stroke.width > 0 else { throw SketchError.unreadable("a stroke's width must be above 0") }
             guard !stroke.points.isEmpty else { throw SketchError.unreadable("a stroke needs at least one point") }
             guard stroke.points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { throw SketchError.unreadable("a point is not a number") }
-            if let ink = stroke.ink, !Self.isColour(ink) { throw SketchError.unreadable("ink \(ink) is not #rrggbb") }
+            if let ink = stroke.ink, !OmarchyThemes.isColour(ink) { throw SketchError.unreadable("ink \(ink) is not #rrggbb") }
         }
         return self
     }
@@ -88,17 +91,16 @@ public struct Sketch: Equatable, Sendable, Codable {
         """
         for stroke in strokes {
             let opacity = stroke.tool == .marker ? " stroke-opacity=\"\(Self.number(Self.markerOpacity))\"" : ""
-            out += "<path class=\"pilot-\(stroke.tool.rawValue)\" d=\"\(Self.d(stroke.points))\" fill=\"none\" "
+            out += "<path class=\"pilot-\(stroke.tool.rawValue)\" d=\"\(Self.d(stroke.drawn))\" fill=\"none\" "
                 + "stroke=\"\(stroke.ink ?? "currentColor")\"\(opacity) stroke-width=\"\(Self.number(stroke.width))\" "
                 + "stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n"
         }
         return out + "</svg>\n"
     }
 
-    /// `M x y L x y …`: a single point is a line to itself, so its round cap draws a dot.
+    /// `M x y L x y …`.
     static func d(_ points: [Point]) -> String {
-        let all = points.count == 1 ? points + points : points
-        return all.enumerated().map { i, p in "\(i == 0 ? "M" : "L")\(number(p.x)) \(number(p.y))" }.joined(separator: " ")
+        points.enumerated().map { i, p in "\(i == 0 ? "M" : "L")\(number(p.x)) \(number(p.y))" }.joined(separator: " ")
     }
 
     /// At most two decimals, no trailing zeros: the same point always writes the same text.
@@ -107,10 +109,6 @@ public struct Sketch: Equatable, Sendable, Codable {
         while s.hasSuffix("0") { s.removeLast() }
         if s.hasSuffix(".") { s.removeLast() }
         return s == "-0" ? "0" : s
-    }
-
-    static func isColour(_ s: String) -> Bool {
-        s.count == 7 && s.hasPrefix("#") && s.dropFirst().allSatisfy(\.isHexDigit)
     }
 
     // MARK: SVG in
@@ -129,6 +127,9 @@ public struct Sketch: Equatable, Sendable, Codable {
 
     public static func load(from url: URL) throws -> Sketch { try Sketch(svg: Data(contentsOf: url)) }
 
+    /// The sketch an attachment holds, or nil when it is no SVG or not one Pilot wrote.
+    public static func read(at url: URL) -> Sketch? { isSVG(url.lastPathComponent) ? try? load(from: url) : nil }
+
     /// Writes over a sketch's file in place, as the canvas's Done does on a sketch reopened: its link stays the same.
     public func write(to url: URL) throws {
         try Data(validated().svg().utf8).write(to: url, options: .atomic)
@@ -138,17 +139,17 @@ public struct Sketch: Equatable, Sendable, Codable {
     /// Markdown that shows it: `![Sketch](attachments/sketch-<stamp>.svg)`.
     public func save(in folder: URL, now: Date) throws -> String {
         let link = try NoteAttachments.save(Data(validated().svg().utf8), named: "sketch-\(NoteAttachments.stamp(now))", ext: "svg", in: folder, now: now)
-        return "![\(Self.alt)](" + link.dropFirst("![](".count)
+        guard link.hasPrefix("![](") else { throw SketchError.unreadable("unexpected link \(link)") }
+        return "![\(Self.alt)](" + link.dropFirst(4)
     }
 
     /// A path's `d` as Pilot writes it: `M` then `L`s, absolute, numbers apart by spaces or commas.
     static func points(_ d: String) -> [Point]? {
-        let words = d.replacingOccurrences(of: #"([MLml])"#, with: " $1 ", options: .regularExpression)
-            .split(whereSeparator: { $0 == " " || $0 == "," || $0.isNewline })
         var numbers: [Double] = []
-        for word in words where word != "M" && word != "L" {
-            guard let n = Double(word) else { return nil }
-            numbers.append(n)
+        for word in d.split(whereSeparator: { $0 == " " || $0 == "," || $0.isNewline }) {
+            let number = word.first == "M" || word.first == "L" ? word.dropFirst() : word[...]
+            guard number.isEmpty || Double(number) != nil else { return nil }
+            if let n = Double(number) { numbers.append(n) }
         }
         guard !numbers.isEmpty, numbers.count.isMultiple(of: 2) else { return nil }
         return stride(from: 0, to: numbers.count, by: 2).map { Point(numbers[$0], numbers[$0 + 1]) }
@@ -174,16 +175,15 @@ private final class SketchReader: NSObject, XMLParserDelegate {
         switch name {
         case "svg" where size == nil:
             isSketch = attributes["data-pilot-sketch"] != nil
-            let box = (attributes["viewBox"] ?? "").split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
+            let box = (attributes["viewBox"] ?? "").split(separator: " ").compactMap { Double($0) }
             if box.count == 4 { size = (box[2], box[3]) }
-            else if let w = attributes["width"].flatMap(Double.init), let h = attributes["height"].flatMap(Double.init) { size = (w, h) }
         case "path":
             guard let tool = attributes["class"].flatMap({ $0.hasPrefix("pilot-") ? Sketch.Tool(rawValue: String($0.dropFirst(6))) : nil }),
-                  var points = attributes["d"].flatMap(Sketch.points) else { return }
+                  var points = attributes["d"].flatMap(Sketch.points),
+                  let width = attributes["stroke-width"].flatMap(Double.init) else { return }
             // A dot is written as a line to itself: read back as the one point it was.
             if points.count == 2, points[0] == points[1] { points.removeLast() }
             let ink = attributes["stroke"].flatMap { $0 == "currentColor" ? nil : $0 }
-            let width = attributes["stroke-width"].flatMap(Double.init) ?? (tool == .marker ? Sketch.markerWidth : Sketch.penWidth)
             strokes.append(Sketch.Stroke(tool: tool, ink: ink, width: width, points: points))
         default: break
         }

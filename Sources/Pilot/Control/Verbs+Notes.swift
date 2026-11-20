@@ -63,7 +63,7 @@ final class ControlNotes {
             var row: [String: JSONValue] = ["name": .string(name), "path": .string(url.path(percentEncoded: false)),
                                             "exists": .bool(FileManager.default.fileExists(atPath: url.path))]
             // A sketch read back as the canvas reopens it, so its strokes are what an edit starts from.
-            if Sketch.isSVG(name), let sketch = try? Sketch.load(from: url) { row["strokes"] = .number(Double(sketch.strokes.count)) }
+            if let sketch = Sketch.read(at: url) { row["strokes"] = .number(Double(sketch.strokes.count)) }
             return .object(row)
         })
         return full
@@ -145,7 +145,8 @@ extension ControlVerbs {
                              detail: { word in detail[word == "unpin" ? "pin" : word] }) { call throws(ControlError) in
             let args = call.arguments()
             let word = args.positional.first ?? "search"
-            if word != "write", let refusal = ControlVerb.unknownFlag(args.flags, known: word == "sketch" ? ["sketch"] : [], in: "pilot note \(word)") { throw refusal }
+            let flags: [String: [String]] = ["sketch": ["sketch"]]
+            if word != "write", let refusal = ControlVerb.unknownFlag(args.flags, known: flags[word] ?? [], in: "pilot note \(word)") { throw refusal }
             @MainActor func target() throws(ControlError) -> Note { try app.note(try args.word(1, "note id (pilot list notes lists them)")) }
             let model = app.model()
             switch word {
