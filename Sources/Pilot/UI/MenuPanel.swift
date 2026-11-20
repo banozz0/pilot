@@ -176,6 +176,17 @@ final class PilotMenu {
         self.source = source
         source.show = { [weak model] in model?.nav.replaceList($0) }
         (source as? ExtensionListSession)?.showEmpty = { [weak model] in model?.nav.emptyView = $0 }
+        // A row on screen is told to its source, and rows the source fills in later keep the row Sven is on (T29).
+        source.showKeeping = { [weak self, weak model, weak source] rows in
+            guard let self, let model, let source, self.source === source, model.nav.actions == nil else { return }
+            let at = model.nav.selection, kept = model.nav.selected?.id
+            model.nav.replaceList(rows)
+            model.nav.point(at: kept.flatMap { t in model.nav.rows.firstIndex { $0.id == t } } ?? min(at, max(model.nav.rows.count - 1, 0)))
+        }
+        model.onRowShown = { [weak model, weak source] index in
+            guard let model, let source, model.nav.rows.indices.contains(index) else { return }
+            source.shown(model.nav.rows[index])
+        }
         model.onQuery = { source.search($0) }
         if search { source.search(model.nav.query) }
     }
@@ -192,6 +203,7 @@ final class PilotMenu {
         case .push(let title, let next):
             guard let model, let current = source else { return next.close() }
             current.show = { _ in }
+            current.showKeeping = nil
             (current as? ExtensionListSession)?.showEmpty = { _ in }
             var nav = MenuNavigator(list: [], title: title, live: true)
             nav.query = next.opening
@@ -563,11 +575,31 @@ final class PilotMenu {
     }
 
     /// Up to three of Raycast's store's folders not installed that what was typed finds at the root (T25), from the
-    /// listing held, so a keystroke asks no one.
+    /// listing held, so a keystroke asks no one. Once typing pauses, the rows still named by their folder have their
+    /// package.json and icon read (T29), then the same search's rows are given again with their titles.
     private func provideStore(_ query: String) {
         guard let model else { return }
-        model.nav.provide(.store, model.nav.branch == nil ? RaycastStoreModel.shared.rootRows(query) : [])
+        let store = RaycastStoreModel.shared, rows = model.nav.branch == nil ? store.rootRows(query) : []
+        model.nav.provide(.store, rows)
+        storeReads?.cancel()
+        let unread = rows.compactMap { row -> String? in
+            if case .storeFolder(let name) = row.target, store.infos[name] == nil { name } else { nil }
+        }
+        guard !unread.isEmpty else { return }
+        storeReads = Task { [weak self, weak model] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            for name in unread {
+                store.want(name) { [weak self, weak model] in
+                    guard let self, let model, self.model === model, !model.nav.isLive, model.nav.query == query else { return }
+                    self.provideStore(query)
+                }
+            }
+        }
     }
+
+    /// The root's store rows' reads, waiting for typing to pause.
+    private var storeReads: Task<Void, Never>?
 
     /// The default browser's engine for the Search the web row, read off the main thread; the row names it once read.
     private func readWebSearch() {
@@ -1757,11 +1789,17 @@ protocol MenuSource: AnyObject {
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target?
     /// What the search holds as the view opens: an ask's text to edit.
     var opening: String { get }
+    /// A row of this view came on screen (T29: the Raycast Store reads what its rows show only then).
+    func shown(_ row: MenuEntry)
+    /// Rows filled in after a read, shown with the selected row kept where it is; set by the panel.
+    var showKeeping: (([MenuEntry]) -> Void)? { get set }
 }
 
 extension MenuSource {
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target? { nil }
     var opening: String { "" }
+    func shown(_ row: MenuEntry) {}
+    var showKeeping: (([MenuEntry]) -> Void)? { get { nil } set {} }
 }
 
 /// A live picker source's answer to a pick: close the panel then run, push a view with its own source, or nothing.

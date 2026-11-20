@@ -263,7 +263,10 @@ struct ExtensionsPageView: View {
             .padding(.horizontal, 10).padding(.vertical, 6)
         case .loaded:
             eyebrow("Raycast Store · \(listing.total - listing.installedCount)")
-            ForEach(listing.store) { entry in row(entry, current: current) }
+            // Each row's package.json and icon read as it comes on screen (T29), never the whole store.
+            ForEach(listing.store) { entry in
+                row(entry, current: current).onAppear { storeModel.want(entry.id) }.onDisappear { storeModel.unwant(entry.id) }
+            }
             if listing.store.isEmpty {
                 Text("Nothing in Raycast's store matches.").font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
             }

@@ -3,8 +3,8 @@ import PilotCore
 import SwiftUI
 
 /// The Extensions page's Raycast Store (raycast-extensions T24), on the model Hyper+Space's Raycast Store reads
-/// (RaycastStoreModel): its folders A to Z, searched as Sven types, named by the folder until picked; the picked one's
-/// package.json is read as it is picked and its detail shows its icon, title, author, description and Install, or
+/// (RaycastStoreModel): its folders A to Z, searched as Sven types, named by the folder until its row's package.json is
+/// read as the row comes on screen (T29); the picked one's is read as it is picked and its detail shows its icon, title, author, description and Install, or
 /// Installed with Open commands. The listing is read from GitHub only while the page shows it, kept a day; Refresh
 /// reads it again. Drawn in Instrument from the Ink, as the page's own list is.
 struct RaycastStoreView: View {
@@ -64,7 +64,10 @@ struct RaycastStoreView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     PartHeading(text: "Raycast Store · \(folders.count)").padding(.horizontal, 10)
-                    ForEach(folders, id: \.name) { folder in row(folder, on: folder.name == current) }
+                    // Each row's package.json and icon read as it comes on screen (T29), never the whole store.
+                    ForEach(folders, id: \.name) { folder in
+                        row(folder, on: folder.name == current).onAppear { model.want(folder.name) }.onDisappear { model.unwant(folder.name) }
+                    }
                     if folders.isEmpty {
                         Text("Nothing in Raycast's store matches.").font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
                     }

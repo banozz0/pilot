@@ -212,7 +212,7 @@ extension ControlVerbs {
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] [--query <text>] | ext act <id> --handler <id> [--command <name>] [--then <row>|escape] | ext act <id> [<action>] [--type <field>=<text>] [--submit [<json values>]]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's action (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, opened searched for --query, with its host kept open: a callback runs and it answers the rows before and after; a typed action (open, copy, paste) is answered, not performed, as Pilot performs it on a press in the menu; --then presses again in the view the first press left, escape going back a view. On a Raycast Form, --type types a text field's text one change per character as keystrokes come, and --submit sets the fields its JSON object names, by id, then presses the form's SubmitForm (or the action named); it answers the form before, each line typing drew, the form filled and the view after, submitted false while a field shows an error."),
         ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
-        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with no question and its same result line. root is Hyper+Space's root search for <typed> as the menu lists it (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, never GitHub."),
+        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with no question and its same result line. root is Hyper+Space's root search for <typed> as the menu lists it once typing pauses (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, each one's package.json and icon read as the menu reads them."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -332,7 +332,8 @@ extension ControlVerbs {
 
     /// `ext store root <typed>` (raycast-extensions T25): Hyper+Space's root search as the menu builds it, its rows from
     /// PilotMenu.entries (each Raycast command read as Extension) and the store's from the listing kept on disk, as
-    /// provideStore gives them, ranked by the menu's own navigator. Reads only: no GitHub, nothing run.
+    /// provideStore gives them, ranked by the menu's own navigator, the store rows read first as the menu reads them once
+    /// typing pauses (T29). Reads only: GitHub's raw files for those rows, nothing run.
     private static func storeRoot(_ typed: String, _ model: RaycastStoreModel, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
         guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { throw ControlError(.badValue, "ext store root takes what is typed") }
         let found = await tools.found().extensions
@@ -340,6 +341,15 @@ extension ControlVerbs {
         let entries = Engine.shared.map { PilotMenu.entries($0, scripts: ScriptCommand.find(), extensions: found) } ?? []
         var nav = MenuNavigator(entries: entries)
         nav.query = typed
+        // As the menu does once typing pauses (T29): the store rows still named by their folder read, then given again.
+        let unread = model.rootRows(typed).compactMap { row -> String? in
+            if case .storeFolder(let name) = row.target, model.infos[name] == nil { name } else { nil }
+        }
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            var left = 0
+            for name in unread where model.want(name, then: { left -= 1; if left == 0 { done.resume() } }) { left += 1 }
+            if left == 0 { done.resume() }
+        }
         nav.provide(.store, model.rootRows(typed))
         let headings = MenuGroups.headings(nav.rows, searching: true)
         let rows: [JSONValue] = nav.rows.prefix(20).enumerated().map { i, row in

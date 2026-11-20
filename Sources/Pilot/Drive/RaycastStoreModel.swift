@@ -3,7 +3,7 @@ import Observation
 import PilotCore
 
 /// The Raycast store's state (raycast-extensions T24), one for Hyper+Space's Raycast Store, the Extensions page's store and
-/// `pilot ext store`: the listing (kept a day, RaycastStore), each picked folder's package.json, which folders are
+/// `pilot ext store`: the listing (kept a day, RaycastStore), each shown or picked folder's package.json, which folders are
 /// installed, and each install while it runs, with why it failed. An install is T6's GitHub route itself
 /// (ControlVerbs.installFromGitHub), with no question (T26) and its same answer.
 @MainActor @Observable
@@ -26,7 +26,7 @@ final class RaycastStoreModel {
     private(set) var cached = false
     /// Why a read failed while an older listing is shown in its place.
     private(set) var stale: String?
-    /// Each folder's package.json, once picked, and its icon file once fetched.
+    /// Each folder's package.json, once shown or picked, and its icon file once fetched.
     private(set) var infos: [String: RaycastStore.Info] = [:]
     private(set) var icons: [String: String] = [:]
     /// Why a folder's package.json could not be read.
@@ -50,6 +50,7 @@ final class RaycastStoreModel {
     /// The store looked at: a listing kept less than a day used, otherwise read from GitHub; the installed ones read
     /// again either way. A read already running is waited for, never started twice.
     func open() async {
+        held = false
         await readInstalled()
         let source = source
         if listing == nil, let (kept, reads) = await Task.detached(operation: { source.kept().map { ($0, source.keptInfos($0)) } }).value {
@@ -60,7 +61,8 @@ final class RaycastStoreModel {
     }
 
     /// Hyper+Space's root search (T25): `extensions`, already read by the menu, as the installed ones, and the listing
-    /// kept on disk once, never GitHub, so typing at the root asks no one.
+    /// kept on disk once, never GitHub, so a keystroke at the root asks no one for the listing (the rows it shows are read
+    /// once typing pauses, T29).
     func openKept(installed extensions: [Extension]) async {
         installed = Dictionary(extensions.map { ($0.id, $0) }) { a, _ in a }
         guard listing == nil else { return }
@@ -166,6 +168,98 @@ final class RaycastStoreModel {
         infoReads[name] = task
         defer { infoReads[name] = nil }
         return await task.value
+    }
+
+    // MARK: Rows on screen (T29)
+
+    /// At most this many folders read at once, and kept waiting: a fast scroll's rows long gone go first.
+    static let mostReading = 4, mostWanted = 24
+    /// How long reads that land are gathered into one change, so a scroll redraws a list once per batch, not per row.
+    static let gather: Duration = .milliseconds(150)
+
+    /// The folders a surface shows whose package.json is not held, newest last, and the ones being read.
+    @ObservationIgnored private var wanted: [String] = []
+    @ObservationIgnored private var fetching: Set<String> = []
+    /// Reads landed since the last change, each folder's read or why it failed, and who waits on each.
+    @ObservationIgnored private var landed: [String: Result<RaycastStore.Source.Read, RaycastStore.Problem>] = [:]
+    @ObservationIgnored private var waiting: [String: [@MainActor () -> Void]] = [:]
+    @ObservationIgnored private var gathering: Task<Void, Never>?
+    /// GitHub said too many calls: nothing more is asked until the store is opened again.
+    @ObservationIgnored private var held = false
+
+    /// A row for `name` came on screen (the Extensions page's, its store's, Hyper+Space's picker and root rows): its
+    /// package.json and icon read once, a few at a time, then kept on disk at its tree hash with the store. `then` runs
+    /// once its read lands in `infos`, or failed, or GitHub limited the reads; never for a folder held already, failed
+    /// before, or not listed, nor once `mostWanted` newer rows pushed it out. True when it is asked.
+    @discardableResult
+    func want(_ name: String, then: (@MainActor () -> Void)? = nil) -> Bool {
+        guard !held, let folder = listing?.folder(name), infos[name]?.sha != folder.sha, infoFailures[name] == nil, infoReads[name] == nil else { return false }
+        if let then { waiting[name, default: []].append(then) }
+        guard !fetching.contains(name), landed[name] == nil else { return true }
+        wanted.removeAll { $0 == name }
+        wanted.append(name)
+        if wanted.count > Self.mostWanted { waiting[wanted.removeFirst()] = nil }
+        pump()
+        return true
+    }
+
+    /// A row for `name` left the screen before its read started: it is not read.
+    func unwant(_ name: String) {
+        guard let at = wanted.firstIndex(of: name) else { return }
+        wanted.remove(at: at)
+        waiting[name] = nil
+    }
+
+    /// The newest wanted folders read, up to `mostReading` at once.
+    private func pump() {
+        while fetching.count < Self.mostReading, !held, let name = wanted.popLast() {
+            guard let folder = listing?.folder(name) else { continue }
+            fetching.insert(name)
+            let source = source
+            Task { [weak self] in
+                let result = await Task.detached { () -> Result<RaycastStore.Source.Read, RaycastStore.Problem> in
+                    do throws(RaycastStore.Problem) { return .success(try await source.readInfo(folder)) } catch { return .failure(error) }
+                }.value
+                self?.land(name, result)
+            }
+        }
+    }
+
+    private func land(_ name: String, _ result: Result<RaycastStore.Source.Read, RaycastStore.Problem>) {
+        fetching.remove(name)
+        landed[name] = result
+        if case .failure(.rateLimited) = result {
+            held = true
+            dlog.error("raycast store: GitHub limited the rows' reads; the rest wait for the next open")
+            // Their waiters run with nothing new, so nothing waits on a read that will not come.
+            let dropped = wanted
+            wanted = []
+            for name in dropped { for then in waiting.removeValue(forKey: name) ?? [] { then() } }
+        }
+        pump()
+        guard gathering == nil else { return }
+        gathering = Task { [weak self] in
+            try? await Task.sleep(for: Self.gather)
+            self?.settle()
+        }
+    }
+
+    /// The reads landed meanwhile put in `infos`, `icons` and `infoFailures` as one change each, then their waiters run.
+    private func settle() {
+        gathering = nil
+        let batch = landed
+        landed = [:]
+        var infos = infos, icons = icons, failures = infoFailures
+        for (name, result) in batch {
+            switch result {
+            case .success(let read): infos[name] = read.info; icons[name] = read.icon; failures[name] = nil
+            case .failure(let problem): failures[name] = problem.reason
+            }
+        }
+        self.infos = infos
+        self.icons = icons
+        infoFailures = failures
+        for name in batch.keys { for then in waiting.removeValue(forKey: name) ?? [] { then() } }
     }
 
     /// T6's install of a listed folder, `github:raycast/extensions/extensions/<folder>`, with no question and its answer;
