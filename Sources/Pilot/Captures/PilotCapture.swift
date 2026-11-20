@@ -262,11 +262,10 @@ final class PilotCapture {
             // The box's letters may have changed what the pick is for: the mode it ends in decides.
             let box = self.overlay?.box, purpose = self.overlay?.purpose ?? purpose
             self.overlay = nil
-            guard let box, box.timer > 0 else { return self.take(outcome, purpose: purpose, windows: windows) }
-            // A recording's timer is its count down; any other capture waits it out, then takes the screen.
-            if purpose == .record { return self.take(outcome, purpose: purpose, windows: windows, countdown: box.timer) }
-            if outcome.picked { return self.after(box.timer, outcome, purpose: purpose, windows: windows) }
-            self.take(outcome, purpose: purpose, windows: windows)
+            // A recording's box timer is its count down, off included; any other capture waits it out, then takes the screen.
+            if purpose == .record { return self.take(outcome, purpose: purpose, windows: windows, countdown: box?.timer) }
+            guard let box, box.timer > 0, outcome.picked else { return self.take(outcome, purpose: purpose, windows: windows) }
+            self.after(box.timer, outcome, purpose: purpose, windows: windows)
         }
         self.overlay = overlay
         overlay.show()
