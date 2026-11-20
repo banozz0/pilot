@@ -27,6 +27,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 
 # Raycast's public store pages 1 and 2 in store order, frozen 2026-11-19 (spec raycast-extensions-spike, Results).
@@ -63,28 +64,33 @@ def say(text=""):
     print(text, flush=True)
 
 
-# MARK: What the log may hold: counts and shapes, never the Mac's own data (T7 review 1). Rows are counted, with the first
-# row's fields and action labels; a title, subtitle or any text is its length; a URL keeps its scheme only (its host too
-# when it is one the harness itself reaches); a row named on a command line is its length. Only the harness's own names
-# pass whole: its sleep and its searches.
+# MARK: What the log may hold: counts and shapes, never the Mac's own data (T7 reviews 1 and 2). An allowlist: only the
+# structural keys below pass whole, with numbers, true, false and null; command ids (ext.<id>.<command>), programs in
+# the system's folders, the harness's own hosts and names, and the placeholders this writes (so redact can run again)
+# pass too. Every other value, a child's stdin included, is its length. Rows are counted, with the first row's field
+# names and action kinds; a URL keeps its scheme (and only the harness's own hosts).
 SAFE = {"", "a", "pilot", "t7victim"}
 HOSTS = {"www.google.com", "github.com", "api.github.com", "raw.githubusercontent.com", "registry.npmjs.org"}
-TEXT_KEYS = {"title", "subtitle", "accessory", "keywords", "section", "text", "markdown", "message", "pressed", "row", "id",
-             "tooltip", "placeholder", "value", "detail", "then", "query"}
-PLACE_KEYS = {"url", "target", "path", "folder"}
-URL = re.compile(r"([a-z][a-z0-9+.-]*://)([^/\s\"'?#<>]*)([^\s\"'<>]*)")
-FIELD = re.compile(r'("(?:%s)"\s*:\s*)"((?:[^"\\]|\\.)*)"' % "|".join(sorted(TEXT_KEYS | PLACE_KEYS)))
+STRUCTURAL = {"kind", "ran", "why", "ms", "pid", "mode", "exit", "firstLineMs", "peakFootprintMB", "type", "handler", "sync",
+              "method", "killable", "bytes", "rows", "status", "isLoading", "loading", "ack", "seq", "question", "esbuild"}
+SYSTEM = ("/bin/", "/usr/bin/", "/usr/sbin/", "/sbin/", "/opt/homebrew/bin/brew")
+URL = re.compile(r"([a-z][a-z0-9+.-]*://)(<host \d+ chars>|[^/\s\"'?#<>]*)(/<cut>|[^\s\"'<>]*)")
+PLACEHOLDER = re.compile(r"<(\d+ chars|cut|host \d+ chars)>")
+COMMAND_ID = re.compile(r"ext\.[a-z0-9-]+\.[A-Za-z0-9-]+")
+FIELD = re.compile(r'"([A-Za-z_]+)"(\s*:\s*)"((?:[^"\\]|\\.)*)"')
 
 
 def masked(text):
-    """A text as its length, unless it is one of the harness's own names."""
-    return text if text in SAFE else "<%d chars>" % len(text)
+    """A text as its length, unless it is the harness's own name, a command id or a placeholder this wrote."""
+    if text in SAFE or COMMAND_ID.fullmatch(text) or PLACEHOLDER.fullmatch(text):
+        return text
+    return "<%d chars>" % len(text)
 
 
 def unlinked(text):
     """Every URL in `text` cut to its scheme, and its host when it is the harness's own."""
     def cut(m):
-        host = m.group(2) if m.group(2) in HOSTS else "<host %d chars>" % len(m.group(2))
+        host = m.group(2) if m.group(2) in HOSTS or PLACEHOLDER.fullmatch(m.group(2)) else "<host %d chars>" % len(m.group(2))
         return m.group(1) + host + ("/<cut>" if m.group(3) else "")
     return URL.sub(cut, text)
 
@@ -100,42 +106,45 @@ def worded(args):
     """A child's arguments: its first word (a subcommand), flags, numbers and the harness's names whole, every other word
     its length; a shell line word by word."""
     def word(i, w):
-        return w if i == 0 or w.startswith("-") or w.isdigit() or w in SAFE else masked(w)
-    return [" ".join(word(j, x) for j, x in enumerate(a.split(" "))) if " " in a else word(i, a) for i, a in enumerate(args)]
-
-
-def place(text):
-    return unlinked(text) if URL.search(text) else masked(text)
+        return w if (i == 0 and w.isalnum()) or w.startswith("-") or w.isdigit() or w in SAFE or PLACEHOLDER.fullmatch(w) else masked(w)
+    def line(a):
+        return " ".join(word(j, x) for j, x in enumerate(re.findall(r"<[^<>]*>|[^ ]+", a)))
+    return [line(a) if " " in a and not PLACEHOLDER.fullmatch(a) else word(i, a) for i, a in enumerate(args)]
 
 
 def shaped(value, key=None):
     """A JSON answer or measure record with nothing of the Mac's own in it (see above)."""
     if isinstance(value, dict):
-        if isinstance(value.get("items"), list) and key != "row":
+        if isinstance(value.get("items"), list):
             rest = {k: shaped(v, k) for k, v in value.items() if k != "items"}
             items = [i for i in value["items"] if isinstance(i, dict)]
-            rest["items"] = {"rows": len(items), "firstRow": shaped(items[0], "row") if items else None}
+            first = items[0] if items else {}
+            rest["items"] = {"rows": len(items), "firstRow": {"fields": sorted(first), "actions": [kind(a) for a in first.get("actions", [])
+                                                                                                 if isinstance(a, dict)]} if items else None}
             return rest
-        if key == "row":
-            return {"title": masked(str(value.get("title", ""))), "fields": sorted(value),
-                    "actions": ["%s (%s)" % (a.get("title", "?"), kind(a))
-                                for a in value.get("actions", []) if isinstance(a, dict)]}
         return {k: shaped(v, k) for k, v in value.items()}
     if isinstance(value, list):
-        if key == "args" and all(isinstance(v, str) for v in value):
+        if key in ("args", "argv") and all(isinstance(v, str) for v in value):
             return worded(value)
+        if key == "fields":
+            return [v if isinstance(v, str) and v.isidentifier() else shaped(v) for v in value]
         return [shaped(v, key) for v in value]
     if isinstance(value, str):
         if key == "line":
             try:
                 return json.dumps(shaped(json.loads(value)), sort_keys=True, ensure_ascii=False)
             except ValueError:
-                return unlinked(FIELD.sub(lambda m: m.group(1) + json.dumps(masked(m.group(2))), value))
-        if key in TEXT_KEYS:
-            return masked(value)
-        if key in PLACE_KEYS:
-            return place(value)
-        return unlinked(value)
+                return masked(value)
+        if key in STRUCTURAL:
+            return value
+        if key in ("file", "program"):
+            # A program in the system's folders, or a bare name (`ps`), passes; any other path is its length.
+            return value if value.startswith(SYSTEM) or re.fullmatch(r"[A-Za-z0-9_.-]+", value) else masked(value)
+        if key == "host":
+            return value if value in HOSTS else masked(value)
+        if URL.match(value):
+            return unlinked(value)
+        return masked(value)
     return value
 
 
@@ -160,7 +169,11 @@ def shown(text):
                 continue
             except ValueError:
                 pass
-        out.append(unlinked(FIELD.sub(lambda m: m.group(1) + json.dumps(masked(m.group(2))), line)))
+        # A line JSON does not read (cut or plain): each "key": "value" outside the allowlist masked, an extension's own
+        # words ("<Extension> says: …") masked, URLs cut.
+        line = FIELD.sub(lambda m: m.group(0) if m.group(1) in STRUCTURAL else '"%s"%s%s' % (m.group(1), m.group(2), json.dumps(masked(m.group(3)))), line)
+        head, says, said = line.partition(" says: ")
+        out.append(unlinked(head + says + masked(said) if says else line))
     return "\n".join(out)
 
 
@@ -208,13 +221,27 @@ def pilot(args, ns, timeout=120):
 
 
 def hosts_left(ns):
-    """This sandbox's hosts still running (by the real host's path), and every pilot-ext-host on the Mac, with owners."""
+    """This sandbox's hosts still running, found by the real host's path, which no other slot runs."""
     mine = subprocess.run(["/usr/bin/pgrep", "-f", ns.host], capture_output=True, text=True).stdout.split()
-    every = subprocess.run(["/usr/bin/pgrep", "-lf", "pilot-ext-host"], capture_output=True, text=True).stdout.strip()
     say("# hosts of this sandbox left: %s" % (" ".join(mine) or "none"))
-    if every:
-        say("# every pilot-ext-host on this Mac (other slots run their own):\n" + every)
     return mine
+
+
+def reap():
+    """Removes the pilot-measure-<pid>-* folders a measured host left in the temporary folder when that host is gone
+    (one killed past its deadline never reaches its exit)."""
+    root = os.environ.get("TMPDIR") or tempfile.gettempdir()
+    for name in os.listdir(root):
+        m = re.fullmatch(r"pilot-measure-(\d+)-[0-9A-F-]+", name)
+        if not m:
+            continue
+        try:
+            os.kill(int(m.group(1)), 0)
+        except ProcessLookupError:
+            shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+            say("# reaped %s (its host is gone)" % name)
+        except PermissionError:
+            pass
 
 
 def chosen(ns):
@@ -411,6 +438,8 @@ def phase_act(ns):
         if isinstance(pressed, dict) and pressed.get("note", "").startswith("answered") and piece in json.dumps(pressed.get("action")):
             hit.append({"kind": kind, "answeredByPilot": pressed.get("action")})
             say("# the press answered a typed action, Pilot's to perform: %s" % json.dumps(shaped(pressed.get("action")), sort_keys=True))
+        # The verdict in the harness's own words: the call's kind and the text it was expected to hold, both the harness's.
+        say("# verdict: %s %s containing %s" % ("issued:" if hit else "NOT issued:", kind, json.dumps(piece)))
         result.update({"actExit": code, "calls": calls, "expected": "%s %s" % (kind, piece), "issued": bool(hit), "hostsLeft": len(left)})
         if folder == "kill-process":
             alive = subprocess.run(["/bin/kill", "-0", str(ns.victim)], capture_output=True).returncode == 0
@@ -512,7 +541,6 @@ def phase_probe(ns):
     """pilot-ext-host --measure on the probe extension (probe/ beside this file), started straight, no sandbox: one row per
     way a command could act on the Mac, each "ran" or "refused", then what the measure log recorded."""
     import sqlite3
-    import tempfile
     work = tempfile.mkdtemp(prefix="probe-", dir=ns.work)
     folder = os.path.join(work, "probe")
     shutil.copytree(os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe"), folder)
@@ -556,6 +584,8 @@ def main():
     parser.add_argument("--only")
     ns = parser.parse_args()
     ns.extensions = None
+    if ns.phase in ("run", "act", "probe"):
+        reap()
     {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary, "redact": phase_redact, "probe": phase_probe}[ns.phase](ns)
 
 
