@@ -32,8 +32,10 @@ struct DropdownPanelValues {
     struct Switch: Hashable {
         var which: Dropdown.Switch
         var on: Bool
-        /// What it is doing now: `Dropdown.Switch.state`.
+        /// What it is doing now: "Hyper+Space", "57 bound", "Off" (InstrumentDropdown's tile state).
         var state: String
+        /// Its glyph, Key binds' the layer key's own sign; nil draws the Caps Lock one.
+        var symbol: String? = nil
     }
 
     struct Running: Hashable {
@@ -123,13 +125,15 @@ struct DropdownPanelValues {
     var canCheckForUpdates = true
 }
 
-/// The tall Pilot menu (spec desktop-controls T2): reference 1794159386534's attachment, hierarchy and density with
-/// Pilot's own blocks: status with any problem first, the workspaces, six switches, what is running, the optional
-/// sound, connections, display, media and stats blocks (off by default), the commands with their keys, and the
-/// footer. One column at 344 pt on the pop radius, hung under Pilot's item by BarPanel as today's Dropdown is.
+/// The Pilot menu (spec desktop-controls T2, reshaped by pilot-ui-redesign T21 to S4 B, shot 4b): a head with Pilot's
+/// name and the Hyper chip, then the saved blocks in order: status with any problem first, the switch tiles, the
+/// workspaces, what is running, the optional sound, connections, display, media and stats blocks (off by default), the
+/// commands with their keys; then the footer's rows, Open Pilot and Quit Pilot. One column at 344 pt on the pop
+/// radius, hung under Pilot's item by BarPanel from the menu bar or Pilot's top bar.
 ///
 /// Each block sits in its own card, as the reference groups them (Sven's pick A, 2026-11-10, over one sheet between
-/// hairlines).
+/// hairlines); the switch tiles and the workspaces are cards themselves, so they stand on the panel (shot 4b). On is
+/// neutral (an ink disc); the signal colour marks Hyper and the current workspace alone (DESIGN.md).
 struct DropdownPanelFace: View {
     /// What a press asks for; the builder (T3, T4) runs it. Indexes are into the values' lists.
     enum Action: Hashable {
@@ -178,7 +182,7 @@ struct DropdownPanelFace: View {
     /// The header and the pinned cards, which stay put while the rest scroll.
     private func top(_ pinned: [[Dropdown.Block]]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            header.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, pinned.isEmpty ? 4 : 12)
+            header.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
             if !pinned.isEmpty { column(pinned) }
         }
     }
@@ -186,7 +190,11 @@ struct DropdownPanelFace: View {
     private func column(_ cards: [[Dropdown.Block]]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(cards, id: \.self) { card in
-                section(VStack(alignment: .leading, spacing: 12) { ForEach(card, id: \.self) { block($0) } })
+                if card.allSatisfy(Self.bare.contains) {
+                    VStack(alignment: .leading, spacing: 12) { ForEach(card, id: \.self) { block($0) } }.padding(.horizontal, 4)
+                } else {
+                    section(VStack(alignment: .leading, spacing: 12) { ForEach(card, id: \.self) { block($0) } })
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -256,6 +264,9 @@ struct DropdownPanelFace: View {
         }
     }
 
+    /// The blocks made of tiles, drawn on the panel without a card round them (shot 4b).
+    static let bare: Set<Dropdown.Block> = [.quickSwitches, .workspaces]
+
     /// A block in its own card.
     private func section(_ content: some View) -> some View { FaceCard(padding: 12) { content } }
 
@@ -298,38 +309,37 @@ struct DropdownPanelFace: View {
 
     // MARK: Header
 
-    /// Pilot's mark, the headline, Hyper's key in the signal colour; the arrange button at the right (T4's edit list).
+    /// Pilot's mark and name (the headline while something needs fixing), the Hyper chip at the right: "Hyper · Caps
+    /// Lock" in the signal colour while Hyper is live, plain while it is not. Under them, only when Hyper is not as usual,
+    /// the line that says why (Key binds off, Accessibility, a password field).
     private var header: some View {
-        HStack(alignment: .center, spacing: 11) {
-            InstrumentMark(size: 22).foregroundStyle(style.color(\.text)).frame(width: 30, height: 30)
-                .background(style.color(\.raised), in: RoundedRectangle(cornerRadius: style.radii.control, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: style.radii.control, style: .continuous).strokeBorder(style.color(\.line2)) }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(Dropdown.headline(isOn: values.pilotOn, problems: values.problems.count))
-                    .font(style.font(\.title, size: 14)).foregroundStyle(style.color(\.text))
-                HStack(spacing: 5) {
-                    if values.hyperOn, values.problems.isEmpty, values.trusted, !values.held {
-                        Text("Hyper is")
-                        InstrumentKey(text: values.layerSign, hyper: true)
-                        Text(values.layerName)
-                    } else {
-                        Text(Dropdown.hyperLine(hyperOn: values.hyperOn, launcherOn: values.launcherOn, trusted: values.trusted, secureInput: values.secureInput,
-                                                held: values.held, layerKey: values.layerName, problems: values.problems.count))
-                    }
-                }
-                .styleText(\.caption).foregroundStyle(style.color(\.text2))
+        let live = values.hyperOn && values.trusted && !values.secureInput
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                InstrumentMark(size: 15).foregroundStyle(style.color(\.text)).frame(width: 20, height: 20)
+                Text(values.problems.isEmpty ? "Pilot" : Dropdown.headline(isOn: values.pilotOn, problems: values.problems.count))
+                    .font(style.font(\.title, size: 15)).foregroundStyle(style.color(\.text)).lineLimit(1)
+                Spacer(minLength: 8)
+                hyperChip(live: live)
             }
-            Spacer(minLength: 0)
-            Button { act(.arrange) } label: {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(style.color(\.text2)).frame(width: 28, height: 28)
-                    .background(style.color(\.raised), in: Circle())
-                    .overlay { Circle().strokeBorder(style.color(\.line)) }
+            if !live {
+                Text(Dropdown.hyperLine(hyperOn: values.hyperOn, launcherOn: values.launcherOn, trusted: values.trusted, secureInput: values.secureInput,
+                                        held: values.held, layerKey: values.layerName, problems: values.problems.count))
+                    .styleText(\.caption).foregroundStyle(style.color(\.text2)).padding(.leading, 28)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .buttonStyle(FacePress(reduceMotion: reduceMotion))
-            .help("Arrange the menu")
-            .accessibilityLabel("Arrange the menu")
         }
+    }
+
+    private func hyperChip(live: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+        return Text(values.held && live ? "Hyper held" : "Hyper · \(values.layerName)")
+            .font(style.font(\.mono, size: 11)).lineLimit(1).fixedSize()
+            .foregroundStyle(style.color(live ? \.accentText : \.text2))
+            .padding(.horizontal, 8).frame(height: 24)
+            .background(style.color(live ? \.accentSoft : \.sunken), in: shape)
+            .overlay { shape.strokeBorder(style.color(live ? \.accentLine : \.line)) }
+            .accessibilityLabel(values.held && live ? "Hyper held" : "Hyper is \(values.layerName)\(live ? "" : ", off")")
     }
 
     // MARK: Blocks
@@ -362,33 +372,26 @@ struct DropdownPanelFace: View {
         }
     }
 
-    /// The workspaces in one row: the number in mono over its apps; the focused one ringed in the signal's line.
+    /// The workspaces in one row of numbered tiles under their eyebrow (shot 4b); the focused one ringed in the signal's
+    /// line, an empty one's number faint.
     private var workspaces: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            blockHead("Workspaces", values.screen)
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 8) {
+            InstrumentEyebrow(text: "Workspaces", role: \.text2).padding(.leading, 2).padding(.top, 6)
+            HStack(spacing: 6) {
                 ForEach(values.workspaces, id: \.self) { workspace in
-                    let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
+                    let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
                     Button { act(.workspace(workspace.name)) } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(workspace.name).font(style.font(\.key, size: 11))
-                            .foregroundStyle(style.color(workspace.current ? \.accentText : workspace.apps.isEmpty ? \.text2 : \.text))
-                        HStack(spacing: -3) {
-                            ForEach(Array(workspace.apps.prefix(3).enumerated()), id: \.offset) { _, icon in
-                                Image(nsImage: icon).resizable().frame(width: 15, height: 15)
-                            }
-                        }
-                        .frame(height: 15)
-                    }
-                    .padding(.horizontal, 7).padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, minHeight: 46, alignment: .topLeading)
-                    .background(style.color(workspace.current ? \.panel : \.sunken), in: shape)
-                    .overlay { shape.strokeBorder(style.color(workspace.current ? \.accentLine : \.line), lineWidth: workspace.current ? 1.5 : 1) }
-                    .contentShape(shape)
+                        Text(workspace.name).font(style.font(\.key, size: 12)).lineLimit(1)
+                            .foregroundStyle(style.color(workspace.current ? \.text : workspace.apps.isEmpty ? \.text3 : \.text2))
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .background(style.color(\.raised), in: shape)
+                            .overlay { shape.strokeBorder(style.color(workspace.current ? \.accentLine : \.line), lineWidth: workspace.current ? 1.5 : 1) }
+                            .contentShape(shape)
                     }
                     .buttonStyle(FacePress(reduceMotion: reduceMotion))
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Workspace \(workspace.name)")
+                    .accessibilityValue(workspace.apps.isEmpty ? "Empty" : "\(workspace.apps.count) apps")
                     .accessibilityAddTraits(workspace.current ? .isSelected : [])
                 }
             }
@@ -416,9 +419,9 @@ struct DropdownPanelFace: View {
         }
     }
 
-    /// The six switches: two columns of tiles with the glyph, the name and what it does now.
+    /// The switches as tiles, two to a row: the glyph in its disc, the name and what it does now (shot 4b).
     private var switches: some View {
-        FaceColumns(items: values.switches, columns: 2) { switchTile($0) }
+        FaceColumns(items: values.switches, columns: 2, spacing: 8) { switchTile($0) }
     }
 
     /// What a switch does now, as a sentence: its first letter raised, unless it starts with a name such as macOS.
@@ -427,26 +430,33 @@ struct DropdownPanelFace: View {
         return first.uppercased() + words.dropFirst()
     }
 
+    /// On is an ink disc with the glyph cut out of it, off a hairline ring with a faint glyph: neutral both, so the signal
+    /// stays Hyper's and the current workspace's.
     private func switchTile(_ item: DropdownPanelValues.Switch) -> some View {
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: style.radii.card, style: .continuous)
         return Button { act(.toggle(item.which)) } label: {
-            HStack(spacing: 9) {
-                FaceGlyph(symbol: item.which.symbol(layerKeys: [.capsLock]), on: item.on, size: 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.which.title).styleText(\.strong).foregroundStyle(style.color(item.on ? \.text : \.text2)).lineLimit(1)
-                    Text(Self.sentence(item.state)).styleText(\.small)
-                        .foregroundStyle(style.color(\.text2)).lineLimit(1).minimumScaleFactor(0.85)
+            HStack(spacing: 10) {
+                Image(systemName: item.symbol ?? item.which.symbol(layerKeys: [.capsLock]))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(style.color(item.on ? \.onInverse : \.text3))
+                    .frame(width: 30, height: 30)
+                    .background { if item.on { Circle().fill(style.color(\.inverse)) } }
+                    .overlay { if !item.on { Circle().strokeBorder(style.color(\.line2)) } }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.which.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
+                    Text(item.state).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1).minimumScaleFactor(0.85)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            .background(style.color(item.on ? \.panel : \.sunken), in: shape)
-            .overlay { shape.strokeBorder(style.color(item.on ? \.line2 : \.line)) }
+            .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+            .background(style.color(\.raised), in: shape)
+            .overlay { shape.strokeBorder(style.color(\.line)) }
             .contentShape(shape)
         }
         .buttonStyle(FacePress(reduceMotion: reduceMotion))
         .accessibilityLabel(item.which.title)
-        .accessibilityValue(item.on ? "On" : "Off")
+        .accessibilityValue(item.on ? "On, \(item.state)" : "Off")
     }
 
     /// What runs now: a recording, a focus timer, a download, each with its reading and its buttons.
@@ -627,39 +637,66 @@ struct DropdownPanelFace: View {
         }
     }
 
-    /// Check for updates at the left (lit while one is ready, left out when the build has nowhere to check), Settings and
-    /// Quit with their keys at the right.
+    /// The footer's rows under a hairline (shot 4b): Check for updates while the build has somewhere to check (Update
+    /// ready, lit, once one waits), Open Pilot and Quit Pilot with their ⌘ keys. A row lights under the pointer, as a
+    /// menu's does.
     private var footer: some View {
         VStack(spacing: 0) {
-            InstrumentRule()
-            HStack(spacing: 14) {
-                if values.canCheckForUpdates || values.updateReady { updates }
-                Spacer(minLength: 0)
-                Button { act(.settings) } label: {
-                    HStack(spacing: 5) { Image(systemName: "gearshape").font(.system(size: 11, weight: .medium)); Text("Settings"); InstrumentKey(text: "⌘,") }
+            InstrumentRule().padding(.horizontal, 14)
+            VStack(spacing: 2) {
+                if values.updateReady {
+                    FooterRow(title: "Update ready", reduceMotion: reduceMotion, glyph: { FaceLiveDot(size: 7) }) { act(.updates) }
+                } else if values.canCheckForUpdates {
+                    FooterRow(title: "Check for updates", symbol: "arrow.triangle.2.circlepath", reduceMotion: reduceMotion) { act(.updates) }
                 }
-                .buttonStyle(FacePress(reduceMotion: reduceMotion))
-                Button { act(.quit) } label: { HStack(spacing: 5) { Text("Quit"); InstrumentKey(text: "⌘Q") } }
-                    .buttonStyle(FacePress(reduceMotion: reduceMotion))
+                FooterRow(title: "Open Pilot", symbol: "macwindow", keys: ["⌘", ","], reduceMotion: reduceMotion) { act(.settings) }
+                FooterRow(title: "Quit Pilot", symbol: "power", keys: ["⌘", "Q"], reduceMotion: reduceMotion) { act(.quit) }
             }
-            .styleText(\.caption).foregroundStyle(style.color(\.text2))
-            .padding(.horizontal, 14).frame(height: 40)
+            .padding(6)
         }
     }
 }
 
-extension DropdownPanelFace {
-    fileprivate var updates: some View {
-        Button { act(.updates) } label: {
-            HStack(spacing: 6) {
-                if values.updateReady { FaceLiveDot() } else {
-                    Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 11, weight: .medium))
-                }
-                Text(values.updateReady ? "Update ready" : "Check for updates")
+/// One of the footer's rows: a glyph, the title, its ⌘ key faint at the right; the raised fill under the pointer.
+private struct FooterRow<Glyph: View>: View {
+    @Environment(\.style) private var style
+    let title: String
+    /// Its ⌘ key as legends, so the ⌘ sign draws as Instrument's keys draw it.
+    var keys: [String] = []
+    var reduceMotion = false
+    @ViewBuilder var glyph: Glyph
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                glyph.frame(width: 18)
+                Text(title).styleText(\.body).foregroundStyle(style.color(\.text)).lineLimit(1)
+                Spacer(minLength: 6)
+                HStack(spacing: 1) { ForEach(keys, id: \.self) { InstrumentLegend(text: $0) } }.foregroundStyle(style.color(\.text3))
             }
+            .padding(.horizontal, 8).frame(minHeight: 32)
+            .background(style.color(\.raised).opacity(hovered ? 1 : 0), in: RoundedRectangle(cornerRadius: style.radii.control, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(FacePress(reduceMotion: reduceMotion))
+        .onHover { hovered = $0 }
+        .accessibilityLabel(title)
+        .accessibilityValue(keys.joined())
     }
+}
+
+extension FooterRow where Glyph == FooterSymbol {
+    init(title: String, symbol: String, keys: [String] = [], reduceMotion: Bool = false, action: @escaping () -> Void) {
+        self.init(title: title, keys: keys, reduceMotion: reduceMotion, glyph: { FooterSymbol(symbol: symbol) }, action: action)
+    }
+}
+
+private struct FooterSymbol: View {
+    @Environment(\.style) private var style
+    let symbol: String
+    var body: some View { Image(systemName: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(style.color(\.text2)) }
 }
 
 /// The panel with a room (DropdownPanelFace): the header and pinned cards, the scroll, the footer, stacked. As tall as its

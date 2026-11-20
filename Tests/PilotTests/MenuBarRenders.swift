@@ -116,6 +116,107 @@ struct MenuBarRenders {
         }
     }
 
+    /// The one Pilot menu (spec pilot-ui-redesign T21, S4 B, shot 4b) hung under Pilot's item in the macOS menu bar and in
+    /// Pilot's top bar, in Tokyo Night and Porcelain: the four switch tiles, the workspaces, Open Pilot and Quit Pilot. The
+    /// values go through InstrumentDropdown.arrange with a new install's layout, so the layout decides what shows. Also Key
+    /// binds off (the head's Hyper line, Check for updates in the footer) and the Desktop › Pilot menu editor's switch rows.
+    /// Glass off, as glass draws nothing offscreen. Written to PILOT_RENDER_DIR/menubar/pilot-menu-panel-*.png:
+    /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter MenuBarRenders/pilotMenuPanel`
+    @Test("The Pilot menu from the menu bar and the top bar, as shot 4b", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func pilotMenuPanel() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch real data")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("menubar")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let was = (look.style, look.themeID, look.glass)
+        defer { (look.style, look.themeID, look.glass) = was }
+        (look.style, look.glass) = (.instrument, false)
+        let walls = DesktopControlsRenders.walls()
+
+        var values = DropdownPanelValues()
+        values.layerName = "Caps Lock"
+        values.workspaces = ["1", "2", "3", "4"].map { .init(name: $0, apps: $0 == "3" ? [] : [DesktopControlsRenders.icon("Safari")], current: $0 == "1") }
+        let shot: [Dropdown.Switch: (Bool, String)] = [.launcher: (true, "Hyper+Space"), .hyper: (true, "57 bound"), .tiling: (false, "Off"),
+                                                       .clipboard: (false, "Off"), .topBar: (true, "macOS bar hidden"), .keepAwake: (false, "Sleeps as usual"),
+                                                       .dictation: (true, "A tap dictates")]
+        values.switches = Dropdown.Switch.allCases.map { .init(which: $0, on: shot[$0]!.0, state: shot[$0]!.1, symbol: $0.symbol(layerKeys: [.capsLock])) }
+        values.canCheckForUpdates = false
+        InstrumentDropdown.arrange(&values, layout: .pilotMenu, problems: false)
+        #expect(values.switches.map(\.which) == Dropdown.Switch.four, "the new install's menu shows the four switches")
+
+        var off = values
+        off.hyperOn = false
+        off.pilotOn = false
+        off.switches = off.switches.map { $0.which == .hyper ? .init(which: .hyper, on: false, state: "Off", symbol: $0.symbol) : $0 }
+        off.canCheckForUpdates = true
+
+        for (name, theme) in [("tokyo-night", "tokyo-night"), ("porcelain", "porcelain")] {
+            look.themeID = theme
+            let tokens = StyleTokens.of(.instrument, theme: look.theme)
+            let backdrop = walls[tokens.dark ? 0 : min(5, walls.count - 1)]
+            func write(_ view: some View, _ file: String) throws {
+                let rep = try #require(snapshot(drawing: view.style(tokens), scale: 2), "\(file) did not draw")
+                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("pilot-menu-panel-\(file)-\(name).png"))
+            }
+            try write(MenuStage(values: values, from: .menuBar, backdrop: backdrop), "menubar")
+            try write(MenuStage(values: values, from: .topBar, backdrop: backdrop), "topbar")
+            try write(MenuStage(values: off, from: .menuBar, backdrop: backdrop), "keybinds-off")
+
+            // The editor's switch rows on Desktop › Pilot menu, with the new install's layout.
+            let suite = "pilot.renders.pilot-menu-editor"
+            UserDefaults().removePersistentDomain(forName: suite)
+            let store = DropdownLayoutStore(defaults: try #require(UserDefaults(suiteName: suite)))
+            try store.setOrder(Dropdown.Layout.pilotMenu.order)
+            try store.setHidden(Dropdown.Layout.pilotMenu.hidden)
+            store.setSwitches(Dropdown.Layout.pilotMenu.switches)
+            try writeRender(DropdownEditor(store: store).frame(width: 640).padding(16).styled(.window, look: look).pilotTheme(look: look).background(Theme.background),
+                            to: dir.appendingPathComponent("pilot-menu-panel-editor-\(name).png"))
+        }
+    }
+
+    /// The panel hung under Pilot's item, as BarPanel hangs it: from the macOS menu bar (the item near the clock, the
+    /// panel's right edge under it) or from Pilot's top bar (DesktopControlsRenders' strip, the item at the left).
+    struct MenuStage: View {
+        enum From { case menuBar, topBar }
+        @Environment(\.style) private var style
+        let values: DropdownPanelValues
+        let from: From
+        let backdrop: NSImage
+
+        var body: some View {
+            VStack(alignment: from == .menuBar ? .trailing : .leading, spacing: 6) {
+                switch from {
+                case .menuBar: macBar
+                case .topBar: DesktopControlsRenders.BarStage(width: 640, pilotLit: true) { EmptyView() }
+                }
+                DropdownPanelFace(values: values).padding(.horizontal, from == .menuBar ? 96 : 6).padding(.bottom, 32)
+            }
+            .frame(width: 640, alignment: .topLeading)
+            .background(alignment: .top) { DesktopControlsRenders.Wallpaper(image: backdrop) }
+        }
+
+        /// macOS's menu bar as a stand-in: the front app's menus, then Pilot's item lit, two others and the clock.
+        private var macBar: some View {
+            HStack(spacing: 16) {
+                Text("Finder").fontWeight(.semibold)
+                ForEach(["File", "Edit", "View"], id: \.self) { Text($0) }
+                Spacer()
+                InstrumentMark(size: 13).frame(width: 30, height: 20)
+                    .background(style.color(\.text).opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                Image(systemName: "waveform")
+                Image(systemName: "slider.horizontal.3")
+                Text("Fri 20 Nov  14:30")
+            }
+            .font(.system(size: 13)).foregroundStyle(style.color(\.text))
+            .padding(.horizontal, 14).frame(width: 640, height: 26)
+            .background(style.color(\.canvas).opacity(0.72))
+        }
+    }
+
     /// The Menu bar page's Bar layout block (Sven on build 2577: the Preset and Islands rows "flush into each other"):
     /// Full strip Attached and Pills Floating, Instrument on Tokyo Night, each row its own BlockRow.
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter MenuBarRenders/barLayout`

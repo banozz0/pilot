@@ -39,13 +39,12 @@ struct DropdownEditor: View {
                         return true
                     }
             }
-            BlockRow(first: false) {
-                SwitchPicks(shown: store.layout.switches) { which, on in store.show(switch: which, on) }
-            }
+            SwitchPicks(shown: store.layout.switches) { which, on in store.show(switch: which, on) }
             BlockRow(first: false) {
                 ExtensionPicks(title: "In the Extensions card", held: store.layout.extensions, bar: extensionBar) { id, on in
                     store.hold(extension: id, on)
                 }
+                .padding(.vertical, 12)
             }
         }
         .background { ScreenAnchor(box: anchor) }
@@ -58,7 +57,11 @@ struct DropdownEditor: View {
         return HStack(spacing: 10) {
             GripDots().foregroundStyle(ink.muted).frame(width: 14).help("Drag to move")
             Image(systemName: block.symbol).font(ink.ui(12.5)).frame(width: 18)
-            Text(block.title).foregroundStyle(shown ? ink.text : ink.muted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(block.title).foregroundStyle(shown ? ink.text : ink.muted)
+                // Hidden, Status still comes back while a problem waits (Dropdown.Layout.shown(problems:)).
+                if block == .status, !shown { Text("Still shows while something needs fixing").font(ink.ui(11.5)).foregroundStyle(ink.muted) }
+            }
             Spacer()
             IconButton(symbol: pinned ? "pin.fill" : "pin", label: pinned ? "Unpin \(block.title)" : "Pin \(block.title)", size: 22, glyph: 11) {
                 withAnimation(Kit.change) { store.pin(block, !pinned) }
@@ -73,18 +76,26 @@ struct DropdownEditor: View {
     }
 }
 
-/// The quick switches the Pilot menu's Switches block can show, each a switch row (spec pilot-ui-redesign T20).
+/// The quick switches the Pilot menu's Switches block can show (spec pilot-ui-redesign T20), under their own head: a row
+/// each in the block rows' columns, its own glyph and its switch (T21's restyle).
 struct SwitchPicks: View {
     @Environment(\.ink) private var ink
     let shown: Set<Dropdown.Switch>
     let set: (Dropdown.Switch, Bool) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("In the Switches block").font(ink.ui(12.5, .medium)).foregroundStyle(ink.text2)
-            ForEach(Dropdown.Switch.allCases, id: \.self) { which in
-                Toggle(which.title, isOn: Binding(get: { shown.contains(which) }, set: { on in withAnimation(Kit.change) { set(which, on) } }))
-                    .toggleStyle(.pilotSwitchRow)
+        BlockRow(first: false) {
+            Text("In the Switches block").font(ink.ui(12.5, .medium)).foregroundStyle(ink.text2).padding(.top, 10)
+        }
+        ForEach(Dropdown.Switch.allCases, id: \.self) { which in
+            let on = shown.contains(which)
+            BlockRow(first: false) {
+                Color.clear.frame(width: 14)
+                Image(systemName: which.symbol(layerKeys: Engine.shared?.settings.layerKeys ?? [.capsLock])).font(ink.ui(12.5)).frame(width: 18)
+                Text(which.title).foregroundStyle(on ? ink.text : ink.muted)
+                Spacer()
+                Toggle("Show \(which.title)", isOn: Binding(get: { on }, set: { on in withAnimation(Kit.change) { set(which, on) } }))
+                    .labelsHidden().toggleStyle(.pilotSwitch)
             }
         }
     }
