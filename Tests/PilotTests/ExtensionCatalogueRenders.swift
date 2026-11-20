@@ -9,7 +9,8 @@ import Testing
 /// The one Extensions list (Q601, pilot-1-1 T7) drawn offscreen on the fixture catalogue: Claude Sessions not installed
 /// (its install failed, so its detail says why), Pomodoro installed at 0.9.0 (an update), Ports installed at its version.
 /// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
-/// when it could not be.
+/// when it could not be. Then Raycast's store (raycast-extensions T24): the page's Raycast Store, Hyper+Space's Raycast
+/// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed.
 /// Temporary folders and a fixture source only; opt-in like the other renders:
 /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter ExtensionCatalogueRenders`
 extension SharedLook {
@@ -64,6 +65,53 @@ struct ExtensionCatalogueRenders {
         try await shot("instrument-installed", loaded, style: .instrument, theme: "nightwatch", pick: "pomodoro")
         try await shot("instrument-failed", failed, style: .instrument, theme: "nightwatch")
         try await shot("instrument-reading", reading, style: .instrument, theme: "nightwatch")
+
+        // Raycast's store (raycast-extensions T24) on a fixture listing: the page's Raycast Store with Kill Process picked
+        // and read, Brew read, the rest by folder name; Hyper+Space's Raycast Store over the same model; and the root
+        // search for each word that offers it, its first rows printed.
+        let (store, storeDir) = try Self.storeModel()
+        defer { try? FileManager.default.removeItem(at: storeDir) }
+        await store.open()
+        await store.info("kill-process")
+        await store.info("brew")
+        look.themeID = "nightwatch"
+        look.style = .instrument
+        let settings = await Self.settings(loaded)
+        let page = Ground { ExtensionsPageView(onScreen: false, settings: settings, store: true, storeModel: store).frame(width: 1000, height: 640) }
+            .styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(page, to: out.appendingPathComponent("instrument-raycast-store.png"), wait: 0.6)
+        var nav = MenuNavigator(list: [], title: RaycastStoreMenu.title, live: true)
+        nav.replaceList(RaycastStoreMenu(model: store).rows())
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: nav)), "menu-raycast-store", in: out)
+        let entries = MenuEntries.build(apps: [], actions: Engine().bindActions, store: BindStore(defaults: [:]), roleApps: [:],
+                                        menu: AppsModule.menuID, openID: AppsModule.openID(bundle:), running: [])
+        for word in ["raycast", "store", "install"] {
+            var root = MenuNavigator(entries: entries)
+            root.query = word
+            print("ROOT \(word): " + root.rows.prefix(6).enumerated().map { "\($0.offset + 1). \($0.element.title)" }.joined(separator: " | ")
+                  + " … Raycast Store at \((root.rows.firstIndex { $0.target == .action(RaycastStoreMenu.actionID) } ?? -2) + 1) of \(root.rows.count)")
+            if word == "raycast" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-raycast", in: out) }
+        }
+    }
+
+    /// A store model on a fixture listing of four folders, two with a package.json, in a temporary folder of its own.
+    static func storeModel() throws -> (RaycastStoreModel, URL) {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "raycast-store-render-\(UUID().uuidString)")
+        let fixture = dir.appending(path: "github")
+        let folders = ["brew", "google-chrome", "kill-process", "obsidian"]
+        let tree = folders.enumerated().map { #"{"path":"\#($1)","type":"tree","sha":"\#(String(repeating: "\($0 + 1)", count: 40))"}"# }
+        try FileManager.default.createDirectory(at: fixture.appending(path: "kill-process/assets"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: fixture.appending(path: "brew"), withIntermediateDirectories: true)
+        try Data(#"{"tree":[\#(tree.joined(separator: ","))],"truncated":false}"#.utf8).write(to: fixture.appending(path: "tree.json"))
+        try Data(#"{"name":"kill-process","title":"Kill Process","description":"Terminate processes sorted by CPU or memory usage","icon":"icon.png","author":"rolandleth","commands":[{"name":"index"}]}"#.utf8)
+            .write(to: fixture.appending(path: "kill-process/package.json"))
+        try Data(#"{"name":"brew","title":"Brew","description":"Search and install Homebrew formulae and casks","author":"nhojb","commands":[{"name":"search"},{"name":"installed"}]}"#.utf8)
+            .write(to: fixture.appending(path: "brew/package.json"))
+        let icon = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/webapp-icons/x.png")
+        try FileManager.default.copyItem(at: icon, to: fixture.appending(path: "kill-process/assets/icon.png"))
+        let extensions = dir.appending(path: "Extensions")
+        try FileManager.default.createDirectory(at: extensions, withIntermediateDirectories: true)
+        return (RaycastStoreModel(source: .standIn(fixture, cache: dir.appending(path: "cache")), extensions: extensions), dir)
     }
 
     /// The page's state on `model`'s Extensions folder, read, with no Keychain or settings of Sven's.

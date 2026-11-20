@@ -10,7 +10,8 @@ import SwiftUI
 /// one's is Get, what you get, its commands and what it will touch, nothing installed before Get. The catalogue is read
 /// from GitHub only while the page shows (kept ten minutes); while it is read three quiet rows stand in, and when it is
 /// out of reach one line says so with Try again, the installed rows untouched. A link or a stopped run lands on one row:
-/// it is picked, scrolled to and wears the focus border a moment. Drawn in Instrument from the Ink (ADR 0008).
+/// it is picked, scrolled to and wears the focus border a moment. Raycast Store, above the list, swaps it for Raycast's
+/// store (RaycastStoreView, raycast-extensions T24) and back. Drawn in Instrument from the Ink (ADR 0008).
 struct ExtensionsPageView: View {
     @Environment(\.ink) private var ink
     /// The app window shows: the folder is read again as it does, and the catalogue read (kept ten minutes).
@@ -33,6 +34,9 @@ struct ExtensionsPageView: View {
     @State private var lit: String?
     /// Measured, never assumed: starting wide would hold the side column open and the page past a narrow window.
     @State private var wide = false
+    /// Raycast's store shows in place of the list and its detail.
+    @State private var store: Bool
+    private let storeModel: RaycastStoreModel
 
     /// The page's state; a render points it at a folder of its own.
     static var make: () -> ExtensionsSettings = { ExtensionsSettings() }
@@ -49,8 +53,10 @@ struct ExtensionsPageView: View {
     /// `pick` the row picked first (a render's); the first row otherwise.
     init(onScreen: Bool = true, focus: Binding<String?> = .constant(nil), toCatalogue: Bool = false, landedCatalogue: @escaping () -> Void = {},
          settings: ExtensionsSettings? = nil, pick: String? = nil, editBind: @escaping (String) -> Void = { _ in },
-         openPage: @escaping (String) -> Void = { _ in }) {
+         openPage: @escaping (String) -> Void = { _ in }, store: Bool = false, storeModel: RaycastStoreModel = .shared) {
         self.onScreen = onScreen
+        _store = State(initialValue: store)
+        self.storeModel = storeModel
         _focus = focus
         self.toCatalogue = toCatalogue
         self.landedCatalogue = landedCatalogue
@@ -73,15 +79,22 @@ struct ExtensionsPageView: View {
         VStack(spacing: 0) {
             toolbar(listing)
             ink.line.frame(height: 1)
-            HStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    list(listing, current: current?.id)
-                        .onChange(of: lit) { if let lit { withAnimation(Kit.change) { proxy.scrollTo(lit, anchor: .center) } } }
-                        .onChange(of: toCatalogue ? catalogue.load : nil, initial: true) { landCatalogue(proxy) }
+            if store {
+                RaycastStoreView(model: storeModel, onScreen: onScreen) { id in
+                    withAnimation(Kit.change) { store = false }
+                    focus = id
                 }
-                .frame(width: Self.listWidth)
-                ink.line.frame(width: 1)
-                detail(current).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                HStack(spacing: 0) {
+                    ScrollViewReader { proxy in
+                        list(listing, current: current?.id)
+                            .onChange(of: lit) { if let lit { withAnimation(Kit.change) { proxy.scrollTo(lit, anchor: .center) } } }
+                            .onChange(of: toCatalogue ? catalogue.load : nil, initial: true) { landCatalogue(proxy) }
+                    }
+                    .frame(width: Self.listWidth)
+                    ink.line.frame(width: 1)
+                    detail(current).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -131,19 +144,26 @@ struct ExtensionsPageView: View {
 
     // MARK: The toolbar
 
-    /// All, Installed and Updates with their counts, the search over both, and the Extensions folder.
+    /// All, Installed and Updates with their counts, Raycast Store, the search over the list, and the Extensions folder;
+    /// while the store shows, only Raycast Store (lit, a press goes back) and the folder.
     private func toolbar(_ listing: ExtensionsPage.Listing) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
-                ForEach(ExtensionsPage.Filter.allCases, id: \.self) { f in
-                    Button { withAnimation(Kit.change) { filter = f } } label: { Chip(text: f.title, on: filter == f, count: "\(listing.count(f))") }
-                        .buttonStyle(.kitPress)
-                        .accessibilityLabel("\(f.title), \(listing.count(f))")
-                        .accessibilityAddTraits(filter == f ? .isSelected : [])
+                if !store {
+                    ForEach(ExtensionsPage.Filter.allCases, id: \.self) { f in
+                        Button { withAnimation(Kit.change) { filter = f } } label: { Chip(text: f.title, on: filter == f, count: "\(listing.count(f))") }
+                            .buttonStyle(.kitPress)
+                            .accessibilityLabel("\(f.title), \(listing.count(f))")
+                            .accessibilityAddTraits(filter == f ? .isSelected : [])
+                    }
                 }
+                Button { withAnimation(Kit.change) { store.toggle() } } label: { Chip(text: "Raycast Store", on: store) }
+                    .buttonStyle(.kitPress)
+                    .help(store ? "Back to your extensions" : "Search and install extensions from github.com/raycast/extensions")
+                    .accessibilityAddTraits(store ? .isSelected : [])
             }
             Spacer(minLength: 12)
-            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.total, "extension"))", text: $query).frame(maxWidth: 220)
+            if !store { SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.total, "extension"))", text: $query).frame(maxWidth: 220) }
             Button { ScriptsModule.openFolder(Extension.folder) } label: { Label("Folder", systemImage: "folder") }
                 .buttonStyle(.pilot)
                 .help("Opens \(Self.folderPath)")
