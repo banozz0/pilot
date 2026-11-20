@@ -8,7 +8,8 @@ import Foundation
 public enum FocusFollowsMouse {
     /// How long the pointer must rest before focus moves, so a sweep across windows never flickers focus on the way.
     public static let settle: TimeInterval = 0.12
-    /// The window server's level for menus (kCGPopUpMenuWindowLevel): one on screen means a menu is open.
+    /// The window server's level for menus (kCGPopUpMenuWindowLevel): one on screen, any app's or Pilot's (its ring),
+    /// means a menu is open.
     public static let menuLayer = 101
     /// A window showing less than this of itself on the pointer's screen, a strip's sliver or a window parked in a
     /// corner, never takes focus: focusing it would scroll the strip or bring a hidden window back.
@@ -69,7 +70,8 @@ public enum FocusFollowsMouse {
         if holds.buttons { return .stay(.buttons) }
         if holds.pilotPanel { return .stay(.pilotPanel) }
         let seen = windows.filter { !$0.lookThrough && $0.alpha > 0 }
-        if seen.contains(where: { $0.layer >= menuLayer && !screens.contains($0.frame) }) { return .stay(.menuOpen) }
+        // The menu level alone: a banner, a tip or another app's overlay above it never holds focus for as long as it shows.
+        if seen.contains(where: { $0.layer == menuLayer && !screens.contains($0.frame) }) { return .stay(.menuOpen) }
         // The front window under the pointer, as a drag finds it: another app's normal window or Pilot's own laid-out one.
         guard let i = MouseDrag.hit(point, among: seen.map { ($0.layer, $0.alpha, $0.frame, $0.own) }, screens: screens) else {
             return .stay(.notAWindow)

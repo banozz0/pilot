@@ -109,6 +109,8 @@ struct WindowBorderTests {
         #expect(decide("rests on the left tile beside the floating window", 100, 800, focused: 3) == .focus(1))
         #expect(decide("a button held", 1400, 500, holds: .init(buttons: true)) == .stay(.buttons))
         #expect(decide("a menu open", 1400, 500, [menu] + world) == .stay(.menuOpen))
+        let banner = F.Listed(id: 13, layer: 102, frame: CGRect(x: 1560, y: 48, width: 340, height: 90), own: true)
+        #expect(decide("Pilot's banner showing in a corner", 1400, 500, [banner] + world) == .focus(2))
         #expect(decide("Hyper+Space open", 1400, 500, holds: .init(pilotPanel: true)) == .stay(.pilotPanel))
         #expect(decide("the focused window shows a sheet", 1400, 500, focused: 1, holds: .init(sheet: true)) == .stay(.sheet))
         #expect(decide("over the menu bar", 500, 10) == .stay(.notAWindow))
