@@ -115,7 +115,7 @@ extension ControlVerbs {
         // The first Allow reads the page; the press asks its own, built from what the page answered, naming what runs.
         let reading = ["to find \(ControlGate.Ask.visible(word)) on it; the press asks again"]
         return try await tools.readBack(ext, page.command, reading, peer: peer) { () throws(ControlError) in
-            let inputs = try await tools.inputs(ext)
+            let inputs = try await tools.inputs(ext, page.command)
             let before = try await Self.blocks(of: page, ext, tools, inputs)
             let target = try Self.target(word, in: Self.targets(before), page: ext.id)
             let action = try Self.pressed(target, args)
@@ -146,7 +146,7 @@ extension ControlVerbs {
             else { try args.word(2, "row, by its title as pilot ext run \(command.actionID) shows it (or row/action), or --handler <id>") }
         let reading = ["to find \(word.map(ControlGate.Ask.visible) ?? "its form") in it; the press asks again"]
         return try await tools.readBack(ext, command, reading, peer: peer) { () throws(ControlError) in
-            let inputs = try await tools.inputs(ext)
+            let inputs = try await tools.inputs(ext, command)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
             do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, query: args.value("query") ?? "", then: args.value("then"), fill: filling ? args : nil, in: session, command, ext, tools, peer: peer)) }

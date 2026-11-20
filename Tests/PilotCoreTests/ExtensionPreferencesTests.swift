@@ -113,16 +113,16 @@ struct ExtensionPreferencesTests {
         let data = try folder("data"), cache = try folder("cache")
         defer { [ext.folder, data, cache].forEach { try? FileManager.default.removeItem(at: $0) } }
         let storage = ExtensionStorage(data: data, cache: cache, keychain: FakeKeychain())
-        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[1])) { try storage.inputs(for: ext) }
+        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[1])) { try storage.inputs(for: ext, command: nil) }
         try storage.set(.string(""), for: ext.preferences[1], of: ext)
-        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[1])) { try storage.inputs(for: ext) }
+        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[1])) { try storage.inputs(for: ext, command: nil) }
         #expect(ExtensionStorage.Unset(preference: ext.preferences[1]).message(in: ext) == "Demo needs PIN set first.")
         try storage.set(.string("pw-SAMPLE-41"), for: ext.preferences[1], of: ext)
         try storage.set(.string(""), for: ext.preferences[0], of: ext)
-        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[0])) { try storage.inputs(for: ext) }
+        #expect(throws: ExtensionStorage.Unset(preference: ext.preferences[0])) { try storage.inputs(for: ext, command: nil) }
         try storage.set(nil, for: ext.preferences[0], of: ext)
 
-        let inputs = try storage.inputs(for: ext)
+        let inputs = try storage.inputs(for: ext, command: nil)
         #expect(inputs.data == data.appending(path: "demo/data") && inputs.cache == cache.appending(path: "demo"))
         var isFolder: ObjCBool = false
         #expect(FileManager.default.fileExists(atPath: inputs.data.path, isDirectory: &isFolder) && isFolder.boolValue)
@@ -137,7 +137,7 @@ struct ExtensionPreferencesTests {
         defer { [ext.folder, data, cache].forEach { try? FileManager.default.removeItem(at: $0) } }
         let storage = ExtensionStorage(data: data, cache: cache, keychain: FakeKeychain())
         try storage.set(.string("pw-SAMPLE-41"), for: ext.preferences[1], of: ext)
-        let inputs = try storage.inputs(for: ext)
+        let inputs = try storage.inputs(for: ext, command: nil)
         let output = try await ExtensionRun.output(ext.commands[0], inputs: inputs, environment: ["HOME": "/Users/test", "PATH": "/usr/bin:/bin"])
         let parts = output.components(separatedBy: "---\n")
         let message = try JSONDecoder().decode([String: JSONValue].self, from: Data(parts[0].utf8))

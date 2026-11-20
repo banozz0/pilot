@@ -59,15 +59,22 @@ public enum RaycastManifest {
 
     /// The extension's preferences, then each command's, as one list, as `getPreferenceValues()` answers them all: a
     /// name given twice keeps its first. Read and checked as an extension.json preference is, its title its `title`,
-    /// else a checkbox's `label`, else its name.
+    /// else a checkbox's `label`, else its name. A command's own is scoped to the commands that declare it (T28), so a
+    /// required one stops only those (Summarize asked for an Anthropic key before any command); the extension's stays
+    /// every command's.
     static func preferences(_ manifest: Manifest) throws -> [Extension.Preference] {
+        let shared = Set((manifest.preferences ?? []).map(\.name))
+        var declaring: [String: Set<String>] = [:]
+        for c in manifest.commands { for p in c.preferences ?? [] where !shared.contains(p.name) { declaring[p.name, default: []].insert(c.name) } }
         var names = Set<String>()
         return try ((manifest.preferences ?? []) + manifest.commands.flatMap { $0.preferences ?? [] }).compactMap { p in
             guard names.insert(p.name).inserted else { return nil }
             guard let type = kinds[p.type] else { throw Extension.Problem.unknownPreferenceType(preference: p.name, type: p.type) }
             let title = [p.title, p.label].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? p.name
-            return try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
+            var preference = try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
                                                                       default: dropdownDefault(macOS(p.default), p), description: p.description, data: p.data))
+            preference.commands = declaring[p.name]
+            return preference
         }
     }
 

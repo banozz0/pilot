@@ -56,7 +56,7 @@ enum ExtensionsModule {
         guard let (ext, command) = Extension.command(inAction: id, in: extensions) else {
             return hud("No extension command \(id) in Extensions.")
         }
-        guard let inputs = await inputs(for: ext, storage: storage, hud: hud, unset: settings) else { return }
+        guard let inputs = await inputs(for: ext, command: command, storage: storage, hud: hud, unset: settings) else { return }
         guard command.mode == .noView else {
             guard let input = Extension.input(inAction: id) else { return list(ext, command, inputs) }
             return typed(ext, command, inputs, input)
@@ -119,12 +119,13 @@ enum ExtensionsModule {
     }
     private static var terminalRead: (bundle: String, at: Date)?
 
-    /// `ext`'s preferences and folders, read off the main thread, with Pilot's defaults; nil when a required preference is
-    /// unset (said, then `unset` runs) or its folders can't be made (said, the reason in the log).
-    static func inputs(for ext: Extension, storage: ExtensionStorage, hud: (String) -> Void,
+    /// `ext`'s preferences and folders, read off the main thread, with Pilot's defaults; nil when a required preference a
+    /// run of `command` needs is unset (said, then `unset` runs; ExtensionStorage.inputs) or its folders can't be made
+    /// (said, the reason in the log).
+    static func inputs(for ext: Extension, command: Extension.Command? = nil, storage: ExtensionStorage, hud: (String) -> Void,
                        unset: (Extension) -> Void = { _ in }) async -> ExtensionRun.Inputs? {
         do {
-            var inputs = try await Task.detached { try storage.inputs(for: ext) }.value
+            var inputs = try await Task.detached { try storage.inputs(for: ext, command: command) }.value
             inputs.pilot = defaults()
             return inputs
         }

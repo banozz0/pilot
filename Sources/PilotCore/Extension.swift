@@ -67,10 +67,21 @@ public struct Extension: Equatable, Sendable {
         }
 
         public let name: String, title: String, kind: Kind, required: Bool, `default`: JSONValue?, description: String?
+        /// The commands that declare it, a Raycast command's own preference (T28); nil for the whole extension's, which every
+        /// command needs. A required one stops only these commands.
+        public var commands: Set<String>?
 
-        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil) {
+        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil,
+                    commands: Set<String>? = nil) {
             self.name = name; self.title = title; self.kind = kind; self.required = required; self.default = `default`
-            self.description = description
+            self.description = description; self.commands = commands
+        }
+
+        /// Whether a run of `command` needs it: the extension's always, a command's own only for that command; with no
+        /// command (an action outliving its run, whose command already started) only the extension's.
+        public func applies(to command: Command?) -> Bool {
+            guard let commands else { return true }
+            return command.map { commands.contains($0.name) } ?? false
         }
 
         /// What the manifest says, checked by `init(_:)`.
@@ -104,7 +115,7 @@ public struct Extension: Equatable, Sendable {
             saved.flatMap { fits($0) ? $0 : nil } ?? `default` ?? (kind == .checkbox ? .bool(false) : nil)
         }
 
-        /// A required preference without `value`, an empty string counting as none: its commands do not run.
+        /// A required preference without `value`, an empty string counting as none: the commands it applies to do not run.
         public func isMissing(_ value: JSONValue?) -> Bool { required && (value == nil || value == .string("")) }
 
         /// Whether `value` is one this preference takes: a boolean for a checkbox, one of its options for a dropdown, a string otherwise.

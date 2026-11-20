@@ -159,7 +159,7 @@ final class ExtensionBar {
             if let last = asked[id], now().timeIntervalSince(last) < Double(bar.every) - 1 { continue }
             asked[id] = now()
             var why: String?
-            guard let inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 }) else {
+            guard let inputs = await ExtensionsModule.inputs(for: ext, command: bar.command, storage: storage, hud: { why = $0 }) else {
                 (next[index].answer, next[index].problem) = (nil, why)
                 continue
             }

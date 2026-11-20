@@ -103,7 +103,7 @@ final class ExtensionPageModel {
             guard let ext = found, ext.shownSurface != nil else { gone = true; return }
             gone = false
             var why: String?, unset = false
-            inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 }, unset: { _ in unset = true })
+            inputs = await ExtensionsModule.inputs(for: ext, command: ext.shownSurface?.command, storage: storage, hud: { why = $0 }, unset: { _ in unset = true })
             needsSettings = unset
             read = now()
             if inputs == nil { problem = why }

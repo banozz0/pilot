@@ -177,10 +177,11 @@ public struct ExtensionStorage: Sendable {
     }
 
     /// What every run of `ext` is handed: its values and its folders, made now if missing. Throws Unset for the first
-    /// required preference without a value, an empty string counting as none.
-    public func inputs(for ext: Extension) throws -> ExtensionRun.Inputs {
+    /// required preference a run of `command` needs (Preference.applies; nil for an action outliving its run) without a
+    /// value, an empty string counting as none.
+    public func inputs(for ext: Extension, command: Extension.Command?) throws -> ExtensionRun.Inputs {
         let values = values(of: ext)
-        if let unset = ext.preferences.first(where: { $0.isMissing(values[$0.name]) }) {
+        if let unset = ext.preferences.first(where: { $0.applies(to: command) && $0.isMissing(values[$0.name]) }) {
             throw Unset(preference: unset)
         }
         let inputs = ExtensionRun.Inputs(preferences: values, data: data.appending(path: "\(ext.id)/data"), cache: cache.appending(path: ext.id))
