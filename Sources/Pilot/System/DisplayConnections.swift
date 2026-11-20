@@ -445,7 +445,7 @@ final class DisplayConnections {
         let required = expected.filter { $0.state == .on && !excluding.contains($0.identity) }
         guard !required.isEmpty else {
             try await backend.restoreLayout(layout)
-            slog.info("display connection: arrangement after \(context, privacy: .public) applied with nothing saved to check")
+            slog.notice("display connection: arrangement after \(context, privacy: .public) applied with nothing saved to check")
             return
         }
         let settled = try await awaitQuietArrangement(required)
@@ -456,7 +456,7 @@ final class DisplayConnections {
                 var line = "arrangement restored after \(context): \(Self.describe(required)) (restore \(attempt)"
                 if !settled { line += ", displays still changing before it" }
                 if !moved.isEmpty { line += "; macOS had moved it to \(moved.joined(separator: " then "))" }
-                slog.info("display connection: \(line, privacy: .public))")
+                slog.notice("display connection: \(line, privacy: .public))")
                 return
             }
             moved.append(drift)
