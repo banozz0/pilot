@@ -98,7 +98,7 @@ struct NotesPopoverWatch: NSViewRepresentable {
     func updateNSView(_ view: Watch, context: Context) { view.close = close }
 
     /// True from a press that closed a pop-up to that press's release, so a button the press lands on (the head's
-    /// Actions) does not open it again.
+    /// Actions, the format bar's Aa) does not open it again.
     @MainActor private(set) static var closingPress = false
     @MainActor private static var release: Any?
 

@@ -160,7 +160,7 @@ struct NotesNote: View {
             ZStack(alignment: .topLeading) {
                 // Kept under the preview and the question, so the caret, the scroll and Undo are where they were after.
                 NotesEditor(text: $model.text, style: markdown, editable: !confirming, focused: !model.listFocused && !confirming,
-                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil) {
+                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil, styling: $model.styling) {
                     // A click in the note, or the window handing it the keyboard, takes it from the list.
                     if model.listFocused { model.leaveList() }
                 }
@@ -189,7 +189,7 @@ struct NotesNote: View {
 }
 
 /// The editor with its format bar (direction B): the bar rises over the selection's first line while something is
-/// picked, under it when there is no room above.
+/// picked, under it when there is no room above; Aa's styles hang under the bar, or over it when there is no room under.
 struct NotesEditor: View {
     @Binding var text: String
     let style: MarkdownStyle
@@ -199,6 +199,8 @@ struct NotesEditor: View {
     var handle: NotesEditorHandle?
     /// The bar may show: the note is being written in, not previewed, asked about or under Cmd+K.
     var bar = true
+    /// Aa's styles open (the model's, so Escape closes them and a render opens them).
+    @Binding var styling: Bool
     var onFocus: (() -> Void)?
     @State private var selection: CGRect?
     /// The bar's own hold on this editor.
@@ -213,11 +215,21 @@ struct NotesEditor: View {
                         let size = NotesFormatBar.size
                         let x = min(max(selection.minX - 8, 4), max(g.size.width - size.width - 4, 4))
                         let above = selection.minY - size.height - 6
-                        NotesFormatBar(handle: own, text: text, selection: selection)
-                            .offset(x: x, y: above >= 2 ? above : selection.maxY + 6)
+                        let y = above >= 2 ? above : selection.maxY + 6
+                        NotesFormatBar(handle: own, text: text, selection: selection, styling: $styling)
+                            .offset(x: x, y: y)
+                        if styling {
+                            let under = y + size.height + 4, height = NotesStylesMenu.height
+                            NotesStylesMenu(markdown: style, current: own.held.flatMap { MarkdownFormat.style(of: $0.string, selection: $0.selectedRange()) },
+                                            pick: { format in styling = false; own.apply(format) }, close: { styling = false })
+                                .offset(x: min(x, max(g.size.width - NotesStylesMenu.width - 4, 4)),
+                                        y: under + height <= g.size.height || y - height - 4 < 0 ? under : y - height - 4)
+                        }
                     }
                 }
             }
+            // The styles go with the selection.
+            .onChange(of: selection == nil) { if selection == nil { styling = false } }
     }
 }
 

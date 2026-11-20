@@ -213,6 +213,93 @@ struct NotesPanelRenders {
         }
     }
 
+    /// Apple Notes' paragraph styles (Sven, 2026-11-20), each in its Markdown form, with every inline mark inside the
+    /// list, checklist and quote lines; the caret on the empty last line, so every line reads drawn.
+    static let styled = """
+        # Title with **bold**
+        ## Heading with _italic_
+        ### Subheading with ~~strike~~
+        Body with <u>underline</u> and `code`.
+        ```
+        Monostyled, let x = 1
+        ```
+        - Bullet **bold** _italic_ ~~strike~~ <u>under</u> `code`
+        - Bullet again
+        + Dash **bold** _italic_ ~~strike~~ <u>under</u> `code`
+        + Dash again
+        1. Number **bold** _italic_ ~~strike~~ <u>under</u> `code`
+        2. Number again
+        - [ ] Check **bold** _italic_ ~~strike~~ <u>under</u> `code`
+        > Quote **bold** _italic_ ~~strike~~ <u>under</u> `code`
+
+        """
+
+    /// The format bar's Aa styles open over a bulleted line (its style ticked) in both themes, and the note in every
+    /// style, written as `styles-<theme>-menu.png` and `styles-tokyo-night-note.png`.
+    @Test("The notes panel renders Aa's paragraph styles and a note in every style", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderStyles() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("notes-panel")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let saved = (look.style, look.themeID, look.glass)
+        look.glass = false
+        defer { (look.style, look.themeID, look.glass) = saved }
+
+        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-notes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(folder: folder)
+        _ = try store.load()
+        try Data(Self.styled.utf8).write(to: folder.appending(path: "title-with-bold-100013.md"))
+
+        look.style = .instrument
+        for (theme, state) in [("tokyo-night", "menu"), ("porcelain", "menu"), ("tokyo-night", "note")] {
+            look.themeID = theme
+            let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
+            model.reload()
+            model.open("title-with-bold-100013.md")
+            let panel = HUD.makePanel(NotesPanelView(model: model).frame(width: NotesPanel.defaultSize.width, height: 720), surface: .notes)
+            defer { panel.close() }
+            let content = try #require(panel.contentView)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
+            panel.makeFirstResponder(editor)
+            let s = editor.string as NSString
+            if state == "menu" {
+                editor.setSelectedRange(s.range(of: "Bullet again"))
+                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                model.styling = true
+            } else {
+                editor.setSelectedRange(NSRange(location: s.length, length: 0))
+                // Every inline mark in the list, checklist and quote lines hidden, its words not.
+                for kind in ["Bullet", "Dash", "Number", "Check", "Quote"] {
+                    let line = s.lineRange(for: s.range(of: kind + " **bold**"))
+                    for mark in ["**bold", "_italic", "~~strike", "<u>under", "`code"] {
+                        let at = s.range(of: mark, range: line).location
+                        try #require(editor.textStorage?.attribute(.notesHidden, at: at, effectiveRange: nil) != nil, "\(kind): \(mark) shows")
+                    }
+                }
+                try #require(editor.bullets().count == 2 && editor.dashes().count == 2 && editor.checkboxes().count == 1)
+            }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            content.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(content, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("styles-\(theme)-\(state).png"))
+            if state == "menu" {
+                // The ticked style is the line's; Escape closes the menu.
+                try #require(MarkdownFormat.style(of: editor.string, selection: editor.selectedRange()) == .bullets)
+                let escape = try #require(NotesKey.pressed(53, [], "\u{1b}", model: model, responder: editor))
+                try #require(escape == .closeStyles)
+                model.perform(escape)
+                try #require(!model.styling, "Escape left the styles open")
+            }
+        }
+    }
+
     /// A sketch a note already holds, as T29 saved it (a house, a dotted way, the amber marker under it): the sketch
     /// canvas is gone (Sven, 2026-11-20), but the SVG still shows as the note's picture, in the theme's ink. Tokyo Night
     /// then Porcelain, written as `sketch-kept-<theme>.png`.

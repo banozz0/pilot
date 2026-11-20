@@ -67,21 +67,46 @@ struct NotesMarkdownTests {
         #expect(empty.text == "ship**** the notes panel" && empty.selection == NSRange(location: 6, length: 0))
         // Code over lines: a fenced block.
         #expect(apply(.code, "a\nb\nc", NSRange(location: 0, length: 3)).text == "```\na\nb\n```\nc")
+        // Underline is <u>…</u>, strikethrough ~~…~~; a second press takes either off.
+        let under = apply(.underline, text, NSRange(location: 5, length: 3))
+        #expect(under.text == "ship <u>the</u> notes panel" && under.selection == NSRange(location: 8, length: 3))
+        #expect(apply(.underline, under.text, under.selection).text == text)
+        let struck = apply(.strike, text, NSRange(location: 9, length: 5))
+        #expect(struck.text == "ship the ~~notes~~ panel" && apply(.strike, struck.text, NSRange(location: 11, length: 5)).text == text)
     }
 
-    @Test("Link wraps words with the address picked to type over; heading cycles #, ##, ### and back; lists and checklists toggle per line")
+    @Test("Link wraps words with the address picked to type over; Apple Notes' paragraph styles convert the picked lines and toggle back to Body; checklists toggle per line")
     func lines() {
         let link = apply(.link, "see docs", NSRange(location: 4, length: 4))
         #expect(link.text == "see [docs](https://)" && (link.text as NSString).substring(with: link.selection) == "https://")
-        var heading = apply(.heading, "Plan", NSRange(location: 2, length: 0))
-        #expect(heading.text == "# Plan" && heading.selection.location == 4)
-        heading = apply(.heading, heading.text, heading.selection)
-        #expect(heading.text == "## Plan")
-        heading = apply(.heading, apply(.heading, heading.text, heading.selection).text, heading.selection)
-        #expect(heading.text == "Plan")
+        // The style keys read the key's own character: ⌘⇧7 is "7", not "&".
+        #expect(MarkdownFormat.keyed("7", command: true, shift: true) == .bullets && MarkdownFormat.keyed("t", command: true, shift: true) == .title)
+        #expect(MarkdownFormat.keyed("b", command: true, shift: true) == .body && MarkdownFormat.keyed("b", command: true, shift: false) == .bold)
+        // ⌘⇧H sets Heading (##), the caret staying on its word; again, Body.
+        let heading = apply(.heading, "Plan", NSRange(location: 2, length: 0))
+        #expect(heading.text == "## Plan" && heading.selection.location == 5)
+        #expect(apply(.heading, heading.text, heading.selection).text == "Plan")
+        // Each style's form, from a bulleted line (its mark swapped), and what the Aa menu ticks on it.
+        let forms: [(MarkdownFormat, String)] = [(.title, "# Plan"), (.heading, "## Plan"), (.subheading, "### Plan"), (.body, "Plan"),
+                                                 (.mono, "```\nPlan\n```"), (.bullets, "- Plan"), (.dashes, "+ Plan"), (.numbers, "1. Plan"),
+                                                 (.quote, "> Plan")]
+        for (style, form) in forms {
+            let from = style == .bullets ? "+ Plan" : "- Plan"
+            let made = apply(style, from, NSRange(location: 3, length: 0)).text
+            #expect(made == form, "\(style.title): \(made)")
+            #expect(MarkdownFormat.style(of: made, selection: NSRange(location: (made as NSString).range(of: "Plan").location, length: 0)) == style)
+        }
+        // Over lines: blank ones stay blank, numbers count the lines with words, and the same style again is Body.
         let list = apply(.bullets, "milk\neggs\n\nbread", NSRange(location: 0, length: 16))
         #expect(list.text == "- milk\n- eggs\n\n- bread")
         #expect(apply(.bullets, list.text, NSRange(location: 0, length: (list.text as NSString).length)).text == "milk\neggs\n\nbread")
+        #expect(apply(.numbers, list.text, NSRange(location: 0, length: 20)).text == "1. milk\n2. eggs\n\n3. bread")
+        #expect(apply(.quote, "## a\n- b", NSRange(location: 0, length: 8)).text == "> a\n> b")
+        // Monostyled fences the lines; any style inside the fence takes it off first; Monostyled again takes it off.
+        let mono = apply(.mono, "- a\n- b\nc", NSRange(location: 0, length: 7))
+        #expect(mono.text == "```\na\nb\n```\nc")
+        #expect(apply(.mono, mono.text, NSRange(location: 4, length: 0)).text == "a\nb\nc")
+        #expect(apply(.title, mono.text, NSRange(location: 4, length: 0)).text == "# a\nb\nc")
         let check = apply(.checklist, "- milk\n  1. eggs", NSRange(location: 0, length: 14))
         #expect(check.text == "- [ ] milk\n  - [ ] eggs")
         #expect(apply(.checklist, check.text, NSRange(location: 0, length: 5)).text == "milk\n  - [ ] eggs")

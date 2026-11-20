@@ -66,6 +66,8 @@ final class NotesModel {
     var confirmingTrash = false
     /// Cmd+K's actions on the open note (the highlighted one while the list has the keyboard); nil while closed.
     private(set) var actions: NoteActions?
+    /// The format bar's Aa styles open (NotesStylesMenu); Escape closes them first.
+    var styling = false
     /// A failed read or write, shown in the panel.
     private(set) var problem: String?
 
@@ -173,6 +175,7 @@ final class NotesModel {
         // A press that just closed them (on the head's Actions) leaves them closed.
         case .actions: actions == nil && !NotesPopoverWatch.closingPress ? openActions() : (actions = nil)
         case .closeActions: actions = nil
+        case .closeStyles: styling = false
         case .stepActions(let by): stepActions(by)
         case .runAction: runAction()
         case .filterActions(let typed): filterActions(typed)
@@ -738,14 +741,17 @@ final class NotesPanel {
 /// the key's characters, modifiers aside (NSEvent's charactersIgnoringModifiers).
 enum NotesKey: Equatable {
     case hide, list, keep, confirmTrash, open, step(Int), new, pin, askTrash, actions, closeActions, stepActions(Int), runAction
+    /// Escape while the format bar's Aa styles are open: they close, before anything else Escape does.
+    case closeStyles
     /// A character for Cmd+K's search, or nil: Backspace takes one off.
     case filterActions(String?)
     case held
 
     init?(code: UInt16, flags modifiers: NSEvent.ModifierFlags, key raw: String?, list: Bool, confirming: Bool, actions: Bool = false,
-          empty: Bool = false) {
+          styling: Bool = false, empty: Bool = false) {
         let flags = modifiers.intersection([.command, .shift, .option, .control])
         let key = raw?.lowercased()
+        if styling, code == 53 { self = .closeStyles; return }
         if actions {
             switch (code, flags, key) {
             case (53, _, _), (_, [.command], "k"): self = .closeActions
@@ -788,7 +794,7 @@ extension NotesKey {
                                    responder: NSResponder?) -> NotesKey? {
         if responder is NotesTextView, model.listFocused { model.leaveList() }
         return NotesKey(code: code, flags: flags, key: key, list: model.listFocused, confirming: model.confirmingTrash,
-                        actions: model.actions != nil, empty: code == 51 && model.isEmptyNote)
+                        actions: model.actions != nil, styling: model.styling, empty: code == 51 && model.isEmptyNote)
     }
 }
 

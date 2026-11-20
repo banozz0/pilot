@@ -158,6 +158,8 @@ extension NSAttributedString.Key {
     static let notesHidden = NSAttributedString.Key("PilotNotesHidden")
     /// On a list's `-`, drawn clear: a dot is drawn in its place.
     static let notesBullet = NSAttributedString.Key("PilotNotesBullet")
+    /// On a dashed list's `+`: drawn as a dash in its place (Apple Notes' Dashed List, 2026-11-20).
+    static let notesDash = NSAttributedString.Key("PilotNotesDash")
     /// On a quote's lines, their ends included, so a quote's lines read as one callout.
     static let notesQuote = NSAttributedString.Key("PilotNotesQuote")
     /// On a fenced code block's lines: its start, so two blocks one under the other stay two panels.

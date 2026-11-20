@@ -358,14 +358,15 @@ struct NotesPanelTests {
         #expect(key(40, .command, "k") == .actions)
         model.perform(.actions)
         #expect(model.actions?.choices.map(\.title) == ["Pin", "Rename", "Duplicate", "Copy as Markdown", "Reveal in Finder",
-                                                       "Heading", "Bold", "Italic", "Code", "Checklist", "New note", "Move to Trash"])
-        #expect(model.actions?.choices.compactMap(\.key) == ["⌘⇧H", "⌘B", "⌘I", "⌘E", "⌘⇧L", "⌘N", "⌘⌫"])
+                                                       "Title", "Heading", "Subheading", "Body", "Bulleted List", "Dashed List", "Numbered List",
+                                                       "Bold", "Italic", "Underline", "Code", "Checklist", "New note", "Move to Trash"])
+        #expect(model.actions?.choices.compactMap(\.key) == ["⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘N", "⌘⌫"])
         #expect(key(125) == .stepActions(1) && key(36) == .runAction && key(53) == .closeActions && key(1, .command, "s") == .held)
-        // Typing searches: "bo" leaves Bold; Backspace takes a letter off.
-        model.perform(try #require(key(11, [], "b"))); model.perform(try #require(key(31, [], "o")))
+        // Typing searches: "bol" leaves Bold; Backspace takes a letter off.
+        model.perform(try #require(key(11, [], "b"))); model.perform(try #require(key(31, [], "o"))); model.perform(try #require(key(37, [], "l")))
         #expect(model.actions?.visible == [.format(.bold)] && model.actions?.index == 0)
-        model.perform(try #require(key(51))); model.perform(try #require(key(51)))
-        #expect(model.actions?.query == "" && model.actions?.visible.count == 12)
+        model.perform(try #require(key(51))); model.perform(try #require(key(51))); model.perform(try #require(key(51)))
+        #expect(model.actions?.query == "" && model.actions?.visible.count == 19)
         model.perform(.stepActions(3))
         model.perform(.runAction)
         #expect(model.actions == nil && board.string(forType: .string) == "# Plan\nship it" && tips == ["Copied “Plan” as Markdown"])

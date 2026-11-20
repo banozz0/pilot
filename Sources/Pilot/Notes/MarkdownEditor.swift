@@ -158,6 +158,10 @@ final class NotesEditorHandle {
         views.allObjects.first { $0.isEditable && $0.window?.isKeyWindow == true } ?? last
     }
 
+    /// The editor it holds, in any window: the format bar's own hold, so what the bar lights and Aa's tick read its
+    /// editor whether or not its window is key.
+    var held: NotesTextView? { views.allObjects.first }
+
     func apply(_ format: MarkdownFormat) { view?.format(format) }
 
     /// Cmd+K's Rename: the note's title words picked, so typing replaces them (the title is the note's first line); now
@@ -322,6 +326,8 @@ enum MarkdownMarks {
     static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
     /// `_words_` or `*words*`; an underscore's may sit right inside or outside bold's `**` (`**_both_**`, `_**both**_`).
     static let italic = try! NSRegularExpression(pattern: #"(?<!\w)_(?=[^\s_]).+?(?<=[^\s_])_(?!\w)|(?<![\*\w])\*(?=[^\s\*_]).+?(?<=[^\s\*_])\*(?![\*\w])"#)
+    /// `<u>words</u>`: underline, as inline HTML (Markdown has none of its own).
+    static let underline = try! NSRegularExpression(pattern: #"<u>(?=\S)(.+?)(?<=\S)</u>"#)
     /// `~~words~~`, GitHub's strikethrough.
     static let strike = try! NSRegularExpression(pattern: #"~~(?=\S)(.+?)(?<=\S)~~"#)
     static let code = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
@@ -588,6 +594,11 @@ final class NotesTextView: NSTextView {
             mark(m.range(at: 1))
             mark(NSRange(location: NSMaxRange(m.range) - m.range(at: 1).length, length: m.range(at: 1).length))
         }
+        each(MarkdownMarks.underline) { m in
+            storage.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
+            mark(NSRange(location: m.range.location, length: 3))
+            mark(NSRange(location: NSMaxRange(m.range) - 4, length: 4))
+        }
         each(MarkdownMarks.strike) { m in
             storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
             mark(NSRange(location: m.range.location, length: 2))
@@ -642,8 +653,8 @@ final class NotesTextView: NSTextView {
                 lineStyle(m.range, style.paragraph(line: room))
             }
         }
-        // A list: `-`, `*` or `+` drawn as a dot (raw while the caret sits inside the mark), numbers in the quote's
-        // colour; a wrapped line lines up under its own text.
+        // A list: `-` or `*` drawn as a dot and `+` as a dash (raw while the caret sits inside the mark), numbers in the
+        // quote's colour; a wrapped line lines up under its own text.
         let caret = selectedRange()
         each(MarkdownMarks.list) { m in
             let sign = m.range(at: 2)
@@ -651,7 +662,8 @@ final class NotesTextView: NSTextView {
             let isBox = MarkdownMarks.checkbox.firstMatch(in: storage.string, range: line) != nil
             if sign.length == 1, "-*+".contains(s.substring(with: sign)), !isBox {
                 let inside = reveal != nil && caret.length == 0 && caret.location > sign.location && caret.location < NSMaxRange(m.range)
-                if inside { mute(sign) } else { storage.addAttributes([.notesBullet: true, .foregroundColor: NSColor.clear], range: sign) }
+                let drawn: NSAttributedString.Key = s.character(at: sign.location) == 43 ? .notesDash : .notesBullet
+                if inside { mute(sign) } else { storage.addAttributes([drawn: true, .foregroundColor: NSColor.clear], range: sign) }
             } else if !isBox {
                 storage.addAttribute(.foregroundColor, value: style.quote, range: sign)
             }
@@ -1018,16 +1030,24 @@ final class NotesTextView: NSTextView {
 
     /// Each list dot: the hidden `-`'s place, centred on its line.
     func bullets() -> [NSRect] {
+        let dot = (style.body.pointSize * 0.36).rounded()
+        return marks(.notesBullet, width: dot, height: dot)
+    }
+
+    /// Each dashed list's dash: the hidden `+`'s place, a short rule centred on its line.
+    func dashes() -> [NSRect] { marks(.notesDash, width: (style.body.pointSize * 0.6).rounded(), height: 1.5) }
+
+    /// A list mark drawn in place of the hidden character `key` is on: `width` by `height`, centred on its place and line.
+    private func marks(_ key: NSAttributedString.Key, width: CGFloat, height: CGFloat) -> [NSRect] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
-        let size = (style.body.pointSize * 0.36).rounded()
-        return runs(.notesBullet).flatMap { run in
+        return runs(key).flatMap { run in
             (run.range.location..<NSMaxRange(run.range)).compactMap { at -> NSRect? in
                 let glyph = layout.glyphIndexForCharacter(at: at)
                 guard let line = fragment(at: glyph) else { return nil }
-                let height = (storage.attribute(.paragraphStyle, at: at, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
+                let lineHeight = (storage.attribute(.paragraphStyle, at: at, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
                 let x = line.rect.minX + layout.location(forGlyphAt: glyph).x
                 let advance = style.body.advancement(forCGGlyph: layout.cgGlyph(at: glyph)).width
-                return NSRect(x: (x + (advance - size) / 2).rounded(), y: (line.rect.minY + (height - size) / 2).rounded(), width: size, height: size)
+                return NSRect(x: (x + (advance - width) / 2).rounded(), y: line.rect.minY + ((lineHeight - height) / 2).rounded(), width: width, height: height)
             }
         }
     }
@@ -1047,6 +1067,7 @@ final class NotesTextView: NSTextView {
         }
         style.quote.setFill()
         for dot in bullets() where dot.intersects(dirtyRect) { NSBezierPath(ovalIn: dot).fill() }
+        for dash in dashes() where dash.intersects(dirtyRect) { NSBezierPath(roundedRect: dash, xRadius: 0.75, yRadius: 0.75).fill() }
         // A checklist's box is round (round 2 shot 6c): a filled circle ticked, a ring not.
         for box in checkboxes() where box.rect.intersects(dirtyRect) {
             if box.ticked {
@@ -1073,12 +1094,13 @@ final class NotesTextView: NSTextView {
         reportSelection()
     }
 
-    /// ⌘B, ⌘I, ⌘E, ⌘⇧H and ⌘⇧L format the selection while this editor has the keyboard (direction B), in the panel and on
-    /// the Notes page alike; any other key equivalent goes on as before.
+    /// The formats' keys (⌘B, ⌘I, ⌘U, ⌘E, ⌘⇧L and the styles' ⌘⇧T, H, J, B, 7, 8 and 9; MarkdownFormat.shortcut) format the
+    /// selection while this editor has the keyboard (direction B), in the panel and on the Notes page alike; any other key
+    /// equivalent goes on as before.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         guard isEditable, window?.firstResponder === self, flags.isSubset(of: [.command, .shift]),
-              let format = MarkdownFormat.keyed(event.charactersIgnoringModifiers, command: flags.contains(.command), shift: flags.contains(.shift))
+              let format = MarkdownFormat.keyed(event.characters(byApplyingModifiers: []), command: flags.contains(.command), shift: flags.contains(.shift))
         else { return super.performKeyEquivalent(with: event) }
         self.format(format)
         return true
