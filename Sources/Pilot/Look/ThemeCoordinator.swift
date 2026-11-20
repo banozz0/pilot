@@ -69,6 +69,7 @@ final class ThemeCoordinator {
             cursorIsSystem: { CursorSets.shared.set == .macOS },
             ghostexColours: isTestRun ? nil : GhostexColours.effects(), appsHome: isTestRun ? nil : NSHomeDirectory())
         owner.wallpaperFolder = { WallpaperSettings.shared.themeOverride }
+        owner.showPressed = { pack in if let pack { Look.shared.tryOn(id: pack.id, pack: pack) } else { Look.shared.endTrial() } }
         owner.forgetFavourite = { WallpaperSettings.shared.forgetThemeFavourite($0) }
         owner.shipped = Shipped(wallpapers: ShippedWallpapers(root: support.appending(path: "wallpapers").path, source: CatalogueSource.live), index: {
             let model = ExtensionCatalogueModel.shared
@@ -188,6 +189,12 @@ final class ThemeCoordinator {
         let index: @MainActor () async throws -> ExtensionCatalogue.Index
     }
     var shipped: Shipped?
+    /// A press's pack shown in Pilot's own window at once, nil to take it off (perf-round, Sven on combined-5: applying a
+    /// theme could be smoother; Pilot recoloured only after every app's config was written, 0.6 s into a debug press).
+    /// Look tries it on in the app; nothing in tests and fixtures.
+    var showPressed: @MainActor (ThemePack?) -> Void = { _ in }
+    /// How long a press waits for its window to draw the theme before the plan's checks and writes: a frame.
+    static let pressedFrame = Duration.milliseconds(17)
     /// Use my wallpaper folder for every theme: the folder an apply sets in place of the pack's pictures, nil while it is
     /// off (WallpaperSettings.themeOverride); nil in tests and fixtures.
     var wallpaperFolder: @MainActor () -> String? = { nil }
@@ -1849,9 +1856,18 @@ final class ThemeCoordinator {
     /// one pressing; the result names what changed, and Restore undoes it. The pilot CLI, a link and an agent go through
     /// plan, then apply, which always asks.
     func press(_ id: String?) async throws(ControlError) -> JSONValue {
+        // Pilot's own window first, from the pack's manifest alone, before the plan reads anything.
+        let shown = id.flatMap { try? store.pack($0) }
+        if let shown {
+            showPressed(shown)
+            try? await Task.sleep(for: Self.pressedFrame)
+        }
         let planned: ThemePlan
-        do { planned = try await plan(id) } catch { throw ControlError(.badValue, String(describing: error)) }
-        return try await apply(planned.id, peer: nil, pressed: true)
+        do { planned = try await plan(id) } catch {
+            if shown != nil { showPressed(nil) }
+            throw ControlError(.badValue, String(describing: error))
+        }
+        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil)
     }
     /// The sandbox's stand-in for Look's button: the same press, only on a fixture host.
     func fixturePress(_ id: String?) async throws(ControlError) -> JSONValue {
@@ -1859,7 +1875,12 @@ final class ThemeCoordinator {
         return try await press(id)
     }
 
-    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false) async throws(ControlError) -> JSONValue {
+    /// `shown`: a press already shows the pack in Pilot's own window.
+    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false) async throws(ControlError) -> JSONValue {
+        // The theme a press shows in Pilot's own window comes off as the apply ends, however it ends: an applied pack
+        // looks the same, a refused or failed one goes.
+        var tried = shown
+        defer { if tried { showPressed(nil) } }
         guard !busy else { throw ControlError(.badValue, "theme mutation already waiting/running") }
         guard let (plan, revision, ownership, appearance) = plans.removeValue(forKey: planID) else {
             // The agent passed a pack's id here more than once (skills-test): say which id this takes.
@@ -1869,6 +1890,13 @@ final class ThemeCoordinator {
             throw ControlError(.badValue, "unknown or spent plan (a plan applies once): plan again with pilot theme plan apply <theme> --summary, or plan restore --summary")
         }
         busy = true; defer { busy = false; removeMadeFolders() }  // Also after a throw: an empty folder from a failed Apply goes.
+        // Pilot's own window takes the theme at the press, before any check or write: one frame for it to draw, then the
+        // rest follows.
+        if pressed, !tried, let pack = plan.selection {
+            showPressed(pack)
+            tried = true
+            try? await Task.sleep(for: Self.pressedFrame)
+        }
         do { try await fresh(plan, contextRevision: revision, appearance: appearance) }
         catch { throw ControlError(.badValue, String(describing: error)) }
         // The plan's identity is the spent key above, not anything shown here.

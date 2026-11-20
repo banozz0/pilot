@@ -72,6 +72,9 @@ public struct ThemePackStore: Sendable {
         return (pack, manifest, source, folder, factory)
     }
 
+    /// `id`'s pack from its manifest alone, no picture read: what a press shows in Pilot's own window at once.
+    public func pack(_ id: String) throws -> ThemePack { try opened(id).pack }
+
     public func load(_ id: String) throws -> Loaded {
         let (pack, manifest, source, folder, factory) = try opened(id)
         let fm = FileManager.default
