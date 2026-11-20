@@ -522,10 +522,16 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case openPage(AppPlace)
         /// A row Activity lists, by Activity.Row.id: Return asks it to quit, Cmd+Return forces it (MenuActivity); not a pick.
         case process(String)
+        /// Raycast's store searched for what was typed (raycast-extensions T25): Return opens Hyper+Space's Raycast Store
+        /// filtered by it. Every root search offers it beside Ask AI (MenuNavigator.fallbacks); not a pick.
+        case searchStore(String)
+        /// A Raycast store folder a root search found in the cached listing (T25): Return opens the store on it, read in
+        /// place, where Return installs; not a pick.
+        case storeFolder(String)
 
         /// A row that offers to search elsewhere for what was typed (Search files, Search to install), not a result.
         public var isSearchOffer: Bool {
-            switch self { case .searchFiles, .searchInstall, .searchWeb: true; default: false }
+            switch self { case .searchFiles, .searchInstall, .searchWeb, .searchStore: true; default: false }
         }
 
         /// The entry's id in the frecency store; nil for a window, which is not a pick: the tiler's id ends with it.
@@ -545,7 +551,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         public var key: String? {
             switch self {
             case .app(let b): "app:\(SameApp.canonical(b))"
-            case .window, .remove, .update, .clean, .copy, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: nil
+            case .window, .remove, .update, .clean, .copy, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process,
+                 .searchStore, .storeFolder: nil
             case .file(let path): "file:\(path)"
             case .package(let key): "package:\(key)"
             case .action(let id): "action:\(id)"
@@ -572,6 +579,12 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case command
         /// An action on what is selected in the app in front, Finder's folders (P43): its provider never replaces the actions.
         case selection
+        /// An installed Raycast-format extension's command (raycast-extensions T25): an action Tab and the counts take as one,
+        /// read as "Extension", its extension's name beside it.
+        case `extension`
+        /// A Raycast store folder a root search found in the cached listing (T25): Return opens its store detail. No tab
+        /// lists it, and it weighs under an installed row that matches as well.
+        case store
 
         /// Tab's cycle at the root search, as the wireframe orders it: every kind (nil), then each with a chip; branches,
         /// emoji and answers have none (cards agent-bo-95422931 and agent-bo-95422933).
@@ -584,6 +597,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
             case .window: "Window"
             case .action, .selection: "Action"
             case .command: "Command"
+            case .extension: "Extension"
+            case .store: "Store"
             case .package: "Package"
             case .emoji: "Emoji"
             case .snippet: "Snippet"
@@ -604,12 +619,12 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         /// Pilot's own Wi-Fi switch stays above the Wi-Fi pane (Q131). It weighs only among rows of one strength: a
         /// title typed whole leads at any weight (FuzzyRanker.strength, P53).
         public var searchWeight: Double {
-            switch self { case .file, .menuItem, .setting: 0.8; case .emoji: 0.6; default: 1 }
+            switch self { case .file, .menuItem, .setting: 0.8; case .store: 0.7; case .emoji: 0.6; default: 1 }
         }
 
         /// The tab that lists the kind: a command or an app's menu item is an action there, so it needs no tab of its own
         /// (P38; Sven, 1.0.1: an app's actions counted only its catalogue commands).
-        public var tab: Kind { self == .command || self == .menuItem ? .action : self }
+        public var tab: Kind { self == .command || self == .menuItem || self == .extension ? .action : self }
     }
 
     public var title: String, target: Target, home: MenuBranch?
@@ -690,7 +705,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case .emoji: .emoji
         case .snippet: .snippet
         case .sticker: .sticker
-        case .branch, .searchFiles, .searchInstall, .searchWeb: .branch
+        case .branch, .searchFiles, .searchInstall, .searchWeb, .searchStore: .branch
+        case .storeFolder: .store
         }
     }
 
@@ -727,8 +743,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case .file: "Open file"
         // Install's Searching row searches the web while the sources answer.
         case .package: MenuEntries.isSearching(self) ? "Search the web" : "Install"
-        case .branch, .searchFiles, .searchInstall, .note(.open), .openPage: "Open"
-        case .searchWeb: "Search"
+        case .branch, .searchFiles, .searchInstall, .note(.open), .openPage, .storeFolder: "Open"
+        case .searchWeb, .searchStore: "Search"
         case .note(.append), .calendarEvent: "Add"
         case .ask: "Ask"
         case .allowFullDiskAccess: "Open Settings"
@@ -1324,9 +1340,10 @@ public struct MenuNavigator: Sendable {
         return rows.indices.dropFirst().first { headings[$0] != nil } ?? rows.count
     }
 
-    /// The two rows a root search always offers for what was typed (Sven 2026-10-16): Ask AI, whose Return opens the AI
-    /// chat with it (none when `rows` already ask, as `ask …` does), and Search the web, in the default browser with its
-    /// engine, named by `via` once read. Both are offers (MenuEntry.isOffer): no kind counts them.
+    /// The rows a root search always offers for what was typed (Sven 2026-10-16): Ask AI, whose Return opens the AI
+    /// chat with it (none when `rows` already ask, as `ask …` does), Search the web, in the default browser with its
+    /// engine, named by `via` once read, and Search extensions, Raycast's store filtered by it (raycast-extensions T25).
+    /// All are offers (MenuEntry.isOffer): no kind counts them.
     public static func fallbacks(_ query: String, after rows: [MenuEntry], via: String?) -> [MenuEntry] {
         let typed = query.trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty else { return [] }
@@ -1334,7 +1351,9 @@ public struct MenuNavigator: Sendable {
         let ask = MenuEntry(title: "Ask AI", target: .ask(typed), detail: "Return asks your AI", subtitle: "“\(typed)”")
         let web = MenuEntry(title: "Search the web", target: .searchWeb(typed), detail: via.map { "Return searches \($0)" } ?? "Return searches the web",
                             subtitle: "“\(typed)”")
-        return (asks ? [] : [ask]) + [web]
+        let store = MenuEntry(title: "Search extensions for \"\(typed)\"", target: .searchStore(typed), detail: "Return searches Raycast's store",
+                              icon: .glyph("puzzlepiece.extension", .accent))
+        return (asks ? [] : [ask]) + [web, store]
     }
 
     /// Whether a search that found nothing reads as an app's name ("raycast", "visual studio code") rather than a file's

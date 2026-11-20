@@ -62,7 +62,8 @@ public enum RowAction: String, Equatable, Sendable {
         case .copy where row.isAnswer && row.home == .translate: return [.changeLanguages]
         // Return types the emoji; Copy leaves it on the clipboard (T37).
         case .emoji: return [.copyEmoji]
-        case .remove, .update, .clean, .copy, .sticker, .snippet, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: return []
+        case .remove, .update, .clean, .copy, .sticker, .snippet, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process,
+             .searchStore, .storeFolder: return []
         }
     }
 

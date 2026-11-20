@@ -615,6 +615,8 @@ final class ExtensionPages {
         /// It has something to show as a page: its page, else its bar item's popover. One with neither opens its card on
         /// Installed.
         var opens = true
+        /// Raycast-format, so the sidebar lists it (T25).
+        var raycast = false
         /// "📊 AI usage".
         var label: String { [icon, title].compactMap { $0 }.joined(separator: " ") }
     }
@@ -643,11 +645,15 @@ final class ExtensionPages {
 
     /// Every installed extension, as the folder lists them.
     nonisolated static func entries(_ extensions: [Extension]) -> [Link] {
-        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil) }
+        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil, raycast: $0.isRaycast) }
     }
 
-    /// The entries ⌃Tab steps through: the ones that open as a page.
-    var pageEntries: [Link] { entries.filter(\.opens) }
+    /// The sidebar's rows (T25): the Raycast extensions; Pilot's own are set aside, their pages still opened from the bar
+    /// and a link.
+    var sidebar: [Link] { entries.filter(\.raycast) }
+
+    /// The entries ⌃Tab steps through: the sidebar's that open as a page.
+    var pageEntries: [Link] { sidebar.filter(\.opens) }
 }
 
 extension Extension {
@@ -667,7 +673,7 @@ struct ExtensionPageRows<Row: View>: View {
     @ViewBuilder let row: (_ link: ExtensionPages.Link, _ on: Bool, _ open: @escaping () -> Void) -> Row
 
     var body: some View {
-        ForEach(pages.entries) { link in
+        ForEach(pages.sidebar) { link in
             row(link, model.extensionPage == link.id) { link.opens ? model.goExtensionPage(link.id) : model.focusExtension(link.id) }
         }
     }

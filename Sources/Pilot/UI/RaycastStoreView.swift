@@ -105,7 +105,7 @@ struct RaycastStoreView: View {
 
 /// The picked folder: read as it shows, then its icon, title, "by <author> · raycast/extensions", Install (or Installed
 /// and Open commands), Open on GitHub, its description and how many commands it has.
-private struct StoreDetail: View {
+struct StoreDetail: View {
     @Environment(\.ink) private var ink
     let folder: RaycastStore.Folder
     let model: RaycastStoreModel

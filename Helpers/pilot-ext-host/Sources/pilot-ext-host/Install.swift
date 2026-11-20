@@ -1,18 +1,22 @@
 import Compression
 import CryptoKit
 import Foundation
+import JavaScriptCore
 
 // The GitHub install route (ADR 0017, T6): a Raycast extension's folder from GitHub, built on this Mac without Node. Pilot
-// runs the host twice, never with a JSContext:
+// runs the host twice, never with an extension's code in a JSContext:
 //   pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools>
 //     one recursive tree listing of that folder (api.github.com), then each file it needs from raw.githubusercontent.com,
 //     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot asks about:
 //     the manifest's commands and preferences, the packages its lockfile pins (its dependencies, and the dev-only ones its
 //     code imports), and whether esbuild is in <tools> yet.
-//   pilot-ext-host --build <workspace> <tools>, the asked plan on stdin
+//   pilot-ext-host --build <workspace> <tools> [<pilot-ext-prelude.js>], the asked plan on stdin
 //     esbuild 0.28.2 (once, checked by its pinned sha512, kept in <tools>), each package's tarball from the npm registry
 //     checked by the lockfile's sha512 and unpacked here (no npm, so no install script ever runs), then esbuild per
 //     command into <workspace>/built: package.json, assets/ and dist/<command>.js, which Pilot then checks and installs.
+//     The `built` line names the Node built-ins the bundles require that the prelude lacks or only loads (`needs`, T25):
+//     read from esbuild's metafile, held to Node's own module names, against the prelude's __pilotModules, read in a
+//     JSContext of its own that runs only the prelude.
 // Each request is one `fetch` line (host, what, bytes, the check it passed); the last line is `plan`, `built` or `error`.
 // Nothing is written outside the two folders named.
 
@@ -51,11 +55,12 @@ enum Installer {
                 switch arguments.first {
                 case "--fetch" where arguments.count == 4:
                     try await fetch(arguments[1], workspace: URL(filePath: arguments[2]), tools: URL(filePath: arguments[3]))
-                case "--build" where arguments.count == 3:
+                case "--build" where arguments.count == 3 || arguments.count == 4:
                     let input = FileHandle.standardInput.readDataToEndOfFile()
-                    try await build(workspace: URL(filePath: arguments[1]), tools: URL(filePath: arguments[2]), plan: input)
+                    try await build(workspace: URL(filePath: arguments[1]), tools: URL(filePath: arguments[2]), plan: input,
+                                    prelude: arguments.count == 4 ? URL(filePath: arguments[3]) : nil)
                 default:
-                    throw Refused("usage: pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools> | --build <workspace> <tools>")
+                    throw Refused("usage: pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools> | --build <workspace> <tools> [<prelude>]")
                 }
             } catch {
                 say(["type": "error", "text": (error as? Refused)?.text ?? error.localizedDescription])
@@ -329,7 +334,7 @@ enum Installer {
 
     // MARK: Build
 
-    static func build(workspace: URL, tools: URL, plan data: Data) async throws {
+    static func build(workspace: URL, tools: URL, plan data: Data, prelude: URL? = nil) async throws {
         guard let plan = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let manifest = plan["manifest"] as? String,
               let packages = plan["packages"] as? [[String: String]], let commands = plan["commands"] as? [[String: String]] else {
             throw Refused("the build was handed no plan")
@@ -352,6 +357,7 @@ enum Installer {
         }
         let built = workspace.appending(path: "built")
         try fm.createDirectory(at: built.appending(path: "dist"), withIntermediateDirectories: true)
+        var required = Set<String>()
         for command in commands {
             guard let name = command["name"], name.wholeMatch(of: #/^[A-Za-z0-9._-]+$/#) != nil else { throw Refused("a command has no name") }
             guard let entry = ["tsx", "ts", "jsx", "js"].map({ "src/\(name).\($0)" }).first(where: { fm.fileExists(atPath: source.appending(path: $0).path) }) else {
@@ -373,6 +379,7 @@ enum Installer {
             if let outside = inputs.first(where: { $0.hasPrefix("/") || !source.appending(path: $0).standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) }) {
                 throw Refused("command \(name) would bundle \(cut(outside)), which is outside the extension's folder; nothing was installed")
             }
+            required.formUnion(builtins(read))
             say(["type": "bundle", "command": name, "entry": entry,
                  "bytes": (try? fm.attributesOfItem(atPath: built.appending(path: "dist/\(name).js").path)[.size] as? Int) ?? 0])
         }
@@ -381,7 +388,48 @@ enum Installer {
             try fm.copyItem(at: source.appending(path: "assets"), to: built.appending(path: "assets"))
         }
         say(["type": "built", "folder": built.path, "esbuild": esbuild.reused ? "reused" : "downloaded", "esbuildPath": esbuild.url.path,
-             "esbuildVersion": esbuildVersion])
+             "esbuildVersion": esbuildVersion, "needs": needs(required, prelude: prelude)])
+    }
+
+    // MARK: Node modules (T25)
+
+    /// Node's own module names (nodejs.org/api/modules.html, `require('node:module').builtinModules` in Node 22, read
+    /// 2026-11-20), `node:` dropped: the only words a `needs` line may carry, so it never repeats a name the extension made up.
+    static let nodeBuiltins: Set<String> = [
+        "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster", "console", "constants", "crypto", "dgram",
+        "diagnostics_channel", "dns", "dns/promises", "domain", "events", "fs", "fs/promises", "http", "http2", "https", "inspector",
+        "inspector/promises", "module", "net", "os", "path", "path/posix", "path/win32", "perf_hooks", "process", "punycode",
+        "querystring", "readline", "readline/promises", "repl", "sqlite", "stream", "stream/consumers", "stream/promises",
+        "stream/web", "string_decoder", "sys", "test", "timers", "timers/promises", "tls", "trace_events", "tty", "url", "util",
+        "util/types", "v8", "vm", "wasi", "worker_threads", "zlib",
+    ]
+
+    /// The Node built-ins one command's bundle leaves to `require`: esbuild's metafile, every output's external imports.
+    static func builtins(_ meta: [String: Any]) -> Set<String> {
+        let outputs = (meta["outputs"] as? [String: Any])?.values.compactMap { $0 as? [String: Any] } ?? []
+        let imports = outputs.flatMap { ($0["imports"] as? [[String: Any]]) ?? [] }
+        return Set(imports.compactMap { i -> String? in
+            guard i["external"] as? Bool == true, let path = i["path"] as? String else { return nil }
+            let plain = path.hasPrefix("node:") ? String(path.dropFirst(5)) : path
+            return nodeBuiltins.contains(plain) ? plain : nil
+        })
+    }
+
+    /// Of `required`, the ones the prelude lacks or only loads, A to Z. A prelude that cannot be read has none, so every
+    /// one is named: the question then says too much, never too little.
+    static func needs(_ required: Set<String>, prelude: URL?) -> [String] {
+        let (provided, loadOnly) = prelude.flatMap(preludeModules) ?? ([], [])
+        return required.filter { !provided.contains($0) || loadOnly.contains($0) }.sorted()
+    }
+
+    /// The prelude's own `__pilotModules()`, in a JSContext that runs only the prelude: its native calls answer nothing.
+    static func preludeModules(_ prelude: URL) -> (Set<String>, Set<String>)? {
+        guard let source = try? String(contentsOf: prelude, encoding: .utf8), let context = JSContext() else { return nil }
+        context.evaluateScript("globalThis.__native = new Proxy({}, { get: () => () => ({}) });")
+        context.evaluateScript(source, withSourceURL: prelude)
+        guard context.exception == nil, let read = context.objectForKeyedSubscript("__pilotModules")?.call(withArguments: [])?.toDictionary(),
+              let provided = read["provided"] as? [String], let loadOnly = read["loadOnly"] as? [String] else { return nil }
+        return (Set(provided), Set(loadOnly))
     }
 
     /// esbuild's tsconfig: the extension's own `baseUrl` and `paths` alone (Obsidian's `@/*` → `src/*`), when each is a

@@ -153,6 +153,9 @@ function whole(bytes) {
   return bytes.length;
 }
 
+/** The modules below that only load (stubs whose members record their use and throw): an install that needs one says so (T25). */
+export const loadOnly = ["stream", "stream/promises", "v8", "http", "https", "zlib", "net"];
+
 /** The modules this file adds to `require`, by name, `node:` or not. */
 export const modules = {
   buffer: { Buffer, constants: { MAX_LENGTH: 2 ** 32 - 1 }, kMaxLength: 2 ** 32 - 1 },

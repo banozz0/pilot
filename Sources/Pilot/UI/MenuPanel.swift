@@ -160,7 +160,10 @@ final class PilotMenu {
         let back = Self.origin, at = Self.anchor
         DispatchQueue.main.async {
             if self.panel != nil { self.close(restoreFocus: false) }
-            self.show(MenuNavigator(list: [], title: title, back: back, live: true), at: at)
+            // A source that opens on words (Search extensions' text, T25) shows them in the search, as a pushed view does.
+            var nav = MenuNavigator(list: [], title: title, back: back, live: true)
+            nav.query = source.opening
+            self.show(nav, at: at)
             self.logPicks = false
             self.attach(source, search: true)
             mlog.notice("menu: live picker \(title, privacy: .public) shown")
@@ -241,6 +244,12 @@ final class PilotMenu {
         for broken in found.broken { mlog.error("menu: extension folder \(broken.folder, privacy: .public) skipped: \(broken.problem.reason, privacy: .public)") }
         extensions = found.extensions
         let entries = Self.entries(engine, scripts: scripts, extensions: extensions)
+        // Raycast's store as the root search finds it (T25): the listing kept on disk, read once, never GitHub.
+        let store = RaycastStoreModel.shared, installed = extensions
+        Task { [weak self] in
+            await store.openKept(installed: installed)
+            if let query = self?.model?.nav.query, !query.isEmpty { self?.provideStore(query) }
+        }
         var nav = MenuNavigator(entries: entries, branch: branch, frecency: frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
@@ -260,6 +269,7 @@ final class PilotMenu {
             self?.translate($0)
             self?.define($0)
             self?.provideSnippets($0)
+            self?.provideStore($0)
         }
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
         model?.onRowShown = { [weak self] in self?.moreGiphy(near: $0) }
@@ -400,8 +410,8 @@ final class PilotMenu {
                                                          .config: DeveloperPages.on ? ConfigsModule.menuRows() : []].merging(installed.extras) { mine, _ in mine },
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
-        // Each app's own commands (P38), from the drive catalogue.
-        return MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle)))
+        // Each app's own commands (P38), from the drive catalogue; a Raycast extension's commands read as Extension (T25).
+        return Extension.dressed(MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle))), with: extensions)
             + MenuEntries.quicklinks(QuicklinkBook.shared.links)
     }
 
@@ -546,6 +556,13 @@ final class PilotMenu {
         model.nav.provide(.answer, model.nav.branch == nil
                           ? RootAnswers.entries(for: query, now: .now, links: QuicklinkBook.shared.links, scripts: scripts,
                                                 extensions: extensions, rates: rates) : [])
+    }
+
+    /// Up to three of Raycast's store's folders not installed that what was typed finds at the root (T25), from the
+    /// listing held, so a keystroke asks no one.
+    private func provideStore(_ query: String) {
+        guard let model else { return }
+        model.nav.provide(.store, model.nav.branch == nil ? RaycastStoreModel.shared.rootRows(query) : [])
     }
 
     /// The default browser's engine for the Search the web row, read off the main thread; the row names it once read.
@@ -1578,6 +1595,11 @@ final class PilotMenu {
         case .openPage(let place):
             close(restoreFocus: false)
             AppWindowController.shared.open(place)
+        // Raycast's store from the root (T25): filtered by the words, or on one folder, read as it opens.
+        case .searchStore(let text):
+            pick(live: RaycastStoreMenu.title, source: RaycastStoreMenu(opening: text))
+        case .storeFolder(let folder):
+            pick(live: RaycastStoreMenu.title, source: RaycastStoreMenu(opening: folder, focus: folder))
         case .process(let id):
             quitProcess(id, force: false)
         case .allowFullDiskAccess:

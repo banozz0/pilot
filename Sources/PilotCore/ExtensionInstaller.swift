@@ -171,12 +171,20 @@ public struct GitHubInstall: Sendable {
             && package.version.count <= 64 && package.version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil
     }
 
-    /// What a build answers: its folder, and the esbuild it used, downloaded or reused.
-    public struct Built: Decodable, Sendable { public let folder, esbuild, esbuildPath, esbuildVersion: String }
+    /// What a build answers: its folder, the esbuild it used, downloaded or reused, and the Node built-ins its bundles
+    /// require that the prelude lacks or only loads (T25), read from esbuild's metafile and held to Node's own names.
+    public struct Built: Decodable, Sendable {
+        public let folder, esbuild, esbuildPath, esbuildVersion: String
+        public let needs: [String]?
+        /// `needs`, each a Node module name (a-z, digits, _ and /), so nothing the extension wrote reaches the question.
+        public var missingModules: [String] { (needs ?? []).filter { $0.count <= 40 && $0.wholeMatch(of: #/[a-z][a-z0-9_]*(\/[a-z0-9_]+)?/#) != nil } }
+    }
 
-    /// The build, and each request it made; `plan` is the one asked about.
+    /// The build, and each request it made; `plan` is the one asked about. The host gets the prelude, which it reads for
+    /// the modules Pilot has.
     public func build(_ plan: Plan) async throws -> (Built, [Fetched]) {
-        let (lines, last) = try await host(["--build", workspace.path, tools.path], input: try JSONEncoder().encode(plan))
+        let prelude = ExtensionRun.host(environment: ProcessInfo.processInfo.environment)?.prelude
+        let (lines, last) = try await host(["--build", workspace.path, tools.path] + (prelude.map { [$0.path] } ?? []), input: try JSONEncoder().encode(plan))
         return (try JSONDecoder().decode(Built.self, from: last), lines)
     }
 

@@ -190,6 +190,17 @@ final class ExtensionTools {
         return githubAsk(plan, tools: tools, whole: false)
     }
 
+    /// The second question of a GitHub install whose built code requires Node modules the prelude lacks or only loads
+    /// (T25): asked after the build, before anything is installed; `missing` are Node's own module names.
+    func modulesAsk(_ plan: GitHubInstall.Plan, _ missing: [String]) -> ControlGate.Ask {
+        let line = "needs Node modules Pilot doesn't have yet: \(missing.joined(separator: ", ")); it may not work"
+        return ControlGate.Ask.install(.extension, lines: [
+            "\(Self.titled(plan.id, plan.version)), built from \(plan.source), its title: \(oneLine(plan.title))",
+            line,
+            "Allow installs it anyway into \(extensions.appending(path: plan.id).path); Deny installs nothing",
+        ]).summed("Install \(oneLine(plan.title)) anyway?", ["It \(line)."])
+    }
+
     /// Read again after Allow: an extension changed or gone while asking denies.
     func removeAsk(_ id: String) -> ControlGate.Ask {
         guard let ext = installed(id) else { return .remove(.extension, "\(id), not installed") }
@@ -252,7 +263,7 @@ extension ControlVerbs {
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] [--query <text>] | ext act <id> --handler <id> [--command <name>] [--then <row>|escape] | ext act <id> [<action>] [--type <field>=<text>] [--submit [<json values>]]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's action (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, opened searched for --query, with its host kept open: a callback runs and it answers the rows before and after; a typed action (open, copy, paste) is answered, not performed, as Pilot performs it on a press in the menu; --then presses again in the view the first press left, escape going back a view. On a Raycast Form, --type types a text field's text one change per character as keystrokes come, and --submit sets the fields its JSON object names, by id, then presses the form's SubmitForm (or the action named); it answers the form before, each line typing drew, the form filled and the view after, submitted false while a field shows an error."),
         ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
-        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with its same question."),
+        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with its same question. root is Hyper+Space's root search for <typed> as the menu lists it (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, never GitHub."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -316,6 +327,7 @@ extension ControlVerbs {
         let model = tools.extensions.standardizedFileURL == shared.extensions.standardizedFileURL ? shared
             : RaycastStoreModel(source: shared.source, extensions: tools.extensions)
         let words = Array(args.positional.dropFirst())
+        if words.first == "root" { return try await storeRoot(words.dropFirst().joined(separator: " "), model, tools) }
         if args.has("refresh") { await model.refresh() } else { await model.open() }
         if case .failed(let why) = model.load { throw ControlError(.badValue, "Raycast's store not listed: \(why)") }
         guard let listing = model.listing else { throw ControlError(.badValue, "Raycast's store not listed") }
@@ -367,6 +379,31 @@ extension ControlVerbs {
             o["stale"] = model.stale.map(JSONValue.string)
             return .object(o)
         }
+    }
+
+    /// `ext store root <typed>` (raycast-extensions T25): Hyper+Space's root search as the menu builds it, its rows from
+    /// PilotMenu.entries (each Raycast command read as Extension) and the store's from the listing kept on disk, as
+    /// provideStore gives them, ranked by the menu's own navigator. Reads only: no GitHub, nothing run.
+    private static func storeRoot(_ typed: String, _ model: RaycastStoreModel, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
+        guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { throw ControlError(.badValue, "ext store root takes what is typed") }
+        let found = await tools.found().extensions
+        await model.openKept(installed: found)
+        let entries = Engine.shared.map { PilotMenu.entries($0, scripts: ScriptCommand.find(), extensions: found) } ?? []
+        var nav = MenuNavigator(entries: entries)
+        nav.query = typed
+        nav.provide(.store, model.rootRows(typed))
+        let headings = MenuGroups.headings(nav.rows, searching: true)
+        let rows: [JSONValue] = nav.rows.prefix(20).enumerated().map { i, row in
+            var o: [String: JSONValue] = ["title": .string(row.shownTitle), "target": .string(String(describing: row.target))]
+            o["heading"] = headings[i].map { .string($0.title(goTo: true)) }
+            o["kind"] = row.kindWord.map(JSONValue.string)
+            o["subtitle"] = row.subtitle.map(JSONValue.string)
+            o["icon"] = row.icon?.file.map(JSONValue.string)
+            return .object(o)
+        }
+        var o: [String: JSONValue] = ["typed": .string(typed), "rows": .array(rows), "listed": .number(Double(nav.rows.count))]
+        o["listing"] = model.listing.map { .string("kept on disk, \($0.folders.count) folders, read \($0.fetched.ISO8601Format())") } ?? .string("none kept")
+        return .object(o)
     }
 
     /// What pilot-ext-host's gap recorder wrote for one extension, ExtensionData/<id>/gaps.json (ADR 0017, T3).
@@ -507,12 +544,16 @@ extension ControlVerbs {
                                    + "(asked: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
                                    + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
             }
-            let done: Extension
-            do { done = try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
+            // Node modules its built code requires that the prelude lacks or only loads (T25): known only once built, so a
+            // second question names them before anything is installed.
+            let missing = built.missingModules
+            let done: Extension = try await tools.gate.allow(missing.isEmpty ? nil : tools.modulesAsk(plan, missing), peer: peer) { () throws(ControlError) in
+                do { return try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
+            }
             log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from \(from, privacy: .public)")
             return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
                             "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
-                            "question": .string(whole ? "whole" : "counted"),
+                            "question": .string(whole ? "whole" : "counted"), "needs": .array(missing.map(JSONValue.string)),
                             "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
                             "fetched": .array((fetched + more).map { f in
                                 .object(["host": .string(f.host), "what": .string(oneLine(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])

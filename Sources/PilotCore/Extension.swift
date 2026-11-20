@@ -29,6 +29,8 @@ public struct Extension: Equatable, Sendable {
         public let keyword: String?
         /// What runs it: its own program, or pilot-ext-host for a Raycast-format command, whose program is its bundle (ADR 0017).
         public internal(set) var runtime: Runtime = .process
+        /// A Raycast-format command's icon file, its own or its extension's (T25); nil for an extension.json one.
+        public internal(set) var picture: String?
 
         public var name: String { id.command }
         public var actionID: String { id.actionID }
@@ -157,6 +159,10 @@ public struct Extension: Equatable, Sendable {
 
     public let id: String, title: String, icon: String?, permissions: Permissions, preferences: [Preference], commands: [Command]
     public let folder: URL
+    /// A Raycast-format extension's icon file in its `assets/` (T25); nil for an extension.json one, whose icon is an emoji.
+    public internal(set) var picture: String?
+    /// Raycast-format (ADR 0017), not one of Pilot's own extension.json extensions, which T25 sets aside.
+    public var isRaycast: Bool { commands.contains { $0.runtime == .raycast } }
     /// The manifest's `"version"`, read only by the extension catalogue to tell an update (2026-10-10); nil when it has
     /// none or it is not a string.
     public let version: String?
@@ -355,7 +361,28 @@ public struct Extension: Equatable, Sendable {
 
     /// Its listed commands as menu and Binds rows: each wears its icon and is found by its extension's title.
     var actionInfos: [BindsPage.ActionInfo] {
-        listed.map { BindsPage.ActionInfo(id: $0.actionID, label: $0.title, module: Module.drive.rawValue, icon: .command(emoji: $0.icon), keywords: title) }
+        listed.map { BindsPage.ActionInfo(id: $0.actionID, label: $0.title, module: Module.drive.rawValue, icon: Self.icon($0.icon, $0.picture), keywords: title) }
+    }
+
+    /// An emoji's icon, or a Raycast extension's picture over the same glyph (T25).
+    static func icon(_ emoji: String?, _ picture: String?) -> MenuIcon {
+        var icon = MenuIcon.command(emoji: emoji)
+        icon.file = picture
+        return icon
+    }
+
+    /// The menu's rows with each Raycast-format command read as what it is (T25): the Extension kind, its extension's
+    /// title beside it, its own icon. Its Return runs it, opening its view, as before; only the words and icon change.
+    public static func dressed(_ rows: [MenuEntry], with extensions: [Extension]) -> [MenuEntry] {
+        let owners = Dictionary(extensions.filter(\.isRaycast).flatMap { ext in ext.listed.map { ($0.actionID, ext) } }) { a, _ in a }
+        guard !owners.isEmpty else { return rows }
+        return rows.map { row in
+            guard case .action(let id) = row.target, let ext = owners[id] else { return row }
+            var row = row
+            row.ownKind = .extension
+            row.subtitle = ext.title
+            return row
+        }
     }
 
     /// Hyper+Space's Extensions branch (story 158): a sub-branch per extension with a listed command, titled after it,
@@ -366,8 +393,10 @@ public struct Extension: Equatable, Sendable {
         for ext in extensions {
             let sub = MenuLayout.extensionBranch(ext.title), commands = ext.actionInfos
             guard !commands.isEmpty, extras[sub] == nil else { continue }   // of two with one title, the first's
-            var row = MenuEntry(title: ext.title, target: .branch(sub), home: .extensions, keywords: ext.id,
-                                subtitle: ext.description.isEmpty ? nil : ext.description, icon: .command(emoji: ext.icon))
+            // A Raycast extension's commands are found as themselves (T25), so its branch row is listed only in Extensions:
+            // a search showed both "Kill Process · Action" and "Go to Kill Process" for its one command.
+            var row = MenuEntry(title: ext.title, target: .branch(sub), home: .extensions, inSearch: !ext.isRaycast, keywords: ext.id,
+                                subtitle: ext.description.isEmpty ? nil : ext.description, icon: Self.icon(ext.icon, ext.picture))
             row.extensionID = ext.id
             rows.append(row)
             extras[sub] = commands
