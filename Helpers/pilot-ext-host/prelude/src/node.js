@@ -634,7 +634,7 @@ const url = guard("url", {
   pathToFileURL: (p) => new URL(`file://${encodeURI(path.resolve(String(p)))}`),
 });
 
-// MARK: tty and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
+// MARK: tty, timers and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
 
 // No terminal is ever attached to a host's descriptors, so every isatty is false; the stream classes are only named.
 const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {}, WriteStream: class WriteStream {} });
@@ -642,6 +642,14 @@ const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {},
 const timersPromises = guard("timers/promises", {
   setTimeout: (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms)),
   setImmediate: (value) => new Promise((resolve) => setImmediate(() => resolve(value))),
+});
+
+// `timers` itself is the globals by another name (T28: Summarize YouTube Videos requires it at load), its promises as above.
+const timers = guard("timers", {
+  setTimeout: (...a) => globalThis.setTimeout(...a), clearTimeout: (id) => globalThis.clearTimeout(id),
+  setInterval: (...a) => globalThis.setInterval(...a), clearInterval: (id) => globalThis.clearInterval(id),
+  setImmediate: (...a) => globalThis.setImmediate(...a), clearImmediate: (id) => globalThis.clearImmediate(id),
+  promises: timersPromises,
 });
 
 // MARK: querystring (T15: Google Translate builds its request with it), as nodejs.org documents it: `+` reads as a space,
@@ -671,5 +679,5 @@ const querystring = guard("querystring", {
 export { path, childProcess, check };
 export const modules = {
   fs, "fs/promises": fsPromises, path, "path/posix": path, "path/win32": win32, os, crypto, child_process: childProcess,
-  events: EventEmitter, util, url, tty, "timers/promises": timersPromises, querystring,
+  events: EventEmitter, util, url, tty, timers, "timers/promises": timersPromises, querystring,
 };
