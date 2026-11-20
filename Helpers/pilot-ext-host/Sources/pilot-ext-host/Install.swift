@@ -7,7 +7,8 @@ import Foundation
 //   pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools>
 //     one recursive tree listing of that folder (api.github.com), then each file it needs from raw.githubusercontent.com,
 //     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot asks about:
-//     the manifest's commands and preferences, the packages its lockfile pins, and whether esbuild is in <tools> yet.
+//     the manifest's commands and preferences, the packages its lockfile pins (its dependencies, and the dev-only ones its
+//     code imports), and whether esbuild is in <tools> yet.
 //   pilot-ext-host --build <workspace> <tools>, the asked plan on stdin
 //     esbuild 0.28.2 (once, checked by its pinned sha512, kept in <tools>), each package's tarball from the npm registry
 //     checked by the lockfile's sha512 and unpacked here (no npm, so no install script ever runs), then esbuild per
@@ -104,17 +105,18 @@ enum Installer {
         guard wanted.contains(where: { $0.path == "package.json" }) else { throw Refused("\(path) has no package.json") }
         let source = workspace.appending(path: "source")
         // Then each top-level folder of the extension's own that a relative import in what was fetched names (T15: Google
-        // Translate's `../vendor/…`), held to the same limits; an import that climbs above the folder is refused.
+        // Translate's `../vendor/…`, or `../vendor` itself), held to the same limits; an import that climbs above the
+        // folder is refused. Names are compared case-folded, as APFS reads them, so `../Src/…` is never fetched over src/.
         var batch = wanted, have = Set(wanted.map(\.path)), total = 0
         while !batch.isEmpty {
             total = try checkLimits(wanted, path)
             for file in batch { try await fetchBlob(file, owner: owner, repo: repo, path: path, into: source) }
-            let folders = try importedFolders(batch.map(\.path), in: source).subtracting(["src", "assets", "node_modules"])
+            let folders = try importedFolders(batch.map(\.path), in: source).filter { !["src", "assets", "node_modules"].contains($0.lowercased()) }
             batch = blobs.filter { blob in !have.contains(blob.path) && folders.contains(where: { blob.path.hasPrefix($0 + "/") }) }
             wanted += batch
             have.formUnion(batch.map(\.path))
         }
-        var plan = try plan(source)
+        var plan = try plan(source, imports: importedPackages(wanted.map(\.path), in: source))
         plan["type"] = "plan"
         plan["tree"] = treeSHA
         plan["source"] = "github:\(owner)/\(repo)/\(path)"
@@ -142,7 +144,7 @@ enum Installer {
     static func importedFolders(_ files: [String], in source: URL) throws -> Set<String> {
         let code = #/(?:\bfrom|\bimport|\brequire)\s*\(?\s*["'](\.{1,2}/[^"'\n]{1,300})["']/#
         var folders = Set<String>()
-        for file in files where [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"].contains(where: file.hasSuffix) {
+        for file in files where codeSuffixes.contains(where: file.hasSuffix) {
             guard let text = try? String(contentsOf: source.appending(path: file), encoding: .utf8) else { continue }
             for match in text.matches(of: code) {
                 var parts = file.split(separator: "/").dropLast().map(String.init)
@@ -152,11 +154,29 @@ enum Installer {
                         parts.removeLast()
                     } else if part != "." { parts.append(part) }
                 }
-                if parts.count > 1 { folders.insert(parts[0]) }
+                // Its top-level name: a folder when the listing has files under it (`../vendor`, `../vendor/x`), else nothing.
+                if let top = parts.first { folders.insert(top) }
             }
         }
         return folders
     }
+
+    /// The packages the bare imports (`from "x"`, `import("@s/x/y")`, `require("x")`) in `files` name, by package name.
+    static func importedPackages(_ files: [String], in source: URL) -> Set<String> {
+        let code = #/(?:\bfrom|\bimport|\brequire)\s*\(?\s*["']([^"'./\s][^"'\s]{0,300})["']/#
+        var names = Set<String>()
+        for file in files where codeSuffixes.contains(where: file.hasSuffix) {
+            guard let text = try? String(contentsOf: source.appending(path: file), encoding: .utf8) else { continue }
+            for match in text.matches(of: code) where !match.1.contains(":") {
+                let parts = match.1.split(separator: "/").map(String.init)
+                let name = match.1.hasPrefix("@") ? parts.prefix(2).joined(separator: "/") : parts[0]
+                if name.wholeMatch(of: npmName) != nil { names.insert(name) }
+            }
+        }
+        return names
+    }
+
+    static let codeSuffixes = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]
 
     /// One file of the listing from raw.githubusercontent.com, checked against its git blob hash, into `source`.
     static func fetchBlob(_ file: Blob, owner: String, repo: String, path: String, into source: URL) async throws {
@@ -179,7 +199,7 @@ enum Installer {
 
     /// The manifest's words and the packages its lockfile pins that the build needs: everything reachable from the root's
     /// dependencies, at the lockfile's own places, the host's externals and their trees left out.
-    static func plan(_ source: URL) throws -> [String: Any] {
+    static func plan(_ source: URL, imports: Set<String> = []) throws -> [String: Any] {
         let manifestData = try Data(contentsOf: source.appending(path: "package.json"))
         guard let manifest = try? JSONSerialization.jsonObject(with: manifestData) as? [String: Any],
               let id = manifest["name"] as? String, let commands = manifest["commands"] as? [[String: Any]] else {
@@ -219,9 +239,17 @@ enum Installer {
             "preferences": preferences,
         ]
         if let version = manifest["version"] as? String { plan["version"] = version }
-        let roots = Set((manifest["dependencies"] as? [String: Any] ?? [:]).keys).subtracting(externals)
+        // The dependencies, and each package the code imports that the lockfile pins at the root as dev-only (T15: GitHub's
+        // generated code imports graphql-tag, which only its codegen pins), so the question names and counts it.
+        let dependencies = Set((manifest["dependencies"] as? [String: Any] ?? [:]).keys)
+        let packages = lock(source)
+        let devOnly = imports.subtracting(dependencies).filter { name in
+            let entry = packages?["node_modules/" + name]
+            return entry?["dev"] as? Bool == true || entry?["devOptional"] as? Bool == true
+        }
+        let roots = dependencies.union(devOnly).subtracting(externals)
         guard !roots.isEmpty else { plan["packages"] = [[String: Any]](); return plan }
-        guard let packages = lock(source) else { throw Refused("it has dependencies but no package-lock.json of version 2 or 3") }
+        guard let packages else { throw Refused("it has dependencies but no package-lock.json of version 2 or 3") }
         plan["packages"] = try walk(roots, packages).map { try described($0, packages) }
         return plan
     }
@@ -299,24 +327,6 @@ enum Installer {
         return ["key": key, "name": real, "version": version, "resolved": resolved, "integrity": integrity]
     }
 
-    /// The packages to fetch when esbuild could not resolve `errors`' bare imports and every one is a package the
-    /// lockfile marks dev-only at the root (T15: GitHub's generated code imports graphql-tag, which only its codegen
-    /// pins): those and their trees, by walk() and described() as the plan's own, less what is already unpacked. Empty
-    /// when any unresolved import is something else, so the build stops as it did.
-    static func devFallback(_ errors: String, source: URL, unpacked: Set<String>) throws -> [[String: String]] {
-        let specs = Set(errors.matches(of: #/Could not resolve "([^"\n]{1,300})"/#).map { String($0.1) })
-        guard !specs.isEmpty, let packages = lock(source) else { return [] }
-        var names = Set<String>()
-        for spec in specs {
-            guard !spec.hasPrefix("."), !spec.hasPrefix("/"), !spec.contains(":") else { return [] }
-            let parts = spec.split(separator: "/").map(String.init)
-            let name = spec.hasPrefix("@") ? parts.prefix(2).joined(separator: "/") : parts[0]
-            guard name.wholeMatch(of: npmName) != nil, packages["node_modules/" + name]?["dev"] as? Bool == true else { return [] }
-            names.insert(name)
-        }
-        return try walk(names, packages, skip: unpacked).map { try described($0, packages) }
-    }
-
     // MARK: Build
 
     static func build(workspace: URL, tools: URL, plan data: Data) async throws {
@@ -328,26 +338,18 @@ enum Installer {
         let manifestData = try Data(contentsOf: source.appending(path: "package.json"))
         guard hex(Array(SHA256.hash(data: manifestData))) == manifest else { throw Refused("its package.json changed after the question") }
         let esbuild = try await esbuildTool(tools)
-        var unpacked = 0, keys = Set<String>()
-        // Each package's tarball from the registry, checked by its lockfile's sha512 and unpacked with no script run.
-        func unpack(_ packages: [[String: String]]) async throws {
-            for package in packages {
-                guard let key = package["key"], let resolved = package["resolved"], let integrity = package["integrity"], let url = URL(string: resolved),
-                      resolved.hasPrefix(registry), safe(key), key.hasPrefix("node_modules/") else { throw Refused("a package in the plan is not the registry's") }
-                let tarball = try await get(url, limit: tarballLimit)
-                guard matches(tarball, integrity) else {
-                    throw Refused("\(key) \(package["version"] ?? "") does not match its lockfile's integrity; nothing was installed")
-                }
-                fetched(url, "\(key.dropFirst("node_modules/".count))@\(package["version"] ?? "")", tarball.count, "sha512 integrity")
-                unpacked += try untar(try gunzip(tarball, limit: unpackedLimit - unpacked), into: source.appending(path: key))
-                guard unpacked <= unpackedLimit else { throw Refused("its packages unpack past \(unpackedLimit) bytes") }
-                keys.insert(key)
+        var unpacked = 0
+        for package in packages {
+            guard let key = package["key"], let resolved = package["resolved"], let integrity = package["integrity"], let url = URL(string: resolved),
+                  resolved.hasPrefix(registry), safe(key), key.hasPrefix("node_modules/") else { throw Refused("a package in the plan is not the registry's") }
+            let tarball = try await get(url, limit: tarballLimit)
+            guard matches(tarball, integrity) else {
+                throw Refused("\(key) \(package["version"] ?? "") does not match its lockfile's integrity; nothing was installed")
             }
+            fetched(url, "\(key.dropFirst("node_modules/".count))@\(package["version"] ?? "")", tarball.count, "sha512 integrity")
+            unpacked += try untar(try gunzip(tarball, limit: unpackedLimit - unpacked), into: source.appending(path: key))
+            guard unpacked <= unpackedLimit else { throw Refused("its packages unpack past \(unpackedLimit) bytes") }
         }
-        try await unpack(packages)
-        // The dev-only fallback below runs once per build: the first command whose bundle needs it fetches them, and every
-        // later command finds them unpacked; a second failure stops the build as before.
-        var fellBack = false
         let built = workspace.appending(path: "built")
         try fm.createDirectory(at: built.appending(path: "dist"), withIntermediateDirectories: true)
         for command in commands {
@@ -356,24 +358,12 @@ enum Installer {
                 throw Refused("command \(name) has no src/\(name).tsx, .ts, .jsx or .js")
             }
             let meta = workspace.appending(path: "meta-\(name).json")
-            let arguments = [
+            try esbuildRun(esbuild.url, in: source, [
                 entry, "--bundle", "--platform=node", "--format=cjs", "--target=es2022", "--jsx=automatic", "--log-level=error",
                 // dynamic import() becomes require(): a bare JSContext has no module loader (useSQL's node:sqlite, T7).
                 "--tsconfig-raw=\(tsconfigRaw(source))", "--supported:dynamic-import=false", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
                 "--external:react/*", "--metafile=\(meta.path)", "--outfile=\(built.appending(path: "dist/\(name).js").path)",
-            ]
-            do {
-                try esbuildRun(esbuild.url, in: source, arguments)
-            } catch let stop as Refused where !fellBack {
-                // Once per build: bare imports esbuild could not resolve that the lockfile pins as dev-only (devFallback)
-                // are fetched as the plan's packages are, and esbuild runs again; anything else stops the build as before.
-                let extra = try devFallback(stop.text, source: source, unpacked: keys)
-                guard !extra.isEmpty else { throw stop }
-                fellBack = true
-                say(["type": "dev-packages", "command": name, "packages": extra.map { "\($0["name"] ?? "")@\($0["version"] ?? "")" }])
-                try await unpack(extra)
-                try esbuildRun(esbuild.url, in: source, arguments)
-            }
+            ])
             // Every file bundled must be the folder's own or a package unpacked into it: Node's lookup also climbs to
             // folders above the workspace (~/node_modules), and nothing from there may enter a bundle.
             guard let metaData = try? Data(contentsOf: meta), let read = try? JSONSerialization.jsonObject(with: metaData) as? [String: Any],
