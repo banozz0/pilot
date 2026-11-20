@@ -43,9 +43,10 @@ public enum ExtensionRun {
     }
 
     /// The line Pilot writes on the command's stdin; a list's carries the search, a surface's which surface asks (story 161),
-    /// a run's the text typed or the answer asked for (`input`, Surfaces v2).
+    /// a run's the text typed or the answer asked for (`input`, Surfaces v2; a Raycast command's first argument, T11).
+    /// `answers`: a Raycast host's one-shot run whose stdin Pilot keeps open to answer its asks (T11, `hosted`).
     static func message(_ command: Extension.Command, query: String? = nil, context: JSONValue? = nil,
-                        surface: Extension.Surface.Kind? = nil, input: String? = nil, inputs: Inputs) -> Data {
+                        surface: Extension.Surface.Kind? = nil, input: String? = nil, inputs: Inputs, answers: Bool = false) -> Data {
         var fields: [String: JSONValue] = ["type": .string("run"), "extension": .string(command.id.extension), "command": .string(command.name),
                                            "preferences": .object(inputs.preferences),
                                            "paths": .object(["data": .string(inputs.data.path), "cache": .string(inputs.cache.path)])]
@@ -54,6 +55,7 @@ public enum ExtensionRun {
         fields["surface"] = surface.map { .string($0.rawValue) }
         fields["input"] = input.map(JSONValue.string)
         fields["pilot"] = inputs.pilot.isEmpty ? nil : .object(inputs.pilot.mapValues(JSONValue.string))
+        if answers { fields["answers"] = .bool(true) }
         return line(fields)
     }
 
@@ -70,11 +72,26 @@ public enum ExtensionRun {
                               environment pilot: [String: String] = ProcessInfo.processInfo.environment,
                               timeout: Duration = noViewTimeout) async throws -> String {
         let (path, arguments, directory) = try launch(command, environment: pilot)
-        let (env, line) = (environment(for: command, from: pilot), message(command, query: query, context: context, surface: surface, input: input, inputs: inputs))
+        let env = environment(for: command, from: pilot)
         guard command.runtime == .raycast else {
+            let line = message(command, query: query, context: context, surface: surface, input: input, inputs: inputs)
             return try await ChildProcess.run(path, arguments, environment: env, input: line, directory: directory, timeout: timeout)
         }
-        return try await hosted(path, arguments, environment: env, input: line, directory: directory, timeout: timeout)
+        // A surface's run (a bar tick, a page) never asks the AI or reads the selection (Q478, T12): only a run with no
+        // surface keeps its stdin for answers.
+        let answers = surface == nil
+        let line = message(command, query: query, context: context, surface: surface, input: input, inputs: inputs, answers: answers)
+        return try await hosted(path, arguments, environment: env, input: line, directory: directory, timeout: timeout,
+                                extension: command.id.extension, answers: answers)
+    }
+
+    /// A Raycast-format view command run once with its first argument filled by `input` (T11), as `list(_:query:…)` runs
+    /// one without.
+    @concurrent public static func list(_ command: Extension.Command, query: String, input: String?, inputs: Inputs,
+                                        environment pilot: [String: String] = ProcessInfo.processInfo.environment,
+                                        timeout: Duration = listTimeout) async -> ListOutcome {
+        do { return answer(try await output(command, query: query, input: input, inputs: inputs, environment: pilot, timeout: timeout)) }
+        catch { return .error(reason(error, timeout: timeout)) }
     }
 
     // MARK: The host's memory stop (ADR 0017, T4)
@@ -83,6 +100,10 @@ public enum ExtensionRun {
     /// Search's 477.6 MB peak runs (Sven, 2026-11-19, Q1, open question 3). MB is MiB, as lean-check counts it.
     public static let memoryStopMB = 512
     public static let memoryStopBytes = UInt64(memoryStopMB) << 20
+
+    /// How long a one-shot host may still run once the last answer to its asks came after its timeout (T11): the host's
+    /// own grace (main.swift's 0.5 s) and a little.
+    static let answerGrace: Duration = .milliseconds(750)
 
     /// How often Pilot reads a running host's footprint.
     static let memoryPoll: Duration = .milliseconds(250)
@@ -115,12 +136,17 @@ public enum ExtensionRun {
 
     /// A one-shot run of the host, as ChildProcess.run runs a program (stdout to its end, TimedOut past `timeout`, a
     /// failed exit as Failure, cancellation as CancellationError), with its footprint watched: past the stop it is
-    /// killed and throws OverMemory.
+    /// killed and throws OverMemory. Its stdin stays open for the answers to its asks (T11): each `ask` line is answered
+    /// through ExtensionAI for the extension `id`, never kept as output, and while one waits `timeout` waits too (the
+    /// AI route's own timeout still ends it); stdin closes once the host is gone. Without `answers` (a surface's run, T12)
+    /// stdin closes right after the run message, so the host fails each ask at once, and an ask line is kept as output.
     static func hosted(_ path: String, _ arguments: [String], environment: [String: String], input: Data, directory: URL,
-                       timeout: Duration) async throws -> String {
+                       timeout: Duration, extension id: String = "", answers: Bool = true) async throws -> String {
         enum Stop { case late, memory, cancelled }
         struct State {
             var session: ChildProcess.Session?, watch: Task<Void, Never>?, stop: Stop?, lines: [String] = [], done = false
+            /// Asks waiting for their answers (T11), and whether `timeout` passed while one waited.
+            var asking = 0, late = false
             var continuation: CheckedContinuation<String, any Error>?
         }
         let state = Mutex(State()), tool = URL(filePath: path).lastPathComponent
@@ -132,11 +158,33 @@ public enum ExtensionRun {
                 s.session?.stop()
             }
         }
+        /// Late, unless an ask is still waiting for its answer: then late `answerGrace` after the last answer.
+        @Sendable func late() {
+            let waits = state.withLock { s in
+                s.late = !s.done && s.asking > 0
+                return s.late
+            }
+            if !waits { stop(.late) }
+        }
+        @Sendable func received(_ line: String) {
+            guard answers, let (number, ask) = ExtensionAI.hostAsk(line) else { return state.withLock { $0.lines.append(line) } }
+            state.withLock { $0.asking += 1 }
+            Task.detached {
+                let answer = await ExtensionAI.answer(number, ask, of: id)
+                let lateNow = state.withLock { s in
+                    s.asking -= 1
+                    if !s.done { s.session?.send(answer) }
+                    return s.asking == 0 && s.late
+                }
+                if lateNow { DispatchQueue.global().asyncAfter(deadline: .now() + answerGrace.inSeconds) { late() } }
+            }
+        }
         @Sendable func ended(_ status: Int32, _ stderr: String) {
             state.withLock { s in
                 guard !s.done, let continuation = s.continuation else { return }
                 s.done = true
                 s.watch?.cancel()
+                s.session?.closeInput()
                 switch s.stop {
                 case .memory: continuation.resume(throwing: OverMemory(limitMB: memoryStopMB))
                 case .late: continuation.resume(throwing: ChildProcess.TimedOut(tool: tool))
@@ -155,7 +203,7 @@ public enum ExtensionRun {
                 let session: ChildProcess.Session
                 do {
                     session = try ChildProcess.Session(path, arguments, environment: environment, directory: directory,
-                                                       lines: { line in state.withLock { $0.lines.append(line) } }, ended: ended)
+                                                       lines: received, ended: ended)
                 } catch {
                     state.withLock { $0.done = true }
                     return continuation.resume(throwing: error)
@@ -168,8 +216,8 @@ public enum ExtensionRun {
                 }
                 if stopped != nil { session.stop() }
                 session.send(input)
-                session.closeInput()
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout.inSeconds) { stop(.late) }
+                if !answers { session.closeInput() }
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout.inSeconds) { late() }
             }
         } onCancel: {
             stop(.cancelled)

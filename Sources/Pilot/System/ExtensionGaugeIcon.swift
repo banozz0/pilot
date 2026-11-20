@@ -6,7 +6,8 @@ import SwiftUI
 /// or two, its one or two thin meters stacked (AI usage: the session over the week) and its text ("66%"), then the item's
 /// text. Without a tone anywhere it is a template, so macOS colours it for the menu bar as it does every other item; with
 /// one, each toned gauge and the text draw in their tone over the menu bar's own label colour, resolved as macOS draws the
-/// item, light or dark.
+/// item, light or dark. A Raycast item's icon (T12) comes first, a glyph tall: its SF Symbol in the label colour, or its
+/// picture as it is, which makes the whole item no template.
 @MainActor
 enum ExtensionGaugeIcon {
     static let height: CGFloat = 18
@@ -34,7 +35,7 @@ enum ExtensionGaugeIcon {
         let inner = width(face)
         guard inner > 0 else { return nil }
         let size = NSSize(width: (inner + padding * 2).rounded(.up), height: height)
-        let toned = face.tone != nil || face.gauges.contains { $0.tone != nil }
+        let toned = face.tone != nil || face.gauges.contains { $0.tone != nil } || face.image != nil
         let image = NSImage(size: size, flipped: false) { _ in
             draw(face, at: padding, colour: { toned ? colour($0) : .black })
             return true
@@ -54,10 +55,16 @@ enum ExtensionGaugeIcon {
         }
     }
 
-    /// Its width in points without the picture's padding: the gauges, then the text.
+    /// The item's own icon (T12): its picture, else its SF Symbol; nil with neither or one that does not read.
+    static func icon(_ face: ExtensionBarFace) -> NSImage? {
+        face.image.flatMap(NSImage.init(data:)) ?? face.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+    }
+
+    /// Its width in points without the picture's padding: its icon, the gauges, then the text.
     static func width(_ face: ExtensionBarFace) -> CGFloat {
         let gauges = face.gauges.map(gaugeWidth)
         var total = gauges.reduce(0, +) + gaugeGap * CGFloat(max(gauges.count - 1, 0))
+        if icon(face) != nil { total += glyphSize + (total > 0 ? gaugeGap : 0) }
         if !face.text.isEmpty { total += (total > 0 ? textGap : 0) + measure(face.text, textFont) }
         return total
     }
@@ -79,6 +86,21 @@ enum ExtensionGaugeIcon {
     /// Draws it from `x` in the current context, `height` tall; `colour` gives each tone's ink (black for a template).
     static func draw(_ face: ExtensionBarFace, at x: CGFloat, colour: (Extension.Tone?) -> NSColor) {
         var x = x
+        if let icon = icon(face) {
+            let rect = NSRect(x: x, y: (height - glyphSize) / 2, width: glyphSize, height: glyphSize)
+            if face.image == nil {
+                // A symbol takes the label colour, as a template's glyph does.
+                let ink = colour(nil)
+                let tinted = NSImage(size: rect.size, flipped: false) { box in
+                    icon.draw(in: box)
+                    ink.set()
+                    box.fill(using: .sourceAtop)
+                    return true
+                }
+                tinted.draw(in: rect)
+            } else { icon.draw(in: rect) }
+            x += glyphSize + gaugeGap
+        }
         for gauge in face.gauges {
             let ink = colour(gauge.tone ?? (face.gauges.count == 1 ? face.tone : nil))
             let parts = parts(gauge)
@@ -106,7 +128,7 @@ enum ExtensionGaugeIcon {
             }
         }
         guard !face.text.isEmpty else { return }
-        if !face.gauges.isEmpty { x += textGap - gaugeGap }
+        if !face.gauges.isEmpty || icon(face) != nil { x += textGap - gaugeGap }
         write(face.text, textFont, colour(face.tone), at: x)
     }
 
@@ -192,6 +214,11 @@ struct ExtensionBarGlyph: View {
 
     var body: some View {
         HStack(spacing: ExtensionGaugeIcon.textGap) {
+            if let image = face.image.flatMap(NSImage.init(data:)) {
+                Image(nsImage: image).resizable().scaledToFit().frame(width: ExtensionGaugeIcon.glyphSize, height: ExtensionGaugeIcon.glyphSize)
+            } else if let symbol = face.symbol {
+                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(ink)
+            }
             if !face.gauges.isEmpty {
                 HStack(spacing: ExtensionGaugeIcon.gaugeGap) {
                     ForEach(face.gauges.indices, id: \.self) { i in gauge(face.gauges[i]) }

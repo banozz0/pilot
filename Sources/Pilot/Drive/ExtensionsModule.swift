@@ -5,9 +5,11 @@ import PilotCore
 /// Extensions folder (ExtensionRun) and shows what it said. Not in the registry, like script commands: the folder is read
 /// again as the menu opens and as a command runs, so an extension added, edited or removed since is followed. Open
 /// Extensions folder and Extension catalogue (ExtensionCatalogueMenu) are registered, so they bind and are found by search.
+/// Registering also installs what answers a Raycast-format extension's asks (T11): `AI.ask` and `getSelectedText`.
 @MainActor
 enum ExtensionsModule {
     static func register(into registry: inout ActionRegistry) {
+        ExtensionAI.answerer.withLock { $0 = { ask, id in await answer(ask, of: id) } }
         do {
             try registry.register(Action(id: "extensions.openFolder", label: "Open Extensions folder", module: .drive) {
                 ScriptsModule.openFolder(Extension.folder)
@@ -31,13 +33,14 @@ enum ExtensionsModule {
 
     /// Runs the command `id` names, read from `folder` now, handed its extension's preferences and folders from `storage`
     /// (card agent-bo-95423246): a no-view one through `run`, with the text a keyword's answer carries as its input, a
-    /// list or detail one through `list`. A required preference
+    /// list or detail one through `list`, or `typed` when a Raycast view's keyword carried words (T11), its first argument. A required preference
     /// unset runs nothing, says which, and opens the Extensions page at the extension (`settings`, card agent-bo-95423247).
     static func perform(_ id: String, in folder: URL, storage: ExtensionStorage = ExtensionStorage(),
                         run: (Extension.Command, ExtensionRun.Inputs, String?) async -> ExtensionRun.Outcome = {
                             await ExtensionRun.noView($0, input: $2, inputs: $1)
                         },
                         list: (Extension, Extension.Command, ExtensionRun.Inputs) -> Void = { openList($0, $1, inputs: $2) },
+                        typed: (Extension, Extension.Command, ExtensionRun.Inputs, String) -> Void = { openList($0, $1, inputs: $2, input: $3) },
                         act: (Extension.Item.Action, Extension, ExtensionRun.Inputs) -> Void = { ExtensionActions.run($0, in: $1, inputs: $2) },
                         settings: (Extension) -> Void = { AppWindowController.shared.open(AppPlace(.extensions), extension: $0.id) },
                         hud: (String) -> Void = { HUD.tip($0) }) async {
@@ -46,8 +49,46 @@ enum ExtensionsModule {
             return hud("No extension command \(id) in Extensions.")
         }
         guard let inputs = await inputs(for: ext, storage: storage, hud: hud, unset: settings) else { return }
-        guard command.mode == .noView else { return list(ext, command, inputs) }
+        guard command.mode == .noView else {
+            guard let input = Extension.input(inAction: id) else { return list(ext, command, inputs) }
+            return typed(ext, command, inputs, input)
+        }
         show(await run(command, inputs, Extension.input(inAction: id)), of: command, in: ext, act: { act($0, ext, inputs) }, hud: hud)
+    }
+
+    /// A Raycast-format extension's ask (ADR 0017, T11), read only as its command calls it: `AI.ask` through the AI
+    /// page's provider (only the prompt's size is logged, never its text), `getSelectedText` from the focused app now.
+    static func answer(_ ask: ExtensionAI.HostAsk, of id: String) async -> Result<String, ExtensionAI.Refusal> {
+        switch ask {
+        case .ai(let prompt):
+            dlog.notice("extension: \(id, privacy: .public) asks AI.ask about \(prompt.utf8.count) bytes")
+            return await ExtensionAI.ask(prompt, runner: AISettings.shared.runner())
+        case .selection:
+            dlog.notice("extension: \(id, privacy: .public) reads the selected text")
+            return await selection()
+        }
+    }
+
+    /// The text selected in the focused app (SelectedText), or that there is none, as Raycast's getSelectedText rejects.
+    /// A test run never reads the Mac's: `PILOT_SANDBOX_SELECTION=<file>` stands in, its text the selection (empty: none),
+    /// each read a line appended to `<file>.reads`; without it nothing is selected.
+    static func selection(environment: [String: String] = ProcessInfo.processInfo.environment) async -> Result<String, ExtensionAI.Refusal> {
+        let none = ExtensionAI.Refusal("No text is selected in the front app")
+        // Never the app's Copy when Pilot itself is in front: that would copy from Pilot's own panel.
+        guard isTestRun else {
+            let front = { NSWorkspace.shared.frontmostApplication.flatMap { $0.processIdentifier == getpid() ? nil : $0 } }
+            return await SelectedText.focused(front: front).map { .success($0.text) } ?? .failure(none)
+        }
+        guard isIsolatedTestRun, let file = environment["PILOT_SANDBOX_SELECTION"].map({ URL(filePath: $0) }) else { return .failure(none) }
+        let reads = file.appendingPathExtension("reads")
+        if !FileManager.default.fileExists(atPath: reads.path) { FileManager.default.createFile(atPath: reads.path, contents: nil) }
+        if let handle = try? FileHandle(forWritingTo: reads) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data("read \(Date().ISO8601Format())\n".utf8))
+            try? handle.close()
+        }
+        let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .failure(none) : .success(text)
     }
 
     /// Pilot's defaults every run message carries (Surfaces v2): Defaults › Folders › Repos and the terminal app's bundle
@@ -118,10 +159,10 @@ enum ExtensionsModule {
     }
 
     /// A list or detail command's view in the menu's panel (cards agent-bo-95423243, 245), handed `context` by the row
-    /// that pushed it.
-    static func openList(_ ext: Extension, _ command: Extension.Command, inputs: ExtensionRun.Inputs, context: JSONValue? = nil) {
+    /// that pushed it, and a Raycast command's first argument as `input` (T11).
+    static func openList(_ ext: Extension, _ command: Extension.Command, inputs: ExtensionRun.Inputs, context: JSONValue? = nil, input: String? = nil) {
         dlog.notice("extension: \(command.actionID, privacy: .public) view opens")
-        PilotMenu.shared.pick(live: command.title, source: ExtensionListSession(ext, command, inputs: inputs, context: context))
+        PilotMenu.shared.pick(live: command.title, source: ExtensionListSession(ext, command, inputs: inputs, context: context, input: input))
     }
 }
 

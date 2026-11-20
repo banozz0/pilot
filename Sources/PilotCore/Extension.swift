@@ -166,6 +166,9 @@ public struct Extension: Equatable, Sendable {
     /// Its page in the app window and its top-bar item, each a command Pilot asks again on its pace (story 161); nil
     /// when the manifest declares none. The menu branch needs no declaring: every extension has one.
     public let page: Surface?, bar: Surface?
+    /// Every top-bar item it has, `bar` first: an extension.json declares one at most, a Raycast extension one per
+    /// `menu-bar` command (T12).
+    public let bars: [Surface]
 
     /// At most this many examples are shown.
     public static let mostExamples = 2
@@ -226,6 +229,7 @@ public struct Extension: Equatable, Sendable {
         description = if case .string(let d)? = manifest.description { d.trimmingCharacters(in: .whitespacesAndNewlines) } else { "" }
         examples = Self.examples(manifest.examples)
         (page, bar) = try Self.surfaces(manifest.surfaces, commands: commands)
+        bars = bar.map { [$0] } ?? []
     }
 
     /// The manifest's or the catalogue's `examples`: its non-empty strings, at most `mostExamples`.

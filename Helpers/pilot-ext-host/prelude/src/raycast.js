@@ -5,10 +5,17 @@
 // typed actions (open, copy, paste, show in Finder), Detail's metadata, toast and HUD, Clipboard, LocalStorage and
 // Cache in ADR 0010's folders, `open`, `showInFinder` and the environment. Anything that acts on the Mac goes to Pilot
 // as an ADR 0010 line (a no-view command's `hud` and `action`, a view's `toast` and `action`), so Pilot performs it and
-// `pilot ext run` answers it unperformed. Every other Raycast export is a stub that records its use (gaps.js).
-import { createElement } from "react";
+// `pilot ext run` answers it unperformed. T8 adds the view stack: `Action.Push` and `useNavigation()`, whose push and
+// pop host.js performs on the run's layers. T10 adds the Form and its items, which form.js turns into fields, and
+// Action.SubmitForm. T11 adds `AI.ask` and `getSelectedText`, which ask Pilot (asks.js), and `confirmAlert`, which asks
+// in the panel (alert.js). T12 adds MenuBarExtra and its parts (menubar.js). Every other Raycast export is a stub that
+// records its use (gaps.js).
+import { createContext, createElement, useContext } from "react";
 import { guard, missing, record, store, stubs } from "./gaps.js";
 import { childProcess, path } from "./node.js";
+import { askAI, selectedText } from "./asks.js";
+import { confirmAlert } from "./alert.js";
+import { menuBarComponents } from "./menubar.js";
 
 const native = globalThis.__native;
 
@@ -59,10 +66,34 @@ ActionPanel.Section = host("ActionPanel.Section");
 ActionPanel.Submenu = host("ActionPanel.Submenu");
 export const Action = host("Action");
 for (const name of ["OpenInBrowser", "CopyToClipboard", "Paste", "Open", "OpenWith", "ShowInFinder"]) Action[name] = host(`Action.${name}`);
-for (const name of ["Push", "SubmitForm", "CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
+// A push is pressed by its handler id as an Action's onAction is; host.js mounts its `target` over the view (T8).
+Action.Push = host("Action.Push");
+// SubmitForm is pressed by its handler id; form.js hands onSubmit the form's values (T10).
+Action.SubmitForm = host("Action.SubmitForm");
+for (const name of ["CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
   Action[name] = lacking(`Action.${name}`);
 }
 Action.Style = Object.freeze({ Regular: "regular", Destructive: "destructive" });
+
+export const Form = withParts("Form");
+for (const name of ["TextField", "PasswordField", "TextArea", "Checkbox", "DatePicker", "Dropdown", "FilePicker", "Separator", "Description"]) {
+  Form[name] = host(`Form.${name}`);
+}
+Form.Dropdown.Item = host("Form.Dropdown.Item");
+Form.Dropdown.Section = host("Form.Dropdown.Section");
+Form.DatePicker.Type = Object.freeze({ Date: "date", DateTime: "dateTime" });
+/** Whether `date` is a whole day, as a Date-only pick gives it: local midnight. */
+Form.DatePicker.isFullDay = (date) => date instanceof Date && date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
+Form.TagPicker = lacking("Form.TagPicker");
+Form.TagPicker.Item = () => null;
+Form.LinkAccessory = lacking("Form.LinkAccessory");
+
+/** The run's view stack (host.js provides it to every layer): `push(view, onPop)` mounts a view over the current one,
+ *  `pop()` goes back to the one under it, its state kept. */
+export const Navigation = createContext(null);
+
+export const MenuBarExtra = menuBarComponents(host);
+const useNavigation = () => useContext(Navigation);
 
 /** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (host.js maps an Icon name to its SF Symbol, T5). */
 const names = () => new Proxy({}, { get: (_, key) => (typeof key === "string" ? key : undefined) });
@@ -165,19 +196,27 @@ export function makeAPI(message, mode) {
     #tell(key, value) { for (const fn of this.#subscribers) fn(key, value); }
   }
 
+  // MARK: AI, through the provider on Pilot's AI page (T11)
+
+  const AI = stubs("AI", [], {
+    ask: askAI, Model: names(),
+    Creativity: Object.freeze({ None: "none", Low: "low", Medium: "medium", High: "high", Maximum: "maximum" }),
+  });
+
   // MARK: The environment
 
   const environment = Object.freeze({
-    commandName: message.command, commandMode: mode, extensionName: message.extension, launchType: "userInitiated",
+    commandName: message.command, commandMode: mode, extensionName: message.extension, launchType: message.launchType ?? "userInitiated",
     supportPath: data, assetsPath: `${native.cwd()}/assets`, raycastVersion: "", isDevelopment: false, textSize: "medium",
     appearance: "dark", theme: "dark", ownerOrAuthorName: "",
-    /** Pilot answers false for each API it lacks (AI, browser and window management): ask before using one. */
-    canAccess: () => false,
+    /** Pilot has AI (T11), through its AI page's provider, and answers false for the APIs it lacks (browser and window
+     *  management): Raycast's docs say to ask before using one. */
+    canAccess: (api) => api === AI,
   });
 
   const api = {
     List, Detail, ActionPanel, Action, Toast, showToast, showHUD: hud, Clipboard, open, showInFinder, LocalStorage, Cache, environment,
-    getPreferenceValues: () => preferences,
+    getPreferenceValues: () => preferences, useNavigation,
     closeMainWindow: () => Promise.resolve(), popToRoot: () => Promise.resolve(), clearSearchBar: () => Promise.resolve(),
     Icon: names(), Color: names(), Image: Object.freeze({ Mask: Object.freeze({ Circle: "circle", RoundedRectangle: "roundedRectangle" }) }),
     Keyboard: Object.freeze({ Shortcut: Object.freeze({ Common: shortcut() }) }),
@@ -186,14 +225,14 @@ export function makeAPI(message, mode) {
     Alert: stubs("Alert", [], { ActionStyle: Object.freeze({ Default: "default", Cancel: "cancel", Destructive: "destructive" }) }),
     // Views and namespaces that come in later tasks, or not at all: each records its use.
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
-    Grid: missing("Grid"), Form: missing("Form"), MenuBarExtra: missing("MenuBarExtra"),
-    AI: stubs("AI", ["ask"], { Model: names() }),
+    Form,
+    Grid: missing("Grid"), MenuBarExtra,
+    AI, getSelectedText: selectedText, confirmAlert: (options) => confirmAlert(options, noView),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
-  for (const name of ["confirmAlert", "trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedText",
-    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "useNavigation", "openExtensionPreferences", "openCommandPreferences",
+  for (const name of ["trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
     "captureException"]) api[name] = missing(name);
   return guard("", api);
 }

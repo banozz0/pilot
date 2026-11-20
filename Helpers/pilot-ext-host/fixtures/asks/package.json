@@ -1,0 +1,67 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "asks",
+  "title": "Asks",
+  "description": "A fixture for pilot-ext-host's asks (T11): confirmAlert in the panel, AI.ask through Pilot's AI page, getSelectedText read as the command runs, and command arguments.",
+  "author": "banozz",
+  "license": "MIT",
+  "categories": ["Developer Tools"],
+  "commands": [
+    {
+      "name": "index",
+      "title": "Confirm a thing",
+      "description": "Delete the thing asks first; its answer shows on the Status row.",
+      "mode": "view"
+    },
+    {
+      "name": "ai",
+      "title": "Ask the AI",
+      "description": "Asks AI.ask once as it opens, loading until the answer comes.",
+      "mode": "view"
+    },
+    {
+      "name": "selection",
+      "title": "Read the selection",
+      "description": "Reads getSelectedText once as it opens.",
+      "mode": "view"
+    },
+    {
+      "name": "quiet",
+      "title": "Never reads",
+      "description": "A view that never calls getSelectedText or AI.ask.",
+      "mode": "view"
+    },
+    {
+      "name": "greet",
+      "title": "Greet",
+      "description": "Shows its arguments as rows.",
+      "mode": "view",
+      "arguments": [
+        { "name": "who", "type": "text", "placeholder": "Who", "required": true },
+        { "name": "how", "type": "dropdown", "placeholder": "How", "data": [{ "title": "Warmly", "value": "warmly" }, { "title": "Briefly", "value": "briefly" }] }
+      ]
+    },
+    {
+      "name": "say",
+      "title": "Say",
+      "description": "Says its arguments in its HUD line.",
+      "mode": "no-view",
+      "arguments": [
+        { "name": "words", "type": "text", "placeholder": "Words", "required": true },
+        { "name": "tone", "type": "text", "placeholder": "Tone" }
+      ]
+    },
+    {
+      "name": "ask-once",
+      "title": "Ask once",
+      "description": "AI.ask from a no-view command.",
+      "mode": "no-view"
+    },
+    {
+      "name": "confirm-once",
+      "title": "Confirm once",
+      "description": "confirmAlert from a no-view command.",
+      "mode": "no-view"
+    }
+  ]
+}

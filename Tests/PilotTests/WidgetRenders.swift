@@ -107,11 +107,19 @@ struct WidgetRenders {
             + [MenuBranch.system, .capture].map { WidgetLauncher.Tile(key: "branch:\($0.rawValue)", title: $0.title, symbol: $0.look.symbol, icon: nil) }
     }
 
+    /// The Extension widget's fixture answer: a title with its symbol, and its menu's rows, display-only.
+    static let barAnswer = Extension.BarAnswer(text: "3 open", blocks: [.list(title: nil, items: [
+        Extension.Item(title: "Write the release notes", actions: []), Extension.Item(title: "Reply to the review", actions: []),
+        Extension.Item(title: "Book the dentist", actions: []), Extension.Item(title: "Mark one done", actions: []), Extension.Item(title: "Mark all done", actions: []),
+    ])], symbol: "checklist")
+
     static func blocks(_ widget: Widget, note: String = "") -> [Extension.Block] {
         switch widget.data {
         case .notes: return WidgetNotes.blocks(notes, picked: note).blocks
         case .repos: return WidgetRepos.blocks(repos)
         case .none, .github, .markets: return []
+        // A Raycast MenuBarExtra's answer as the bar's tick gives it (T12's tasks fixture), mapped as the desk maps it.
+        case .barItem: return Widget.barItemBlocks(barAnswer)
         case .reading(let readings):
             let data: JSONValue = readings.count == 1 ? Self.readings[readings[0].rawValue]!
                 : .object(Dictionary(uniqueKeysWithValues: readings.map { ($0.rawValue, Self.readings[$0.rawValue]!) }))
@@ -141,7 +149,8 @@ struct WidgetRenders {
         defer { (look.themeID, look.style, look.glass) = saved }
         look.themeID = "tokyo-night"
         #expect(ReadyWidgets.inCode.map(\.id) == [ReadyWidgets.thisMac, ReadyWidgets.clock, ReadyWidgets.note, ReadyWidgets.upkeep,
-                                                  ReadyWidgets.launcher, ReadyWidgets.notes, ReadyWidgets.repos, ReadyWidgets.github, ReadyWidgets.nowPlaying, ReadyWidgets.folder, ReadyWidgets.markets])
+                                                  ReadyWidgets.launcher, ReadyWidgets.notes, ReadyWidgets.repos, ReadyWidgets.github, ReadyWidgets.nowPlaying, ReadyWidgets.folder, ReadyWidgets.markets,
+                                                  ReadyWidgets.extensionItem])
         #expect(Widget.menuPicks(ReadyWidgets.widget(ReadyWidgets.launcher)?.menuField?.initial) == Self.picked.map { "action:\($0.action)" })
         // A Launcher placed before 1.0.2 kept bare action ids: they read as their rows.
         #expect(Widget.menuPicks(.array([.string("apps.clean"), .string("app:com.apple.Safari"), .string("apps.open:x"), .string("action:apps.clean")]))

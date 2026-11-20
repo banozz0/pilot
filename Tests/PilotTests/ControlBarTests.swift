@@ -159,7 +159,7 @@ struct ControlBarTests {
         let rig = Rig()
         let row = await rig.rows("bar-extensions").first
         #expect(row == .object(["id": .string("todo"), "title": .string("To-do"), "on": .bool(true), "placement": .string("menuBar"),
-                                "side": .null, "index": .null]))
+                                "side": .null, "index": .null, "answered": .bool(false), "problem": .bool(false)]))
         // Into the top bar it is its own item, last on the right; --side and --index move it, and pilot bar reads the order.
         let added = await rig.ok("add", "bar-extensions", "--id", "todo", "--placement", "topBar")
         #expect(rig.bar.settings.extensionEntry("todo").placement == .both && rig.nudges == 1)

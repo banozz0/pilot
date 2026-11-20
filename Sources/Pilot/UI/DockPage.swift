@@ -16,7 +16,7 @@ final class DockPageFocus {
 
     /// The extension whose preferences a widget's settings show: the one it reads, or for Focus timer Pomodoro, which
     /// starts the timer.
-    static func settingsID(_ slot: DockSlot) -> String? { slot.widget?.extensionID ?? slot.extensionID }
+    static func settingsID(_ slot: DockSlot) -> String? { slot.widget?.extensionID ?? slot.extensionID.map(DockSlot.owner) }
 
     /// The widgets whose choices are the dock's own (DockWidgetOptions).
     static let ownSettings: Set<DockWidget> = [.system, .battery, .toggles, .stacks, .clock]
@@ -60,8 +60,9 @@ struct DockPage: View {
         _prefs = State(initialValue: prefs ?? ExtensionsSettings(folder: folder))
     }
 
-    /// The installed extensions with a top bar item no widget reads (DockWidgetSources.barExtensions), from what was read.
-    private var offered: [Extension] { prefs.rows.map(\.ext).filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) } }
+    /// The top bar items of the installed extensions no widget reads (DockWidgetSources.barItems), from what was read:
+    /// one row per item, a Raycast extension's later menu-bar commands too (T14).
+    private var offered: [DockWidgetSources.Offer] { DockWidgetSources.offers(DockWidgetSources.barExtensions(prefs.rows.map(\.ext))) }
 
     /// The settings on More, by their `pilot` keys: a search result for one opens More (AppShell's `ringsOnMore`).
     static let moreKeys: Set<String> = ["dock.magnify", "dock.placement", "dock.tint", "dock.visualizer"]
@@ -186,7 +187,7 @@ struct DockPage: View {
 struct DockWidgetList: View {
     @Environment(\.ink) private var ink
     let dock: DockController
-    let offered: [Extension]
+    let offered: [DockWidgetSources.Offer]
     let prefs: ExtensionsSettings
     let focus: DockPageFocus
     var extensionBar: ExtensionBar = .shared

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "nav-stack",
+  "title": "Nav stack",
+  "description": "A fixture for pilot-ext-host's view stack: a List that pushes another, which goes back by Escape or by useNavigation().pop().",
+  "author": "banozz",
+  "license": "MIT",
+  "categories": ["Developer Tools"],
+  "commands": [
+    {
+      "name": "index",
+      "title": "Push and pop",
+      "description": "Counts presses at the root, pushes a second List and counts each time it goes back.",
+      "mode": "view"
+    }
+  ]
+}
