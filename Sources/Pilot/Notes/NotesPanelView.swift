@@ -5,7 +5,7 @@ import SwiftUI
 /// section 03): the panel is the note. A 34 pt head (the list's key, where the note is listed, its words and time, ⌘K
 /// and +) over the note at a 560 pt measure, no foot. Escape slides the list over the note's left edge as a drawer, its
 /// search focused (180 ms, no slide under Reduce Motion); a format bar rises over a selection; the head's + opens Insert
-/// (Checklist, Picture…, Sketch; UI redesign T26); ⌘K holds the rest. The
+/// (Checklist, Picture…; UI redesign T26); ⌘K holds the rest. The
 /// shared shape, drawn in the picked style by its pieces (InstrumentNotes); the Notes page docks the same list
 /// beside the same head and note (NotesPage).
 struct NotesPanelView: View {
@@ -14,23 +14,20 @@ struct NotesPanelView: View {
     /// The Insert menu under the head's +: open, and the row under the pointer. A render opens it from the start.
     @State private var inserting: Bool
     @State private var insertHovered: NotesInsert?
-    /// Renders: Edit sketch shown on the note's first sketch, as under the pointer.
-    private let sketchHover: Bool
 
     static let drawerWidth: CGFloat = 300
 
-    init(model: NotesModel, inserting: Bool = false, insertHovered: NotesInsert? = nil, sketchHover: Bool = false) {
+    init(model: NotesModel, inserting: Bool = false, insertHovered: NotesInsert? = nil) {
         self.model = model
         _inserting = State(initialValue: inserting)
         _insertHovered = State(initialValue: insertHovered)
-        self.sketchHover = sketchHover
     }
 
     var body: some View {
         let drawer = model.listing
         VStack(spacing: 0) {
             NotesHead(model: model, listKey: true, inserting: $inserting)
-            NotesNote(model: model, measure: NotesMeasure.panel, beside: drawer ? Self.drawerWidth : 0, sketchHover: sketchHover)
+            NotesNote(model: model, measure: NotesMeasure.panel, beside: drawer ? Self.drawerWidth : 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .leading) {
                     ZStack(alignment: .leading) {
@@ -58,13 +55,6 @@ struct NotesPanelView: View {
                     .padding(.top, 38).padding(.trailing, 8)
                 }
             }
-        }
-        // Sketch's key while the note is being written in (Open question 9); the checklist's ⌘⇧L is the editor's own.
-        .background {
-            Button("Sketch") { NotesInsert.sketch.perform(model.editor) }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-                .disabled(model.listFocused || model.confirmingTrash || model.actions != nil || model.previewNote != nil)
-                .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
         }
         .onChange(of: model.listFocused) { if model.listFocused { inserting = false } }
         .onChange(of: model.actions == nil) { if model.actions != nil { inserting = false } }
@@ -138,15 +128,11 @@ struct NotesHead: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// "49 words · 1 sketch · 14:20" for the open note, "preview" for another, nothing for Scratch; while a sketch is
-    /// drawn, that Escape keeps it (round 2 shot 6c-draw).
+    /// "49 words · 14:20" for the open note, "preview" for another, nothing for Scratch.
     private func status(_ note: Note?, preview: Bool) -> String? {
         if preview { return "preview" }
-        if SketchBoard.shared.isOpen { return "Drawing · esc keeps it" }
         guard let note, !note.isScratch else { return nil }
-        let sketches = Sketch.count(in: model.text)
-        return [NotesText.count(NotesText.words(model.text)), sketches == 0 ? nil : sketches == 1 ? "1 sketch" : "\(sketches) sketches",
-                NotesText.stamp(note.edited, clock: false)].compactMap { $0 }.joined(separator: " · ")
+        return [NotesText.count(NotesText.words(model.text)), NotesText.stamp(note.edited, clock: false)].joined(separator: " · ")
     }
 
     private var crumbFont: Font { style.font(\.caption) }
@@ -161,8 +147,6 @@ struct NotesNote: View {
     @Bindable var model: NotesModel
     let measure: CGFloat
     var beside: CGFloat = 0
-    /// Renders: Edit sketch shown on the note's first sketch.
-    var sketchHover = false
 
     var body: some View {
         let markdown = MarkdownStyle(style: style, measure: measure)
@@ -176,7 +160,7 @@ struct NotesNote: View {
             ZStack(alignment: .topLeading) {
                 // Kept under the preview and the question, so the caret, the scroll and Undo are where they were after.
                 NotesEditor(text: $model.text, style: markdown, editable: !confirming, focused: !model.listFocused && !confirming,
-                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil, sketchHover: sketchHover) {
+                            folder: model.store.folder, handle: model.editor, bar: shown && model.actions == nil) {
                     // A click in the note, or the window handing it the keyboard, takes it from the list.
                     if model.listFocused { model.leaveList() }
                 }
@@ -201,21 +185,12 @@ struct NotesNote: View {
                 if let problem = model.problem { NotesProblem(text: problem).padding(.horizontal, edge + beside).padding(.top, 4) }
             }
         }
-        // Insert › Sketch and ⌘⇧D open the canvas in the editor that has the note (UI redesign T29).
-        .onAppear { NotesInsert.openSketch = { handle in if let view = handle.view { SketchBoard.shared.open(on: view) } } }
-        // The note going elsewhere keeps the sketch: Escape to the list, another note, the Trash question, the panel gone.
-        .onChange(of: model.listFocused) { if model.listFocused { SketchBoard.shared.done() } }
-        .onChange(of: model.current) { SketchBoard.shared.done() }
-        .onChange(of: model.confirmingTrash) { if model.confirmingTrash { SketchBoard.shared.done() } }
-        .onDisappear { SketchBoard.shared.done() }
     }
 }
 
 /// The editor with its format bar (direction B): the bar rises over the selection's first line while something is
-/// picked, under it when there is no room above. A sketch opened on it is drawn over the note at the caret, the words
-/// from there down waiting under the panel's colour (round 2 shot 6c-draw); a sketch under the pointer offers Edit sketch.
+/// picked, under it when there is no room above.
 struct NotesEditor: View {
-    @Environment(\.style) private var look
     @Binding var text: String
     let style: MarkdownStyle
     var editable = true
@@ -224,27 +199,16 @@ struct NotesEditor: View {
     var handle: NotesEditorHandle?
     /// The bar may show: the note is being written in, not previewed, asked about or under Cmd+K.
     var bar = true
-    /// Renders: Edit sketch shown on the note's first sketch, as under the pointer.
-    var sketchHover = false
     var onFocus: (() -> Void)?
     @State private var selection: CGRect?
     /// The bar's own hold on this editor.
     @State private var own = NotesEditorHandle()
-    /// This editor's text view, known once it has had the keyboard: a sketch opened on it is drawn here.
-    @State private var mine = NotesEditorView()
-    /// The sketch under the pointer and its picture's frame.
-    @State private var hovered: NotesSketchSpot?
-    /// Bumped when this editor takes the keyboard or its note scrolls, so the canvas and Edit sketch follow.
-    @State private var moved = 0
-    private static let nowhere = NSObject()
 
     var body: some View {
-        let board = SketchBoard.shared
-        let drawing = board.isOpen && board.view != nil && board.view === mine.view
-        MarkdownEditor(text: $text, style: style, editable: editable, focused: focused && !drawing, folder: folder, handle: handle, bar: own,
-                       onFocus: { mine.view = handle?.view; moved += 1; onFocus?() }, selection: $selection)
+        MarkdownEditor(text: $text, style: style, editable: editable, focused: focused, folder: folder, handle: handle, bar: own,
+                       onFocus: { onFocus?() }, selection: $selection)
             .overlay(alignment: .topLeading) {
-                if bar, editable, !drawing, let selection {
+                if bar, editable, let selection {
                     GeometryReader { g in
                         let size = NotesFormatBar.size
                         let x = min(max(selection.minX - 8, 4), max(g.size.width - size.width - 4, 4))
@@ -254,72 +218,7 @@ struct NotesEditor: View {
                     }
                 }
             }
-            .overlay(alignment: .topLeading) {
-                let _ = moved
-                if drawing, let view = mine.view, let origin = view.sketchOrigin(at: board.at, link: board.link) {
-                    GeometryReader { g in
-                        ZStack(alignment: .topLeading) {
-                            // As the drawer covers the note: the words from the canvas down wait under it.
-                            look.color(\.panel).frame(width: g.size.width, height: max(g.size.height - origin.y + 4, 0))
-                                .offset(y: origin.y - 4).accessibilityHidden(true)
-                            SketchCanvas(board: board, ink: style.text).offset(x: origin.x, y: origin.y)
-                        }
-                    }
-                } else if editable, !board.isOpen,
-                          let sketch = hovered ?? (sketchHover ? mine.view?.sketchFrames().first.map { NotesSketchSpot(link: $0.link, frame: $0.frame) } : nil) {
-                    editSketch(sketch)
-                }
-            }
-            // Written only when the sketch under the pointer changes, so a pointer moving over words redraws nothing.
-            .onContinuousHover { phase in
-                var spot: NotesSketchSpot?
-                if case .active(let point) = phase, editable, !board.isOpen, text.contains(".svg"),
-                   let found = mine.view?.sketchFrames().first(where: { $0.frame.insetBy(dx: -4, dy: -4).contains(point) }) {
-                    spot = NotesSketchSpot(link: found.link, frame: found.frame)
-                }
-                if spot != hovered { hovered = spot }
-            }
-            // A scroll moves the canvas and Edit sketch with their line; it redraws nothing while neither shows.
-            .onReceive(NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification,
-                                                            object: mine.view?.enclosingScrollView?.contentView ?? Self.nowhere)) { _ in
-                if hovered != nil { hovered = nil }
-                if drawing || sketchHover { moved += 1 }
-            }
     }
-
-    /// Edit sketch at the picture's top right: the canvas opens on that sketch.
-    private func editSketch(_ sketch: NotesSketchSpot) -> some View {
-        Button {
-            hovered = nil
-            if let view = mine.view { SketchBoard.shared.open(on: view, link: sketch.link) }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).accessibilityHidden(true)
-                Text("Edit sketch").styleText(\.caption)
-            }
-            .foregroundStyle(look.color(\.text2))
-            .padding(.horizontal, 10).frame(height: 26)
-            .background(look.color(\.panel), in: .rect(cornerRadius: 7, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(look.color(\.line2)) }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain).focusable(false)
-        .fixedSize()
-        .frame(width: sketch.frame.width - 12, alignment: .trailing)
-        .offset(x: sketch.frame.minX + 6, y: sketch.frame.minY + 6)
-    }
-}
-
-/// A sketch in the note and its picture's frame, in the scroll view's points.
-struct NotesSketchSpot: Equatable {
-    let link: String
-    let frame: CGRect
-}
-
-/// An editor's text view, held weakly: the one NotesEditor draws a sketch over.
-@MainActor
-final class NotesEditorView {
-    weak var view: NotesTextView?
 }
 
 /// The list: the drawer over the panel's note, or docked on the Notes page. Its search field (18 pt in the drawer, the

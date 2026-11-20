@@ -804,13 +804,12 @@ final class NotesTextView: NSTextView {
     /// The picture a link names, read once at most 1200 px a side; nil without a folder or when the file does not read.
     private func picture(_ link: String) -> NSImage? {
         guard let folder, !unreadable.contains(link), let url = NoteAttachments.url(link, in: folder) else { return nil }
-        // A sketch (UI redesign T28, T29): its paths drawn in the text colour, cached by file and ink, so a theme change
-        // draws it anew in the new ink rather than the first look's.
+        // A sketch a note already holds (UI redesign T28): its paths drawn in the text colour, cached by file and ink, so
+        // a theme change draws it anew in the new ink rather than the first look's.
         if Sketch.isSVG(link) {
             let ink = Self.hex(style.text), key = Self.sketchKey(url, ink: ink)
             if let known = Self.pictures.object(forKey: key) { return known }
             guard let image = Sketch.picture(at: url, ink: style.text) else { unreadable.insert(link); return nil }
-            Self.sketchInks.insert(ink)
             Self.pictures.setObject(image, forKey: key)
             return image
         }
@@ -823,9 +822,6 @@ final class NotesTextView: NSTextView {
         return picture
     }
 
-    /// The inks sketches were drawn in, so a sketch saved over can be let go in every one of them.
-    private static var sketchInks: Set<String> = []
-
     /// A sketch's cache key: its file and the ink it was drawn in.
     private static func sketchKey(_ url: URL, ink: String) -> NSURL {
         NSURL(string: "#ink-\(ink)", relativeTo: url)?.absoluteURL as NSURL? ?? url as NSURL
@@ -835,17 +831,6 @@ final class NotesTextView: NSTextView {
     private static func hex(_ colour: NSColor) -> String {
         let c = colour.usingColorSpace(.sRGB) ?? colour
         return String(format: "%02x%02x%02x", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
-    }
-
-    /// A sketch saved over its own file (the canvas's Done on a sketch reopened, UI redesign T29): its drawing let go from
-    /// the shared cache in every ink and tried again here, then drawn anew; the note's words did not change, so nothing
-    /// else would redraw it.
-    func forgetSketch(_ link: String) {
-        guard let folder, let url = NoteAttachments.url(link, in: folder) else { return }
-        for ink in Self.sketchInks { Self.pictures.removeObject(forKey: Self.sketchKey(url, ink: ink)) }
-        unreadable.remove(link)
-        restyle()
-        needsDisplay = true
     }
 
     /// A picture's size on the page: its own, made smaller to fit the line's width and at most 280 pt tall.

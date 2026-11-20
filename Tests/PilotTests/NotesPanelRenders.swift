@@ -166,7 +166,7 @@ struct NotesPanelRenders {
         """
 
     /// UI redesign T26 (shots 6c-insert and round 1's 6a): the format bar over a selection, the head's Insert menu with
-    /// Sketch under the pointer, and the note's ticked checklist, in Instrument on Tokyo Night and Porcelain, written as
+    /// Picture… under the pointer, and the note's ticked checklist, in Instrument on Tokyo Night and Porcelain, written as
     /// `T26-<theme>-<state>.png`.
     @Test("The notes panel renders the format bar and the Insert menu", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderInsert() throws {
@@ -196,7 +196,7 @@ struct NotesPanelRenders {
                 let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
                 model.reload()
                 model.open(trip.id)
-                let view = NotesPanelView(model: model, inserting: state == "insert", insertHovered: state == "insert" ? .sketch : nil)
+                let view = NotesPanelView(model: model, inserting: state == "insert", insertHovered: state == "insert" ? .picture : nil)
                 let panel = HUD.makePanel(view.frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height), surface: .notes)
                 defer { panel.close() }
                 let content = try #require(panel.contentView)
@@ -213,31 +213,24 @@ struct NotesPanelRenders {
         }
     }
 
-    /// Round 2's route (shots 6c-draw and 6c-done) in a 560 × 220 sketch: a house, a dotted way to a train, on to a plane,
-    /// in the note's own ink, and the train's track in the amber marker.
-    static let route: [Sketch.Stroke] = {
-        func pen(_ points: [(Double, Double)], width: Double = Sketch.penWidth + 0.5) -> Sketch.Stroke {
-            Sketch.Stroke(width: width, points: points.map { Sketch.Point($0.0, $0.1) })
-        }
-        func dots(from: Double, to: Double, y: (Double) -> Double) -> [Sketch.Stroke] {
-            stride(from: from, through: to, by: 13).map { x in pen([(x, y(x))], width: 3.5) }
-        }
-        let house = [pen([(44, 172), (44, 112), (80, 80), (116, 112), (116, 172), (44, 172)]), pen([(68, 172), (68, 146), (90, 146), (90, 172)])]
-        let way = dots(from: 132, to: 326, y: { 140 - 26 * sin(($0 - 132) / 34) })
-        let train = [pen([(352, 104), (420, 104), (430, 114), (430, 150), (420, 160), (352, 160), (342, 150), (342, 114), (352, 104)]),
-                     pen([(354, 122), (418, 122)]), pen([(358, 166), (346, 182)]), pen([(414, 166), (426, 182)])]
-        let track = Sketch.Stroke(tool: .marker, ink: SketchBoard.inks[0], width: Sketch.markerWidth, points: [Sketch.Point(334, 196), Sketch.Point(438, 194)])
-        let onward = dots(from: 444, to: 486, y: { 130 - ($0 - 444) * 1.1 })
-        let plane = [pen([(482, 64), (536, 40), (516, 92), (506, 72), (482, 64)]), pen([(506, 72), (536, 40)])]
-        return house + way + [track] + train + onward + plane
-    }()
+    /// A sketch a note already holds, as T29 saved it (a house, a dotted way, the amber marker under it): the sketch
+    /// canvas is gone (Sven, 2026-11-20), but the SVG still shows as the note's picture, in the theme's ink. Tokyo Night
+    /// then Porcelain, written as `sketch-kept-<theme>.png`.
+    static let keptSVG = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" width="560" height="220" viewBox="0 0 560 220" data-pilot-sketch="1">
+        <path class="pilot-pen" d="M44 172 L44 112 L80 80 L116 112 L116 172 L44 172" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="pilot-pen" d="M68 172 L68 146 L90 146 L90 172" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="pilot-marker" d="M150 196 L438 194" fill="none" stroke="#e0af68" stroke-opacity="0.35" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="pilot-pen" d="M150 140 L150 140" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="pilot-pen" d="M180 128 L180 128" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="pilot-pen" d="M352 104 L420 104 L430 114 L430 150 L420 160 L352 160 L342 150 L342 114 L352 104" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
 
-    /// UI redesign T29 (shots 6c-draw and 6c-done): the canvas opened from Insert › Sketch on the empty line under Route,
-    /// the route drawn, the pen picked; then a note with a saved sketch drawn inline in the theme's ink, Edit sketch over
-    /// it, and the round checklist boxes with `_small_` slanted. Tokyo Night then Porcelain, the same SVG in both, so a
-    /// sketch's ink follows the theme rather than the first look's. Written as `T29-<theme>-<state>.png`.
-    @Test("The notes panel renders the sketch canvas", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func renderSketch() throws {
+        """
+
+    @Test("A note's saved sketch still shows as its picture", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderKeptSketch() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("notes-panel")
@@ -248,155 +241,35 @@ struct NotesPanelRenders {
         let look = Look.shared
         let saved = (look.style, look.themeID, look.glass)
         look.glass = false
-        let board = SketchBoard.shared
-        defer { board.done(); (look.style, look.themeID, look.glass) = saved }
+        defer { (look.style, look.themeID, look.glass) = saved }
 
         let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-notes-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let store = NoteStore(folder: folder)
         _ = try store.load()
-        let link = try Sketch(width: 560, height: 220, strokes: Self.route).save(in: folder, now: .now)
-        let head = "# Trip plan\nLeave **Friday 07:30**, train to the airport.\n\n## Route\n"
-        // A note to draw in per theme, so the first pass's saved link never reaches the second's.
-        for n in 0..<2 { try Data(head.utf8).write(to: folder.appending(path: "trip-plan-10001\(n).md")) }
-        try Data((head + link + "\n\n## Pack\n- [x] Passport\n- [ ] Charger and the _small_ adapter\n").utf8)
-            .write(to: folder.appending(path: "trip-plan-done-100011.md"))
-        let notes = try store.load()
-        let done = try #require(notes.first { $0.id == "trip-plan-done-100011.md" })
+        let attachments = folder.appending(path: NoteAttachments.folder)
+        try FileManager.default.createDirectory(at: attachments, withIntermediateDirectories: true)
+        try Data(Self.keptSVG.utf8).write(to: attachments.appending(path: "sketch-20261120-101500.svg"))
+        let text = "# Trip plan\nLeave **Friday 07:30**, train to the airport.\n\n## Route\n![Sketch](attachments/sketch-20261120-101500.svg)\n\n## Pack\n- [x] Passport\n"
+        try Data(text.utf8).write(to: folder.appending(path: "trip-plan-100011.md"))
 
         look.style = .instrument
-        for (n, theme) in ["tokyo-night", "porcelain"].enumerated() {
+        for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
-            let drawn = try #require(notes.first { $0.id == "trip-plan-10001\(n).md" })
-            for state in ["draw", "done"] {
-                let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
-                model.reload()
-                model.open(state == "draw" ? drawn.id : done.id)
-                let view = NotesPanelView(model: model, sketchHover: state == "done")
-                let panel = HUD.makePanel(view.frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height), surface: .notes)
-                defer { panel.close() }
-                let content = try #require(panel.contentView)
-                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-                // The editor given the keyboard, its caret at the note's end (the draw note's: the empty line under Route).
-                let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
-                panel.makeFirstResponder(editor)
-                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                if state == "draw" {
-                    NotesInsert.sketch.perform(model.editor)
-                    try #require(board.isOpen, "Insert › Sketch did not open the canvas")
-                    board.sketch.strokes = Self.route
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                } else {
-                    // Scrolled to the checklist under the sketch: the panel is shorter than round 2's frame.
-                    editor.scrollRangeToVisible(NSRange(location: (editor.string as NSString).length, length: 0))
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                }
-                content.layoutSubtreeIfNeeded()
-                let rep = try #require(snapshot(content, scale: 2))
-                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("T29-\(theme)-\(state).png"))
-                if state == "draw" {
-                    // Escape is Done (T30): the Notes page's key read on the first pass, the panel's on the second; each
-                    // saves the sketch and holds the key, the list left alone, with the window holding the keyboard as
-                    // the canvas leaves it; the sketch saved in attachments/, linked on the line under Route, and read
-                    // back stroke for stroke.
-                    let escape = n == 0 ? NotesPageKeys.key(53, [], "\u{1b}", model: model, responder: panel.firstResponder)
-                        : NotesKey.pressed(53, [], "\u{1b}", model: model, responder: panel.firstResponder)
-                    try #require(escape == .held, "Escape while sketching was not held (\(n == 0 ? "page" : "panel"))")
-                    try #require(!board.isOpen && !model.listFocused, "Escape while sketching left the canvas or opened the list")
-                    let saved = try #require(model.text.components(separatedBy: "\n").first { $0.hasPrefix("![Sketch](attachments/sketch-") })
-                    try #require(model.text.hasPrefix(head + saved + "\n"), "the link is not on the line under Route")
-                    let path = String(saved.dropFirst("![Sketch](".count).dropLast())
-                    try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count)
-                } else if theme == "porcelain" {
-                    // Edit sketch, the last pass: the sketch reopened, a stroke taken out, Done writes over the same file,
-                    // and the editor draws it anew rather than the cached picture.
-                    let path = String(link.dropFirst("![Sketch](".count).dropLast())
-                    let before = try #require(editor.pictureRects().first?.image)
-                    board.open(on: editor, link: path)
-                    try #require(board.isOpen, "Edit sketch did not reopen the sketch")
-                    board.sketch.strokes.removeLast()
-                    board.done()
-                    try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count - 1)
-                    try #require(model.text.contains(link), "the link moved")
-                    try #require(editor.pictureRects().first?.image !== before, "the sketch was drawn from the cache")
-                    // The window closing mid-sketch keeps it (T30): its willClose is Done while the editor is still there.
-                    let links = Sketch.count(in: model.text)
-                    board.open(on: editor)
-                    board.sketch.strokes = Self.route
-                    NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: panel)
-                    try #require(!board.isOpen, "the window closing left the canvas open")
-                    try #require(Sketch.count(in: model.text) == links + 1, "the window closing lost the sketch")
-                    let kept = try #require(model.text.components(separatedBy: "\n").last { $0.hasPrefix("![Sketch](attachments/sketch-") && $0 != link })
-                    let keptPath = String(kept.dropFirst("![Sketch](".count).dropLast())
-                    try #require(try Sketch.load(from: folder.appending(path: keptPath)).strokes.count == Self.route.count)
-                    // Another note opened mid-sketch (spec-end review 1, blocker 1): the sketch ends in the note it was
-                    // drawn in and is saved in that note's file; the note opened after gets none of it.
-                    let other = "packing-list-100012.md"
-                    try Data("# Packing list\nSocks.\n".utf8).write(to: folder.appending(path: other))
-                    model.reload()
-                    let first = model.current
-                    board.open(on: editor)
-                    board.sketch.strokes = Self.route
-                    model.open(other)
-                    try #require(!board.isOpen && model.current == other, "opening another note left the canvas open")
-                    func drawn(_ text: String) -> [String] {
-                        text.components(separatedBy: "\n").filter { $0.hasPrefix("![Sketch](attachments/sketch-") && $0 != link && $0 != kept }
-                    }
-                    let onDisk = try store.load()
-                    try #require(onDisk.filter { !drawn($0.text).isEmpty }.map(\.id) == [first], "the sketch is not in the note it was drawn in alone")
-                    try #require(Sketch.count(in: model.text) == 0, "the sketch reached the note opened after")
-                    // The quick notes panel hiding while a sketch is open in another window (the Notes page's; here this
-                    // render's, which is not the panel): that sketch stays open (spec-end review 2). One in the panel
-                    // itself ends there, before the panel's save (hide's Done, for the panel's window only).
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                    try #require(editor.string == model.text, "the editor does not show the note opened")
-                    board.open(on: editor)
-                    board.sketch.strokes = Self.route
-                    NotesPanel.shared.hide()
-                    try #require(board.isOpen, "hiding the panel ended a sketch drawn outside it")
-                    board.done()
-                    model.flush()
-                    let hidden = try String(contentsOf: folder.appending(path: model.current), encoding: .utf8)
-                    try #require(drawn(hidden).count == 1, "the sketch was lost")
-                    // The notes folder changed mid-sketch, as the Notes page's folder line and `pilot set notes.folder` do
-                    // (spec-end review 2), through the panel's own shared model and an Engine that never launches, which
-                    // holds the setting: the sketch ends in its note in the old folder, and the new folder gets none of it.
-                    // Then the model swapped for the new folder mid-sketch (the next show, the page's reload): the old
-                    // model's sketch ends in its own note first.
-                    let engine = Engine()
-                    let old = folder.appending(path: "old", directoryHint: .isDirectory), moved = folder.appending(path: "new", directoryHint: .isDirectory)
-                    for dir in [old, moved] { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
-                    engine.settings.notesFolder = old.path
-                    defer { engine.settings.notesFolder = nil }
-                    let noteA = "folder-note-100030.md"
-                    try Data("# Folder note\nDrawn before the folder changes.\n".utf8).write(to: old.appending(path: noteA))
-                    let shared = NotesPanel.shared.currentModel()
-                    try #require(shared.store.folder.path == NotesFolder.folder(old.path).path, "the panel's model is not on the old folder")
-                    shared.reload()
-                    shared.open(noteA)
-                    let sharedPanel = HUD.makePanel(NotesPanelView(model: shared).frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height),
-                                                    surface: .notes)
-                    defer { sharedPanel.close() }
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-                    let sharedContent = try #require(sharedPanel.contentView)
-                    let sharedEditor = try #require(NotesMarkdownRenders.editors(in: sharedContent).first { $0.isEditable })
-                    sharedPanel.makeFirstResponder(sharedEditor)
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                    let inOld = { Sketch.count(in: try String(contentsOf: old.appending(path: noteA), encoding: .utf8)) }
-                    let inNew = { try NoteStore(folder: moved).load().map { Sketch.count(in: $0.text) }.reduce(0, +) }
-                    board.open(on: sharedEditor)
-                    try #require(board.isOpen, "the canvas did not open on the panel's model")
-                    board.sketch.strokes = Self.route
-                    try NotesPanel.shared.changeFolder(to: moved, move: false)
-                    try #require(!board.isOpen, "changing the folder left the canvas open")
-                    try #require(try inOld() == 1 && inNew() == 0, "the sketch is not in its note in the old folder alone")
-                    board.open(on: sharedEditor)
-                    board.sketch.strokes = Self.route
-                    let next = NotesPanel.shared.currentModel()
-                    try #require(next !== shared && !board.isOpen, "the model swapped with the canvas still open")
-                    try #require(try inOld() == 2 && inNew() == 0, "the swap lost the sketch or moved it to the new folder")
-                }
-            }
+            let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
+            model.reload()
+            model.open("trip-plan-100011.md")
+            let panel = HUD.makePanel(NotesPanelView(model: model).frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height),
+                                      surface: .notes)
+            defer { panel.close() }
+            let content = try #require(panel.contentView)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
+            try #require(editor.pictureRects().count == 1, "the saved sketch does not show")
+            try #require(model.text == text, "showing the sketch changed the note")
+            content.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(content, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("sketch-kept-\(theme).png"))
         }
     }
 

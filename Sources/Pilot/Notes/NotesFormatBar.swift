@@ -98,9 +98,10 @@ struct NotesFormatBar: View {
     }
 }
 
-/// What the note head's + puts in a note (round 2 shot 6c-insert; Open question 9: the drawn keys, Table left out).
+/// What the note head's + puts in a note (round 2 shot 6c-insert; Open question 9: the drawn keys, Table left out; the
+/// sketch removed, Sven 2026-11-20).
 enum NotesInsert: String, CaseIterable, Identifiable {
-    case checklist, picture, sketch
+    case checklist, picture
 
     var id: String { rawValue }
 
@@ -108,7 +109,6 @@ enum NotesInsert: String, CaseIterable, Identifiable {
         switch self {
         case .checklist: "Checklist"
         case .picture: "Picture…"
-        case .sketch: "Sketch"
         }
     }
 
@@ -116,29 +116,22 @@ enum NotesInsert: String, CaseIterable, Identifiable {
         switch self {
         case .checklist: MarkdownFormat.checklist.symbol
         case .picture: "photo"
-        case .sketch: "scribble.variable"
         }
     }
 
-    /// Its key as the row shows it: the checklist's is MarkdownFormat's ⌘⇧L; Sketch's is ⌘⇧D, which no notes key, AppKit
-    /// text binding or default Pilot bind uses (clash check, T26); Picture has none.
+    /// Its key as the row shows it: the checklist's is MarkdownFormat's ⌘⇧L; Picture has none.
     var key: String? {
         switch self {
         case .checklist: MarkdownFormat.checklist.key
         case .picture: nil
-        case .sketch: "⌘⇧D"
         }
     }
-
-    /// Sketch's way in: opens the sketch canvas at the caret, set by the note's view (NotesNote, UI redesign T29).
-    @MainActor static var openSketch: ((NotesEditorHandle) -> Void)?
 
     /// Puts it in the note the handle holds, at the caret.
     @MainActor func perform(_ handle: NotesEditorHandle) {
         switch self {
         case .checklist: handle.apply(.checklist)
         case .picture: Self.choosePictures(handle)
-        case .sketch: Self.openSketch?(handle)
         }
     }
 
@@ -164,7 +157,7 @@ enum NotesInsert: String, CaseIterable, Identifiable {
     }
 }
 
-/// The Insert menu under the head's +: Checklist, Picture… and Sketch, each its own glyph, its name and its key. Drawn
+/// The Insert menu under the head's +: Checklist and Picture…, each its own glyph, its name and its key. Drawn
 /// in the panel, a ring and no shadow (DESIGN.md), so it renders offscreen as Pilot shows it.
 struct NotesInsertMenu: View {
     @Environment(\.style) private var style
