@@ -8,12 +8,14 @@
 // `pilot ext run` answers it unperformed. T8 adds the view stack: `Action.Push` and `useNavigation()`, whose push and
 // pop host.js performs on the run's layers. T10 adds the Form and its items, which form.js turns into fields, and
 // Action.SubmitForm. T11 adds `AI.ask` and `getSelectedText`, which ask Pilot (asks.js), and `confirmAlert`, which asks
-// in the panel (alert.js). Every other Raycast export is a stub that records its use (gaps.js).
+// in the panel (alert.js). T12 adds MenuBarExtra and its parts (menubar.js). Every other Raycast export is a stub that
+// records its use (gaps.js).
 import { createContext, createElement, useContext } from "react";
 import { guard, missing, record, store, stubs } from "./gaps.js";
 import { childProcess, path } from "./node.js";
 import { askAI, selectedText } from "./asks.js";
 import { confirmAlert } from "./alert.js";
+import { menuBarComponents } from "./menubar.js";
 
 const native = globalThis.__native;
 
@@ -89,6 +91,8 @@ Form.LinkAccessory = lacking("Form.LinkAccessory");
 /** The run's view stack (host.js provides it to every layer): `push(view, onPop)` mounts a view over the current one,
  *  `pop()` goes back to the one under it, its state kept. */
 export const Navigation = createContext(null);
+
+export const MenuBarExtra = menuBarComponents(host);
 const useNavigation = () => useContext(Navigation);
 
 /** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (host.js maps an Icon name to its SF Symbol, T5). */
@@ -202,7 +206,7 @@ export function makeAPI(message, mode) {
   // MARK: The environment
 
   const environment = Object.freeze({
-    commandName: message.command, commandMode: mode, extensionName: message.extension, launchType: "userInitiated",
+    commandName: message.command, commandMode: mode, extensionName: message.extension, launchType: message.launchType ?? "userInitiated",
     supportPath: data, assetsPath: `${native.cwd()}/assets`, raycastVersion: "", isDevelopment: false, textSize: "medium",
     appearance: "dark", theme: "dark", ownerOrAuthorName: "",
     /** Pilot has AI (T11), through its AI page's provider, and answers false for the APIs it lacks (browser and window
@@ -222,7 +226,7 @@ export function makeAPI(message, mode) {
     // Views and namespaces that come in later tasks, or not at all: each records its use.
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
     Form,
-    Grid: missing("Grid"), MenuBarExtra: missing("MenuBarExtra"),
+    Grid: missing("Grid"), MenuBarExtra,
     AI, getSelectedText: selectedText, confirmAlert: (options) => confirmAlert(options, noView),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),

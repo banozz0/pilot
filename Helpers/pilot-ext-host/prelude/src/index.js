@@ -5,7 +5,9 @@
 // the manifest in the host's folder, the extension's own (T3): a view renders, a no-view command is called and the run
 // ends once its promise settles, its HUD and actions printed as ADR 0010's lines. Its `arguments` (T11) are the
 // manifest's, each a string: the run message's own when it carries them, else empty, the first filled with the run's
-// `input`, the words typed after the command's keyword at Hyper+Space's root (or `pilot ext run --input`).
+// `input`, the words typed after the command's keyword at Hyper+Space's root (or `pilot ext run --input`). A `menu-bar`
+// command (T12) renders its MenuBarExtra: a bar render (`"surface": "bar"`) is launched in the background, with a bar
+// render's deadline (main.swift), an open popover by the user.
 import "./globals.js";
 import * as React from "react";
 import * as JSX from "react/jsx-runtime";
@@ -50,12 +52,15 @@ globalThis.__pilotStart = (factory, message) => {
     gapsAt(message.paths, message.command);
     const entry = manifestOf(message.command), mode = entry.mode ?? "view";
     message.arguments = argumentsOf(entry, message);
+    message.mode = mode;
+    message.launchType = mode === "menu-bar" && message.surface === "bar" ? "background" : "userInitiated";
     if (mode === "no-view") native.noView();
+    if (message.launchType === "background") native.menuBar();
     const module = { exports: {} };
     factory(module, module.exports, requirer(makeAPI(message, mode)));
     const command = module.exports?.default ?? module.exports;
     if (typeof command !== "function") throw new Error("its command exports no function");
-    const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
+    const props = { arguments: message.arguments ?? {}, launchType: message.launchType, launchContext: message.context };
     if (mode === "no-view") {
       Promise.resolve().then(() => command(props)).then(undefined, (error) => fail(error));
       return;

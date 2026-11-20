@@ -16,6 +16,8 @@
 // callback made never leaves the two stacks apart). At the root both answer the view unchanged.
 // The Form (T10) is form.js's: a form answer of fields, each edit an invoke carrying its value, SubmitForm its submit.
 // An alert (T11) is alert.js's: while `confirmAlert` waits it is the answer, its two rows the only handlers.
+// A `menu-bar` command's MenuBarExtra (T12) is menubar.js's: a bar line for a bar render, which ends the run once it is
+// ready, or the menu's rows for an open popover.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
@@ -23,6 +25,7 @@ import { Navigation, effects } from "./raycast.js";
 import { symbols } from "./icons.js";
 import { formAnswer, formPress } from "./form.js";
 import { alertAnswer, alertPress, alertUp, setRedraw } from "./alert.js";
+import { menuBarAnswer, menuBarPress, menuBarReady } from "./menubar.js";
 
 const native = globalThis.__native;
 
@@ -234,10 +237,10 @@ function top(container) {
   return layer ? view(layer.children) : null;
 }
 
-/** The first List, Detail or Form in the tree, depth first. */
+/** The first List, Detail, Form or MenuBarExtra in the tree, depth first. */
 function view(nodes) {
   for (const node of nodes) {
-    if (node.type === "List" || node.type === "Detail" || node.type === "Form") return node;
+    if (node.type === "List" || node.type === "Detail" || node.type === "Form" || node.type === "MenuBarExtra") return node;
     const inner = node.children && view(node.children);
     if (inner) return inner;
   }
@@ -245,11 +248,13 @@ function view(nodes) {
 }
 
 /** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
- *  loading row. An alert up (T11) is the answer instead, its rows carrying the search `query`. */
-function answer(container, handlers, query) {
+ *  loading row. An alert up (T11) is the answer instead, its rows carrying the search `query`. A menu-bar command's
+ *  (T12) is its MenuBarExtra's, as the run's `surface` asks it. */
+function answer(container, handlers, query, message) {
   const alert = alertAnswer(handlers, query);
   if (alert) return alert;
   const root = top(container);
+  if (message.mode === "menu-bar") return menuBarAnswer(root?.type === "MenuBarExtra" ? root : null, message.surface, handlers, words, picture);
   if (!root) return null;
   if (root.type === "Form") return formAnswer(root, handlers, actions);
   if (root.type === "Detail") {
@@ -280,10 +285,19 @@ export function fail(error, ack) {
 /** Renders the command `component` for the run `message`, writing each changed answer. */
 export function render(component, message) {
   let last = null, queued = false, handlers = new Map(), ack = null, query = String(message.query ?? "");
-  /** Writes the answer when it changed, or, when a request waits, with its `ack` even unchanged. */
+  const barRender = message.mode === "menu-bar" && message.surface === "bar";
+  /** Writes the answer when it changed, or, when a request waits, with its `ack` even unchanged; a bar render then says
+   *  whether it is ready to end (T12). */
   function flush() {
+    write();
+    if (barRender) {
+      const root = top(container);
+      native.barReady(menuBarReady(root?.type === "MenuBarExtra" ? root : null, imaging.size > 0));
+    }
+  }
+  function write() {
     const table = new Map();
-    const now = answer(container, table, query) ?? (ack != null ? { type: "list", items: [] } : null);
+    const now = answer(container, table, query, message) ?? (ack != null ? { type: "list", items: [] } : null);
     handlers = table;
     if (!now) return;
     const line = JSON.stringify(now);
@@ -308,7 +322,7 @@ export function render(component, message) {
   // boundary's fallback on screen and goes to stderr alone.
   const logged = (error) => console.error(error instanceof Error && error.stack ? `${error.message}\n${error.stack}` : String(error));
   const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, logged, logged, noop);
-  const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
+  const props = { arguments: message.arguments ?? {}, launchType: message.launchType ?? "userInitiated", launchContext: message.context };
 
   // The view stack, the command's own view at the bottom: each layer wrapped once, with its onPop.
   const stack = [];
@@ -366,7 +380,7 @@ export function render(component, message) {
       request(seq, () => {
         const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
         const callback = alertUp() ? alertPress(word) : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
-          : formPress(word, node, value, top(container))
+          : formPress(word, node, value, top(container)) ?? menuBarPress(word, node)
             ?? (node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
               : node?.props?.[word.split(".").pop()]);
         if (typeof callback !== "function") return console.error(`no handler ${id} in the current view: answering it unchanged`);

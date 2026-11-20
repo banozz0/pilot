@@ -17,7 +17,10 @@ import JavaScriptCore
 // or `selection`) that Pilot answers on stdin with an `answer` line carrying the same `id` and its `text` or `error`;
 // the run is held until it comes, its run deadline too (Pilot's own timeout still stops it). Once stdin ended, nothing
 // can answer, so an ask then fails at once. A one-shot run whose run message says `"answers": true` keeps its stdin open
-// for answers: it ends as if its input had ended at once, while its asks are still answered.
+// for answers: it ends as if its input had ended at once, while its asks are still answered. A menu-bar command's bar
+// render (T12) has 9.5 s (Pilot gives it 10 s) and ends once the prelude says it is ready (its MenuBarExtra committed,
+// not loading, every picture landed) and still is after the drain, timers and fetches left behind, as Raycast unloads a
+// menu-bar command then.
 
 /// Writes one line to stdout or stderr, unbuffered.
 func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
@@ -39,6 +42,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     private var asking = 0, late = false
     /// A one-shot run whose stdin Pilot keeps for answers (T11): it ends as one whose input ended, stdin still open.
     private var once = false
+    /// A bar render's MenuBarExtra is ready to end (T12).
+    private var barReady = false
     var children: [Int: Child] = [:]
     private let born = Date()
 
@@ -82,6 +87,17 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
             settle()
         }
         native.setObject(hold, forKeyedSubscript: "hold" as NSString)
+        // A bar render (T12): its deadline, and whether it is ready to end.
+        let menuBar: @convention(block) () -> Void = { [unowned self] in runDeadline = 9.5 }
+        let barReady: @convention(block) (Bool) -> Void = { [unowned self] ready in
+            self.barReady = ready
+            guard ready else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + Host.drain) { [weak self] in
+                MainActor.assumeIsolated { if self?.barReady == true { self?.finish() } }
+            }
+        }
+        native.setObject(menuBar, forKeyedSubscript: "menuBar" as NSString)
+        native.setObject(barReady, forKeyedSubscript: "barReady" as NSString)
         installSystem(into: native)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
