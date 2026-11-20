@@ -184,19 +184,6 @@ extension CaptureBox {
 
     /// Window picks a window; Area, Full and Scroll pick on the area selection, Full taking the whole display.
     var mode: CaptureSelection.Mode { how == .window ? .window : .area }
-
-    /// The box's keys in one line, its choices in brackets: a stand-in for the mode bar T24 draws.
-    var hint: String {
-        func item(_ title: String, _ letter: Letter?, _ on: Bool) -> String {
-            let words = [title, letter.map { String($0.rawValue).uppercased() }].compactMap(\.self).joined(separator: " ")
-            return on ? "[\(words)]" : words
-        }
-        let hows = [item("Area", .area, how == .area), item("Window", .window, how == .window), item("Full", .full, how == .full),
-                    item("Scroll", .scroll, how == .scroll)]
-        let whats = [item("Photo", nil, what == .photo), item("Record", .record, what == .record), item("Text", .text, what == .text)]
-        let timed = item("Timer \(timer == 0 ? "off" : "\(timer) s")", .timer, false)
-        return (hows + ["·"] + whats + ["·", timed, "·", "Return  \(action)", "Esc"]).joined(separator: "  ")
-    }
 }
 
 extension CaptureOverlay.Result {
@@ -221,6 +208,12 @@ final class CaptureOverlayView: NSView {
     private var purpose: CaptureOverlay.Purpose { box?.purpose ?? opened }
     private let still: NSImage
     private let report: (CaptureSelection.Outcome, CaptureOverlayView) -> Void
+    /// The box's bar, handles and readouts in the picked theme (T24, CaptureBoxView.swift).
+    private lazy var chrome = CaptureBoxChrome(tokens: Look.shared.chromeTokens(.hud), scale: grab.scale)
+    /// The bar's picture for the mode it was drawn in, drawn again only when the mode changes.
+    private var bar: (box: CaptureBox, image: NSImage)?
+    /// The pointer last set over a held area's handle or body, so a move sets it only when it changes.
+    private var gripCursor: NSCursor?
 
     init(grab: DisplayGrab, selection: CaptureSelection, accent: NSColor, purpose: CaptureOverlay.Purpose = .capture, box: CaptureBox? = nil,
          report: @escaping (CaptureSelection.Outcome, CaptureOverlayView) -> Void) {
@@ -306,6 +299,17 @@ final class CaptureOverlayView: NSView {
     override func mouseMoved(with event: NSEvent) {
         update { $0.move(to: point(event)) }
         lookUpElement()
+        pointHeld(at: selection.pointer)
+    }
+
+    /// Over a held area's handle a resize arrow, over the area a hand, elsewhere the overlay's own pointer.
+    private func pointHeld(at p: CGPoint) {
+        guard box != nil else { return }
+        let grip = gripping?.grip ?? held.flatMap { CaptureBox.grip(at: p, of: $0) }
+        let shape = CaptureBoxChrome.cursor(for: grip, dragging: gripping != nil) ?? cursor
+        guard shape !== gripCursor else { return }
+        gripCursor = shape
+        if window?.isKeyWindow == true { shape.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -319,10 +323,19 @@ final class CaptureOverlayView: NSView {
         if held != nil { drop() }
         update { $0.press(at: p) }
     }
+
+    #if DEBUG
+    /// Holds `rect` as a let-go drag would, for the renders.
+    func hold(_ rect: CGRect) {
+        held = rect
+        needsDisplay = true
+    }
+    #endif
     override func mouseDragged(with event: NSEvent) {
         let p = point(event)
         if let gripping { held = CaptureBox.adjusted(gripping.from, gripping.grip, from: gripping.start, to: p, within: bounds) }
         update { $0.move(to: p) }
+        pointHeld(at: p)
     }
     override func mouseUp(with event: NSEvent) {
         let p = point(event)
@@ -332,7 +345,11 @@ final class CaptureOverlayView: NSView {
             return report(event.modifierFlags.contains(.shift) ? .rgb(selection.pointer) : .colour(selection.pointer), self)
         }
         if full { return report(.area(selection.bounds), self) }
-        if gripping != nil { gripping = nil; return update { $0.move(to: p) } }
+        if gripping != nil {
+            gripping = nil
+            update { $0.move(to: p) }
+            return pointHeld(at: p)
+        }
         if holds {
             let dragged = selection.isDragging
             let released = selection.release(at: p)
@@ -500,26 +517,52 @@ final class CaptureOverlayView: NSView {
             let ring = NSBezierPath(rect: hole.insetBy(dx: -0.5, dy: -0.5))
             ring.lineWidth = ringed ? 3 : 1
             ring.stroke()
-            if selection.mode == .area, let area { label("\(Int(area.width * grab.scale)) × \(Int(area.height * grab.scale))", below: area) }
-            if let held { handles(held) }
+            if box != nil {
+                readout(area: selection.mode == .area ? area : nil)
+            } else if selection.mode == .area, let area {
+                label(size(area), below: area)
+            }
+            if let held { chrome.handles(held, accent: accent) }
         }
         if pointing {
             if !selection.isDragging { crosshair() }
             loupe()
         }
-        hint(hintText)
+        if let box { drawBar(box) } else { hint(hintText) }
     }
 
-    /// The held area's eight handles, plain squares in the accent: a stand-in for T24's.
-    private func handles(_ rect: CGRect) {
-        for point in CaptureBox.Grip.handles.compactMap({ $0.point(on: rect) }) {
-            let square = NSBezierPath(rect: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8))
-            NSColor.white.setFill()
-            square.fill()
-            accent.setStroke()
-            square.lineWidth = 1
-            square.stroke()
+    /// `rect`'s size in the display's pixels.
+    private func size(_ rect: CGRect) -> String { "\(Int(rect.width * grab.scale)) × \(Int(rect.height * grab.scale))" }
+
+    /// The box's readout (shots 5c-*): an area's size under its right edge, the hovered window's app and size over its
+    /// top right, Full's display and size at the top of the screen.
+    private func readout(area: CGRect?) {
+        if full {
+            let name = NSScreen.screens.first { $0.displayID == grab.id }?.localizedName
+            chrome.chip(name: name, figures: "\(grab.image.width) × \(grab.image.height)") { CGPoint(x: (bounds.midX - $0.width / 2).rounded(), y: 22) }
+        } else if selection.mode == .window, let window = selection.hovered {
+            let name = window.owner > 0 ? NSRunningApplication(processIdentifier: window.owner)?.localizedName : nil
+            chrome.chip(name: name, figures: size(window.frame)) { chip in
+                let x = min(max(window.frame.maxX - chip.width, bounds.minX + 4), bounds.maxX - chip.width - 4)
+                let above = window.frame.minY - chip.height - 8
+                return CGPoint(x: x, y: above >= bounds.minY + 4 ? above : window.frame.minY + 8)
+            }
+        } else if let area {
+            chrome.chip(name: nil, figures: size(area)) { chip in
+                let x = min(max(area.maxX - chip.width, bounds.minX + 4), bounds.maxX - chip.width - 4)
+                let below = area.maxY + 10
+                return CGPoint(x: x, y: below + chip.height <= bounds.maxY - 4 ? below : area.minY - chip.height - 10)
+            }
         }
+    }
+
+    /// The box's bar at the foot of the display, drawn once per mode.
+    private func drawBar(_ box: CaptureBox) {
+        if bar?.box != box { bar = chrome.bar(box).map { (box, $0) } }
+        guard let image = bar?.image else { return hint(box.action) }
+        let frame = CGRect(x: (bounds.midX - image.size.width / 2).rounded(), y: bounds.maxY - image.size.height - 26,
+                           width: image.size.width, height: image.size.height)
+        image.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     private func crosshair() {
@@ -607,8 +650,7 @@ final class CaptureOverlayView: NSView {
 
     /// What the keys do, for the purpose and the mode.
     private var hintText: String {
-        if let box { return box.hint }
-        return switch (purpose, selection.mode) {
+        switch (purpose, selection.mode) {
         case (.colour, _): "Pick a colour: click copies its hex, Shift-click its rgb   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Esc"
         case (_, .area) where selection.smart: "Smart: drag loosely, it snaps to the content   Click a UI element   Scroll  bigger or smaller   A  off   Esc"
         case (.capture, .area): "Drag an area   A  smart   Click or Space  window   Tab  hex   Shift-Tab  rgb   Scroll  zoom   Return  whole screen   Esc"

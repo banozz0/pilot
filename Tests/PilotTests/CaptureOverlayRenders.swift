@@ -7,8 +7,11 @@ import Testing
 
 /// The capture overlay (spec `capture.html` CP3) drawn offscreen over a made-up still: an area mid-drag with its size,
 /// window mode with the hovered window ringed, and the pointer in a corner, where the loupe flips inside the display.
+/// The capture box (pilot-ui-redesign T24, shots 5c-*) in each mode and its key sheet, in Tokyo Night and Porcelain: it
+/// sets the shared look's theme, so the suite runs with the other shared-look suites, one at a time.
 /// Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureOverlayRenders`
+extension SharedLook {
 @MainActor
 @Suite("Capture overlay renders")
 struct CaptureOverlayRenders {
@@ -78,6 +81,68 @@ struct CaptureOverlayRenders {
         }
     }
 
+    /// The box's six modes as shots 5c-* draw them: Area, Record and Text with a held area and its handles, Scroll
+    /// held over the window that scrolls, Window with the window under the pointer ringed, Full on the whole display.
+    static func boxes(_ grab: DisplayGrab) -> [(String, CaptureOverlayView)] {
+        let area = CGRect(x: 380, y: 170, width: 460, height: 340)
+        func view(_ box: CaptureBox, pointer: CGPoint, held: CGRect?) -> CaptureOverlayView {
+            var selection = CaptureSelection(size: size, windows: windows, mode: box.mode, pointer: pointer)
+            selection.move(to: pointer)
+            let view = CaptureOverlayView(grab: grab, selection: selection, accent: CaptureOverlay.accent(), purpose: box.purpose, box: box) { _, _ in }
+            if let held { view.hold(held) }
+            return view
+        }
+        return [
+            ("area", view(CaptureBox(how: .area), pointer: CGPoint(x: 560, y: 230), held: area)),
+            ("window", view(CaptureBox(how: .window), pointer: CGPoint(x: 900, y: 420), held: nil)),
+            ("full", view(CaptureBox(how: .full), pointer: CGPoint(x: 600, y: 380), held: nil)),
+            ("scroll", view(CaptureBox(how: .scroll), pointer: CGPoint(x: 700, y: 320), held: CGRect(x: 620, y: 288, width: 460, height: 332))),
+            ("record", view(CaptureBox(how: .area, what: .record, timer: 3), pointer: CGPoint(x: 560, y: 230), held: area)),
+            ("text", view(CaptureBox(how: .area, what: .text), pointer: CGPoint(x: 260, y: 200), held: CGRect(x: 160, y: 150, width: 470, height: 230))),
+        ]
+    }
+
+    @Test("The capture box in each mode and its key sheet, an unset bind shown as no key, in Tokyo Night and Porcelain",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func box() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        testApp()
+        let faces = DisplayFaces.directory
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        defer { DisplayFaces.directory = faces }
+        let look = Look.shared
+        let saved = (look.style, look.themeID)
+        defer { (look.style, look.themeID) = saved }
+        look.style = .instrument
+        let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("capture-box")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+
+        // The registry's capture binds as a store would hold them, Capture full screen unbound.
+        var registry = ActionRegistry()
+        CapturesModule.register(into: &registry)
+        var store = BindStore(defaults: registry.defaults)
+        try store.set("captures.fullscreen", to: nil)
+        try #require(store.trigger(for: "captures.fullscreen") == nil)
+        try #require(store.trigger(for: "captures.area") != nil)
+
+        // An id no real display has, so Full's chip names none of this Mac's screens.
+        let grab = DisplayGrab(id: 0xC0FFEE, frame: CGRect(origin: .zero, size: Self.size), scale: 2, image: Self.still())
+        for (scheme, theme) in [("dark", "tokyo-night"), ("light", "porcelain")] {
+            look.themeID = theme
+            for (name, view) in Self.boxes(grab) {
+                let rep = try #require(snapshot(view, scale: 2))
+                try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("\(name)-\(scheme).png"))
+            }
+            let tokens = look.chromeTokens(.hud)
+            let sheet = CaptureKeySheet(store: store) { registry.actions[$0]?.label }
+                .padding(48).background(tokens.color(\.sidebar)).style(tokens)
+            let rep = try #require(snapshot(drawing: sheet))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: out.appendingPathComponent("keys-\(scheme).png"))
+        }
+    }
+
     @Test("Smart on, a loose drag inside the front window snaps to its lines of text; smart off, it stays as dragged")
     func snap() {
         let grab = DisplayGrab(id: 1, frame: CGRect(origin: .zero, size: Self.size), scale: 2, image: Self.still())
@@ -128,5 +193,6 @@ struct CaptureOverlayRenders {
         #expect(view.hex(at: CGPoint(x: 400, y: 120)) == "#CCCCCC")
         #expect(view.hex(at: CGPoint(x: 5000, y: 5000)) == nil)
     }
+}
 }
 #endif
