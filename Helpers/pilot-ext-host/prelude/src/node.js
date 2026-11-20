@@ -1,5 +1,5 @@
 // The Node subset Raycast extensions reach for (ADR 0017, T3), written from Node's documentation: `fs` (sync, callback
-// and promise forms, text only: a read answers a string), `path` (POSIX), `os`, `crypto`'s hashes, `child_process`
+// and promise forms, text only: a read answers a string), `path` (POSIX, with win32's rules beside it), `os`, `crypto`'s hashes, `child_process`
 // (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host; an
 // osascript child starts only once the extension may run AppleScript, T9's automation.js),
 // `events`, `util` and `url`. Every module is guarded: a member Node has and this lacks records its use (gaps.js), and
@@ -80,6 +80,48 @@ const path = {
   toNamespacedPath: (p) => p,
 };
 path.posix = path;
+
+// Windows' rules (Node's path.win32, from its docs), for code that reads them on any platform: node-tar takes
+// win32.isAbsolute and win32.parse at load to strip a drive, UNC or slash root from an entry's path (T26, Speedtest).
+// Either separator; a root is `\\server\share\`, `C:\`, `C:` or one slash.
+const winRoot = (s) => (/^[\\/]{2}[^\\/]+[\\/]+[^\\/]+[\\/]*/.exec(s) ?? /^[a-zA-Z]:[\\/]?/.exec(s) ?? /^[\\/]/.exec(s))?.[0] ?? "";
+const win32 = {
+  sep: "\\", delimiter: ";",
+  isAbsolute: (p) => /^([\\/]|[a-zA-Z]:[\\/])/.test(String(p)),
+  normalize(p) {
+    const s = String(p);
+    if (!s) return ".";
+    const root = winRoot(s).replace(/\//g, "\\"), absolute = /[\\/]$/.test(root) || root.startsWith("\\");
+    const rest = normalizeParts(s.slice(winRoot(s).length).split(/[\\/]/), absolute).join("\\");
+    return root + (rest || (absolute ? "" : ".")) + (/[\\/]$/.test(s) && rest ? "\\" : "");
+  },
+  join: (...parts) => win32.normalize(parts.filter((p) => p !== "").map(String).join("\\") || "."),
+  basename(p, ext) {
+    const s = String(p).slice(winRoot(String(p)).length).replace(/[\\/]+$/, ""), base = s.slice(Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1);
+    return ext && base.endsWith(ext) && base !== ext ? base.slice(0, -ext.length) : base;
+  },
+  dirname(p) {
+    const s = String(p), root = winRoot(s), rest = s.slice(root.length).replace(/[\\/]+$/, "");
+    const at = Math.max(rest.lastIndexOf("/"), rest.lastIndexOf("\\"));
+    return at < 0 ? root || "." : root + rest.slice(0, at);
+  },
+  extname(p) {
+    const base = win32.basename(p), at = base.lastIndexOf(".");
+    return at <= 0 ? "" : base.slice(at);
+  },
+  parse(p) {
+    const s = String(p), root = winRoot(s), base = win32.basename(s), ext = win32.extname(s);
+    const dir = /[\\/]/.test(s.slice(root.length).replace(/[\\/]+$/, "")) ? win32.dirname(s) : root;
+    return { root, dir, base, ext, name: ext ? base.slice(0, -ext.length) : base };
+  },
+  format: (o) => {
+    const base = o.base ?? `${o.name ?? ""}${o.ext ?? ""}`, dir = o.dir ?? o.root ?? "";
+    return dir ? (/[\\/]$/.test(dir) ? dir + base : `${dir}\\${base}`) : base;
+  },
+  toNamespacedPath: (p) => p,
+};
+win32.win32 = path.win32 = win32;
+win32.posix = path;
 
 // MARK: fs
 
@@ -487,6 +529,6 @@ const querystring = guard("querystring", {
 /** The modules `require` finds, by name, `node:` or not. */
 export { path, childProcess, check };
 export const modules = {
-  fs, "fs/promises": fsPromises, path, "path/posix": path, os, crypto, child_process: childProcess,
+  fs, "fs/promises": fsPromises, path, "path/posix": path, "path/win32": win32, os, crypto, child_process: childProcess,
   events: EventEmitter, util, url, tty, "timers/promises": timersPromises, querystring,
 };
