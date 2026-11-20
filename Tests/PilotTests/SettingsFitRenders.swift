@@ -76,6 +76,47 @@ struct SettingsFitRenders {
             for page in Self.pickerPages { try draw(page, width: width, height: 3600, name: "page-\(page.rawValue)-\(Int(width))") }
         }
     }
+
+    /// Menu bar › Notifications with Dock saved (Sven, 2026-11-20, Q284), at 1296: Pilot's dock off with the top bar on
+    /// (Show in offers Floating and Top bar, Top bar marked), both off (the same two and the fine print), the dock on (Dock
+    /// offered and marked). Stand-ins for the dock and the top bar, so nothing switches on the Mac.
+    /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter "SettingsFitRenders/dockStates"`
+    @Test("Notifications' Show in with Dock saved, Pilot's dock off and on", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func dockStates() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath() == URL(fileURLWithPath: home).resolvingSymlinksInPath(), "the home directory did not move")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("settings-fit")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let settings = NotificationSettings.shared
+        let saved = (settings.enabled, settings.showIn, settings.topBarOn, settings.dockOn)
+        defer { (settings.enabled, settings.showIn, settings.topBarOn, settings.dockOn) = saved }
+        settings.enabled = true
+        settings.showIn = .dock
+        let look = Look.shared
+        let was = (look.themeID, look.style)
+        defer { (look.themeID, look.style) = was }
+        (look.themeID, look.style) = ("nightwatch", .instrument)
+        let engine = Engine()
+        for (name, dock, top) in [("dock-off-topbar-on", false, true), ("dock-off-topbar-off", false, false), ("dock-on", true, false)] {
+            (settings.dockOn, settings.topBarOn) = ({ dock }, { top })
+            // A window each: the stand-ins aren't observed, as the engine's dock and top bar are in Pilot.
+            let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
+            let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+            defer { window.close() }
+            let frame = try #require(window.contentView?.superview)
+            AppWindowController.applyLook(look, to: window)
+            model.go(AppPlace(.menuBar))
+            window.setContentSize(NSSize(width: AppWindowController.size.width, height: 3600))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+            frame.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("notifications-\(name).png"))
+            print("q284: \(name): saved \(settings.showIn.rawValue), placement \(settings.placement.rawValue), choices \(settings.choices.map(\.rawValue)), marked \(settings.shownChoice.rawValue)")
+        }
+    }
 }
 }
 #endif
