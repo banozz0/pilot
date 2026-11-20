@@ -409,7 +409,7 @@ struct WorkspaceScrollingBlock: View {
                 Spacer()
             }
         }
-        .task { if given == nil, apps.isEmpty { apps = AppsModule.pickableApps() } }
+        .task { if given == nil, apps.isEmpty { apps = await AppsModule.pickableAppsOffMain() } }
     }
 
     private func edit(_ app: String, _ change: @escaping @MainActor (inout PilotBlock.ColumnRule) -> Void) {

@@ -21,6 +21,10 @@ extension DefaultAppsSystem {
 /// appear, and changed only on Sven's pick, then read back. Never at launch, never in a test.
 @Observable @MainActor
 final class DefaultAppsModel {
+    /// Open with's: kept between visits, so a visit draws the rows it last read and reads them again just after
+    /// (OpenWithPage, page-perf).
+    static let shared = DefaultAppsModel()
+
     struct Row {
         var current: String?
         /// The apps that open it, the current default first when macOS left it out of that list.

@@ -43,6 +43,32 @@ struct InstrumentPage<Content: View>: View {
     }
 }
 
+/// A page's blocks top to bottom, built as they scroll into view: only the ones on screen as the page opens (page-perf).
+/// Once a link, the search, a ring or the page itself (`asked`) wants a block or a row this visit, it is built whole from
+/// then on, as a lazy stack cannot scroll to what it has not built yet.
+struct PageStack<Content: View>: View {
+    @Environment(\.blockLanding) private var landing
+    @Environment(\.landingRing) private var ring
+    var spacing: CGFloat = 0
+    /// The page's own wish to scroll to a block (Look's section).
+    var asked = false
+    @ViewBuilder var content: Content
+    /// Set in the pass that first sees the wish, so no later pass, once the landing is cleared, goes lazy again.
+    @State private var whole = Whole()
+    final class Whole { var yes = false }
+
+    var body: some View {
+        if asked || landing?.place != nil || ring != nil { whole.yes = true }
+        return Group {
+            if whole.yes {
+                VStack(alignment: .leading, spacing: spacing) { content }
+            } else {
+                LazyVStack(alignment: .leading, spacing: spacing) { content }
+            }
+        }
+    }
+}
+
 /// A block: InstrumentPanel (its glyph, title and what sits at its right on a 44 pt header over a hairline), its note,
 /// then its content inset as the header; without a title, the content alone on the panel.
 struct InstrumentBlock<Trailing: View, Content: View>: View {

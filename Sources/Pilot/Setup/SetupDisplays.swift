@@ -74,10 +74,28 @@ final class SetupDisplays {
         self.nicknames = nicknames
     }
 
+    /// The screens as they are now. Each screen's modes and whether it turns are read once per screen and kept until
+    /// macOS says the screens changed (page-perf: a fresh MonitorPanel manager per screen held each System visit ~110 ms).
     func start() {
         displays = system.displays()
-        modesByDisplay = Dictionary(displays.map { ($0.id, system.modes($0.id)) }, uniquingKeysWith: { a, _ in a })
-        rotatable = Set(displays.map(\.id).filter(system.canRotate))
+        followScreenChanges()
+        for display in displays where !probed.contains(display.id) {
+            modesByDisplay[display.id] = system.modes(display.id)
+            if system.canRotate(display.id) { rotatable.insert(display.id) } else { rotatable.remove(display.id) }
+            probed.insert(display.id)
+        }
+    }
+
+    /// The screens whose modes and rotation `start` has read since the screens last changed.
+    @ObservationIgnored private var probed: Set<CGDirectDisplayID> = []
+    @ObservationIgnored private var screensMoved: NSObjectProtocol?
+
+    /// A screen added, removed, turned or given another mode: its modes and rotation are read again at the next start.
+    private func followScreenChanges() {
+        guard screensMoved == nil else { return }
+        screensMoved = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.probed = [] }
+        }
     }
 
     /// Whether the screen offers Rotate: macOS's private rotation call is there and lets this screen turn.
@@ -292,6 +310,7 @@ final class SetupDisplays {
             try system.rotate(display, to: degrees)
             problem = nil
             slog.notice("display \(display, privacy: .public) rotated to \(degrees, privacy: .public)°")
+            probed.remove(display)
             start()
             if let screen = displays.first(where: { $0.id == display }) {
                 keep(degrees, for: screen, among: displays.map(\.live))

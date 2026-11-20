@@ -142,6 +142,10 @@ struct FloatAppsBlock: View {
     @State private var floatedFirst: Set<String> = []
     /// Its rows, made again only as the apps, the search or the floats change, never on a gaps edit.
     @State private var rows: [FloatApps.Row] = []
+    /// The apps are read: until then no "No app called" line.
+    @State private var read = false
+    /// The last read's apps, shown at once on the next visit while the disk is read again.
+    private static var lastInstalled: [(name: String, bundle: String)] = []
 
     /// Every app with its Float switch (C8): the installed and running apps, an app floated by id this Mac lacks, and a name
     /// from before C8 no app answers to. Floated first, as they were when the list loaded or the search changed, so a
@@ -166,14 +170,23 @@ struct FloatAppsBlock: View {
                                 .labelsHidden().toggleStyle(.pilotSwitch)
                         }
                     }
-                    if rows.isEmpty { BlockRow { Text("No app called \(appQuery)").foregroundStyle(ink.muted) } }
+                    if rows.isEmpty && (read || apps != nil) { BlockRow { Text("No app called \(appQuery)").foregroundStyle(ink.muted) } }
                 }
             }
             .frame(height: 300)
         }
         .onAppear {
-            if apps == nil { installed = AppsModule.pickableApps() }
             floatedFirst = FloatApps.floated(block.block)
+            if apps == nil { installed = Self.lastInstalled }
+            list()
+        }
+        // The apps from the disk off the main actor (page-perf: the scan held Tiling's switch).
+        .task {
+            guard apps == nil else { return }
+            let found = await AppsModule.pickableAppsOffMain()
+            Self.lastInstalled = found
+            installed = found
+            read = true
             list()
         }
         .onChange(of: appQuery) { floatedFirst = FloatApps.floated(block.block); list() }

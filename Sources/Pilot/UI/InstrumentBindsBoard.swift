@@ -27,7 +27,9 @@ struct InstrumentBindsBoard: View {
     var whole = false
     /// Each bound key filled in its module's colour (StyleColors.groups), as Binds draws it; Home keeps them plain.
     var tinted = false
-    @State private var width: CGFloat = 0
+    /// The board's width, from the last one measured (InstrumentBindsPage.width's reason).
+    @State private var width: CGFloat = Self.lastWidth
+    private static var lastWidth: CGFloat = 0
 
     var body: some View {
         let measure = InstrumentBoardFit.measure(style.type.keyName)
@@ -49,7 +51,7 @@ struct InstrumentBindsBoard: View {
         }
         .frame(maxWidth: .infinity, minHeight: InstrumentBoardFit.height(fit.board, gap: spacing.gap),
                maxHeight: InstrumentBoardFit.height(fit.board, gap: spacing.gap), alignment: .topLeading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0; Self.lastWidth = $0 }
     }
 
     private func key(_ spot: BindsKeyboard.Spot, marks: InstrumentBoardFit.Marks, unit: CGFloat, spacing: InstrumentBoardFit.Spacing,
