@@ -136,8 +136,7 @@ enum NotesInsert: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Sketch's way in: opens the sketch canvas at the caret. Nil until the canvas lands (UI redesign T28, T29), so the
-    /// row and ⌘⇧D insert nothing yet.
+    /// Sketch's way in: opens the sketch canvas at the caret, set by the note's view (NotesNote, UI redesign T29).
     @MainActor static var openSketch: ((NotesEditorHandle) -> Void)?
 
     /// Puts it in the note the handle holds, at the caret.

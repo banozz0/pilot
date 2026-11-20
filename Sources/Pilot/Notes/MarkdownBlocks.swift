@@ -105,8 +105,8 @@ enum MarkdownBlocks {
 }
 
 /// A sketch drawn in a note (pilot-ui-redesign T28): its strokes as paths, never an image buffer per stroke, so the
-/// editor's picture and the canvas (T29) draw the same lines. ImageIO reads no SVG, so a sketch's link is to draw
-/// through `picture(at:)` (the editor's hook is not wired yet).
+/// editor's picture and the canvas (T29) draw the same lines. ImageIO reads no SVG, so a sketch's link draws
+/// through `picture(at:)`.
 extension Sketch {
     /// One stroke as a path in the sketch's own points, origin top left (a flipped context): round ends and joins, as
     /// the SVG says.
