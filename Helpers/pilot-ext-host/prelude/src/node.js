@@ -1,10 +1,12 @@
 // The Node subset Raycast extensions reach for (ADR 0017, T3), written from Node's documentation: `fs` (sync, callback
 // and promise forms, text only: a read answers a string), `path` (POSIX), `os`, `crypto`'s hashes, `child_process`
-// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host),
+// (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host; an
+// osascript child starts only once the extension may run AppleScript, T9's automation.js),
 // `events`, `util` and `url`. Every module is guarded: a member Node has and this lacks records its use (gaps.js), and
 // a module this lacks records `require("<name>")`.
 import { guard, lack } from "./gaps.js";
 import { hexBytes } from "./web.js";
+import { consent, consentNow, runsAppleScript } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -239,7 +241,11 @@ class ChildProcess extends EventEmitter {
     this.killed = false;
     this.stdout = piped ? new Readable() : null;
     this.stderr = piped ? new Readable() : null;
-    this.stdin = piped ? { write: (t) => { native.childWrite(id, String(t)); return true; }, end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); } } : null;
+    // An emitter, as Node's Writable is, so `stdin.on("error", …)` (runAppleScript sets one) attaches.
+    this.stdin = piped ? Object.assign(new EventEmitter(), {
+      write: (t) => { native.childWrite(id, String(t)); return true; },
+      end: (t) => { if (t != null) native.childWrite(id, String(t)); native.childEnd(id); },
+    }) : null;
   }
   kill(signal = "SIGTERM") {
     const numbers = { SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 };
@@ -273,6 +279,7 @@ function spawn(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const id = ++lastChild, made = spawnOptions(options);
+  if (runsAppleScript(String(file), args)) return held(id, String(file), args.map(String), made);
   const pid = native.spawn(id, String(file), args.map(String), made);
   const child = new ChildProcess(id, typeof pid === "number" ? pid : undefined, made.stdio === "pipe");
   if (typeof pid !== "number") {
@@ -280,6 +287,46 @@ function spawn(file, args = [], options = {}) {
     return child;
   }
   running.set(id, child);
+  return child;
+}
+
+/** An osascript child (automation.js): made at once, so its listeners attach, and started only once the extension may
+ *  run AppleScript. Until then its stdin is kept, and a kill cancels it. A refusal is its `error`, as a spawn that fails. */
+function held(id, file, args, made) {
+  const child = new ChildProcess(id, undefined, made.stdio === "pipe");
+  let input = "", ended = false, live = false, done = false;
+  const cancel = consent((error) => {
+    if (done) return;
+    done = true;
+    if (error) return child.emit("error", error);
+    const pid = native.spawn(id, file, args, made);
+    if (typeof pid !== "number") return child.emit("error", Object.assign(new Error(`spawn ${file} ${pid?.error ?? "failed"}`), { code: pid?.error, syscall: `spawn ${file}`, path: file }));
+    child.pid = pid;
+    live = true;
+    running.set(id, child);
+    if (input) native.childWrite(id, input);
+    if (ended) native.childEnd(id);
+  });
+  if (child.stdin) {
+    child.stdin = Object.assign(new EventEmitter(), {
+      write: (t) => { if (live) native.childWrite(id, String(t)); else input += String(t); return true; },
+      end: (t) => {
+        if (t != null) child.stdin.write(t);
+        if (live) native.childEnd(id);
+        else ended = true;
+      },
+    });
+  }
+  const kill = child.kill.bind(child);
+  child.kill = (signal = "SIGTERM") => {
+    if (live) return kill(signal);
+    if (done) return false;
+    done = true;
+    cancel();
+    child.killed = true;
+    queueMicrotask(() => { child.signalCode = String(signal); child.emit("exit", null, child.signalCode); child.emit("close", null, child.signalCode); });
+    return true;
+  };
   return child;
 }
 
@@ -322,6 +369,8 @@ function spawnSync(file, args = [], options = {}) {
   if (!Array.isArray(args)) { options = args ?? {}; args = []; }
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const made = spawnOptions(options);
+  const refused = runsAppleScript(String(file), args) ? consentNow() : null;
+  if (refused) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: refused };
   const r = native.spawnSync(String(file), args.map(String), made, options.input == null ? "" : String(options.input));
   if (r.error) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: Object.assign(new Error(r.message), { code: r.error }) };
   return { pid: r.pid, status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, output: [null, r.stdout, r.stderr] };

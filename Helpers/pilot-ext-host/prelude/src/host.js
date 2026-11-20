@@ -6,6 +6,9 @@
 // Typed actions (T3) go out as the open, copy or paste action Pilot already performs, and a Detail's Metadata as its facts.
 // The table is rebuilt on every answer; an id it lacks is stale. Each query or invoke Pilot numbers (`seq`) is
 // answered by the next line, which carries `ack`: the commit it caused, else the current view again.
+// AppleScript consent (T9): while automation.js asks whether the extension may run AppleScript, the answer is its
+// question as two rows, Don't Allow and Allow, pressed as callbacks, their ids carrying the question's serial so a
+// stale press answers nothing; the extension's own view comes back once it is answered.
 // Icons (T5): a Raycast `Icon` name goes out as the SF Symbol Pilot draws (icons.js), an emoji as itself, and an asset
 // file or an http(s) URL as the row's `image`, read once by the host (Images.swift) and sent in a later line once it lands.
 // The view stack (T8): the run renders its layers, the command's view first, each `Action.Push` target or
@@ -26,6 +29,7 @@ import { symbols } from "./icons.js";
 import { formAnswer, formPress } from "./form.js";
 import { alertAnswer, alertPress, alertUp, setRedraw } from "./alert.js";
 import { menuBarAnswer, menuBarPress, menuBarReady } from "./menubar.js";
+import { answer as answerConsent, consentAlerted, onConsentChange, question as consentQuestion } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -248,9 +252,11 @@ function view(nodes) {
 }
 
 /** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
- *  loading row. An alert up (T11) is the answer instead, its rows carrying the search `query`. A menu-bar command's
- *  (T12) is its MenuBarExtra's, as the run's `surface` asks it. */
+ *  loading row. The AppleScript consent question (T9), then an alert up (T11), is the answer instead, its rows carrying
+ *  the search `query`. A menu-bar command's (T12) is its MenuBarExtra's, as the run's `surface` asks it. */
 function answer(container, handlers, query, message) {
+  const consent = consentQuestion();
+  if (consent) return question(consent, handlers, query);
   const alert = alertAnswer(handlers, query);
   if (alert) return alert;
   const root = top(container);
@@ -268,6 +274,21 @@ function answer(container, handlers, query, message) {
   return list;
 }
 
+/** The consent question as its two rows, Don't Allow first, each pressed by a handler of this question alone; they carry
+ *  the search `query`, so Pilot's filter never hides them. */
+function question({ serial, text }, handlers, query) {
+  const row = (title, allowed, symbol) => {
+    const id = `consent-${serial}-${allowed ? "allow" : "deny"}`, handler = `${id}.onAction`;
+    handlers.set(handler, { type: "Consent", run: () => answerConsent(serial, allowed) });
+    const out = { id, title, subtitle: text, symbol, actions: [{ type: "invoke", handler, title }] };
+    if (query.trim()) out.keywords = query;
+    return out;
+  };
+  return { type: "list", items: [row("Don't Allow", false, "xmark.shield"), row("Allow", true, "checkmark.shield")] };
+}
+
+onConsentChange(() => { for (const flush of changed) flush(); });
+
 // MARK: The run
 
 /** Writes one wire line; a line Pilot can't read is never sent. */
@@ -279,6 +300,8 @@ function send(message) {
 export function fail(error, ack) {
   const text = error instanceof Error ? error.message : String(error);
   console.error(error instanceof Error && error.stack ? `${text}\n${error.stack}` : text);
+  // A no-view run that sent the consent alert ends on it: an error line would stand in for the alert (T9).
+  if (consentAlerted()) return;
   send({ type: "error", text: text.slice(0, 300), ack: typeof ack === "number" ? ack : undefined });
 }
 
@@ -379,7 +402,7 @@ export function render(component, message) {
     invoke(id, seq, value) {
       request(seq, () => {
         const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
-        const callback = alertUp() ? alertPress(word) : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
+        const callback = node?.type === "Consent" ? node.run : alertUp() ? alertPress(word) : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
           : formPress(word, node, value, top(container)) ?? menuBarPress(word, node)
             ?? (node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
               : node?.props?.[word.split(".").pop()]);
