@@ -83,6 +83,12 @@ struct ExtensionCatalogueRenders {
         var nav = MenuNavigator(list: [], title: RaycastStoreMenu.title, live: true)
         nav.replaceList(RaycastStoreMenu(model: store).rows())
         try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: nav)), "menu-raycast-store", in: out)
+        // An Engine reads Pilot's support folder: only in a home that moved (CFFIXED_USER_HOME, either spelling of /tmp) or
+        // a run without one, whose folder is its own.
+        if let home = Self.env["CFFIXED_USER_HOME"] {
+            try #require(URL(filePath: NSHomeDirectory()).resolvingSymlinksInPath() == URL(filePath: home).resolvingSymlinksInPath(),
+                         "the home directory did not move; refusing to start an engine on Sven's data")
+        }
         let entries = MenuEntries.build(apps: [], actions: Engine().bindActions, store: BindStore(defaults: [:]), roleApps: [:],
                                         menu: AppsModule.menuID, openID: AppsModule.openID(bundle:), running: [])
         for word in ["raycast", "store", "install"] {
