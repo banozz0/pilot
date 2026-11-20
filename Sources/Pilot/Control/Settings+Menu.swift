@@ -8,8 +8,7 @@ extension SettingsSchema {
     /// `launcher.on` is one of Home's and the Pilot menu's four switches (spec pilot-ui-redesign T4): off, the launcher's
     /// key opens nothing.
     func registerMenu(files: FileSearchSettings, passwords: PasswordSettings, folders: PilotFolders, giphy: any StoredKey,
-                      dropdown: DropdownLayoutStore = .forSettings, launcher: SessionSwitch = .launcher) {
-        registerDropdown(dropdown)
+                      launcher: SessionSwitch = .launcher) {
         register([
             .bool("launcher.on", "Launcher on (its key, Hyper+Space, opens the Pilot menu; off, it opens nothing)", page: "home", standard: true,
                   read: { launcher.isOn }, write: { launcher.set($0) }),
@@ -33,42 +32,6 @@ extension SettingsSchema {
         ])
     }
 
-    /// The tall Pilot menu's arrangement (spec desktop-controls T4), as Menu bar › Pilot menu edits it, Instrument only:
-    /// `dropdown.order` names the blocks to lead, the rest following in their first order; `dropdown.hidden` and
-    /// `dropdown.pinned` are sets; `dropdown.extensions` the extensions the Extensions card lists; `dropdown.switches` the
-    /// quick switches the Switches block shows. Blocks: status, workspaces, switches, extensions, running, sound,
-    /// connections, display, media, stats, commands. A new install starts from the one Pilot menu (spec pilot-ui-redesign
-    /// T20: switches and workspaces shown, the four switches, status back only for a problem), an install from before
-    /// from the tall menu, whose optional blocks are hidden until shown.
-    func registerDropdown(_ store: DropdownLayoutStore) {
-        let all = Dropdown.Layout.arrangeable, first = DropdownLayoutStore.first
-        func listed(_ blocks: [Dropdown.Block]) -> String { blocks.isEmpty ? "none" : Dropdown.Layout.names(blocks) }
-        func switches(_ shown: [Dropdown.Switch]) -> String { shown.isEmpty ? "none" : shown.map(\.rawValue).joined(separator: ",") }
-        register([
-            .text("dropdown.order", "Pilot menu's block order, comma-separated (the rest follow)", page: "pilotMenu", standard: listed(first.order),
-                  read: { listed(store.layout.order) }, write: { typed throws(ControlError) in try store.setOrder(Self.blocks(typed, key: "dropdown.order")) }),
-            .text("dropdown.hidden", "Pilot menu's hidden blocks, comma-separated or none (status hidden still shows a problem)", page: "pilotMenu",
-                  standard: listed(all.filter(first.hidden.contains)), read: { listed(all.filter(store.layout.hidden.contains)) },
-                  write: { typed throws(ControlError) in try store.setHidden(Set(Self.blocks(typed, key: "dropdown.hidden"))) }),
-            .text("dropdown.pinned", "Pilot menu's blocks pinned above its scroll, comma-separated or none", page: "pilotMenu", standard: "none",
-                  read: { listed(all.filter(store.layout.pinned.contains)) },
-                  write: { typed throws(ControlError) in try store.setPinned(Set(Self.blocks(typed, key: "dropdown.pinned"))) }),
-            .text("dropdown.extensions", "The extensions' bar items in the Pilot menu's Extensions card, ids comma-separated or none",
-                  page: "pilotMenu", standard: "none",
-                  read: { store.layout.extensions.isEmpty ? "none" : store.layout.extensions.joined(separator: ",") },
-                  write: { typed throws(ControlError) in try store.setExtensions(Self.words(typed, lowercased: false)) }),
-            .text("dropdown.switches", "Pilot menu's quick switches, comma-separated or none (launcher, keybinds, tiling, topbar, keepawake, clipboard, dictation)",
-                  page: "pilotMenu", standard: switches(first.shownSwitches), read: { switches(store.layout.shownSwitches) },
-                  write: { typed throws(ControlError) in
-                      store.setSwitches(Set(try Self.named(typed, key: "dropdown.switches", noun: "name", from: Dropdown.Switch.allCases)))
-                  }),
-        ])
-    }
-
-    static func blocks(_ typed: String, key: String) throws(ControlError) -> [Dropdown.Block] {
-        try named(typed, key: key, noun: "block", from: Dropdown.Layout.arrangeable)
-    }
-
     /// A typed list: words, comma-separated and trimmed, or none for an empty list.
     static func words(_ typed: String, lowercased: Bool = true) -> [String] {
         let words = typed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -76,7 +39,7 @@ extension SettingsSchema {
         return words.map { $0.lowercased() } == ["none"] ? [] : words
     }
 
-    /// Names as typed (the Pilot menu's blocks, the pill's views): a word list; an unknown name is refused with the
+    /// Names as typed (the pill's views): a word list; an unknown name is refused with the
     /// `options` there are.
     static func named<T: RawRepresentable<String>>(_ typed: String, key: String, noun: String, from options: [T]) throws(ControlError) -> [T] {
         var found: [T] = []

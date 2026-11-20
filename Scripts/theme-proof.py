@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 import importlib.util
 from pathlib import Path
 
-CASES = ('lifecycle', 'zed', 'obsidian', 'packs', 'editor', 'strip', 'islands', 'custom', 'agents', 'matrix', 'apps', 'carousel', 'dropdown', 'pill')
+CASES = ('lifecycle', 'zed', 'obsidian', 'packs', 'editor', 'strip', 'islands', 'custom', 'agents', 'matrix', 'apps', 'carousel', 'pill')
 parser = argparse.ArgumentParser()
 parser.add_argument('--case', required=True, choices=[*CASES, 'all'])
 parser.add_argument('--seam-only', action='store_true')

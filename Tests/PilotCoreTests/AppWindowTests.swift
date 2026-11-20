@@ -6,7 +6,7 @@ import Testing
 struct AppWindowTests {
     @Test("Twenty-nine pages in Home, eleven areas, Developer while its switch is on, and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the first ten, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), Windows under Keys (Q289), AI and Extensions areas of their own (build 19 notes), Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
     func pages() {
-        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Pilot menu", "Look", "System",
+        #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Look", "System",
                                                    "Update & Clean", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
                                                    "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Extensions", "Developer", "Pilot"])
@@ -18,7 +18,7 @@ struct AppWindowTests {
         #expect(AppArea.windows.pages == [.workspaces, .tiling] && AppArea.windows.key == "3" && AppArea.launcher.key == "4")
         // Pilot menu beside Menu bar (Sven, 2026-11-12, Q182); Dock between them, its own page (dock round 4, 2026-11-13).
         // The split (Sven, 2026-11-15): Look and Fonts are an area of their own.
-        #expect(AppArea.desktop.pages == [.menuBar, .dock, .pilotMenu, .widgets])
+        #expect(AppArea.desktop.pages == [.menuBar, .dock, .widgets])
         #expect(AppArea.look.pages == [.look, .fonts])
         // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with; Login & Background beside it (2026-11-16).
         #expect(AppArea.mac.pages == [.upkeep, .system] && AppArea.mac.key == "7")
@@ -35,7 +35,7 @@ struct AppWindowTests {
         #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil, nil, ","])
         #expect(AppArea.main.count == 12 && !AppArea.main.contains(.pilot))
         // Ctrl+Tab steps through the area's pages, round to the first; a page alone stays.
-        #expect(AppArea.next(after: .pilotMenu) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
+        #expect(AppArea.next(after: .dock) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
         #expect(AppArea.next(after: .menu) == .menu && AppArea.next(after: .extensions) == .extensions && AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .tiling) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.

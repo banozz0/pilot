@@ -57,3 +57,27 @@ struct PillEditor: View {
         ExtensionPicks(title: "In the Extensions view", held: held, bar: extensionBar) { id, on in store.hold(extension: id, on) }
     }
 }
+
+/// The extensions with a bar item, each a switch that puts it in the pill's Extensions view, in the order switched on.
+struct ExtensionPicks: View {
+    @Environment(\.ink) private var ink
+    let title: String
+    let held: [String]
+    var bar: ExtensionBar = .shared
+    let set: (String, Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(ink.ui(12.5, .medium)).foregroundStyle(ink.text2)
+            if bar.items.isEmpty {
+                Text("No extension has a bar item yet.").font(ink.ui(12.5)).foregroundStyle(ink.muted)
+            }
+            ForEach(bar.items) { item in
+                Toggle(isOn: Binding(get: { held.contains(item.id) }, set: { on in withAnimation(Kit.change) { set(item.id, on) } })) {
+                    Text("\(item.icon ?? "🧩")  \(item.title)")
+                }
+                .toggleStyle(.pilotSwitchRow)
+            }
+        }
+    }
+}

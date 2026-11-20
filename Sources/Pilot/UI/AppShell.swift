@@ -120,7 +120,6 @@ struct PageView: View {
         case .menuBar: MenuBarPage(onScreen: model.live)
         // Pilot's dock's own page (round 4).
         case .dock: DockPage(more: section == .dockMore)
-        case .pilotMenu: PilotMenuPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()

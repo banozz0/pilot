@@ -73,7 +73,7 @@ struct MenuBarPage: View {
             }
             // The page reads top to bottom as the bar does (Sven, 2026-11-12, Q182: "too crowded and im getting confused"):
             // the switch, the bar's items, how the bar looks, each item's style, the clock and the pill, then the screens.
-            // Pilot's own menu has its own page beside this one (PilotMenuPage).
+            // Pilot's own menu is fixed (2026-11-20): nothing of it is set here.
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow(alignment: .top) {
                     BarPresetControls(store: store)

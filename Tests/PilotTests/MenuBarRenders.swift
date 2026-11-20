@@ -97,27 +97,11 @@ struct MenuBarRenders {
                 if read.contains(where: { $0.contains("Finder") }) { #expect(read.contains { $0.contains("CPU") }, "\(name): Finder kept, CPU dropped") }
             }
         }
-        // The Pilot menu's own page beside Menu bar (Sven, 2026-11-12, Q182), Instrument dark and light.
-        model.go(AppPlace(.pilotMenu))
-        for dark in [true, false] {
-            Look.shared.style = .instrument
-            Look.shared.themeID = dark ? "tokyo-night" : "porcelain"
-            for width in [1440, 1000] {
-                window.setContentSize(NSSize(width: CGFloat(width), height: 2600))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-                frame.layoutSubtreeIfNeeded()
-                let rep = try #require(snapshot(frame, scale: 2))
-                let name = "pilot-menu-instrument\(dark ? "" : "-light")-\(width)"
-                try RestyledRenders.writeTrimmed(rep, from: Int(Self.pageLeft(.instrument, width: CGFloat(width))), to: dir.appendingPathComponent("\(name).png"))
-                #expect(Self.gutterClear(rep), "\(name): the page runs past the window's right edge")
-            }
-        }
     }
 
     /// The one Pilot menu (spec pilot-ui-redesign T21, S4 B, shot 4b) hung under Pilot's item in the macOS menu bar and in
-    /// Pilot's top bar, in Tokyo Night and Porcelain: the four switch tiles, the workspaces, Open Pilot and Quit Pilot. The
-    /// values go through InstrumentDropdown.arrange with a new install's layout, so the layout decides what shows. Also Key
-    /// binds off (the head's Hyper line, Check for updates in the footer) and the Desktop › Pilot menu editor's switch rows.
+    /// Pilot's top bar, in Tokyo Night and Porcelain: the four switch tiles, the workspaces, Open Pilot and Quit Pilot, the
+    /// one menu every install has (2026-11-20). Also Key binds off (the head's Hyper line, Check for updates in the footer).
     /// Glass off, as glass draws nothing offscreen. Written to PILOT_RENDER_DIR/menubar/pilot-menu-panel-*.png:
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter MenuBarRenders/pilotMenuPanel`
     @Test("The Pilot menu from the menu bar and the top bar, as shot 4b", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -139,12 +123,9 @@ struct MenuBarRenders {
         values.layerName = "Caps Lock"
         values.workspaces = ["1", "2", "3", "4"].map { .init(name: $0, apps: $0 == "3" ? [] : [DesktopControlsRenders.icon("Safari")], current: $0 == "1") }
         let shot: [Dropdown.Switch: (Bool, String)] = [.launcher: (true, "Hyper+Space"), .hyper: (true, "57 bound"), .tiling: (false, "Off"),
-                                                       .clipboard: (false, "Off"), .topBar: (true, "macOS bar hidden"), .keepAwake: (false, "Sleeps as usual"),
-                                                       .dictation: (true, "A tap dictates")]
-        values.switches = Dropdown.Switch.allCases.map { .init(which: $0, on: shot[$0]!.0, state: shot[$0]!.1, symbol: $0.symbol(layerKeys: [.capsLock])) }
+                                                       .clipboard: (false, "Off")]
+        values.switches = Dropdown.Switch.four.map { .init(which: $0, on: shot[$0]!.0, state: shot[$0]!.1, symbol: $0.symbol(layerKeys: [.capsLock])) }
         values.canCheckForUpdates = false
-        InstrumentDropdown.arrange(&values, layout: .pilotMenu, problems: false)
-        #expect(values.switches.map(\.which) == Dropdown.Switch.four, "the new install's menu shows the four switches")
 
         var off = values
         off.hyperOn = false
@@ -164,15 +145,6 @@ struct MenuBarRenders {
             try write(MenuStage(values: values, from: .topBar, backdrop: backdrop), "topbar")
             try write(MenuStage(values: off, from: .menuBar, backdrop: backdrop), "keybinds-off")
 
-            // The editor's switch rows on Desktop › Pilot menu, with the new install's layout.
-            let suite = "pilot.renders.pilot-menu-editor"
-            UserDefaults().removePersistentDomain(forName: suite)
-            let store = DropdownLayoutStore(defaults: try #require(UserDefaults(suiteName: suite)))
-            try store.setOrder(Dropdown.Layout.pilotMenu.order)
-            try store.setHidden(Dropdown.Layout.pilotMenu.hidden)
-            store.setSwitches(Dropdown.Layout.pilotMenu.switches)
-            try writeRender(DropdownEditor(store: store).frame(width: 640).padding(16).styled(.window, look: look).pilotTheme(look: look).background(Theme.background),
-                            to: dir.appendingPathComponent("pilot-menu-panel-editor-\(name).png"))
         }
     }
 

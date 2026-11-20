@@ -2,8 +2,8 @@ import Foundation
 import PilotCore
 import Testing
 
-/// The dropdown's blocks (card agent-bo-95422912, compact since spec pilot-1-1 T29): problems lead, Now only while something
-/// runs, Option adds the developer rows, and every row the old dropdown offered has a place.
+/// The Pilot menu's words (card agent-bo-95422912; one fixed menu since 2026-11-20): the headline and Hyper's line, the
+/// footer's rows and Option's developer rows, and the switches.
 @Suite("Dropdown")
 struct DropdownTests {
     @Test("Key labels sign the real layer key and the bind's own keys, never a fixed Caps Lock (card agent-bo-95422993, G3)", arguments: LayerKey.allCases)
@@ -15,12 +15,6 @@ struct DropdownTests {
         #expect(Dropdown.keyLabel(nil, layerKeys: [layerKey]) == nil)
         #expect(Dropdown.workspaceKeys(layerKeys: [layerKey], count: 3) == "\(sign) 1–4")
         #expect(Dropdown.workspaceKeys(layerKeys: [layerKey], count: 6) == "\(sign) 1–6")
-    }
-
-    @Test("The compact menu's blocks (spec pilot-1-1 T29): Option adds the developer rows before the footer; Now draws itself only while something runs")
-    func blocks() {
-        #expect(Dropdown.blocks(option: false) == [.status, .workspaces, .quickSwitches, .now, .rows, .footer])
-        #expect(Dropdown.blocks(option: true) == [.status, .workspaces, .quickSwitches, .now, .rows, .developer, .footer])
     }
 
     @Test("The headline says Pilot is on, or how many things need fixing; the line under it what Hyper is")
@@ -42,47 +36,15 @@ struct DropdownTests {
         #expect(Dropdown.hyperLine(hyperOn: false, trusted: false, secureInput: true, held: false, layerKey: "Caps Lock", problems: 2) == "Hyper is off until they are fixed")
     }
 
-    @Test("Every row of the old dropdown has a place in a block, Option's rows included, and Feedback and Support are on Settings' About")
-    func nothingMissing() {
-        let old = ["The workspaces with windows, a click going there", "The tiler is not running: tiling and workspaces are off",
-                   "Rescue stranded windows", "Always rescue when the tiler quits", "Accessibility not granted", "Finish setup…",
-                   "A password field has the keyboard", "Hyper held / Hyper is <key>", "Pilot's last error", "Last: <press>",
-                   "Recent presses", "Pilot (the on/off switch)", "Also quit Karabiner-Elements", "Also quit Hammerspoon",
-                   "The switch's problem", "Print observers", "Open Pilot… ⌘,", "Quit Pilot ⌘Q", "Send feedback", "Support Pilot"]
-        #expect(Dropdown.carried.map(\.row) == old)
-        let shown = Set(Dropdown.blocks(option: true))
-        #expect(Dropdown.carried.allSatisfy { shown.contains($0.block) && !$0.now.isEmpty })
-    }
-
-    @Test("Row set A (Q683): Open, Capture and Pilot's groups, then Check for updates, Settings and Quit on one line; Check for updates only in a built bundle")
+    @Test("The footer: Check for updates, Settings and Quit on one line, Check for updates only in a built bundle; Option's developer rows (the command rows went 2026-11-20)")
     func footerRows() {
-        #expect(Dropdown.groups.map(\.title) == ["Open", "Capture", "Pilot"])
-        #expect(Dropdown.groups.map { $0.rows.map(\.title) } == [
-            ["Pilot menu", "Clipboard history", "AI chat", "Quick notes", "Dictate"], ["Capture area", "Screen recording"], ["Keys map", "Extensions"],
-        ])
         #expect(Dropdown.footer(canUpdate: true).map(\.title) == ["Check for updates", "Settings", "Quit"])
         #expect(!Dropdown.footer(canUpdate: false).contains(.updates))
-        // A row shows its registered action's bind, or its ⌘ key; never both.
-        #expect(Dropdown.Row.allCases.compactMap(\.actionID) == ["apps.launcher", "apps.clipboard", "ai.chat", "notes.toggle", "dictation.toggle",
-                                                                 "captures.area", "captures.screenRecording"])
         #expect(Dropdown.Row.allCases.filter { $0.command != nil } == [.settings, .quit])
-        #expect(Dropdown.Row.allCases.allSatisfy { $0.actionID == nil || $0.command == nil })
         #expect(Dropdown.Row.developer.map(\.title) == ["Print observers", "Rescue stranded windows"])
         // Every row is drawn somewhere, once.
-        let drawn = Dropdown.groups.flatMap(\.rows) + Dropdown.footer(canUpdate: true) + Dropdown.Row.developer
+        let drawn = Dropdown.footer(canUpdate: true) + Dropdown.Row.developer
         #expect(Set(drawn) == Set(Dropdown.Row.allCases) && drawn.count == Dropdown.Row.allCases.count)
-    }
-
-    @Test("The Pilot on/off switch is back in the dropdown as Key binds (spec pilot-ui-redesign T4)")
-    func noPilotSwitch() throws {
-        let pilot = try #require(Dropdown.carried.first { $0.row == "Pilot (the on/off switch)" })
-        #expect(pilot.block == .quickSwitches && pilot.now == "the Key binds switch")
-    }
-
-    @Test("The Also quit ticks left the dropdowns with Other apps (C3, Sven 2026-10-10); their saved choice still applies")
-    func noQuitTicks() {
-        let ticks = Dropdown.carried.filter { $0.row.hasPrefix("Also quit") }
-        #expect(ticks.count == 2 && ticks.allSatisfy { $0.now == "gone; the saved choice still applies" })
     }
 
     @Test("The switches say what they do now; the four are Home's and the Pilot menu's, each by its setting")

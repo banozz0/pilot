@@ -345,10 +345,6 @@ extension Extension {
         /// Whether the item draws: a text, a gauge or an icon to show.
         public var shows: Bool { !text.isEmpty || !gauges.isEmpty || symbol != nil || image != nil }
 
-        /// One line of words for where gauges are not drawn (the menu's Extensions card): its text, else its gauges as
-        /// "Claude 97% · OpenAI 100%"; empty when it shows neither.
-        public var line: String { text.isEmpty ? gauges.map(\.words).joined(separator: " · ") : text }
-
         /// The strongest tone it carries, its own or a gauge's: alert over warn over fine.
         public var loudest: Tone? {
             ([tone] + gauges.map(\.tone)).compactMap { $0 }.max { $0.rank < $1.rank }

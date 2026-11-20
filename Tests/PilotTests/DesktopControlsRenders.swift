@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The desktop controls' native faces (spec desktop-controls T2): the tall Dropdown panel, the pill (each view compact and
+/// The desktop controls' native faces (spec desktop-controls T2): the Pilot menu panel, the pill (each view compact and
 /// open) and the Carousel in both modes, in Instrument on Tokyo Night (dark) and Porcelain (light), each face fed plain values.
 /// The panel and the pill hang under a stand-in solid top bar over a wallpaper, so the attachment shows; Glass is off, as
 /// glass draws nothing offscreen (T6 judges the material on Sven's screen). Empty states: nothing playing, no
@@ -59,52 +59,25 @@ struct DesktopControlsRenders {
             problem.trusted = false
             try shot(PanelStage(values: problem, backdrop: backdrop), "panel-a-2-problem")
             var idle = panel
-            idle.running = []
             idle.updateReady = true
-            try shot(PanelStage(values: idle, backdrop: backdrop), "panel-a-3-nothing-running")
-            var full = panel
-            full.sound = .init(device: "Studio Display", level: 0.64)
-            full.connections = .init(wifiOn: true, wifiBars: 3, bluetoothOn: true, bluetoothDetail: "On · AirPods Pro")
-            full.display = .init(name: "Studio Display", level: 0.78)
-            full.media = .init(title: "Weightless", artist: "Marconi Union", art: walls[min(2, walls.count - 1)], playing: true)
-            full.stats = .init(cpu: 11, memoryUsed: 14.2, memoryTotal: 24, battery: nil)
-            try shot(PanelStage(values: full, backdrop: backdrop), "panel-a-4-optional-blocks")
+            try shot(PanelStage(values: idle, backdrop: backdrop), "panel-a-3-update-ready")
 
-            // The follow-ups: a saved order, pins above a scroll, nothing pinned, Option held, the tiler stopped, a build
-            // with nowhere to check and a download that cannot stop.
-            var ordered = full
-            ordered.order = [.status, .media, .now, .stats, .workspaces, .quickSwitches, .display, .sound, .rows]
-            try shot(PanelStage(values: ordered, backdrop: backdrop), "panel-b-1-saved-order")
-            var pinned = ordered
-            pinned.pinned = [.media, .now]
-            try shot(PanelStage(values: pinned, room: 560, backdrop: backdrop), "panel-b-2-pinned-room-560")
-            var unpinned = panel
-            unpinned.running = []
-            unpinned.pinnedCommands = 0
-            try shot(PanelStage(values: unpinned, backdrop: backdrop), "panel-b-3-commands-unpinned")
-            var option = unpinned
+            // Option held, the tiler stopped, a build with nowhere to check. (The tall menu's optional blocks, saved order,
+            // pins, commands, Running now and Extensions card went 2026-11-20: one fixed menu.)
+            var option = panel
             option.developer = [.init(symbol: "text.alignleft", title: "Print observers"), .init(symbol: "lifepreserver", title: "Rescue stranded windows")]
             option.presses = ["14:29:52  ⇪ V  Clipboard history", "14:29:40  ⇪ 2  Workspace 2", "14:28:03  ⇪ Space  Pilot menu",
                               "14:27:11  ⇪ ⇧ 4  Move window to workspace 4 and follow it there"]
             try shot(PanelStage(values: option, backdrop: backdrop), "panel-b-4-developer-option-held")
-            var stopped = unpinned
+            try shot(PanelStage(values: option, room: 420, backdrop: backdrop), "panel-b-4-developer-option-held-room-420")
+            var stopped = panel
             stopped.problems = [.init(title: "The tiler is not running", detail: "Tiling and workspaces are off until it restarts.", button: "Restart")]
             stopped.workspaces = []
             stopped.workspacesStopped = true
             try shot(PanelStage(values: stopped, backdrop: backdrop), "panel-b-5-workspaces-stopped")
-            var download = unpinned
-            download.canCheckForUpdates = false
-            download.running = [.init(symbol: "arrow.down.to.line", title: "Whisper large v3", detail: "Downloading", reading: "62 %", share: 0.62, canStop: false),
-                                .init(symbol: "arrow.down.to.line", title: "Terminal pack", detail: "Downloading", reading: "18 %", share: 0.18)]
-            try shot(PanelStage(values: download, backdrop: backdrop), "panel-b-6-no-updates-download-cannot-stop")
-            // The Extensions card (Q74 A, Sven's pick of the mock-up): after the switches, one extension with a problem.
-            var extensions = panel
-            extensions.extensions = [
-                .init(emoji: "☀️", title: "Weather", text: "14°", detail: "Partly cloudy · Valletta"),
-                .init(emoji: "✅", title: "To-do", text: "3 left", detail: "Next: send the invoice"),
-                .init(emoji: "📊", title: "AI usage", text: "–", problem: "Needs its API key set first"),
-            ]
-            try shot(PanelStage(values: extensions, backdrop: backdrop), "panel-b-7-extensions-card")
+            var nowhere = panel
+            nowhere.canCheckForUpdates = false
+            try shot(PanelStage(values: nowhere, backdrop: backdrop), "panel-b-6-no-updates")
 
             // The pill: each view compact, then open; the empty ones; halfway open.
             let pill = Self.pill(walls)
@@ -272,26 +245,10 @@ struct DesktopControlsRenders {
             .init(name: "4", apps: [icon("Mail"), icon("Calendar"), icon("Messages")]),
             .init(name: "5"),
         ]
-        let on: [Dropdown.Switch: Bool] = [.hyper: true, .tiling: true, .topBar: true, .keepAwake: false, .clipboard: true, .dictation: true]
-        values.switches = Dropdown.Switch.allCases.map {
+        let on: [Dropdown.Switch: Bool] = [.launcher: true, .hyper: true, .tiling: true, .clipboard: true]
+        values.switches = Dropdown.Switch.four.map {
             .init(which: $0, on: on[$0] ?? false, state: $0.state(on[$0] ?? false, layerKeys: [.capsLock], tiler: "Tiling"))
         }
-        values.running = [
-            .init(symbol: "record.circle", title: "Screen recording", detail: "Studio Display · window", reading: "00:42", canPause: true),
-            .init(symbol: "timer", title: "Focus", detail: "Write the release notes", reading: "18:20", canPause: true),
-        ]
-        values.commands = [
-            .init(symbol: "magnifyingglass", title: "Pilot menu", keys: ["⇪", "Space"]),
-            .init(symbol: "list.clipboard", title: "Clipboard history", keys: ["⇪", "V"]),
-            .init(symbol: "sparkles", title: "AI chat", keys: ["⇪", "A"]),
-            .init(symbol: "pencil", title: "Quick notes", keys: ["⇪", "N"]),
-            .init(symbol: "crop", title: "Capture area", keys: ["⇪", "4"]),
-            .init(symbol: "mic", title: "Dictate"),
-            .init(symbol: "video", title: "Screen recording", keys: ["⇪", "5"]),
-            .init(symbol: "keyboard", title: "Keys map", keys: ["⇪", "K"]),
-            .init(symbol: "puzzlepiece.extension", title: "Extensions"),
-        ]
-        values.pinnedCommands = 5
         return values
     }
 

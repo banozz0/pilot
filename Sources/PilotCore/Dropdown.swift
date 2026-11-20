@@ -1,118 +1,12 @@
 import Foundation
 
-/// Pilot's menu-bar dropdown (card agent-bo-95422912; round 3's dropdown, "Menu bar changes ok", redrawn in design round
-/// 4, artifact 5sh21HWjCjsWYAwWKTibcE, approved by Sven in chat 2026-10-06), compact since spec pilot-1-1 T29 (Q644 A,
-/// row set A of Q683), tall since spec desktop-controls T3 (Sven's pick A, each block its card): Status, with any problem
-/// at the top; the workspaces; the quick switches; what is running, only while something runs; the rows with their keys; Check
-/// for updates, Settings and Quit on one line. Holding Option adds the developer rows and the recent presses.
+/// The Pilot menu (card agent-bo-95422912, design round 4, approved by Sven in chat 2026-10-06), one fixed menu since
+/// 2026-11-20 (Sven: "pilot menu page shouldnt exist anymore either pilot menu should be simple"; pilot-ui-redesign T20,
+/// S4 B): any problem at the top, the four switches, the workspaces, then Check for updates, Open Pilot and Quit. Holding
+/// Option adds the developer rows and the recent presses. Nothing in it is arranged.
 public enum Dropdown {
-    /// The launcher's action (Hyper+Space): the one bind Key binds off keeps, and the Menu row's (spec pilot-ui-redesign T4).
+    /// The launcher's action (Hyper+Space): the one bind Key binds off keeps (spec pilot-ui-redesign T4).
     public static let launcherAction = "apps.launcher"
-
-    /// A block by the name `pilot set dropdown.*` takes (spec desktop-controls T4). Extensions, sound, connections,
-    /// display, media and stats are the tall menu's optional blocks, off until shown; the developer rows and the footer are
-    /// fixed.
-    public enum Block: String, CaseIterable, Codable, Sendable {
-        case status, workspaces, quickSwitches = "switches", extensions, now = "running"
-        case sound, connections, display, media, stats
-        case rows = "commands", developer, footer
-    }
-
-    /// Today's compact blocks in order: the developer rows, before the footer, only while Option is
-    /// held. Now draws only while something runs (a recording, a focus timer, a download), and reads that itself, so a
-    /// countdown redraws only it. The optional blocks are the tall menu's alone.
-    public static func blocks(option: Bool) -> [Block] {
-        [.status, .workspaces, .quickSwitches, .now, .rows, .developer, .footer].filter { option || $0 != .developer }
-    }
-
-    /// The tall menu's arrangement (spec desktop-controls T4, Launcher › Your menu's pattern): the order of the blocks
-    /// that move, which are hidden and which are pinned above the scroll, and which quick switches the Switches block
-    /// shows. Status hidden still leads while a problem waits (`shown(problems:)`); the developer rows and the footer stay
-    /// where they are.
-    public struct Layout: Codable, Equatable, Sendable {
-        public var order: [Block]
-        public var hidden: Set<Block>
-        public var pinned: Set<Block>
-        /// The extensions' ids whose bar items the Extensions card lists, in order (Sven, 2026-11-11, Q74 A, Q75: its own
-        /// list, not the pill's).
-        public var extensions: [String]
-        /// The quick switches the Switches block shows, drawn in `Switch.allCases` order (spec pilot-ui-redesign T20).
-        public var switches: Set<Switch>
-
-        /// The blocks that can move, in their first order.
-        public static let arrangeable: [Block] = [.status, .workspaces, .quickSwitches, .extensions, .now, .sound, .connections, .display,
-                                                  .media, .stats, .rows]
-        /// Off until shown (Sven's "yes", 2026-11-08; Extensions, 2026-11-11).
-        public static let optional: Set<Block> = [.extensions, .sound, .connections, .display, .media, .stats]
-        /// The tall menu, an install from before's arrangement while it has none saved: every block but the optional ones,
-        /// all seven switches.
-        public static let standard = Layout(order: arrangeable, hidden: optional, pinned: [])
-        /// The one Pilot menu, a new install's arrangement (spec pilot-ui-redesign T20, S4 B, shot 4b; Open question 6,
-        /// Sven 2026-11-19): the four switches, then the workspaces, then the footer's Open Pilot and Quit. Every other
-        /// block and the other three switches are hidden, there to turn back on from Desktop › Pilot menu. Status is
-        /// first but hidden, so it shows only while a problem waits.
-        public static let pilotMenu: Layout = {
-            let lead: [Block] = [.status, .quickSwitches, .workspaces]
-            return Layout(order: lead + arrangeable.filter { !lead.contains($0) },
-                          hidden: Set(arrangeable).subtracting([.quickSwitches, .workspaces]), pinned: [], switches: Set(Switch.four))
-        }()
-
-        public init(order: [Block], hidden: Set<Block>, pinned: Set<Block>, extensions: [String] = [], switches: Set<Switch> = Set(Switch.allCases)) {
-            self.order = order; self.hidden = hidden; self.pinned = pinned; self.extensions = extensions; self.switches = switches
-        }
-
-        /// A layout saved before the Extensions card has no `extensions`: it reads as none. One saved before T20 has no
-        /// `switches`: it reads as all seven, as that menu showed them.
-        public init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            order = try c.decode([Block].self, forKey: .order)
-            hidden = try c.decode(Set<Block>.self, forKey: .hidden)
-            pinned = try c.decode(Set<Block>.self, forKey: .pinned)
-            extensions = (try? c.decodeIfPresent([String].self, forKey: .extensions)) ?? []
-            switches = (try? c.decodeIfPresent(Set<Switch>.self, forKey: .switches)) ?? Set(Switch.allCases)
-        }
-
-        /// The extensions asked on the menu's account while it is open: its own, only while the Extensions card shows.
-        public var asked: [String] { shown.contains(.extensions) ? extensions : [] }
-
-        /// The blocks that show, in order.
-        public var shown: [Block] { order.filter { !hidden.contains($0) } }
-
-        /// The blocks the menu draws: `shown`, with a hidden Status back in its place while any problem waits, so a
-        /// problem always leads the menu it is hidden from.
-        public func shown(problems: Bool) -> [Block] { order.filter { !hidden.contains($0) || (problems && $0 == .status) } }
-
-        /// The switches the Switches block draws, in their order.
-        public var shownSwitches: [Switch] { Switch.allCases.filter(switches.contains) }
-
-        /// `given` first, then the rest in their first order; refuses a fixed block or one named twice.
-        public static func order(_ given: [Block]) throws(ControlError) -> [Block] {
-            if let fixed = given.first(where: { !arrangeable.contains($0) }) {
-                throw ControlError(.badValue, "\(fixed.rawValue) stays where it is; the blocks that move are \(names(arrangeable))")
-            }
-            guard Set(given).count == given.count else { throw ControlError(.badValue, "a block is named twice in \(names(given))") }
-            return given + arrangeable.filter { !given.contains($0) }
-        }
-
-        /// Refuses hiding a fixed block. Status may hide since T20: a problem still brings it back (`shown(problems:)`).
-        public static func hide(_ given: Set<Block>) throws(ControlError) -> Set<Block> {
-            if let fixed = given.first(where: { !arrangeable.contains($0) }) { throw ControlError(.badValue, "\(fixed.rawValue) can't be hidden") }
-            return given
-        }
-
-        public static func pin(_ given: Set<Block>) throws(ControlError) -> Set<Block> {
-            if let fixed = given.first(where: { !arrangeable.contains($0) }) { throw ControlError(.badValue, "\(fixed.rawValue) can't be pinned") }
-            return given
-        }
-
-        /// `block` moved to `index` in the order (the edit list's arrows and drag), the others keeping theirs.
-        public mutating func move(_ block: Block, to index: Int) {
-            guard let from = order.firstIndex(of: block), order.indices.contains(index) else { return }
-            order.insert(order.remove(at: from), at: index)
-        }
-
-        public static func names(_ blocks: [Block]) -> String { blocks.map(\.rawValue).joined(separator: ",") }
-    }
 
     /// The status block's headline: "Pilot is on", or how many things need fixing, which then lead the dropdown.
     public static func headline(isOn: Bool, problems: Int) -> String {
@@ -134,7 +28,6 @@ public enum Dropdown {
 
     /// The quick switches. The first four (`four`) are Home's and the Pilot menu's (spec pilot-ui-redesign T4, S4 B):
     /// the launcher, the key binds, tiling and the clipboard; each is one saved setting.
-    /// Each one's raw value is its name in `pilot set dropdown.switches` and in a saved layout.
     public enum Switch: String, CaseIterable, Codable, Sendable {
         case launcher, hyper = "keybinds", tiling, topBar = "topbar", keepAwake = "keepawake", clipboard, dictation
 
@@ -210,12 +103,10 @@ public enum Dropdown {
         }
     }
 
-    /// The dropdown's rows (row set A, Q683; Sven 2026-10-10: "make sure it has all the most important stuff"): what opens
-    /// by key, listed as a reminder and for mouse moments; capture and voice; the ways into Pilot that have no key; then
-    /// the footer's line. A row with a registered action shows that action's bind; Settings and Quit keep their ⌘ keys.
-    /// Send feedback and Support are on General's About (Settings).
+    /// The menu's rows: the footer's line, and the developer rows while Option is held. Settings and Quit keep their ⌘
+    /// keys. (The command rows, row set A of Q683, went with the tall menu, 2026-11-20.)
     public enum Row: CaseIterable, Sendable {
-        case menu, clipboard, aiChat, quickNotes, dictate, captureArea, screenRecording, keysMap, extensions, updates, settings, quit
+        case updates, settings, quit
         case printObservers, rescue
 
         /// The developer rows while Option is held.
@@ -223,15 +114,6 @@ public enum Dropdown {
 
         public var title: String {
             switch self {
-            case .menu: "Pilot menu"
-            case .clipboard: "Clipboard history"
-            case .aiChat: "AI chat"
-            case .quickNotes: "Quick notes"
-            case .dictate: "Dictate"
-            case .captureArea: "Capture area"
-            case .screenRecording: "Screen recording"
-            case .keysMap: "Keys map"
-            case .extensions: "Extensions"
             case .updates: "Check for updates"
             case .settings: "Settings"
             case .quit: "Quit"
@@ -242,34 +124,11 @@ public enum Dropdown {
 
         public var symbol: String {
             switch self {
-            case .menu: "magnifyingglass"
-            case .clipboard: "list.clipboard"
-            case .aiChat: "sparkles"
-            case .quickNotes: "pencil"
-            case .dictate: "mic"
-            case .captureArea: "crop"
-            case .screenRecording: "video"
-            case .keysMap: "keyboard"
-            case .extensions: "puzzlepiece.extension"
             case .updates: "arrow.triangle.2.circlepath"
             case .settings: "gearshape"
             case .quit: "power"
             case .printObservers: "text.alignleft"
             case .rescue: "lifepreserver"
-            }
-        }
-
-        /// The registered action the row runs, whose bind it shows.
-        public var actionID: String? {
-            switch self {
-            case .menu: Dropdown.launcherAction
-            case .clipboard: "apps.clipboard"
-            case .aiChat: "ai.chat"
-            case .quickNotes: "notes.toggle"
-            case .dictate: "dictation.toggle"
-            case .captureArea: "captures.area"
-            case .screenRecording: "captures.screenRecording"
-            default: nil
             }
         }
 
@@ -282,14 +141,6 @@ public enum Dropdown {
             }
         }
     }
-
-    /// The rows' groups under the switches and Now, each with its heading. Widgets joins Pilot's once it has a page
-    /// (spec pilot-1-1 T17 to T24).
-    public static let groups: [(title: String, rows: [Row])] = [
-        ("Open", [.menu, .clipboard, .aiChat, .quickNotes, .dictate]),
-        ("Capture", [.captureArea, .screenRecording]),
-        ("Pilot", [.keysMap, .extensions]),
-    ]
 
     /// The footer's one line; Check for updates only where there is something to check (a release's update feed, or a
     /// bundle built from a commit).
@@ -306,31 +157,4 @@ public enum Dropdown {
     /// The Workspaces header's keys: the layer key's sign and 1 to the highest tile, at least 4, as Home's tile says.
     public static func workspaceKeys(layerKeys: [LayerKey], count: Int) -> String { "\(layerKeys.symbol) 1–\(max(4, count))" }
 
-    /// Every row the dropdown offered before card 912 or dropped since, and where it is now, so nothing goes missing.
-    public static let carried: [(row: String, block: Block, now: String)] = [
-        ("The workspaces with windows, a click going there", .workspaces, "a tile per workspace with its apps"),
-        ("The tiler is not running: tiling and workspaces are off", .status, "the tiler problem with Restart; Workspaces back once it runs"),
-        ("Rescue stranded windows", .status, "a command under Option; the tiler problem restarts it"),
-        ("Always rescue when the tiler quits", .developer, "gone with the old tiler (R3)"),
-        ("Accessibility not granted", .status, "the Accessibility problem"),
-        ("Finish setup…", .status, "Allow on the Accessibility problem"),
-        ("A password field has the keyboard", .status, "the secure input problem"),
-        ("Hyper held / Hyper is <key>", .status, "the line under the headline"),
-        ("Pilot's last error", .status, "a problem"),
-        // Now shows only what runs (spec pilot-1-1 T29): the last press went to Option's rows.
-        ("Last: <press>", .developer, "the recent presses, commands under Option"),
-        ("Recent presses", .developer, "the recent presses, commands under Option"),
-        // Pilot is the whole app, so it has no on/off here; the Hyper key does (Sven, 2026-10-07; card agent-bo-95422986).
-        ("Pilot (the on/off switch)", .quickSwitches, "the Key binds switch"),
-        // Other apps are not Pilot's to mention (Sven, C3 2026-10-10): the ticks left; the saved choice still applies.
-        ("Also quit Karabiner-Elements", .developer, "gone; the saved choice still applies"),
-        ("Also quit Hammerspoon", .developer, "gone; the saved choice still applies"),
-        ("The switch's problem", .status, "a problem"),
-        ("Print observers", .developer, "a command under Option"),
-        ("Open Pilot… ⌘,", .footer, "Settings ⌘,"),
-        ("Quit Pilot ⌘Q", .footer, "Quit ⌘Q"),
-        // Spec pilot-1-1 T29: both are on General's About, which Settings opens.
-        ("Send feedback", .footer, "Settings, then About"),
-        ("Support Pilot", .footer, "Settings, then General's Support"),
-    ]
 }
