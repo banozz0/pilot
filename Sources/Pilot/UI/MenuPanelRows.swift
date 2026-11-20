@@ -163,6 +163,7 @@ extension MenuEntry {
     /// New web app block. A table, not a switch: an action added later wears its module's glyph until it has a row here.
     private static let actionLooks: [String: (symbol: String, tint: Tint)] = [
         "extensions.catalogue": ("bag", .accent),
+        "extensions.raycastStore": ("storefront", .accent),
         "system.lock": ("lock", .neutral), "system.lockKeyboard": ("lock.rectangle", .neutral), "system.sleep": ("moon", .accent), "system.restart": ("arrow.triangle.2.circlepath", .amber),
         "system.shutDown": ("power", .problem), "system.logOut": ("rectangle.portrait.and.arrow.right", .neutral), "system.ejectAll": ("eject", .neutral),
         "system.darkMode": ("circle.lefthalf.filled", .second), "system.keepAwake": ("cup.and.saucer", .amber),

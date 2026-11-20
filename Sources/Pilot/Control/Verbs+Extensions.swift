@@ -252,6 +252,7 @@ extension ControlVerbs {
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] [--query <text>] | ext act <id> --handler <id> [--command <name>] [--then <row>|escape] | ext act <id> [<action>] [--type <field>=<text>] [--submit [<json values>]]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's action (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, opened searched for --query, with its host kept open: a callback runs and it answers the rows before and after; a typed action (open, copy, paste) is answered, not performed, as Pilot performs it on a press in the menu; --then presses again in the view the first press left, escape going back a view. On a Raycast Form, --type types a text field's text one change per character as keystrokes come, and --submit sets the fields its JSON object names, by id, then presses the form's SubmitForm (or the action named); it answers the form before, each line typing drew, the form filled and the view after, submitted false while a field shows an error."),
         ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
+        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with its same question."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -275,7 +276,7 @@ extension ControlVerbs {
                                      .init("type", help: "ext act: types into a Raycast Form's text field, one change per character: <field>=<text>"),
                                      .init("submit", help: "ext act: sets a Raycast Form's fields from a JSON object by id, then submits it"),
                                      .init("card", help: "ext open: its card, not its page", takesValue: false),
-                                     .init("refresh", help: "ext catalogue: read the catalogue again", takesValue: false)],
+                                     .init("refresh", help: "ext catalogue, ext store: read the catalogue or the store's listing again", takesValue: false)],
                              schema: { .object(["modes": .array(modes.map(JSONValue.string)), "subcommands": .array(Self.extSubcommands.map { .object(["name": .string($0.name), "usage": .string("pilot " + $0.usage), "help": .string($0.help)]) }),
                                                 "collections": .array([.string("extensions"), .string("ext-prefs")])]) },
                              index: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
@@ -293,6 +294,7 @@ extension ControlVerbs {
             case "page": return try await Self.pageExtension(args, tools, peer: call.peer)
             case "act": return try await Self.actExtension(args, tools, peer: call.peer)
             case "gaps": return try await Self.extensionGaps(args, tools)
+            case "store": return try await Self.store(args, tools, peer: call.peer)
             case "catalogue": return try await Self.catalogue(args, tools)
             case "get": return try await Self.getExtension(args, tools, peer: call.peer)
             case "publish":
@@ -304,6 +306,67 @@ extension ControlVerbs {
             }
         })
         registerExtensionPrefs(tools)
+    }
+
+    /// `ext store [<query>] [--refresh] | info <folder> | install <folder>` (raycast-extensions T24): the store the menu's
+    /// Raycast Store and the Extensions page show, through their one model. A list answers at most 100 rows, the rest counted.
+    private static func store(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        // The shared model, which the menu and the page read, unless the caller's Extensions folder is another (a test's).
+        let shared = RaycastStoreModel.shared
+        let model = tools.extensions.standardizedFileURL == shared.extensions.standardizedFileURL ? shared
+            : RaycastStoreModel(source: shared.source, extensions: tools.extensions)
+        let words = Array(args.positional.dropFirst())
+        if args.has("refresh") { await model.refresh() } else { await model.open() }
+        if case .failed(let why) = model.load { throw ControlError(.badValue, "Raycast's store not listed: \(why)") }
+        guard let listing = model.listing else { throw ControlError(.badValue, "Raycast's store not listed") }
+        func row(_ folder: RaycastStore.Folder) -> JSONValue {
+            var o: [String: JSONValue] = ["folder": .string(folder.name), "title": .string(model.title(folder.name)),
+                                          "loaded": .bool(model.infos[folder.name] != nil)]
+            o["installed"] = model.installedExtension(folder.name).map { .string($0.id) } ?? .bool(false)
+            return .object(o)
+        }
+        switch words.first {
+        case "info":
+            guard words.count == 2 else { throw ControlError(.badValue, "ext store info takes one folder") }
+            let name = words[1]
+            guard let folder = listing.folder(name) else {
+                throw ControlError(.badValue, "no folder \(oneLine(name)) in Raycast's store listing; pilot ext store lists them")
+            }
+            let kept = model.infos[name]?.sha == folder.sha
+            guard let info = await model.info(name) else {
+                throw ControlError(.badValue, "\(name)'s package.json not read: \(model.infoFailures[name] ?? "unknown")")
+            }
+            var o: [String: JSONValue] = ["folder": .string(name), "tree": .string(folder.sha), "read": .string(kept ? "kept" : "fetched"),
+                                          "title": .string(info.title), "description": .string(info.description),
+                                          "commands": .number(Double(info.commands)), "install": .string(RaycastStore.spec(name)),
+                                          "page": .string(RaycastStore.pageURL(name).absoluteString)]
+            o["name"] = info.name.map(JSONValue.string)
+            o["author"] = info.author.map(JSONValue.string)
+            o["icon"] = model.iconFile(name).map(JSONValue.string)
+            o["installed"] = model.installedExtension(name).map { ext in
+                .object(["id": .string(ext.id), "commands": .array(ext.listed.map { .string($0.actionID) })])
+            } ?? .bool(false)
+            return .object(o)
+        case "install":
+            guard words.count == 2 else { throw ControlError(.badValue, "ext store install takes one folder") }
+            guard case .object(var answer) = try await model.install(words[1], tools: tools, peer: peer, from: "the pilot command's ext store") else {
+                throw ControlError(.badValue, "ext store install answered nothing")
+            }
+            answer["store"] = .string(words[1])
+            return .object(answer)
+        default:
+            let query = words.joined(separator: " ")
+            let found = model.folders(matching: query)
+            var o: [String: JSONValue] = ["source": .string(RaycastStore.listingURL.absoluteString), "fetched": .string(listing.fetched.ISO8601Format()),
+                                          "read": .string(model.cached ? "kept" : "fetched"), "truncated": .bool(false),
+                                          "folders": .number(Double(listing.folders.count)), "dropped": .number(Double(listing.dropped)),
+                                          "matching": .number(Double(found.count)),
+                                          "rows": .array(found.prefix(100).map(row))]
+            if !query.isEmpty { o["query"] = .string(query) }
+            if found.count > 100 { o["more"] = .number(Double(found.count - 100)) }
+            o["stale"] = model.stale.map(JSONValue.string)
+            return .object(o)
+        }
     }
 
     /// What pilot-ext-host's gap recorder wrote for one extension, ExtensionData/<id>/gaps.json (ADR 0017, T3).
@@ -381,7 +444,7 @@ extension ControlVerbs {
 
     private static func installExtension(_ args: ControlArguments, _ tools: ExtensionTools, cwd: String?, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         if let github = GitHubInstall(try args.word(1, "folder"), extensions: tools.extensions) {
-            return try await installFromGitHub(github, tools, peer: peer)
+            return try await installFromGitHub(github, tools, peer: peer, from: "the pilot command")
         }
         let folder = ExtensionTools.folder(try args.word(1, "folder"), cwd: cwd)
         // Read once into a copy: the check, the question and the install all read the copy's bytes.
@@ -408,8 +471,9 @@ extension ControlVerbs {
 
     /// `ext install github:<owner>/<repo>/<folder>` (ADR 0017, T6): the folder fetched and planned, asked about, then
     /// built and installed as a checked local folder. The workspace goes whatever happens: success, a refusal or a No.
-    /// Answers every request made, with the host it went to and the check it passed.
-    private static func installFromGitHub(_ github: GitHubInstall, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+    /// Answers every request made, with the host it went to and the check it passed. The Raycast store's Install (T24)
+    /// comes here too, `from` naming where it was pressed in Pilot's log.
+    static func installFromGitHub(_ github: GitHubInstall, _ tools: ExtensionTools, peer: ControlPeer?, from: String) async throws(ControlError) -> JSONValue {
         defer { github.remove() }
         func refused(_ error: any Error, _ what: String) -> ControlError {
             ControlError(.badValue, "github:\(oneLine(github.spec)) not \(what): \(oneLine(ExtensionCatalogue.Problem.reason(error)))")
@@ -445,7 +509,7 @@ extension ControlVerbs {
             }
             let done: Extension
             do { done = try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
-            log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from the pilot command")
+            log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from \(from, privacy: .public)")
             return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
                             "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
                             "question": .string(whole ? "whole" : "counted"),

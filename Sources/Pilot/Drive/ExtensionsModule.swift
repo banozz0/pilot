@@ -4,7 +4,8 @@ import PilotCore
 /// Extensions (card agent-bo-95423242, ADR 0010): `ext.<id>.<command>` runs that command of the extension in Pilot's
 /// Extensions folder (ExtensionRun) and shows what it said. Not in the registry, like script commands: the folder is read
 /// again as the menu opens and as a command runs, so an extension added, edited or removed since is followed. Open
-/// Extensions folder and Extension catalogue (ExtensionCatalogueMenu) are registered, so they bind and are found by search.
+/// Extensions folder, Extension catalogue (ExtensionCatalogueMenu) and Raycast Store (RaycastStoreMenu) are registered, so
+/// they bind and are found by search.
 /// Registering also installs what answers a Raycast-format extension's asks (T11): `AI.ask` and `getSelectedText`.
 @MainActor
 enum ExtensionsModule {
@@ -22,6 +23,13 @@ enum ExtensionsModule {
                 PilotMenu.shared.pick(live: ExtensionCatalogueMenu.title, source: ExtensionCatalogueMenu())
             })
         } catch { dlog.error("\(ExtensionCatalogueMenu.actionID, privacy: .public): \(String(describing: error), privacy: .public)") }
+        // Raycast's store in the menu (raycast-extensions T24): its listing read from GitHub only as it opens, kept a day.
+        do {
+            try registry.register(Action(id: RaycastStoreMenu.actionID, label: RaycastStoreMenu.title, module: .drive,
+                                         keywords: "raycast store install extensions extension get") {
+                PilotMenu.shared.pick(live: RaycastStoreMenu.title, source: RaycastStoreMenu())
+            })
+        } catch { dlog.error("\(RaycastStoreMenu.actionID, privacy: .public): \(String(describing: error), privacy: .public)") }
     }
 
     /// The action an `ext.` id names, labelled with its command's title (the id when it is gone); nil for any other id.
